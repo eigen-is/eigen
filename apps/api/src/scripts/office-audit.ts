@@ -188,6 +188,11 @@ const NO_KIND = '(none named)';
 const NO_PLACEHOLDER = '(no placeholder)';
 const PLACEHOLDER = new RegExp(`(?:^|>)([^<>]*?) chart not imported(?=<|$)|(?:^|>)${CHART_NOT_IMPORTED}(?=<|$)`, 'g');
 
+// The writer's counted losses as the round trip reports them: each code with its count.
+export function lossCounts(warnings: TransformWarning[]): Map<string, number> {
+    return new Map(warnings.map((warning) => [warning.code, 'count' in warning ? warning.count : 1]));
+}
+
 // From the import's warnings and its output, whose strings the placeholders' text is in.
 export function chartsNotImported(warnings: TransformWarning[], output: unknown): ChartsNotImported {
     let count = 0;

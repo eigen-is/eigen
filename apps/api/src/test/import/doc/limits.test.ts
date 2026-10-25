@@ -1138,6 +1138,22 @@ describe('figures and media', () => {
         expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual([PICTURE_NOT_IMPORTED, 'A pixel']);
         expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
+
+    // A pptx draws its box and an xlsx counts its picture for the same file.
+    test('a picture whose r:embed names no relationship, or an external one, is left out and counted, the external its alt text after the line', async () => {
+        const embedded = (rid: string) => paragraph(GOLDEN_DOCX_IMAGE_RUN.replace('rId4', rid));
+        const { json, media, warnings } = await importDocxBody(`${embedded('rId99')}${embedded('rId9')}`, {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="https://example.com/chart.png" TargetMode="External"/>`,
+        });
+        expect(media).toEqual([]);
+        expect(nodesOfType(json, 'figure')).toEqual([]);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual([
+            PICTURE_NOT_IMPORTED,
+            PICTURE_NOT_IMPORTED,
+            'A pixel',
+        ]);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
+    });
 });
 
 describe('links', () => {

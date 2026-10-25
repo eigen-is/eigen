@@ -166,7 +166,7 @@ describe('the all-features doc', () => {
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
         const docx = writeDocx(
             { json: buildAllFeaturesDocJson(), bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-            { title: 'All features', media: buildAllFeaturesDocMedia(), publicOrigin: ORIGIN },
+            { title: 'All features', media: buildAllFeaturesDocMedia(), publicOrigin: ORIGIN, lost: () => {} },
         );
         const { json, media } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
         const imported = withSourceNames(json, sourceNames(media));
@@ -179,7 +179,7 @@ describe('a chart', () => {
         const source = { type: 'doc', content: [{ type: 'paragraph', content: [chart] }] };
         const docx = writeDocx(
             { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-            { title: 'Chart', media: [], publicOrigin: ORIGIN },
+            { title: 'Chart', media: [], publicOrigin: ORIGIN, lost: () => {} },
         );
         return docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
     };
@@ -246,7 +246,7 @@ describe('the page', () => {
             Buffer.from(
                 writeDocx(
                     { json: source, bands: {}, page, style: DEFAULT_NORMAL_STYLE },
-                    { title: 'Letter', media: [] },
+                    { title: 'Letter', media: [], lost: () => {} },
                 ),
             ),
         );
@@ -291,7 +291,7 @@ describe('the page', () => {
                 page: { ...DEFAULT_PAGE_SETUP, differentFirstPage: true },
                 style: DEFAULT_NORMAL_STYLE,
             },
-            { title: 'Bands', media: [] },
+            { title: 'Bands', media: [], lost: () => {} },
         );
         const { bands: read, page } = docxToPmJson(Buffer.from(docx));
         expect(page.differentFirstPage).toBe(true);
@@ -319,7 +319,7 @@ describe('the page', () => {
         };
         const docx = writeDocx(
             { json: body, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-            { title: 'Body', media: [] },
+            { title: 'Body', media: [], lost: () => {} },
         );
         const { json } = docxToPmJson(Buffer.from(docx));
         expect(stored(json)).toEqual(stored(docSchema().nodeFromJSON(body).toJSON()));
@@ -361,7 +361,7 @@ describe('the Normal', () => {
             Buffer.from(
                 writeDocx(
                     { json: source, bands: { header }, page: DEFAULT_PAGE_SETUP, style: normal },
-                    { title: 'Word', media: [] },
+                    { title: 'Word', media: [], lost: () => {} },
                 ),
             ),
         );
@@ -376,7 +376,7 @@ describe('the Normal', () => {
             Buffer.from(
                 writeDocx(
                     { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-                    { title: 'Eigen', media: [] },
+                    { title: 'Eigen', media: [], lost: () => {} },
                 ),
             ),
         );
@@ -402,7 +402,7 @@ describe("the math package's corpus equations", () => {
         const { json } = await importDocxBody(input);
         const docx = writeDocx(
             { json, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-            { title: 'Equations', media: [], publicOrigin: ORIGIN },
+            { title: 'Equations', media: [], publicOrigin: ORIGIN, lost: () => {} },
         );
         const document = parseOoxml(openZip(new Uint8Array(docx)).read('word/document.xml') ?? '');
         const body = document && xmlChild(document, W_NS, 'body');
@@ -460,7 +460,7 @@ async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent;
         Buffer.from(
             writeDocx(
                 { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-                { title: 'Nested', media: [] },
+                { title: 'Nested', media: [], lost: () => {} },
             ),
         ),
     );
@@ -871,7 +871,7 @@ test('no space before under a table, beside a Normal with one, comes back as set
     ];
     const docx = writeDocx(
         { json: { type: 'doc', content }, bands: {}, page: DEFAULT_PAGE_SETUP, style },
-        { title: 'Spaced', media: [] },
+        { title: 'Spaced', media: [], lost: () => {} },
     );
     const { json } = docxToPmJson(Buffer.from(docx));
     expect(json.content?.at(-1)?.attrs?.['spaceBefore']).toBe(0);
@@ -902,7 +902,7 @@ describe('a line under a Normal in another family', () => {
         for (let trip = 0; trip < 3; trip++) {
             const docx = writeDocx(
                 { json: { type: 'doc', content }, bands: {}, page: DEFAULT_PAGE_SETUP, style },
-                { title: 'Line', media: [] },
+                { title: 'Line', media: [], lost: () => {} },
             );
             const imported = docxToPmJson(Buffer.from(docx));
             content = imported.json.content ?? [];
@@ -1162,7 +1162,7 @@ describe('a Word file, imported, written and imported again', () => {
     const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
     const twice = async (body: string, parts: DocxParts = {}) => {
         const first = await importDocxBody(body, parts);
-        const second = docxToPmJson(Buffer.from(writeDocx(first, { title: 'Word', media: [] })));
+        const second = docxToPmJson(Buffer.from(writeDocx(first, { title: 'Word', media: [], lost: () => {} })));
         return { first, second };
     };
 

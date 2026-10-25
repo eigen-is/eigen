@@ -40,7 +40,7 @@ import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/g
 const zip = openZip(
     writeDocx(
         { json: buildAllFeaturesDocJson(), bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-        { title: 'Report.eigendoc', media: buildAllFeaturesDocMedia() },
+        { title: 'Report.eigendoc', media: buildAllFeaturesDocMedia(), lost: () => {} },
     ),
 );
 

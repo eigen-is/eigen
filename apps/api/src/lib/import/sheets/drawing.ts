@@ -19,7 +19,18 @@ import { hasXmlName, xmlAttr, xmlChild, xmlTrimmedText } from '../../core/xml';
 import type { Lost } from '../../document/transform/protocol';
 import type { Box, DrawingTheme } from '../../ooxml/drawingml';
 import { anchoredBox, blipEmbeds, DEGREE } from '../../ooxml/drawingml';
-import { A_NS, alternativeFor, C_NS, EMU_PER_PX, emu, ooxmlElements, R_NS, SML_NS, XDR_NS } from '../../ooxml/ooxml';
+import {
+    A_NS,
+    alternativeFor,
+    C_NS,
+    EMU_PER_PX,
+    emu,
+    ooxmlChild,
+    ooxmlElements,
+    R_NS,
+    SML_NS,
+    XDR_NS,
+} from '../../ooxml/ooxml';
 import { chartCost, chartPart, readChart, readChartPartLook } from '../../ooxml/ooxml-chart';
 import type { OoxmlPackage, Relationship } from '../../ooxml/opc';
 import { optional, relTarget } from '../../ooxml/opc';
@@ -158,7 +169,7 @@ export function partsText(parts: SheetChartSpecParts): number {
 
 // A picture over its box, turned by its a:xfrm's rot as Eigen turns it, clockwise. Excel and LibreOffice anchor a
 // picture turned sideways over its box turned a quarter, so its own box is that one turned back (anchoredBox). Its
-// part is its svgBlip's, else its blip's.
+// part is its svgBlip's, else its blip's, its blipFill read through mc:AlternateContent as the anchor is.
 function pictureOf(
     picture: XmlElement,
     rels: ReadonlyMap<string, Relationship>,
@@ -166,7 +177,7 @@ function pictureOf(
     place: () => Box | undefined,
     tracks: number,
 ): Omit<SheetImage, 'index'> | undefined {
-    const fill = xmlChild(picture, XDR_NS, 'blipFill');
+    const fill = ooxmlChild(picture, XDR_NS, 'blipFill', alternative);
     const [svg, raster] = blipEmbeds(fill && xmlChild(fill, A_NS, 'blip'));
     const part = pictureMediaPart(context.pkg, rels, svg, 'xl/') ?? pictureMediaPart(context.pkg, rels, raster, 'xl/');
     if (!part || !context.spend(tracks + 1)) return undefined;

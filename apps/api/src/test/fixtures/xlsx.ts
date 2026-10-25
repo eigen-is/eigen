@@ -1,5 +1,8 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
+import type { TransformWarning } from '../../lib/document/transform/protocol';
+import { lossCounter } from '../../lib/document/transform/protocol';
+import type { OfficeMedia } from '../../lib/export/office-image';
 import { writeXlsx } from '../../lib/export/sheets/xlsx/to-xlsx';
 import { writeZip } from '../../lib/ooxml/zip';
 
@@ -210,6 +213,16 @@ export function xlsxFixture(workbook: FixtureWorkbook): Uint8Array {
 }
 
 // The xlsx export as the transform calls it: untitled, without media, its warnings kept where a test passes them.
-export function exportXlsx(sheets: Sheet[], options: Partial<Parameters<typeof writeXlsx>[1]> = {}): Uint8Array {
-    return writeXlsx(sheets, { title: '', media: [], warnings: [], ...options });
+export function exportXlsx(
+    sheets: Sheet[],
+    {
+        title = '',
+        media = [],
+        warnings = [],
+    }: { title?: string; media?: OfficeMedia[]; warnings?: TransformWarning[] } = {},
+): Uint8Array {
+    const losses = lossCounter();
+    const bytes = writeXlsx(sheets, { title, media, lost: losses.lost });
+    warnings.push(...losses.warnings());
+    return bytes;
 }

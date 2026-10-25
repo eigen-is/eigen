@@ -20,6 +20,7 @@ import { toTransferableText } from '../../../../lib/document/transform/protocol'
 import type { OfficeMedia } from '../../../../lib/export/office-image';
 import { sanitizeSceneHtml } from '../../../../lib/export/sanitize';
 import { writePptx } from '../../../../lib/export/slides/pptx/to-pptx';
+import { renderEigenslidesExport } from '../../../../lib/export/slides/transform';
 import { IDENTITY_COLOR_MAP } from '../../../../lib/ooxml/drawingml';
 import { C_NS, parseOoxml } from '../../../../lib/ooxml/ooxml';
 import { CHART_CONTENT_TYPE, readChart } from '../../../../lib/ooxml/ooxml-chart';
@@ -97,7 +98,7 @@ function sceneOf(
 }
 
 function pptx(scene: VectorScene, media: OfficeMedia[] = []): ZipReader {
-    return openZip(writePptx(scene, { title: 'Deck & <co>.eigenslides', media }));
+    return openZip(writePptx(scene, { title: 'Deck & <co>.eigenslides', media, lost: () => {} }));
 }
 
 function part(zip: ZipReader, path: string): XmlElement {
@@ -262,13 +263,15 @@ describe('pptx package', () => {
             element('richtext', { html: '<p>Hello <a href="https://example.com">there</a></p>' }),
             element('image', { index: 'a1', mediaName: 'wide.png', objectFit: 'cover' }),
         ]);
-        expect(writePptx(scene, { title: 'Deck', media: [PNG_MEDIA] })).toEqual(
-            writePptx(scene, { title: 'Deck', media: [PNG_MEDIA] }),
+        expect(writePptx(scene, { title: 'Deck', media: [PNG_MEDIA], lost: () => {} })).toEqual(
+            writePptx(scene, { title: 'Deck', media: [PNG_MEDIA], lost: () => {} }),
         );
     });
 
     test('a deck with no frames is the empty deck', () => {
-        expect(() => writePptx(sceneOf([], []), { title: 'Deck', media: [] })).toThrow('The deck is empty');
+        expect(() => writePptx(sceneOf([], []), { title: 'Deck', media: [], lost: () => {} })).toThrow(
+            'The deck is empty',
+        );
     });
 
     test("the slide size is the deck's: its shape and its own width", () => {
@@ -1129,5 +1132,87 @@ describe('pptx images and backgrounds', () => {
         const contain = first(first(bg(5), A, 'blipFill'), A, 'fillRect');
         expect([attr(contain, 't'), attr(contain, 'b'), attr(contain, 'l')]).toEqual(['27778', '27778', undefined]);
         expect(bg(4)).toBeUndefined();
+    });
+});
+
+describe('pptx losses', () => {
+    // What the pptx leaves out or draws simpler, as the export returns it: each kind counted once per element.
+    async function lossesOf(elements: Fields[], frames: FrameSpec[] = [{ id: 'f1', index: 'a0' }]) {
+        const doc = deckDoc(frames, elements, undefined, WIDESCREEN);
+        const { warnings } = await renderEigenslidesExport(doc, 'pptx', 'Deck', async () => [PNG_MEDIA]);
+        return warnings;
+    }
+    const hatched = serializeFill({ type: 'solid', color: '#ff0000', style: 'hachure' });
+
+    test("a chart whose spec doesn't parse or holds range data is a chart left out", async () => {
+        const range = JSON.stringify({ source: 'range', categories: null, series: [] });
+        const charts = [
+            element('chart', { ...sampleChartParts('pie'), specData: '{' }),
+            element('chart', { ...sampleChartParts('pie'), specData: range, index: 'a1', id: 'chart-a1' }),
+            element('chart', { ...sampleChartParts('pie'), index: 'a2', id: 'chart-a2' }),
+        ];
+        expect(await lossesOf(charts)).toEqual([{ code: 'charts-dropped', count: 2 }]);
+    });
+
+    test('a picture or background whose media the prep has none is a picture left out; an empty image is not', async () => {
+        const pictures = [
+            element('image', { mediaName: 'gone.png', index: 'a0', id: 'gone' }),
+            element('image', { mediaName: '', index: 'a1', id: 'empty' }),
+            element('image', { mediaName: 'wide.png', index: 'a2', id: 'shown' }),
+        ];
+        const frames: FrameSpec[] = [
+            { id: 'f1', index: 'a0', background: { type: 'image', mediaName: 'gone.png', fit: 'cover' } },
+            { id: 'f2', index: 'a1', background: { type: 'image', mediaName: 'wide.png', fit: 'cover' } },
+        ];
+        expect(await lossesOf(pictures, frames)).toEqual([{ code: 'images-dropped', count: 2 }]);
+    });
+
+    test('a hatched fill is drawn solid and counted; a hatch on no paint loses nothing', async () => {
+        const shapes = [
+            element('rectangle', { fill: hatched, index: 'a0', id: 'hatched' }),
+            element('ellipse', {
+                fill: serializeFill({ type: 'solid', color: 'transparent', style: 'hachure' }),
+                index: 'a1',
+                id: 'clear',
+            }),
+            element('ellipse', {
+                fill: serializeFill({ type: 'solid', color: '#ff0000', style: 'solid' }),
+                index: 'a2',
+                id: 'solid',
+            }),
+        ];
+        expect(await lossesOf(shapes)).toEqual([{ code: 'fills-simplified', count: 1 }]);
+    });
+
+    test("a rough shape and an elbow arrow's rounded bends draw plain, each one shape however many looks it loses", async () => {
+        const shapes = [
+            element('rectangle', { roughness: 1, index: 'a0', id: 'rough' }),
+            element('arrow', {
+                points: '[[0,0],[100,0],[100,100],[200,100]]',
+                elbow: true,
+                roundness: 'round',
+                roughness: 1,
+                index: 'a1',
+                id: 'elbow',
+            }),
+            element('arrow', {
+                points: '[[0,0],[200,0]]',
+                elbow: true,
+                roundness: 'round',
+                index: 'a2',
+                id: 'straight',
+            }),
+            // A text box with no border or fill puts no rough ink on the slide.
+            element('richtext', { html: '<p>plain</p>', roughness: 1, index: 'a3', id: 'text' }),
+        ];
+        expect(await lossesOf(shapes)).toEqual([{ code: 'shapes-simplified', count: 2 }]);
+    });
+
+    test("a quote's bar is left out of its text box, counted once per box", async () => {
+        const boxes = [
+            element('richtext', { html: '<blockquote><p>a</p></blockquote><blockquote><p>b</p></blockquote>' }),
+            element('richtext', { html: '<p>plain</p>', index: 'a1', id: 'plain' }),
+        ];
+        expect(await lossesOf(boxes)).toEqual([{ code: 'text-simplified', count: 1 }]);
     });
 });

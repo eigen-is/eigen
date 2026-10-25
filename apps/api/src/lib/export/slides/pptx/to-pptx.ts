@@ -1,8 +1,12 @@
+// The pptx writer's entry: a deck's scene to the bytes of a PowerPoint file, run in the transform process. Each frame is
+// a slide of DrawingML shapes. What DrawingML can't draw is counted through the loss counter the caller passes.
+
 import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { VectorScene } from '@workspace/lib/vector';
 import { elementsInFrame, SLIDE_SIZES, slidePxToPt } from '@workspace/lib/vector';
 import { ApiError } from '../../../core/errors';
+import type { LossCounter } from '../../../document/transform/protocol';
 import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import { A_NS, EMU_PER_POINT, R_NS } from '../../../ooxml/ooxml';
 import type { PackagePart } from '../../../ooxml/opc';
@@ -15,7 +19,10 @@ import { LAYOUT_XML, MASTER_XML, NAMESPACES, slideXml } from './package';
 
 // A deck → hand-written PresentationML, one slide per frame, each element as the DrawingML shape that draws it. Takes
 // the scene sanitizeSceneHtml returns, and media by name as the Office media prep hands it over (an SVG beside its PNG).
-export function writePptx(scene: VectorScene, { title, media }: { title: string; media: OfficeMedia[] }): Uint8Array {
+export function writePptx(
+    scene: VectorScene,
+    { title, media, lost }: { title: string; media: OfficeMedia[]; lost: LossCounter['lost'] },
+): Uint8Array {
     if (scene.frames.length === 0) throw new ApiError(400, 'The deck is empty');
     // The deck's own physical size: its width, and its slide size's height at the deck's pt per px.
     const { slideSize, slideWidth } = scene.meta;
@@ -28,6 +35,7 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
         images: officeImages(media, 'ppt/media'),
         charts: [],
         byId: new Map(scene.elements.map((el) => [el.id, el])),
+        lost,
     };
     const slides = scene.frames.map((frame) => slideXml(frame, elementsInFrame(scene.elements, frame.id), deck));
 

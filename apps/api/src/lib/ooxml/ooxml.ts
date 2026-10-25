@@ -87,6 +87,16 @@ export function ooxmlElements(element: XmlElement, alternative: (element: XmlEle
     return xmlElements(element).flatMap((item) => (isAlternateContent(item) ? alternative(item) : [item]));
 }
 
+// An element's first child of this name, read through its mc:AlternateContent as ooxmlElements reads them.
+export function ooxmlChild(
+    element: XmlElement,
+    ns: string,
+    local: string,
+    alternative: (element: XmlElement) => XmlElement[],
+): XmlElement | undefined {
+    return ooxmlElements(element, alternative).find((child) => hasXmlName(child, ns, local));
+}
+
 // ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export const EMU_PER_PX = 9525;

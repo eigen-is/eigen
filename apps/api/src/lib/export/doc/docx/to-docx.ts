@@ -1,8 +1,13 @@
+// The docx writer's entry: a doc's JSON, bands, page and Normal to the bytes of a Word document, run in the transform
+// process. It walks the body, the notes and the bands into parts of their own, and packages them with the styles, the
+// fonts and the media. What Word can't hold is counted through the loss counter the caller passes.
+
 import type { JSONContent } from '@tiptap/core';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { FIRST_PAGE_BAND, flattenNestedFootnotes, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { EigendocBands } from '../../../document/doc';
+import type { LossCounter } from '../../../document/transform/protocol';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
 import { NOTE_SEPARATORS, WML } from '../../../ooxml/wordml';
@@ -25,7 +30,12 @@ export function writeDocx(
         page: setup,
         style: normal,
     }: { json: JSONContent; bands: EigendocBands; page: PageSetup; style: NormalStyle },
-    { title, media, publicOrigin }: { title: string; media: OfficeMedia[]; publicOrigin?: string },
+    {
+        title,
+        media,
+        publicOrigin,
+        lost,
+    }: { title: string; media: OfficeMedia[]; publicOrigin?: string; lost: LossCounter['lost'] },
 ): Uint8Array {
     const document = partRelationships();
     for (const type of ['styles', 'numbering', 'settings', 'fontTable']) document.relate(type, `${type}.xml`);
@@ -45,6 +55,7 @@ export function writeDocx(
         faces: new Map([[normal.font, new Set<FontSlot>(['Regular'])]]),
         normal,
         styles: new Map(styleDefinitions(normal).map((style) => [style.id, style])),
+        lost,
     };
     const page = pageTwips(setup);
     const column = page.width - page.margin.left - page.margin.right;

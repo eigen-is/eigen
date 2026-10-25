@@ -25,7 +25,19 @@ import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode, Lost } from '../../document/transform/protocol';
 import { ARROWHEAD_BY_LINE_END, DEGREE, drawingLines, isSideways, strokeStyleOf } from '../../ooxml/drawingml';
-import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../ooxml/ooxml';
+import {
+    A_NS,
+    C_NS,
+    DGM_NS,
+    emu,
+    isAlternateContent,
+    isOn,
+    OLE_NS,
+    ooxmlChild,
+    P_NS,
+    R_NS,
+    TBL_NS,
+} from '../../ooxml/ooxml';
 import { CHART_NOT_IMPORTED, droppedChart } from '../../ooxml/ooxml-chart';
 import type { Part } from '../../ooxml/opc';
 import { PICTURE_NOT_IMPORTED } from '../image-types';
@@ -580,7 +592,7 @@ function readPicture(
     lines: Lines,
     { box, mirrored }: Placed,
 ): void {
-    const blipFill = childOf(shape, P_NS, 'blipFill');
+    const blipFill = ooxmlChild(shape, P_NS, 'blipFill', alternative);
     const blip = blipFill && childOf(blipFill, A_NS, 'blip');
     const part = blipMedia(walk.deck.pkg, walk.part, blip);
     const mediaName = part && walk.deck.mediaName(part);

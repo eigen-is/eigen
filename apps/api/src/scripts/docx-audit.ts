@@ -32,6 +32,7 @@ import { cssColorToHex } from '../lib/document/colors';
 import { docSchema } from '../lib/document/doc-schema';
 import { readStoredEquation } from '../lib/document/equation';
 import { nodeLook, ownTextLook } from '../lib/document/looks';
+import { lossCounter } from '../lib/document/transform/protocol';
 import type { writeDocx } from '../lib/export/doc/docx/to-docx';
 import type { Fonts, Script } from '../lib/import/doc/docx-fonts';
 import { FONT_SLOTS, fontMark, readFontTable, readTheme } from '../lib/import/doc/docx-fonts';
@@ -79,6 +80,7 @@ import {
     chartFields,
     chartsNotImported,
     classify,
+    lossCounts,
     message,
     officeMedia,
     roundtripChild,
@@ -2289,11 +2291,12 @@ async function docxRoundtripChild(
     await roundtripChild(options, async (step) => {
         const data = Buffer.from(await Bun.file(file).arrayBuffer());
         const a = await step('import', () => read(data));
+        const losses = lossCounter();
         let media: Awaited<ReturnType<typeof officeMedia>> = [];
         const bytes = await step('export', async () => {
             const drawn = await pastedFigureMedia([a.json, ...Object.values(a.bands)]);
             media = await officeMedia(a.media, drawn);
-            return write(a, { title: path.basename(file), media });
+            return write(a, { title: path.basename(file), media, lost: losses.lost });
         });
         const b = await step('reimport', () => read(Buffer.from(bytes)));
         const groups = await step('compare', async () =>
@@ -2304,7 +2307,11 @@ async function docxRoundtripChild(
                 prepared: await picturesOf(media),
             }),
         );
-        return { warnings: new Map(), groups, charts: chartsNotImported(a.warnings, [a.json, a.bands]) };
+        return {
+            warnings: lossCounts(losses.warnings()),
+            groups,
+            charts: chartsNotImported(a.warnings, [a.json, a.bands]),
+        };
     });
 }
 

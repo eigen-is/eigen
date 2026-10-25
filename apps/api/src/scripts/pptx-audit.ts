@@ -11,6 +11,7 @@ import { gradientStops } from '@workspace/lib/background';
 import type { VectorElement, VectorFrame, VectorScene } from '@workspace/lib/vector';
 import { elementsInFrame, normalizeAngle, parsePoints, pointsBounds, slidePxToPt } from '@workspace/lib/vector';
 import type { TransformWarning } from '../lib/document/transform/protocol';
+import { lossCounter } from '../lib/document/transform/protocol';
 import type { writePptx } from '../lib/export/slides/pptx/to-pptx';
 import type { ImportedMedia } from '../lib/import/image-types';
 import { EMU_PER_POINT } from '../lib/ooxml/ooxml';
@@ -27,6 +28,7 @@ import {
     chartFields,
     chartsNotImported,
     classify,
+    lossCounts,
     officeMedia,
     roundtripChild,
     roundtripLine,
@@ -373,10 +375,11 @@ async function pptxRoundtripChild(
     await roundtripChild(options, async (step) => {
         const data = await Bun.file(file).arrayBuffer();
         const a = await step('import', () => read(data));
+        const losses = lossCounter();
         let media: Awaited<ReturnType<typeof officeMedia>> = [];
         const bytes = await step('export', async () => {
             media = await officeMedia(a.media);
-            return write(sanitizeSceneHtml(a.scene), { title: path.basename(file), media });
+            return write(sanitizeSceneHtml(a.scene), { title: path.basename(file), media, lost: losses.lost });
         });
         const b = await step('reimport', () => read(new Uint8Array(bytes).slice().buffer));
         const groups = await step('compare', async () =>
@@ -388,7 +391,11 @@ async function pptxRoundtripChild(
                 ),
             }),
         );
-        return { warnings: new Map(), groups, charts: chartsNotImported(a.warnings, a.scene.elements) };
+        return {
+            warnings: lossCounts(losses.warnings()),
+            groups,
+            charts: chartsNotImported(a.warnings, a.scene.elements),
+        };
     });
 }
 

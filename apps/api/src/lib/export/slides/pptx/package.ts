@@ -1,3 +1,6 @@
+// The pptx writer's frame: the presentation's master and its one blank layout, a slide's part around its shapes, and
+// the state one export carries from slide to slide.
+
 import type { VectorElement, VectorFrame } from '@workspace/lib/vector';
 import {
     arrowRoute,
@@ -9,14 +12,13 @@ import {
     pointsBounds,
 } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
+import type { LossCounter } from '../../../document/transform/protocol';
 import { A_NS, P_NS, R_NS } from '../../../ooxml/ooxml';
 import type { PackagePart, PartRelationships, Relationship } from '../../../ooxml/opc';
 import { partRelationships } from '../../../ooxml/opc';
 import type { OfficeImages } from '../../office-image';
 import { backgroundXml } from './pictures';
 import { elementXml } from './shapes';
-
-// The presentation's own parts, its master and its one blank layout, and a slide's part around its shapes.
 
 export const NAMESPACES = `xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"`;
 
@@ -38,6 +40,8 @@ export type Deck = {
     charts: PackagePart[];
     // The elbow router reads the shapes an arrow is bound to.
     byId: Map<string, VectorElement>;
+    // Counts what the pptx leaves out or draws simpler, once per element or frame.
+    lost: LossCounter['lost'];
 };
 
 export type Slide = {

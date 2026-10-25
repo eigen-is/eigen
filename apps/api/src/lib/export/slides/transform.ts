@@ -1,3 +1,6 @@
+// A deck's export inside the transform process: the HTML download and the printed document through the canvas pages,
+// and the pptx. Each returns its bytes and the warnings that count what it left out.
+
 import { readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type {
@@ -6,7 +9,7 @@ import type {
     SlidesExportFormat,
     TransformWarning,
 } from '../../document/transform/protocol';
-import { toTransferableBuffer } from '../../document/transform/protocol';
+import { lossCounter, toTransferableBuffer } from '../../document/transform/protocol';
 import { sceneMediaNames } from '../canvas/render';
 import { renderEigenslidesHtml } from '../canvas/transform';
 import { withSvgFallbacks } from '../office-image';
@@ -25,6 +28,8 @@ export async function renderEigenslidesExport(
     if (format !== 'pptx') return renderEigenslidesHtml(doc, format, title, loadMedia);
     const { writePptx } = await import('./pptx/to-pptx');
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
-    const pptx = writePptx(scene, { title, media: await withSvgFallbacks(await loadMedia(sceneMediaNames(scene))) });
-    return { data: toTransferableBuffer(pptx), warnings: [] };
+    const media = await withSvgFallbacks(await loadMedia(sceneMediaNames(scene)));
+    const losses = lossCounter();
+    const pptx = writePptx(scene, { title, media, lost: losses.lost });
+    return { data: toTransferableBuffer(pptx), warnings: losses.warnings() };
 }

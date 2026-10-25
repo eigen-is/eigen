@@ -114,8 +114,13 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             const path = partPath(svg, context.scope) ?? partPath(raster, context.scope);
             const name = path && pictureName(reader, path);
             if (!name) {
-                const linked = blip && !raster && xmlAttr(blip, R_NS, 'link');
-                if (path || linked) pictureLeftOut(reader, context, linked ? alt : null);
+                // A blip that names nothing is an empty frame. A linked picture, or one embedded from outside the file,
+                // lives outside it, so its alt text stays after the line.
+                const rels = context.scope.part.rels;
+                const outside =
+                    [svg, raster].some((id) => id && rels.get(id)?.external) ||
+                    (blip && !raster && xmlAttr(blip, R_NS, 'link'));
+                if (path || svg || raster || outside) pictureLeftOut(reader, context, outside ? alt : null);
                 continue;
             }
             const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];

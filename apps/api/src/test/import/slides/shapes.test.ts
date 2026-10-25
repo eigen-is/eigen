@@ -772,6 +772,21 @@ describe('pictures', () => {
         expect(new Uint8Array(deck.media[0].data)).toEqual(PIXEL_PNG);
     });
 
+    // As the docx reader reads one, the branch the reader understands, here the fallback.
+    test('a blipFill in mc:AlternateContent is the branch the reader understands', () => {
+        const wrapped = pic({ xfrm: box(10, 20, 30, 40), embed: 'rId2' }).replace(
+            /<p:blipFill>.*<\/p:blipFill>/,
+            (blipFill) =>
+                `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="a14">${blipFill.replace('rId2', 'rId9')}</mc:Choice><mc:Fallback>${blipFill}</mc:Fallback></mc:AlternateContent>`,
+        );
+        const deck = deckOf({ slides: [{ shapes: wrapped, rels: rel('rId2', 'image', '../media/a.png') }], files });
+        const [image] = deck.slides[0].elements;
+        expect(image).toMatchObject({ type: 'image' });
+        expectBox(image, 10, 20, 30, 40);
+        expect(deck.media).toHaveLength(1);
+        expect(deck.warnings).toEqual([]);
+    });
+
     test('a picture cropped to a rounded rectangle has curved corners', () => {
         const deck = deckOf({
             slides: [

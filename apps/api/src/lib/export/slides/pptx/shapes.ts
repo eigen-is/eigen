@@ -6,6 +6,7 @@ import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import type { FillPaint } from '@workspace/lib/types/background';
 import type { Box, Corners, Point, VectorChartElement, VectorElement } from '@workspace/lib/vector';
 import {
+    capabilitiesOf,
     cornerRadius,
     diamondOutline,
     isBordered,
@@ -45,6 +46,7 @@ export function angle(value: number): number {
 
 export function elementXml(el: VectorElement, slide: Slide): string {
     const opacity = el.opacity / 100;
+    countPlainLook(el, slide);
     switch (el.type) {
         case 'rectangle':
             return spXml(
@@ -108,7 +110,10 @@ export function elementXml(el: VectorElement, slide: Slide): string {
             return pictureXml(el, slide, opacity);
         case 'richtext': {
             const inset = el.padding + (isBordered(el) ? el.strokeWidth : 0);
-            const text = textBodyXml(slide, paragraphsOf(el.html), {
+            const paragraphs = paragraphsOf(el.html);
+            // A text body has no paragraph border, so a quote keeps its indent and fade but loses its bar.
+            if (paragraphs.some((paragraph) => paragraph.quotes > 0)) slide.deck.lost('text-simplified', el);
+            const text = textBodyXml(slide, paragraphs, {
                 ...el,
                 bold: el.fontWeight === 'bold',
                 italic: el.fontStyle === 'italic',
@@ -153,13 +158,30 @@ export function elementXml(el: VectorElement, slide: Slide): string {
     }
 }
 
+// DrawingML has no sketch and no hatch. So a rough element draws plain, counted as a shape simplified, and a hatched
+// fill draws solid, counted as a fill simplified. Each counts once per element, and only where the element paints what
+// was lost. A chart's look goes with its chart part.
+function countPlainLook(el: VectorElement, slide: Slide): void {
+    if (el.type === 'chart') return;
+    const capabilities = capabilitiesOf(el);
+    const fill = 'fill' in el && capabilities.fill ? parseFill(el.fill) : undefined;
+    const filled = fill !== undefined && !isTransparentFill(fill);
+    if (filled && capabilities.fillStyle && fill.style !== 'solid') slide.deck.lost('fills-simplified', el);
+    // A freehand stroke's ink is never rough, only the fill of its loop.
+    const outlined = el.type !== 'freedraw' && isBordered(el);
+    if (el.roughness > 0 && (filled || outlined)) slide.deck.lost('shapes-simplified', el);
+}
+
 // A graphic frame showing the chart's own part, drawn plain, upright and opaque: a frame turns and fades no chart, and a
 // chart part paints no sketch, hatch, gradient or dash. A spec that doesn't parse or holds range data draws nothing, as
-// on the canvas it draws only its placeholder. PowerPoint draws the numbers the part holds inline: a pptx embeds no
-// workbook for Edit Data to open.
+// on the canvas it draws only its placeholder, and counts as a chart left out. PowerPoint draws the numbers the part
+// holds inline: a pptx embeds no workbook for Edit Data to open.
 function chartXml(el: VectorChartElement, slide: Slide): string {
     const { spec } = readChartSpec(el);
-    if (spec?.data.source !== 'inline') return '';
+    if (spec?.data.source !== 'inline') {
+        slide.deck.lost('charts-dropped', el);
+        return '';
+    }
     const parts = {
         parts: slide.deck.charts,
         path: 'ppt/charts/chart',

@@ -1,3 +1,5 @@
+// The pptx writer's pictures and slide backgrounds, each image a media part related from the slide that shows it.
+
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { VectorFrame, VectorImageElement } from '@workspace/lib/vector';
 import { isBordered } from '@workspace/lib/vector';
@@ -6,8 +8,6 @@ import type { OfficeImage } from '../../office-image';
 import { lineXml } from './lines';
 import type { Slide } from './package';
 import { boxGeometry, fillXml, presetXml, share, spXml, xfrmXml } from './shapes';
-
-// Pictures and backgrounds.
 
 function slideBlipXml(image: OfficeImage, slide: Slide, opacity: number): string {
     const rId = slide.part.relate('image', `../media/${image.part}`);
@@ -32,7 +32,10 @@ export function pictureXml(el: VectorImageElement, slide: Slide, opacity: number
     const image = slide.deck.images.image(el.mediaName);
     const bordered = isBordered(el);
     const border = () => spXml(slide, 'Border', el, boxGeometry(el), '<a:noFill/>', lineXml(slide, el, opacity));
-    if (!image) return bordered ? border() : '';
+    if (!image) {
+        if (el.mediaName) slide.deck.lost('images-dropped', el);
+        return bordered ? border() : '';
+    }
     const fit = fitOf(image, el.width, el.height);
     const contain = el.objectFit === 'contain' && fit;
     const box = contain
@@ -65,7 +68,10 @@ export function backgroundXml(background: BackgroundFill | null, frame: VectorFr
     if (!background) return '';
     if (background.type !== 'image') return `<p:bg><p:bgPr>${fillXml(background, 1)}<a:effectLst/></p:bgPr></p:bg>`;
     const image = slide.deck.images.image(background.mediaName);
-    if (!image) return '';
+    if (!image) {
+        slide.deck.lost('images-dropped', frame);
+        return '';
+    }
     const fit = fitOf(image, frame.width, frame.height);
     let insets = '';
     if (fit) {

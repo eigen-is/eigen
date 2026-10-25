@@ -98,6 +98,8 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         Math.max(1, Math.round(set > 0 ? Math.min(set, columnPx) : Math.min(natural, room))) * EMU_PER_PX;
     const image =
         node.type === 'chart' ? wordChartOf(node, context.pkg, extent) : imageOf(figureMediaKey(node), context.pkg);
+    // A figure that names a picture it can't write is counted; one that names none loses nothing.
+    if (!image && node.type !== 'chart' && (attrs.mediaName || attrs.src)) context.pkg.lost('images-dropped');
     // The caption alone is the figure's box, as the HTML's.
     if (!image) return captionRuns ? [captionParagraph(0, { top: top + captionBefore, bottom })] : [];
     const cx = extent(image.width);
@@ -184,13 +186,16 @@ function imageOf(name: string | null, pkg: Package): Image | undefined {
 }
 
 // Drawn plain, as a chart part paints no sketch, hatch, gradient or dash, and at the scale `extent` draws it at. A doc
-// has no sheet, so a spec that doesn't parse or holds range data draws nothing, and its caption stands alone. The labels
-// draw in the spec's font, embedded as a run's is, the title in the bold. Word draws the numbers the part holds inline:
-// a docx embeds no workbook for Edit Data to open.
+// has no sheet, so a spec that doesn't parse or holds range data draws nothing. It is counted as a chart left out, and
+// its caption stands alone. The labels draw in the spec's font, embedded as a run's is, the title in the bold. Word
+// draws the numbers the part holds inline: a docx embeds no workbook for Edit Data to open.
 function wordChartOf(node: JSONContent, pkg: Package, extent: (natural: number) => number): WordChart | undefined {
     const attrs = readChartAttrs(node.attrs ?? {});
     const { spec } = readChartSpec(node.attrs ?? {});
-    if (spec?.data.source !== 'inline') return undefined;
+    if (spec?.data.source !== 'inline') {
+        pkg.lost('charts-dropped');
+        return undefined;
+    }
     const width = attrs.width ?? CHART_DEFAULT_SIZE.width;
     const height = attrs.height ?? CHART_DEFAULT_SIZE.height;
     const parts = { parts: pkg.charts, path: 'word/charts/chart', target: 'charts/chart', relate: pkg.part.relate };

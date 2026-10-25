@@ -61,7 +61,7 @@ function deck(): Uint8Array {
     for (const [i, element] of ELEMENTS.entries())
         writeElementInDoc(doc, { ...element, frameId: 'f1' }, keys[i], SLIDES_STYLE_DEFAULTS, `el-${i}`);
     const media = [{ name: 'pixel.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG.slice()) }];
-    return writePptx(readVectorFromDoc(doc), { title: 'Round trip', media });
+    return writePptx(readVectorFromDoc(doc), { title: 'Round trip', media, lost: () => {} });
 }
 
 async function corpus(name: string, files: Record<string, Uint8Array | string>): Promise<string> {

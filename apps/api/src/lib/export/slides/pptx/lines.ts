@@ -1,3 +1,5 @@
+// The pptx writer's lines: lines, arrows, freehand strokes and paths, and the a:ln every stroke is written as.
+
 import type {
     Arrowhead,
     Box,
@@ -28,8 +30,6 @@ import { colorXml, LINE_END_BY_ARROWHEAD, PRESET_DASH_BY_STYLE } from '../../../
 import type { Slide } from './package';
 import { customXml, fillXml, presetXml, spXml, toEmu, xfrmXml } from './shapes';
 import { NO_MARKS, textBodyXml } from './text';
-
-// Lines, arrows, freehand strokes and paths, and the a:ln every stroke is written as.
 
 type Stroke = { strokeColor: string; strokeWidth: number; strokeStyle: StrokeStyle };
 
@@ -167,6 +167,8 @@ function pathFrame(el: Box, points: Point[], slide: Slide): { box: Box; pt: (p: 
 
 export function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string {
     const points = arrowRoute(el, slide.deck.byId) ?? parsePoints(el.points);
+    // DrawingML has no rounded elbow, so the bends are square.
+    if (el.elbow && el.roundness === 'round' && points.length > 2) slide.deck.lost('shapes-simplified', el);
     let xml = linearXml(el, points, slide, opacity, [el.startArrowhead, el.endArrowhead]);
     for (const position of ['start', 'end'] as const) {
         const head = position === 'start' ? el.startArrowhead : el.endArrowhead;
