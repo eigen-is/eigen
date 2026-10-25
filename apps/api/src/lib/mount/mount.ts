@@ -855,12 +855,18 @@ export class Mount {
     }
 
     // Refuses to move a row that is in trash. A trash may have landed while the move waited, and on
-    // `local` the move would carry its bytes out of .trash/. It also refuses a move into the row's own
-    // subtree. `seen` stops the walk on a tree that already has a cycle.
+    // `local` the move would carry its bytes out of .trash/.
     private assertMovableInTx(tx: Tx, pathId: string, targetParentId: string | null | undefined): void {
         const row = tx.select({ trashedAt: paths.trashedAt }).from(paths).where(eq(paths.id, pathId)).get();
         if (row?.trashedAt) throw new ApiError(404, 'File is in trash');
-        if (targetParentId === undefined) return;
+        if (targetParentId !== undefined) this.assertTargetFolderInTx(tx, pathId, targetParentId);
+    }
+
+    // A move or a restore runs this in the transaction of its row write. It refuses a target in the
+    // row's own subtree. It also refuses a target that went to trash after the caller checked it, with
+    // the 404 of a deleted folder, because the folder's permanent delete would take the row with it.
+    // `seen` stops the walk on a tree that already has a cycle.
+    public assertTargetFolderInTx(tx: Tx, pathId: string, targetParentId: string | null): void {
         const seen = new Set<string>();
         let current = targetParentId;
         while (current) {
@@ -869,7 +875,12 @@ export class Mount {
             }
             if (seen.has(current)) throw new ApiError(500, `Folder tree has a cycle at ${current}`);
             seen.add(current);
-            const row = tx.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, current)).get();
+            const row = tx
+                .select({ parentId: paths.parentId, trashedAt: paths.trashedAt })
+                .from(paths)
+                .where(eq(paths.id, current))
+                .get();
+            if (row?.trashedAt) throw new ApiError(404, 'Folder not found');
             current = row?.parentId ?? null;
         }
     }

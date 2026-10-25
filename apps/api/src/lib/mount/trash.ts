@@ -131,19 +131,24 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
             }
 
             const now = new Date();
+            // Off `local` no lock keeps a trash of the target folder out, so the check shares the
+            // transaction of the row write.
             const writeRow = async (): Promise<void> => {
                 try {
-                    await mount.db
-                        .update(paths)
-                        .set({
-                            parentId: targetParentId,
-                            trashedAt: null,
-                            trashedFrom: null,
-                            name: restoreName,
-                            ...(mount.isPathBased ? { file: restoreName } : {}),
-                            updatedAt: now,
-                        })
-                        .where(eq(paths.id, pathId));
+                    mount.db.transaction((tx) => {
+                        mount.assertTargetFolderInTx(tx, pathId, targetParentId);
+                        tx.update(paths)
+                            .set({
+                                parentId: targetParentId,
+                                trashedAt: null,
+                                trashedFrom: null,
+                                name: restoreName,
+                                ...(mount.isPathBased ? { file: restoreName } : {}),
+                                updatedAt: now,
+                            })
+                            .where(eq(paths.id, pathId))
+                            .run();
+                    });
                 } catch (e) {
                     rethrowPathWriteError(e, restoreName);
                 }
@@ -279,8 +284,9 @@ export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void
 
 // Runs under the item's path lock, which trash and restore take too, and reads the row inside it. So a
 // restore that got the lock first is never undone. It returns false when the item is gone or not in trash.
-// A move that raced a trash can point a trashedFrom back into the folder being deleted. Path locks are
-// not reentrant, so the delete skips every item it has already taken on (`seen`).
+// A mount can still hold a trashedFrom that points back into the folder being deleted, written by a
+// move or restore from before those checked for a trashed target. Path locks are not reentrant, so the
+// delete skips every item it has already taken on (`seen`).
 export async function permanentlyDeleteFromTrash(
     mount: Mount,
     pathId: string,

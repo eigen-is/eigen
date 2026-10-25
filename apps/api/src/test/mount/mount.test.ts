@@ -1758,13 +1758,15 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         expect(await mount4.getPath(newId)).not.toBeNull();
     });
 
-    // A move that races a trash can leave a trash root's original folder inside its own subtree, or two
-    // trash roots whose original folders sit inside each other. The delete must not wait on a lock it holds.
+    // A mount can still hold a trash root whose original folder sits inside its own subtree, or two trash
+    // roots whose original folders sit inside each other. The delete must not wait on a lock it holds.
     test('permanent delete ends when trashedFrom points back into the subtree', async () => {
+        const moveRow = (id: string, parentId: string) =>
+            mount.db.update(paths).set({ parentId }).where(eq(paths.id, id));
         const outerId = await mount.createFolder(rootId, 'CycleOuter');
         const innerId = await mount.createFolder(outerId, 'CycleInner');
         await mount.trashPath(innerId);
-        await mount.updatePath(outerId, { parentId: innerId });
+        await moveRow(outerId, innerId);
 
         const pId = await mount.createFolder(rootId, 'CycleP');
         const xId = await mount.createFolder(pId, 'CycleX');
@@ -1772,8 +1774,8 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         const yId = await mount.createFolder(qId, 'CycleY');
         await mount.trashPath(xId);
         await mount.trashPath(yId);
-        await mount.updatePath(pId, { parentId: yId });
-        await mount.updatePath(qId, { parentId: xId });
+        await moveRow(pId, yId);
+        await moveRow(qId, xId);
 
         const deleted = (id: string) =>
             Promise.race([
@@ -1999,6 +2001,46 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
         expect(err).toBeInstanceOf(ApiError);
         expect((err as ApiError).status).toBe(404);
         expect((await mount.getPath(fileId))?.trashedAt).not.toBeNull();
+    });
+
+    // Drive checked the folder before the move. It went to trash after that check, so its later
+    // permanent delete would take the moved file with it.
+    test('a move into a folder trashed meanwhile answers 404', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedBeforeMove');
+        const subId = await mount.createFolder(folderId, 'Sub');
+        const fileId = await mount.createFile(rootId, 'kept-out.txt', 'text/plain', 1, Buffer.from('k'));
+        await mount.trashPath(folderId);
+
+        for (const target of [folderId, subId]) {
+            const err = await mount.updatePath(fileId, { parentId: target }).catch((e: unknown) => e);
+            expect(err).toBeInstanceOf(ApiError);
+            expect((err as ApiError).status).toBe(404);
+        }
+        await mount.permanentlyDeleteFromTrash(folderId);
+        expect((await mount.getPath(fileId))?.parentId).toBe(rootId);
+    });
+
+    // The restore picked the original folder, and the folder goes to trash before the restore writes the row.
+    test('a restore into a folder trashed meanwhile answers 404', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedBeforeRestore');
+        const fileId = await mount.createFile(folderId, 'restored-later.txt', 'text/plain', 1, Buffer.from('r'));
+        await mount.trashPath(fileId);
+
+        const getChildByName = mount.getChildByName.bind(mount);
+        const spy = spyOn(mount, 'getChildByName').mockImplementation(async (parentId, name) => {
+            if (parentId === folderId) await mount.trashPath(folderId);
+            return getChildByName(parentId, name);
+        });
+        let err: unknown;
+        try {
+            err = await mount.restorePath(fileId).catch((e: unknown) => e);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(404);
+
+        expect((await mount.restorePath(fileId)).parentId).toBe(rootId);
     });
 });
 
