@@ -73,6 +73,9 @@ const MAX_VALUE = 1e100;
 // d3 ticks a step under one by its inverse, which overflows near the smallest double, so a span under
 // this lays out as a zero span.
 const MIN_SPAN = 1e-300;
+// A line's axis takes in zero when its smallest magnitude is under this share of its largest, LibreOffice's
+// ScaleAutomatism rule, which mirrors Excel's: the spread is then over a sixth of the largest magnitude.
+const WIDE_SPREAD = 5 / 6;
 const ELLIPSIS = '…';
 
 type Frame = { left: number; top: number; right: number; bottom: number };
@@ -477,8 +480,8 @@ function parity(ctx: Context, labels: ChartLabel[], keep: number): ChartLabel[] 
     return kept;
 }
 
-// The data's range, zero included for bars, which grow from it; a line's axis fits its data unless the line
-// is flat. Stacks sum positives and negatives apart.
+// The data's range, zero included for bars, which grow from it; a line's axis takes in zero when the line is flat
+// or spreads wide, else fits its data. Stacks sum positives and negatives apart.
 function valueExtent(
     values: (number | null)[][],
     stacked: boolean,
@@ -507,6 +510,8 @@ function valueExtent(
             lo = Math.min(lo, down);
         }
     }
+    if (lo > 0 && lo / hi < WIDE_SPREAD) lo = 0;
+    if (hi < 0 && hi / lo < WIDE_SPREAD) hi = 0;
     if (!(hi - lo >= MIN_SPAN)) {
         lo = Math.min(lo, 0);
         hi = Math.max(hi, 0);

@@ -37,7 +37,7 @@ These ride on charts Eigen does read, and the import drops them silently. Each n
 
 ## Drawing as Office and Google do
 
-Ranked by what a user notices, from a study of how ECharts, Chart.js, Plotly, Vega, Highcharts, LibreOffice and Excel draw ([CHART-DRAWING-RESEARCH.md](CHART-DRAWING-RESEARCH.md)). Two rows are the owner's call, since Excel and Google disagree.
+Ranked by what a user notices, from a study of how ECharts, Chart.js, Plotly, Vega, Highcharts, LibreOffice and Excel draw ([CHART-DRAWING-RESEARCH.md](CHART-DRAWING-RESEARCH.md)). One row is the owner's call, since Excel and Google disagree.
 
 | # | What | Effort | Notes |
 |---|---|---|---|
@@ -47,12 +47,11 @@ Ranked by what a user notices, from a study of how ECharts, Chart.js, Plotly, Ve
 | 4 | **Hover tooltips** | M | A chart's hit test is its box, so no app shows a value under the pointer. The layout's shape ids already name the series and point (`bar:<series>:<index>`, `marker:…`, `slice:0:<index>`): hit-test bars and slices by containment and line points within a few pixels, and show series, category and value. Sheets first, as Google Sheets shows them. |
 | 5 | **`#N/A` draws through a line, as Excel's does** | S | `resolveRangeChartData` (`packages/sheet/src/engine/chart-data.ts`) reads every cell that isn't a number as blank, errors included, so `#N/A` breaks a line under the gap setting. Excel bridges `#N/A` in line, scatter and radar charts whatever its blanks setting, and users put `NA()` in a cell for exactly that. Mark `#N/A` apart from a blank and read `c16r3:dispNaAsBlank`, which turns it off. |
 | 6 | **Category labels wrap before they turn** | M | Names that don't fit their band turn -45° and ellipsize; Highcharts, LibreOffice and Google wrap them to a second line first. Break at spaces into the band, two lines at most, and turn only when two lines don't fit. |
-| 7 | **A line's value axis takes in zero, as Excel's does** | S | Owner's call. Eigen's line axis fits its data, as Google's look does; Excel and LibreOffice take in zero once the spread passes a sixth of the max, so an imported line of 50, 70 and 100 ticks 50 to 100 in Eigen and 0 to 100 in Excel. |
-| 8 | **Headroom above the tallest bar** | S | A column of 95, 98 and 100 ends on the top gridline, as Google's does. Excel, LibreOffice, Highcharts and Plotly add a step when the data fills over 20/21 of the axis. |
-| 9 | **A pinned min gets its own label** | S | A min of 3 ticks at 20, 40 and on, with no label at 3. Excel steps from the min, and Chart.js labels a pinned end (`includeBounds`). |
-| 10 | **A sheet chart's ticks never repeat a label** | S | A sheet chart formats ticks with the cell format and ignores the step, so an integer format over a 0.5 step reads `0 1 1 2 2`. Ask for fewer ticks while two neighbours format alike, as LibreOffice does (tdf#48041). |
-| 11 | **Read `c:firstSliceAng`** | S | An Excel pie turned by it draws from 12 o'clock (2 of 48 test-file pies). One number on `plots.pie`, drawn by the start angle `layoutPie` already takes. |
-| 12 | **Dash, hatch and gradient in a written chart's `c:spPr`** | S–M | `writeChart` writes solid fills and lines only, so a chart's dashed stroke and hatch draw plain in Excel, and a gradient background draws none. DrawingML holds each: `a:prstDash`, `a:pattFill` and `a:gradFill`. Map them for xlsx now, and for docx and pptx with their chart parts ([ROADMAP.md](ROADMAP.md), Write charts to Office files as charts). The sketch has no equivalent. |
+| 7 | **Headroom above the tallest bar** | S | A column of 95, 98 and 100 ends on the top gridline, as Google's does. Excel, LibreOffice, Highcharts and Plotly add a step when the data fills over 20/21 of the axis. |
+| 8 | **A pinned min gets its own label** | S | A min of 3 ticks at 20, 40 and on, with no label at 3. Excel steps from the min, and Chart.js labels a pinned end (`includeBounds`). |
+| 9 | **A sheet chart's ticks never repeat a label** | S | A sheet chart formats ticks with the cell format and ignores the step, so an integer format over a 0.5 step reads `0 1 1 2 2`. Ask for fewer ticks while two neighbours format alike, as LibreOffice does (tdf#48041). |
+| 10 | **Read `c:firstSliceAng`** | S | An Excel pie turned by it draws from 12 o'clock (2 of 48 test-file pies). One number on `plots.pie`, drawn by the start angle `layoutPie` already takes. |
+| 11 | **Dash, hatch and gradient in a written chart's `c:spPr`** | S–M | `writeChart` writes solid fills and lines only, so a chart's dashed stroke and hatch draw plain in Excel, and a gradient background draws none. DrawingML holds each: `a:prstDash`, `a:pattFill` and `a:gradFill`. Map them for xlsx now, and for docx and pptx with their chart parts ([ROADMAP.md](ROADMAP.md), Write charts to Office files as charts). The sketch has no equivalent. |
 
 ## Measuring
 

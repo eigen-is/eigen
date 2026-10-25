@@ -1108,6 +1108,27 @@ describe('edge cases', () => {
         expect(valueTicks(layout('line', {}, { data: one([-5, -5]) })).at(-1)).toBe('0');
     });
 
+    test("a line axis takes in zero once the data spreads over a sixth of its largest magnitude, as Excel's does", () => {
+        // The line's lowest point sits as far above the baseline at zero as it sits below its highest point.
+        const wide = layout('line', {}, { data: one([50, 70, 100]) });
+        expect(valueTicks(wide)[0]).toBe('0');
+        const [line] = lines(wide, 'line');
+        expect(lines(wide, 'baseline')[0].y - (line.y + line.height)).toBeCloseTo(line.height, 6);
+        expect(valueTicks(layout('line', {}, { data: one([-50, -70, -100]) })).at(-1)).toBe('0');
+        // 49 is under 5/6 of 60; 50 is exactly 5/6 and still fits.
+        expect(valueTicks(layout('line', {}, { data: one([49, 60]) }))[0]).toBe('0');
+        for (const values of [
+            [90, 95, 100],
+            [50, 60],
+        ]) {
+            expect(Number(valueTicks(layout('line', {}, { data: one(values) }))[0])).toBeGreaterThan(0);
+            expect(Number(valueTicks(layout('line', {}, { data: one(values.map((v) => -v)) })).at(-1))).toBeLessThan(0);
+        }
+        // A pinned min still wins.
+        const pinned = layout('line', { axes: { y: { scale: { min: 40, max: null } } } }, { data: one([50, 70, 100]) });
+        expect(valueTicks(pinned)[0]).toBe('40');
+    });
+
     test('no plottable value says No data for every type', () => {
         for (const type of CHART_TYPES) {
             for (const blanks of ['gap', 'zero', 'span'] as const) {
