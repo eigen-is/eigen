@@ -1896,7 +1896,7 @@ describe('the trash purge at mount open', () => {
             await Bun.sleep(50);
 
             expect(deletes.mock.calls.length).toBe(deletesAtClose);
-            expect(errors.mock.calls.filter(([message]) => String(message).includes('purge'))).toEqual([]);
+            expect(errors).not.toHaveBeenCalled();
         } finally {
             errors.mockRestore();
         }
@@ -1904,7 +1904,9 @@ describe('the trash purge at mount open', () => {
         // Whatever the purge left keeps its row, so the next open finishes it.
         const third = openMount(config, handles);
         await third.init({ passive: true });
-        expect((await third.listTrash()).length).toBe(readdirSync(third.dataDir).length);
+        const left = (await third.listTrash()).length;
+        expect(left).toBeGreaterThan(0);
+        expect(left).toBe(readdirSync(third.dataDir).length);
         await handles[2].close();
     });
 });
