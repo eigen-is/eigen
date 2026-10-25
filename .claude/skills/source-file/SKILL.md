@@ -42,7 +42,7 @@ import * as path from 'node:path';
 3. Make types honest: a part that can be missing is optional. No new `as`.
 4. Give every class member `public`, `private` or `protected`, the narrowest that compiles.
 5. Split `import type { … }` from the value import of the same module, so each line fits.
-6. Comments: keep only the WHY a maintainer can't see in the code, and rewrite it in plain English. Delete narration, history, review reasoning and audit tags.
+6. Comments: keep only the WHY a maintainer can't see in the code, and only where it adds real value. Rewrite each as you would explain it to a colleague: whole sentences, one thought each, no comma-chained clauses or private shorthand. A comment that doesn't make the code clearer goes. Delete narration, history, review reasoning and audit tags.
 7. Write the header.
 8. Neighbouring files with the same smell: fix it when it is a few lines, otherwise list it in your report.
 
