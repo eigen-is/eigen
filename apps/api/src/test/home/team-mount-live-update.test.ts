@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { teamOwnerId } from '@workspace/lib/types';
 import { getSyntheticTeamUser, TeamHome } from '../../lib/home/team-home';
+import { createMountConfig, Mount } from '../../lib/mount';
 import { getTestContext } from '../setup';
 
 // AUDIT 11: TeamHome.updateMount only persisted the change to settings.json; the already-built Drive
@@ -133,6 +134,44 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
             const listed = await home.drive.listMounts();
             expect(listed.find((m) => m.id === mount.id)).toBeUndefined();
         } finally {
+            await home.close();
+        }
+    });
+
+    // The Drive is called directly. Two saves of the settings file at once collide on their own.
+    test('two storage changes at once leave one open mount, on the change made last', async () => {
+        const home = await freshTeamHome();
+        const built: Mount[] = [];
+        const init = Mount.prototype.init;
+        const spy = spyOn(Mount.prototype, 'init').mockImplementation(function (this: Mount) {
+            built.push(this);
+            return init.call(this);
+        });
+        try {
+            const settings = await home.addMount({ name: 'Raced', maxSizeMB: 100 });
+            built.length = 0;
+            const repointed = (bucket: string) =>
+                createMountConfig(settings.id, {
+                    ...settings,
+                    s3Config: {
+                        endpoint: 'https://s3.example.com',
+                        bucket,
+                        prefix: '',
+                        accessKeyId: 'AK',
+                        secretAccessKey: 'SK',
+                    },
+                });
+
+            await Promise.all([
+                home.drive.updateMount(repointed('first'), true),
+                home.drive.updateMount(repointed('second'), true),
+            ]);
+
+            expect(built).toHaveLength(2);
+            expect(built.filter((m) => !m.closing)).toEqual(home.drive.getMounts());
+            expect(home.drive.getMountConfig(settings.id).s3Config?.bucket).toBe('second');
+        } finally {
+            spy.mockRestore();
             await home.close();
         }
     });

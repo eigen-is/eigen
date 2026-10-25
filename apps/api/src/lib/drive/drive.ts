@@ -103,10 +103,8 @@ export class Drive {
     private defaultMountId = 'default';
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
     private readonly documents: CollabRegistry;
-    // The last ACL change queued for each path. updateACLDelta runs the changes for one path one
-    // after the other. Otherwise two changes would both merge onto the same old ACL, and the one
-    // that writes last would drop the entries of the other.
-    private readonly aclDeltaChains = new Map<string, Promise<void>>();
+    // The last change queued for each key, such as the ACL of one path or the settings of one mount.
+    private readonly chains = new Map<string, Promise<void>>();
 
     public constructor(home: Home) {
         this.home = home;
@@ -169,25 +167,29 @@ export class Drive {
     }
 
     // Applies saved mount settings to the live mount, so a change takes effect without reloading the home.
+    // Two changes to one mount run one after the other. Otherwise both could build a new mount, and
+    // the one that lands last would leave the other open.
     public async updateMount(config: MountConfig, enabled: boolean): Promise<void> {
-        const live = this.mounts.get(config.id);
-        if (!enabled) {
-            if (live) await this.removeMount(config.id);
-            return;
-        }
-        if (!live) {
-            await this.addMount(config);
-            return;
-        }
-        // A mount binds its storage backend when it is built, so new storage needs a new mount. Closing
-        // the old one syncs its open databases to the old storage. The new one replays any pending
-        // uploads to the new storage when it starts.
-        if (mountStorageIdentity(live.config) !== mountStorageIdentity(config)) {
-            await this.removeMount(config.id);
-            await this.addMount(config);
-            return;
-        }
-        live.applyConfig(config);
+        return this.runInOrder(`mount:${config.id}`, async () => {
+            const live = this.mounts.get(config.id);
+            if (!enabled) {
+                if (live) await this.removeMount(config.id);
+                return;
+            }
+            if (!live) {
+                await this.addMount(config);
+                return;
+            }
+            // A mount binds its storage backend when it is built, so new storage needs a new mount.
+            // Closing the old one syncs its open databases to the old storage. The new one replays any
+            // pending uploads to the new storage when it starts.
+            if (mountStorageIdentity(live.config) !== mountStorageIdentity(config)) {
+                await this.removeMount(config.id);
+                await this.addMount(config);
+                return;
+            }
+            live.applyConfig(config);
+        });
     }
 
     private async removeMount(mountId: string): Promise<void> {
@@ -203,6 +205,22 @@ export class Drive {
         await this.documents.destructMount(mount);
         await mount.closeAllDatabases();
         this.mounts.delete(mountId);
+    }
+
+    // Runs fn after every earlier call with the same key has finished.
+    private async runInOrder<T>(key: string, fn: () => Promise<T>): Promise<T> {
+        const run = (this.chains.get(key) ?? Promise.resolve()).then(fn);
+        // The chain keeps a copy that never fails, so one refused change doesn't stop the next one.
+        // The caller still gets the real error from run.
+        const tail = run.then(
+            () => {},
+            () => {},
+        );
+        this.chains.set(key, tail);
+        tail.then(() => {
+            if (this.chains.get(key) === tail) this.chains.delete(key);
+        });
+        return run;
     }
 
     public getMounts(): Mount[] {
@@ -720,7 +738,9 @@ export class Drive {
         return canWriteFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)));
     }
 
-    // Routes change an ACL only through here. The change is merged onto the ACL as it is now, on the server.
+    // Routes change an ACL only through here. The change is merged onto the ACL as it is now, on the
+    // server. Two changes to one path run one after the other. Otherwise both would merge onto the same
+    // old ACL, and the one that writes last would drop the entries of the other.
     public async updateACLDelta(
         mountId: string,
         pathId: string,
@@ -730,9 +750,7 @@ export class Drive {
         actor?: User | null,
         options?: ACLPropagationOptions,
     ): Promise<void> {
-        const key = `${mountId}:${pathId}`;
-        const prev = this.aclDeltaChains.get(key) ?? Promise.resolve();
-        const run = prev.then(async () => {
+        return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
             const item = await this.getMount(mountId).getPath(pathId);
             if (!item) {
                 throw new ApiError(404, 'Path not found');
@@ -747,16 +765,6 @@ export class Drive {
                 options,
             );
         });
-        // The chain keeps a copy that never fails, so one refused change doesn't stop the next one.
-        // The caller still gets the real error from run.
-        const tail = run.catch(() => {});
-        this.aclDeltaChains.set(key, tail);
-        tail.then(() => {
-            if (this.aclDeltaChains.get(key) === tail) {
-                this.aclDeltaChains.delete(key);
-            }
-        });
-        return run;
     }
 
     // Replaces the whole ACL. Routes only send changes, through updateACLDelta, so no client can
