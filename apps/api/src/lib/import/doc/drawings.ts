@@ -33,7 +33,6 @@ import { descendants, int } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks } from './paragraphs';
 import type { RunContext } from './runs';
-import { pushText } from './runs';
 
 // A part the package gives no type takes its extension's, and a misspelt type its alias; both only through the
 // allowlist, so a part declared as anything else is still never stored. A WMF or EMF figure shows its alt text in a
@@ -52,16 +51,18 @@ function imageType(reader: Reader, path: string): string | undefined {
 // sharp has no loader for these, so no screen preview shows them.
 export const UNSHOWN_IMAGE_TYPES = new Set(['image/bmp', 'image/x-wmf', 'image/x-emf']);
 
-// One media file per image part, named in encounter order. A picture whose part is missing or of no image type, whose
-// bytes don't read, or past the pictures' caps is left out and counted, and leaves a line saying so, as a slide leaves
-// a box.
-function pictureName(reader: Reader, path: string, context: RunContext): string | undefined {
+// One media file per image part, named in encounter order; none for a part that is missing or of no image type, whose
+// bytes don't read, or past the pictures' caps.
+function pictureName(reader: Reader, path: string): string | undefined {
     const part = mediaPart(reader.pkg.zip, path, imageType(reader, path), IMAGE_TYPES);
-    const name = part && reader.files.name(part);
-    if (name) return name;
+    return part && reader.files.name(part);
+}
+
+// A picture left out is counted and leaves a line saying so, as a slide leaves a box; a linked one, which lives outside
+// the file, its alt text after the line.
+function pictureLeftOut(reader: Reader, context: RunContext, alt: string | null): void {
     reader.lost('images-dropped');
-    leaveLines(context, [PICTURE_NOT_IMPORTED]);
-    return undefined;
+    leaveLines(context, alt ? [PICTURE_NOT_IMPORTED, alt] : [PICTURE_NOT_IMPORTED]);
 }
 
 // What a drawing left out says in its place, a paragraph after the one it stood in.
@@ -102,10 +103,10 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             const [blip] = descendants(picture, A_NS, 'blip');
             const [svg, raster] = blipEmbeds(blip);
             const path = partPath(svg, context.scope) ?? partPath(raster, context.scope);
-            const name = path && pictureName(reader, path, context);
+            const name = path && pictureName(reader, path);
             if (!name) {
-                // A linked picture lives outside the file; its alt text says what it was.
-                if (blip && !raster && xmlAttr(blip, R_NS, 'link') && alt) pushText(reader, alt, {}, context);
+                const linked = blip && !raster && xmlAttr(blip, R_NS, 'link');
+                if (path || linked) pictureLeftOut(reader, context, linked ? alt : null);
                 continue;
             }
             const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];
@@ -272,8 +273,11 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
                 continue;
             }
             const path = partPath(xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid'), context.scope);
-            const name = path && pictureName(reader, path, context);
-            if (!name) continue;
+            const name = path && pictureName(reader, path);
+            if (!name) {
+                if (path) pictureLeftOut(reader, context, null);
+                continue;
+            }
             const width = vmlWidthPx(shape.attributes['style'] ?? '', reader.columnPx);
             const alt = shape.attributes['alt'] || xmlAttr(data, O_NS, 'title') || null;
             context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, width } } });

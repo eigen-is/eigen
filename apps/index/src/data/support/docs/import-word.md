@@ -70,6 +70,7 @@ After an import into an open document, a message counts what didn't come across,
 - A chart in a header, footer, or footnote comes in as its title only.
 - An equation takes the size of the text around it, so a size set inside a Word equation doesn't come across.
 - A picture Eigen can't read is left out, and so is every picture after the first 1,000, or once the pictures add up to more than the largest file you can upload (35 MB unless your administrator changed it). A line that says **Picture not imported** takes its place.
+- A picture linked to a file outside the Word document, rather than saved in it, is left out too. Its description follows the **Picture not imported** line.
 - A WMF, EMF, or BMP picture, a format older Office files often use, comes in but can't be shown: it shows as a broken image with its description, and the message counts it as a picture that was kept, but can't be shown. You can delete it. When you download the document, it's left out.
 
 A password-protected Word file can't be imported. Open it in Word, remove the password, save it, and import it again.

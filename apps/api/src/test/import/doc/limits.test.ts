@@ -1128,14 +1128,15 @@ describe('figures and media', () => {
         expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual([PICTURE_NOT_IMPORTED, 'Figure 1']);
     });
 
-    test('a linked picture is dropped, its alt text kept as text', async () => {
+    test('a linked picture is left out and counted as a pptx and an xlsx count theirs, its alt text after the line', async () => {
         const linked = GOLDEN_DOCX_IMAGE_RUN.replace('r:embed="rId4"', 'r:link="rId9"');
-        const { json, media } = await importDocxBody(paragraph(linked), {
+        const { json, media, warnings } = await importDocxBody(paragraph(linked), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="https://example.com/chart.png" TargetMode="External"/>`,
         });
         expect(media).toEqual([]);
         expect(nodesOfType(json, 'figure')).toEqual([]);
-        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['A pixel']);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual([PICTURE_NOT_IMPORTED, 'A pixel']);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
 });
 
