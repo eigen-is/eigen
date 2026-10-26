@@ -1,3 +1,8 @@
+// The one sanitizer every export and preview body passes, DOMPurify plus a rule of our own: nothing in the result may
+// fetch, as a browser opening a download and the drive hero fetch whatever a body references. Resources are data: URIs,
+// or the exact preview URLs the caller allows. Beside it are the passes for SVG media and for a canvas scene's text
+// boxes.
+
 import { isElement, LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@workspace/lib/html';
 import { CSS_FETCH_FUNCTIONS, cssStatements, sheetText } from '@workspace/lib/mail/remote-content';
 import type { VectorScene } from '@workspace/lib/vector';
@@ -13,14 +18,6 @@ type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
 // as a data: URI and pass none; a preview body embeds the `/file/<id>/preview` URLs the main thread
 // resolved, so it passes exactly those — an exact-string set, never a host or prefix rule.
 type SanitizeOptions = SanitizeConfig & { allowedRefs?: ReadonlySet<string> };
-
-// Minimal structural view of the jsdom element passed to DOMPurify hooks.
-type AttrNode = {
-    tagName?: string;
-    getAttribute(name: string): string | null;
-    setAttribute(name: string, value: string): void;
-    removeAttribute(name: string): void;
-};
 
 // `url(` as the CSS parser reads it, in any case, unless a same-document fragment or a data: URI with no fragment
 // follows: Firefox loads a data: SVG named with one (`mask:url(data:…#m)`) as a document and fetches its @import. A
@@ -83,8 +80,8 @@ const cssFetches = (css: string, allowed: ReadonlySet<string>): boolean =>
 // of the prepared media URLs, so any other CSS url() or fetching attribute is attacker-injected via
 // schemaless slide/sheet/vector CRDT strings. A browser opening an HTML download fetches those, and a
 // preview body is injected as live DOM in the drive hero (a beacon fired at every viewer). DOMPurify
-// keeps url()/src by default, so restrict here; WeasyPrint's fetcher opens only data: URIs
-// (weasyprint-render.py). <a href> is left alone: a browser follows a link on a click, and sheets/docs
+// keeps url()/src by default, so restrict here; WeasyPrint's fetcher opens only data: URIs too.
+// <a href> is left alone: a browser follows a link on a click, and sheets/docs
 // carry legitimate http(s) hyperlinks.
 function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>): void {
     // SVG presentation attributes (fill, filter, mask, marker-*) are CSS too, so every value is scanned for `url(`.
@@ -121,7 +118,7 @@ function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>): void {
 }
 
 // DOMPurify's default profile drops every <use>; one that draws a glyph from its own document fetches nothing.
-function isSameDocumentUse(node: AttrNode): boolean {
+function isSameDocumentUse(node: Element): boolean {
     const refs = [node.getAttribute('href'), node.getAttribute('xlink:href')].filter((ref) => ref !== null);
     return refs.length > 0 && refs.every(isFragmentRef);
 }
@@ -145,7 +142,7 @@ function restrictStyleTextToDataRefs(node: Element, allowed: ReadonlySet<string>
 export const KEEP_MATHML = { ADD_TAGS: ['none'] };
 
 // Backs the data-only rule up in the browser: the export route sends it as a header, and every HTML
-// download carries it as a <meta> (html-document.ts).
+// download carries it as a <meta>.
 export const EXPORT_CSP = "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'";
 
 // Shared sanitizer for assembled export and preview bodies (slides/sheets/docs/vector), used for HTML,
@@ -160,7 +157,7 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
         if (data.tagName === 'use') data.allowedTags['use'] = isElement(node) && isSameDocumentUse(node);
     });
     try {
-        return DOMPurify.sanitize(html, { FORCE_BODY: true, ...config }) as string;
+        return DOMPurify.sanitize(html, { FORCE_BODY: true, ...config });
     } finally {
         DOMPurify.removeHook('afterSanitizeAttributes');
         DOMPurify.removeHook('uponSanitizeElement');
@@ -185,7 +182,7 @@ function dropNestedUses(root: Element): void {
 }
 
 // An .svg is read as XML, where DOMPurify's HTML (an unclosed <br>, an &nbsp;) blanks the drawing. Empty with no <svg>.
-export function toXmlDocument(svg: string): string {
+function toXmlDocument(svg: string): string {
     const dom = new JSDOM(svg, { contentType: 'text/html' });
     const root = dom.window.document.querySelector('svg');
     if (!root) return '';
