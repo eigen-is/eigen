@@ -4,7 +4,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../../lib/config/server-config';
 import * as getHomeModule from '../../lib/home/get-home';
-import { sendToHome } from '../../lib/home/home-relay';
+import { drainHomeDeliveries, sendToHome, sendToUserHomes } from '../../lib/home/home-relay';
 import type { TestContext, TestUser } from '../setup';
 import {
     addMember,
@@ -186,5 +186,33 @@ describe('A fan-out to many homes', () => {
         }
         expect(held.peak()).toBeGreaterThan(0);
         expect(held.peak()).toBeLessThanOrEqual(DELIVERY_BUDGET);
+    });
+});
+
+describe('A graceful shutdown', () => {
+    afterEach(() => {
+        mock.restore();
+    });
+
+    // A delivery reopens the recipient's home, so the shutdown waits for it before it closes the homes.
+    test('waits for the deliveries a fan-out started after its request answered', async () => {
+        const tag = 'relay-drain:detached';
+        const held = holdMemberHomes();
+        let drainedFirst: boolean;
+        try {
+            sendToUserHomes(
+                members.map((member) => member.id),
+                { type: 'notification', notification: { type: 'admin-alert', title: 'Detached', tag } },
+            ).catch(() => {});
+            drainedFirst = await answersFirst(drainHomeDeliveries());
+        } finally {
+            held.release();
+        }
+        expect(drainedFirst).toBe(false);
+
+        await drainHomeDeliveries();
+        for (const member of members) {
+            expect(await notificationsWithTag(member, tag)).toHaveLength(1);
+        }
     });
 });

@@ -168,9 +168,13 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
 // and a user home relays no further. So a delivery never waits for a permit that its own fan-out holds.
 const deliveryBudget = new Semaphore(8);
 
+// The fan-outs that are still delivering. Most of them run after their request answered, so nobody
+// waits for them. A delivery opens its recipient's home, so a shutdown drains them first.
+const deliveries = new Set<Promise<unknown>>();
+
 // A failed delivery is logged, and the other homes still get the message.
 export async function sendToUserHomes(userIds: Iterable<string>, message: HomeMessage): Promise<void> {
-    await Promise.all(
+    const delivery = Promise.all(
         [...userIds].map((id) =>
             deliveryBudget.run(() =>
                 sendToHome(id, message).catch((err) =>
@@ -179,6 +183,21 @@ export async function sendToUserHomes(userIds: Iterable<string>, message: HomeMe
             ),
         ),
     );
+    deliveries.add(delivery);
+    try {
+        await delivery;
+    } finally {
+        deliveries.delete(delivery);
+    }
+}
+
+// Waits for every fan-out that is still delivering, and for the ones that start meanwhile, such as a
+// team notification that a delivery passes on to the members. Graceful shutdown calls it before it
+// closes the homes.
+export async function drainHomeDeliveries(): Promise<void> {
+    while (deliveries.size > 0) {
+        await Promise.allSettled([...deliveries]);
+    }
 }
 
 // Tells the open tabs of each member, such as everyone a file is shared with, about one event. A

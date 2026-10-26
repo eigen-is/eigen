@@ -9,6 +9,7 @@ import { assertMailDomainUnchanged, isSetupRequired } from './lib/config/server-
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
+import { drainHomeDeliveries } from './lib/home/home-relay';
 import { pinDefaultTeam } from './lib/org';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
@@ -77,8 +78,10 @@ async function gracefulShutdown(signal: string) {
     // Each mount flushes its upload queue (bounded by this deadline) during destruct, after
     // its final close-time enqueues but before metadata.db closes.
     setShutdownDrainDeadline(Date.now() + SHUTDOWN_DRAIN_BUDGET_MS);
-    // In-flight ACL fan-outs reopen recipient homes to deliver, so drain them before closing homes.
+    // A delivery reopens its recipient's home, so the queued ACL fan-outs and every other delivery
+    // still in flight, such as watcher and chat notifications, finish before the homes close.
     await drainACLFanOuts();
+    await drainHomeDeliveries();
     await shutdownAllHomes();
     console.log('All homes shut down, exiting.');
     process.exit(0);
