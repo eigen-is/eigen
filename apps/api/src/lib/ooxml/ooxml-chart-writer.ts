@@ -6,6 +6,7 @@
 
 import { gradientStops } from '@workspace/lib/background';
 import {
+    BAR_GROUP_WIDTH,
     CHART_TITLE_SCALE,
     chartColor,
     chartFontSize,
@@ -64,6 +65,9 @@ type ChartParts = {
 // The fixed c:axId of x, the category axis, and of y, the value axis.
 const CATEGORY_AXIS = 1;
 const VALUE_AXIS = 2;
+
+// ST_GapAmount's largest gap, in percent of a bar's width.
+const MAX_GAP_WIDTH = 500;
 
 // The reader's tables turned around. Where two spellings read the same, the reader's first is the one written:
 // clustered rather than standard, r rather than tr.
@@ -299,10 +303,14 @@ function groupXml(spec: ChartSpec, width: number, sources: Source[]): string {
     }
     const { stacking } = spec.plots[type];
     const stacked = stacking !== 'none';
+    // Office's gap between categories is a share of one bar's width, so the bars side by side and the gap make up the
+    // category. This gap leaves the bars the share Eigen draws them at, up to the widest gap ST_GapAmount allows.
+    const bars = stacked ? 1 : spec.data.series.length;
+    const gap = Math.min(MAX_GAP_WIDTH, Math.round((100 * bars * (1 - BAR_GROUP_WIDTH)) / BAR_GROUP_WIDTH));
     return [
         `<c:barChart><c:barDir val="${type === 'bar' ? 'bar' : 'col'}"/>`,
         `<c:grouping val="${GROUPING.get(stacking)}"/><c:varyColors val="0"/>${series}`,
-        `<c:gapWidth val="150"/>${stacked ? '<c:overlap val="100"/>' : ''}${axes}</c:barChart>`,
+        `<c:gapWidth val="${gap}"/>${stacked ? '<c:overlap val="100"/>' : ''}${axes}</c:barChart>`,
     ].join('');
 }
 

@@ -346,6 +346,21 @@ describe('writeChart with inline data', () => {
         expect(at({ ...FRAME, emuPerPx: EMU_PER_PX / 2 })).toContain(String(Math.round(label / 2)));
     });
 
+    test("the bars fill Eigen's share of their category, so Office draws them as wide, up to the widest gap Office allows", () => {
+        const gapOf = (type: 'column' | 'bar', stacking: ChartStacking, count: number) => {
+            const series = Array.from({ length: count }, (_, i) => ({ id: `s-${i + 1}`, name: '', values: [1, 2] }));
+            const data = { source: 'inline' as const, categories: ['a', 'b'], series };
+            const spec = parsed({ ...defaultChartSpec(type, data), ...stacked(type, stacking) });
+            return val(root(writeChart(spec, INLINE)), 'gapWidth');
+        };
+        // One bar fills 61.8% of its category when the gap is 61.8% of a bar's width.
+        expect(gapOf('column', 'none', 1)).toBe('62');
+        expect(gapOf('bar', 'none', 2)).toBe('124');
+        expect(gapOf('column', 'stacked', 3)).toBe('62');
+        expect(gapOf('column', 'percent', 3)).toBe('62');
+        expect(gapOf('column', 'none', 9)).toBe('500');
+    });
+
     test("a chart drawn tiny keeps its text at Office's smallest size, 1 pt", () => {
         const chart = root(
             writeChart(sampleChartSpec('column'), { look: FLAT_CHART_LOOK, frame: { ...FRAME, emuPerPx: 100 } }),

@@ -10,8 +10,9 @@ import { nice, tickStep, ticks } from './ticks';
 // The most value ticks asked of d3 however long the axis: Google's axes stop at about 20 labels, and the
 // box comes from a peer, so its length must not set the work.
 export const MAX_TICK_COUNT = 20;
-// Share of its category's band a category's bars fill, side by side or stacked: Google's bar.groupWidth, the golden ratio.
-const BAR_GROUP_WIDTH = 0.618;
+// The share of its category's band that a category's bars fill, side by side or stacked. It is Google's
+// bar.groupWidth, the golden ratio.
+export const BAR_GROUP_WIDTH = 0.618;
 // d3 ticks a step under one by its inverse, which overflows near the smallest double, so a span under
 // this lays out as a zero span.
 const MIN_SPAN = 1e-300;
