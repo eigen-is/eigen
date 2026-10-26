@@ -1,3 +1,6 @@
+// A sheet chart's body inside its floating frame: the painter's SVG of the chart in its look, read from the workbook's
+// cells. The floating-object layer renders one per chart, and a resize redraws it at the preview size.
+
 import type { SheetChart } from '@workspace/lib/sheets';
 import { sheetFloatingBox } from '@workspace/lib/sheets';
 import type { Box } from '@workspace/lib/vector';
