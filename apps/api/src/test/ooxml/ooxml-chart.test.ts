@@ -583,6 +583,14 @@ describe('the title', () => {
         expect(spec(space(bar() + AXES, { head: lines })).title.text).toBe('From cell');
     });
 
+    // The writer writes a title as rich text, which reads trimmed, so a title from a cell reads trimmed too.
+    test('a title from a cell drops the spaces at its ends, as a rich title does, while a series name keeps them', () => {
+        const cell = `<c:title><c:tx>${strRef('Sheet1!$A$1', [' From cell  '])}</c:tx></c:title>`;
+        const named = bar([{ idx: 0, name: ' Plan ', values: [1] }]);
+        const read = spec(space(named + AXES, { head: cell }));
+        expect([read.title.text, read.data.series[0]?.name]).toEqual(['From cell', ' Plan ']);
+    });
+
     test("a literal title's and a series name's line breaks are a space each, a Windows one too", () => {
         const named = bar([{ idx: 0, name: 'Plan&#13;&#10;2024', values: [1] }]);
         expect(spec(space(named + AXES)).data.series[0]?.name).toBe('Plan 2024');

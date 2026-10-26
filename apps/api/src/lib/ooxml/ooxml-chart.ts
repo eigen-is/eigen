@@ -408,11 +408,11 @@ function seriesIds(series: XmlElement[]): string[] {
 // without a name gives no title.
 function chartTitle(chart: XmlElement | undefined, groups: XmlElement[]): string {
     const title = child(chart, 'title');
-    const text = cachedText(child(title, 'tx'));
+    const text = titleText(child(title, 'tx'));
     if (text !== undefined) return chartLabel(text);
     if (!title && isOnElement(child(chart, 'autoTitleDeleted')) !== false) return '';
     const series = groups.flatMap((group) => children(group, 'ser'));
-    if (series.length === 1) return chartLabel(cachedText(child(series[0], 'tx')) ?? '');
+    if (series.length === 1) return chartLabel(titleText(child(series[0], 'tx')) ?? '');
     return title ? 'Chart Title' : '';
 }
 
@@ -420,7 +420,13 @@ function chartTitle(chart: XmlElement | undefined, groups: XmlElement[]): string
 function axisTitle(axis: XmlElement | undefined): string {
     const title = child(axis, 'title');
     if (!title) return '';
-    return chartLabel(cachedText(child(title, 'tx')) ?? 'Axis Title');
+    return chartLabel(titleText(child(title, 'tx')) ?? 'Axis Title');
+}
+
+// A title's text without the spaces at its ends. The writer writes a title as rich text, which reads trimmed, so a
+// title from a cell reads the same on a round trip.
+function titleText(tx: XmlElement | undefined): string | undefined {
+    return cachedText(tx)?.trim();
 }
 
 function legendPosition(legend: XmlElement | undefined): LegendPosition {
