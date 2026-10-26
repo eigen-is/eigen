@@ -473,6 +473,22 @@ describe('a bordered picture exported and read back', () => {
         expect(back?.strokeColor).toBe('#00305e');
         expect(back?.strokeWidth).toBeCloseTo(1, 3);
     });
+
+    // A crafted width past what the schema allows reads as the default line, not as a stroke wider than the slide.
+    test('a line wider than the schema allows reads as the default width', () => {
+        const read = (w: string) => {
+            const shapes = sp({
+                xfrm: box(100, 100, 200, 100),
+                geom: 'rect',
+                spPr: `${solid('993300')}<a:ln w="${w}">${solid('00305e')}</a:ln>`,
+            });
+            return readPptx(buildPptx({ slides: [{ shapes }] }), { maxMediaBytes: 1024 * 1024 }).slides[0].elements[0];
+        };
+        const automatic = read('')?.strokeWidth;
+        expect(read('1e300')?.strokeWidth).toBe(automatic);
+        expect(read('99999999')?.strokeWidth).toBe(automatic);
+        expect(read('12700')?.strokeWidth).not.toBe(automatic);
+    });
 });
 
 // The canvas fills only a looping line, but a two-point one keeps the fill it holds, as a connector's spPr does.

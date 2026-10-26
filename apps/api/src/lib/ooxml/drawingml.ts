@@ -8,7 +8,19 @@ import { isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import type { XmlElement } from '../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../core/xml';
-import { A_NS, ASVG_NS, R_NS } from './ooxml';
+import { A_NS, ASVG_NS, emu, R_NS } from './ooxml';
+
+// ── Lines ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// The widest line ST_LineWidth allows, 1584 pt.
+const MAX_LINE_WIDTH = 20_116_800;
+
+// An a:ln width in EMU, or undefined when the file states none the schema allows. A crafted width such as 1e300
+// would otherwise reach the canvas as a stroke wider than any slide.
+export function lineWidthEmu(value: string | undefined): number | undefined {
+    const width = emu(value);
+    return width !== undefined && width >= 0 && width <= MAX_LINE_WIDTH ? width : undefined;
+}
 
 // ── Colours ─────────────────────────────────────────────────────────────────────────────────────────────────────
 

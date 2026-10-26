@@ -24,12 +24,18 @@ import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode, Lost } from '../../document/transform/protocol';
-import { ARROWHEAD_BY_LINE_END, DEGREE, drawingLines, isSideways, strokeStyleOf } from '../../ooxml/drawingml';
+import {
+    ARROWHEAD_BY_LINE_END,
+    DEGREE,
+    drawingLines,
+    isSideways,
+    lineWidthEmu,
+    strokeStyleOf,
+} from '../../ooxml/drawingml';
 import {
     A_NS,
     C_NS,
     DGM_NS,
-    emu,
     isAlternateContent,
     isOn,
     OLE_NS,
@@ -521,7 +527,8 @@ function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
     const color = paint?.type === 'gradient' ? paint.from : paint?.color;
     if (!color || color === TRANSPARENT_COLOR) return NO_STROKE;
     const width =
-        lines.lns.map((found) => emu(xmlAttr(found, '', 'w'))).find((found) => found !== undefined) ?? DEFAULT_LINE_EMU;
+        lines.lns.map((found) => lineWidthEmu(xmlAttr(found, '', 'w'))).find((found) => found !== undefined) ??
+        DEFAULT_LINE_EMU;
     const preset = lines.lns.map((found) => childOf(found, A_NS, 'prstDash')).find((found) => found !== undefined);
     const dash = preset && xmlAttr(preset, '', 'val');
     return {

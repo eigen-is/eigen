@@ -45,8 +45,8 @@ import {
     xmlTrimmedText,
 } from '../core/xml';
 import type { DrawingTheme } from './drawingml';
-import { drawingColor, drawingLines, readColorMap } from './drawingml';
-import { A_NS, alternativeFor, C_NS, C16_NS, emu, isOn, isOnElement, ooxmlElements } from './ooxml';
+import { drawingColor, drawingLines, lineWidthEmu, readColorMap } from './drawingml';
+import { A_NS, alternativeFor, C_NS, C16_NS, isOn, isOnElement, ooxmlElements } from './ooxml';
 import type { OoxmlPackage, Relationship } from './opc';
 import { optional, relTarget } from './opc';
 
@@ -585,8 +585,6 @@ const AUTOMATIC_LINE = automatic(
     '<a:solidFill><a:schemeClr val="tx1"><a:tint val="75000"/></a:schemeClr></a:solidFill>',
 );
 const AUTOMATIC_LINE_WIDTH = 9525;
-// The widest line ST_LineWidth allows, 1584 pt.
-const MAX_LINE_WIDTH = 20_116_800;
 // A line series' own width where it states none, 2.25 pt, as Office draws it.
 const AUTOMATIC_SERIES_WIDTH = 28575;
 
@@ -619,9 +617,8 @@ export function readChartPartLook(
         return shape && xmlChild(shape, A_NS, 'ln');
     };
     const widthOf = (line: XmlElement | undefined, automatic: number) => {
-        const width = emu(line && xmlAttr(line, '', 'w'));
-        const stated = width !== undefined && width >= 0 && width <= MAX_LINE_WIDTH;
-        return Math.round(((stated ? width : automatic) / emuPerPx) * 100) / 100;
+        const width = lineWidthEmu(line && xmlAttr(line, '', 'w')) ?? automatic;
+        return Math.round((width / emuPerPx) * 100) / 100;
     };
     let text = child(root, 'txPr');
     for (const local of ['p', 'pPr', 'defRPr']) text = text && xmlChild(text, A_NS, local);
