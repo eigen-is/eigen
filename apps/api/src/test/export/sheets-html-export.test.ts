@@ -1571,7 +1571,8 @@ describe('Sheets HTML export — the cell cap', () => {
             mode: 'pdf',
             lost: (code) => lost.push(code),
         });
-        expect(performance.now() - started).toBeLessThan(10_000);
+        // It renders the cap's 250,000 rows, about 14 s on a loaded CI runner; the span walk it guards took 119 s.
+        expect(performance.now() - started).toBeLessThan(60_000);
         expect(lost).toEqual(['sheets-cut']);
         expect(trs(html)).toBe(MAX_EXPORT_CELLS);
         const lone = { ...sheet, config: { borderInfo: { '10000000000_0': { b: { style: 1, color: '#000' } } } } };
@@ -1579,7 +1580,7 @@ describe('Sheets HTML export — the cell cap', () => {
             cut: [],
             size: { width: 0, height: 0 },
         });
-    }, 30_000);
+    }, 90_000);
 
     test('the cap is spent across the sheets in tab order, and a sheet with too little left is left out', async () => {
         const forged = (id: string): Sheet => ({
