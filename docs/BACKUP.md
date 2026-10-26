@@ -369,4 +369,4 @@ The backup runs in the API, whose container mounts `data/`, `backups/` and `.env
 - [COLLAB.md](COLLAB.md#home-replacement-closes-every-socket): the socket half of a per-home restore
 - [SYNC.md](SYNC.md): the upload queue a restored `s3` mount drains through
 - [SELF-HOSTING.md](SELF-HOSTING.md) and the help center's [Back up and restore the whole server](https://eigen.is/support/self-hosting/back-up-and-restore): the operator's side
-- [PROPOSAL_BACKUP_RESTORE.md](proposals/PROPOSAL_BACKUP_RESTORE.md): the design, and phase ④ (migration)
+- [PROPOSAL_BACKUP_RESTORE.md](proposals/PROPOSAL_BACKUP_RESTORE.md): moving a mount between storage backends while it serves
