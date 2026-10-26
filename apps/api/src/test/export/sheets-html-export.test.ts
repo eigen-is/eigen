@@ -831,6 +831,32 @@ describe('Sheets HTML export — hostile values in CSS', () => {
         }
     });
 
+    // A peer can store any JSON where a color goes, and a color that is no string draws as none.
+    test('a cell, rule, border or data bar color that is not a string is dropped, in the export and the preview', () => {
+        const numeric = { t: 'n', fa: 'General' };
+        const sheet: Sheet = {
+            ...makeSheet(
+                [
+                    { r: 0, c: 0, v: JSON.parse('{"v":"x","fc":42,"bg":{"r":255}}') },
+                    { r: 1, c: 0, v: { v: 50, ct: numeric } },
+                    { r: 2, c: 0, v: { v: 10, ct: numeric } },
+                    { r: 3, c: 0, v: { v: 20, ct: numeric } },
+                ],
+                JSON.parse(`[
+                    {"type":"default","cellrange":[{"row":[1,1],"column":[0,0]}],"format":{"textColor":7,"cellColor":[1]},
+                     "conditionName":"greaterThan","conditionRange":[],"conditionValue":[10]},
+                    {"type":"dataBar","cellrange":[{"row":[2,3],"column":[0,0]}],"format":[5]},
+                    {"type":"dataBar","cellrange":[{"row":[2,3],"column":[0,0]}],"format":[5,true]}
+                ]`),
+            ),
+            config: { borderInfo: JSON.parse('{"0_0":{"b":{"style":1,"color":3}}}') },
+        };
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        expect(out.html).toContain('>x<');
+        expect(out.css).not.toMatch(/color:(42|7|3)\b|background:\[/);
+        expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('>x<');
+    });
+
     test.each(['#ff0000', '#F00', 'rgb(255, 0, 0)', 'rgba(0, 0, 255, 0.5)', 'transparent', 'red'])(
         'a cell keeps the color %s',
         (color) => {
