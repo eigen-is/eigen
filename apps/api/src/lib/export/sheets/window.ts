@@ -202,10 +202,11 @@ function hiddenIn(hidden: Record<string, number> | undefined, first: number, las
     return kept;
 }
 
-// Each stored merge as whole numbers, cut to Excel's grid. One that names no cell of it is dropped.
+// Each stored merge as whole numbers, cut to Excel's grid. One that names no cell of it is dropped, and so is a null.
 function gridMerges(merge: SheetConfig['merge']): MergeCell[] {
     const merges: MergeCell[] = [];
     for (const m of Object.values(merge ?? {})) {
+        if (!m) continue;
         const [r, c, rs, cs] = [Number(m.r), Number(m.c), Number(m.rs), Number(m.cs)];
         if (![r, c, rs, cs].every(Number.isInteger)) continue;
         const r0 = Math.max(r, 0);
@@ -359,14 +360,17 @@ function windowMerges(merges: MergeCell[], range: GridRange): Record<string, Mer
 
 // A rule may name the whole sheet while the window is small, and the evaluator visits every cell of every range,
 // running a formula rule's engine once per cell. Clipping keeps that work to what is rendered. A rule that misses the
-// window drops out, and a formula rule keeps its anchor (withCfRanges).
+// window drops out, and a formula rule keeps its anchor (withCfRanges). No reader checks a rule's shape, so one a peer
+// stored without ranges, or with a range that has no rows or columns, drops out too.
 function clipRulesToWindow(
     rules: ConditionalFormatRule[],
     [firstRow, lastRow, firstCol, lastCol]: GridRange,
 ): ConditionalFormatRule[] {
     const clipped: ConditionalFormatRule[] = [];
     for (const rule of rules) {
-        const cellrange = rule.cellrange
+        const ranges = Array.isArray(rule.cellrange) ? rule.cellrange : [];
+        if (!ranges.every((range) => Array.isArray(range?.row) && Array.isArray(range.column))) continue;
+        const cellrange = ranges
             .map((range) => ({
                 row: [Math.max(range.row[0], firstRow), Math.min(range.row[1], lastRow)],
                 column: [Math.max(range.column[0], firstCol), Math.min(range.column[1], lastCol)],

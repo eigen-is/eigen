@@ -1824,6 +1824,28 @@ describe('Sheets HTML export — the window over forged keys', () => {
         }
     });
 
+    test('a rule with no ranges, or a range with no rows, is dropped and the export still renders', () => {
+        const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
+        const valid: ConditionalFormatRule = {
+            type: 'default',
+            cellrange: [{ row: [0, 0], column: [0, 0] }],
+            format: { cellColor: '#00ff00' },
+            conditionName: 'greaterThan',
+            conditionRange: [],
+            conditionValue: [1],
+        };
+        const { cellrange: _, ...noRanges } = valid;
+        const forged = [
+            noRanges,
+            { ...valid, cellrange: [{ row: null, column: [0, 0] }] },
+            { ...valid, cellrange: [null] },
+        ];
+        const sheet = makeSheet([{ r: 0, c: 0, v: cell }], [...forged, valid] as never);
+        const out = renderSheetsHtml([{ ...sheet, config: { merge: { '0_0': null as never } } }], NO_MEDIA);
+        expect(classesFor(out, 'background:#00ff00')).toHaveLength(1);
+        expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('background:#00ff00');
+    });
+
     test('an empty tab between two others adds no page', () => {
         const tab = (id: string, cells: Sheet['celldata']): Sheet => ({ id, name: id, order: 0, celldata: cells });
         const a = tab('a', [{ r: 0, c: 0, v: { v: 'a', m: 'a' } }]);
