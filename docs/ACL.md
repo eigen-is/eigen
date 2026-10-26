@@ -65,6 +65,7 @@ Strips entries an ancestor's ACL already grants to the same id, and a team entry
 - **Team ACL**: Additive with user ACL
 - **No org-level ACL**: `parseOwnerId` recognizes the `org_` prefix but `matchesACL` only checks `user` and `team` entries. Org-wide sharing is not implemented; use teams instead
 - **The root folder has no ACL**: `Drive.updateACL` refuses a mount's root with 403
+- **A move needs write on the item, on the folder it leaves and on the folder it lands in** (`SharedDrive.movePath`), as a rename needs write on the folder. Otherwise an editor of one file could pull it out of a folder they can't change, into one where more people see it
 
 ## Visibility
 

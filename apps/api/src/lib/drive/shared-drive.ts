@@ -233,9 +233,13 @@ export class SharedDrive {
         return this.drive.updatePathDetails(mountId, pathId, details);
     }
 
+    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does.
     public async movePath(mountId: string, pathId: string, targetParentId: string, _user?: User): Promise<DrivePath> {
         const memberships = await getMemberships(this.user.id);
         await this.requireWrite(mountId, pathId, memberships, 'No write permission on source');
+        const path = await this.drive.getPath(mountId, pathId);
+        if (!path?.parentId) throw new ApiError(403, 'No write permission on source folder');
+        await this.requireWrite(mountId, path.parentId, memberships, 'No write permission on source folder');
         await this.requireWrite(mountId, targetParentId, memberships, 'No write permission on target folder');
         return this.drive.movePath(mountId, pathId, targetParentId, this.user);
     }
