@@ -20,7 +20,7 @@ This proposal lets a docs image sit in front of the text or behind it, at a posi
 - Positioned images inside table cells. As far as we know, Google Docs allows only inline images in a table cell too. (Recommended; an `appendTransaction` resets one that lands in a cell, § Anchoring.)
 - Text wrapping around a positioned image. Wrapping stays the job of the wrap layouts; CSS can't wrap text around an absolutely positioned box.
 - Rotation. `ObjectTransform` can rotate, but a rotated image is a second feature with its own docx mapping.
-- Per-document page size and margins come later, on [PROPOSAL_DOCX.md § One page setup](PROPOSAL_DOCX.md#one-page-setup). Offsets are relative to the paragraph, so changing a margin moves the images with the text. The clamp to the paper reads the document's setup at drag time.
+- Page size and margins: a doc has its own ([DOCS.md § A doc stores its page in a page map beside its content](../DOCS.md#a-doc-stores-its-page-in-a-page-map-beside-its-content)). Offsets are relative to the paragraph, so changing a margin moves the images with the text. The clamp to the paper reads the document's setup at drag time.
 
 ## Current state
 
@@ -109,7 +109,7 @@ A `front` image takes the clicks over the text it covers, as in Google Docs.
 - **One inline-legal element.** A figure of any layout serializes as a `<span>` with `display: block` (or `inline-block`) instead of a `<figure>`, and its caption as a `<span>` instead of a `<figcaption>`, so an HTML parser keeps it inside its paragraph. This fixes the export split and the paste split for every layout. `parseHTML` keeps a rule for `<figure>`, so HTML from other apps, such as a web page's `<figure>`, still parses.
 - **Preview, HTML and PDF.** `renderFigureNode` writes the absolute box with the same offsets and z-index. A probe on WeasyPrint 68.1 drew `z-index: -1` under the text and `z-index: 1` over it, both relative to a `position: relative` paragraph. The export `.page` and the drive preview's host (`packages/ui/src/components/drive/file-preview.tsx`) get `isolation: isolate`, and the preview's host gets `overflow: hidden`.
 - **PDF pages.** In the PDF the anchor paragraph can land near the bottom of a page. WeasyPrint does not carry an absolute box over to the next page; the probe showed it cut at the sheet edge. This is accepted for now and written down in the help center. Per-document page setup may make it worth more work later.
-- **docx export.** Each positioned figure becomes a `wp:anchor` with `wrapNone`, `behindDoc="1"` for `behind`, `allowOverlap="1"`, `relativeHeight` from the rank (unsigned, as OOXML requires; `behindDoc` keeps the two layers apart), `positionH relativeFrom="column"` and `positionV relativeFrom="paragraph"`, with `posOffset` at 9525 EMU per pixel. Our paragraph-relative offsets map one to one. The docx writer of [PROPOSAL_DOCX.md](PROPOSAL_DOCX.md) emits the anchor directly.
+- **docx export.** Each positioned figure becomes a `wp:anchor` with `wrapNone`, `behindDoc="1"` for `behind`, `allowOverlap="1"`, `relativeHeight` from the rank (unsigned, as OOXML requires; `behindDoc` keeps the two layers apart), `positionH relativeFrom="column"` and `positionV relativeFrom="paragraph"`, with `posOffset` at 9525 EMU per pixel. Our paragraph-relative offsets map one to one. The docx writer (`apps/api/src/lib/export/doc/docx/`, [EXPORT.md](../EXPORT.md#a-docs-docx-is-written-from-its-json-with-the-editors-css-values)) emits the anchor directly.
 - **docx import.** The docx reader reads each `wp:anchor` itself (`anchorLayout` in `apps/api/src/lib/import/doc/drawings.ts`). Today a square, tight or through wrap becomes wrapped left or right, and every other anchor a block figure at its anchor paragraph, aligned by its `positionH`. The mapping it grows into:
 
   | Word anchor | Eigen figure |
@@ -136,13 +136,13 @@ These are gaps in what ships today. Each is small, and they are worth doing befo
 3. Clear floats before plain `ul` and `ol` in `eigen-prose.css`, and delete the copy of the rule in `PRINT_EXTRAS`.
 4. Serialize the figure as an inline-legal element (see § Renderers), its caption included: `<figcaption>` closes an open `<p>` just as `<figure>` does, so it becomes a `<span>` too. This also closes the ROADMAP row on paste. `packages/lib/src/test/docs/eigendoc/nodes/figure.test.ts` pins the `<figure>` markup and changes with it. The rules that target the tag (`figure`, `figcaption` and `figure img` in `eigen-prose.css`, and `page-break-inside: avoid` on `figure` in `PRINT_EXTRAS`) move to classes the spans carry, so margins, the caption style and page-break avoidance survive.
 5. Divide the resize pointer delta by the page scale.
-6. The PDF at 2 cm, so it breaks lines where the editor does. This comes with the page setup of [PROPOSAL_DOCX.md § One page setup](PROPOSAL_DOCX.md#one-page-setup), its phase 0, which also gives quick look, the thumbnail and the docx one page definition.
+6. The PDF at the doc's margins, so it breaks lines where the editor does. Every surface derives its page from the doc's page setup (`packages/lib/src/docs/eigendoc/page.ts`).
 
 ## Phasing and effort
 
 | Phase | Work | Size | Days |
 |---|---|---|---|
-| 0 | Fixes 1 to 5 above; fix 6 is costed in PROPOSAL_DOCX.md's phase 0 | S | 1–1.5 |
+| 0 | Fixes 1 to 6 above | S | 1–1.5 |
 | 1 | Spike: check the caret beside the zero-size wrapper and the click-through test, before the rest of phase 1 | S | 1 |
 | 1 | Schema, `FIGURE_LAYOUTS`, `figureLayoutStyle`, serialization of the new attributes | S | 0.5 |
 | 1 | Node view: absolute box, move, re-anchor, clamp, page growth, hit-testing behind text, nudging, the table-cell rule | L | 4–6 |
@@ -164,7 +164,7 @@ Tests pin the contract: schema round trips of every layout through `renderHTML` 
 
 ## Related
 
-- [PROPOSAL_DOCX.md](PROPOSAL_DOCX.md): phases 2 and 3 here build on its writer and its import rewrite, so they come after it. Phase 0's sixth fix is its page setup, so that one lands with or before it; the rest of phase 0 and phase 1 don't depend on it.
+- The docx writer (`apps/api/src/lib/export/doc/docx/`) and reader (`apps/api/src/lib/import/doc/`), described in [EXPORT.md](../EXPORT.md): phases 2 and 3 here build on them.
 - Per-document page size and margins. Offsets are relative to the paragraph, so changing a margin moves the images with the text. The clamp to the paper reads the current margins at drag time.
 
 ## Decisions
