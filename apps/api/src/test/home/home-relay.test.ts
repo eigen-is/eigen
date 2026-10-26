@@ -3,6 +3,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../../lib/config/server-config';
+import { drainDeliveriesWithin } from '../../lib/drive/acl-propagation';
 import * as getHomeModule from '../../lib/home/get-home';
 import { drainHomeDeliveries, sendToHome, sendToUserHomes } from '../../lib/home/home-relay';
 import type { TestContext, TestUser } from '../setup';
@@ -214,5 +215,31 @@ describe('A graceful shutdown', () => {
         for (const member of members) {
             expect(await notificationsWithTag(member, tag)).toHaveLength(1);
         }
+    });
+
+    // A delivery stuck on a home that never opens must not hold the shutdown, or eat the time the
+    // mounts need to upload. The wait gives up at its bound and logs what is left.
+    test('stops waiting for a delivery that never settles once the bound is over', async () => {
+        const tag = 'relay-drain:stalled';
+        const held = holdMemberHomes();
+        const warnings = spyOn(console, 'warn').mockImplementation(() => {});
+        let drainedFirst: boolean;
+        let logged: unknown[][];
+        try {
+            sendToUserHomes([members[0].id], {
+                type: 'notification',
+                notification: { type: 'admin-alert', title: 'Stalled', tag },
+            }).catch(() => {});
+            drainedFirst = await answersFirst(drainDeliveriesWithin(100));
+        } finally {
+            logged = warnings.mock.calls;
+            warnings.mockRestore();
+            held.release();
+        }
+        expect(drainedFirst).toBe(true);
+        expect(logged.some((call) => String(call[0]).includes('1 home deliveries'))).toBe(true);
+
+        await drainHomeDeliveries();
+        expect(await notificationsWithTag(members[0], tag)).toHaveLength(1);
     });
 });

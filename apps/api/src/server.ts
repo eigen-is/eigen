@@ -10,9 +10,8 @@ import { recoverInterruptedServerBackups } from './lib/backup/server-archives';
 import { isProduction } from './lib/config/env';
 import { assertMailDomainUnchanged, isSetupRequired } from './lib/config/server-config';
 import { documentTransformRunner } from './lib/document/transform/runner';
-import { drainACLFanOuts } from './lib/drive/acl-propagation';
+import { drainDeliveriesWithin } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
-import { drainHomeDeliveries } from './lib/home/home-relay';
 import { pinDefaultTeam } from './lib/org';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
@@ -20,10 +19,14 @@ import { createSetupLink } from './lib/setup/setup-token';
 import { setShutdownDrainDeadline } from './lib/sync';
 import { startControlSocket } from './routes/control';
 
-// How long a shutdown may spend uploading the pending S3 writes. With the wait for the backup jobs
-// before it, it stays below docker-compose's stop_grace_period, so the drain ends before SIGKILL. An
-// upload that doesn't make it stays queued and runs again at the next boot.
+// How long a shutdown may spend uploading the pending S3 writes. With the waits for the backup jobs
+// and the deliveries before it, it stays below docker-compose's stop_grace_period, so the drain ends
+// before SIGKILL. An upload that doesn't make it stays queued and runs again at the next boot.
 const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
+
+// How long a shutdown waits for the deliveries into other homes before it closes the homes. A delivery
+// that hangs, such as on a stalled bucket, is given up after it, so the upload time above stays whole.
+const SHUTDOWN_DELIVERY_BOUND_MS = 10_000;
 
 // Both before the server listens: a request that resolved a home while the recovery was still
 // deciding about it would open a half-written folder as if it were the home. A restore that died
@@ -75,13 +78,12 @@ async function gracefulShutdown(signal: string) {
     // would leave a user with no home folder. So the backup jobs settle first, before the S3 drain time
     // below starts counting.
     await drainBackupJobs();
+    // A delivery reopens its recipient's home, so the queued ACL fan-outs and every other delivery
+    // still in flight, such as watcher and chat notifications, finish before the homes close.
+    await drainDeliveriesWithin(SHUTDOWN_DELIVERY_BOUND_MS);
     // Each mount uploads its queue during its close, until this deadline. That runs after the last writes
     // of the close are queued and before metadata.db closes.
     setShutdownDrainDeadline(Date.now() + SHUTDOWN_DRAIN_BUDGET_MS);
-    // A delivery reopens its recipient's home, so the queued ACL fan-outs and every other delivery
-    // still in flight, such as watcher and chat notifications, finish before the homes close.
-    await drainACLFanOuts();
-    await drainHomeDeliveries();
     await shutdownAllHomes();
     console.log('All homes shut down, exiting.');
     process.exit(0);

@@ -200,6 +200,10 @@ export async function drainHomeDeliveries(): Promise<void> {
     }
 }
 
+export function countHomeDeliveries(): number {
+    return deliveries.size;
+}
+
 // Tells the open tabs of each member, such as everyone a file is shared with, about one event. A
 // member without an account is skipped, and so is one whose lookup fails: a broadcast is best effort.
 export async function relayEventToMembers(members: EffectiveMember[], event: SSEvent): Promise<void> {
