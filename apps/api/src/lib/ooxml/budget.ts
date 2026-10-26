@@ -6,7 +6,7 @@
 import { ApiError } from '../core/errors';
 
 export type Budget = {
-    // Throws the 413 once the units charged pass the limit.
+    // Throws the 413 once the units charged pass the limit, and for an amount that is no count of work.
     charge(units: number): void;
     // Whether what is left covers this much, charging nothing.
     affords(units: number): boolean;
@@ -16,10 +16,13 @@ export type Budget = {
 
 export function budget(limit: number, tooLarge: string): Budget {
     let left = limit;
-    const affords = (units: number) => left >= units;
+    // NaN, an infinity or a negative amount is a reader's bug or a crafted count. Charging one spends the whole budget,
+    // so it can never turn the budget off.
+    const isCount = (units: number) => Number.isFinite(units) && units >= 0;
+    const affords = (units: number) => isCount(units) && left >= units;
     return {
         charge: (units) => {
-            left -= units;
+            left = isCount(units) ? left - units : Number.NEGATIVE_INFINITY;
             if (left < 0) throw new ApiError(413, tooLarge);
         },
         affords,

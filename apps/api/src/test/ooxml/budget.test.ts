@@ -26,6 +26,23 @@ describe('a budget', () => {
         expect(work.spend(1)).toBe(false);
     });
 
+    test('a charge that is no count of work refuses the file, and the budget stays spent', () => {
+        for (const units of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+            const work = budget(Number.POSITIVE_INFINITY, 'Too large');
+            expect(() => work.charge(units)).toThrow(new ApiError(413, 'Too large'));
+            expect(() => work.charge(0)).toThrow(new ApiError(413, 'Too large'));
+            expect(work.affords(0)).toBe(false);
+        }
+    });
+
+    test('affords and spends no amount that is no count of work', () => {
+        const work = budget(10, 'Too large');
+        for (const units of [Number.NaN, Number.NEGATIVE_INFINITY, -1]) {
+            expect([work.affords(units), work.spend(units)]).toEqual([false, false]);
+        }
+        expect([work.affords(10), work.affords(11)]).toEqual([true, false]);
+    });
+
     test('without a limit never refuses', () => {
         const work = budget(Number.POSITIVE_INFINITY, 'Too large');
         work.charge(Number.MAX_SAFE_INTEGER);

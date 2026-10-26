@@ -158,7 +158,7 @@ Signatures are as the code declares them. Types the signatures name but the modu
 
 ### budget.ts
 
-- `budget(limit: number, tooLarge: string): Budget`: `charge(units)` throws a 413 past the limit. `affords(units)` asks without charging. `spend(units)` charges only when what is left covers it.
+- `budget(limit: number, tooLarge: string): Budget`: `charge(units)` throws a 413 past the limit, and for NaN, an infinity or a negative amount. `affords(units)` asks without charging. `spend(units)` charges only when what is left covers it.
 
 ### ooxml.ts
 
