@@ -22,7 +22,7 @@ Each slide becomes one slide in the PowerPoint file, with its text, shapes, line
 A few things look different in the PowerPoint file:
 
 - A chart arrives as a PowerPoint chart with its numbers, kept the way PowerPoint keeps a chart's data. A rotated chart sits upright, and a see-through one is drawn solid.
-- A WebP image stays a WebP, which Microsoft 365 shows but PowerPoint 2016 and 2019 can't.
+- A WebP image is saved as PNG or JPEG, since Word, PowerPoint and Google's editors can't show WebP.
 - A **Hachure**, **Cross-hatch**, or **Zigzag** fill becomes solid, and every object draws with clean lines, as the **Architect** sketch style does.
 - A quote keeps its indent but loses the bar along its left edge.
 - The file names Eigen's fonts but doesn't include them. PowerPoint shows them only on a computer that has them installed, so PowerPoint for the web shows a similar font instead. Google Slides has Inter, Source Serif 4, and JetBrains Mono, and shows a similar font in place of Excalifont.
