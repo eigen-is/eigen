@@ -52,15 +52,32 @@ async function bootServer(): Promise<void> {
     }
 }
 
+export type SSECollector = {
+    events: SSEvent[];
+    next: (match: (event: SSEvent) => boolean) => Promise<void>;
+    stop: () => void;
+};
+
 // In-process SSE listener: subscribes to a user's Home broadcast stream (opening the Home if needed)
 // and collects every event until stop() is called. Resolves once subscribed, so nothing broadcast
-// after the await is missed.
-export async function collectSSE(userId: string): Promise<{ events: SSEvent[]; stop: () => void }> {
+// after the await is missed. next() resolves on the first matching event, already collected or still to
+// come, so a test can wait for what an open tab hears instead of polling a route on a time budget.
+export async function collectSSE(userId: string): Promise<SSECollector> {
     const events: SSEvent[] = [];
-    const listener = (event: SSEvent) => events.push(event);
+    const waiters = new Set<{ match: (event: SSEvent) => boolean; resolve: () => void }>();
+    const listener = (event: SSEvent) => {
+        events.push(event);
+        for (const waiter of waiters) {
+            if (!waiter.match(event)) continue;
+            waiters.delete(waiter);
+            waiter.resolve();
+        }
+    };
     const home = await getHome(userId);
     home.subscribeSSE(listener);
-    return { events, stop: () => home.unsubscribeSSE(listener) };
+    const next = (match: (event: SSEvent) => boolean): Promise<void> =>
+        events.some(match) ? Promise.resolve() : new Promise((resolve) => waiters.add({ match, resolve }));
+    return { events, next, stop: () => home.unsubscribeSSE(listener) };
 }
 
 export type TestUser = {

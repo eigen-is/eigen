@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { evictHome } from '../../lib/home/get-home';
 import { boxDir } from '../mail-test-helpers';
 import type { TestUser } from '../setup';
@@ -150,7 +151,9 @@ describe('Mail read in another mail app', () => {
             expect(await mailNewUnread(user)).toBe(true);
 
             readOnThePhone(user);
-            await eventually(async () => ((await mailNewUnread(user)) ? undefined : true), 'the notification read');
+            // The watcher's event can come seconds late on macOS, so the test waits for the tab to hear the bell change.
+            await tab.next((event) => event.type === SSEventType.NOTIFICATION_CHANGED);
+            expect(await mailNewUnread(user)).toBe(false);
         } finally {
             tab.stop();
         }
@@ -166,7 +169,8 @@ describe('Mail read in another mail app', () => {
 
         const tab = await collectSSE(user.id);
         try {
-            await eventually(async () => ((await mailNewUnread(user)) ? undefined : true), 'the notification read');
+            await tab.next((event) => event.type === SSEventType.NOTIFICATION_CHANGED);
+            expect(await mailNewUnread(user)).toBe(false);
         } finally {
             tab.stop();
         }
