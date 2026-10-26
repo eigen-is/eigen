@@ -1,6 +1,6 @@
 // Writes a ChartSpec as a DrawingML chart part, the c:chartSpace that xlsx, docx and pptx files share, for the Office
 // exports. It is the mirror of readChart and readChartPartLook, which read the part back as the same spec and look.
-// Office draws what Eigen draws: an automatic colour is written as the palette's colour at its place, and the look as
+// Office draws what Eigen draws: an automatic color is written as the palette's color at its place, and the look as
 // the part's shape and text properties, at the sizes Eigen gives the chart's box. A docx's or pptx's inline numbers go
 // as refs into a workbook embedded beside the part, laid out as desktop Office lays one out, for its Edit Data.
 
@@ -62,8 +62,8 @@ const MAX_GAP_WIDTH = 500;
 
 // The reader's tables turned around. Where two spellings read the same, the reader's first is the one written:
 // clustered rather than standard, r rather than tr.
-const GROUPING = turned(STACKING_BY_GROUPING);
-const LEGEND = turned(LEGEND_BY_POSITION);
+const GROUPING_BY_STACKING = turned(STACKING_BY_GROUPING);
+const POSITION_BY_LEGEND = turned(LEGEND_BY_POSITION);
 
 // A frame's graphic, showing the chart part its relationship names. c:chart declares its own prefixes, as Office
 // writes it, so no host part has to.
@@ -72,7 +72,7 @@ export function chartGraphicXml(rId: string): string {
 }
 
 // Whether the part draws the look plainer than Eigen does. writeChart paints a sketch, a hatch and a dashed or dotted
-// stroke plain, and a gradient background as one colour. A host whose frame turns or fades the chart passes that as
+// stroke plain, and a gradient background as one color. A host whose frame turns or fades the chart passes that as
 // `layer`, since no chart part carries either.
 export function chartLookSimplified(look: ChartLook, layer?: { angle: number; opacity: number }): boolean {
     const paint = chartPaintOf(look);
@@ -99,7 +99,7 @@ export function writeChart(
     const { position } = spec.legend;
     const legend = position === 'none' ? '' : legendXml(position);
     const background = parseFill(look.fill);
-    // The writer gives a chart part's background one colour, so a gradient is written as its middle colour.
+    // The writer gives a chart part's background one color, so a gradient is written as its middle color.
     const { color, opacity } =
         background.type === 'solid'
             ? { color: background.color, opacity: 1 }
@@ -126,7 +126,7 @@ function textSizes({ width, height, emuPerPx }: ChartFrame): { text: number; tit
     return { text: clampTextSize(points * 100), title: clampTextSize(points * CHART_TITLE_SCALE * 100) };
 }
 
-// Every label's colour and size, and the spec's font.
+// Every label's color and size, and the spec's font.
 function textProperties(color: string, font: string, size: number): string {
     return `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${size}">${solidFillXml(color)}<a:latin typeface="${escapeXml(font)}"/></a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`;
 }
@@ -138,7 +138,7 @@ type Source = { name: string; data: string; points: number };
 function sourcesOf(spec: ChartSpec, ranges: Ranges, cache: ChartData | undefined, embedded: boolean): Source[] {
     const { data } = spec;
     // A pie has no value axis to carry the values' format, so the values carry it, which is where Excel reads a pie's.
-    const format = escapeXml(spec.axes.y.labels.format ?? 'General');
+    const format = spec.axes.y.labels.format ?? 'General';
     if (data.source === 'range') return rangeSources(data, ranges, cache, format);
     return data.series.map((series, i) =>
         embedded ? embeddedSource(data.categories, series, i, format) : inlineSource(data.categories, series, format),
@@ -222,7 +222,7 @@ function rangeSource(
     format: string,
     cache: { categories: string[] | undefined; series: InlineChartSeries | undefined },
 ): Source {
-    const formula = (ref: CellRangeRef) => cellRange(ref, ranges);
+    const formula = (ref: CellRangeRef) => refFormula(ref, ranges);
     return {
         name:
             typeof name === 'string'
@@ -243,7 +243,9 @@ function strRef(formula: string, points: readonly string[] | undefined): string 
 }
 
 function numRef(formula: string, points: readonly (number | null)[] | undefined, format: string): string {
-    const cache = points ? `<c:numCache><c:formatCode>${format}</c:formatCode>${pointsXml(points)}</c:numCache>` : '';
+    const cache = points
+        ? `<c:numCache><c:formatCode>${escapeXml(format)}</c:formatCode>${pointsXml(points)}</c:numCache>`
+        : '';
     return `<c:numRef><c:f>${escapeXml(formula)}</c:f>${cache}</c:numRef>`;
 }
 
@@ -252,7 +254,7 @@ function strLit(points: readonly string[]): string {
 }
 
 function numLit(points: readonly (number | null)[], format: string): string {
-    return `<c:numLit><c:formatCode>${format}</c:formatCode>${pointsXml(points)}</c:numLit>`;
+    return `<c:numLit><c:formatCode>${escapeXml(format)}</c:formatCode>${pointsXml(points)}</c:numLit>`;
 }
 
 // A cache's or a literal's points. A gap is no c:pt.
@@ -264,7 +266,7 @@ function pointsXml(points: readonly (string | number | null)[]): string {
 }
 
 // A ref such as Sheet!$A$2:$A$9, by the name the workbook writes the sheet under.
-function cellRange(ref: CellRangeRef, ranges: Ranges): string {
+function refFormula(ref: CellRangeRef, ranges: Ranges): string {
     const name = ranges(ref.sheetId);
     return name === undefined ? '#REF!' : `${sheetRefName(name)}!${rangeToA1(ref, true)}`;
 }
@@ -288,7 +290,7 @@ function groupXml(spec: ChartSpec, width: number, sources: Source[]): string {
     const gap = Math.min(MAX_GAP_WIDTH, Math.round((100 * bars * (1 - BAR_GROUP_WIDTH)) / BAR_GROUP_WIDTH));
     return [
         `<c:barChart><c:barDir val="${type === 'bar' ? 'bar' : 'col'}"/>`,
-        `<c:grouping val="${GROUPING.get(stacking)}"/><c:varyColors val="0"/>${series}`,
+        `<c:grouping val="${GROUPING_BY_STACKING.get(stacking)}"/><c:varyColors val="0"/>${series}`,
         `<c:gapWidth val="${gap}"/>${stacked ? '<c:overlap val="100"/>' : ''}${axes}</c:barChart>`,
     ].join('');
 }
@@ -385,7 +387,7 @@ function titleXml(
 }
 
 function legendXml(position: Exclude<LegendPosition, 'none'>): string {
-    return `<c:legend><c:legendPos val="${LEGEND.get(position)}"/><c:overlay val="0"/></c:legend>`;
+    return `<c:legend><c:legendPos val="${POSITION_BY_LEGEND.get(position)}"/><c:overlay val="0"/></c:legend>`;
 }
 
 function turned<K, V>(read: ReadonlyMap<K, V>): Map<V, K> {
