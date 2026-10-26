@@ -1,6 +1,6 @@
 // Turns a scene into one standalone SVG string, with no DOM and no measurement. Shapes are drawn as
 // plain roughjs path data and text uses the width and height the client measured. The clipboard's SVG
-// flavour and the downloaded image both use it. Each kind draws its own body; this file orders the
+// flavor and the downloaded image both use it. Each kind draws its own body; this file orders the
 // elements and places what they draw.
 
 import { escapeXml } from '../core/xml';

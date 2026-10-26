@@ -1,7 +1,8 @@
 // Routes an elbow arrow. The orthogonal polyline is derived on every read and render from the two
 // endpoints and the bindings, so the server renderer draws what the canvas draws. The router grows an
 // obstacle around each bound shape, builds a grid from their edges and runs A* over it, and falls back
-// to a plain L when no route is found. `arrowRoute` is the entry point, called for example by geometry and scene-to-svg.
+// to a plain L when no route is found. `arrowRoute` is the entry point, called for example by geometry
+// and scene-to-svg.
 
 import type { B4, Heading } from './elbow-heading';
 import {
