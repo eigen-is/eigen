@@ -174,8 +174,8 @@ export function lineHeightPt(value: string, sizePt: number): number {
     return /^[\d.]+$/.test(value) ? Number(value) * sizePt : cssPt(value, sizePt);
 }
 
-// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do: its size the
-// Normal's.
+// A heading's or title's size, spacing and line. One without its own size or line height inherits the prose root's,
+// as h5 and h6 do, so its size is the Normal's.
 export function textMetrics(selector: string, normalPt: number) {
     const size = proseValueIfSet(selector, 'font-size');
     const sizePt = size === undefined ? normalPt : cssPt(size, BODY.sizePt);
@@ -195,7 +195,7 @@ export function autoLine(linePt: number, sizePt: number, font: string): number {
     return Math.round((SINGLE_LINE * linePt) / (sizePt * fontLineHeight(font)));
 }
 
-// A line spacing, which CSS draws in Inter's line, in the Normal's font, as Word draws it.
+// The auto line Word draws a line spacing at in the Normal's font. CSS draws a line spacing in Inter's line.
 export function normalLine(lineSpacing: number, normal: NormalStyle): number {
     return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
 }
@@ -225,8 +225,8 @@ export function familyLineScale(mark: RunFace, faces: RunFace[]): number {
 
 type OwnLook = { sizePt: number; before: number; after: number; line: number };
 
-// What a text node draws with no mark or format of its own, which the docx writer's styles write, and so what the reader
-// and the audit take as none: its size in points, its space before and after in twips and its auto line in the
+// What a text node draws with no mark or format of its own. The docx writer's styles write it, so the reader and the
+// audit read it as no format. The size is in points, the space before and after in twips, and the auto line in the
 // Normal's font. A note's paragraph draws Word's FootnoteText over the Normal.
 export function ownTextLook(type: string, level: number, normal: NormalStyle, inNote: boolean): OwnLook | undefined {
     if (inNote) return noteTextLook(normal);
