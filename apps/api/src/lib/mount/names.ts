@@ -1,15 +1,15 @@
+// The rules a name in a mount's paths table keeps, and the storage key a flat-key backend derives from
+// one. Mount checks every new name with them, and a backup restore reads archived paths tables with them
+// while the API runs, so no import here opens anything.
+
 import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
 
-// The rules a name in a mount's paths table keeps, and the storage key a flat-key backend derives from one. No
-// import here opens anything: a backup restore reads archived paths tables with them while the API runs.
-
-// Reserved: any case variant of `.trash` aliases the real trash dir (Mount.trashDir) on path-based mounts.
-// Also checked on move (updatePath) so a legacy pre-guard row can't be re-parented onto the alias.
-// NFKC before folding: APFS equates compatibility characters ('.traſh' with U+017F IS '.trash'),
-// which plain toLowerCase misses.
+// On a `local` mount the trash is the folder `.trash`, and every name the disk folds onto it would be
+// that folder. The rule holds on every mount, so an item can always move to another one. A move checks
+// it too, because a row can carry the name from before the rule.
 export function isReservedName(name: string): boolean {
-    return name.normalize('NFKC').toLowerCase() === '.trash';
+    return foldName(name) === '.trash';
 }
 
 // Two names that fold alike are one file on a case-insensitive disk such as APFS, which folds more than

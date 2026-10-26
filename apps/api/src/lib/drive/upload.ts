@@ -5,6 +5,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
+import { foldName } from '../mount/names';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { User } from '../user';
 import type { Drive } from './drive';
@@ -32,7 +33,7 @@ export async function finalizeUpload(
     const existing = await mount.getChildByName(args.parentId, safeName);
     if (existing) {
         const siblings = await mount.listFolder(args.parentId);
-        const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
+        const usedNames = new Set(siblings.map((s) => foldName(s.name)));
         safeName = getUniqueFileName(safeName, usedNames);
     }
 

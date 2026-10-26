@@ -11,6 +11,7 @@ import type { Drive } from '../lib/drive';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { getTeamHome } from '../lib/home';
+import { foldName } from '../lib/mount/names';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -88,8 +89,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
             if (body.dedupeName) {
                 const desired = withEigenExtension(fileName, DRIVE_TYPE_CHAT);
                 const siblings = await drive.getFolderContents(params.mountId, parentId);
-                const used = new Set(siblings.map((s) => s.name.toLowerCase()));
-                if (used.has(desired.toLowerCase())) {
+                const used = new Set(siblings.map((s) => foldName(s.name)));
+                if (used.has(foldName(desired))) {
                     fileName = stripEigenExtension(getUniqueFileName(desired, used));
                 }
             }

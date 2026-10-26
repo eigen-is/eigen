@@ -1,7 +1,12 @@
-import { MAX_NAME_BYTES } from '../mount/names';
+// Picks a free name beside existing ones by adding a number, such as `photo (2).jpg`, for an upload, a
+// copy or a restore that would collide with a sibling.
 
+import { foldName, MAX_NAME_BYTES } from '../mount/names';
+
+// The used names come folded with foldName, the fold of a case-insensitive disk. So the name picked here
+// is one the mount takes.
 export function getUniqueFileName(name: string, usedNames: Set<string>): string {
-    // A leading dot is a dotfile, not an extension (matches buildStorageKey / the v7 dedup split).
+    // A leading dot starts a dotfile, not an extension, the same as in buildStorageKey.
     const dotIdx = name.lastIndexOf('.');
     const ext = dotIdx > 0 ? name.slice(dotIdx) : '';
     let base = dotIdx > 0 ? name.slice(0, dotIdx) : name;
@@ -15,7 +20,7 @@ export function getUniqueFileName(name: string, usedNames: Set<string>): string 
     do {
         counter++;
         const candidate = fitName(base, ` (${counter})${ext}`);
-        if (!usedNames.has(candidate.toLowerCase())) {
+        if (!usedNames.has(foldName(candidate))) {
             return candidate;
         }
     } while (counter < 10000);

@@ -12,7 +12,7 @@ import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
 import { renameThenWriteRow, rethrowPathWriteError } from './helpers';
 import type { Mount } from './mount';
-import { isReservedName, trashStorageKey } from './names';
+import { foldName, isReservedName, trashStorageKey } from './names';
 import { paths } from './schema';
 
 export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath> {
@@ -127,7 +127,7 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
                     .from(paths)
                     .where(and(eq(paths.parentId, targetParentId), isNull(paths.trashedAt)))
                     .all();
-                const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
+                const usedNames = new Set(siblings.map((s) => foldName(s.name)));
                 restoreName = getUniqueFileName(row.name, usedNames);
             }
 

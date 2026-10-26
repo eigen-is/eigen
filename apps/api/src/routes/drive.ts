@@ -29,6 +29,7 @@ import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
+import { foldName } from '../lib/mount/names';
 import {
     assertEmlPreviewable,
     assertIcsPreviewable,
@@ -202,8 +203,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // NFC first: the store keeps names NFC, so the compare below has to see the same form.
             const desired = (body.name ?? src.name).replace(/[/\\]/g, '_').normalize('NFC');
             const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
-            const used = new Set(siblings.map((s) => s.name.toLowerCase()));
-            const finalName = used.has(desired.toLowerCase()) ? getUniqueFileName(desired, used) : desired;
+            const used = new Set(siblings.map((s) => foldName(s.name)));
+            const finalName = used.has(foldName(desired)) ? getUniqueFileName(desired, used) : desired;
 
             if (sameMount) {
                 return await sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, finalName, user);

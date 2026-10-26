@@ -738,8 +738,8 @@ describe('Name validation', () => {
     });
 
     test('rejects .trash compatibility-character aliases', async () => {
-        // U+017F LATIN SMALL LETTER LONG S: '.traſh' IS the '.trash' dir under APFS case folding,
-        // but survives NFC + toLowerCase. NFKC maps ſ→s.
+        // U+017F LATIN SMALL LETTER LONG S: '.traſh' is the '.trash' dir under APFS case folding,
+        // though toLowerCase keeps it apart. foldName folds it onto s.
         await expect(mount.createFolder(rootId, '.traſh')).rejects.toThrow('reserved name');
     });
 
