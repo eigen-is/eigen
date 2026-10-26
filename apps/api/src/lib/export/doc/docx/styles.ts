@@ -37,11 +37,6 @@ import { pPrXml, TITLE_STYLES } from './paragraphs';
 import type { RunProps } from './runs';
 import { rPrXml } from './runs';
 
-// A length an element in the body text takes, in twips.
-export function proseTwips(selector: string, property: string): number {
-    return twips(cssPt(proseValue(selector, property), BODY.sizePt));
-}
-
 export type Styles = Map<StyleId, StyleDef>;
 
 export type StyleDef = {
@@ -101,7 +96,7 @@ const HAIRLINE: Pick<StyleDef, 'pPr' | 'rPr'> = {
     rPr: { size: 2 },
 };
 
-// No w:lang, so Word checks spelling in the reader's own language. Text without a font, colour or size draws in the
+// No w:lang, so Word checks spelling in the reader's own language. Text without a font, color or size draws in the
 // Normal's.
 export function stylesXml({ normal, styles, languages }: Package): string {
     const run = { font: normal.font, color: cssColorToHex(normal.color), size: halfPoints(normal.size) };

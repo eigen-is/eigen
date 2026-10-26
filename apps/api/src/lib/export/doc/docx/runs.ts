@@ -143,7 +143,7 @@ export function runsXml(nodes: JSONContent[], context: Context, style: StyleId |
             xml += runs;
             continue;
         }
-        const id = context.pkg.part.relate('hyperlink', link.target, true);
+        const id = context.pkg.partRels.relate('hyperlink', link.target, true);
         const tooltip = link.tooltip ? ` w:tooltip="${escapeXml(link.tooltip)}"` : '';
         xml += `<w:hyperlink r:id="${id}"${tooltip} w:history="1">${runs}</w:hyperlink>`;
     }

@@ -32,18 +32,18 @@ export const BAND_TAGS = { header: 'w:hdr', footer: 'w:ftr' } as const;
 // What one export accumulates as it walks, each image file, shared bullet numbering and face once.
 export type Package = {
     // The relationships of the part being written, the document's, a band's or the notes'.
-    part: PartRelationships;
+    partRels: PartRelationships;
     publicOrigin: string | undefined;
-    lists: List[];
+    abstractNums: List[];
     // Each w:num's abstractNum, by index.
-    nums: number[];
+    numAbstracts: number[];
     bullets: Map<number, number>;
     checkboxes: boolean;
     languages: Set<string>;
     images: OfficeImages;
     // The charts the walk wrote, each part under word/charts/ and its workbook under word/embeddings/.
     charts: OfficeCharts;
-    drawings: number;
+    lastDrawingId: number;
     faces: Map<string, Set<FontSlot>>;
     // The notes the body references, note n at index n - 1.
     footnotes: JSONContent[];
@@ -57,14 +57,14 @@ export type Package = {
 // The walk's surroundings, so a nested block sizes and indents itself against its parent: column and indent in twips.
 export type Context = {
     pkg: Package;
-    first: boolean;
+    firstInFlow: boolean;
     // The type of the block after this one, which a numbered list runs on to when it is another.
     next?: string;
     column: number;
     indent: number;
     depth: number;
-    // The numbered lists around the block, by which an untyped one numbers.
-    numbered: number;
+    // An untyped list numbers by how many ordered lists are around it.
+    orderedListsAround: number;
     quotes: number;
     style?: StyleId;
     // The style TaskDone replaced, which an open task nested in a done one restores, as the editor strikes no nested task.
@@ -103,7 +103,7 @@ export function separatorXml(type: (typeof NOTE_SEPARATORS)[number], index: numb
 const NOTE_NUMBER =
     '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r>';
 
-export function numbered(blocks: Block[]): Block[] {
+export function withNoteNumber(blocks: Block[]): Block[] {
     const first = blocks.findIndex((block) => !('table' in block));
     if (first < 0) return [{ props: { style: 'FootnoteText' }, runs: NOTE_NUMBER }, ...blocks];
     return blocks.map((block, index) =>
