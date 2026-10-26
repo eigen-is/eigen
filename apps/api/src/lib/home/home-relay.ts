@@ -162,9 +162,10 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
     }
 }
 
-// Opening a home holds about 25 to 30 file descriptors, so the fan-outs through sendToUserHomes
-// share a budget of eight deliveries at once. Only deliveries to user homes take a permit, and a
-// user home relays no further. So a delivery never waits for a permit that its own fan-out holds.
+// Opening a home costs about 25 to 30 file descriptors and a burst of database opens. So the
+// fan-outs through sendToUserHomes open at most eight homes at once, all of them together. An opened
+// home still stays open for its idle time afterwards. Only deliveries to user homes take a permit,
+// and a user home relays no further. So a delivery never waits for a permit that its own fan-out holds.
 const deliveryBudget = new Semaphore(8);
 
 // A failed delivery is logged, and the other homes still get the message.
@@ -267,7 +268,7 @@ export async function pullPendingInvitations(ownerUserId: string, attendeeEmail:
 }
 
 // In the event writes, `user` is the person who makes the change, not the owner of the calendar.
-// The owner's home uses it for the events it sends and for the history it keeps.
+// The owner's home uses it for the live updates it sends and for the history it keeps.
 
 export async function createEventAt(
     ownerUserId: string,
