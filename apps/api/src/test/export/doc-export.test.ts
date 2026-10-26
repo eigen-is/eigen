@@ -13,7 +13,8 @@ import * as Y from 'yjs';
 import * as storedEquation from '../../lib/document/equation';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import { MATHML_LIMIT, renderDocHtml } from '../../lib/export/doc/render';
+import { MATHML_LIMIT } from '../../lib/export/doc/equations';
+import { renderDocHtml } from '../../lib/export/doc/render';
 import { MAX_BAND_BLOCKS, MAX_BAND_TEXT, MAX_PAGE_NOTES, renderEigendocExport } from '../../lib/export/doc/transform';
 import * as mathSvg from '../../lib/export/math-svg';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
@@ -570,6 +571,18 @@ describe('doc export — trailing breaks', () => {
         expect(body).toContain('<li><p><br></p></li>');
         expect(body).toContain('<blockquote><p><br></p></blockquote>');
         expect(body).toMatch(/<td[^>]*><p><br><\/p><\/td>/);
+    });
+
+    test('a code block over 64 kB with no language renders plain, one with a language still highlights', () => {
+        const long = 'const a = 1;\n'.repeat(Math.ceil((64 * 1024) / 13) + 1);
+        const block = (language: string | null) => ({
+            type: 'doc',
+            content: [{ type: 'codeBlock', attrs: { language }, content: [{ type: 'text', text: long }] }],
+        });
+        const plain = renderDocHtml(block(null), () => null);
+        expect(plain).toStartWith('<pre><code class="hljs">const a = 1;\n');
+        expect(plain).not.toContain('<span');
+        expect(renderDocHtml(block('javascript'), () => null)).toContain('<span class="hljs-keyword">const</span>');
     });
 
     test('an empty code block or one ending in a newline keeps its last line, one ending in text gets none', async () => {

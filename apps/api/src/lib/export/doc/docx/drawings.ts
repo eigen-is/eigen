@@ -173,7 +173,7 @@ function imageOf(name: string | null, pkg: Package): Image | undefined {
     if (!isPositive(width) || !isPositive(height)) return undefined;
     const image = pkg.images.image(name);
     if (!image) return undefined;
-    const relate = (target: string) => pkg.part.relate('image', `media/${target}`);
+    const relate = (target: string) => pkg.partRels.relate('image', `media/${target}`);
     return {
         ...image,
         kind: 'picture',
@@ -196,7 +196,7 @@ function wordChartOf(node: JSONContent, pkg: Package, extent: (natural: number) 
         pkg.charts,
         spec,
         { look: attrs, frame },
-        { target: 'charts/', relate: pkg.part.relate, lost: pkg.lost },
+        { target: 'charts/', relate: pkg.partRels.relate, lost: pkg.lost },
     );
     // addOfficeChart relates no part without a spec, so `!spec` only narrows its type.
     if (!spec || !rId) return undefined;
@@ -212,7 +212,7 @@ function isPositive(value: number | undefined): value is number {
 
 // Word and LibreOffice draw the svgBlip; a reader without SVG draws the PNG.
 function drawingXml(image: Image | WordChart, cx: number, cy: number, alt: string, pkg: Package): string {
-    const n = ++pkg.drawings;
+    const n = ++pkg.lastDrawingId;
     const descr = escapeXml(alt);
     const inline = `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>`;
     if (image.kind === 'chart') {

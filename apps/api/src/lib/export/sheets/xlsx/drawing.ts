@@ -10,7 +10,7 @@ import type { CellResolver } from '@workspace/sheet/engine';
 import { resolveRangeChartData } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import { anchoredBox, blipXml, DEGREE } from '../../../ooxml/drawingml';
-import { A_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../ooxml/ooxml';
+import { A_NS, EMU_PER_PX, pxToEmu, R_NS, XDR_NS } from '../../../ooxml/ooxml';
 import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf } from '../../../ooxml/opc';
@@ -21,7 +21,7 @@ import { sheetsResolver } from '../cell-style';
 
 // A sheet's floating charts and pictures as its drawing part: the path its <drawing> relationship targets, and the parts
 // the drawing adds to the package (itself, its relationships and its charts).
-export type SheetDrawing = { path: string; parts: PackagePart[] };
+type SheetDrawing = { path: string; parts: PackagePart[] };
 
 // Each chart and picture is a two-cell anchor over the cells its box covers, in paint order, so the import lands it on
 // the same pixels. A chart's ranges name the workbook's sheets by the names they are written under, and `number` names
@@ -106,13 +106,9 @@ function anchorXml(sheet: Sheet, { x, y, width, height }: Placed, content: strin
     const corner = (tag: string, left: number, top: number) => {
         const column = sheetTrackAt(sheet, 'column', left);
         const row = sheetTrackAt(sheet, 'row', top);
-        return `<xdr:${tag}><xdr:col>${column.index}</xdr:col><xdr:colOff>${toEmu(column.offsetPx)}</xdr:colOff><xdr:row>${row.index}</xdr:row><xdr:rowOff>${toEmu(row.offsetPx)}</xdr:rowOff></xdr:${tag}>`;
+        return `<xdr:${tag}><xdr:col>${column.index}</xdr:col><xdr:colOff>${pxToEmu(column.offsetPx)}</xdr:colOff><xdr:row>${row.index}</xdr:row><xdr:rowOff>${pxToEmu(row.offsetPx)}</xdr:rowOff></xdr:${tag}>`;
     };
     return `<xdr:twoCellAnchor editAs="oneCell">${corner('from', x, y)}${corner('to', x + width, y + height)}${content}<xdr:clientData/></xdr:twoCellAnchor>`;
-}
-
-function toEmu(px: number): number {
-    return Math.round(px * EMU_PER_PX);
 }
 
 function chartFrameXml(id: number, rId: string): string {
@@ -130,6 +126,6 @@ function pictureXml({ x, y, width, height, angle }: Placed, id: number, blip: st
     return [
         `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${id}" name="Picture ${id - 1}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>`,
         `<xdr:blipFill>${blip}<a:stretch><a:fillRect/></a:stretch></xdr:blipFill>`,
-        `<xdr:spPr><a:xfrm${rot ? ` rot="${rot}"` : ''}><a:off x="${toEmu(x)}" y="${toEmu(y)}"/><a:ext cx="${toEmu(width)}" cy="${toEmu(height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>`,
+        `<xdr:spPr><a:xfrm${rot ? ` rot="${rot}"` : ''}><a:off x="${pxToEmu(x)}" y="${pxToEmu(y)}"/><a:ext cx="${pxToEmu(width)}" cy="${pxToEmu(height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>`,
     ].join('');
 }

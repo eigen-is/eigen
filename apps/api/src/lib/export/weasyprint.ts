@@ -1,3 +1,7 @@
+// PDF through WeasyPrint, a Python subprocess outside the transform runner: the HTML each export renders goes in, the
+// PDF comes out. Renders run one at a time under the transform child's limits and a timeout, and the request's signal
+// kills one whose client is gone.
+
 import { Semaphore } from '../../utils/semaphore';
 import { ApiError } from '../core/errors';
 import { isEnoent } from '../core/local-filesystem';
@@ -14,8 +18,7 @@ const MIN_WEASYPRINT_MAJOR = 68;
 
 const RENDER_TIMEOUT_MS = 60_000;
 
-// A render can take gigabytes, so renders run one at a time, as transform children do (DOCUMENT-TRANSFORMS.md § One
-// child runs at a time), beside at most the one child.
+// A render can take gigabytes, so renders run one at a time, as transform children do, beside at most the one child.
 const renders = new Semaphore(1);
 // A waiting render holds its document and its connection. The runner admits about four foreground exports behind the
 // one running (120 s of predicted wait at 30 s each), so four renders may wait behind the one WeasyPrint.

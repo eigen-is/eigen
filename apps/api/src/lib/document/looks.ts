@@ -61,6 +61,11 @@ export const BODY = {
     color: proseColor('.eigen-prose', 'color'),
 };
 
+// A length an element in the body text takes, in twips.
+export function proseTwips(selector: string, property: string): number {
+    return twips(cssPt(proseValue(selector, property), BODY.sizePt));
+}
+
 // A solid border shorthand, its width in eighths of a point.
 export function proseBorder(selector: string, property: string): Omit<Border, 'space'> {
     const value = proseValue(selector, property);

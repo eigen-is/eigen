@@ -105,6 +105,11 @@ export function ooxmlChild(
 export const EMU_PER_PX = 9525;
 export const EMU_PER_POINT = 12_700;
 
+// A length in pixels as whole EMUs, at 96 dpi unless the caller's scale says otherwise.
+export function pxToEmu(px: number, emuPerPx = EMU_PER_PX): number {
+    return Math.round(px * emuPerPx);
+}
+
 // The points in one of each unit of ST_UniversalMeasure, which Strict OOXML writes where transitional writes a number.
 export const POINTS_PER_UNIT = new Map([
     ['pt', 1],

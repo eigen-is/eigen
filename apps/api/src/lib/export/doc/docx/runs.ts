@@ -143,7 +143,7 @@ export function runsXml(nodes: JSONContent[], context: Context, style: StyleId |
             xml += runs;
             continue;
         }
-        const id = context.pkg.part.relate('hyperlink', link.target, true);
+        const id = context.pkg.partRels.relate('hyperlink', link.target, true);
         const tooltip = link.tooltip ? ` w:tooltip="${escapeXml(link.tooltip)}"` : '';
         xml += `<w:hyperlink r:id="${id}"${tooltip} w:history="1">${runs}</w:hyperlink>`;
     }
@@ -177,12 +177,12 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ['small', () => ({ spacing: twips(SMALL_LOOK.letterSpacingPt), size: halfPoints(SMALL_LOOK.sizePt) })],
     [
         'code',
+        // Only inside a heading or title a size of its own, as textStyle's, or it would unset Small's before it.
         (_attrs, { blockPt }) => ({
             style: 'Code',
-            size:
-                blockPt === undefined
-                    ? undefined
-                    : halfPoints(cssPt(proseValue('.eigen-prose code', 'font-size'), blockPt)),
+            ...(blockPt !== undefined && {
+                size: halfPoints(cssPt(proseValue('.eigen-prose code', 'font-size'), blockPt)),
+            }),
         }),
     ],
     [

@@ -15,10 +15,8 @@ import { renderEigenslidesHtml } from '../canvas/transform';
 import { withSvgFallbacks } from '../office-image';
 import { sanitizeSceneHtml } from '../sanitize';
 
-// Materialized deck + prepared media → export bytes. Runs inside the transform process (child.ts owns execution; the
-// main-thread orchestration lives in export-document.ts), so it never reaches the Mount or the preview cache. HTML and
-// PDF are the canvas pages; the pptx is written from the scene by pptx/to-pptx.ts, which loads lazily so an HTML export
-// never evaluates it. The rich-text filter the HTML export runs keeps a peer's javascript: link out of the pptx.
+// The pptx writer loads lazily, so an HTML export never evaluates it. The rich-text filter the HTML export runs keeps a
+// peer's javascript: link out of the pptx.
 export async function renderEigenslidesExport(
     doc: Y.Doc,
     format: SlidesExportFormat,

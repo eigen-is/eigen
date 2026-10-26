@@ -1,3 +1,8 @@
+// The canvas compositor: a page of scene layers as an HTML string, for the deck and drawing exports and their previews.
+// A screen layer carries the box CSS the live canvas sets, a printed one the same box laid out where it prints, so
+// what a user sees is what prints. It touches no Mount, preview cache or DOM. Each layer's gradient and clip
+// references stay inside its own <svg>, because WeasyPrint resolves `url(#id)` only within one.
+
 import { backgroundCss } from '@workspace/lib/background';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
@@ -16,22 +21,12 @@ import {
 } from '@workspace/lib/vector';
 import { mediaNamesIn } from '../../document/media';
 
-// The canvas compositor: a page of sceneLayers as an HTML string, for the PDF export and the
-// preview body. A screen layer carries the same box CSS the live canvas sets (layerBoxCss), a printed
-// one the same box laid out where it prints (layerPrintCss), so what a user sees is what prints.
-// Worker-pure: no Mount, no preview cache, no DOM.
-//
-// A kind points at its own gradient with `fill="url(#…)"` / `stroke="url(#…)"` and clips an image with
-// `clip-path="url(#…)"`, into the <defs> of the same fragment. That is load-bearing on the PDF path:
-// WeasyPrint resolves `url(#id)` only within one <svg>, so each layer's references stay inside the one
-// viewport layerInnerHtml gives it.
-
 // The media a deck or drawing names: its images, and the frame backgrounds, which the scene keeps as stored JSON.
 export function sceneMediaNames(scene: VectorScene): Set<string> {
     return mediaNamesIn([scene.elements, scene.frames.map((frame) => parseBackgroundFill(frame.background))]);
 }
 
-// A page in SCENE units plus the offset that brings its top-left to (0,0): a frame is (0,0)-based
+// A page in scene units plus the offset that brings its top-left to (0,0): a frame is (0,0)-based
 // so its origin is zero, a frameless drawing's content bounds start wherever the user drew.
 export type CanvasPage = {
     width: number;
@@ -58,7 +53,7 @@ export function drawingPage(scene: VectorScene, resolveMedia: MediaResolver): Ca
     };
 }
 
-// One page per frame, in deck order. A frame IS the page — 0,0-based and the deck's size — so unlike a
+// One page per frame, in deck order. A frame is the page, 0,0-based and the deck's size, so unlike a
 // drawing there is no content-bounds arithmetic and no origin offset; an element that overhangs is
 // clipped by the page box, exactly as the live canvas clips it.
 export function framePages(scene: VectorScene, resolveMedia: MediaResolver): CanvasPage[] {
@@ -90,7 +85,7 @@ export function sceneBackground(scene: VectorScene): BackgroundFill | null {
 }
 
 // One page on screen: a clipped box at `scale`, holding the scene at 1:1 with the whole thing scaled
-// once. The resolver is only for a frame's IMAGE background — a drawing's background is a color token,
+// once. The resolver is only for a frame's image background — a drawing's background is a color token,
 // so those callers pass nothing.
 export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string {
     // scale first, then translate: the shift is expressed in scene units and rides the scale.
@@ -100,7 +95,7 @@ export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?:
         'left:0',
         `width:${round(page.width)}px`,
         `height:${round(page.height)}px`,
-        // The scale is NOT rounded: the page box above is `width * scale`, so a 2-dp scale on an
+        // The scale is not rounded: the page box above is `width * scale`, so a 2-dp scale on an
         // awkward ratio (960 / 2870) would leave a gutter between the scene and the page edge.
         `transform:scale(${scale}) translate(${round(-page.originX)}px,${round(-page.originY)}px)`,
         'transform-origin:0 0',
@@ -131,10 +126,9 @@ function pageStyle(page: CanvasPage, scale: number, resolveMedia?: MediaResolver
     ];
 }
 
-// The same page in the fit box every SCREEN consumer scales it in — the HTML export document, the
+// The same page in the fit box every screen consumer scales it in — the HTML export document, the
 // lightbox and the drive hero. The box carries the page's composed size as custom properties so one
-// rule set (`.page-fit`, packages/ui/src/styles/globals.css, mirrored by the export document's own
-// CSS) fits a slide of either size and a drawing of any ratio the same way.
+// rule set (`.page-fit`, the app's, which the export document's own CSS mirrors) fits a slide of either size and a drawing of any ratio the same way.
 export function renderFittedPage(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string {
     const width = round(page.width * scale);
     const height = round(page.height * scale);

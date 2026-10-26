@@ -1,16 +1,21 @@
+// The docx writer's lists: a w:num per list and an abstractNum per ordered list, so lists side by side stay apart and
+// count apart, and Word's checkbox for a task. The paragraph walker calls listOf and itemOf, and the package writes
+// numbering.xml from what they recorded.
+
 import type { JSONContent } from '@tiptap/core';
-import { BLOCK_MARGINS } from '../../../document/looks';
+import { BLOCK_MARGINS, proseTwips } from '../../../document/looks';
 import { W_NS } from '../../../ooxml/ooxml';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, SINGLE_LINE } from '../../../ooxml/wordml';
 import type { Context, Package } from './package';
 import type { Block, Paragraph, ParagraphProps } from './paragraphs';
 import { blocksOf, indentOf, pPrXml, quoteBar, textProps, withAfter } from './paragraphs';
 import { rPrXml } from './runs';
-import { proseTwips } from './styles';
-
-// Lists: a w:num per list and an abstractNum per ordered list, so adjacent lists stay apart and count separately.
 
 export type List = { format: string; start: number; base: number };
+
+export const CLEAR_FLOATS = '<w:r><w:br w:type="textWrapping" w:clear="all"/></w:r>';
+
+export const LIST_LEVEL = proseTwips('.eigen-prose ul', 'padding-left');
 
 // Only an outermost list's last paragraph takes the list's margin; a task list and an empty one number nothing.
 export function listOf(
@@ -31,7 +36,7 @@ export function listOf(
                   ilvl,
               }
             : undefined;
-    const items = { ...context, list, numbered: context.numbered + (tag === 'ol' ? 1 : 0) };
+    const items = { ...context, list, orderedListsAround: context.orderedListsAround + (tag === 'ol' ? 1 : 0) };
     const blocks = blocksOf(content, textProps({}, items), items, false);
     if (context.depth > 0) return blocks;
     const runsOn = tag === 'ol' && context.next === 'orderedList';
@@ -46,9 +51,9 @@ export function listOf(
 // indent share their definition: Word caps the definitions a file holds.
 function numIdOf(pkg: Package, list: List): number {
     const bullet = list.format === 'bullet';
-    const abstract = (bullet ? pkg.bullets.get(list.base) : undefined) ?? pkg.lists.push(list) - 1;
+    const abstract = (bullet ? pkg.bullets.get(list.base) : undefined) ?? pkg.abstractNums.push(list) - 1;
     if (bullet) pkg.bullets.set(list.base, abstract);
-    return pkg.nums.push(abstract);
+    return pkg.numAbstracts.push(abstract);
 }
 
 // The item's text is a level in; only its first paragraph opens with the number or checkbox.
@@ -87,10 +92,6 @@ export function itemOf(
     };
     return [...opened, { props: clearing, runs: CLEAR_FLOATS }];
 }
-
-export const CLEAR_FLOATS = '<w:r><w:br w:type="textWrapping" w:clear="all"/></w:r>';
-
-export const LIST_LEVEL = proseTwips('.eigen-prose ul', 'padding-left');
 
 // A list or quote deeper than Word's levels indents no further.
 function itemIndent(context: Context): number {

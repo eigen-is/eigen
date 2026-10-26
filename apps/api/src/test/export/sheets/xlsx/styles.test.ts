@@ -18,6 +18,14 @@ function styleSheet(xml: string) {
 }
 
 describe('the style registry', () => {
+    test("a font size past Excel's 1 to 409 points is held to them, and one that is no number is the default", () => {
+        const { styles } = registryOf();
+        for (const fs of [1e308, -5, 0.5, Number.NaN, Number.POSITIVE_INFINITY, 409, 11.5])
+            styles.xf({ v: 'x', fs }, undefined);
+        const sizes = [...styles.xml().matchAll(/<sz val="([^"]*)"\/>/g)].map((match) => match[1]);
+        expect(sizes).toEqual(['10', '409', '1', '11.5']);
+    });
+
     test("Inter at the sheet's default size is the first font, so a column width counts its digit", () => {
         const { styles } = registryOf();
         const xml = styles.xml();

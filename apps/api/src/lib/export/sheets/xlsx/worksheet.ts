@@ -1,3 +1,7 @@
+// A sheet part around its grid: the tab color, the view with its frozen pane and gridlines, the default sizes, the
+// columns, the filter's span, the merges, the rules, the links and the drawing, in the order CT_Worksheet sets, since
+// Excel repairs a file that breaks it.
+
 import { pxToPt } from '@workspace/lib/docs/eigendoc';
 import type { Sheet } from '@workspace/lib/sheets';
 import {
@@ -19,10 +23,6 @@ import type { GridContext } from './cells';
 import { inGrid, keyOf, sheetGrid } from './cells';
 import { rulesXml } from './rules';
 import { argbOf } from './styles';
-
-// A sheet part around its grid: the tab colour, the view with its frozen pane and gridlines, the default sizes, the
-// columns, the filter's span, the merges, the rules, the links and the drawing, in the order CT_Worksheet sets, since
-// Excel repairs a file that breaks it.
 
 export type WorksheetContext = GridContext & {
     // As the workbook names it.
@@ -53,11 +53,13 @@ export function worksheetPart(
     sheet: Sheet,
     context: WorksheetContext,
 ): { xml: () => Generator<string>; relationships: Relationship[] } {
+    // The drawing is the first relationship, and each link takes the next id.
+    const drawingId = 'rId1';
     const relationships: Relationship[] = context.drawing ? [{ type: `${R_NS}/drawing`, target: context.drawing }] : [];
     const links = linksXml(sheet, context, relationships);
     function* xml(): Generator<string> {
         const grid = sheetGrid(sheet, context);
-        const tabColor = sheet.color ? argbOf(sheet.color) : undefined;
+        const tabColor = argbOf(sheet.color);
         yield [
             `<worksheet xmlns="${SML_NS}" xmlns:r="${R_NS}">`,
             tabColor ? `<sheetPr><tabColor rgb="${tabColor}"/></sheetPr>` : '',
@@ -76,14 +78,14 @@ export function worksheetPart(
             rulesXml(sheet, context.styles, context.lost),
             links,
             PAGE_MARGINS,
-            context.drawing ? '<drawing r:id="rId1"/>' : '',
+            context.drawing ? `<drawing r:id="${drawingId}"/>` : '',
             '</worksheet>',
         ].join('');
     }
     return { xml, relationships };
 }
 
-// One view: Excel honours only the first. A frozen pane splits after the last frozen row and column.
+// One view: Excel honors only the first. A frozen pane splits after the last frozen row and column.
 function viewsXml(sheet: Sheet, selected: boolean): string {
     const attributes = `${sheet.showGridLines === false || sheet.showGridLines === 0 ? ' showGridLines="0"' : ''}${selected ? ' tabSelected="1"' : ''} workbookViewId="0"`;
     const { type, range } = sheet.frozen ?? {};

@@ -1,3 +1,6 @@
+// A plain text file's preview body: markdown rendered and sanitized, code highlighted by its file extension, and
+// plain text as paragraphs. The preview cache calls it on the main thread, for a drive file or a mail part.
+
 import type { BytesTextPreviewMode } from '@workspace/lib/constants/preview';
 import { getExtension } from '@workspace/lib/constants/preview';
 import { escapeHtml } from '@workspace/lib/html';
@@ -79,7 +82,7 @@ export async function generateTextPreview(
 
     if (mode === 'code') {
         try {
-            const { hastToHtml, highlightCode } = await import('../export/doc/render');
+            const { hastToHtml, highlightCode } = await import('../document/lowlight');
             const highlighted = hastToHtml(highlightCode(getLanguageFromFileName(fileName) ?? '', content));
             return { body: `<pre><code>${highlighted}</code></pre>`, mode };
         } catch {

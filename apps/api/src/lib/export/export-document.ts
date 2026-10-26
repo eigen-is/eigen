@@ -1,3 +1,7 @@
+// An export's main-thread entry, which the export route calls: the container's type and the format pick the job, the
+// transform process renders it, and a PDF is that document through WeasyPrint. The media the document names is
+// prepared here, beside the Mount.
+
 import { DOCX_MIME, PPTX_MIME, XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -16,35 +20,35 @@ import type { Mount } from '../mount';
 import { collectExportMedia } from './media';
 import { htmlToPdf } from './weasyprint';
 
-export type ExportResult = {
+type ExportResult = {
     data: Buffer;
     contentType: string;
     fileName: string;
 };
 
-// One envelope per download format: the document the Worker renders, the headers the
+// One envelope per download format: the document the transform process renders, the headers the
 // route serves, and the filename extension (always over the stripped container name).
 // `pdf` is the only format with a main-thread stage left.
 const EXPORT_ENVELOPES = {
-    html: { workerFormat: 'html', contentType: 'text/html; charset=utf-8', extension: 'html' },
-    pdf: { workerFormat: 'pdf-html', contentType: 'application/pdf', extension: 'pdf' },
-    xlsx: { workerFormat: 'xlsx', contentType: XLSX_MIME, extension: 'xlsx' },
-    docx: { workerFormat: 'docx', contentType: DOCX_MIME, extension: 'docx' },
-    pptx: { workerFormat: 'pptx', contentType: PPTX_MIME, extension: 'pptx' },
+    html: { transformFormat: 'html', contentType: 'text/html; charset=utf-8', extension: 'html' },
+    pdf: { transformFormat: 'pdf-html', contentType: 'application/pdf', extension: 'pdf' },
+    xlsx: { transformFormat: 'xlsx', contentType: XLSX_MIME, extension: 'xlsx' },
+    docx: { transformFormat: 'docx', contentType: DOCX_MIME, extension: 'docx' },
+    pptx: { transformFormat: 'pptx', contentType: PPTX_MIME, extension: 'pptx' },
 } as const;
 
 type ExportEnvelope = (typeof EXPORT_ENVELOPES)[keyof typeof EXPORT_ENVELOPES];
 
-// What the Worker is asked to render. One arm per document type, so a format its route
+// What the transform process is asked to render. One arm per document type, so a format its route
 // rejects — a docx from a deck, a pptx from a document — does not compile.
-export type ExportJob =
+type ExportJob =
     | { documentType: 'eigensheets'; format: SheetExportFormat }
     | { documentType: 'eigendoc'; format: EigendocExportFormat }
     | { documentType: 'eigenslides'; format: SlidesExportFormat }
     | { documentType: 'eigenvector'; format: VectorExportFormat };
 
-// `signal` aborts the off-thread transforms when the client disconnects — the runner
-// drops the queued job or terminates its Worker.
+// `signal` aborts the transform when the client disconnects: the runner drops the queued job
+// or kills its child process.
 export async function exportDocument(
     mount: Mount,
     path: DrivePath,
@@ -56,12 +60,18 @@ export async function exportDocument(
     const containerMime = isCollabType(path.type) ? path.mimeType : '';
     if (containerMime === DRIVE_MIME_DOC && offers(EIGEN_DOC_TYPE_INFO.doc.exportFormats, format)) {
         const envelope = EXPORT_ENVELOPES[format];
-        return serveExport({ documentType: 'eigendoc', format: envelope.workerFormat }, envelope, mount, path, signal);
+        return serveExport(
+            { documentType: 'eigendoc', format: envelope.transformFormat },
+            envelope,
+            mount,
+            path,
+            signal,
+        );
     }
     if (containerMime === DRIVE_MIME_SHEETS && offers(EIGEN_DOC_TYPE_INFO.sheets.exportFormats, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
-            { documentType: 'eigensheets', format: envelope.workerFormat },
+            { documentType: 'eigensheets', format: envelope.transformFormat },
             envelope,
             mount,
             path,
@@ -71,7 +81,7 @@ export async function exportDocument(
     if (containerMime === DRIVE_MIME_SLIDES && offers(EIGEN_DOC_TYPE_INFO.slides.exportFormats, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
-            { documentType: 'eigenslides', format: envelope.workerFormat },
+            { documentType: 'eigenslides', format: envelope.transformFormat },
             envelope,
             mount,
             path,
@@ -81,7 +91,7 @@ export async function exportDocument(
     if (containerMime === DRIVE_MIME_VECTOR && offers(EIGEN_DOC_TYPE_INFO.vector.exportFormats, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
-            { documentType: 'eigenvector', format: envelope.workerFormat },
+            { documentType: 'eigenvector', format: envelope.transformFormat },
             envelope,
             mount,
             path,
@@ -92,7 +102,7 @@ export async function exportDocument(
 }
 
 // The gate AND the narrowing: the type's own list is what the Download menus offer, and each entry
-// narrows to a literal, so a format added there without a Worker envelope for it fails to compile.
+// narrows to a literal, so a format added there without an envelope for it fails to compile.
 function offers<T extends readonly string[]>(formats: T, format: string): format is T[number] {
     return formats.includes(format);
 }
@@ -108,9 +118,9 @@ async function serveExport(
     // onto the sheet.
     const { data: bytes, zoom } = await runDocumentExport(job, mount, path, signal);
     return {
-        // WeasyPrint stays a main-thread subprocess (already off-process, so it never
-        // blocks the event loop) over the document the Worker rendered.
-        data: envelope.workerFormat === 'pdf-html' ? await htmlToPdf(bytes, zoom, signal) : bytes,
+        // WeasyPrint runs in a subprocess of its own, so it never blocks the event loop, over the
+        // document the transform process rendered.
+        data: envelope.transformFormat === 'pdf-html' ? await htmlToPdf(bytes, zoom, signal) : bytes,
         contentType: envelope.contentType,
         fileName: `${stripEigenExtension(path.name)}.${envelope.extension}`,
     };
@@ -127,7 +137,7 @@ export async function runDocumentExport(
     signal?: AbortSignal,
 ): Promise<{ data: Buffer; zoom?: number }> {
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
-    // docx document property carries the stripped one, applied in the Worker. Root-relative
+    // docx document property carries the stripped one, applied in the child. Root-relative
     // links take the public origin in every format, none on a checkout's dev server.
     const request: ExportTransformJob =
         job.documentType === 'eigendoc'

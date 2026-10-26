@@ -58,7 +58,7 @@ Generations are shared per cache name, the first one and the background one alik
 
 Loose bytes render in one of three modes. Markdown goes through markdown-it with raw HTML off. Code goes through lowlight. Plain text becomes `<p>` paragraphs, not `<pre>`, because `eigen-prose` paints every `<pre>` as a dark code block and a `.txt` should read like prose.
 
-One ceiling bounds every loose-bytes preview, Drive and mail alike: `TEXT_PREVIEW_MAX_BYTES` (1 MiB). The decode and the highlighter run on the API event loop, per request. Drive refuses on the row's `size` before it reads a byte. A container is not measured against it, because its size is its databases, not the body the transform renders. `getPreviewMode` on the client applies the same gate, so the overlay shows the file card rather than a panel the route would 404.
+One ceiling bounds every loose-bytes preview, Drive and mail alike: `TEXT_PREVIEW_MAX_BYTES` (1 MiB). The decode and the highlighter run on the API event loop, per request. A code file past 64 KB in no language the highlighter knows shows as plain text, as automatic detection tries every grammar. Drive refuses on the row's `size` before it reads a byte. A container is not measured against it, because its size is its databases, not the body the transform renders. `getPreviewMode` on the client applies the same gate, so the overlay shows the file card rather than a panel the route would 404.
 
 ## An Eigen document previews a slice, off the event loop
 
@@ -73,7 +73,7 @@ A preview is a glance, so each type stops at its natural unit and leaves the exp
 | eigenvector | 500 elements in reading order, one page |
 | eigensheets | first sheet, 200 rows × 50 columns, 10,000 cells |
 
-A sheets preview never recalculates and renders stored values ([SHEETS.md § The editor computes on write](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). The sheet window also bounds declared spans: one merge or conditional-format range can name millions of cells, so both clip to the window. So an aggregate rule (data bars, color scales, top-N, duplicates) takes its extremes over the window, not over the range it declares.
+A sheets preview never recalculates and renders stored values ([SHEETS.md § The editor computes on write](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). The sheet window also bounds declared spans: one merge or conditional-format range can name millions of cells, so both clip to the window, through the export's `windowedSheet` ([EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-charts-and-pictures)). So an aggregate rule (data bars, color scales, top-N, duplicates) takes its extremes over the window, not over the range it declares. A data bar or a color scale reads only the cells that show, and a top-N, average or duplicate rule ranks each range from its first shown row and column to its last, hidden cells between them included. The preview also draws a font size held to Excel's 1 to 409 points and a color that is no string as none, as the export does: both are safer in a body embedded in a page.
 
 The caps count units, and one enormous block passes all of them. So `applyPreviewByteGuard` replaces any body over 8 MB with the truncation marker, never with a sliced string. The marker is inline-styled because a preview body is embedded without a `<head>`.
 

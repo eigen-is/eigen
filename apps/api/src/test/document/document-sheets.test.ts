@@ -327,7 +327,13 @@ describe('document/sheets — patch op replay', () => {
 
         expect(result[0].data![0][1]).toEqual({ v: 2, f: '=1+1', m: '2' });
         expect(
-            sheetsHtmlDocument({ title: 'first-formula', sheets: result, mediaUrls: NO_MEDIA, mode: 'screen' }),
+            sheetsHtmlDocument({
+                title: 'first-formula',
+                sheets: result,
+                mediaUrls: NO_MEDIA,
+                mode: 'screen',
+                lost: () => {},
+            }),
         ).toContain('>2<');
     });
 

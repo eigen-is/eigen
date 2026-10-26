@@ -1,3 +1,7 @@
+// A text box's HTML as the paragraphs and runs of a DrawingML text body, laid out as canvas-text.css lays it out: its
+// lists, quotes, links and marks, and its sizes and spacing in the deck's points.
+
+import { isElement } from '@workspace/lib/html';
 import type { TextAlign, VerticalAlign } from '@workspace/lib/vector';
 import { slidePxToPt } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
@@ -7,11 +11,8 @@ import { ALGN_BY_ALIGN, ANCHOR_BY_ALIGN, clampTextSize, solidFillXml } from '../
 import { AHYP_NS } from '../../../ooxml/ooxml';
 import { uriReference } from '../../../ooxml/opc';
 import { MAX_SLIDE_EMU } from '../../../ooxml/presentationml';
-import { isElement } from '../../sanitize';
 import type { Slide } from './package';
 import { toEmu } from './shapes';
-
-// Text: a box's HTML as the paragraphs and runs of a text body, laid out as canvas-text.css lays it out.
 
 // Text sizes and spacing in 100ths of a point, at the deck's scale.
 function centipoints(slide: Slide, px: number): number {

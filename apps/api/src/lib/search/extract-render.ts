@@ -1,3 +1,7 @@
+// A collab document's body text for the search index, cut to the index's byte budget. It runs in the transform
+// process, so it reaches neither the Mount nor the transform seam. Each reader loads through a dynamic import, so a
+// doc's extract never loads the sheet engine. Light reads, such as a sticky or a chat, stay on the main thread.
+
 import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { ElementKindRegistry, VectorElement } from '@workspace/lib/vector';
@@ -6,13 +10,6 @@ import type * as Y from 'yjs';
 import type { readStoredEquation } from '../document/equation';
 import type { ExtractTextJob, TransformWarning } from '../document/transform/protocol';
 import { CONTENT_INDEX_MAX_BYTES } from './limits';
-
-// Materialized doc → indexable body text. Runs inside the transform process
-// (child.ts owns execution; the main-thread dispatch lives in extract-text.ts).
-// This module must not reach the Mount or the transform seam. Each reader loads
-// through a dynamic import, the same shape as child.ts's renderPreview, so an
-// eigendoc extract never evaluates the sheet engine. Stickies, chat and plain-text
-// bodies are light reads and stay on the main thread.
 
 // The cap is a UTF-8 byte budget, and a leaf is arbitrarily large: whatever the
 // collectors keep is cloned to the main thread and inserted into FTS, so each leaf is
@@ -95,9 +92,8 @@ function collectCanvasText(elements: VectorElement[], kinds: ElementKindRegistry
     return out.parts.join('\n');
 }
 
-// Body text for one collab document, capped at ~100 KB. Sheets index stored values
-// only — like the preview renderer, the read never recalcs (SHEETS.md § The
-// editor computes on write), so a valueless formula cell contributes nothing.
+// Body text for one collab document, capped at about 100 KB. Sheets index their stored values only: as for the
+// preview, the read never recalculates, so a formula cell with no value adds nothing.
 export async function extractCollabText(
     documentType: ExtractTextJob['documentType'],
     doc: Y.Doc,

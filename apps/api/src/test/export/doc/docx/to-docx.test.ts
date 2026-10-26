@@ -16,8 +16,8 @@ import { cssPt, QUOTE_LOOK, twips } from '../../../../lib/document/looks';
 import { proseValue, proseValueIfSet } from '../../../../lib/document/prose-css';
 import type { ExportMedia, TransformWarning } from '../../../../lib/document/transform/protocol';
 import { lossCounter, toTransferableText } from '../../../../lib/document/transform/protocol';
+import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/doc/docx/fonts';
 import { writeDocx } from '../../../../lib/export/doc/docx/to-docx';
-import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/fonts';
 import type { DrawingTheme } from '../../../../lib/ooxml/drawingml';
 import { IDENTITY_COLOR_MAP } from '../../../../lib/ooxml/drawingml';
 import { A_NS, C_NS, parseOoxml } from '../../../../lib/ooxml/ooxml';
@@ -1004,6 +1004,16 @@ describe('docx writer — marks', () => {
         ]);
     });
 
+    // Only a forged peer marks code beside Small: the editor's Code mark excludes the others.
+    test("code outside a heading or title beside Small keeps Small's size", async () => {
+        expect(await runProps({ type: 'small' }, { type: 'code' })).toEqual([
+            ['rStyle', 'Code'],
+            ['spacing', '2'],
+            ['sz', '18'],
+            ['szCs', '18'],
+        ]);
+    });
+
     test('a text color and an Eigen font are written; rgb() is normalized', async () => {
         expect(
             await runProps({ type: 'textStyle', attrs: { color: 'rgb(192, 0, 0)', fontFamily: 'Source Serif 4' } }),
@@ -1900,6 +1910,14 @@ describe('docx writer — code blocks', () => {
         const json = doc(code('a'), p(text('x')), code('b', 'no-such-language'), p(text('y')), code('c', '"/><w:b/>'));
         expect([...(await styles(json)).keys()].filter((id) => id.startsWith('CodeBlock-'))).toEqual([]);
         expect([...(await styles()).keys()].filter((id) => id.startsWith('CodeBlock-'))).toEqual([]);
+    });
+
+    test('a block over 64 kB with no language is written plain, one with a language still highlights', async () => {
+        const long = 'const a = 1;\n'.repeat(Math.ceil((64 * 1024) / 13) + 1);
+        const plain = xmlChildren(await bodyOf(doc(code(long))), W, 'p');
+        expect(plain.slice(0, 2).map(texts)).toEqual(['const a = 1;', 'const a = 1;']);
+        expect(plain.flatMap((paragraph) => descendants(paragraph, W, 'color'))).toEqual([]);
+        expect((await codeLines(doc(code(long, 'javascript'))))[0][0]).toEqual(['const', 'CBA6F7', undefined]);
     });
 
     test("the Code Block style is the editor's dark box: borders as its padding, shading, mono at 286 auto", async () => {

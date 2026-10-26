@@ -11,6 +11,7 @@ import {
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_DIGIT_WIDTH,
     SHEET_DEFAULT_FONT,
+    SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
 
 // The prefix of SpreadsheetML's content types, and the content type of a sheet's drawing part, which is DrawingML's.
@@ -103,6 +104,15 @@ export const MAX_CELL_FORMATS = 64_000;
 export const MAX_SHEET_LINKS = 65_530;
 // Excel's limit on a validation's input message.
 export const MAX_PROMPT_LENGTH = 255;
+// Excel's font sizes run from 1 to 409 points, and it repairs a file past them.
+const MAX_FONT_SIZE_POINTS = 409;
+
+// A cell's font size held to Excel's range. A peer can store any value, and one that is no finite number is the default.
+export function cellFontSize(fs: unknown): number {
+    return typeof fs === 'number' && Number.isFinite(fs)
+        ? Math.min(MAX_FONT_SIZE_POINTS, Math.max(1, fs))
+        : SHEET_DEFAULT_FONT_SIZE;
+}
 
 // Whether a ref's cells, after its sheet's name, all lie in Excel's grid. A defined name shaped like a cell, such as
 // UkRegion2, names a column past XFD.

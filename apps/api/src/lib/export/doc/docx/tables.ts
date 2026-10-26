@@ -22,6 +22,24 @@ export const TABLE_BORDER_SIDES = [...BORDER_SIDES, 'insideH', 'insideV'] as con
 
 type GridCell = { node: JSONContent; content: JSONContent[]; column: number; colspan: number; rowspan: number };
 
+// Far above any real table; a sum of MAX_TABLE_COLUMNS of them stays finite.
+const MAX_COLWIDTH_PX = 1e6;
+
+// Based on Normal, it looks as Normal does, and stays out of Word's gallery.
+const TABLE_HEADER_STYLE: StyleDef = {
+    type: 'paragraph',
+    id: 'TableHeader',
+    name: STYLE_NAMES.TableHeader,
+    basedOn: 'Normal',
+    semiHidden: true,
+};
+
+export const TABLE_LOOK = {
+    border: { ...proseBorder('.eigen-prose td', 'border'), space: 0 },
+    padding: TABLE_CELL_PADDING,
+    margin: TABLE_MARGIN,
+};
+
 // Spans hold their columns; stray content gets a cell, one past the last column joins the cell there: no text is lost.
 // A table wider than Word's 63 columns loses its last columns' layout, so it is counted once as simplified.
 export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
@@ -92,7 +110,7 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             const owner = cell ?? merged;
             const colspan = owner?.colspan ?? 1;
             const width = spanWidth(column, colspan);
-            // Word draws a fill per cell, so a merge's covered cells carry it too; a cell's own wins over a header's grey.
+            // Word draws a fill per cell, so a merge's covered cells carry it too; a cell's own wins over a header's gray.
             const fill =
                 readCellBackground(owner?.node.attrs?.['backgroundColor'])?.slice(1).toUpperCase() ??
                 (owner?.node.type === 'tableHeader' ? HEADER_CELL_LOOK.fill : undefined);
@@ -129,9 +147,6 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     ];
 }
 
-// Far above any real table; a sum of MAX_TABLE_COLUMNS of them stays finite.
-const MAX_COLWIDTH_PX = 1e6;
-
 // As TableWidthClamp: known columns scale down to the column, floored; unknown ones share the rest, as width: 100%.
 function gridWidths(widths: (number | undefined)[], columnPx: number): { dxa: number[]; fixed: boolean } {
     const known = widths.filter((width) => width !== undefined);
@@ -147,15 +162,20 @@ function gridWidths(widths: (number | undefined)[], columnPx: number): { dxa: nu
 
 // A cell is a flow of its own: no indent or list around it, its paragraphs flush and aligned as the cell is. Only an
 // untyped list in it still numbers by the lists around the table, as eigen-prose.css draws it.
-function cellXml({ node, content }: GridCell, column: number, { pkg, numbered }: Context, marked: boolean): string {
+function cellXml(
+    { node, content }: GridCell,
+    column: number,
+    { pkg, orderedListsAround }: Context,
+    marked: boolean,
+): string {
     const align = node.attrs?.['align'];
     const cell: Context = {
         pkg,
-        first: false,
+        firstInFlow: false,
         column,
         indent: 0,
         depth: 0,
-        numbered,
+        orderedListsAround,
         quotes: 0,
         after: 0,
         align: typeof align === 'string' ? JUSTIFICATION.get(align) : undefined,
@@ -169,18 +189,3 @@ function cellXml({ node, content }: GridCell, column: number, { pkg, numbered }:
     }
     return blocks.length > 0 ? blocksXml(blocks, pkg.styles) : paragraphXml({ props: empty, runs: '' });
 }
-
-// Based on Normal, it looks as Normal does, and stays out of Word's gallery.
-const TABLE_HEADER_STYLE: StyleDef = {
-    type: 'paragraph',
-    id: 'TableHeader',
-    name: STYLE_NAMES.TableHeader,
-    basedOn: 'Normal',
-    semiHidden: true,
-};
-
-export const TABLE_LOOK = {
-    border: { ...proseBorder('.eigen-prose td', 'border'), space: 0 },
-    padding: TABLE_CELL_PADDING,
-    margin: TABLE_MARGIN,
-};

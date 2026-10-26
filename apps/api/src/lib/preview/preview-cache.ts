@@ -1,3 +1,8 @@
+// The preview cache: a file's previews, each built once per version and kept in the mount's previewsDir. The drive and
+// mail routes call it, for example through getTextPreview, getScreenPreview and getEmlPreview. A collab document's or
+// a card's preview is built in the transform process, a plain text file's and an image's here. A name stamped with
+// updatedAt and the format lets a new version or renderer write a new file, so a response can be cached long.
+
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -57,12 +62,11 @@ export const TEXT_FORMAT = 'f8';
 // does not answer for them.) A cached body is JSON this process wrote from a value it built, so the read
 // back is a typed assignment nothing else checks: change one of the payload types and bump its format
 // here, or a restored previewsDir serves the old shape. The payloads are built inside the transform
-// process (child.ts owns execution, this module the main-thread orchestration), which is why no builder
-// may reach the Mount or the transform seam.
+// process, which is why no builder may reach the Mount or the transform seam.
 export const VCARD_FORMAT = 'vcard-f1';
 
 // One more reason to bump this one: the payload's html is what a DOMPurify upgrade filters, so a cached
-// body predates every sanitizer fix (PREVIEWS.md).
+// body predates every sanitizer fix.
 // eml-f2: CSS is refused on the `url(` token, and a data: reference survives only as a raster image.
 // eml-f3: the parts past the cap are counted as `remainingAttachments`.
 // eml-f4: CSS is read again as the color-scheme deletion a viewer makes would leave it, and a repeated
@@ -473,7 +477,7 @@ export async function getVCardPreview(mount: Mount, drivePath: DrivePath): Promi
     );
 }
 
-// The same cards from bytes the caller holds (a mail part): same Worker job, no cache.
+// The same cards from bytes the caller holds (a mail part): the same transform job, no cache.
 export async function getBytesVCardPreview(data: ArrayBuffer): Promise<VCardPreview> {
     return parseVCardPreview(await runBytesTransformToText(VCARD_PREVIEW_JOB, data, {}));
 }

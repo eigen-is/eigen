@@ -29,7 +29,7 @@ You do not need to open the document to export it. In Drive, right-click the doc
 
 ## What is included
 
-The exported file contains the document text and all formatting: headings, lists, tables, images, charts, code blocks, and other content. Comment threads are not included in the exported file. In the Word file, a chart is a Word chart with its numbers, kept the way Word keeps a chart's data. A sketched, hatched, or dashed look is drawn plain, and a gradient background becomes its middle color. A WebP image is saved as PNG or JPEG, since Word, PowerPoint and Google's editors can't show WebP.
+The exported file contains the document text and all formatting: headings, lists, tables, images, charts, code blocks, and other content. Code blocks keep their colors, except a very long one with no language set, which is exported as plain text. Comment threads are not included in the exported file. In the Word file, a chart is a Word chart with its numbers, kept the way Word keeps a chart's data. A sketched, hatched, or dashed look is drawn plain, and a gradient background becomes its middle color. A WebP image is saved as PNG or JPEG, since Word, PowerPoint and Google's editors can't show WebP.
 
 The PDF and the Word file put the header and footer on every page, with the page numbers and page count filled in, and give the first page its own when you set one. The web page shows the header at the top and the footer at the end, with **#** for a page number. See [Add headers, footers, and page numbers](/support/docs/headers-and-footers).
 
@@ -46,7 +46,7 @@ The PDF, the web page, and the Word file use the editor's spacing, including the
 - Images keep their width, alignment, and caption. An image that floats left or right floats in the Word file too, with the text wrapping around it.
 - Numbered lists keep their numbers, and task lists keep their checkboxes, ticked or not.
 - Tables keep their column widths, borders, and cell colors, and a header row repeats on every page.
-- Code blocks keep their colors, and quotes keep the bar along their left edge.
+- Quotes keep the bar along their left edge.
 - Equations become Word equations that you can edit in Word, and a displayed one stays on its own line. The LaTeX you typed stays behind, since Word has no place for it, so after a round trip through Word the **LaTeX** field shows Eigen's way of writing the equation, which may differ from yours.
 
 The PDF, the web page, and the Word file use the document's paper size, orientation, and margins, as set under **File → Page setup…**.

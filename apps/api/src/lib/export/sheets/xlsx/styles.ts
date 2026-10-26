@@ -11,6 +11,7 @@ import type { Lost } from '../../../document/transform/protocol';
 import { SML_NS } from '../../../ooxml/ooxml';
 import {
     BUILTIN_NUMBER_FORMATS,
+    cellFontSize,
     DATE_FORMAT,
     FONT_FAMILY_NUMBER,
     MAX_CELL_FORMATS,
@@ -27,10 +28,10 @@ export type StyleRegistry = {
     xml(): string;
 };
 
-// The cell's hex colours and the rgb(…) strings of the editor's CSS pipeline alike; undefined for one Office can't
-// hold, which the caller leaves out.
-export function argbOf(color: string): string | undefined {
-    const hex = cssColorToHex(color);
+// The cell's hex colors and the rgb(…) strings of the editor's CSS pipeline alike; undefined for one Office can't
+// hold, which the caller leaves out. No reader checks a stored color, so a peer's can be anything, not only a string.
+export function argbOf(color: unknown): string | undefined {
+    const hex = typeof color === 'string' ? cssColorToHex(color) : undefined;
     return hex && `FF${hex}`;
 }
 
@@ -43,21 +44,21 @@ export function runPropertiesXml(style: CellStyle): string {
 function fontXml(style: CellStyle, face: 'name' | 'rFont'): string {
     const name = cellFontName(style.ff) ?? SHEET_DEFAULT_FONT.name;
     const category = EIGEN_FONTS.find((font) => font.name === name)?.category;
-    const argb = style.fc ? argbOf(style.fc) : undefined;
+    const argb = argbOf(style.fc);
     return [
         style.bl === 1 ? '<b/>' : '',
         style.it === 1 ? '<i/>' : '',
         style.cl === 1 ? '<strike/>' : '',
         style.un === 1 ? '<u/>' : '',
-        `<sz val="${typeof style.fs === 'number' ? style.fs : SHEET_DEFAULT_FONT_SIZE}"/>`,
+        `<sz val="${cellFontSize(style.fs)}"/>`,
         argb ? `<color rgb="${argb}"/>` : '',
         `<${face} val="${escapeXml(name)}"/>`,
         category ? `<family val="${FONT_FAMILY_NUMBER[category]}"/>` : '',
     ].join('');
 }
 
-// The workbook's default font, the one a column width counts the digit of. No colour, so automatic: the import gives a
-// cell of any other format its font whole, and a colour would read as one the cell picked.
+// The workbook's default font, the one a column width counts the digit of. No color, so automatic: the import gives a
+// cell of any other format its font whole, and a color would read as one the cell picked.
 const DEFAULT_FONT = `<font><sz val="${SHEET_DEFAULT_FONT_SIZE}"/><name val="${escapeXml(SHEET_DEFAULT_FONT.name)}"/><family val="${FONT_FAMILY_NUMBER[SHEET_DEFAULT_FONT.category]}"/></font>`;
 const DEFAULT_FILLS = [
     '<fill><patternFill patternType="none"/></fill>',
@@ -118,7 +119,7 @@ export function styleRegistry(lost: Lost): StyleRegistry {
         return BUILTIN_FORMAT_IDS.get(code) ?? FIRST_CUSTOM_FORMAT + intern(formats, code);
     };
     const lookOf = (cell: Cell): Look => {
-        const fc = cell.fc ? argbOf(cell.fc) : undefined;
+        const fc = argbOf(cell.fc);
         const hasFont =
             cell.bl === 1 ||
             cell.it === 1 ||
@@ -127,7 +128,7 @@ export function styleRegistry(lost: Lost): StyleRegistry {
             typeof cell.fs === 'number' ||
             fc !== undefined ||
             cellFontName(cell.ff) !== undefined;
-        const bg = cell.bg ? argbOf(cell.bg) : undefined;
+        const bg = argbOf(cell.bg);
         const horizontal = cell.ht === undefined ? undefined : HORIZONTAL_ALIGN[cell.ht];
         const vertical = cell.vt === undefined ? undefined : VERTICAL_ALIGN[cell.vt];
         // 255 stacks the characters; 91 to 180 turn down by the excess over 90.
@@ -186,8 +187,8 @@ export function styleRegistry(lost: Lost): StyleRegistry {
             return xfs.size - 1;
         },
         dxf({ textColor, cellColor }) {
-            const text = textColor ? argbOf(textColor) : undefined;
-            const cell = cellColor ? argbOf(cellColor) : undefined;
+            const text = argbOf(textColor);
+            const cell = argbOf(cellColor);
             // Excel reads a dxf's solid fill from bgColor, the import from fgColor: both hold it.
             return intern(
                 dxfs,

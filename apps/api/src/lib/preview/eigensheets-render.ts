@@ -1,3 +1,7 @@
+// A workbook's preview body: the first rows and columns of its sheets, drawn by the sheet export's renderer and
+// sanitized. It runs in the transform process, so it reaches neither the Mount nor the transform seam, and its
+// floating images resolve through the URL map the main thread prepared. The renderer stays out of the main process.
+
 import type * as Y from 'yjs';
 import { readSheetsFromDoc } from '../document/sheets';
 import type { TransformWarning } from '../document/transform/protocol';
@@ -5,18 +9,13 @@ import { sanitizeExportHtml } from '../export/sanitize';
 import { renderSheetsPreviewHtml } from '../export/sheets/render';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 
-// Materialized doc → sanitized preview body. Runs inside the transform process
-// (child.ts owns execution; the main-thread orchestration lives in preview-document.ts).
-// This module must not reach the Mount or the transform seam — the Worker imports it,
-// and the sheet renderer it pulls in must stay out of the main process. Floating images
-// resolve through the URL map the main thread prepared (the Worker has no Mount). The
-// read never recalcs: a legacy never-computed workbook can cost ~39s, past the 30s
-// preview deadline — stored values render as-is (blank for valueless formula cells).
 export function renderEigensheetsPreviewBody(
     doc: Y.Doc,
     mediaUrls: Map<string, string>,
 ): { body: string; warnings: TransformWarning[] } {
     const warnings: TransformWarning[] = [];
+    // The read never recalculates: a workbook that was never computed can take 39 s, past the preview's deadline. So
+    // the stored values render as they are, and a formula cell with no value is blank.
     const { sheets } = readSheetsFromDoc(doc, { recalc: false });
 
     const { html, truncated } = renderSheetsPreviewHtml(sheets, mediaUrls);

@@ -14,18 +14,18 @@ import {
     nodeLook,
     normalLine,
     proseTextLook,
+    proseTwips,
     QUOTE_LOOK,
     TITLE_SELECTORS,
     textMetrics,
     twips,
     untypedListFormat,
 } from '../../../document/looks';
-import { lowlight } from '../../../document/lowlight';
+import type { HastNode } from '../../../document/lowlight';
+import { highlightCode, lowlight } from '../../../document/lowlight';
 import { proseValueIfSet } from '../../../document/prose-css';
 import type { StyleId } from '../../../ooxml/wordml';
 import { BORDER_SIDES, codeBlockStyle, JUSTIFICATION, LIST_FORMATS, LIST_LEVELS } from '../../../ooxml/wordml';
-import type { HastNode } from '../render';
-import { highlightCode } from '../render';
 import { figureOf } from './drawings';
 import { useFace } from './fonts';
 import { CLEAR_FLOATS, checkboxXml, itemOf, LIST_LEVEL, listOf } from './numbering';
@@ -33,7 +33,7 @@ import type { Context, Package } from './package';
 import type { RunProps } from './runs';
 import { INLINES, LINE_BREAK, rPrXml, runsXml, textXml } from './runs';
 import type { Styles } from './styles';
-import { HAIRLINE_TWIPS, proseTwips } from './styles';
+import { HAIRLINE_TWIPS } from './styles';
 import { TABLE_LOOK, tableOf } from './tables';
 
 type Spacing = { before?: number; after?: number; line?: number; exact?: true };
@@ -141,7 +141,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         (node, context) => {
             const level = clampInt(node.attrs?.['level'], 1, 6, 1);
             const { sizePt } = textMetrics(`.eigen-prose h${level}`, context.pkg.normal.size);
-            const firstMargin = context.first
+            const firstMargin = context.firstInFlow
                 ? proseValueIfSet(`.eigen-prose h${level}:first-child`, 'margin-top')
                 : undefined;
             const props = textProps(
@@ -198,7 +198,8 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         'orderedList',
         (node, context) => {
             const type = node.attrs?.['type'];
-            const format = (typeof type === 'string' && LIST_FORMATS.get(type)) || untypedListFormat(context.numbered);
+            const format =
+                (typeof type === 'string' && LIST_FORMATS.get(type)) || untypedListFormat(context.orderedListsAround);
             return listOf(node, context, 'ol', { format, start: clampInt(node.attrs?.['start'], 0, 32767, 1) });
         },
     ],
@@ -290,7 +291,7 @@ export function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: C
         if (!write) throw new Error(`no docx mapping for ${node.type}`);
         const written = write(node, {
             ...context,
-            first: !textblock && index === 0,
+            firstInFlow: !textblock && index === 0,
             next: nodes[index + 1]?.type,
             blockPt: undefined,
             upright: undefined,
@@ -519,8 +520,6 @@ export function styleSpacing(styles: Styles, style: StyleId | undefined, side: '
 function textOf(node: JSONContent): string {
     return node.text ?? (node.content ?? []).map(textOf).join('');
 }
-
-// ── Code blocks: one paragraph per line, lowlight's tokens as runs ─────────────────────────────────────────────────
 
 // A token that spans lines is split at each break and keeps its color and italic on every line.
 function codeLines(tree: HastNode, pkg: Package): string[] {

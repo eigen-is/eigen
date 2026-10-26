@@ -13,12 +13,9 @@ import {
 } from '../../document/transform/protocol';
 import { withSvgFallbacks } from '../office-image';
 
-// Materialized doc → export bytes. Runs inside the transform process (child.ts owns
-// execution; the format logic stays here in export/, pure over Sheet[] + title).
-// Per-format renderers load lazily so an HTML export never evaluates the xlsx writer.
-// Recalc failure serves replayed values with a warning — an export must never fail
-// because recalc hiccuped. Floating images embed as data: URIs, and go into an xlsx as the Office media prep made them,
-// an SVG beside its PNG.
+// The writers load lazily, so an HTML export never evaluates the xlsx writer. A failed recalc exports the replayed
+// values with a warning, as an export never fails for it. Images embed as data: URIs in the HTML, and go into an xlsx
+// as the Office media prep made them, an SVG beside its PNG.
 export async function renderEigensheetsExport(
     doc: Y.Doc,
     format: SheetExportFormat,
@@ -34,13 +31,15 @@ export async function renderEigensheetsExport(
         case 'pdf-html': {
             const { sheetsHtmlDocument } = await import('./render');
             const media = await loadMedia(mediaNamesIn(sheets.map((sheet) => sheet.images)));
+            const losses = lossCounter();
             const html = sheetsHtmlDocument({
                 title,
                 sheets,
                 mediaUrls: toDataUriMap(media),
                 mode: htmlExportMode(format),
+                lost: losses.lost,
             });
-            return { data: toTransferableText(html), warnings };
+            return { data: toTransferableText(html), warnings: [...warnings, ...losses.warnings()] };
         }
         case 'xlsx': {
             const { writeXlsx } = await import('./xlsx/to-xlsx');

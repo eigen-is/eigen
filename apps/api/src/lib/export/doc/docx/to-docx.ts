@@ -18,12 +18,11 @@ import type { FontSlot } from './fonts';
 import { embeddedFonts, fontTableXml } from './fonts';
 import { numberingXml } from './numbering';
 import type { Context, Package } from './package';
-import { BAND_TAGS, DOCUMENT_NAMESPACES, numbered, sectionXml, separatorXml, settingsXml } from './package';
+import { BAND_TAGS, DOCUMENT_NAMESPACES, sectionXml, separatorXml, settingsXml, withNoteNumber } from './package';
 import { blocksOf, blocksXml, withoutAfter } from './paragraphs';
 import { styleDefinitions, stylesXml } from './styles';
 
-// ProseMirror JSON -> hand-written WordprocessingML, in the transform process, so it never reaches the Mount or the
-// preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
+// Every look comes from eigen-prose.css. No schema checked the CRDT's JSON, so attrs are checked where they are used.
 export function writeDocx(
     {
         json,
@@ -41,16 +40,16 @@ export function writeDocx(
     const document = partRelationships();
     for (const type of ['styles', 'numbering', 'settings', 'fontTable']) document.relate(type, `${type}.xml`);
     const pkg: Package = {
-        part: document,
+        partRels: document,
         publicOrigin,
-        lists: [],
-        nums: [],
+        abstractNums: [],
+        numAbstracts: [],
         bullets: new Map(),
         checkboxes: false,
         languages: new Set(),
         images: officeImages(media, 'word/media'),
         charts: officeCharts('word'),
-        drawings: 0,
+        lastDrawingId: 0,
         footnotes: [],
         // A Spacer's and a figure's mark draw in the Normal's Regular.
         faces: new Map([[normal.font, new Set<FontSlot>(['Regular'])]]),
@@ -60,26 +59,26 @@ export function writeDocx(
     };
     const page = pageTwips(setup);
     const column = page.width - page.margin.left - page.margin.right;
-    const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, numbered: 0, quotes: 0 };
+    const flow: Context = { pkg, firstInFlow: false, column, indent: 0, depth: 0, orderedListsAround: 0, quotes: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false), pkg.styles);
 
     // The notes the body referenced, in Word's notes part after its two separators, each in the body's column through
     // the part's own relationships, as a band is. A nested note is its text.
     const noteParts: PackagePart[] = [];
     if (pkg.footnotes.length > 0) {
-        pkg.part = partRelationships();
+        pkg.partRels = partRelationships();
         const note: Context = { ...flow, style: 'FootnoteText' };
         const notes = pkg.footnotes.map((node, index) => {
             const blocks = blocksOf(flattenNestedFootnotes(node).content ?? [], {}, note, false);
-            return `<w:footnote w:id="${index + 1}">${blocksXml(numbered(blocks), pkg.styles)}</w:footnote>`;
+            return `<w:footnote w:id="${index + 1}">${blocksXml(withNoteNumber(blocks), pkg.styles)}</w:footnote>`;
         });
         noteParts.push([
             'word/footnotes.xml',
             `<w:footnotes ${DOCUMENT_NAMESPACES}>${NOTE_SEPARATORS.slice(0, 2).map(separatorXml).join('')}${notes.join('')}</w:footnotes>`,
             `${WML}.footnotes+xml`,
         ]);
-        if (pkg.part.relationships.length > 0)
-            noteParts.push([relsPathOf('word/footnotes.xml'), relationshipsXml(pkg.part.relationships)]);
+        if (pkg.partRels.relationships.length > 0)
+            noteParts.push([relsPathOf('word/footnotes.xml'), relationshipsXml(pkg.partRels.relationships)]);
         document.relate('footnotes', 'footnotes.xml');
     }
 
@@ -93,7 +92,7 @@ export function writeDocx(
         const written: [type: 'default' | 'first', band: JSONContent | undefined][] = own ? [['default', own]] : [];
         if (setup.differentFirstPage && (own || pageOne)) written.push(['first', pageOne]);
         for (const [index, [type, band]] of written.entries()) {
-            pkg.part = partRelationships();
+            pkg.partRels = partRelationships();
             const path = `word/${edge}${index + 1}.xml`;
             const content = band
                 ? blocksXml(withoutAfter(blocksOf(band.content ?? [], {}, flow, false)), pkg.styles)
@@ -103,8 +102,8 @@ export function writeDocx(
                 `<${BAND_TAGS[edge]} ${DOCUMENT_NAMESPACES}>${content}</${BAND_TAGS[edge]}>`,
                 `${WML}.${edge}+xml`,
             ]);
-            if (pkg.part.relationships.length > 0)
-                bandParts.push([relsPathOf(path), relationshipsXml(pkg.part.relationships)]);
+            if (pkg.partRels.relationships.length > 0)
+                bandParts.push([relsPathOf(path), relationshipsXml(pkg.partRels.relationships)]);
             const rId = document.relate(edge, path.slice('word/'.length));
             references.push(`<w:${edge}Reference w:type="${type}" r:id="${rId}"/>`);
         }
@@ -130,7 +129,7 @@ export function writeDocx(
             ...bandParts,
             ...pkg.charts.parts,
             ['word/styles.xml', stylesXml(pkg), `${WML}.styles+xml`],
-            ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
+            ['word/numbering.xml', numberingXml(pkg.abstractNums, pkg.numAbstracts), `${WML}.numbering+xml`],
             ['word/settings.xml', settingsXml(pkg.footnotes.length > 0), `${WML}.settings+xml`],
             ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
             ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
