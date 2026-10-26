@@ -64,7 +64,14 @@ export function sharedStringTable(lost: Lost): SharedStringTable {
 export function cutText(text: string, lost: Lost): string {
     if (text.length <= MAX_TEXT_LENGTH) return text;
     lost('texts-cut');
-    return text.slice(0, MAX_TEXT_LENGTH);
+    return cut(text, MAX_TEXT_LENGTH);
+}
+
+// Never between a surrogate pair's halves.
+export function cut(text: string, length: number): string {
+    if (text.length <= length) return text;
+    const code = text.charCodeAt(length - 1);
+    return text.slice(0, code >= 0xd800 && code <= 0xdbff ? length - 1 : length);
 }
 
 // XML collapses no whitespace, but Excel trims a text's edges unless told.

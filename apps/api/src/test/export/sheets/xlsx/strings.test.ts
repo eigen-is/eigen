@@ -55,6 +55,12 @@ describe('the shared strings', () => {
         expect(readBack(partOf(table.xml()))).toEqual(['x'.repeat(32_767)]);
     });
 
+    test('a text cut at the limit keeps an emoji that straddles it whole or not at all', () => {
+        const { table } = tableOf();
+        table.text(`${'x'.repeat(32_766)}😀 tail`);
+        expect(partOf(table.xml())).toContain(`<t>${'x'.repeat(32_766)}</t>`);
+    });
+
     test('a rich string keeps its runs and their fonts; runs without text are left out, and none is no string', () => {
         const { table } = tableOf();
         const runs = [{ v: 'Hello ', bl: 1, fc: '#FF0000' }, { v: '' }, { v: 'world', it: 1, ff: 'Georgia', fs: 14 }];

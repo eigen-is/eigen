@@ -6,6 +6,7 @@ import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import { MAX_SHEET_NAME_LENGTH, quoteSheetName, rangeToA1, SHEET_NAME_FORBIDDEN } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import { R_NS, SML_NS } from '../../../ooxml/ooxml';
+import { cut } from './strings';
 import { filterArea } from './worksheet';
 
 // Excel opens on the active tab, the first unless told, so a hidden first sheet would open hidden. Excel refuses to hide
@@ -71,11 +72,4 @@ export function sheetNames(sheets: Pick<Sheet, 'name'>[], lost: Lost): string[] 
 function legalName(name: string): string {
     const replaced = stripNonXmlChars(name).replace(SHEET_NAME_FORBIDDEN, '_');
     return cut(replaced, MAX_SHEET_NAME_LENGTH).replace(/^'+|'+$/g, '');
-}
-
-// Never between a surrogate pair's halves.
-function cut(text: string, length: number): string {
-    if (text.length <= length) return text;
-    const code = text.charCodeAt(length - 1);
-    return text.slice(0, code >= 0xd800 && code <= 0xdbff ? length - 1 : length);
 }
