@@ -68,6 +68,7 @@ import {
     filterRedundantACL,
     findContainerFromAncestors,
     grantsPublicRead,
+    isTrashedChain,
     matchesACL,
     mergeACLDelta,
     normalizeACL,
@@ -855,9 +856,10 @@ export class Drive {
         return this.membersFromCrumbs(await mount.getBreadcrumb(pathId));
     }
 
-    // Takes the breadcrumb of the path, so checkAccessForEmails can use the one it already has.
+    // Takes the breadcrumb of the path, so checkAccessForEmails can use the one it already has. A path
+    // in the trash is its owner's alone, so the ACLs of its chain let nobody else in until the restore.
     private async membersFromCrumbs(crumbs: DrivePath[]): Promise<EffectiveMember[]> {
-        const allACL = crumbs.flatMap((crumb) => crumb.acl ?? []);
+        const allACL = isTrashedChain(crumbs) ? [] : crumbs.flatMap((crumb) => crumb.acl ?? []);
 
         // Every member of a team has full access to the team's drive. So the team goes in as one more
         // ACL entry, and resolveACLToEmails turns it into its members.
@@ -887,7 +889,7 @@ export class Drive {
 
         const members = await this.membersFromCrumbs(crumbs);
         const memberByEmail = new Map(members.map((m) => [m.email, m]));
-        const ancestorPublic = crumbs.some((crumb) => grantsPublicRead(crumb.visibility));
+        const ancestorPublic = !isTrashedChain(crumbs) && crumbs.some((crumb) => grantsPublicRead(crumb.visibility));
         const openSignup = getServerSettings().guests.openSignup;
 
         const recipients: DriveAccessRecipient[] = [];
