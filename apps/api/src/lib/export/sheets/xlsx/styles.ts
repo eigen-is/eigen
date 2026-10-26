@@ -14,6 +14,7 @@ import {
     DATE_FORMAT,
     FONT_FAMILY_NUMBER,
     MAX_CELL_FORMATS,
+    MAX_FONT_SIZE_POINTS,
     MAX_NUMBER_FORMAT_LENGTH,
 } from '../../../ooxml/spreadsheetml';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from '../cell-style';
@@ -55,9 +56,10 @@ function fontXml(style: CellStyle, face: 'name' | 'rFont'): string {
     ].join('');
 }
 
-// Excel's font sizes run from 1 to 409 points, and it repairs a file past them.
 function fontSize(fs: unknown): number {
-    return typeof fs === 'number' && Number.isFinite(fs) ? Math.min(409, Math.max(1, fs)) : SHEET_DEFAULT_FONT_SIZE;
+    return typeof fs === 'number' && Number.isFinite(fs)
+        ? Math.min(MAX_FONT_SIZE_POINTS, Math.max(1, fs))
+        : SHEET_DEFAULT_FONT_SIZE;
 }
 
 // The workbook's default font, the one a column width counts the digit of. No color, so automatic: the import gives a
