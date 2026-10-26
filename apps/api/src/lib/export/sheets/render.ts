@@ -1,34 +1,22 @@
 // A workbook as HTML: the export's one document, which the HTML download serves and WeasyPrint prints, and the
-// preview's body of the first sheet, cut to a budget. Each cell is a table cell drawn as the canvas draws it, with the
-// images and charts floating over the grid where the editor floats them. Runs in the transform process, so it reaches
-// no Mount: images arrive as URLs by media name.
+// preview's body of the first sheet, cut to a budget. Each sheet renders through windowedSheet, so it walks only the
+// window. Each cell is a table cell drawn as the canvas draws it, with the images and charts floating over the grid
+// where the editor floats them. Runs in the transform process, so it reaches no Mount: images arrive as URLs by media
+// name.
 
 import { escapeHtml } from '@workspace/lib/html';
-import type {
-    Cell,
-    CellBorderSides,
-    CellWithRowAndCol,
-    ConditionalFormatRule,
-    MergeCell,
-    Sheet,
-    SheetConfig,
-} from '@workspace/lib/sheets';
+import type { Cell, CellBorderSides, CellWithRowAndCol, MergeCell, Sheet } from '@workspace/lib/sheets';
 import {
-    borderInfoExtent,
     borderSidesToCss,
     cellFontName,
-    floatingItems,
     mergedBorderSides,
-    REFERENCE_COLUMN_COUNT,
-    REFERENCE_ROW_COUNT,
+    parseCellKey,
     SHEET_DEFAULT_COL_WIDTH,
     SHEET_DEFAULT_FONT_SIZE,
     sheetColumnsWidth,
-    sheetFloatingBox,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
-import { getElementBounds } from '@workspace/lib/vector';
 import type { CellFormatStyle, CellResolver, ComputeMap, DataBar } from '@workspace/sheet/engine';
 import {
     booleanDisplay,
@@ -39,7 +27,6 @@ import {
     generalAlign,
     renderSheetChartSvg,
     richText,
-    withCfRanges,
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
@@ -48,6 +35,8 @@ import { cellFontSize } from '../../ooxml/spreadsheetml';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, sheetsResolver, VERTICAL_ALIGN } from './cell-style';
+import type { SheetBudget, WindowedSheet } from './window';
+import { floatingObjects, windowedSheet } from './window';
 
 // Image sources by media name: data: URIs for an export, the prepared preview URLs for a preview.
 type MediaUrls = Map<string, string>;
@@ -60,14 +49,11 @@ type ContentSize = { width: number; height: number };
 // keeps inline styles, because its body embeds without a <head>.
 type StyleRegistry = Map<string, string>;
 
-// A window renders from the top-left of the used range. maxCells is a bound of its own, so tuning the rows or the
-// columns can never remove it.
-type SheetBudget = { maxRows: number; maxCols: number; maxCells: number };
 export const PREVIEW_SHEET_BUDGET: SheetBudget = { maxRows: 200, maxCols: 50, maxCells: 10_000 };
 
 // The most cells, rows times columns, an export walks of all its sheets together. A peer can write a merge or a border
 // key at XFD1048576 on as many sheets as it likes, and the sanitizer and WeasyPrint pay for every cell the walk writes.
-// A row whose every column is hidden still costs one.
+// A row whose every column is hidden still costs one, and a sheet whose every row is hidden costs its columns once.
 export const MAX_EXPORT_CELLS = 250_000;
 
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.
@@ -112,12 +98,13 @@ export function sheetsHtmlDocument({
 export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
     const shown = shownSheets(sheets);
     if (shown.length === 0) return { html: '', truncated: false };
-    const first = renderSheet(shown[0], new FormulaEngine(), sheetsResolver(sheets), {
+    const windowed = windowedSheet(shown[0], () => PREVIEW_SHEET_BUDGET);
+    if (!windowed) return { html: '', truncated: true };
+    const first = renderSheet(windowed, new FormulaEngine(), sheetsResolver(sheets), {
         budget: PREVIEW_SHEET_BUDGET,
         mediaUrls,
     });
-    if (!first) return { html: '', truncated: true };
-    return { html: `<div class="sheet">\n${first.html}\n</div>`, truncated: first.truncated || shown.length > 1 };
+    return { html: `<div class="sheet">\n${first.html}\n</div>`, truncated: windowed.truncated || shown.length > 1 };
 }
 
 // One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
@@ -137,13 +124,14 @@ export function renderSheetsHtml(
     const bodies: string[] = [];
     let cellsLeft = MAX_EXPORT_CELLS;
     for (const sheet of shownSheets(sheets)) {
-        const rendered = renderSheet(sheet, engine, resolver, { cellsLeft, styles, mediaUrls });
-        if (!rendered) {
+        const windowed = windowedSheet(sheet, (rows, cols) => exportWindow(cellsLeft, rows, cols));
+        if (!windowed) {
             leftOut.push(sheet);
             continue;
         }
-        cellsLeft -= rendered.cells;
-        if (rendered.truncated) cut.push(sheet);
+        cellsLeft -= windowed.cells;
+        if (windowed.truncated) cut.push(sheet);
+        const rendered = renderSheet(windowed, engine, resolver, { styles, mediaUrls });
         size.width = Math.max(size.width, rendered.size.width);
         size.height = Math.max(size.height, rendered.size.height);
         bodies.push(rendered.html);
@@ -181,79 +169,61 @@ function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { 
 }
 
 // The sheet's table and overlay, for the caller to wrap in its .sheet div. With `styles` this is the export, with
-// interned classes, in a window of `cellsLeft`, and null when those cells hold none of its rows. Without it this is the
-// preview, inline-styled, in its budget. `cells` is what the window cost, and `size` the table and its overlay as
-// rendered: the overlay draws at the stored grid coordinate, so an image or chart parked past the used range is still
-// on the page.
+// interned classes. Without it this is the preview, inline-styled, whose `budget` also clips the overlay. `size` is
+// the table and its overlay as rendered: the overlay draws at the stored grid coordinate, so an image or chart parked
+// past the used range is still on the page.
 function renderSheet(
-    sheet: Sheet,
+    { sheet, rows, cols, range, offset }: WindowedSheet,
     engine: FormulaEngine,
     resolver: CellResolver,
-    {
-        budget,
-        cellsLeft = 0,
-        styles,
-        mediaUrls,
-    }: { budget?: SheetBudget; cellsLeft?: number; styles?: StyleRegistry; mediaUrls: MediaUrls },
-): { html: string; truncated: boolean; cells: number; size: ContentSize } | null {
+    { budget, styles, mediaUrls }: { budget?: SheetBudget; styles?: StyleRegistry; mediaUrls: MediaUrls },
+): { html: string; size: ContentSize } {
     const forStylesheet = styles !== undefined;
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
-    const overlay = { budget, styles, mediaUrls, resolver };
-
-    const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
-    if (maxRow < 0 || maxCol < 0) {
+    const [firstRow, , firstCol] = range ?? [0, 0, 0, 0];
+    const clip = budget && {
+        width: sheetColumnsWidth(sheet, firstCol, firstCol + budget.maxCols - 1),
+        height: sheetRowsHeight(sheet, firstRow, firstRow + budget.maxRows - 1),
+    };
+    const overlay = { styles, mediaUrls, resolver };
+    if (!range) {
         // An image or chart on an otherwise blank sheet is all there is to render.
-        return {
-            html: withFloatingOverlay(sheet, '', 0, 0, 0, overlay),
-            truncated: false,
-            cells: 0,
-            size: floatingExtent(sheet, { left: 0, top: 0 }),
-        };
+        return { html: withFloatingOverlay(sheet, '', 0, offset, clip, overlay), size: floatingExtent(sheet, offset) };
     }
 
-    // The window comes first, so all that follows costs what is rendered, not what the sheet declares: a merge or a
-    // rule's range can name millions of cells.
-    const shownRows = shownCount(minRow, maxRow, config.rowhidden);
-    const { maxRows, maxCols, maxCells } =
-        budget ?? exportWindow(cellsLeft, shownRows, shownCount(minCol, maxCol, config.colhidden));
-    if (maxRows === 0 && shownRows > 0) return null;
-    let truncated = false;
-    const renderCols: number[] = [];
-    for (let c = minCol; c <= maxCol; c++) {
-        if (config.colhidden?.[c] != null) continue;
-        if (renderCols.length >= maxCols) {
-            truncated = true;
-            break;
-        }
-        renderCols.push(c);
+    // Each merge is one td on the first rendered cell it covers, spanning the rendered rows and columns it covers, so
+    // a hidden row or column inside it adds no span and the table matches its colgroup. The border fold reads the
+    // same rendered positions, so a merge over many hidden rows expands over the rows that show.
+    const width = cols.length;
+    const spans = new Map<number, { anchor: MergeCell; span: MergeCell }>();
+    const covered = new Uint8Array(rows.length * width);
+    const renderedMerges: Record<string, MergeCell> = {};
+    for (const anchor of Object.values(config.merge ?? {})) {
+        const r0 = firstAtOrAfter(rows, anchor.r);
+        const r1 = firstAtOrAfter(rows, anchor.r + anchor.rs) - 1;
+        const c0 = firstAtOrAfter(cols, anchor.c);
+        const c1 = firstAtOrAfter(cols, anchor.c + anchor.cs) - 1;
+        if (r0 > r1 || c0 > c1) continue;
+        const span = { r: r0, c: c0, rs: r1 - r0 + 1, cs: c1 - c0 + 1 };
+        renderedMerges[`${r0}_${c0}`] = span;
+        spans.set(r0 * width + c0, { anchor, span });
+        for (let i = r0; i <= r1; i++) covered.fill(1, i * width + c0, i * width + c1 + 1);
     }
-
-    const renderRows: number[] = [];
-    const rowCells = Math.max(1, renderCols.length);
-    let cellCount = 0;
-    for (let r = minRow; r <= maxRow; r++) {
-        if (config.rowhidden?.[r] != null) continue;
-        if (renderRows.length >= maxRows || cellCount + rowCells > maxCells) {
-            truncated = true;
-            break;
-        }
-        cellCount += rowCells;
-        renderRows.push(r);
+    const rowAt = new Map(rows.map((r, i) => [r, i]));
+    const colAt = new Map(cols.map((c, j) => [c, j]));
+    const renderedBorders: Record<string, CellBorderSides> = {};
+    for (const key in config.borderInfo) {
+        const [r, c] = parseCellKey(key);
+        const i = rowAt.get(r);
+        const j = colAt.get(c);
+        if (i !== undefined && j !== undefined) renderedBorders[`${i}_${j}`] = config.borderInfo[key];
     }
-    const lastRow = renderRows.at(-1) ?? -1;
-    const lastCol = renderCols.at(-1) ?? -1;
-    // Only a window that leaves cells out clips what reaches past it: the preview's, or an export cut to the cap.
-    const clipped = budget !== undefined || truncated;
-
     // A merge's outer borders sit on its first cell, the only one rendered for it.
-    const borderMap = mergedBorderSides(config.borderInfo, config.merge, [minRow, lastRow, minCol, lastCol]);
+    const borderMap = mergedBorderSides(renderedBorders, renderedMerges, [0, rows.length - 1, 0, width - 1]);
 
     // The rules need the dense `data` matrix, and a sheet without it draws none, as the canvas does.
-    const rules =
-        clipped && sheet.conditionalFormatRules
-            ? clipRulesToWindow(sheet.conditionalFormatRules, minRow, lastRow, minCol, lastCol)
-            : sheet.conditionalFormatRules;
+    const rules = sheet.conditionalFormatRules;
     const cfMap: ComputeMap | null =
         rules && sheet.data
             ? evaluateConditionalFormat(rules, sheet.data, {
@@ -261,62 +231,37 @@ function renderSheet(
               })
             : null;
 
-    // Each rendered row tests the merges that cover it, which a sweep down the merges by their first row keeps. A set
-    // of every covered cell would be an allocation bomb, as one merge can span a million rows.
-    const merges = config.merge ? Object.values(config.merge).sort((a, b) => a.r - b.r) : [];
-    const mergeAnchors = new Map<string, MergeCell>();
-    for (const m of merges) mergeAnchors.set(`${m.r},${m.c}`, m);
-    let rowMerges: MergeCell[] = [];
-    let nextMerge = 0;
-
     const cellMap = new Map<string, CellWithRowAndCol>();
-    if (sheet.celldata) {
-        for (const cd of sheet.celldata) {
-            cellMap.set(`${cd.r},${cd.c}`, cd);
-        }
-    }
+    for (const cd of sheet.celldata ?? []) cellMap.set(`${cd.r},${cd.c}`, cd);
 
-    const cols: string[] = [];
+    const colTags: string[] = [];
     let tableWidth = 0;
-    for (const c of renderCols) {
+    for (const c of cols) {
         const w = sheetColumnsWidth(sheet, c, c);
         tableWidth += w;
-        cols.push(`<col ${styleAttr(styles, `width:${w}px`)}>`);
+        colTags.push(`<col ${styleAttr(styles, `width:${w}px`)}>`);
     }
-    const colgroup = `<colgroup>${cols.join('')}</colgroup>`;
+    const colgroup = `<colgroup>${colTags.join('')}</colgroup>`;
 
-    const rows: string[] = [];
+    const rowTags: string[] = [];
     let tableHeight = 0;
-    for (const r of renderRows) {
-        const h = sheetRowsHeight(sheet, r, r);
+    for (let i = 0; i < rows.length; i++) {
+        const h = sheetRowsHeight(sheet, rows[i], rows[i]);
         tableHeight += h;
         const cells: string[] = [];
-        rowMerges = rowMerges.filter((m) => r < m.r + m.rs);
-        for (; nextMerge < merges.length && merges[nextMerge].r <= r; nextMerge++) {
-            if (r < merges[nextMerge].r + merges[nextMerge].rs) rowMerges.push(merges[nextMerge]);
-        }
-
-        for (const c of renderCols) {
-            const key = `${r},${c}`;
-
-            if (rowMerges.some((m) => c >= m.c && c < m.c + m.cs && (m.r !== r || m.c !== c))) continue;
-
-            const cd = cellMap.get(key);
-            const v = cd?.v ?? null;
-            const merge = mergeAnchors.get(key);
+        for (let j = 0; j < width; j++) {
+            const merge = spans.get(i * width + j);
+            if (!merge && covered[i * width + j]) continue;
+            // A merge draws its first cell, even when that cell's row or column is hidden.
+            const [r, c] = merge ? [merge.anchor.r, merge.anchor.c] : [rows[i], cols[j]];
+            const v = cellMap.get(`${r},${c}`)?.v ?? null;
             const cfStyle = cfMap ? cfMap[`${r}_${c}`] : undefined;
 
             const attrs: string[] = [];
-            if (merge) {
-                // A span past the window would claim table cells the window never wrote.
-                const cs = clipped ? Math.min(merge.cs, lastCol - c + 1) : merge.cs;
-                const rs = clipped ? Math.min(merge.rs, lastRow - r + 1) : merge.rs;
-                if (cs !== merge.cs || rs !== merge.rs) truncated = true;
-                if (cs > 1) attrs.push(`colspan="${cs}"`);
-                if (rs > 1) attrs.push(`rowspan="${rs}"`);
-            }
+            if (merge && merge.span.cs > 1) attrs.push(`colspan="${merge.span.cs}"`);
+            if (merge && merge.span.rs > 1) attrs.push(`rowspan="${merge.span.rs}"`);
 
-            const cellStyle = buildCellStyle(v, borderMap[`${r}_${c}`], showGrid, cfStyle, forStylesheet);
+            const cellStyle = buildCellStyle(v, borderMap[`${i}_${j}`], showGrid, cfStyle, forStylesheet);
             if (forStylesheet) {
                 // The shared td{} rule holds the base declarations, so an unstyled cell needs no class.
                 if (cellStyle) attrs.push(styleAttr(styles, cellStyle));
@@ -338,47 +283,49 @@ function renderSheet(
             cells.push(`<td${attrStr}>${inner}</td>`);
         }
 
-        rows.push(`<tr ${styleAttr(styles, `height:${h}px`)}>${cells.join('')}</tr>`);
+        rowTags.push(`<tr ${styleAttr(styles, `height:${h}px`)}>${cells.join('')}</tr>`);
     }
 
     const q = fontQuote(forStylesheet);
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS.replaceAll('"', q)};font-size:${SHEET_DEFAULT_FONT_SIZE}pt;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
-    const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>`;
-    const html = withFloatingOverlay(sheet, table, tableWidth, minRow, minCol, overlay);
-    const extent = floatingExtent(sheet, gridOffset(sheet, minRow, minCol));
-    const size = { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) };
-    return { html, truncated, cells: cellCount, size };
+    const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rowTags.join('')}</tbody></table>`;
+    const html = withFloatingOverlay(sheet, table, tableWidth, offset, clip, overlay);
+    const extent = floatingExtent(sheet, offset);
+    return { html, size: { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) } };
+}
+
+// The position of the first track in `tracks`, ascending, at or after `track`: tracks.length when there is none.
+function firstAtOrAfter(tracks: number[], track: number): number {
+    let low = 0;
+    let high = tracks.length;
+    while (low < high) {
+        const mid = (low + high) >> 1;
+        if (tracks[mid] < track) low = mid + 1;
+        else high = mid;
+    }
+    return low;
 }
 
 // The export's window keeps the columns from the left up to one PDF page wide, and more of them while every row still
-// fits. Then it keeps the rows that fit the cells left.
+// fits, a sheet whose every row is hidden as one row. Then it keeps the rows that fit the cells left.
 function exportWindow(cellsLeft: number, rows: number, cols: number): SheetBudget {
     const pageCols = Math.min(cols, PAGE_COLUMNS);
-    const maxCols = Math.min(cols, Math.max(pageCols, Math.floor(cellsLeft / rows)));
+    const maxCols = Math.min(cols, Math.max(pageCols, Math.floor(cellsLeft / Math.max(1, rows))));
     return { maxRows: Math.min(rows, Math.floor(cellsLeft / Math.max(1, maxCols))), maxCols, maxCells: cellsLeft };
 }
 
 // The table inside a box that reaches the farthest image or chart, so what follows in the flow, the next sheet or the
-// preview's marker, starts below them. The preview clips the overlay to its window: an image parked outside it would
-// stretch the body and shrink the thumbnail scaled from it. A sheet with no images or charts writes the bare table.
+// preview's marker, starts below them. The preview clips the overlay to its budget's box: an image parked outside it
+// would stretch the body and shrink the thumbnail scaled from it. A sheet with no images or charts writes the bare
+// table.
 function withFloatingOverlay(
     sheet: Sheet,
     table: string,
     tableWidth: number,
-    minRow: number,
-    minCol: number,
-    {
-        budget,
-        styles,
-        mediaUrls,
-        resolver,
-    }: { budget?: SheetBudget; styles?: StyleRegistry; mediaUrls: MediaUrls; resolver: CellResolver },
+    offset: { left: number; top: number },
+    clip: { width: number; height: number } | undefined,
+    { styles, mediaUrls, resolver }: { styles?: StyleRegistry; mediaUrls: MediaUrls; resolver: CellResolver },
 ): string {
-    const offset = gridOffset(sheet, minRow, minCol);
-    const clip = budget && {
-        width: sheetColumnsWidth(sheet, minCol, minCol + budget.maxCols - 1),
-        height: sheetRowsHeight(sheet, minRow, minRow + budget.maxRows - 1),
-    };
     const overlay = renderFloatingObjects(sheet, mediaUrls, resolver, offset, styles, clip);
     if (!overlay) return table;
     const extent = floatingExtent(sheet, offset);
@@ -386,142 +333,6 @@ function withFloatingOverlay(
     const height = clip ? Math.min(extent.height, clip.height) : extent.height;
     const box = `position:relative;width:${width}px;min-height:${height}px${clip ? ';overflow:hidden' : ''}`;
     return `<div ${styleAttr(styles, box)}>${table}${overlay}</div>`;
-}
-
-// A rule may name the whole sheet while the preview renders a small window, and the evaluator visits every cell of
-// every range, running a formula rule's engine once per cell. Clipping keeps that work to what is rendered. A rule
-// that misses the window drops out.
-function clipRulesToWindow(
-    rules: ConditionalFormatRule[],
-    firstRow: number,
-    lastRow: number,
-    firstCol: number,
-    lastCol: number,
-): ConditionalFormatRule[] {
-    const clipped: ConditionalFormatRule[] = [];
-    for (const rule of rules) {
-        const cellrange = rule.cellrange
-            .map((range) => ({
-                row: [Math.max(range.row[0], firstRow), Math.min(range.row[1], lastRow)],
-                column: [Math.max(range.column[0], firstCol), Math.min(range.column[1], lastCol)],
-            }))
-            .filter((range) => range.row[0] <= range.row[1] && range.column[0] <= range.column[1]);
-        if (cellrange.length > 0) clipped.push(withCfRanges(rule, cellrange));
-    }
-    return clipped;
-}
-
-// How many of the rows or columns from first to last show. A hidden one has a key in `rowhidden` or `colhidden`.
-function shownCount(first: number, last: number, hidden: Record<string, number> | undefined): number {
-    let count = 0;
-    for (let i = first; i <= last; i++) {
-        if (hidden?.[i] == null) count++;
-    }
-    return count;
-}
-
-// Images and charts are stored in grid pixels from A1, while the overlay places them against the window's first cell.
-// One anchored above or left of the used range would take a negative offset and fall off the page, so the window
-// starts at the row and column the earliest one, as it turns, starts in.
-function getRenderBounds(
-    sheet: Sheet,
-    config: SheetConfig,
-): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
-    const bounds = getGridBounds(sheet, config.borderInfo ?? {});
-    const floating = floatingObjects(sheet);
-    if (floating.length === 0 || bounds.maxRow < 0) return bounds;
-
-    let x = Number.MAX_SAFE_INTEGER;
-    let y = Number.MAX_SAFE_INTEGER;
-    for (const { bounds: turned } of floating) {
-        x = Math.min(x, turned.minX);
-        y = Math.min(y, turned.minY);
-    }
-
-    let minCol = 0;
-    let left = 0;
-    while (minCol < bounds.minCol && left + sheetColumnsWidth(sheet, minCol, minCol) <= x) {
-        left += sheetColumnsWidth(sheet, minCol, minCol);
-        minCol++;
-    }
-    let minRow = 0;
-    let top = 0;
-    while (minRow < bounds.minRow && top + sheetRowsHeight(sheet, minRow, minRow) <= y) {
-        top += sheetRowsHeight(sheet, minRow, minRow);
-        minRow++;
-    }
-    return { ...bounds, minRow, minCol };
-}
-
-function getGridBounds(
-    sheet: Sheet,
-    borderInfo: Record<string, CellBorderSides>,
-): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
-    let minRow = Number.MAX_SAFE_INTEGER;
-    let minCol = Number.MAX_SAFE_INTEGER;
-    let maxRow = -1;
-    let maxCol = -1;
-
-    if (sheet.celldata) {
-        for (const { r, c, v } of sheet.celldata) {
-            if (!hasVisibleContent(v)) continue;
-            if (r < minRow) minRow = r;
-            if (c < minCol) minCol = c;
-            if (r > maxRow) maxRow = r;
-            if (c > maxCol) maxCol = c;
-        }
-    }
-
-    // The raw border keys: folding onto a merge's first cell only ever drops keys.
-    const be = borderInfoExtent(borderInfo);
-    if (be.minRow < minRow) minRow = be.minRow;
-    if (be.minCol < minCol) minCol = be.minCol;
-    if (be.maxRow > maxRow) maxRow = be.maxRow;
-    if (be.maxCol > maxCol) maxCol = be.maxCol;
-
-    if (sheet.config?.merge) {
-        for (const m of Object.values(sheet.config.merge)) {
-            if (m.r < minRow) minRow = m.r;
-            if (m.c < minCol) minCol = m.c;
-            const endRow = m.r + m.rs - 1;
-            const endCol = m.c + m.cs - 1;
-            if (endRow > maxRow) maxRow = endRow;
-            if (endCol > maxCol) maxCol = endCol;
-        }
-    }
-
-    // A key past Excel's grid draws nothing there, and every walk over the span would run as far as it says.
-    maxRow = Math.min(maxRow, REFERENCE_ROW_COUNT - 1);
-    maxCol = Math.min(maxCol, REFERENCE_COLUMN_COUNT - 1);
-    if (maxRow < 0 || minRow > maxRow || minCol > maxCol) return { minRow: 0, minCol: 0, maxRow: -1, maxCol: -1 };
-    return { minRow, minCol, maxRow, maxCol };
-}
-
-function hasVisibleContent(v: Cell | null): boolean {
-    if (!v) return false;
-    if (v.v != null || v.m != null || richText(v) !== undefined) return true;
-    if (v.bg || v.fc) return true;
-    if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1) return true;
-    if (v.mc && 'rs' in v.mc) return true; // merge anchor
-    return false;
-}
-
-// The rows and columns the window skips, in grid pixels from A1, which the overlay subtracts from each stored box.
-function gridOffset(sheet: Sheet, minRow: number, minCol: number): { left: number; top: number } {
-    return { left: sheetColumnsWidth(sheet, 0, minCol - 1), top: sheetRowsHeight(sheet, 0, minRow - 1) };
-}
-
-// Every image and chart in their one paint order, each with its box clamped as the editor's writers store it
-// (sheetFloatingBox), which also turns a string a peer stored into its number, and the box it covers as it turns,
-// which the page size, the window's origin and the preview's clip count. One turned past A1 tucks under the
-// editor's headers, but a page has none, so it moves right or down until it starts on the page.
-function floatingObjects(sheet: Sheet) {
-    return floatingItems(sheet).map((item) => {
-        const stored = sheetFloatingBox(item.object);
-        const turned = getElementBounds(stored);
-        const box = { ...stored, x: stored.x - Math.min(0, turned.minX), y: stored.y - Math.min(0, turned.minY) };
-        return { item, box, bounds: getElementBounds(box) };
-    });
 }
 
 function buildCellStyle(
