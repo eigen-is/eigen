@@ -237,11 +237,13 @@ function renderSheet(
               })
             : null;
 
-    // Each rendered row tests the merges for the cells they cover. A set of every covered cell would be an allocation
-    // bomb, as one merge can span a million rows.
-    const merges = config.merge ? Object.values(config.merge) : [];
+    // Each rendered row tests the merges that cover it, which a sweep down the merges by their first row keeps. A set
+    // of every covered cell would be an allocation bomb, as one merge can span a million rows.
+    const merges = config.merge ? Object.values(config.merge).sort((a, b) => a.r - b.r) : [];
     const mergeAnchors = new Map<string, MergeCell>();
     for (const m of merges) mergeAnchors.set(`${m.r},${m.c}`, m);
+    let rowMerges: MergeCell[] = [];
+    let nextMerge = 0;
 
     const cellMap = new Map<string, CellWithRowAndCol>();
     if (sheet.celldata) {
@@ -263,7 +265,10 @@ function renderSheet(
     for (const r of renderRows) {
         const h = sheetRowsHeight(sheet, r, r);
         const cells: string[] = [];
-        const rowMerges = merges.filter((m) => m.r <= r && r < m.r + m.rs);
+        rowMerges = rowMerges.filter((m) => r < m.r + m.rs);
+        for (; nextMerge < merges.length && merges[nextMerge].r <= r; nextMerge++) {
+            if (r < merges[nextMerge].r + merges[nextMerge].rs) rowMerges.push(merges[nextMerge]);
+        }
 
         for (const c of renderCols) {
             const key = `${r},${c}`;
