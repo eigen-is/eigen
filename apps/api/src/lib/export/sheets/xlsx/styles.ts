@@ -11,10 +11,10 @@ import type { Lost } from '../../../document/transform/protocol';
 import { SML_NS } from '../../../ooxml/ooxml';
 import {
     BUILTIN_NUMBER_FORMATS,
+    cellFontSize,
     DATE_FORMAT,
     FONT_FAMILY_NUMBER,
     MAX_CELL_FORMATS,
-    MAX_FONT_SIZE_POINTS,
     MAX_NUMBER_FORMAT_LENGTH,
 } from '../../../ooxml/spreadsheetml';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from '../cell-style';
@@ -49,17 +49,11 @@ function fontXml(style: CellStyle, face: 'name' | 'rFont'): string {
         style.it === 1 ? '<i/>' : '',
         style.cl === 1 ? '<strike/>' : '',
         style.un === 1 ? '<u/>' : '',
-        `<sz val="${fontSize(style.fs)}"/>`,
+        `<sz val="${cellFontSize(style.fs)}"/>`,
         argb ? `<color rgb="${argb}"/>` : '',
         `<${face} val="${escapeXml(name)}"/>`,
         category ? `<family val="${FONT_FAMILY_NUMBER[category]}"/>` : '',
     ].join('');
-}
-
-function fontSize(fs: unknown): number {
-    return typeof fs === 'number' && Number.isFinite(fs)
-        ? Math.min(MAX_FONT_SIZE_POINTS, Math.max(1, fs))
-        : SHEET_DEFAULT_FONT_SIZE;
 }
 
 // The workbook's default font, the one a column width counts the digit of. No color, so automatic: the import gives a

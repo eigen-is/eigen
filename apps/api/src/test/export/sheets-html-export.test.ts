@@ -199,6 +199,19 @@ describe('Sheets HTML export — class-based styles', () => {
         expect(classesFor(out, `font-size:${SHEET_DEFAULT_FONT_SIZE}pt;`)).toEqual(table);
     });
 
+    // A peer can store any number, and the xlsx export holds a size to the same range.
+    test("a font size is held to Excel's 1 to 409 points, and one that is not finite draws at the default", () => {
+        const cellSize = (fs: number) => {
+            const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', fs } }])], NO_MEDIA);
+            return out.css.match(/\.s\d+\{font-size:([^;}]+)/)?.[1];
+        };
+        expect(cellSize(1e9)).toBe('409pt');
+        expect(cellSize(-3)).toBe('1pt');
+        expect(cellSize(Number.POSITIVE_INFINITY)).toBe(`${SHEET_DEFAULT_FONT_SIZE}pt`);
+        expect(cellSize(Number.NaN)).toBe(`${SHEET_DEFAULT_FONT_SIZE}pt`);
+        expect(cellSize(14)).toBe('14pt');
+    });
+
     test('non-last sheets carry the page-break class next to .sheet', () => {
         const out = renderSheetsHtml(
             [makeSheet([{ r: 0, c: 0, v: { v: 'one' } }]), makeSheet([{ r: 0, c: 0, v: { v: 'two' } }])],

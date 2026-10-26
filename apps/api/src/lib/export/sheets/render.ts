@@ -44,6 +44,7 @@ import {
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
 import type { HtmlExportMode, LossCounter } from '../../document/transform/protocol';
+import { cellFontSize } from '../../ooxml/spreadsheetml';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, sheetsResolver, VERTICAL_ALIGN } from './cell-style';
@@ -545,7 +546,7 @@ function buildCellStyle(
         }
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
-        if (typeof v.fs === 'number') parts.push(`font-size:${v.fs}pt`);
+        if (typeof v.fs === 'number') parts.push(`font-size:${cellFontSize(v.fs)}pt`);
         // A rule's colors win over the cell's own, as on the canvas.
         const textColor = cssColor(cfStyle?.textColor || v.fc);
         if (textColor) parts.push(`color:${textColor}`);
