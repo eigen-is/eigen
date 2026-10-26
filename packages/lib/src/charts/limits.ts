@@ -6,7 +6,7 @@
 import { nanoid } from 'nanoid';
 import { isRecord } from '../core/guards';
 import { MAX_PAPER_MM, mmToPx } from '../docs/eigendoc/page';
-import type { InlineChartData, StoredChartSpec } from '../types/chart';
+import type { ChartData, InlineChartData, StoredChartSpec } from '../types/chart';
 
 export const MAX_CHART_SPEC_BYTES = 64 * 1024;
 // Levels of [ and {, far past what Eigen writes. V8's JSON.stringify recurses, so every writer that serializes what is
@@ -34,8 +34,12 @@ export function fitsInlineGrid(series: number, rows: number): boolean {
 
 // The grid pads every series to the longest, so a ragged chart counts as its full grid.
 export function exceedsInlineGridLimits(data: InlineChartData): boolean {
-    const rows = Math.max(data.categories.length, ...data.series.map((series) => series.values.length));
-    return !fitsInlineGrid(data.series.length, rows);
+    return !fitsInlineGrid(data.series.length, inlineRowCount(data));
+}
+
+// The rows inline data spans: its categories or its longest series, whichever runs further.
+export function inlineRowCount({ categories, series }: ChartData): number {
+    return series.reduce((most, { values }) => Math.max(most, values.length), categories.length);
 }
 
 // Ids are the grammar of nanoid's alphabet, and never a name a plain object inherits, so a record keyed by them is

@@ -11,6 +11,7 @@ import {
     holdsUnknownChartData,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
+    inlineRowCount,
     MAX_CHART_POINTS,
 } from '@workspace/lib/charts';
 import { cellsToHtmlTable, cellsToTsv, htmlTableCells, parseTsv } from '@workspace/lib/clipboard';
@@ -542,7 +543,7 @@ function EditableGrid({
 }
 
 function ReadOnlyGrid({ data }: { data: InlineChartData }) {
-    const count = Math.max(data.categories.length, ...data.series.map((series) => series.values.length));
+    const count = inlineRowCount(data);
     return (
         <>
             <div className="max-h-[60vh] overflow-auto rounded-md border">

@@ -7,6 +7,7 @@ import {
     fitsInlineGrid,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
+    inlineRowCount,
     newChartSeriesId,
 } from '@workspace/lib/charts';
 import type { ChartSpec, InlineChartData } from '@workspace/lib/types/chart';
@@ -28,7 +29,7 @@ export type CellRef = { row: number; column: number };
 export type GridSelection = { anchor: CellRef; focus: CellRef; whole?: 'rows' | 'columns' };
 
 export function gridOf({ data, axes }: InlineChartSpec): Grid {
-    const count = Math.max(data.categories.length, ...data.series.map((series) => series.values.length));
+    const count = inlineRowCount(data);
     return {
         corner: axes.x.title.text,
         columns: data.series.map(({ id, name }) => ({ id, name })),
