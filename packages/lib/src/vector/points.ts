@@ -47,8 +47,8 @@ export function pointsBounds(points: Point[]): Bounds {
 
 // 2-decimal rounding, the precision every serialized length uses: the stored point lists here and the
 // SVG path data the kinds emit (Excalidraw's TO_FIXED_PRECISION, without the regex). `-0` collapses to
-// `0` so two identical geometries can't serialize differently. The 3- and 4-decimal siblings below are
-// deliberately different precisions, not copies of this one.
+// `0` so two identical geometries can't serialize differently. `round3` (geometry) and `round4` (outline)
+// are deliberately different precisions, not copies of this one.
 export function round(n: number): number {
     const r = Math.round(n * 100) / 100;
     return r === 0 ? 0 : r;

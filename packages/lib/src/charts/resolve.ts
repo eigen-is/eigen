@@ -73,8 +73,8 @@ export function chartLabel(value: string): string {
     return Array.from(stripNonXmlChars(value)).slice(0, MAX_CHART_LABEL_LENGTH).join('');
 }
 
-// A record shaped as a CellRangeRef, which a structural writer finds a ref by, under any key. It is looser than the
-// reader: a key beside the three is accepted, as the reader accepts it, and the bounds are not checked.
+// Whether a value has the shape of a CellRangeRef, so a writer can find a ref under any key. It checks the sheet id and
+// the two integer pairs only: extra keys are accepted and the bounds are not checked.
 export function isCellRangeShape(value: unknown): value is CellRangeRef {
     const bounds = (v: unknown) => Array.isArray(v) && v.length === 2 && v.every(Number.isInteger);
     return isRecord(value) && typeof value['sheetId'] === 'string' && bounds(value['row']) && bounds(value['column']);

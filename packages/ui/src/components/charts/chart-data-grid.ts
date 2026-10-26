@@ -15,10 +15,10 @@ import { fromPercent } from './percent';
 
 export type InlineChartSpec = ChartSpec & { data: InlineChartData };
 
-export type GridColumn = { id: string; name: string };
+type GridColumn = { id: string; name: string };
 // A row carries the index it opened at, so a removed row takes its points, such as its pie slice's color, with it and
 // the rows after it keep theirs. A new row has none, so its points are automatic.
-export type GridRow = { origin: number | null; category: string; cells: string[] };
+type GridRow = { origin: number | null; category: string; cells: string[] };
 // The corner, A1, heads the categories column: the category axis title, as in Google.
 export type Grid = { corner: string; columns: GridColumn[]; rows: GridRow[] };
 
@@ -97,7 +97,7 @@ export function rangeOf({ anchor, focus }: GridSelection) {
         right: Math.max(anchor.column, focus.column),
     };
 }
-export type Range = ReturnType<typeof rangeOf>;
+type RangeBounds = ReturnType<typeof rangeOf>;
 
 // A block of text fills the grid from (row, column), growing it as far as the limits allow; `clipped` says
 // some didn't fit. A paste and a committed cell both land through here.
@@ -143,7 +143,7 @@ export function writeCell(grid: Grid, { row, column }: CellRef, text: string): {
     return fill(grid, row, column, [[text]]);
 }
 
-export function clearRange(grid: Grid, { top, bottom, left, right }: Range): Grid {
+export function clearRange(grid: Grid, { top, bottom, left, right }: RangeBounds): Grid {
     const inside = (r: number, c: number) => r >= top && r <= bottom && c >= left && c <= right;
     return {
         corner: inside(0, 0) ? '' : grid.corner,
@@ -158,7 +158,7 @@ export function clearRange(grid: Grid, { top, bottom, left, right }: Range): Gri
 
 // Whole rows or columns go, the header row or category column among them clears instead; the last row or
 // series empties rather than leaving a chart with none.
-export function removeWhole(grid: Grid, whole: 'rows' | 'columns', range: Range): Grid {
+export function removeWhole(grid: Grid, whole: 'rows' | 'columns', range: RangeBounds): Grid {
     const cleared = clearRange(grid, whole === 'rows' ? { ...range, bottom: 0 } : { ...range, right: 0 });
     if (whole === 'rows') {
         const rows = cleared.rows.filter((_, i) => i + 1 < range.top || i + 1 > range.bottom);
