@@ -2,7 +2,7 @@
 
 Eigen is a self-hosted alternative to Google Workspace. Monorepo with integrated apps sharing a single API server, UI library, and business logic layer.
 
-Layout, stack, and scripts are derivable: read `package.json` (scripts + workspaces) and `ls apps packages`. Two things that aren't written down anywhere else: the API serves every app from port 8000, and `packages/sheet` is a fork of fortune-sheet/luckysheet.
+Layout, stack, and scripts are derivable: read `package.json` (scripts + workspaces) and `ls apps packages`. One API process is the backend of every app: in dev it listens on `localhost:8000` and each app runs its own vite server ([CONTRIBUTING.md](docs/CONTRIBUTING.md)). `packages/sheet` is our fork of fortune-sheet/luckysheet ([SHEETS.md](docs/SHEETS.md)).
 
 ## Critical Rules
 
