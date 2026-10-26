@@ -6,7 +6,7 @@ The single source of truth for **how** Eigen Support articles are written. The g
 
 **Before writing any article, read, in order:**
 1. This guide.
-2. [AGENTS.md](../AGENTS.md) and [ARCHITECTURE.md](ARCHITECTURE.md), for navigating the codebase while you verify features.
+2. [README.md](README.md), the index of the docs, and [ARCHITECTURE.md](ARCHITECTURE.md), for navigating the codebase while you verify features.
 3. The three **golden exemplars** (match them; imitation beats instruction):
    - `apps/index/src/data/support/drive/get-started.md` (an **overview**).
    - `apps/index/src/data/support/drive/share-a-file.md` (a short **how-to**).

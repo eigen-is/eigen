@@ -43,6 +43,8 @@ Examples per rule: [CODE-EXAMPLES.md § Code Style](CODE-EXAMPLES.md#code-style)
 - Class members in this order: fields, constructor, getters, lifecycle (init, close), then the rest
 - File names are kebab-case (`get-home.ts`); route files follow TanStack Router's naming. Named exports only, no `export default`, except in a config file whose tool requires one (`vite.config.ts`, the Drizzle config). An older file that breaks either is fixed when someone cleans it up
 - Backend errors use `ApiError`: `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`; internal invariants (db not open, missing config) may use `throw new Error()`
+- Think about every `await`: a bare async call returns a truthy Promise, so `if (!asyncFn())` is always false. Fire-and-forget has a `.catch()`. Skip the `await` when blocking would hurt response time and failure is acceptable
+- Sanitize user-provided paths: refuse `..`, `/` and control characters before filesystem or header use, and never put raw user input into an HTTP header
 - Theme tokens, not colors: `text-muted-foreground`, `bg-muted`, not `text-gray-500`; `selection-handle` for selection UI
 - Use `cn()` for class merging: from `@workspace/ui/lib/utils`, never raw `clsx`/`twMerge` or string concatenation
 - Name for grep-ability; don't shadow libraries: `use*`, `Eigen*`, `*Dialog`, `*Provider`, `invalidate*`, `*Keys`; never reuse a name a dependency owns (`useSearchQuery`, not `useSearch`) or give three helpers one name (`isMobile`)
