@@ -1,3 +1,6 @@
+// A plain text file's preview body: markdown rendered and sanitized, code highlighted by its file extension, and
+// plain text as paragraphs. The preview cache calls it on the main thread, for a drive file or a mail part.
+
 import type { BytesTextPreviewMode } from '@workspace/lib/constants/preview';
 import { getExtension } from '@workspace/lib/constants/preview';
 import { escapeHtml } from '@workspace/lib/html';

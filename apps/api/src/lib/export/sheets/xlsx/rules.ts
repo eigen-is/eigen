@@ -94,7 +94,7 @@ function spanInGrid(ends: number[] | undefined, count: number): [number, number]
 
 function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
     if (rule.type === 'dataBar') {
-        const color = rule.format.length > 0 ? argbOf(rule.format[0]) : undefined;
+        const color = argbOf(rule.format[0]);
         return color
             ? {
                   type: 'dataBar',

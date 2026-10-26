@@ -46,7 +46,7 @@ export function getFontFaceCSSForFamilies(families: Iterable<string>): string {
 }
 
 // Read + base64 once per bundled font (~2 MB resident): the main-thread SVG preview path
-// asks for faces on every request, while a one-shot export Worker pays it once anyway.
+// asks for faces on every request, while a one-shot export's child process pays it once anyway.
 // A bundled asset that cannot be read is a build defect, so the read is unguarded.
 const faceCSSByFile = new Map<FontFaceFile, string>();
 

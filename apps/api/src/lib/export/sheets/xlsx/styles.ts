@@ -14,6 +14,7 @@ import {
     DATE_FORMAT,
     FONT_FAMILY_NUMBER,
     MAX_CELL_FORMATS,
+    MAX_FONT_SIZE_POINTS,
     MAX_NUMBER_FORMAT_LENGTH,
 } from '../../../ooxml/spreadsheetml';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from '../cell-style';
@@ -27,9 +28,9 @@ export type StyleRegistry = {
 };
 
 // The cell's hex colors and the rgb(…) strings of the editor's CSS pipeline alike; undefined for one Office can't
-// hold, which the caller leaves out.
-export function argbOf(color: string): string | undefined {
-    const hex = cssColorToHex(color);
+// hold, which the caller leaves out. No reader checks a stored color, so a peer's can be anything, not only a string.
+export function argbOf(color: unknown): string | undefined {
+    const hex = typeof color === 'string' ? cssColorToHex(color) : undefined;
     return hex && `FF${hex}`;
 }
 
@@ -42,7 +43,7 @@ export function runPropertiesXml(style: CellStyle): string {
 function fontXml(style: CellStyle, face: 'name' | 'rFont'): string {
     const name = cellFontName(style.ff) ?? SHEET_DEFAULT_FONT.name;
     const category = EIGEN_FONTS.find((font) => font.name === name)?.category;
-    const argb = style.fc ? argbOf(style.fc) : undefined;
+    const argb = argbOf(style.fc);
     return [
         style.bl === 1 ? '<b/>' : '',
         style.it === 1 ? '<i/>' : '',
@@ -55,9 +56,10 @@ function fontXml(style: CellStyle, face: 'name' | 'rFont'): string {
     ].join('');
 }
 
-// Excel's font sizes run from 1 to 409 points, and it repairs a file past them.
 function fontSize(fs: unknown): number {
-    return typeof fs === 'number' && Number.isFinite(fs) ? Math.min(409, Math.max(1, fs)) : SHEET_DEFAULT_FONT_SIZE;
+    return typeof fs === 'number' && Number.isFinite(fs)
+        ? Math.min(MAX_FONT_SIZE_POINTS, Math.max(1, fs))
+        : SHEET_DEFAULT_FONT_SIZE;
 }
 
 // The workbook's default font, the one a column width counts the digit of. No color, so automatic: the import gives a
@@ -122,7 +124,7 @@ export function styleRegistry(lost: Lost): StyleRegistry {
         return BUILTIN_FORMAT_IDS.get(code) ?? FIRST_CUSTOM_FORMAT + intern(formats, code);
     };
     const lookOf = (cell: Cell): Look => {
-        const fc = cell.fc ? argbOf(cell.fc) : undefined;
+        const fc = argbOf(cell.fc);
         const hasFont =
             cell.bl === 1 ||
             cell.it === 1 ||
@@ -131,7 +133,7 @@ export function styleRegistry(lost: Lost): StyleRegistry {
             typeof cell.fs === 'number' ||
             fc !== undefined ||
             cellFontName(cell.ff) !== undefined;
-        const bg = cell.bg ? argbOf(cell.bg) : undefined;
+        const bg = argbOf(cell.bg);
         const horizontal = cell.ht === undefined ? undefined : HORIZONTAL_ALIGN[cell.ht];
         const vertical = cell.vt === undefined ? undefined : VERTICAL_ALIGN[cell.vt];
         // 255 stacks the characters; 91 to 180 turn down by the excess over 90.
@@ -190,8 +192,8 @@ export function styleRegistry(lost: Lost): StyleRegistry {
             return xfs.size - 1;
         },
         dxf({ textColor, cellColor }) {
-            const text = textColor ? argbOf(textColor) : undefined;
-            const cell = cellColor ? argbOf(cellColor) : undefined;
+            const text = argbOf(textColor);
+            const cell = argbOf(cellColor);
             // Excel reads a dxf's solid fill from bgColor, the import from fgColor: both hold it.
             return intern(
                 dxfs,

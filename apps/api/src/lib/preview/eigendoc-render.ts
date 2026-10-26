@@ -1,3 +1,8 @@
+// A doc's preview body: its first blocks, drawn by the doc export's renderer and sanitized, for the drive hero and the
+// preview pane. It runs in the transform process, so it reaches neither the Mount nor the transform seam, and its
+// media resolves through the URL map the main thread prepared. The renderer and its lowlight grammars stay out of the
+// main process.
+
 import type * as Y from 'yjs';
 import { readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../document/doc';
 import type { PreviewResult, TransformWarning } from '../document/transform/protocol';
@@ -7,12 +12,6 @@ import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-m
 
 const PREVIEW_MAX_BLOCKS = 20;
 
-// Materialized doc → sanitized preview body. Runs inside the transform process.
-// This module must not reach the Mount or the transform seam — the Worker imports it,
-// and the static renderer plus lowlight grammars it pulls in must stay out of the main
-// process. Media resolves through the URL map the main thread prepared — the Worker has
-// no Mount.
-//
 // The body renders as live DOM in the drive hero and the preview pane, so it goes through the shared
 // ref restriction: a figure keeps its collaborator-written `src` when it carries no mediaName, and
 // that would beacon every viewer. Only the prepared media URLs pass — the same allowance the export

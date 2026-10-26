@@ -1,6 +1,6 @@
 // HTML as strings, for browser and server code alike: escaping, plain text to paragraphs and back, and the tags and
-// attributes a LightEditor body keeps, which the canvas and the API's exports filter to. The DOM-based helpers live
-// beside it in html-dom.
+// attributes a LightEditor body keeps, which the canvas and the API's exports filter to. A node guard such as
+// isElement reads only the node, so it lives here too; the helpers that need a `document` live in html-dom.
 
 export function escapeHtml(text: string): string {
     return text

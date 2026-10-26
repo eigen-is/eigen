@@ -3,9 +3,9 @@
 
 let converter: ReturnType<typeof loadConverter> | undefined;
 
-// Loaded on the first equation, once per Worker. Every glyph is a path of its own (fontCache 'none'): a cache would
-// repeat each glyph's id in every equation's <defs>, all in one HTML document. One SVG per equation, never MathJax's
-// inline line breaks, which split it into several around an element the sanitizer drops.
+// Every glyph is a path of its own (fontCache 'none'): a cache would repeat each glyph's id in every equation's <defs>,
+// all in one HTML document. One SVG per equation, never MathJax's inline line breaks, which split it into several
+// around an element the sanitizer drops.
 async function loadConverter() {
     const [{ mathjax }, { MathML }, { SVG }, { liteAdaptor }, { RegisterHTMLHandler }] = await Promise.all([
         import('@mathjax/src/js/mathjax.js'),
@@ -25,7 +25,7 @@ async function loadConverter() {
     return { adaptor, document };
 }
 
-// The sanitizer's jsdom, in the Worker beside the API, and WeasyPrint pay per SVG element; glyph paths make bytes bind
+// The sanitizer's jsdom in the transform process and WeasyPrint pay per SVG element. Glyph paths make the bytes bind
 // first.
 export const SVG_LIMIT = { elements: 50_000, bytes: 10_000_000 };
 
