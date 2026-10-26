@@ -761,7 +761,8 @@ export class Drive {
     }
 
     // Replaces the whole ACL. Routes only send changes, through updateACLDelta, so no client can
-    // replace a whole ACL.
+    // replace a whole ACL. A path in the trash keeps its ACL as it is, because the restore shares it
+    // again with the same people.
     public async updateACL(
         mountId: string,
         pathId: string,
@@ -772,10 +773,7 @@ export class Drive {
         options?: ACLPropagationOptions,
     ): Promise<void> {
         const mount = this.getMount(mountId);
-        const item = await mount.getPath(pathId);
-        if (!item) {
-            throw new ApiError(404, 'Path not found');
-        }
+        const item = await mount.getActivePath(pathId);
         if (item.parentId === null) {
             throw new ApiError(403, 'Cannot update ACL for root folder');
         }

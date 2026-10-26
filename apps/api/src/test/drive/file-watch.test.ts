@@ -302,11 +302,13 @@ describe('File watch + fan-out', () => {
 
         await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/path/${file.id}`, { method: 'DELETE' });
 
-        // An event on a trashed item is dropped entirely (recordFileEvent returns on
-        // path.trashedAt) — neither recorded nor fanned out.
-        await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/acl`, {
-            add: [{ id: ctx.charlie.user.email, read: true, write: false }],
+        // A trashed item takes no ACL change, so no acl-changed event can follow the trash.
+        const acl = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/path/${file.id}/acl`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ add: [{ id: ctx.charlie.user.email, read: true, write: false }] }),
         });
+        expect(acl.status).toBe(404);
 
         const notifications = await notificationsWhen(
             ctx.bob.user.id,

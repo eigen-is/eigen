@@ -55,7 +55,7 @@ describe('A trashed chat', () => {
     });
 
     test('refuses a sharee and creates nothing inside it', async () => {
-        expect((await getMessages(ctx.bob.user.sessionToken)).status).toBe(404);
+        expect((await getMessages(ctx.bob.user.sessionToken)).status).toBe(403);
         expect(await liveChildren()).toEqual([]);
     });
 

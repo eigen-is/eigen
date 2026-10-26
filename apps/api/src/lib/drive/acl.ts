@@ -1,3 +1,7 @@
+// Who may read or write a Drive path, decided from the chain of folders above it. SharedDrive asks
+// this before every call it passes on, and the watcher fan-out asks it before each notification. The
+// helpers that merge, normalize and trim an ACL before Drive saves it live here too.
+
 import { parseOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { isCollabType } from '@workspace/lib/types/drive';
@@ -10,12 +14,15 @@ export function grantsPublicRead(visibility: DriveVisibility): boolean {
 }
 
 // Ownership, team membership, public visibility or an ACL entry on the path or any ancestor.
+// A path in the trash is the owner's alone until it is restored. Its ACL and visibility stay, so the
+// restore gives everyone their access back.
 function canFromAncestors(
     ancestors: DrivePath[],
     user: User,
     memberships: Memberships,
     permission: 'read' | 'write',
 ): boolean {
+    const trashed = ancestors.some((path) => path.trashedAt);
     for (const path of ancestors) {
         if (path.ownerId === user.id) return true;
 
@@ -23,6 +30,8 @@ function canFromAncestors(
         if (parsed.type === 'team') {
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
+
+        if (trashed) continue;
 
         if (permission === 'read' ? grantsPublicRead(path.visibility) : path.visibility === 'public-write') {
             return true;

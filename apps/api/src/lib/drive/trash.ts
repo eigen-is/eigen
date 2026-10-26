@@ -84,14 +84,18 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
 
     if (user && watcherIds.length > 0) {
         // The item joins the chain, so someone who watched a file shared with them directly still
-        // qualifies. The folder it was trashed from still exists, so its breadcrumb is whole.
+        // qualifies. The folder it was trashed from still exists, so its breadcrumb is whole. The item
+        // joins as it was before the trash, because a path in the trash lets nobody but the owner in.
         await mount.history.notifyWatchers(watcherIds, {
             eventType: 'deleted',
             actor: user,
             itemName: item.name,
             pathType: item.type,
             tagPathId: item.id,
-            verifyAncestors: [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item],
+            verifyAncestors: [
+                ...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []),
+                { ...item, trashedAt: null },
+            ],
         });
     }
     return true;

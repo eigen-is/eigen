@@ -269,10 +269,16 @@ export class SharedDrive {
 
     // A path shared directly with the caller is left, not trashed. Only their own ACL entry goes,
     // whatever their permission level. Any other path goes to the trash, and that needs write access.
+    // A path in the trash can't be left. The caller gets the same 403 as for a path they can't see.
     public async deletePath(mountId: string, pathId: string, _user?: User): Promise<void> {
         const path = await this.drive.getPath(mountId, pathId);
         const own = path?.acl?.find((entry) => entry.id.toLowerCase() === this.user.email.toLowerCase());
-        if (path && own && !this.isEffectiveOwner(path.ownerId, await getMemberships(this.user.id))) {
+        if (
+            path &&
+            !path.trashedAt &&
+            own &&
+            !this.isEffectiveOwner(path.ownerId, await getMemberships(this.user.id))
+        ) {
             return this.drive.updateACLDelta(mountId, pathId, { remove: [own.id] }, undefined, undefined, this.user);
         }
         await this.requireWrite(mountId, pathId);

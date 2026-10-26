@@ -37,6 +37,8 @@ Walks a pre-fetched breadcrumb (root-first, ending at the path itself) and retur
 4. User in local `acl` with `read: true` (by email or team membership) → true
 5. Default → false
 
+When the path or any folder above it is in the trash, only steps 1 and 2 count, so a trashed item is its owner's alone until it is restored ([SOFT-DELETE.md](SOFT-DELETE.md#trash-revokes-every-share-and-restore-re-shares-without-an-email)).
+
 The `Drive.canRead(mountId, pathId, user, memberships?)` method fetches the breadcrumb and delegates to this function.
 
 ### canWriteFromAncestors
