@@ -16,9 +16,8 @@ import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-m
 import { capPreviewElements } from './preview-scene';
 
 // Materialized doc → the deck's first slides as compositor pages, the same HTML the PDF export
-// prints. Runs inside the transform process (child.ts owns execution; the main-thread orchestration
-// lives in preview-document.ts). This module must not reach the Mount or the transform seam. Media
-// resolves through the URL map the main thread prepared (the Worker has no Mount).
+// prints. Runs inside the transform process. This module must not reach the Mount or the transform
+// seam. Media resolves through the URL map the main thread prepared (the Worker has no Mount).
 //
 // Filtered on the two levels eigenvector-render.ts documents: each rich-text body through the shared
 // ref restriction first, then the assembled page as a whole, with the media URLs allow-listed so the

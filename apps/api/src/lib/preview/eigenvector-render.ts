@@ -11,9 +11,8 @@ import { capPreviewElements } from './preview-scene';
 const EMPTY_PREVIEW_HEIGHT = 120;
 
 // Materialized doc → the drawing as one compositor page, the same HTML the PDF export prints.
-// Runs inside the transform process (child.ts owns execution; the main-thread orchestration lives
-// in preview-document.ts). This module must not reach the Mount or the transform seam — the Worker
-// imports it, and the compositor's roughjs/perfect-freehand deps stay DOM-free. Media resolves
+// Runs inside the transform process. This module must not reach the Mount or the transform seam —
+// the Worker imports it, and the compositor's roughjs/perfect-freehand deps stay DOM-free. Media resolves
 // through the URL map the main thread prepared (the Worker has no Mount).
 //
 // The body renders as live DOM in the drive hero and the preview pane, so it is filtered twice. The

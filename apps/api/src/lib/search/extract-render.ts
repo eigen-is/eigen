@@ -7,8 +7,7 @@ import type { readStoredEquation } from '../document/equation';
 import type { ExtractTextJob, TransformWarning } from '../document/transform/protocol';
 import { CONTENT_INDEX_MAX_BYTES } from './limits';
 
-// Materialized doc → indexable body text. Runs inside the transform process
-// (child.ts owns execution; the main-thread dispatch lives in extract-text.ts).
+// Materialized doc → indexable body text. Runs inside the transform process.
 // This module must not reach the Mount or the transform seam. Each reader loads
 // through a dynamic import, the same shape as child.ts's renderPreview, so an
 // eigendoc extract never evaluates the sheet engine. Stickies, chat and plain-text
