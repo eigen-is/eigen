@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SQL } from 'drizzle-orm';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
@@ -304,19 +304,8 @@ async function deleteTrashRoot(mount: Mount, pathId: string, seen: Set<string>):
         if (!row?.trashedAt) return false;
 
         if (row.type !== 'file') {
-            const allIds = [pathId, ...mount.collectDescendantIds(pathId)];
-            const orphans = await mount.db
-                .select({ id: paths.id })
-                .from(paths)
-                .where(
-                    sql`${paths.trashedFrom} IN (${sql.join(
-                        allIds.map((id) => sql`${id}`),
-                        sql`, `,
-                    )})`,
-                )
-                .all();
             // Each one is a trash root of its own, so a restore may race it too.
-            for (const orphan of orphans) {
+            for (const orphan of trashRootsFrom(mount, pathId)) {
                 if (!seen.has(orphan.id)) await deleteTrashRoot(mount, orphan.id, seen);
             }
         }
@@ -324,4 +313,26 @@ async function deleteTrashRoot(mount: Mount, pathId: string, seen: Set<string>):
         await mount.deletePath(pathId);
         return true;
     });
+}
+
+// The trash roots a folder's permanent delete takes with it: the items trashed on their own from inside
+// the folder, and from inside those in turn. Drive reads them before the delete to tell their watchers.
+export async function listTrashRootsInside(mount: Mount, folderId: string): Promise<DrivePath[]> {
+    const found = new Map<string, DrivePath>();
+    const collect = (id: string): void => {
+        for (const row of trashRootsFrom(mount, id)) {
+            if (row.id === folderId || found.has(row.id)) continue;
+            found.set(row.id, mount.toDrivePath(row));
+            collect(row.id);
+        }
+    };
+    collect(folderId);
+    return [...found.values()];
+}
+
+// The trash roots whose original folder is the path or lies under it. They hang under the mount root,
+// and once the path is deleted they could never go back to it.
+function trashRootsFrom(mount: Mount, pathId: string): (typeof paths.$inferSelect)[] {
+    const allIds = [pathId, ...mount.collectDescendantIds(pathId)];
+    return mount.db.select().from(paths).where(inArray(paths.trashedFrom, allIds)).all();
 }

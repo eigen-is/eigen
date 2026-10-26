@@ -294,6 +294,37 @@ describe('File watch + fan-out', () => {
         expect(watches.some((w) => w.id === folder.id)).toBe(true);
     });
 
+    test('a folder delete tells the tabs and the watchers of an item trashed on its own from inside it', async () => {
+        const folder = await createFolder('WatchDeleteOrphan');
+        await shareWith(folder.id, ctx.bob.user.email);
+        const file = await driveUpload(aliceToken, aliceOwnerId, mountId, folder.id, new File(['x'], 'orphan.txt'));
+        await watch(bobToken, file.id);
+
+        await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/path/${file.id}`, { method: 'DELETE' });
+        await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/path/${folder.id}`, { method: 'DELETE' });
+        const alice = await getHome(aliceOwnerId);
+        const emit = spyOn(alice.drive, 'emit');
+        let res: Response;
+        let emitted: string[];
+        try {
+            res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/trash/${folder.id}`, {
+                method: 'DELETE',
+            });
+        } finally {
+            emitted = emit.mock.calls.map(([type, path]) => `${type} ${path.id}`);
+            emit.mockRestore();
+        }
+        expect(res.status).toBe(200);
+        expect(await alice.drive.getPath(mountId, file.id)).toBeNull();
+        expect(emitted).toContain(`${SSEventType.DRIVE_FILE_DELETED} ${file.id}`);
+
+        const tag = fileEventTag(aliceOwnerId, mountId, file.id);
+        const deleted = (
+            await notificationsWhen(ctx.bob.user.id, (rows) => hasTitle(rows, tag, 'Alice Test deleted'), 'the delete')
+        ).find((n) => n.tag === tag);
+        expect(deleted?.body).toBe('orphan.txt');
+    });
+
     test('events on items already in trash do not fan out', async () => {
         const folder = await createFolder('WatchTrashedNoFanout');
         await shareWith(folder.id, ctx.bob.user.email);

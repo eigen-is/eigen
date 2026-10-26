@@ -972,6 +972,10 @@ export class Mount {
         return trash.getTrashedFrom(this, pathId);
     }
 
+    public async listTrashRootsInside(folderId: string): Promise<DrivePath[]> {
+        return trash.listTrashRootsInside(this, folderId);
+    }
+
     public async restorePath(pathId: string): Promise<DrivePath> {
         return trash.restorePath(this, pathId);
     }
