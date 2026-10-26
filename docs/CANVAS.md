@@ -114,7 +114,7 @@ A docked end is rounded to stored precision before the box is derived, so a sett
 
 The panel's arrow type (sharp, curved, elbow) is derived from two stored fields, `roundness` and `elbow`, by `arrowShapeOf`, so the two cannot drift.
 
-An unpinned elbow arrow stores the flag, its two endpoints and the bindings. `elbowRoute` derives the orthogonal route on every read, with A* around the bound shapes, as a port of Excalidraw. It falls back to a plain L and never throws, so an arrow always draws. `arrowRoute` is the one gate every path reads (canvas, hit test, bounds, label, export), so none can quietly draw an elbow arrow straight. The route lives in the unrotated frame, so an elbow arrow's angle is always 0.
+An unpinned elbow arrow stores the flag, its two endpoints and the bindings. `elbowRoute` derives the orthogonal route on every read, with A* around the bound shapes, as a port of Excalidraw. It avoids only the arrow's own two bound shapes, never another shape in its way. It falls back to a plain L and never throws, so an arrow always draws. `arrowRoute` is the one gate every path reads (canvas, hit test, bounds, label, export), so none can quietly draw an elbow arrow straight. The route lives in the unrotated frame, so an elbow arrow's angle is always 0.
 
 Dragging a segment pins it (`fixedSegments`, `elbow-pins.ts`). From then on the stored `points` are the route and the router never runs on that arrow again. Dragging an end segment inserts an L-jog so the pinned segment turns interior while the endpoint stays put. `startIsSpecial`/`endIsSpecial` mark such jogs so the next move removes them and corners never pile up.
 

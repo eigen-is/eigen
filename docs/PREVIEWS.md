@@ -202,7 +202,7 @@ Every layer portals to `<body>` in the order it opened, so later in the document
 
 Presence is not enough for the keydown in hand. A layer dismisses itself on the capture phase of the same keydown the overlay hears on the bubble, so by then the layer is gone. So a keydown whose target sits inside a dialog, menu or listbox after the overlay belongs to that layer. A `DialogContent` under an open preview ignores Escape, which is the overlay's to close.
 
-Space yields when focus is on a control inside the overlay, where it presses that control. The overlay registers it with `preventDefault: false`, because the hotkey library prevents the default before the callback runs.
+Space yields when focus is on a control inside the overlay, where it presses that control. The overlay registers it with `preventDefault: false`, because the hotkey library prevents the default before the callback runs. A focused Chrome `<audio controls>` swallows every keydown, so while it has focus the X button is the only way out.
 
 ## One hook wires every attachment chip to the menu
 

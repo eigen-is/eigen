@@ -60,7 +60,7 @@ The route keeps its per-socket state (the `opened` gate, the drive, the document
 
 ## Read is checked at open, write on every message
 
-The route checks read once, when the socket opens, and write on every binary frame, so a writer demoted to reader loses write with the next frame. `CollabDocument.handleMessage` drops a sync update from a peer without write and still answers its sync step 1 and awareness.
+The route checks read once, when the socket opens, and write on every binary frame, so a writer demoted to reader loses write with the next frame. `CollabDocument.handleMessage` drops a sync update from a peer without write and still answers its sync step 1 and awareness. The route keeps each socket's session in a map keyed on `ws.raw`: Elysia's Bun WebSocket adapter hands every open, message and close a fresh wrapper, so a map keyed on `ws` never matches between events.
 
 A revoked read would otherwise keep receiving broadcasts until the socket drops. So `Drive.updateACL` and `Drive.movePath` call `enforceReadAccessBelow` (`apps/api/src/lib/drive/collab-registry.ts`), which walks every open document at or below the path and closes each connection that lost read with 1008. It re-checks read per connection rather than diffing the removed ACL entries, because read inherits from the whole ancestor chain: revoking a folder share must reach the documents inside it. Removing a member from a team does not re-check: a removed member keeps a socket that is already open ([ROADMAP.md](ROADMAP.md)).
 

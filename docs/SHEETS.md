@@ -23,6 +23,8 @@ The sections run from storage (ops, config collections, borders, the snapshot co
 
 The whole upstream library (UI components, state runtime, formula parser) lives in `packages/sheet/`, with no external fortune-sheet dependency. `src/engine/` is the DOM-free half the server imports, `src/state/` the workbook context and its immer reducers, `src/components/` the React UI. How the canvas and the DOM overlays stack is in [RENDERING.md](../packages/sheet/RENDERING.md).
 
+We own the code, so sheet code you touch gets simplified and its broken windows fixed, in small steps a reviewer can follow. A dialog is the shared centered `Dialog`, opened through the sheet's `useDialog` and `ModalProvider` as `ResizeDialog` and `CustomSort` are; a bespoke positioned card-dialog moves to it when someone touches it, while hover popovers and toolbars may stay positioned. A benchmark runs with immer's `autoFreeze` on, as the app does: turning it off misstates what an edit costs.
+
 ## An edit is an op in a Y.Array
 
 `use-sheet.ts` (`apps/sheets/src/components/sheets/hooks/`) pushes each local batch to `ops`. A peer applies it with `applyOp()` (`components/Workbook/api.ts`), which patches the context without remounting the grid.

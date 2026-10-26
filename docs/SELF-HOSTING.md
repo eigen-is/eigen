@@ -139,7 +139,9 @@ Don't attach `postfix` or `eigen-api` to another network that wins the container
 
 With the `static` profile, setup fills in the templates in `docker/proxy/` (`{{DOMAIN}}` and `{{TARGET}}`, the listen address) and writes `eigen.nginx.conf`, `eigen.apache.conf` and `eigen.Caddyfile` next to `.env.production`. `docker/test-host-proxies.sh` runs all three in front of a real install.
 
-Each one forwards everything to `eigen-static`, upgrades WebSockets, turns off buffering for SSE, and sets `X-Real-IP` to the visitor. `eigen-static` (`docker/static/Caddyfile`) trusts `X-Real-IP` from private ranges only and ignores `X-Forwarded-For`, which a client can prepend to, so rate limits, login lockout and OTP throttling key on the real visitor. It sets `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` and `Permissions-Policy` itself, as the bundled Caddy does. The Content-Security-Policy rides in each app's HTML.
+Each one forwards everything to `eigen-static`, upgrades WebSockets, turns off buffering for SSE, and sets `X-Real-IP` to the visitor. `eigen-static` (`docker/static/Caddyfile`) trusts `X-Real-IP` from private ranges only and ignores `X-Forwarded-For`, which a client can prepend to, so rate limits, login lockout and OTP throttling key on the real visitor. Behind a proxy the socket address the API sees is the proxy's, the same for every visitor, so IP-keyed logic in the API goes through `clientIpKey` (`apps/api/src/lib/core/access.ts`: `X-Real-IP`, then `X-Forwarded-For`, then the socket). It sets `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` and `Permissions-Policy` itself, as the bundled Caddy does. The Content-Security-Policy rides in each app's HTML. The dev server's policy allows inline scripts, so check a change to `script-src` on the built `dist/` HTML.
+
+In a Caddyfile, `redir /x/ 301` reads `/x/` as a matcher, not as the target. Write `redir * /dav/ 301`, as `docker/caddy/site.Caddyfile` does.
 
 ## Firewall
 

@@ -133,6 +133,10 @@ The copy route and WebDAV COPY send nothing while a deep tree copies, so both li
 
 A move never crosses mounts. It would change the row's owner, mount and id, and that breaks shares, links and history.
 
+## Slow operations log in production too
+
+`time()` (`apps/api/src/utils/timing.ts`) logs a `[timing]` line for a wrapped operation past 100 ms, and a `ManagedDatabase` logs `Synced` after each push to storage. Both stay on in production, by the owner's choice: they are how a slow request or a stuck sync shows in the logs. Don't gate them behind an environment check.
+
 ## See also
 
 - [SOFT-DELETE.md](SOFT-DELETE.md): trash and restore
