@@ -2,7 +2,7 @@
 
 This proposal grows Eigen's clipboard into a typed protocol, so that a table, a slide object or a card keeps its structure when it is pasted into another Eigen app, and still pastes as useful text and HTML anywhere else.
 
-**Status:** the first version is built and [CLIPBOARD.md](../CLIPBOARD.md) describes it: `EigenClipboardData`, the `data-eigen-clipboard` HTML marker, the `application/eigen-clipboard` MIME and the cross-document media re-upload path. Read that first. This page covers what v2 adds on top, which is not built, plus the one v1 residual in Phase 0, which is still open. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps the v2 row and [ROADMAP.md](../ROADMAP.md) the Phase 0 row.
+**Status:** v1 is built, and [CLIPBOARD.md](../CLIPBOARD.md) describes it, canvas elements and charts included. This page designs v2 on top of it (Phases 1 to 4 and a chart's live link), none of it built, and the Phase 0 residual on the async write. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps the v2 row and [ROADMAP.md](../ROADMAP.md) the Phase 0 row.
 
 ## TLDR
 
@@ -70,11 +70,9 @@ transaction and the CRDT merge resolves it, exactly as it already does for typin
 
 ### Phase 0: Add the custom MIME to the async write (S)
 
-Phase 0 as originally written -- make the **sync** path write the HTML-embedded marker -- **shipped**:
-`writeEigenClipboard` in `../../packages/lib/src/core/clipboard/clipboard.ts` already writes
-`application/eigen-clipboard`, the `data-eigen-clipboard` HTML marker and the plain-text fallback.
-
-What is left is the mirror-image residual on the **async** path (the ROADMAP P2 row):
+The sync path, `writeEigenClipboard`, writes `application/eigen-clipboard`, the marker and the
+plain-text fallback ([CLIPBOARD.md § One payload rides two channels](../CLIPBOARD.md#one-payload-rides-two-channels)).
+The residual is on the **async** path (the ROADMAP row):
 
 | File | Change |
 |---|---|
@@ -174,8 +172,9 @@ type EigenClipboardPayload = {
 }
 ```
 
-Types deliberately omitted from Phase 1: `calendarevent`, `contact`, `chatmessages`, `vectorelements`, `chart`.
-These are added when the corresponding app integration is built (Phase 3+).
+Types deliberately omitted from Phase 1: `calendarevent`, `contact`, `chatmessages`.
+These are added when the corresponding app integration is built (Phase 3+). Canvas elements and charts
+already travel as v1's `elements` and `chart` items.
 
 #### 1b. Transport Layer
 
@@ -283,8 +282,8 @@ Expose as a singleton via a React context or module-level instance. The bus is i
   HTML paste handle it via the `html` field (produces a table node). Fall back to v1 compat, then native paste.
 
 **Slides** (`../../apps/slides/src/components/slides/editor.tsx`):
-- Copy handler: Wrap slide objects in `EigenClipboardSlideObjects`. Already serializes full object data in
-  `meta` -- restructure into the v2 content type.
+- Copy handler: Wrap slide objects in `EigenClipboardSlideObjects`. The canvas already copies its selection
+  as an `elements` item ([CLIPBOARD.md § A canvas selection rides as its stored records](../CLIPBOARD.md#a-canvas-selection-rides-as-its-stored-records)) -- restructure it into the v2 content type.
 - Paste handler: Prefer `slideobjects` content for lossless paste. Accept `richtext` to create a text box.
   Accept `image` for image objects.
 
@@ -403,11 +402,9 @@ can be added iteratively.
 
 ---
 
-### Phase 5: Vector + Charts (when those apps ship)
+### Phase 5: Chart live linking
 
-- Add `vectorelements` and `chart` content types.
-- Converters between vector elements and slide objects.
-- Chart copy with `sourceRef` for live linking.
+- Chart copy with `sourceRef` for live linking. A chart item carries its data inline ([CLIPBOARD.md § A chart travels as its spec with the numbers inline](../CLIPBOARD.md#a-chart-travels-as-its-spec-with-the-numbers-inline)).
 
 ---
 
@@ -482,7 +479,7 @@ The migration is non-breaking because:
 | Phase 2 | Cross-app converters + external content classification | 2-3 sessions |
 | Phase 3 | Non-document apps + cut + drag-and-drop | 3-4 sessions |
 | Phase 4 | Polish (Paste Special, smart URL, clipboard indicator) | 1-2 sessions |
-| Phase 5 | Vector + chart integration | When those apps ship |
+| Phase 5 | Chart live linking | |
 
 Phases 0 and 1 should be done first and can be shipped independently. Phases 2-4 are incremental
-improvements that can be interleaved with other work. Phase 5 is blocked on the vector and chart apps.
+improvements that can be interleaved with other work.
