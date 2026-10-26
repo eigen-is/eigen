@@ -69,6 +69,8 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 - **Uploads** — a file added to a folder someone deletes at that moment is refused as not found, and leaves nothing behind in storage
 - **Folder sizes** — a folder shows the right size after a file in it is moved twice in quick succession
 - **Large files** — a file too large for the server's memory to import, export, preview or index is refused, instead of taking the server down
+- **Calendar** — looking up the calendar of a guest or of the organization answers that you have no access, instead of failing with a server error
+- **Calendar** — looking up the calendar of an account that doesn't exist answers the same as one you can't see, so it doesn't tell which accounts exist
 
 ## [0.3.3] - 2026-10-13
 

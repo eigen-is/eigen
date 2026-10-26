@@ -21,6 +21,7 @@ import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
 import type { SnapshotProgress } from '../backup/snapshot-home';
 import { captureBytes, snapshotHome } from '../backup/snapshot-home';
+import type { Calendar } from '../calendar/calendar';
 import { readCalendarTotalSize } from '../calendar/resource-store';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
 import { getAvatarsDir, getDataRoot, getUserHomePath, homeDirUnder, SERVER_DIR, SERVER_FILES } from '../config/paths';
@@ -207,9 +208,17 @@ export async function pullDrivePath(ownerUserId: string, mountId: string, pathId
 
 // --- Calendar ---
 
+// The calendar of a home that has one. A user who never signed in has no home folder yet, and a guest
+// or an org has no calendar. Each of them answers as if the caller may not see the calendar. So asking
+// never creates a home, and the answer doesn't tell which owners exist.
+async function calendarOf(ownerId: string): Promise<Calendar | null> {
+    if (!fs.existsSync(homeDirUnder(getDataRoot(), ownerId))) return null;
+    const home = await getHome(ownerId);
+    return home.hasCalendar ? home.calendar : null;
+}
+
 export async function pullCalendars(ownerUserId: string): Promise<CalendarItem[]> {
-    const home = await getHome(ownerUserId);
-    return home.calendar.getCalendars();
+    return (await calendarOf(ownerUserId))?.getCalendars() ?? [];
 }
 
 export async function pullCalendarById(ownerUserId: string, calendarId: string): Promise<CalendarItem | null> {
@@ -223,8 +232,7 @@ export async function pullCalendarPermission(
     email: string,
     teamIds: string[],
 ): Promise<CalendarShare['permission'] | null> {
-    const home = await getHome(ownerUserId);
-    return home.calendar.checkPermission(calendarId, email, teamIds);
+    return (await calendarOf(ownerUserId))?.checkPermission(calendarId, email, teamIds) ?? null;
 }
 
 export async function pullCalendarShares(
@@ -232,8 +240,7 @@ export async function pullCalendarShares(
     email: string,
     teamIds: string[],
 ): Promise<{ calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[]> {
-    const home = await getHome(ownerUserId);
-    return home.calendar.getSharedWith(email, teamIds);
+    return (await calendarOf(ownerUserId))?.getSharedWith(email, teamIds) ?? [];
 }
 
 export async function pullEventsInRange(
@@ -256,8 +263,7 @@ export async function pullEventById(
 }
 
 export async function pullPendingInvitations(ownerUserId: string, attendeeEmail: string): Promise<CalendarEvent[]> {
-    const home = await getHome(ownerUserId);
-    return home.calendar.getEventsWithAttendee(attendeeEmail);
+    return (await calendarOf(ownerUserId))?.getEventsWithAttendee(attendeeEmail) ?? [];
 }
 
 // In the event writes, `user` is the person who makes the change, not the owner of the calendar.
