@@ -1,5 +1,5 @@
 // A paste through the eigen clipboard: what a docs copy writes, placed by the paste.
-import { expect, spyOn, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { Editor } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
@@ -13,7 +13,9 @@ const { FLAT_CHART_LOOK, MAX_CHART_SPEC_BYTES } = await import('@workspace/lib/c
 const { DOCUMENT_FONT, EIGEN_FONTS } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
-const { insertEigenItems, writeDocsClipboard } = await import('../../../components/docs/clipboard');
+const { insertEigenItems, runClipboardCommand, writeDocsClipboard } = await import(
+    '../../../components/docs/clipboard'
+);
 const { cleanPastedHTML } = await import('../../../components/docs/paste');
 const { sampleChartParts } = await import('../../fixtures/chart-parts');
 
@@ -106,6 +108,37 @@ test('a copy of text and an image pastes both, in document order', async () => {
         paragraph(text('Two')),
     ]);
     expect(blocks(await paste(clipboard))).toEqual([['Intro'], ['chart.png'], ['One'], ['Two']]);
+});
+
+// A menu's Copy fires the native copy, which the browser sends to the element that holds the page's selection.
+// The HTML isn't compared: happy-dom reports the selection change at once, so ProseMirror reads back a text selection.
+test("a viewer's menu Copy of a figure writes what an editor's copy writes", () => {
+    const content = [paragraph(text('Intro')), paragraph(figure('chart.png'))];
+    const viewer = source(content);
+    document.body.append(viewer.view.dom);
+    viewer.setEditable(false);
+    viewer.commands.setNodeSelection(8);
+    let written: DataTransfer | null = null;
+    document.execCommand = mock((command: string) => {
+        const anchor = document.getSelection()?.anchorNode;
+        const target = anchor instanceof Element ? anchor : (anchor?.parentElement ?? document.body);
+        const event = new ClipboardEvent(command, {
+            clipboardData: new DataTransfer(),
+            bubbles: true,
+            cancelable: true,
+        });
+        target.dispatchEvent(event);
+        written = event.clipboardData;
+        return true;
+    });
+    runClipboardCommand(viewer, 'copy');
+    const editor = source(content);
+    editor.commands.setNodeSelection(8);
+    const expected = copyOrCut(editor, 'copy');
+    if (!written) throw new Error('no copy event');
+    const { eigen, text: plain } = classifyPaste(written);
+    expect(eigen?.items.map((item) => item.type)).toEqual(['image']);
+    expect({ eigen, plain }).toEqual({ eigen: expected.eigen, plain: expected.text });
 });
 
 // A figure whose file does not resolve, as one still uploading, has no item; its paragraph stays in the text.
