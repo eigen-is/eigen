@@ -29,6 +29,7 @@ export {
     fitsInlineGrid,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
+    inlineRowCount,
     isChartSeriesId,
     isChartSpecKey,
     MAX_CHART_LABEL_LENGTH,
@@ -40,11 +41,12 @@ export {
     newChartSeriesId,
 } from './limits';
 export { chartPaintOf, FLAT_CHART_LOOK, readChartLook } from './look';
-export { chartLabel, chartSearchText, holdsUnknownChartData } from './resolve';
+export { chartLabel, chartSearchText, holdsUnknownChartData, isCellRangeShape } from './resolve';
 export { BAR_GROUP_WIDTH } from './scales';
 export {
     chartSpecTexts,
     chartSpecWrites,
+    isChartSpecPartKey,
     mapChartSpecParts,
     newChartSpecParts,
     newSheetChartSpecParts,

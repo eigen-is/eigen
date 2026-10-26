@@ -1,17 +1,15 @@
-// Pure scene → SVG string. No DOM, no measurement: roughjs's RoughGenerator yields path
-// ops as plain data (DOM-free), we serialize them ourselves instead of using RoughSVG,
-// and text trusts client-measured width/height so the server never measures. Shared verbatim by the
-// clipboard's SVG flavor and the editor's downloaded image (packages/ui's canvas image writer) — the two
-// places a scene leaves the app as one standalone file. Every per-kind body lives in the registry (kinds/); this module
-// places what a kind draws.
+// Turns a scene into one standalone SVG string, with no DOM and no measurement. Shapes are drawn as
+// plain roughjs path data and text uses the width and height the client measured. The clipboard's SVG
+// flavor and the downloaded image both use it. Each kind draws its own body; this file orders the
+// elements and places what they draw.
 
 import { escapeXml } from '../core/xml';
 import { arrowRoute, sceneBounds } from './elbow-route';
 import { isTransparentColor } from './fill';
 import { orderByFractionalIndex } from './fractional-index';
-import { round } from './geometry';
 import { ELEMENT_KINDS } from './kinds';
 import { elementGroupOpen, SVG_NS } from './kinds/render-utils';
+import { round } from './points';
 import { RICH_TEXT_CLASS } from './scene-layers';
 import type { VectorElement, VectorScene } from './types';
 

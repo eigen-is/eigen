@@ -2,14 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { serializeFill, solidFill } from '../../../vector/fill';
 import type { Point } from '../../../vector/geometry';
-import {
-    bindingAnchor,
-    bindingGap,
-    boundEndpoint,
-    elementBounds,
-    rotatePoint,
-    serializePoints,
-} from '../../../vector/geometry';
+import { bindingAnchor, bindingGap, boundEndpoint, elementBounds, rotatePoint } from '../../../vector/geometry';
 import { capabilitiesOf, ELEMENT_FIELDS, ELEMENT_KINDS, isBindable, storedFields } from '../../../vector/kinds';
 import { MAX_PATH_BYTES, MAX_PATH_COMMANDS, parseNormalizedPath } from '../../../vector/kinds/read-fields';
 import type { OutlineShape } from '../../../vector/outline';
@@ -20,6 +13,7 @@ import {
     scaleNormalizedPath,
     serializePath,
 } from '../../../vector/outline';
+import { serializePoints } from '../../../vector/points';
 import { readVectorFromDoc } from '../../../vector/read-vector';
 import { sceneToSvg } from '../../../vector/scene-to-svg';
 import type { VectorPathElement } from '../../../vector/types';

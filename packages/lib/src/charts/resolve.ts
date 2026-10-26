@@ -73,6 +73,13 @@ export function chartLabel(value: string): string {
     return Array.from(stripNonXmlChars(value)).slice(0, MAX_CHART_LABEL_LENGTH).join('');
 }
 
+// Whether a value has the shape of a CellRangeRef, so a writer can find a ref under any key. It checks the sheet id and
+// the two integer pairs only: extra keys are accepted and the bounds are not checked.
+export function isCellRangeShape(value: unknown): value is CellRangeRef {
+    const bounds = (v: unknown) => Array.isArray(v) && v.length === 2 && v.every(Number.isInteger);
+    return isRecord(value) && typeof value['sheetId'] === 'string' && bounds(value['row']) && bounds(value['column']);
+}
+
 // A part that isn't a record reads as empty, so each of its keys reads its default.
 function validChartSpec(v: unknown): ChartSpec {
     const spec = record(v);
@@ -96,7 +103,7 @@ function validChartSpec(v: unknown): ChartSpec {
             blanks: oneOf(prop(chart, 'blanks'), CHART_BLANKS, defaults.chart.blanks),
             fontFamily: fontFamily(prop(chart, 'fontFamily'), defaults.chart.fontFamily),
         },
-        title: { text: text(str(prop(optionalRecord(prop(spec, 'title')), 'text'), defaults.title.text)) },
+        title: { text: labelText(str(prop(optionalRecord(prop(spec, 'title')), 'text'), defaults.title.text)) },
         legend: {
             position: oneOf(
                 prop(optionalRecord(prop(spec, 'legend')), 'position'),
@@ -122,12 +129,12 @@ function chartAxis(v: unknown, defaults: ChartAxis): ChartAxis {
     const format = prop(optionalRecord(prop(axis, 'labels')), 'format');
     return {
         kind: oneOf(prop(axis, 'kind'), CHART_AXIS_KINDS, defaults.kind),
-        title: { text: text(str(prop(optionalRecord(prop(axis, 'title')), 'text'), defaults.title.text)) },
+        title: { text: labelText(str(prop(optionalRecord(prop(axis, 'title')), 'text'), defaults.title.text)) },
         visible: bool(prop(axis, 'visible'), defaults.visible),
         gridlines: {
             visible: bool(prop(optionalRecord(prop(axis, 'gridlines')), 'visible'), defaults.gridlines.visible),
         },
-        labels: { format: typeof format === 'string' ? text(format) : defaults.labels.format },
+        labels: { format: typeof format === 'string' ? labelText(format) : defaults.labels.format },
         scale: {
             min: ordered ? min : null,
             max: ordered ? max : null,
@@ -171,7 +178,7 @@ function chartData(v: unknown): InlineChartData | RangeChartData {
     const series = list(prop(data, 'series'));
     if (series.length > MAX_CHART_SERIES) invalid();
     if (source === 'inline') {
-        const categories = list(prop(data, 'categories')).map(text);
+        const categories = list(prop(data, 'categories')).map(labelText);
         const inline = uniqueIds(series.map(inlineSeries));
         const points = inline.reduce((sum, { values }) => sum + values.length, 0);
         if (points > MAX_CHART_POINTS || categories.length > MAX_CHART_POINTS) invalid();
@@ -192,7 +199,7 @@ function inlineSeries(v: unknown): InlineChartSeries {
     const series = record(v);
     return {
         id: seriesId(prop(series, 'id')),
-        name: text(str(prop(series, 'name'), '')),
+        name: labelText(str(prop(series, 'name'), '')),
         values: list(prop(series, 'values')).map(finiteOrNull),
     };
 }
@@ -203,7 +210,7 @@ function rangeSeries(v: unknown): RangeChartSeries {
     const values = prop(series, 'values');
     return {
         id: seriesId(prop(series, 'id')),
-        name: typeof name === 'string' ? text(name) : cellRange(name),
+        name: typeof name === 'string' ? labelText(name) : cellRange(name),
         values: values === null ? null : cellRange(values),
     };
 }
@@ -238,7 +245,7 @@ function cellIndex(v: unknown, count: number): number {
     return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < count ? v : invalid();
 }
 
-function text(v: unknown): string {
+function labelText(v: unknown): string {
     return typeof v === 'string' ? chartLabel(v) : invalid();
 }
 

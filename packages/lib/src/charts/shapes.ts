@@ -4,7 +4,7 @@
 
 import { serializeFill, TRANSPARENT_COLOR, TRANSPARENT_FILL } from '../vector/fill';
 import type { Box, Point } from '../vector/geometry';
-import { pointsBounds, serializePoints } from '../vector/geometry';
+import { pointsBounds, serializePoints } from '../vector/points';
 import type {
     VectorElementBase,
     VectorEllipseElement,

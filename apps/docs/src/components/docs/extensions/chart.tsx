@@ -1,3 +1,7 @@
+// The Docs editor's chart: the shared chart node with a view that draws its spec as inline SVG at its size, redrawn at
+// every move of a resize, inside the figure frame a picture uses. A double-click on a chart with inline data opens
+// Edit data, which the editor passes in as an option.
+
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
@@ -31,7 +35,9 @@ function ChartView(props: NodeViewProps) {
     const { node, selected, editor, extension, getPos } = props;
     const { onEditData }: ChartOptions = extension.options;
     const containerRef = useRef<HTMLSpanElement>(null);
-    const { width, height, layout } = readChartAttrs(node.attrs);
+    // node.attrs is a new object only when an attribute changes, a part's and the look's among them.
+    const attrs = useMemo(() => readChartAttrs(node.attrs), [node.attrs]);
+    const { width, height, layout } = attrs;
     const isEditable = editor.isEditable;
 
     const getMaxWidth = useCallback(() => figureMaxWidth(containerRef.current, layout ?? null), [layout]);
@@ -52,12 +58,8 @@ function ChartView(props: NodeViewProps) {
         width: width ?? CHART_DEFAULT_SIZE.width,
         height: height ?? CHART_DEFAULT_SIZE.height,
     };
-    // node.attrs is a new object only when an attribute changes, a part's and the look's among them.
     const parsed = useMemo(() => readChartSpec(node.attrs).spec, [node.attrs]);
-    const svg = useMemo(
-        () => chartSvg(parsed, { ...readChartAttrs(node.attrs), ...size }),
-        [parsed, node.attrs, size.width, size.height],
-    );
+    const svg = useMemo(() => chartSvg(parsed, { ...attrs, ...size }), [parsed, attrs, size.width, size.height]);
     const box: Box | null = selected && isEditable ? { x: 0, y: 0, ...size, angle: 0 } : null;
 
     return (

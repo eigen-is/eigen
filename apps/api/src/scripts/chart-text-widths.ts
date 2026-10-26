@@ -1,5 +1,5 @@
-// Writes packages/lib/src/vector/text-width-data.ts, the advance widths measureLabel sums, from the static TTFs a docx
-// embeds (their Bold slots are the weight the editor draws bold in).
+// Writes the advance-width table measureLabel sums for every bundled font, from the static TTFs a docx embeds. Their
+// Bold slots are the weight the editor draws bold in. Run it by hand after a font changes, and commit its output.
 //
 // Usage: bun apps/api/src/scripts/chart-text-widths.ts
 

@@ -20,8 +20,9 @@ import {
 import { isRecord } from '../../../core/guards';
 import type { ChartLook, ChartSpec, ChartSpecPartKey, ChartType } from '../../../types/chart';
 import { CHART_LOOK_FIELDS, CHART_SPEC_PART_KEYS } from '../../../types/chart';
-import { renderChartSpecSvg } from '../../../vector/kinds/chart-render';
-import { randomSeed } from '../../../vector/write-vector';
+// The vector barrel, not the painter's module: a kind's module as the first way in evaluates the registry before
+// that kind, which the barrel avoids by loading geometry first.
+import { randomSeed, renderChartSpecSvg } from '../../../vector';
 import type { FigureFrameAttrs } from './figure-frame';
 import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
 
@@ -73,13 +74,13 @@ export function readChartAttrs(attrs: Record<string, unknown>): ChartAttrs & Cha
 
 // The chart drawn in its look at its stored size, or the placeholder for a spec that doesn't parse. Its id is new on
 // every draw, so no two charts on a page, or in a copy beside it, share a gradient's id.
-export function chartSvg(spec: ChartSpec | null, { width, height, ...look }: ChartAttrs): string {
+export function chartSvg(spec: ChartSpec | null, { width, height, ...rest }: ChartAttrs): string {
     return renderChartSpecSvg({
         id: `chart-${nanoid(10)}`,
         spec,
         width: width ?? CHART_DEFAULT_SIZE.width,
         height: height ?? CHART_DEFAULT_SIZE.height,
-        look: readChartLook(look),
+        look: readChartLook(rest),
     });
 }
 

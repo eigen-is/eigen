@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { solidFill } from '../../../vector/fill';
-import { serializePoints } from '../../../vector/geometry';
 import { svgId } from '../../../vector/kinds/render-utils';
 import { diamondOutline, ellipseOutline, outlinePath, rectOutline, scaleNormalizedPath } from '../../../vector/outline';
+import { serializePoints } from '../../../vector/points';
 import { elementToSvg } from '../../../vector/scene-to-svg';
 import type { FillStyle, VectorElement } from '../../../vector/types';
 import { FILL_STYLES } from '../../../vector/types';

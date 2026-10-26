@@ -22,6 +22,7 @@ import { chartColor, chartSeriesStyle } from './defaults';
 import { fit, label } from './labels';
 import type { LegendItem } from './legend';
 import { placeLegend } from './legend';
+import { inlineRowCount } from './limits';
 import { layoutPie, sliceColor } from './pie';
 import { rectangle } from './shapes';
 
@@ -49,7 +50,7 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     const background = backgroundShapes(ctx);
     const message = (text: string): ChartLayout => ({ shapes: background, labels: messageLabel(ctx, text) });
 
-    const count = data.series.reduce((most, series) => Math.max(most, series.values.length), data.categories.length);
+    const count = inlineRowCount(data);
     if (data.series.length === 0 || count === 0) return message(CHART_MESSAGES.noData);
     const values = data.series.map((series) =>
         Array.from({ length: count }, (_, i) => {

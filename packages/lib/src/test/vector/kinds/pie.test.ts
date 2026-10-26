@@ -2,16 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { elbowBindPoint } from '../../../vector/elbow-heading';
 import { solidFill } from '../../../vector/fill';
 import type { Point } from '../../../vector/geometry';
-import {
-    bindingAnchor,
-    bindingGap,
-    boundEndpoint,
-    rotatePoint,
-    serializePoints,
-    shapeAnchorPoints,
-} from '../../../vector/geometry';
+import { bindingAnchor, bindingGap, boundEndpoint, rotatePoint, shapeAnchorPoints } from '../../../vector/geometry';
 import { ELEMENT_KINDS } from '../../../vector/kinds';
 import { distanceToSegment, ellipseOutline, outlineContains } from '../../../vector/outline';
+import { serializePoints } from '../../../vector/points';
 import { readElementFromFields } from '../../../vector/read-vector';
 import type { VectorPieElement } from '../../../vector/types';
 import { serializeBinding } from '../../../vector/types';

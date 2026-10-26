@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { serializePoints } from '../../../vector/geometry';
 import { ELEMENT_KINDS } from '../../../vector/kinds';
+import { serializePoints } from '../../../vector/points';
 import type { VectorArrowElement } from '../../../vector/types';
 import { arrow } from '../element-factories';
 

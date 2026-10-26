@@ -4,7 +4,7 @@
 // The measuring is DOM work (packages/ui's canvas image writer reads Range.getClientRects); this half is pure.
 
 import { escapeXml } from '../core/xml';
-import { round } from './geometry';
+import { round } from './points';
 
 export type MeasuredTextStyle = {
     // The computed CSS family list, written as it is.

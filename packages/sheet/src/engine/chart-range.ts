@@ -2,7 +2,6 @@
 // The sheet's chart writers, such as Insert → Chart and the panel's Setup rows, set a chart up through it.
 
 import { defaultChartSpec, MAX_CHART_POINTS, MAX_CHART_SERIES, newChartSeriesId } from '@workspace/lib/charts';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
     ChartSpec,
@@ -10,8 +9,8 @@ import type {
     RangeChartData,
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
-import { parseA1Range, rangeToA1, sheetRefName } from './a1-notation';
-import { cellLabel, resolveRangeChartData } from './chart-data';
+import { a1RangeRef, parseA1Range, rangeToA1, sheetRefName } from './a1-notation';
+import { cellLabel, resolveRangeChartData, seriesName } from './chart-data';
 import type { Cell, CellResolver } from './types';
 
 // Google's Setup of a range chart: one block of cells, its series down the columns or along the rows, and
@@ -168,13 +167,8 @@ export function parseChartRangeText(text: string, sheets: SheetName[], ownSheetI
     const range = parseA1Range(text.trim());
     if (!range) return null;
     const sheetId = range.sheet === undefined ? ownSheetId : sheets.find((sheet) => sheet.name === range.sheet)?.id;
-    const rows: [number, number] = [Math.min(range.start.row, range.end.row), Math.max(range.start.row, range.end.row)];
-    const columns: [number, number] = [
-        Math.min(range.start.col, range.end.col),
-        Math.max(range.start.col, range.end.col),
-    ];
-    if (!sheetId || rows[1] >= REFERENCE_ROW_COUNT || columns[1] >= REFERENCE_COLUMN_COUNT) return null;
-    return { sheetId, row: rows, column: columns };
+    const ref = a1RangeRef(range);
+    return sheetId && ref ? { sheetId, ...ref } : null;
 }
 
 // Insert → Chart from a selection: a column chart titled after its series the way Google titles one
@@ -183,11 +177,7 @@ export function suggestChartSpec(ref: CellRangeRef, resolver: CellResolver): Cha
     const setup = setUpChartRange(ref, resolver);
     if (typeof setup === 'string') return setup;
     const { range, data } = setup;
-    const names = data.series
-        .map(({ name }) =>
-            typeof name === 'string' ? name : cellLabel(resolver.getCell(name.sheetId, name.row[0], name.column[0])),
-        )
-        .filter((name) => name !== '');
+    const names = data.series.map(({ name }) => seriesName(name, resolver)).filter((name) => name !== '');
     const title = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '');
     const corner = range.headerRow && range.headerColumn && !range.seriesInRows;
     const axisTitle = corner ? cellLabel(resolver.getCell(ref.sheetId, ref.row[0], ref.column[0])) : '';

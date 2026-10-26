@@ -35,7 +35,7 @@ export function officeChartContentTypes({ workbooks }: OfficeCharts): Record<str
 
 // The part that shows the chart: `target` is the charts folder as that part's relationships name it, and `layer` the
 // turn and the fade a host draws the chart with, which no chart part carries.
-type ChartHost = {
+type ChartShowingPart = {
     target: string;
     relate: PartRelationships['relate'];
     lost: Lost;
@@ -49,7 +49,7 @@ export function addOfficeChart(
     charts: OfficeCharts,
     spec: ChartSpec | null,
     options: Omit<ChartWriteOptions, 'workbook'>,
-    { target, relate, lost, layer }: ChartHost,
+    { target, relate, lost, layer }: ChartShowingPart,
 ): string | undefined {
     const embedded = charts.folder !== 'xl';
     const sheet = spec && embedded ? embeddedChartSheet(spec) : undefined;

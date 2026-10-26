@@ -1,3 +1,7 @@
+// The Docs editor's equation: the shared equation node with a view that draws its MathML inline, a dotted box in each
+// empty argument as Word draws one, and its comment mark. Enter on a selected equation opens the Equation panel, and
+// a right-click asks the editor for its menu.
+
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state';
 import type { Editor, NodeViewProps } from '@tiptap/react';

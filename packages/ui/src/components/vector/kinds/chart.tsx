@@ -11,7 +11,8 @@ import { ChartEditor, InlineChartDataDialog } from '@workspace/ui/components/cha
 import { Shapes } from 'lucide-react';
 import type { KindEditDialogProps, KindPanelSectionProps } from './index';
 
-// Google's defaults: a drawing's chart, and a chart filling most of a 16:9 slide (1920 × 1080).
+// A canvas chart's own sizes, which differ from CHART_DEFAULT_SIZE, the size of a doc's or a sheet's new chart: Google
+// Drawings inserts a chart at 640 × 400, and on a 16:9 slide (1920 × 1080) a new chart fills most of it.
 const NEW_CHART_SIZE = { infinite: { width: 640, height: 400 }, frame: { width: 1200, height: 675 } };
 
 // In the host's font, which the spec carries from then on.
@@ -32,12 +33,12 @@ export function newChartElement(
     };
 }
 
-const chartOf = (el: VectorElement | undefined) => readChartSpec(el?.type === 'chart' ? el : {});
+const readChartElementSpec = (el: VectorElement | undefined) => readChartSpec(el?.type === 'chart' ? el : {});
 
 // One chart only: a spec doesn't merge across charts the way a color does.
 export function ChartPanelSection({ elements, onChange, onReplace }: KindPanelSectionProps) {
     const [el] = elements;
-    const { stored, spec } = chartOf(elements.length === 1 ? el : undefined);
+    const { stored, spec } = readChartElementSpec(elements.length === 1 ? el : undefined);
     if (!spec) return null;
     return (
         <ChartEditor spec={spec} stored={stored} onChange={(change) => onChange(chartSpecWrites(stored, change))}>
@@ -61,7 +62,7 @@ export function ChartPanelSection({ elements, onChange, onReplace }: KindPanelSe
 
 // Save applies onto the element as it is then, so a peer's edit while the dialog was open stays.
 export function ChartEditDialog({ element, onChange, onClose }: KindEditDialogProps) {
-    const { stored, spec } = chartOf(element);
+    const { stored, spec } = readChartElementSpec(element);
     return (
         <InlineChartDataDialog
             spec={spec}

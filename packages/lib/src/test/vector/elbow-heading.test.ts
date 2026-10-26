@@ -10,8 +10,8 @@ import {
     followBindings,
     linearLocalToScene,
     normalizeFixedPoint,
-    parsePoints,
 } from '../../vector/geometry';
+import { parsePoints } from '../../vector/points';
 import type {
     Corners,
     VectorArrowElement,

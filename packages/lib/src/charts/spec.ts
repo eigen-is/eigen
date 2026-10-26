@@ -46,6 +46,11 @@ export const SHEET_CHART_KEYED_PART_KEYS: ReadonlySet<string> = new Set(
     PARTS.filter(isKeyedPart).map((part) => CHART_SPEC_PART_KEY[part]),
 );
 
+// Whether a key is the field of one of this build's parts, rather than of a part a newer build added.
+export function isChartSpecPartKey(key: string): boolean {
+    return PART_OF_KEY.has(key);
+}
+
 // Reads a host's record of parts, which is what peers store, so the size limit is measured on it. `stored` is what a
 // writer applies a change onto, and it is empty past the size limit. A part past the depth limit, or one that is no
 // JSON object, reads as absent, or as empty for a keyed part, so the other parts still read.

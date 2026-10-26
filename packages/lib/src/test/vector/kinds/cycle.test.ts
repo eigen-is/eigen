@@ -2,6 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { ELEMENT_FIELDS } from '../../../vector/kinds';
 
+// Only an entry through the vector barrel, which loads geometry before any kind, is safe: a kind's own
+// module imported first throws a TDZ ReferenceError, so these tests pin the entries that must work.
+//
 // The runtime back-edges inside vector/: geometry ↔ kinds (kind.ts takes geometry's box primitives while
 // geometry dispatches through the registry), geometry ↔ elbow-pins, geometry ↔ elbow-route,
 // elbow-heading ↔ kinds (arrow.ts reads the heading helpers), and elbow-route → elbow-heading →
@@ -34,5 +37,16 @@ describe('the vector engine survives either entry order', () => {
 
     test('kinds as the process entry builds the same table', async () => {
         expect(await elementFieldsFromEntry('kinds/index.ts')).toEqual([...ELEMENT_FIELDS]);
+    });
+
+    // The charts layout reaches vector/ only through modules that import no kind, so the chart kind
+    // finds the charts barrel evaluated whichever loads first.
+    test('the charts barrel as the process entry builds the same table', async () => {
+        expect(await elementFieldsFromEntry('../charts/index.ts')).toEqual([...ELEMENT_FIELDS]);
+    });
+
+    // A doc's chart reaches the painter from outside vector/, so it must enter through the barrel.
+    test('the eigendoc barrel as the process entry builds the same table', async () => {
+        expect(await elementFieldsFromEntry('../docs/eigendoc/index.ts')).toEqual([...ELEMENT_FIELDS]);
     });
 });

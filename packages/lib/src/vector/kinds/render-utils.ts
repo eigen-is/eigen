@@ -9,7 +9,7 @@ import { escapeXml } from '../../core/xml';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
 import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
 import type { Box, Point } from '../geometry';
-import { arrowCurveBeziers, DEG_TO_RAD, isClosedPath, round } from '../geometry';
+import { arrowCurveBeziers, isClosedPath } from '../geometry';
 import {
     cornerRadius,
     diamondOutline,
@@ -19,6 +19,7 @@ import {
     scaleNormalizedPath,
     sharpDiamondOffset,
 } from '../outline';
+import { DEG_TO_RAD, round } from '../points';
 import type {
     FillStyle,
     TextLine,

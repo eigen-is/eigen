@@ -1,3 +1,6 @@
+// The freedraw kind: a pen stroke stored as points and their pressures, drawn as perfect-freehand's outline filled
+// with the stroke color. A closed stroke can also take a fill.
+
 import { getStroke } from 'perfect-freehand';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { escapeXml } from '../../core/xml';
@@ -9,12 +12,11 @@ import {
     isClosedLinear,
     isClosedPath,
     linearLocalToScene,
-    parsePoints,
     parsePressures,
-    serializePoints,
     serializePressures,
 } from '../geometry';
 import { polylineOutline } from '../outline';
+import { parsePoints, serializePoints } from '../points';
 import type { VectorLinearElement } from '../types';
 import { DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS } from '../types';
 import { defineKind } from './kind';

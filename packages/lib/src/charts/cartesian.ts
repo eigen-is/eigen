@@ -11,6 +11,7 @@ import type {
     ChartSpec,
     InlineChartSeries,
 } from '../types/chart';
+import { isStackingChartType } from '../types/chart';
 import { serializeFill } from '../vector/fill';
 import type { Point } from '../vector/geometry';
 import type { VectorLinearElement } from '../vector/types';
@@ -43,7 +44,7 @@ export function layoutCartesian(
     spec: ChartSpec,
     categories: string[],
     series: PaintedSeries[],
-    stored: (number | null)[][],
+    raw: (number | null)[][],
     frame: Frame,
     sourceFormat: ChartLayoutInput['formatTick'],
 ): ChartShape[] | null {
@@ -52,9 +53,9 @@ export function layoutCartesian(
     const { x, y } = spec.axes;
     const horizontal = type === 'bar';
     const { stacking } = spec.plots[type];
-    const stacked = stacking !== 'none' && type !== 'line';
+    const stacked = stacking !== 'none' && isStackingChartType(type);
     const percent = stacked && stacking === 'percent';
-    const values = percent ? shares(stored) : stored;
+    const values = percent ? shares(raw) : raw;
     const formatTick = percent ? formatPercentTick : sourceFormat;
     const [low, high] = valueExtent(values, stacked, blanks === 'zero', type !== 'line');
     // Float sums can run a hair past ±100%, which nice ends would round up a whole step.
@@ -233,8 +234,8 @@ function barMarks(
     const stroke = isOutlined(ctx) ? Math.min(ctx.paint.strokeWidth, slot / 2) : 0;
     for (const [si, s] of series.entries()) {
         const fill = serializeFill({ type: 'solid', color: s.color, style: ctx.paint.fillStyle });
-        for (const [c, stored] of values[si].entries()) {
-            const value = stored ?? (spec.chart.blanks === 'zero' ? 0 : null);
+        for (const [c, raw] of values[si].entries()) {
+            const value = raw ?? (spec.chart.blanks === 'zero' ? 0 : null);
             if (value === null) continue;
             let from = 0;
             if (stacked) {
@@ -277,8 +278,8 @@ function lineMarks(
         const markerFill = serializeFill({ type: 'solid', color: s.color, style: 'solid' });
         const runs: { first: number; points: Point[] }[] = [];
         let open = false;
-        for (const [c, stored] of values[si].entries()) {
-            const value = stored ?? (spec.chart.blanks === 'zero' ? 0 : null);
+        for (const [c, raw] of values[si].entries()) {
+            const value = raw ?? (spec.chart.blanks === 'zero' ? 0 : null);
             if (value === null) {
                 if (spec.chart.blanks === 'gap') open = false;
                 continue;

@@ -13,7 +13,7 @@ import type {
     LegendPosition,
     StoredChartSpec,
 } from '@workspace/lib/types/chart';
-import { LEGEND_POSITIONS } from '@workspace/lib/types/chart';
+import { isStackingChartType, LEGEND_POSITIONS } from '@workspace/lib/types/chart';
 import { Button } from '@workspace/ui/components/button';
 import {
     ColorRow,
@@ -30,7 +30,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { ChartDataDialog } from './chart-data-dialog';
 import { CHART_TYPE_OPTIONS } from './chart-types';
-import { fromPercent } from './percent';
+import { fromPercent, toPercent } from './percent';
 
 const LEGEND_LABELS: Record<LegendPosition, string> = {
     top: 'Top',
@@ -93,11 +93,9 @@ export function ChartEditor({
             : (categories ?? Array.from({ length: Math.max(-1, ...colored) + 1 }, () => ''))
     ).map((category, i) => category || `Slice ${i + 1}`);
 
-    // A 100% stack's min and max are fractions of the whole, Excel's c:min and c:max, shown and typed as
-    // percents; toPrecision keeps 0.07 from showing as 7.000000000000001.
-    const percent = stacking === 'percent' && (type === 'column' || type === 'bar');
-    const shownBound = (bound: number | null) =>
-        bound === null ? undefined : percent ? Number((bound * 100).toPrecision(12)) : bound;
+    // A 100% stack's min and max are fractions of the whole, Excel's c:min and c:max, shown and typed as percents.
+    const percent = stacking === 'percent' && isStackingChartType(type);
+    const shownBound = (bound: number | null) => (bound === null ? undefined : percent ? toPercent(bound) : bound);
     const storedBound = (typed: number) => (percent ? fromPercent(typed) : typed);
 
     const setBounds = (bounds: Partial<ChartAxis['scale']>) => {
@@ -181,11 +179,10 @@ export function ChartEditor({
     // Excel's bar chart reads reversed by default, so its direction would turn a column chart right to left. Column and
     // bar share their stacking, so a switch between them keeps it.
     const setType = (next: ChartSpec['chart']['type']) => {
-        const bars = (t: string) => t === 'column' || t === 'bar';
         onChange([
             set(['chart', 'type'], next),
             ...((next === 'bar') === valueHorizontal ? [] : [set(['axes', 'x', 'scale', 'reversed'], false)]),
-            ...(bars(type) && bars(next) && spec.plots[next].stacking !== stacking
+            ...(isStackingChartType(type) && isStackingChartType(next) && spec.plots[next].stacking !== stacking
                 ? [set(['plots', next, 'stacking'], stacking)]
                 : []),
         ]);
@@ -197,7 +194,7 @@ export function ChartEditor({
                 <PropertyRow label="Type">
                     <MergedSelect value={type} options={CHART_TYPE_OPTIONS} onChange={setType} />
                 </PropertyRow>
-                {(type === 'column' || type === 'bar') && (
+                {isStackingChartType(type) && (
                     <PropertyRow label="Stacking">
                         <MergedSelect
                             value={stacking}

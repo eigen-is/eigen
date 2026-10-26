@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { formatTickValue, layoutChart, sampleChartSpec } from '../../charts';
 import type { ChartData, ChartLabel, ChartLayout, ChartSeriesStyle, ChartSpec } from '../../types/chart';
 import { CHART_TYPES } from '../../types/chart';
-import { parsePoints } from '../../vector/geometry';
+import { parsePoints } from '../../vector/points';
 import type { VectorLinearElement, VectorRectangleElement } from '../../vector/types';
 import type { AxisPatch, SpecPatch } from './layout-fixtures';
 import {

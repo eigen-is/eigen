@@ -1,4 +1,15 @@
-import { columnIndexToLabel, columnLabelToIndex } from '@workspace/lib/sheets';
+// A1 notation, the text form of a cell or a range such as Sheet1!$A$1:B3: parsing it, writing it, and the rules a
+// sheet name follows in it. The formula parser's helpers own the low-level pieces, and this module re-exports them.
+// The API imports it too, for example to read an Office chart's refs, so it stays free of React and the sheet's state.
+
+import {
+    columnIndexToLabel,
+    columnLabelToIndex,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+} from '@workspace/lib/sheets';
+import type { CellRangeRef } from '@workspace/lib/types/chart';
+import { rowIndexToLabel, rowLabelToIndex, SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
 
 export {
     extractLabel,
@@ -9,8 +20,6 @@ export {
     toLabel,
     unquoteSheetName,
 } from './parser/helper/cell';
-
-import { rowIndexToLabel, rowLabelToIndex, SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
 
 // Excel's limit on a sheet name's length and the characters it refuses in one; it refuses a quote at either end too.
 export const MAX_SHEET_NAME_LENGTH = 31;
@@ -50,6 +59,13 @@ export function parseA1Range(range: string): A1Range | null {
     if (endColIndex < 0 || endRowIndex < 0) return null;
 
     return { sheet, start, end: { col: endColIndex, row: endRowIndex } };
+}
+
+// A range's rows and columns as a CellRangeRef holds them, each pair in order, or null for one past Excel's grid.
+export function a1RangeRef({ start, end }: A1Range): Pick<CellRangeRef, 'row' | 'column'> | null {
+    const row: [number, number] = [Math.min(start.row, end.row), Math.max(start.row, end.row)];
+    const column: [number, number] = [Math.min(start.col, end.col), Math.max(start.col, end.col)];
+    return row[1] < REFERENCE_ROW_COUNT && column[1] < REFERENCE_COLUMN_COUNT ? { row, column } : null;
 }
 
 export function toA1(row: number, col: number): string {

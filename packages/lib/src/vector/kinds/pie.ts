@@ -1,7 +1,11 @@
+// The pie kind: a slice of an ellipse, from a start angle through a sweep, in degrees. It is a shape of its own, and
+// a pie chart's slices draw through it, so a chart's slice and a drawn one are the same SVG.
+
 import type { Point } from '../geometry';
-import { boxCenter, DEG_TO_RAD, rotatePoint } from '../geometry';
+import { boxCenter, rotatePoint } from '../geometry';
 import type { OutlineShape } from '../outline';
 import { EMPTY_OUTLINE, ellipseOutline, normalizeAngle, outlineDistance } from '../outline';
+import { DEG_TO_RAD } from '../points';
 import type { VectorPieElement } from '../types';
 import { defineKind } from './kind';
 import { fillField, num } from './read-fields';

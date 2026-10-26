@@ -37,20 +37,19 @@ import {
     normalizeFixedPoint,
     normalizeLinear,
     outlinePoint,
-    parsePoints,
     projectFixedPointOntoDiagonal,
     remapBinding,
     rescalePoints,
     resizeLinear,
     resizeRotatedRect,
     rotatePoint,
-    serializePoints,
     shapeAnchorPoints,
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
 import { ELEMENT_KINDS } from '../../vector/kinds';
 import { outlineDistance } from '../../vector/outline';
+import { parsePoints, serializePoints } from '../../vector/points';
 import type {
     Corners,
     VectorArrowElement,

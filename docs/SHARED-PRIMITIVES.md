@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1998 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2002 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -995,7 +995,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1039)
+## Utilities & constants (1043)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1159,8 +1159,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `holdsUnknownChartData` | `@workspace/lib/charts` | packages/lib/src/charts/resolve.ts |
 | `INLINE_GRID_MAX_CATEGORIES` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
 | `INLINE_GRID_MAX_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
+| `inlineRowCount` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
+| `isCellRangeShape` | `@workspace/lib/charts` | packages/lib/src/charts/resolve.ts |
 | `isChartSeriesId` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
 | `isChartSpecKey` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
+| `isChartSpecPartKey` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `isInlineSketchCapped` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `isSketchCapped` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `layoutChart` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
@@ -1643,6 +1646,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHART_SPEC_PARTS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_STACKINGS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_TYPES` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `isStackingChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `LEGEND_POSITIONS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `BACKUP_ARTIFACT_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
@@ -1742,7 +1746,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `DEFAULT_RICHTEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `DEG_TO_RAD` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `DEG_TO_RAD` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
 | `diamondOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `distance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1862,7 +1866,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `parseIdList` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `parsePathCommands` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
-| `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
 | `parsePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `pasteAnchorOffset` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `PATH_COORD_MAX` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
@@ -1871,7 +1875,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PLACEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `pointInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `pointInPolygon` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
-| `pointsBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `pointsBounds` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
 | `polylineOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `projectFixedPointOntoDiagonal` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `prop` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1897,7 +1901,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `richTextFitHeight` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/richtext.ts |
 | `richTextSvg` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `round` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `round` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
 | `round4` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `scaledPathCommands` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
@@ -1915,7 +1919,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `serializeFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `serializeIdList` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `serializePath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
-| `serializePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `serializePoints` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
 | `serializePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `shapeAnchorPoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `sharpDiamondOffset` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
