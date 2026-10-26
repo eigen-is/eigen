@@ -72,6 +72,15 @@ describe('a number format', () => {
         expect(malformed).toMatchObject({ numFmt: undefined, fa: '0;M00[h', isDate: false });
     });
 
+    // The lexer is numfmt's: a fill or skip takes the next character, and an unclosed bracket takes the rest. `_"` hides the quote, so the m after it is a month.
+    test('a degenerate code is cased as its lexer reads it', () => {
+        const codes = ['h_;mm', '[yyyy mm', '[s]_"x;m"'];
+        const formats = looks(
+            `<numFmts>${codes.map((code, index) => `<numFmt numFmtId="${164 + index}" formatCode="${code.replaceAll('"', '&quot;')}"/>`).join('')}</numFmts>${xfs('<xf/>', ...codes.map((_, index) => `<xf numFmtId="${164 + index}"/>`))}`,
+        );
+        expect(formats.slice(1).map((look) => look.fa)).toEqual(['h_;mm', '[yyyy mm', '[s]_"x;M"']);
+    });
+
     test('cell formats naming more than 1,000 formats are too large', () => {
         const ids = Array.from({ length: 1_001 }, (_, index) => 164 + index);
         const many = (count: number) =>
