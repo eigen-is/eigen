@@ -199,6 +199,7 @@ function wordChartOf(node: JSONContent, pkg: Package, extent: (natural: number) 
         { look: attrs, frame },
         { target: 'charts/', relate: pkg.part.relate, lost: pkg.lost },
     );
+    // addOfficeChart relates no part without a spec, so `!spec` only narrows its type.
     if (!spec || !rId) return undefined;
     const font = spec.chart.fontFamily;
     useFace(pkg, { font }, undefined);
