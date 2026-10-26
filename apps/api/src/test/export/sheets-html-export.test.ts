@@ -229,7 +229,8 @@ describe('Sheets HTML export — class-based styles', () => {
             ...makeSheet([]),
             images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10 }),
         };
-        const out = renderSheetsHtml([pictured, makeSheet([{ r: 0, c: 0, v: { v: 'two' } }])], NO_MEDIA);
+        const media = new Map([['chart.png', 'data:image/png;base64,AA==']]);
+        const out = renderSheetsHtml([pictured, makeSheet([{ r: 0, c: 0, v: { v: 'two' } }])], media);
         const brk = classesFor(out, 'page-break-after:always');
         expect(out.html.startsWith(`<div class="sheet ${brk[0]}">`)).toBe(true);
     });
@@ -1771,6 +1772,13 @@ describe('Sheets HTML export — the window over forged keys', () => {
             ['<td colspan="2">', '<td>', '<td>'],
             ['<td colspan="5">'],
         ]);
+    });
+
+    test('an empty tab between two others adds no page', () => {
+        const tab = (id: string, cells: Sheet['celldata']): Sheet => ({ id, name: id, order: 0, celldata: cells });
+        const a = tab('a', [{ r: 0, c: 0, v: { v: 'a', m: 'a' } }]);
+        const c = tab('c', [{ r: 0, c: 0, v: { v: 'c', m: 'c' } }]);
+        expect(renderSheetsHtml([a, tab('empty', []), c], NO_MEDIA)).toEqual(renderSheetsHtml([a, c], NO_MEDIA));
     });
 
     test('merges right of the window cost nothing per rendered cell', () => {

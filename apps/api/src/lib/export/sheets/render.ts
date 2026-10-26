@@ -134,7 +134,8 @@ export function renderSheetsHtml(
         const rendered = renderSheet(windowed, engine, resolver, { styles, mediaUrls });
         size.width = Math.max(size.width, rendered.size.width);
         size.height = Math.max(size.height, rendered.size.height);
-        bodies.push(rendered.html);
+        // A blank sheet draws nothing, so it takes no page.
+        if (rendered.html) bodies.push(rendered.html);
     }
     // Each sheet but the last ends its page. The .sheet div already has a class, so its page break is a second class.
     const html = bodies
