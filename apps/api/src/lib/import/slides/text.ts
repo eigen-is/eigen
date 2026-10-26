@@ -156,6 +156,13 @@ export function richTextOf(
     const counted = [...covered.values()].filter((style) => style.chars > 0);
     const [box] = counted.sort((a, b) => b.chars - a.chars);
     if (!box) return undefined;
+    // The box draws one size, colour and font, so a run in another loses its own.
+    if (
+        counted.some(
+            (style) => style.size !== box.size || style.color !== box.color || style.fontFamily !== box.fontFamily,
+        )
+    )
+        lost('text-simplified');
     // A mark is the box's only when every character has it: the editor can't take one off a run.
     const every = (mark: keyof Marks) => counted.every((style) => style[mark]);
     const marks: Marks = {
