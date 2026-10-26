@@ -120,10 +120,12 @@ export class SharedDrive {
         return this.drive.getPath(mountId, pathId);
     }
 
+    // A path the caller can't read resolves to null, the same as a name that doesn't exist. A 403 would
+    // tell a stranger which names exist.
     public async resolvePath(mountId: string, pathStr: string): Promise<DrivePath | null> {
         const path = await this.drive.resolvePath(mountId, pathStr);
-        if (path) await this.requireRead(mountId, path.id);
-        return path;
+        if (!path) return null;
+        return (await this.canRead(mountId, path.id, this.user)) ? path : null;
     }
 
     public async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {

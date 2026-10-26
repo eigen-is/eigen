@@ -155,8 +155,8 @@ describe('SharedDrive gating enumeration', () => {
         },
         getPath: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.getPath(mountId, fileId) },
         resolvePath: {
-            gate: 'denies',
-            reason: 'read-gated once the path string resolves',
+            gate: 'denies-null',
+            reason: 'an unreadable path resolves like a missing one, so no name leaks',
             call: (sd) => sd.resolvePath(mountId, 'Gating Probe/secret.txt'),
         },
         downloadFile: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.downloadFile(mountId, fileId) },
