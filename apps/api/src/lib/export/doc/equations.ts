@@ -16,7 +16,7 @@ type EquationCost = { elements: number; bytes: number };
 
 export type EquationDrawing = EquationCost & { html: string };
 
-// The sanitizer's jsdom pays 3 to 5 KB a MathML element in the Worker, beside the API; the bytes cost no more than text.
+// The sanitizer's jsdom pays 3 to 5 KB a MathML element in the transform process. The bytes cost no more than text.
 export const MATHML_LIMIT = { elements: 50_000, bytes: Number.POSITIVE_INFINITY };
 
 // One export's equations, the body's and its bands' spending one budget: the PDF's SVG drawings, else the MathML in the
