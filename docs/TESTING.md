@@ -146,6 +146,8 @@ Run them one at a time: two started together can pick the same subnet. `./docker
 | `docker/test-boot.sh` | The publish workflow's arm64 gate: its candidate images (`CANDIDATE=candidate-<version or main>-<platform>`), installed with mail off, answer `/eigen/health`. It needs a candidate on ghcr.io, so `test-all.sh` leaves it out. |
 | `docker/test-mail-hardening.sh` | The mail hardening of [MAIL.md § Submission is held to the login's own address](MAIL.md#submission-is-held-to-the-logins-own-address): sender checks, the queue alert and the SASL failure limiters, the per-IP message rate (probe 15), DKIM signing with a key the API can read, and a TLS key it can read too (probes 13 and 14): the server backup archives both. About 7 minutes; `PROBES=2,3,4` runs a subset. Its comments explain the SMTP AUTH behavior that looks like a bug and is not. |
 
+The release gate's check that `./eigen update` waits out a running backup can skip. Nothing holds a backup open, so it starts a Full backup slowed by 1 GB of noise, and a fast runner ends it before the update has pulled its images. The check then skips as harness timing when the update's backup command started within five seconds of that backup's end, by `docker events` and the backup's record, and fails when it started earlier. A Mac run proves the wait.
+
 ## CI
 
 `.github/workflows/check.yml` runs on every push to `main` or a `release-*` branch and on every pull request to `main`. Its `check` job installs with `--frozen-lockfile`, then runs `bun dedupe --check`, `bun run lint`, `bun run typecheck` (each workspace runs `bun check --no-script`) and `bun run primitives:check`, then the tests:
