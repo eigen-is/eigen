@@ -22,30 +22,30 @@ The ROADMAP row for the missing CANCEL and REPLY (a team calendar has no organiz
 
 | Piece | Where | State |
 |---|---|---|
-| Mailboxes | `docs/MAIL.md:5` | One per user. No team and no guest has one |
-| Team Home | `apps/api/src/lib/home/team-home.ts:38-40` | Builds drive and calendar only, no `Mail` |
-| Team Home's user | `getSyntheticTeamUser`, `team-home.ts:15-21`, built at `apps/api/src/lib/home/get-home.ts:111` | Synthetic, with the team name and an empty email |
-| Team row | `apps/api/auth-schema.ts:112-121` | Id, name, org, member count. No address. Additive columns are added at boot by `ensureAuthSchemaColumns` (`apps/api/src/lib/auth/auth.ts:65`) |
-| Default team | `auth.ts:314-319` | Every new user joins it. Guests never do, and an admin can remove members |
-| Accepted recipients | `docker/postfix/main.cf.template:16-20` | Every local part on the mail domain, with no recipient map. Each recipient is piped alone to `eigen-deliver` (`docker/postfix/master.cf.template:69-70`), whose `D` flag prepends `Delivered-To:` |
-| Unknown recipient | `docker/postfix/eigen-deliver:14` | The API's 404 becomes `EX_NOUSER`, a bounce |
-| Delivery fan-out | `mailboxDeliver`, `apps/api/src/lib/mail/mail.ts:18-31` | A user gets the bytes. A role address (`postmaster`, `abuse`, `noreply`) goes to every org admin, one `mailboxDeliver` per admin. A throw partway makes Postfix redeliver, which duplicates the message for the admins already done (`mail.ts:25`). Nothing dedupes by Message-ID |
-| iMIP at delivery | `Mail.mailboxDeliver`, `apps/api/src/lib/mail/mail-domain.ts:135-157` | Appends to INBOX, then runs `processInboundImip` on that Home inside a catch, so an iMIP failure never causes a redelivery. One call does both |
-| Reserved addresses | `ROLE_MAILBOX_LOCAL_PARTS` and `RESERVED_USERNAMES`, `packages/lib/src/validation/username.ts:3-5`; `isRoleAddress`, `apps/api/src/lib/config/server-config.ts:111` | `RESERVED_USERNAMES` (`admin`, `support`, `info` and more) includes the three role parts. `rejectRoleAddress` (`auth.ts:106`) refuses role addresses on user create and update (`auth.ts:155`, `:181`) |
-| Submission | `docker/postfix/sender_login.regexp:5`, enforced at `master.cf.template:24` and `:38` | An identity map: the login must equal `MAIL FROM`. `MAIL.md:83`: "There are no aliases, so login and sender are one string" |
-| Web send | `docs/MAIL.md:69` | The save before a send pins From to the account |
-| API outbound | `sendsAsThemselves`, `apps/api/src/lib/core/mailer.ts:74-76`; `buildMailOptions`, `mailer.ts:123-134` | Any address on the mail domain goes out as itself when hosted mail is on. Otherwise mail goes out "via" the system sender |
-| DKIM | `docker/postfix/entrypoint.sh:97` and `:103` | One OpenDKIM key signs for the whole mail domain (`Domain ${MAIL_DOMAIN}`), and stamps `Authentication-Results` with the mail domain as authserv-id |
-| Outbound organizer | `apps/api/src/lib/calendar/invite-propagation.ts:95`, `:118`, `:145`, `:166` | The acting member, for invite, relay copy, removal and update |
-| Who is "self" when inviting | `selves`, `invite-propagation.ts:86` | The acting user and `organizerHome.user.email`, empty on a team Home. An attendee in it gets no invitation |
-| Outbound CANCEL | `propagateCancellation`, `invite-propagation.ts:229-233` | Takes the Home's user. A team's is empty, so the mail to an outside guest is skipped and logged |
-| From of an iMIP mail | `apps/api/src/lib/calendar/imip.ts:83`, `:105` | The organizer's address |
-| Inbound verdict | `verifyImipSender`, `apps/api/src/lib/mail/imip-auth.ts:49-67` | An aligned `dkim=pass` under our own authserv-id |
-| Inbound REPLY | `processInboundImip`, `imip.ts:257-261` | Looks the UID up in the receiving Home's own calendar, so a REPLY that lands in a member's Home misses a team event. Safe to run twice: a REPLY sets a PARTSTAT |
-| Self-check | `imip.ts:221` | A REQUEST or CANCEL from `home.user.email` is dropped. REPLY is exempt |
-| Answering an invitation | `rsvp`, `apps/api/src/lib/calendar/invitations.ts:743-773`; decline on delete, `apps/api/src/lib/calendar/events.ts:358-366` | Only an attendee whose address is the acting user's may answer (403 "Not an attendee"), and `composeRsvpReply` sends the REPLY from that user's address |
-| "Is this someone else's invitation" | `isInvitationFromOthers`, `packages/lib/src/core/calendar/calendar-utils.ts:184-189` | With an owner address, compares `ORGANIZER` to it. Without one, as on a team Home, reads Eigen's organizer stamp |
-| Cross-home writes | `scripts/check-home-imports.ts:12` | `lib/mail/mail.ts` is on the `getHome` allowlist, which is how the role fan-out reaches other Homes |
+| Mailboxes | `docs/MAIL.md`, the opening | One per user. No team and no guest has one |
+| Team Home | `TeamHome` in `apps/api/src/lib/home/team-home.ts` | Builds drive and calendar only, no `Mail` |
+| Team Home's user | `getSyntheticTeamUser` in `team-home.ts`, called from `getHome` in `apps/api/src/lib/home/get-home.ts` | Synthetic, with the team name and an empty email |
+| Team row | the `team` table in `apps/api/auth-schema.ts` | Id, name, org, member count. No address. Additive columns are added at boot by `ensureAuthSchemaColumns` (in `apps/api/src/lib/auth/auth.ts`) |
+| Default team | `authEnsureDefaultOrgMembership` in `auth.ts` | Every new user joins it. Guests never do, and an admin can remove members |
+| Accepted recipients | `virtual_mailbox_domains` and `virtual_transport` in `docker/postfix/main.cf.template` | Every local part on the mail domain, with no recipient map. Each recipient is piped alone to `eigen-deliver` (the `eigen` service in `docker/postfix/master.cf.template`), whose `D` flag prepends `Delivered-To:` |
+| Unknown recipient | `docker/postfix/eigen-deliver` | The API's 404 becomes `EX_NOUSER`, a bounce |
+| Delivery fan-out | `mailboxDeliver`, `apps/api/src/lib/mail/mail.ts` | A user gets the bytes. A role address (`postmaster`, `abuse`, `noreply`) goes to every org admin, one `mailboxDeliver` per admin. A throw partway makes Postfix redeliver, which duplicates the message for the admins already done (the loop in `mailboxDeliver`). Nothing dedupes by Message-ID |
+| iMIP at delivery | `Mail.mailboxDeliver`, `apps/api/src/lib/mail/mail-domain.ts` | Appends to INBOX, then runs `processInboundImip` on that Home inside a catch, so an iMIP failure never causes a redelivery. One call does both |
+| Reserved addresses | `ROLE_MAILBOX_LOCAL_PARTS` and `RESERVED_USERNAMES`, `packages/lib/src/validation/username.ts`; `isRoleAddress`, `apps/api/src/lib/config/server-config.ts` | `RESERVED_USERNAMES` (`admin`, `support`, `info` and more) includes the three role parts. `rejectRoleAddress` in `auth.ts` refuses role addresses on user create and update |
+| Submission | `docker/postfix/sender_login.regexp`, enforced by `reject_authenticated_sender_login_mismatch` on the `submission` and `smtps` services in `master.cf.template` | An identity map: the login must equal `MAIL FROM`. `MAIL.md`: "There are no aliases, so login and sender are one string" |
+| Web send | `docs/MAIL.md`, on `messageSend` | The save before a send pins From to the account |
+| API outbound | `sendsAsThemselves` and `buildMailOptions`, `apps/api/src/lib/core/mailer.ts` | Any address on the mail domain goes out as itself when hosted mail is on. Otherwise mail goes out "via" the system sender |
+| DKIM | the OpenDKIM config in `docker/postfix/entrypoint.sh` (`Domain`, `AuthservID`) | One OpenDKIM key signs for the whole mail domain (`Domain ${MAIL_DOMAIN}`), and stamps `Authentication-Results` with the mail domain as authserv-id |
+| Outbound organizer | `propagateInvitation` in `apps/api/src/lib/calendar/invite-propagation.ts` | The acting member, for invite, relay copy, removal and update |
+| Who is "self" when inviting | `selves` in `propagateInvitation` | The acting user and `organizerHome.user.email`, empty on a team Home. An attendee in it gets no invitation |
+| Outbound CANCEL | `propagateCancellation`, `invite-propagation.ts` | Takes the Home's user. A team's is empty, so the mail to an outside guest is skipped and logged |
+| From of an iMIP mail | `composeInviteEmail` and `composeCancelEmail` in `apps/api/src/lib/calendar/imip.ts` | The organizer's address |
+| Inbound verdict | `verifyImipSender`, `apps/api/src/lib/mail/imip-auth.ts` | An aligned `dkim=pass` under our own authserv-id |
+| Inbound REPLY | `processInboundImip`, `imip.ts` | Looks the UID up in the receiving Home's own calendar, so a REPLY that lands in a member's Home misses a team event. Safe to run twice: a REPLY sets a PARTSTAT |
+| Self-check | the sender check in `processInboundImip` | A REQUEST or CANCEL from `home.user.email` is dropped. REPLY is exempt |
+| Answering an invitation | `rsvp`, `apps/api/src/lib/calendar/invitations.ts`; decline on delete, `deleteEvent` in `apps/api/src/lib/calendar/events.ts` | Only an attendee whose address is the acting user's may answer (403 "Not an attendee"), and `composeRsvpReply` sends the REPLY from that user's address |
+| "Is this someone else's invitation" | `isInvitationFromOthers`, `packages/lib/src/core/calendar/calendar-utils.ts` | With an owner address, compares `ORGANIZER` to it. Without one, as on a team Home, reads Eigen's organizer stamp |
+| Cross-home writes | the `ALLOWED` set in `scripts/check-home-imports.ts` | `lib/mail/mail.ts` is on the `getHome` allowlist, which is how the role fan-out reaches other Homes |
 | Team settings in Admin | `apps/admin/src/components/admin/team-settings-section.tsx` | Calendar toggle and member access, avatar |
 
 ## Phase 1: a receive-only group address
@@ -67,7 +67,7 @@ Postfix can expand a group itself with `virtual_alias_maps`. The API can also do
 | Retry | Postfix queues and retries each member alone | One request for all members. A failure partway redelivers to all of them |
 | Inbound iMIP | The API sees one delivery per member and can't tell they were one team mail | Runs once, on the team Home |
 | `Delivered-To:` | The member's address | The team address, so a member's mail client can filter team mail |
-| Change | A map file and a reload, or a lookup service | A team branch in `mailboxDeliver` (`mail.ts:18-31`) |
+| Change | A map file and a reload, or a lookup service | A team branch in `mailboxDeliver` (`mail.ts`) |
 
 The recommendation is the delivery route. It is the role-address path with a second kind of recipient, it is the only way to route iMIP to the team Home, and it never delivers to a former member. Postfix needs no change, because it already accepts every local part and pipes it with the address as given. The cost is the retry: a failure partway duplicates the message for the members already done, as the role fan-out does today. A local append rarely fails, so phase 1 accepts it.
 
@@ -81,19 +81,19 @@ Postfix pipes each recipient alone, so a mail to `marketing@` with `alice@` on C
 
 `Mail.mailboxDeliver` appends and scans in one call. The team branch needs them apart: it appends to each member with the scan off, then runs `processInboundImip` once on the team Home, with the verdict from `verifyImipSender`. Scanning in every member's Home would file one copy per member, and each copy would answer the organizer on its own.
 
-On the team Home, phase 1 acts on REPLY and ignores REQUEST and CANCEL. A REPLY must reach the Home whose `calendar.db` holds the event, and that is the team's. A REQUEST to the team would land on the team calendar as an invitation nobody can answer: `rsvp` accepts an answer only from an attendee whose address is the acting user's, and sends it from that user's address, which the outside organizer never invited. So until phase 2 lets a member answer as the team, a REQUEST to the team address is plain mail in each member's inbox, and an outside CANCEL has nothing to cancel. The self-check at `imip.ts:221` exempts REPLY, so phase 1 doesn't need it to know the team address.
+On the team Home, phase 1 acts on REPLY and ignores REQUEST and CANCEL. A REPLY must reach the Home whose `calendar.db` holds the event, and that is the team's. A REQUEST to the team would land on the team calendar as an invitation nobody can answer: `rsvp` accepts an answer only from an attendee whose address is the acting user's, and sends it from that user's address, which the outside organizer never invited. So until phase 2 lets a member answer as the team, a REQUEST to the team address is plain mail in each member's inbox, and an outside CANCEL has nothing to cancel. The sender check in `processInboundImip` exempts REPLY, so phase 1 doesn't need it to know the team address.
 
-`processInboundImip` takes a `Home` and uses only its calendar and its address, so a `TeamHome` fits. A team calendar that is off throws 404 from the getter (`team-home.ts:45-47`), and the delivery's existing catch logs it, so the mail still lands. Postfix redelivering a message runs the REPLY again, which sets the same PARTSTAT.
+`processInboundImip` takes a `Home` and uses only its calendar and its address, so a `TeamHome` fits. A team calendar that is off throws 404 from the getter (the `calendar` getter of `TeamHome`), and the delivery's existing catch logs it, so the mail still lands. Postfix redelivering a message runs the REPLY again, which sets the same PARTSTAT.
 
 ### The team calendar organizes as the team
 
-On a team Home with an address, every outbound iMIP message names the team address as organizer and sends from it: invite, update, removal and cancel. The relay copy for an Eigen attendee names it too (`invite-propagation.ts:118`), so the attendee sees the team, not whichever member last saved. The skip at `invite-propagation.ts:229-233` stays only for teams without an address. `selves` (`invite-propagation.ts:86`) adds the team address, so a member who lists the team as a guest of its own event doesn't mail the team an invitation that fans out to every member.
+On a team Home with an address, every outbound iMIP message names the team address as organizer and sends from it: invite, update, removal and cancel. The relay copy for an Eigen attendee names it too (`propagateInvitation`), so the attendee sees the team, not whichever member last saved. The skip in `propagateCancellation` stays only for teams without an address. `selves` (in `propagateInvitation`) adds the team address, so a member who lists the team as a guest of its own event doesn't mail the team an invitation that fans out to every member.
 
 Sending needs nothing new. `sendsAsThemselves` lets any address on the mail domain go out as itself when hosted mail is on, and OpenDKIM signs for the whole domain, so the From is DKIM-aligned at the guest. A receiving Eigen verifies it like a user's mail.
 
-The synthetic user's email stays empty, and `TeamHome` carries the address as its own field. `home.user.email` means "the owner's own address" to `isInvitationFromOthers`, the REPLY lookup (`imip.ts:260`) and the web app's hook. A team calendar answers that question with Eigen's organizer stamp, because an event a member writes from a CalDAV client carries the member's address ([CALENDAR.md § An attendee may re-alarm a copy and nothing more](../CALENDAR.md#an-attendee-may-re-alarm-a-copy-and-nothing-more)). Filling `user.email` would switch the team calendar to the address rule, and every such event would lock. That is the alias problem of the deferred row, on a small scale.
+The synthetic user's email stays empty, and `TeamHome` carries the address as its own field. `home.user.email` means "the owner's own address" to `isInvitationFromOthers`, the REPLY lookup (in `processInboundImip`) and the web app's hook. A team calendar answers that question with Eigen's organizer stamp, because an event a member writes from a CalDAV client carries the member's address ([CALENDAR.md § An attendee may re-alarm a copy and nothing more](../CALENDAR.md#an-attendee-may-re-alarm-a-copy-and-nothing-more)). Filling `user.email` would switch the team calendar to the address rule, and every such event would lock. That is the alias problem of the deferred row, on a small scale.
 
-A guest invited before the team had an address holds a copy that names the member. The next update names the team, and the guest's calendar app may file it as a second event. Pre-1.0 this is accepted, and nothing on Eigen's side records who sent a past invitation: the organizer is added per message (`withOrganizer`, `imip.ts:59`), never stored on the organizer's copy.
+A guest invited before the team had an address holds a copy that names the member. The next update names the team, and the guest's calendar app may file it as a second event. Pre-1.0 this is accepted, and nothing on Eigen's side records who sent a past invitation: the organizer is added per message (`withOrganizer` in `imip.ts`), never stored on the organizer's copy.
 
 A team address needs hosted mail. Without it, nothing delivers to the address, and outbound mail goes out "via" the system sender, which is the [ROADMAP](../ROADMAP.md) row "Eigen-to-Eigen invitations sent "via" lose their iMIP effect". So the admin field shows only when hosted mail is on, and the calendar falls back to today's behavior without it.
 
@@ -115,11 +115,11 @@ A member who answers a customer as `marketing@` files the answer in their own Se
 
 ### A member answers an invitation as the team
 
-With send-as in place, the team Home acts on REQUEST and CANCEL too, so an outside organizer can invite the team. `rsvp` and the decline on delete (`events.ts:358-366`) accept an answer for the team's attendee row from any member who may edit the team calendar, and `composeRsvpReply` sends it from the team address, the address the organizer invited. The answer is the team's, one PARTSTAT for all members, as the team is one attendee. The self-check at `imip.ts:221` compares the sender with the team address too, so the team's own CANCEL coming back doesn't seize its own event. A mail to both `marketing@` and `alice@` files one invitation on the team calendar and one in Alice's, since both were invited.
+With send-as in place, the team Home acts on REQUEST and CANCEL too, so an outside organizer can invite the team. `rsvp` and the decline on delete (`deleteEvent` in `events.ts`) accept an answer for the team's attendee row from any member who may edit the team calendar, and `composeRsvpReply` sends it from the team address, the address the organizer invited. The answer is the team's, one PARTSTAT for all members, as the team is one attendee. The self-check at the sender check in `processInboundImip` compares the sender with the team address too, so the team's own CANCEL coming back doesn't seize its own event. A mail to both `marketing@` and `alice@` files one invitation on the team calendar and one in Alice's, since both were invited.
 
 ### DKIM needs nothing new
 
-One key signs for the mail domain (`entrypoint.sh:97`), and a team address is on that domain. Mail a member submits as the team is signed the same way as mail they submit as themselves. No new selector and no DNS change.
+One key signs for the mail domain (the OpenDKIM `Domain` in `entrypoint.sh`), and a team address is on that domain. Mail a member submits as the team is signed the same way as mail they submit as themselves. No new selector and no DNS change.
 
 ### The alias question
 

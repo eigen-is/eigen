@@ -27,16 +27,16 @@ This proposal lets Eigen's Mail app work on a mailbox the user already has at an
 
 | Piece | Where | State |
 |---|---|---|
-| Storage backend seam | `MailStore`, `apps/api/src/lib/mail/mail-store.ts` | 28 methods, one implementation (`MaildirStore`). The change-stream comment already anticipates "IMAP IDLE for a remote backend" (`:46`) |
-| Store construction | `apps/api/src/lib/home/user-home.ts:24` | `new Mail(this, new MaildirStore(this))`, unconditional — the single line backend selection touches |
+| Storage backend seam | `MailStore`, `apps/api/src/lib/mail/mail-store.ts` | 28 methods, one implementation (`MaildirStore`). New mail reaches `Mail` through the store's `received` callback, which a remote backend would feed from IMAP IDLE |
+| Store construction | `apps/api/src/lib/home/user-home.ts` | `new Mail(this, new MaildirStore(this))`, unconditional — the single line backend selection touches |
 | Summary index | `emails` table, `apps/api/src/lib/mail/schema.ts` | Subject, addresses, a short text excerpt, flags, mailbox. Lists and search run on it; full messages are parsed lazily. An IMAP store fills the same table from `ENVELOPE` + a body excerpt |
-| Hosted-mailboxes switch | `isMailEnabled()`, `apps/api/src/lib/config/env.ts:15` | Rides to the FE as `mailEnabled` on `GET /p/config`; every Mail entry point disappears when off |
-| Outbound | `createTransport()`, `apps/api/src/lib/core/mailer.ts:45` | One global `SMTP_*` relay with optional user/password. No per-user transport, no OAuth |
-| Inbound iMIP | `Mail.mailboxDeliver`, `apps/api/src/lib/mail/mail-domain.ts:124` | Runs `processInboundImip` on **delivered bytes only** — a message that arrives any other way never reaches the Calendar |
-| iMIP sender trust | `verifyImipSender`, `apps/api/src/lib/mail/imip-auth.ts:49` | Requires an `Authentication-Results` header stamped with **our** authserv-id (`getMailDomain()`) carrying an aligned `dkim=pass` |
-| OAuth token storage | `account` table, `apps/api/auth-schema.ts:42-47` | `access_token`, `refresh_token`, `scope` and both expiry columns exist; better-auth fills them for social sign-ins. Nothing reads them yet |
-| Welcome mail | `apps/api/src/lib/mail/mail-domain.ts:91-93` | Appended into a fresh store's INBOX — must not happen to a real external mailbox |
-| Home lifetime | `apps/api/src/lib/home/home.ts:37` | Homes idle out after five minutes, taking their store (and any IMAP connection) with them |
+| Hosted-mailboxes switch | `isMailEnabled()`, `apps/api/src/lib/config/env.ts` | Rides to the FE as `mailEnabled` on `GET /p/config`; every Mail entry point disappears when off |
+| Outbound | `createTransport()`, `apps/api/src/lib/core/mailer.ts` | One global `SMTP_*` relay with optional user/password. No per-user transport, no OAuth |
+| Inbound iMIP | `Mail.mailboxDeliver`, `apps/api/src/lib/mail/mail-domain.ts` | Runs `processInboundImip` on **delivered bytes only** — a message that arrives any other way never reaches the Calendar |
+| iMIP sender trust | `verifyImipSender`, `apps/api/src/lib/mail/imip-auth.ts` | Requires an `Authentication-Results` header stamped with **our** authserv-id (`getMailDomain()`) carrying an aligned `dkim=pass` |
+| OAuth token storage | `account` table, the `account` table in `apps/api/auth-schema.ts` | `access_token`, `refresh_token`, `scope` and both expiry columns exist; better-auth fills them for social sign-ins. Nothing reads them yet |
+| Welcome mail | `Mail.init` in `apps/api/src/lib/mail/mail-domain.ts` | Appended into a fresh store's INBOX — must not happen to a real external mailbox |
+| Home lifetime | `idleMs` in `apps/api/src/lib/home/home.ts` | Homes idle out after five minutes, taking their store (and any IMAP connection) with them |
 
 ## Architecture
 
@@ -65,7 +65,7 @@ This proposal lets Eigen's Mail app work on a mailbox the user already has at an
 
 ### Sending
 
-The Mail app and iMIP both send *as the acting user* (`messageSend`; `from: organizer.email`, `apps/api/src/lib/calendar/imip.ts:74`). In this mode those sends go through the **user's own SMTP submission** with the same OAuth token, via a per-send transport (nodemailer supports `auth.type: 'OAuth2'`) — so the provider signs them and the `From` is simply true. After a send the store appends the message to Sent, **except** where the provider already files submitted mail itself (Gmail and Exchange Online both do); appending there would duplicate it.
+The Mail app and iMIP both send *as the acting user* (`messageSend`; `from: organizer.email`, `composeInviteEmail` in `apps/api/src/lib/calendar/imip.ts`). In this mode those sends go through the **user's own SMTP submission** with the same OAuth token, via a per-send transport (nodemailer supports `auth.type: 'OAuth2'`) — so the provider signs them and the `From` is simply true. After a send the store appends the message to Sent, **except** where the provider already files submitted mail itself (Gmail and Exchange Online both do); appending there would duplicate it.
 
 System mail — share notices, OTPs, access requests — has no acting mailbox and keeps using the instance-wide `SMTP_*` relay. One small change rides along: `MAIL_FROM` (and optional `MAIL_FROM_NAME`) overriding `defaultFrom()`, because `noreply@{mailDomain}` is not an address a third-party relay will accept on an instance that does not own that domain's mail.
 
@@ -97,7 +97,7 @@ Instance-wide in v1: a `MAIL_BACKEND=imap` setting beside `MAIL_ENABLED`, read w
 
 [PROPOSAL_SSO.md](PROPOSAL_SSO.md) specifies OIDC through better-auth's `sso` plugin. For this proposal the relevant part is its noted shortcut: **`socialProviders`** for Microsoft and Google with a tenant / `hd` check. It is the cheaper sign-in for a single-domain deployment, and it is the *only* route that can request the provider's mail scopes and keep the resulting tokens — the `sso` plugin federates sign-in and has no notion of API scopes. So the order is fixed: `socialProviders` sign-in, then `ImapStore` on top of its tokens.
 
-SSO also fixes identity. The login form composes `username@mailDomain` (`packages/ui/src/components/layout/pages/login-page.tsx:46`), so an external address cannot sign in today; SSO bypasses the form, and the Eigen identity, the mailbox and the `From` address become the same string.
+SSO also fixes identity. The login form composes `username@mailDomain` (`packages/ui/src/components/layout/pages/login-page.tsx`), so an external address cannot sign in today; SSO bypasses the form, and the Eigen identity, the mailbox and the `From` address become the same string.
 
 Protocol clients are unaffected: `verifyProtocolAuth` tries the app password first, so SSO users reach CalDAV, CardDAV and WebDAV with one. IMAP clients point at the provider.
 
