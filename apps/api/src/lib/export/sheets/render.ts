@@ -19,6 +19,8 @@ import {
     cellFontName,
     floatingItems,
     mergedBorderSides,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_FONT_SIZE,
     sheetColumnsWidth,
     sheetFloatingBox,
@@ -48,19 +50,22 @@ import { HORIZONTAL_ALIGN, isNumericRotation, sheetsResolver, VERTICAL_ALIGN } f
 // Image sources by media name: data: URIs for an export, the prepared preview URLs for a preview.
 type MediaUrls = Map<string, string>;
 
+type ContentSize = { width: number; height: number };
+
 // The export interns every cell's style into a class declared in one <style> element. A workbook repeats a few hundred
 // styles over hundreds of thousands of cells, and the sanitizer CSS-parses every style attribute but passes class
 // names and style text as plain strings. A key is the exact declarations the inline path would write. The preview
 // keeps inline styles, because its body embeds without a <head>.
 type StyleRegistry = Map<string, string>;
 
-// The preview renders from the top-left of the used range. maxCells is a bound of its own, so tuning the rows or the
+// A window renders from the top-left of the used range. maxCells is a bound of its own, so tuning the rows or the
 // columns can never remove it.
-type SheetPreviewBudget = { maxRows: number; maxCols: number; maxCells: number };
-export const PREVIEW_SHEET_BUDGET: SheetPreviewBudget = { maxRows: 200, maxCols: 50, maxCells: 10_000 };
+type SheetBudget = { maxRows: number; maxCols: number; maxCells: number };
+export const PREVIEW_SHEET_BUDGET: SheetBudget = { maxRows: 200, maxCols: 50, maxCells: 10_000 };
 
-// The most cells, rows times columns, an export walks of one sheet. A peer can write a merge or a border key at
-// XFD1048576, and the sanitizer and WeasyPrint pay for every cell the walk writes.
+// The most cells, rows times columns, an export walks of all its sheets together. A peer can write a merge or a border
+// key at XFD1048576 on as many sheets as it likes, and the sanitizer and WeasyPrint pay for every cell the walk writes.
+// A row whose every column is hidden still costs one.
 export const MAX_EXPORT_CELLS = 250_000;
 
 // Every td's defaults: inline in the preview, whose embedders strip the <head>, and the shared td{} rule in the export.
@@ -70,8 +75,8 @@ const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
 const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
 
-// The workbook as one document. The screen's prints landscape. The PDF's page fits its widest and tallest sheet, so
-// WeasyPrint never clips a wide grid. A sheet past MAX_EXPORT_CELLS is cut to that many, and counted.
+// The workbook as one document. The screen's prints landscape. The PDF's page fits its widest and tallest sheet as
+// rendered, so WeasyPrint never clips a wide grid. A sheet cut to MAX_EXPORT_CELLS is counted.
 export function sheetsHtmlDocument({
     title,
     sheets,
@@ -85,9 +90,9 @@ export function sheetsHtmlDocument({
     mode: HtmlExportMode;
     lost: LossCounter['lost'];
 }): string {
-    const { html, css, cut } = renderSheetsHtml(sheets, mediaUrls);
+    const { html, css, cut, size } = renderSheetsHtml(sheets, mediaUrls);
     for (const sheet of cut) lost('sheets-cut', sheet);
-    const page = mode === 'pdf' ? pdfPageCss(shownSheets(sheets)) : '@page { size: landscape; margin: 1.5cm; }';
+    const page = mode === 'pdf' ? pdfPageCss(size) : '@page { size: landscape; margin: 1.5cm; }';
     return exportHtmlDocument({
         title,
         css: `${SHEET_CSS_BASE}${page}${SHEET_CSS_PRINT}`,
@@ -109,21 +114,32 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
 }
 
 // One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
-// The resolver reads the stored values: only a rule's own formula is evaluated. `cut` holds the sheets cut to the cap.
-export function renderSheetsHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; css: string; cut: Sheet[] } {
+// The resolver reads the stored values: only a rule's own formula is evaluated. The sheets spend one MAX_EXPORT_CELLS
+// in tab order, so a sheet gets the cells the ones before it left. `cut` holds the sheets cut to it, and `size` is the
+// widest and tallest sheet as rendered.
+export function renderSheetsHtml(
+    sheets: Sheet[],
+    mediaUrls: MediaUrls,
+): { html: string; css: string; cut: Sheet[]; size: ContentSize } {
     const engine = new FormulaEngine();
     const resolver = sheetsResolver(sheets);
     const styles: StyleRegistry = new Map();
     const shown = shownSheets(sheets);
     const cut: Sheet[] = [];
+    const size = { width: 0, height: 0 };
+    let cellsLeft = MAX_EXPORT_CELLS;
     const html = shown
         .map((sheet, i) => {
-            const rendered = renderSheet(sheet, i === shown.length - 1, engine, resolver, { styles, mediaUrls });
+            const isLast = i === shown.length - 1;
+            const rendered = renderSheet(sheet, isLast, engine, resolver, { cellsLeft, styles, mediaUrls });
+            cellsLeft -= rendered.cells;
             if (rendered.truncated) cut.push(sheet);
+            size.width = Math.max(size.width, rendered.size.width);
+            size.height = Math.max(size.height, rendered.size.height);
             return rendered.html;
         })
         .join('\n');
-    return { html, css: serializeStyleRules(styles), cut };
+    return { html, css: serializeStyleRules(styles), cut, size };
 }
 
 // The sheets the tabs show, as Excel prints them. The resolver still spans every sheet, the hidden ones too.
@@ -131,30 +147,9 @@ function shownSheets(sheets: Sheet[]): Sheet[] {
     return sheets.filter((sheet) => sheet.hide !== 1);
 }
 
-function pdfPageCss(sheets: Sheet[]): string {
-    let width = 0;
-    let height = 0;
-    for (const sheet of sheets) {
-        const size = getSheetContentSize(sheet);
-        width = Math.max(width, size.width);
-        height = Math.max(height, size.height);
-    }
+function pdfPageCss({ width, height }: ContentSize): string {
     const side = (content: number) => Math.min(content + 2 * PAGE_MARGIN + PAGE_SLACK, MAX_PDF_PAGE_PX);
     return `@page { size: ${side(width)}px ${side(height)}px; margin: ${PAGE_MARGIN}px; }`;
-}
-
-export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
-    const config = sheet.config ?? {};
-    const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
-    const blank = maxRow < 0 || maxCol < 0;
-    const offset = blank ? { left: 0, top: 0 } : gridOffset(sheet, minRow, minCol);
-    // The overlay draws at the stored grid coordinate, so an image or chart parked past the used range is still on the
-    // page.
-    const extent = floatingExtent(sheet, offset);
-    return {
-        width: Math.max(blank ? 0 : sheetColumnsWidth(sheet, minCol, maxCol), extent.width),
-        height: Math.max(blank ? 0 : sheetRowsHeight(sheet, minRow, maxRow), extent.height),
-    };
 }
 
 // The far corner of a sheet's images and charts as they turn, in the table's space, as the overlay places them.
@@ -168,14 +163,21 @@ function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { 
     return { width, height };
 }
 
-// With `styles` this is the export, with interned classes. Without it this is the preview, inline-styled.
+// With `styles` this is the export, with interned classes, in a window of `cellsLeft`. Without it this is the preview,
+// inline-styled, in its budget. `cells` is what the window cost, and `size` the table and its overlay as rendered: the
+// overlay draws at the stored grid coordinate, so an image or chart parked past the used range is still on the page.
 function renderSheet(
     sheet: Sheet,
     isLast: boolean,
     engine: FormulaEngine,
     resolver: CellResolver,
-    { budget, styles, mediaUrls }: { budget?: SheetPreviewBudget; styles?: StyleRegistry; mediaUrls: MediaUrls },
-): { html: string; truncated: boolean } {
+    {
+        budget,
+        cellsLeft = 0,
+        styles,
+        mediaUrls,
+    }: { budget?: SheetBudget; cellsLeft?: number; styles?: StyleRegistry; mediaUrls: MediaUrls },
+): { html: string; truncated: boolean; cells: number; size: ContentSize } {
     const forStylesheet = styles !== undefined;
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
@@ -187,14 +189,20 @@ function renderSheet(
         return {
             html: `<div class="sheet">${withFloatingOverlay(sheet, '', 0, 0, 0, overlay)}</div>`,
             truncated: false,
+            cells: 0,
+            size: floatingExtent(sheet, { left: 0, top: 0 }),
         };
     }
 
     // The window comes first, so all that follows costs what is rendered, not what the sheet declares: a merge or a
-    // rule's range can name millions of cells. The export's window is every row and column that fits the cap.
-    const maxCells = budget?.maxCells ?? MAX_EXPORT_CELLS;
-    const maxCols = budget?.maxCols ?? MAX_EXPORT_CELLS;
-    const maxRows = budget?.maxRows ?? Number.POSITIVE_INFINITY;
+    // rule's range can name millions of cells.
+    const { maxRows, maxCols, maxCells } =
+        budget ??
+        exportWindow(
+            cellsLeft,
+            shownCount(minRow, maxRow, config.rowhidden),
+            shownCount(minCol, maxCol, config.colhidden),
+        );
     let truncated = false;
     const renderCols: number[] = [];
     for (let c = minCol; c <= maxCol; c++) {
@@ -207,14 +215,15 @@ function renderSheet(
     }
 
     const renderRows: number[] = [];
+    const rowCells = Math.max(1, renderCols.length);
     let cellCount = 0;
     for (let r = minRow; r <= maxRow; r++) {
         if (config.rowhidden?.[r] != null) continue;
-        if (renderRows.length >= maxRows || cellCount + renderCols.length > maxCells) {
+        if (renderRows.length >= maxRows || cellCount + rowCells > maxCells) {
             truncated = true;
             break;
         }
-        cellCount += renderCols.length;
+        cellCount += rowCells;
         renderRows.push(r);
     }
     const lastRow = renderRows.at(-1) ?? -1;
@@ -262,8 +271,10 @@ function renderSheet(
     const colgroup = `<colgroup>${cols.join('')}</colgroup>`;
 
     const rows: string[] = [];
+    let tableHeight = 0;
     for (const r of renderRows) {
         const h = sheetRowsHeight(sheet, r, r);
+        tableHeight += h;
         const cells: string[] = [];
         rowMerges = rowMerges.filter((m) => r < m.r + m.rs);
         for (; nextMerge < merges.length && merges[nextMerge].r <= r; nextMerge++) {
@@ -324,7 +335,17 @@ function renderSheet(
     const html = `<div class="${divClass}"${pageBreak}>
 ${withFloatingOverlay(sheet, table, tableWidth, minRow, minCol, overlay)}
 </div>`;
-    return { html, truncated };
+    const extent = floatingExtent(sheet, gridOffset(sheet, minRow, minCol));
+    const size = { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) };
+    return { html, truncated, cells: cellCount, size };
+}
+
+// The export's window cuts columns first. It keeps every row and the columns from the left that fit the cells left
+// with them. Only rows that pass the cells left on their own are cut too, to one column. With nothing left it keeps
+// nothing.
+function exportWindow(cellsLeft: number, rows: number, cols: number): SheetBudget {
+    const maxCols = cellsLeft > 0 ? Math.min(cols, Math.max(1, Math.floor(cellsLeft / rows))) : 0;
+    return { maxRows: Math.floor(cellsLeft / Math.max(1, maxCols)), maxCols, maxCells: cellsLeft };
 }
 
 // The table inside a box that reaches the farthest image or chart, so what follows in the flow, the next sheet or the
@@ -341,7 +362,7 @@ function withFloatingOverlay(
         styles,
         mediaUrls,
         resolver,
-    }: { budget?: SheetPreviewBudget; styles?: StyleRegistry; mediaUrls: MediaUrls; resolver: CellResolver },
+    }: { budget?: SheetBudget; styles?: StyleRegistry; mediaUrls: MediaUrls; resolver: CellResolver },
 ): string {
     const offset = gridOffset(sheet, minRow, minCol);
     const clip = budget && {
@@ -378,6 +399,15 @@ function clipRulesToWindow(
         if (cellrange.length > 0) clipped.push(withCfRanges(rule, cellrange));
     }
     return clipped;
+}
+
+// How many of the rows or columns from first to last show. A hidden one has a key in `rowhidden` or `colhidden`.
+function shownCount(first: number, last: number, hidden: Record<string, number> | undefined): number {
+    let count = 0;
+    for (let i = first; i <= last; i++) {
+        if (hidden?.[i] == null) count++;
+    }
+    return count;
 }
 
 // Images and charts are stored in grid pixels from A1, while the overlay places them against the window's first cell.
@@ -450,7 +480,10 @@ function getGridBounds(
         }
     }
 
-    if (maxRow < 0) return { minRow: 0, minCol: 0, maxRow: -1, maxCol: -1 };
+    // A key past Excel's grid draws nothing there, and every walk over the span would run as far as it says.
+    maxRow = Math.min(maxRow, REFERENCE_ROW_COUNT - 1);
+    maxCol = Math.min(maxCol, REFERENCE_COLUMN_COUNT - 1);
+    if (maxRow < 0 || minRow > maxRow || minCol > maxCol) return { minRow: 0, minCol: 0, maxRow: -1, maxCol: -1 };
     return { minRow, minCol, maxRow, maxCol };
 }
 
