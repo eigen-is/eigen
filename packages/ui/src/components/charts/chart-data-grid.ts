@@ -55,8 +55,10 @@ export function specOf({ corner, columns, rows }: Grid, spec: InlineChartSpec): 
 }
 
 // A number as Sheets shows one in the en convention: grouped (1,234), after a currency symbol ($1,234.00,
-// -€5) or a percent (12% is 0.12). An empty cell is a gap; anything else is NaN, and flagged.
-const NUMBER_TEXT = /^([-+]?)[$€£¥]?(\d{1,3}(?:,\d{3})+(?:\.\d*)?|\d*\.?\d+(?:e[-+]?\d+)?)(%?)$/i;
+// -€5) or a percent (12% is 0.12). An empty cell is a gap; anything else is NaN, and flagged. The digits before and
+// after the point are split by the point itself, so a long run of digits that isn't a number fails in linear time: a
+// pasted cell is checked on every render.
+const NUMBER_TEXT = /^([-+]?)[$€£¥]?(\d{1,3}(?:,\d{3})+(?:\.\d*)?|(?:\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?)(%?)$/i;
 export function numberOf(text: string): number | null {
     const trimmed = text.trim();
     if (trimmed === '') return null;
