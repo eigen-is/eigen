@@ -52,3 +52,4 @@ import * as path from 'node:path';
 - The domain's tests: `cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/<domain>/`.
 - A cleanup that changes behaviour, or touches a lifecycle, a lock, a cache or a cross-home call, is not done until it has had the orchestrate skill's cold review, and an adversarial hunt on that mechanism.
 - Another agent working in the tree makes the machine slow, and a 5 s hook timeout then fails. Re-run the failing file alone or with `--timeout 60000` before you blame your change. Don't run `bun run check` while another agent works.
+- The Write tool decodes `\u` escapes in the content it writes, so a file that needs such an escape gets the character from `String.fromCharCode`, or is edited another way.

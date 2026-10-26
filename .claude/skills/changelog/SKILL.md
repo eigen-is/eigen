@@ -32,7 +32,7 @@ A bullet is the effect alone: what a person sees, does or can rely on now, in on
 
 ## Every claim is checked
 
-Before a bullet stays, find what backs it: the commit (`git log --since … --until …` around the release date) and the code that does it. A claim you can't back is cut or corrected. Shortcuts, limits, counts and lists ("XLOOKUP, TEXTJOIN and …") are checked one by one.
+Before a bullet stays, find what backs it: the commit (`git log --since … --until …` around the release date) and the code that does it. A claim you can't back is cut or corrected. Shortcuts, limits, counts and lists ("XLOOKUP, TEXTJOIN and …") are checked one by one. Before a tag, check `[Unreleased]` against `git log` since the last tag: it has missed whole rounds.
 
 ## When you hand it back
 
