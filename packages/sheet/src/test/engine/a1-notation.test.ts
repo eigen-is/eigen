@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseA1Range, rangeToA1, rowIndexToLabel, rowLabelToIndex, toA1 } from '../../engine/a1-notation';
+import { a1RangeRef, parseA1Range, rangeToA1, rowIndexToLabel, rowLabelToIndex, toA1 } from '../../engine/a1-notation';
 
 describe('engine/a1-notation — rowLabelToIndex', () => {
     test('"1" → 0', () => expect(rowLabelToIndex('1')).toBe(0));
@@ -72,5 +72,21 @@ describe('engine/a1-notation — rangeToA1', () => {
     test("absolute is Excel's $A$1 form", () => {
         expect(rangeToA1({ row: [1, 1], column: [2, 2] }, true)).toBe('$C$2');
         expect(rangeToA1({ row: [0, 1048575], column: [1, 1] }, true)).toBe('$B$1:$B$1048576');
+    });
+});
+
+describe('engine/a1-notation — a1RangeRef', () => {
+    const ref = (text: string) => {
+        const range = parseA1Range(text);
+        return range && a1RangeRef(range);
+    };
+    test('orders each pair, whichever corner comes first', () => {
+        expect(ref('C5:A2')).toEqual({ row: [1, 4], column: [0, 2] });
+        expect(ref('B3')).toEqual({ row: [2, 2], column: [1, 1] });
+    });
+    test("a range past Excel's grid is null", () => {
+        expect(ref('A1:XFD1048576')).toEqual({ row: [0, 1048575], column: [0, 16383] });
+        expect(ref('A1:A1048577')).toBeNull();
+        expect(ref('A1:XFE1')).toBeNull();
     });
 });

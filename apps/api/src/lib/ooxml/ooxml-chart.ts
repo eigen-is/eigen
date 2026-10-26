@@ -17,7 +17,6 @@ import {
     parseChartSpec,
 } from '@workspace/lib/charts';
 import { bundledFont } from '@workspace/lib/constants/fonts';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
     ChartLook,
@@ -31,7 +30,7 @@ import type {
 import { CHART_BLANKS } from '@workspace/lib/types/chart';
 import { solidFill, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 // The two engine modules a chart reads, not the engine: a docx or pptx import never evaluates the formula engine.
-import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine/a1-notation';
+import { a1RangeRef, parseA1Range, unquoteSheetName } from '@workspace/sheet/engine/a1-notation';
 import { numberDisplay } from '@workspace/sheet/engine/format';
 import type { XmlElement } from '../core/xml';
 import {
@@ -492,15 +491,9 @@ function cellRange(formula: string, sheetId: (sheetName: string) => string | und
     const bang = formula.lastIndexOf('!');
     if (bang < 1 || formula.startsWith('(')) unsupported();
     const range = parseA1Range(formula.slice(bang + 1));
-    if (!range) unsupported();
-    const rows: [number, number] = [Math.min(range.start.row, range.end.row), Math.max(range.start.row, range.end.row)];
-    const columns: [number, number] = [
-        Math.min(range.start.col, range.end.col),
-        Math.max(range.start.col, range.end.col),
-    ];
-    if (rows[1] >= REFERENCE_ROW_COUNT || columns[1] >= REFERENCE_COLUMN_COUNT) unsupported();
+    const ref = (range && a1RangeRef(range)) ?? unsupported();
     const id = sheetId(unquoteSheetName(formula.slice(0, bang))) ?? unsupported();
-    return { sheetId: id, row: rows, column: columns };
+    return { sheetId: id, ...ref };
 }
 
 // The Latin typeface of the chart-wide text properties, as a bundled font. A theme font (+mn-lt) or a font Eigen
