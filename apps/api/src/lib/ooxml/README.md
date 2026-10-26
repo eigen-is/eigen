@@ -241,7 +241,7 @@ Past all of these, the transform process's memory limit is the backstop. Inflati
 - It doesn't decrypt a package, verify a signature or read macros.
 - It doesn't write ZIP64, so an archive past 4 GB or 65,534 entries throws.
 - It doesn't validate parts against the schemas. A reader takes what it understands and leaves the rest.
-- Part names are compared exactly, never case-folded.
+- It finds a part's entry in the zip by its exact name. Only content types compare part names as OPC does, decoded and case-insensitively.
 - DrawingML colour transforms beyond alpha, lumMod, lumOff, satMod, tint and shade are ignored.
 - A chart is read only when the spec draws it as the file does: a column, bar, line or pie chart with one group, at most one category and one value axis, and no stacked line, log scale or reversed value axis. Excel 2016's chartEx parts are not read.
 - It renders nothing.

@@ -80,16 +80,19 @@ export function openPackage(bytes: Uint8Array, messages: PackageMessages): Ooxml
     for (const entry of types ? xmlElements(types) : []) {
         const contentType = (entry.attributes['ContentType'] ?? '').toLowerCase();
         if (hasXmlName(entry, CONTENT_TYPES_NS, 'Default'))
-            defaults.set((entry.attributes['Extension'] ?? '').toLowerCase(), contentType);
+            defaults.set(partNameKey(decodedName(entry.attributes['Extension'] ?? '')), contentType);
         if (hasXmlName(entry, CONTENT_TYPES_NS, 'Override'))
-            overrides.set((entry.attributes['PartName'] ?? '').replace(/^\//, ''), contentType);
+            overrides.set(
+                partNameKey(decodedName((entry.attributes['PartName'] ?? '').replace(/^\//, ''))),
+                contentType,
+            );
     }
     return {
         zip,
         part,
         relationships: (partPath) => relationshipsOf(part(relsPathOf(partPath)), partPath),
         contentTypeOf: (path) =>
-            overrides.get(path) ?? defaults.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase()),
+            overrides.get(partNameKey(path)) ?? defaults.get(partNameKey(path.slice(path.lastIndexOf('.') + 1))),
         readMedia: (path) => optional(() => zip.read(path)),
     };
 }
@@ -150,27 +153,35 @@ export function relationshipsOf(root: XmlElement | undefined, partPath: string):
 }
 
 // A target climbs from its source part's folder, or from the package root when it starts with '/'. '.' and '..' are
-// resolved, so no '..' is left for a format's prefix check to miss. A part name is a URI, so the target's escapes are
-// decoded: `sheet%201.xml` names the entry `sheet 1.xml`. An escape that is malformed, or that would add a '/' no '..'
-// check saw, is kept as written.
+// resolved, so no '..' is left for a format's prefix check to miss.
 function resolveTarget(base: string, target: string): string {
     const parts = target.startsWith('/') ? [] : base.split('/').slice(0, -1);
-    for (const written of target.split('/')) {
-        const segment = written.replace(ESCAPES, (escapes) => {
-            try {
-                const decoded = decodeURIComponent(escapes);
-                return decoded.includes('/') ? escapes : decoded;
-            } catch {
-                return escapes;
-            }
-        });
+    for (const segment of decodedName(target).split('/')) {
         if (segment === '..') parts.pop();
         else if (segment !== '.' && segment !== '') parts.push(segment);
     }
     return parts.join('/');
 }
 
+// A part name is a URI, so a name as written decodes its escapes: `sheet%201.xml` names the entry `sheet 1.xml`. An
+// escape that is malformed, or that would add a '/' no '..' check saw, is kept as written.
+function decodedName(written: string): string {
+    return written.replace(ESCAPES, (escapes) => {
+        try {
+            const decoded = decodeURIComponent(escapes);
+            return decoded.includes('/') ? escapes : decoded;
+        } catch {
+            return escapes;
+        }
+    });
+}
+
 const ESCAPES = /(?:%[0-9A-Fa-f]{2})+/g;
+
+// OPC compares decoded part names case-insensitively in ASCII, so `Chart1.XML` and `chart1.xml` name one part.
+function partNameKey(name: string): string {
+    return name.replace(/[A-Z]+/g, (upper) => upper.toLowerCase());
+}
 
 // The first internal target of this type. A type is matched by its last segment, so a Strict package's relationship
 // types match too.

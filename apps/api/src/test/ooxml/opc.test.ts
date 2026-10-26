@@ -168,6 +168,25 @@ describe('a package', () => {
         expect(pkg.contentTypeOf('a/c.png')).toBeUndefined();
     });
 
+    test('compares part names as OPC does: with their escapes decoded, and case-insensitively', () => {
+        const types =
+            `<Types xmlns="${CONTENT_TYPES_NS}"><Default Extension="B%49N" ContentType="text/bin"/>` +
+            '<Override PartName="/xl/charts/chart%201.xml" ContentType="text/chart"/>' +
+            '<Override PartName="/XL/Media/Logo.XML" ContentType="text/logo"/>' +
+            '<Override PartName="/xl/bad%zz.xml" ContentType="text/bad"/></Types>';
+        const chartRels = `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${IMAGE}" Target="charts/chart%201.xml"/></Relationships>`;
+        const pkg = open({
+            '[Content_Types].xml': types,
+            'xl/_rels/workbook.xml.rels': chartRels,
+            'xl/charts/chart 1.xml': '<c/>',
+        });
+        const chart = relOfType(pkg.relationships('xl/workbook.xml'), 'image') ?? '';
+        expect([chart, pkg.contentTypeOf(chart)]).toEqual(['xl/charts/chart 1.xml', 'text/chart']);
+        expect(pkg.contentTypeOf('xl/media/logo.xml')).toBe('text/logo');
+        expect(pkg.contentTypeOf('xl/bad%zz.xml')).toBe('text/bad');
+        expect(pkg.contentTypeOf('xl/data.bin')).toBe('text/bin');
+    });
+
     test('an optional read is undefined for damaged XML or a damaged entry, and a cap still refuses', () => {
         expect(optional(() => parseOoxml('<b>'))).toBeUndefined();
         expect(optional(() => thrownBy(new ZipError('bad-crc')))).toBeUndefined();
