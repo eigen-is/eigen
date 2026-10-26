@@ -75,13 +75,14 @@ const PREDICATES: Record<Outcome, readonly [one: string, many: string]> = {
 
 // What an import left out or drew simpler, per kind, for the toast after Import…, whichever format's reader counted it.
 // Each kind lists in this order within its clause. A pptx's warnings count source shapes, so a master's background is
-// one fill however many slides show it.
+// one fill however many slides show it. A code only an export counts, such as charts-simplified, has no row.
 const LOSSES: { code: CountedWarningCode; noun: Noun; what: Outcome }[] = [
     { code: 'tables-dropped', noun: ['table', 'tables'], what: 'dropped' },
     { code: 'charts-dropped', noun: ['chart', 'charts'], what: 'dropped' },
     { code: 'diagrams-dropped', noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'dropped' },
     { code: 'objects-dropped', noun: ['embedded object', 'embedded objects'], what: 'dropped' },
     { code: 'images-dropped', noun: ['picture', 'pictures'], what: 'dropped' },
+    { code: 'mirrors-dropped', noun: ["picture's flip", "pictures' flips"], what: 'dropped' },
     { code: 'conditional-formats-dropped', noun: ['conditional format', 'conditional formats'], what: 'dropped' },
     { code: 'validations-dropped', noun: ['data validation rule', 'data validation rules'], what: 'dropped' },
     { code: 'section-pages-dropped', noun: ["section's page setup", "sections' page setups"], what: 'dropped' },
@@ -91,11 +92,9 @@ const LOSSES: { code: CountedWarningCode; noun: Noun; what: Outcome }[] = [
         what: 'dropped',
     },
     { code: 'band-content-dropped', noun: ['header or footer item', 'header or footer items'], what: 'dropped' },
-    { code: 'charts-simplified', noun: ['chart', 'charts'], what: 'simplified' },
     { code: 'shapes-simplified', noun: ['shape', 'shapes'], what: 'simplified' },
     { code: 'fills-simplified', noun: ['fill', 'fills'], what: 'simplified' },
     { code: 'text-simplified', noun: ['text box', 'text boxes'], what: 'simplified' },
-    { code: 'mirrors-dropped', noun: ['flipped picture', 'flipped pictures'], what: 'simplified' },
     {
         code: 'band-images-unanchored',
         noun: ['header or footer picture', 'header or footer pictures'],
