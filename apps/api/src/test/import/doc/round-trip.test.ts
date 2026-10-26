@@ -11,6 +11,7 @@ import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { readStoredEquation } from '../../../lib/document/equation';
 import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK, textMetrics } from '../../../lib/document/looks';
+import { toTransferableText } from '../../../lib/document/transform/protocol';
 import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import type { ImportedMedia } from '../../../lib/import/image-types';
@@ -1345,4 +1346,40 @@ describe('a Word file, imported, written and imported again', () => {
         ]);
         expect(stored(second.json)).toEqual(stored(first.json));
     });
+});
+
+// A block figure at a heading's start is a paragraph of its own in Word, which holds the heading's space before.
+test("a block figure at a heading's start keeps the heading's space above it", () => {
+    const png = toTransferableText('png');
+    const media = [{ name: 'a.png', contentType: 'image/png', data: png, width: 400, height: 300 }];
+    const figure = { type: 'figure', attrs: { mediaName: 'a.png', width: 240, alignment: 'center', layout: 'block' } };
+    const write = (json: JSONContent) =>
+        writeDocx(
+            { json, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+            { title: 'Figure', media, lost: () => {} },
+        );
+    // The space before of the paragraph that holds the drawing.
+    const figureBefore = (docx: Uint8Array) =>
+        new TextDecoder()
+            .decode(openZip(docx).read('word/document.xml'))
+            .match(/w:before="(\d+)"[^]*?<w:drawing>/)?.[1];
+    const source = docSchema()
+        .nodeFromJSON({
+            type: 'doc',
+            content: [
+                { type: 'paragraph' },
+                { type: 'heading', attrs: { level: 1 }, content: [figure, { type: 'text', text: 'Heading' }] },
+            ],
+        })
+        .toJSON();
+    const first = write(source);
+    const { json, media: imported } = docxToPmJson(Buffer.from(first));
+    expect(json.content?.[0]).toMatchObject({ type: 'paragraph' });
+    const again = write({
+        ...json,
+        content: json.content?.map((node) =>
+            withSourceNames(node, new Map(imported.map((image) => [image.name, 'a.png']))),
+        ),
+    });
+    expect(figureBefore(again)).toBe(figureBefore(first));
 });

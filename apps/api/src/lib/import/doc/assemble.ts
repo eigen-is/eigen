@@ -1,7 +1,14 @@
 import type { JSONContent } from '@tiptap/core';
 import { isFigureFrameNode, ptToTwips, readParagraphFormat, twipsToPt } from '@workspace/lib/docs/eigendoc';
 import { readStoredEquation } from '../../document/equation';
-import { BLOCK_MARGINS, CODE_BLOCK_LOOK, QUOTE_LOOK, TABLE_MARGIN, untypedListFormat } from '../../document/looks';
+import {
+    BLOCK_MARGINS,
+    CODE_BLOCK_LOOK,
+    FIGURE_MARGIN,
+    QUOTE_LOOK,
+    TABLE_MARGIN,
+    untypedListFormat,
+} from '../../document/looks';
 import { LIST_FORMATS, LIST_LEVELS, LIST_TYPES } from '../../ooxml/wordml';
 import type { ListRef } from './numbering';
 import type { Role } from './styles';
@@ -38,8 +45,14 @@ export type Para = {
     hairline: boolean;
     // What it sets apart from the docx's Normal, in pt, and its own indent in twips, which counts from its container's
     // text; an item's holds its number.
-    // baseBefore is the space before its style or the Normal gives it.
-    format?: { lineSpacing?: number; spaceBefore?: number; spaceAfter?: number; baseBefore?: number };
+    // baseBefore and baseAfter are the spaces its style or the Normal gives it.
+    format?: {
+        lineSpacing?: number;
+        spaceBefore?: number;
+        spaceAfter?: number;
+        baseBefore?: number;
+        baseAfter?: number;
+    };
     indent?: { left: number; right: number; firstLine: number };
 };
 
@@ -163,6 +176,9 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
                     : !item.empty && !item.list && !item.task && (item.role.kind === 'caption' || !!item.captionLook);
                 if (caption && last?.attrs && figures.length === 1 && !last.attrs['caption']) {
                     last.attrs['caption'] = inlineText(item.inlines);
+                    // The space below the caption is the figure's now.
+                    const { spaceAfter, baseAfter } = item.format ?? {};
+                    previous.format = { ...previous.format, spaceAfter, baseAfter };
                     continue;
                 }
             }
@@ -559,7 +575,8 @@ function buildFlow(items: Item[]): JSONContent[] {
         closeLists();
         // The space Eigen draws above it anyway: none at the top, as the writer writes a first heading, and below a
         // block that ends in a table the gap the writer starts it with.
-        blocks.push(textblockOf(item, 0, blocks.length === 0 ? 0 : gapBelowTable(blocks.at(-1))));
+        const above = blocks.length === 0 ? 0 : gapBelowTable(blocks.at(-1));
+        blocks.push(textblockOf(item, 0, above, Math.max(above ?? 0, spaceBelow(items[index - 1]))));
     }
     flushCode();
     closeLists();
@@ -593,6 +610,12 @@ const CONTAINER_MARGINS = new Map([
 
 // A table holds no space after, so the writer starts the block below one with its margin, or with the larger margin of
 // a list or quote it ends, as withAfter gives that to the table.
+// The space a paragraph leaves below it as the file writes it, in twips.
+function spaceBelow(item: Item | undefined): number {
+    const after = item?.kind === 'para' ? (item.format?.spaceAfter ?? item.format?.baseAfter) : undefined;
+    return after === undefined ? 0 : ptToTwips(after);
+}
+
 function gapBelowTable(block: JSONContent | undefined): number | undefined {
     if (block?.type === 'table') return TABLE_MARGIN;
     const margin = CONTAINER_MARGINS.get(block?.type ?? '');
@@ -636,14 +659,26 @@ function formatOf(para: Para, edge: number | undefined, above?: number): Record<
     });
 }
 
-function textblockOf(para: Para, edge: number | undefined, above?: number): JSONContent {
+// The figure draws its own margin above it, so only the space past that margin is the paragraph's. A heading the writer
+// split at its figure keeps its space above that way. Readers collapse a paragraph's space above with the one the block
+// above leaves below it, so a space no larger than that one, `below` in twips, is the block above's.
+function figureSpaceBefore(para: Para, below: number): number | undefined {
+    const before = para.format?.spaceBefore;
+    const past = before === undefined ? 0 : ptToTwips(before) - FIGURE_MARGIN.top;
+    return past > below ? twipsToPt(past) : undefined;
+}
+
+function textblockOf(para: Para, edge: number | undefined, above?: number, below = 0): JSONContent {
     const { textAlign, inlines: content } = para;
     if (isFigureOnly(para)) {
         for (const figure of content) {
             if (isFigureFrameNode(figure.type) && figure.attrs && !figure.attrs['layout'] && !figure.attrs['alignment'])
                 figure.attrs['alignment'] = textAlign === 'center' || textAlign === 'right' ? textAlign : 'left';
         }
-        return { type: 'paragraph', content };
+        const spaceBefore = edge === 0 && para.quote === 0 ? figureSpaceBefore(para, below) : undefined;
+        return spaceBefore === undefined
+            ? { type: 'paragraph', content }
+            : { type: 'paragraph', attrs: { spaceBefore }, content };
     }
     const attrs = { textAlign, ...formatOf(para, edge, above) };
     if (para.role.kind === 'heading') return { type: 'heading', attrs: { level: para.role.level, ...attrs }, content };

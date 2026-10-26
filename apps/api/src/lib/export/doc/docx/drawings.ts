@@ -4,7 +4,7 @@ import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
 import { readChartAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
-import { BODY, boxSide, cssPt, twips } from '../../../document/looks';
+import { BODY, boxSide, cssPt, FIGURE_MARGIN, twips } from '../../../document/looks';
 import { sanitizeMedia } from '../../../document/media';
 import { proseValue } from '../../../document/prose-css';
 import type { ExportMedia } from '../../../document/transform/protocol';
@@ -76,9 +76,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
     const jc = side ? 'center' : (alignment ?? 'center');
     const captionRuns = caption ? textXml(caption) : '';
     if (captionRuns) useFace(context.pkg, {}, 'Caption');
-    const margin = proseValue('.eigen-prose .figure', 'margin');
-    const top = twips(cssPt(boxSide(margin, 'top'), BODY.sizePt));
-    const bottom = twips(cssPt(boxSide(margin, 'bottom'), BODY.sizePt));
+    const { top, bottom } = FIGURE_MARGIN;
     const captionBefore = styleSpacing(context.pkg.styles, 'Caption', 'before');
     const captionParagraph = (before: number, inset: Inset): Paragraph => ({
         props: {

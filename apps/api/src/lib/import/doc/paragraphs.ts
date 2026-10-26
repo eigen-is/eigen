@@ -549,6 +549,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                 lineSpacing,
                 spaceBefore: index === 0 ? unlessOwn(format.spaceBefore, own?.before) : undefined,
                 baseBefore: twipsToPt(base.before ?? 0),
+                baseAfter: twipsToPt(base.after ?? 0),
                 spaceAfter: index === halves.length - 1 ? unlessOwn(format.spaceAfter, own?.after) : undefined,
             },
             indent,
