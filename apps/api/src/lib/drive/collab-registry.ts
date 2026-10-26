@@ -18,8 +18,9 @@ export class CollabRegistry {
     // its documents open again.
     private readonly closedMounts = new WeakSet<Mount>();
     // The keys of a path that is moving to the trash, and of everything under it. The trash closes their
-    // databases before it marks them trashed, so a document opened in between would lose its edits.
-    private readonly trashing = new Set<string>();
+    // databases before it marks them trashed, so a document opened in between would lose its edits. A
+    // key counts the trashes that guard it, because two trashes of nested paths can overlap.
+    private readonly trashing = new Map<string, number>();
 
     public constructor(private ownerId: string) {}
 
@@ -77,11 +78,20 @@ export class CollabRegistry {
     // refused socket tries again, and by then the path is in the trash, so it gets a 404.
     public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {
         const keys = [pathId, ...mount.collectDescendantIds(pathId)].map((id) => this.key(mount.id, id));
-        for (const key of keys) this.trashing.add(key);
+        for (const key of keys) this.trashing.set(key, (this.trashing.get(key) ?? 0) + 1);
         try {
             await trash();
+            // A document can move into the folder after the keys above were read. The trash closed its
+            // database with the rest, so the document closes now and stops taking edits it can't save.
+            for (const id of [pathId, ...mount.collectDescendantIds(pathId)]) {
+                if (this.has(mount.id, id)) await this.close(mount, id, { skipFinalSnapshot: true });
+            }
         } finally {
-            for (const key of keys) this.trashing.delete(key);
+            for (const key of keys) {
+                const count = this.trashing.get(key) ?? 0;
+                if (count > 1) this.trashing.set(key, count - 1);
+                else this.trashing.delete(key);
+            }
         }
     }
 
