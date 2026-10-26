@@ -907,22 +907,25 @@ export class Drive {
     }
 
     // Gives someone access to a chat. A chat inside a document shares the document, because its ACL is
-    // the one that counts. A chat on its own shares itself.
+    // the one that counts. A chat on its own shares itself. SharedDrive passes the path it checked, so
+    // a move in between can't make the invite share a document nobody checked.
     public async inviteToChat(
         mountId: string,
         chatId: string,
         email: string,
         actor: User | null = null,
+        checkedTarget?: DrivePath,
     ): Promise<InviteResult> {
         if (!validateEmailAddress(email)) {
             throw new ApiError(400, 'Invalid email address');
         }
 
-        const chatPath = await this.getPath(mountId, chatId);
-        if (!chatPath) throw new ApiError(404, 'Chat not found');
-
-        const container = await this.findContainerPath(mountId, chatPath.parentId ?? '');
-        const targetPath = container ?? chatPath;
+        let targetPath = checkedTarget;
+        if (!targetPath) {
+            const chatPath = await this.getPath(mountId, chatId);
+            if (!chatPath) throw new ApiError(404, 'Chat not found');
+            targetPath = (await this.findContainerPath(mountId, chatPath.parentId ?? '')) ?? chatPath;
+        }
 
         const id = email.toLowerCase();
         if (targetPath.acl?.some((entry) => entry.id.toLowerCase() === id)) {

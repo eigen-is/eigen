@@ -193,7 +193,7 @@ In `apps/api/src/lib/drive/acl.ts`. Walks a pre-fetched breadcrumb (root-first) 
 - Standalone chat → ACL lands on the chat itself; embedded or nested → on the outermost container
 - The invitee gets read and write
 - Target already named in the target path's own ACL → `alreadyHasAccess: true`, no ACL write. Access inherited from a folder above does not count
-- The route refuses a guest (`requireNonGuest`), and `SharedDrive.inviteToChat()` requires write on the chat **and** on the container, otherwise 403
+- The route refuses a guest (`requireNonGuest`), and `SharedDrive.inviteToChat()` requires write on the chat **and** on the container, otherwise 403. It hands the container it checked to `Drive.inviteToChat()`, so a move that lands in between can't make the invite share a document nobody checked
 - `sharingRestricted` on the container blocks editors; the owner (or a team member on a team path) passes
 - Emails are lowercased before comparison and storage; invalid email → 400; self-invite is allowed
 
@@ -209,7 +209,7 @@ The ACL model treats "can edit content" and "can manage access" as one permissio
 
 **Schema**: `sharingRestricted INTEGER NOT NULL DEFAULT 0` on `paths` (`apps/api/src/lib/mount/schema.ts`) and on `shared_paths` (`apps/api/src/lib/drive/sharedschema.ts`); `sharingRestricted: boolean` on `DrivePath`.
 
-**Enforcement**: `SharedDrive.updateACLDelta()` checks write permission first, so viewers get the generic "no write permission" 403 and never learn a restriction exists. Then `isEffectiveOwner()` (a team member on a team path) decides: a restricted non-owner gets 403, and a non-owner's `sharingRestricted` value is silently dropped rather than applied. Chat `/invite` and the drive `access-check` (`canShare`) run the same check. The owner is unaffected: `getSharedDrive` hands the owner their own `Drive`, with no wrapper and no restriction check. `receiveSharedPathChange()` mirrors the flag into `shared_paths`, so recipients see the current restriction state.
+**Enforcement**: `SharedDrive.updateACLDelta()` checks write permission first, so a viewer gets the generic "no write permission" 403, the same as on any path they can't change. Then `isEffectiveOwner()` (a team member on a team path) decides: a restricted non-owner gets 403, and a non-owner's `sharingRestricted` value is silently dropped rather than applied. Chat `/invite` and the drive `access-check` (`canShare`) run the same check. The owner is unaffected: `getSharedDrive` hands the owner their own `Drive`, with no wrapper and no restriction check. `receiveSharedPathChange()` mirrors the flag into `shared_paths`, so recipients see the current restriction state.
 
 ### ACL Route
 

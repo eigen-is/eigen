@@ -313,8 +313,8 @@ export class SharedDrive {
 
     // ---- Access and sharing ----
 
-    // Write access comes first, so a reader gets the plain 403 and never learns that sharing is
-    // restricted. A value for the restriction from anyone but an owner is dropped.
+    // Write access comes first, so a reader gets the same 403 as on any path they can't change. A value
+    // for the restriction from anyone but an owner is dropped.
     public async updateACLDelta(
         mountId: string,
         pathId: string,
@@ -396,11 +396,12 @@ export class SharedDrive {
         if (container) {
             await this.requireWrite(mountId, container.id, memberships, 'No write permission on container document');
         }
-        if (this.sharingRestrictedFor(container ?? chatPath, memberships)) {
+        const target = container ?? chatPath;
+        if (this.sharingRestrictedFor(target, memberships)) {
             throw new ApiError(403, 'Sharing is restricted by the owner');
         }
 
-        return this.drive.inviteToChat(mountId, chatId, email, this.user);
+        return this.drive.inviteToChat(mountId, chatId, email, this.user, target);
     }
 
     // No access check: the list only holds paths whose ACL lets this user read them.
