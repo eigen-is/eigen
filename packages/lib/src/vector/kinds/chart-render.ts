@@ -35,7 +35,7 @@ const DATA_ERROR_MESSAGES: Record<ChartDataError, string> = {
 };
 
 export function renderChartSvg(el: VectorChartElement): string {
-    return chartBodySvg(chartBox(el), chartLayout(el));
+    return chartBodySvg(chartBox(el), chartElementLayout(el));
 }
 
 // A complete <svg> of the box in its look and the spec's font, which a document's HTML inlines and a sheet overlays.
@@ -60,7 +60,7 @@ export function renderChartSpecSvg({
 
 // What the chart draws, which Convert to shapes unpacks too; null for the placeholder. A canvas has no sheet
 // to read range data from; a malformed spec stays stored for recovery.
-export function chartLayout(el: VectorChartElement): ChartLayout | null {
+export function chartElementLayout(el: VectorChartElement): ChartLayout | null {
     const { spec } = readChartSpec(el);
     if (spec === null || spec.data.source !== 'inline') return null;
     return layoutChart({ ...chartBox(el), spec, data: spec.data, formatTick: formatTickValue });

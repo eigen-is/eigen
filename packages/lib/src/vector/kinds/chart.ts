@@ -15,7 +15,7 @@ import { rectOutline } from '../outline';
 import type { VectorChartElement } from '../types';
 import { DEFAULT_ELEMENT_PROPS } from '../types';
 import { chartToElements } from './chart-convert';
-import { chartLayout, renderChartSvg } from './chart-render';
+import { chartElementLayout, renderChartSvg } from './chart-render';
 import { defineKind } from './kind';
 import { color, fillField, optionalStrokeWidth } from './read-fields';
 
@@ -65,6 +65,6 @@ export const chartKind = defineKind<VectorChartElement>({
     render: (el) => ({ svg: renderChartSvg(el) }),
     searchText: (el) => chartSearchText(readChartSpec(el).spec),
     // The font its labels draw in; the placeholder adds none.
-    fontFamilies: (el) => chartLayout(el)?.labels.map((label) => label.fontFamily) ?? [],
+    fontFamilies: (el) => chartElementLayout(el)?.labels.map((label) => label.fontFamily) ?? [],
     toShapes: chartToElements,
 });

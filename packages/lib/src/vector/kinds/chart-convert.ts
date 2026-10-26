@@ -1,5 +1,5 @@
 // Convert to shapes: a chart unpacked into the plain elements its painter draws. It reads the painter's own
-// layout (chartLayout), so each shape converts to exactly what drew it; the labels become rich-text boxes.
+// layout (chartElementLayout), so each shape converts to exactly what drew it; the labels become rich-text boxes.
 
 import { textToParagraphHtml } from '../../core/html';
 import type { ChartLabel } from '../../types/chart';
@@ -10,7 +10,7 @@ import { normalizeAngle } from '../outline';
 import { measureLabel } from '../text-width';
 import type { TextAlign, VectorChartElement, VectorElement, VectorRichTextElement } from '../types';
 import { DEFAULT_CORNERS, DEFAULT_RICHTEXT_PROPS } from '../types';
-import { chartLayout } from './chart-render';
+import { chartElementLayout } from './chart-render';
 
 // measureLabel ignores kerning and guesses outside Latin-1, so a box cut to it exactly could wrap its line.
 const LABEL_SLACK_EMS = 0.5;
@@ -20,9 +20,9 @@ const ANCHOR_ALIGN: Record<ChartLabel['anchor'], TextAlign> = { start: 'left', m
 // [] for a chart that draws its placeholder. Ids stay the layout's `${chartId}:…` placeholders for the
 // writer to replace; seeds are kept, so the jitter and the hatches don't reroll.
 export function chartToElements(chart: VectorChartElement): VectorElement[] {
-    const layout = chartLayout(chart);
+    const layout = chartElementLayout(chart);
     if (!layout) return [];
-    const local = [...layout.shapes, ...layout.labels.map((label, i) => labelBox(chart, label, i))];
+    const local = [...layout.shapes, ...layout.labels.map((label, i) => labelElement(chart, label, i))];
     const center = boxCenter(chart);
     return local.map((el) => {
         const at = rotatePoint(
@@ -43,7 +43,7 @@ export function chartToElements(chart: VectorChartElement): VectorElement[] {
 
 // A label turns about its anchor at the line's top, an element about its box center: the box is laid out
 // unturned from the anchor, then its center is turned about the anchor.
-function labelBox(chart: VectorChartElement, label: ChartLabel, i: number): VectorRichTextElement {
+function labelElement(chart: VectorChartElement, label: ChartLabel, i: number): VectorRichTextElement {
     const { fontFamily, fontSize, bold } = label;
     const width = measureLabel(label.text, fontFamily, fontSize, bold) + LABEL_SLACK_EMS * fontSize;
     const height = getLineHeightPx(fontFamily, fontSize);

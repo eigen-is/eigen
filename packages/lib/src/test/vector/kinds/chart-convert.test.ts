@@ -7,7 +7,7 @@ import type { Point } from '../../../vector/geometry';
 import { boxCenter, rotatePoint } from '../../../vector/geometry';
 import { convertToShapes, ELEMENT_KINDS } from '../../../vector/kinds';
 import { chartToElements } from '../../../vector/kinds/chart-convert';
-import { chartLayout, renderChartSvg } from '../../../vector/kinds/chart-render';
+import { chartElementLayout, renderChartSvg } from '../../../vector/kinds/chart-render';
 import { elementGroupOpen, svgTextLine } from '../../../vector/kinds/render-utils';
 import type { VectorChartElement, VectorElement, VectorRichTextElement } from '../../../vector/types';
 import { chart, shape } from '../element-factories';
@@ -32,7 +32,7 @@ const CROWDED = specOf('column', {
 });
 
 function layoutOf(el: VectorChartElement) {
-    const layout = chartLayout(el);
+    const layout = chartElementLayout(el);
     if (!layout) throw new Error('expected a chart that draws');
     return layout;
 }
