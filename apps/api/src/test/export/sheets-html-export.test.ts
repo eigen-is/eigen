@@ -13,6 +13,7 @@ import type {
     SheetChart,
     SheetImage,
 } from '@workspace/lib/sheets';
+
 import {
     encodeSheetsSnapshot,
     REFERENCE_COLUMN_COUNT,
