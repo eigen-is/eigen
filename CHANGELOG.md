@@ -8,88 +8,100 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 
 ### Added
 
-- **Word, Excel and PowerPoint files** — convert one to an Eigen document in Drive, import one into the document you have open, or download your work in that format
+- **PowerPoint files** — convert one to a Slides deck in Drive, import one into the deck you have open, or download a deck as PowerPoint. Shapes, pictures and backgrounds come along
 - **Word files** — keep their equations, headers and footers, footnotes and page setup
-- **Excel files** — keep their hidden sheets and pictures
-- **PowerPoint files** — keep their shapes, pictures and backgrounds
+- **Excel files** — keep their hidden sheets, tab colors and pictures, both when they come in and when you download a spreadsheet as Excel. A cell with more than one format in its text, such as one bold word, comes in with it
 - **Charts in these files** — come in as charts you can edit, not as pictures, with their background, text color, line color and line widths
 - **Charts in downloads** — a chart in a Word, Excel or PowerPoint download is a chart there too, not a picture, with bars as wide as Eigen draws them. A sketched, hatched or dashed chart draws plain, a gradient background takes its middle color, a rotated one sits upright, and a see-through one on a slide is solid
 - **Chart data in Word and PowerPoint downloads** — a chart keeps its numbers in a small spreadsheet inside the file, the way Word and PowerPoint keep a chart's data
 - **Import into a spreadsheet or deck** — add a file's sheets or slides to the one you have open, or replace it with the file. Eigen saves a version before it replaces anything, so you can go back
 - **What didn't come across** — after you import a file into an open document, spreadsheet or deck, a message counts what Eigen left out or simplified, such as a chart it can't draw
-- **Pictures left out** — a Word or PowerPoint picture Eigen can't bring in leaves a **Picture not imported** mark where it was, in Docs and in Slides, so you can see what is missing
-- **Equations** — write math in Docs in LaTeX and watch the preview as you type, or pick symbols from the menus above the field
+- **Pictures left out** — a Word or PowerPoint picture Eigen can't bring in leaves a **Picture not imported** mark where it was, in Docs and in Slides, so you can see what is missing. A chart Eigen can't draw leaves a mark too
+- **Equations** — write math in Docs in LaTeX and watch the preview as you type, or pick symbols from the menus above the field. An equation sits in line with the text or on its own line
 - **Pasted math** — math copied from Word for the web, or from most web pages that show math, pastes as an equation you can edit
 - **Equations in downloads** — PDF, web page and Word downloads keep your equations
-- **Charts** — add a column, bar, line or pie chart in Docs, Sheets, Slides and Vector. You edit its numbers in a small sheet next to it
-- **Charts in Sheets** — a chart follows the cells it shows, so it changes when they do
+- **Charts** — add a column, bar, line or pie chart in Docs, Sheets, Slides and Vector. **Edit data** opens its numbers in a small sheet
+- **Chart axes and stacking** — hide an axis, reverse the order of the categories, or stack a column or bar chart, plain or to 100%
+- **Charts in Sheets** — a chart follows the cells it shows, so it changes when they do. You move, resize, rotate and stack it the way you do a picture
 - **Copying charts** — a chart you copy into another Eigen app stays a chart you can edit
 - **Chart style** — a chart takes the same fill, stroke and sketch style as a shape. In Vector and Slides you can turn one into shapes
 - **Download image** — right-click a chart, or a selection in Vector or Slides, to save it as an SVG picture. This works when you can only view, too. The text in the picture stays real text
-- **Vector downloads** — download a drawing as SVG from the editor, or as PDF from Drive
 - **Page setup** — choose the paper size, orientation and margins in Docs. The editor, printing and every download use them
 - **Slide size** — switch a deck between widescreen 16:9 and standard 4:3
 - **Headers and footers** — add them in Docs, with page numbers and a page count. The first page can have its own. They show on every page when you print, and in PDF and Word downloads
-- **Footnotes** — add numbered notes in Docs. In a PDF they print at the bottom of their page
+- **Footnotes** — add numbered notes in Docs. In a PDF they print at the bottom of their page. A document with more than 1,500 notes, or one longer than a page, lists them after the text instead
 - **More formatting in Docs** — line and paragraph spacing, indents, a font size box on the toolbar, and a background color for table cells
 - **Normal text in Docs** — **Update 'Normal text' to match** gives all normal text the look of the text at your cursor
+- **New functions in Sheets** — XLOOKUP, XMATCH, TEXTJOIN, MAXIFS and MINIFS calculate, and so do Excel's dotted names such as STDEV.S and NORM.DIST
+- **Download from the command palette** — with a document selected in Drive, ⌘K offers **Download as** in each format its File › Download menu has
 
 ### Changed
 
-- **Find and replace** — ⇧⌘H opens it in every editor, as in Google Docs. In Docs, ⌥⌘F now inserts a footnote
-- **Printing from Docs** — Eigen prints through a PDF, so headers, footers and page numbers print too
+- **Find and replace** — ⇧⌘H opens it in Docs, Sheets and text files in Drive, as in Google Docs. In Docs, ⌥⌘F now inserts a footnote
+- **Printing from Docs** — Eigen prints through a PDF, so headers, footers and page numbers print too. Offline, with edits not yet saved, or when the PDF fails, it says so and prints from the browser without them
 - **Nested numbered lists** — number by level, as in Google Docs: 1., then a., then i. A nested list that showed 1. 2. 3. on every level now shows a. or i. on the deeper levels. To keep 1. 2. 3., pick that style for the list again
 - **Text in Sheets** — long text spills into the empty cells next to it
-- **Alignment in Sheets** — numbers and dates line up on the right unless you align them yourself
+- **Alignment in Sheets** — numbers and dates line up on the right, and TRUE, FALSE and errors in the middle, unless you align them yourself. A tick box sits in the middle of its cell, or on the left when it has a label
 - **Column widths in Sheets** — an imported Excel file's columns are as wide as they are in Excel
-- **Excel functions** — IFS, IFNA, XLOOKUP, TEXTJOIN and other newer Excel functions calculate in Sheets
-- **Pictures and charts in Sheets** — you move, resize, rotate and stack them the same way
-- **Large workbooks** — an Excel file imports as long as its cells fit. There is no longer a separate limit on sheets, rows or merged cells
-- **Password-protected files** — an import tells you the file has a password, and where to remove it
-- **Menus** — every menu orders its items the same way, with Delete last and in red
+- **Font size in Sheets** — the size box takes any size from 1 to 400 points, half points too, where it stopped at 6 and 96
+- **Font sizes in Slides** — sizes and letter spacing show in points, so a 44 pt PowerPoint title reads 44. The stroke width is a number you type, in Slides and in Vector
+- **Sizes in Docs** — an image's width and the size shown while you resize a picture or chart are in centimeters
+- **Vector downloads** — File › Download › **SVG image** draws the SVG in your browser, with its text as real text. Drive and the command palette offer a drawing as PDF only
+- **Large workbooks** — an Excel file with many sheets, rows or merged cells imports as long as the file fits Eigen's size limits. There is no longer a separate limit on sheets, rows or merged cells
+- **Password-protected files** — an Excel or PowerPoint import tells you the file has a password, and to remove it there, as a Word import does
+- **Menus** — right-click and ⋮ menus order their items the same way in every app. In every menu, Delete comes last and in red
 - **Choices in menus** — where you pick one of several options, the submenu shows a check next to the current one
-- **Right-click menus** — shapes and pictures on a canvas, and tables and equations in Docs, get more of their actions in the right-click menu
-- **Accent colors** — charts, calendars, labels and collaborators' cursors use one set of colors. It starts with Eigen's pink, and colors next to each other are easy to tell apart, also for color-blind readers
+- **Right-click menus** — shapes and pictures in Slides and Vector get more of their actions in the right-click menu. In Docs, tables, pictures, charts and equations get a right-click menu of their own
+- **Accent colors** — calendars, labels, collaborators' cursors and now charts take their colors in a new order. It starts with Eigen's pink, and colors next to each other are easy to tell apart, also for color-blind readers. Collaborators' cursors take new colors
 - **Clear formatting** — in Docs it keeps comments and links, and ⌘\ runs it
+- **Server memory** — an open document's live connection holds about 8 KB of the server's memory while idle, where it held about 189 KB
 
 ### Fixed
 
-- **Access** — when someone removes your write access to a document you have open in Docs, the editor turns read-only right away
-- **Sharing** — a sharing change applies right away to every open document in that drive
-- **Team drives** — edits in an open document stay saved when an admin gives its team drive new storage or turns the drive off
+- **Access** — when someone changes your access to a document you have open in Docs, the editor follows right away: it turns read-only when you lose write access, and editable when you get it. This holds for a change on a folder above the document or on its drive too
+- **Team drives** — edits made in an open document stay saved when an admin gives its team drive new storage or turns the drive off
 - **Settings** — two settings changes saved at the same moment both stick, and neither shows an error
 - **Links in Docs** — a collaborator's edit or an undo no longer turns a file name like plan.md into a link
 - **Wrapped images in Docs** — a wrapped image leaves room for the text and lists beside it
 - **Tables in Word downloads** — a table you download as Word and import again keeps its column widths. This holds for a table inside a cell and for a table without set widths too
 - **Copying from Sheets** — cells you paste into another app keep their rows and columns
-- **Pasting in Sheets** — a pasted cell keeps its font
-- **Keys in Sheets** — Tab and Ctrl+arrow move the way they do in Excel
+- **Pasting in Sheets** — a pasted cell keeps its font, or takes the closest one Eigen has
+- **Keys in Sheets** — Tab and Ctrl+arrow move the way they do in Excel and Google Sheets
 - **Mixed formatting in Sheets** — a cell with more than one format in its text, such as one bold word, counts in sorting, filters and formulas
-- **Trash** — on local storage, a crash during a trash or a restore no longer leaves the file out of reach
+- **Formulas in Sheets** — INDEX, TEXT, FIND, SEARCH and a skipped argument, as in SUM(1,,2), give the answers Excel gives. Insert function and autocomplete offer only functions that calculate
+- **Newer Excel functions** — IFS, IFNA, XLOOKUP and Excel's other newer functions in an imported file calculate, where they failed. An Excel download writes them so Excel calculates them too
+- **Images in Sheets** — Delete removes a selected image, and an image that failed to load can be selected and deleted too
+- **Hidden sheets in downloads** — a web page or PDF download of a spreadsheet leaves out its hidden sheets, as Excel prints them
+- **Empty sheets in downloads** — an empty tab prints no blank page
+- **Slides and Vector PDFs** — a PDF of a deck or a drawing prints all of its text and every see-through shape
+- **Blank lines in text boxes** — a blank line in a Slides or Vector text box keeps its height in downloads and previews
+- **Dragging shapes** — in Slides and Vector, dragging a shape moves it even while text on the page is selected, instead of dragging that text
+- **Renaming and moving** — on local storage, a rename or move that fails leaves the file under its old name, instead of out of reach. An upload waiting behind a rename no longer writes over the renamed file
+- **Trash** — on local storage, a trash or restore that failed or was cut short by a crash finishes when you try it again, instead of leaving the file out of reach
 - **Trash** — a file you restore while the Trash is being emptied either comes back or is reported gone. It is never reported restored and then deleted
+- **Trash** — emptying the Trash finishes when it holds a folder and items trashed from inside it, instead of stopping halfway
 - **Trash** — a drive that closes while it clears out expired trash leaves no deleted files behind in its S3 bucket
-- **Trash** — when you trash a document while someone opens it, every edit made before the trash is there after you restore it
+- **Trash** — someone who opens a document while you trash it waits and then finds it in the Trash, instead of typing edits that are lost
 - **Trash** — a chat in the trash restores with all its messages, even after someone tried to open it there
 - **Sharing** — an item in the trash is closed to everyone you shared it with, and nobody can share it on from there. Restoring it gives them the same access again
-- **Trash** — a file you upload or create in a folder while someone trashes it is refused as not found. It no longer stays live inside the trashed folder
-- **Trash** — a document moved into a folder while the folder goes to the trash keeps every edit you make after you restore it
+- **Trash** — a file you create, upload, copy or move into a folder while someone trashes it is refused as not found. It no longer stays live inside the trashed folder
 - **Trash** — deleting a folder for good also takes the items you trashed from inside it off every open Trash view, and tells the people who watched them
 - **Sharing** — a trash that fails, such as when storage is down, leaves the item in your collaborators' **Shared with me**
 - **Sharing** — someone you remove from an item while it is renamed or restored stays removed from their **Shared with me**
-- **Sharing** — moving a file needs edit access to the folder it leaves, as renaming it does. Someone who can edit only the file can't take it out of your folder
+- **Sharing** — moving an item needs edit access to the folder it leaves, as renaming it does. Someone who can edit only the item can't take it out of your folder
 - **WebDAV** — a file or folder you have no access to answers the same as one that doesn't exist, so nobody can guess the names in your drive
 - **Guests** — a guest can't send mail to a file's collaborators, as a guest can't share. The File menu and Drive don't offer them **Email collaborators**
 - **Copying documents** — opening a copy of a document before the copy is done waits for it. The copy then finishes with all of its content, instead of stopping halfway with an empty document
-- **Uploads** — two uploads of one name into one folder at the same moment keep the first file's contents on local storage. The second is refused as a duplicate
-- **Uploads** — a file added to a folder someone deletes at that moment is refused as not found, and leaves nothing behind in storage
-- **Folder sizes** — a folder shows the right size after a file in it is moved twice in quick succession
+- **Uploads** — two files of one name created in one folder at the same moment, such as two uploads, keep the first file's contents on local storage. The second is refused as a duplicate
+- **Uploads** — on S3 storage, a file added to a folder someone deletes for good at that moment is refused as not found, and leaves nothing behind in storage
+- **Folder sizes** — a folder shows the right size after two moves of a file in it at the same moment
 - **Large files** — a file too large for the server's memory to import, export, preview or index is refused, instead of taking the server down
 - **Calendar** — looking up the calendar of a guest or of the organization answers that you have no access, instead of failing with a server error
 - **Calendar** — looking up the calendar of an account that doesn't exist answers the same as one you can't see, so it doesn't tell which accounts exist
-- **Excel theme colors** — a lighter or darker shade of a theme color, such as Text 2, Lighter 40%, comes into Sheets in the color Excel shows
-- **Very large spreadsheets** — a web page or PDF download of a spreadsheet holds its first 250,000 cells, instead of running until the export fails. A sheet cut short keeps at least a page's width of columns, more when all its rows fit, and drops the rows past that, and a sheet with no room left is left out
+- **Excel theme colors** — a lighter or darker shade of a theme color, such as Text 2, Lighter 40%, comes into Sheets in the color Excel shows. A file you imported before keeps its old colors until you import it again
+- **Very large spreadsheets** — a web page or PDF download of a spreadsheet draws up to 250,000 cells, shared by its sheets in tab order, instead of running until the export fails. A sheet cut short keeps one PDF page of columns, or more when all its rows fit, then the rows that fit. A sheet with too few cells left is left out
 - **Merged cells in spreadsheet downloads** — a merged cell over a hidden row or column keeps the table's columns in line in the web page, PDF and preview, and shows its text and its outer border even when its first or last row or column is hidden
-- **Long code blocks** — a code block longer than 64 KB without a language downloads at once, as plain text, instead of stalling the export
+- **Long code blocks** — a Docs code block longer than about 65,000 characters, with no language set, downloads at once without syntax colors, instead of stalling the export
 
 ## [0.3.3] - 2026-10-13
 
