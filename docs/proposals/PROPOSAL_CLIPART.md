@@ -18,7 +18,7 @@ This proposal adds a bundled library of 2000s-era vector clipart to Eigen's canv
 - **Generative AI or external clipart APIs**: No prompts, no runtime fetches to third-party icon/clipart services, no raster clip art. Every asset is a deterministic vector definition checked into the repository under a permissive license.
 - **Nested group trees in the Yjs model**: The canvas engine deliberately avoids nested group hierarchies (`no groupId in packages/lib/src/vector/types.ts`). Like charts, a clipart is a single composite element while whole, and unpacks flat into its z-order slot when broken apart.
 - **Full arbitrary SVG 2 filter/mask/scripting support**: The `path` kind models geometric vector paths (`M`, `L`, `C`, `Q`, `Z`), not SVG `<filter>`, `<feGaussianBlur>`, CSS animations or embedded bitmaps.
-- **In-canvas Bézier node-editing tool (Phase 1)**: In Phase 1, `path` elements are created by unpacking clipart (or from a shape picker) and transform via `ObjectTransform` (move, resize, rotate, flip). A pen tool / vertex-handle editor for `path` control points is an optional later phase.
+- **In-canvas Bézier node-editing tool**: `path` elements are created by unpacking clipart (or from a shape picker) and transform via `ObjectTransform` (move, resize, rotate, flip). A pen tool / vertex-handle editor for `path` control points is an optional later phase.
 
 ## Current state
 
