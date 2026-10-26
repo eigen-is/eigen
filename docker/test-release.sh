@@ -463,6 +463,7 @@ done
 ) 2>/dev/null &
 watching=$!
 started=$SECONDS
+since=$(date +%s)
 eigen update
 show
 backed_up=0
@@ -484,7 +485,17 @@ if [ "$backed_up" != 0 ] || [ -z "$manual" ] || [[ $saved != server-pre-update-l
 elif [ -e "$SCRATCH/update-waited" ]; then
     ok "the update waited for the backup that ran, $manual, then made $saved on the running API"
 else
-    fail "the update was not seen waiting for the backup that ran, $manual"
+    # No seam holds a backup open, and a fast runner ends the 1 GB one before the update's pulls do: a miss is the
+    # product's only if the update's backup command started over five seconds, the CLI's way to the API, before the
+    # running backup's record was last written.
+    ended=$(scratch_run stat -c %Y "$INSTALL/backups/$manual.json" 2>/dev/null || true)
+    asked=$(docker events --since "$since" --until "$(date +%s)" --filter "container=$PROJECT-eigen-api-1" \
+        --format '{{.Time}} {{.Action}}' | awk '/exec_start: .* backup .*--reason pre-update/ { print $1; exit }' || true)
+    if [ -n "$asked" ] && [ -n "$ended" ] && [ "$asked" -ge $((ended - 5)) ]; then
+        skip "harness timing: $manual ended at $ended, the update asked at $asked, so the wait went untested"
+    else
+        fail "the update asked for its backup at '$asked', before $manual ended at '$ended', and was not seen waiting for it"
+    fi
 fi
 check_running "$NEW"
 after=$(unpinned)
