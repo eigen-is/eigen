@@ -150,6 +150,8 @@ const ARROWS: Record<string, [number, number]> = {
     ArrowRight: [0, 1],
 };
 const GRID_LINES = 'border-r border-b border-(--sheet-grid-line)';
+// A cell's line of text is its row's height less the 1 px grid line under it.
+const CELL_TEXT = { lineHeight: `${SHEET_DEFAULT_ROW_HEIGHT - 1}px` };
 const HEADER = cn(
     GRID_LINES,
     'flex items-center justify-center bg-(--sheet-header-background) text-(--sheet-header-text)',
@@ -208,13 +210,13 @@ function EditableGrid({
             el.scrollTop = y + SHEET_DEFAULT_ROW_HEIGHT - el.clientHeight;
     }, [selection.focus]);
 
-    const measure = () => {
+    const growReach = () => {
         const el = scroller.current;
         if (!el) return;
         const rows = Math.ceil((el.scrollTop + 2 * el.clientHeight) / SHEET_DEFAULT_ROW_HEIGHT);
         setReach((current) => Math.max(current, rows));
     };
-    useLayoutEffect(measure, []);
+    useLayoutEffect(growReach, []);
 
     // The open edit lands in the grid; Save and every move go from the committed grid.
     const committed = () => {
@@ -387,7 +389,7 @@ function EditableGrid({
                 ref={scroller}
                 className="eigen-paper relative isolate h-[60vh] w-full overflow-auto rounded-md border bg-background font-sans select-none"
                 style={{ fontSize: `${SHEET_DEFAULT_FONT_SIZE}pt` }}
-                onScroll={measure}
+                onScroll={growReach}
                 onMouseUp={() => {
                     dragging.current = false;
                 }}
@@ -467,10 +469,11 @@ function EditableGrid({
                                             aria-invalid={bad || undefined}
                                             className={cn(
                                                 GRID_LINES,
-                                                'truncate px-1 leading-[19px]',
+                                                'truncate px-1',
                                                 (row === 0 || column === 0) && 'font-bold',
                                                 bad && 'bg-destructive/10 text-destructive',
                                             )}
+                                            style={CELL_TEXT}
                                             onMouseDown={(e) => pointTo(e, cell)}
                                             onMouseEnter={(e) => {
                                                 if (dragging.current && e.buttons === 1) extend(cell);
@@ -506,11 +509,11 @@ function EditableGrid({
                     autoComplete="off"
                     spellCheck={false}
                     className={cn(
-                        'absolute border border-(--sheet-editor-border) bg-background px-1 leading-[19px] outline-none select-text',
+                        'absolute border border-(--sheet-editor-border) bg-background px-1 outline-none select-text',
                         editing ? 'shadow-[0_2px_5px_var(--sheet-editor-shadow)]' : 'pointer-events-none opacity-0',
                         (active.row === 0 || active.column === 0) && 'font-bold',
                     )}
-                    style={box(active.row, active.column, active.row, active.column)}
+                    style={{ ...box(active.row, active.column, active.row, active.column), ...CELL_TEXT }}
                     value={editing?.text ?? ''}
                     onChange={(e) => onChange(e.target.value)}
                     onKeyDown={onKeyDown}
