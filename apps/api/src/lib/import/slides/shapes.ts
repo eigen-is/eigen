@@ -634,7 +634,7 @@ function readGraphicFrame(walk: Walk, shape: XmlElement, box: Box): void {
     else placeholderBox(walk, shape, kind, box, chart && droppedChart(chart.unsupported));
 }
 
-// Q5: a loss the user can see on the slide, saying what was there.
+// A loss the user can see on the slide, saying what was there.
 function placeholderBox(walk: Walk, shape: XmlElement, what: Dropped, box: Box, lines = [DROPPED[what].label]): void {
     walk.deck.lost(DROPPED[what].code, shape);
     const color = textColorOf(walk.inheritance.theme.colors);

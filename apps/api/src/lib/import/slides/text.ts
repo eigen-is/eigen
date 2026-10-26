@@ -1,4 +1,4 @@
-// A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
+// A text body becomes one rich-text box: its HTML and the box's typography. It leaves out per-run size, colour and
 // font, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript, subscript and
 // highlight.
 
@@ -24,7 +24,7 @@ import { charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './loo
 import type { DeckWalk } from './package';
 import { alternative } from './package';
 
-// What a text body inherits from, nearest first (SPEC X-D4).
+// What a text body inherits from, nearest first.
 export type TextSource = {
     // The shape's own p:txBody.
     body: XmlElement;

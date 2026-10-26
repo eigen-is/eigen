@@ -1,4 +1,4 @@
-// What a slide takes from its layout, master and theme (SPEC X-D4): placeholders matched down the chain, the colour
+// What a slide takes from its layout, master and theme: placeholders matched down the chain, the colour
 // map, the background, and the shapes the layout and master draw beneath the slide's own.
 
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
@@ -246,7 +246,7 @@ function placeholdersOf(root: XmlElement): Placeholders {
     return placeholders;
 }
 
-// SPEC X-D4: ctrTitle is a title; subTitle, obj, an untyped placeholder and one for content a master has no
+// ctrTitle is a title; subTitle, obj, an untyped placeholder and one for content a master has no
 // placeholder of its own for are body, as python-pptx matches them.
 const BODY_TYPES = new Set(['body', 'subTitle', 'obj', 'pic', 'tbl', 'chart', 'clipArt', 'dgm', 'media']);
 
