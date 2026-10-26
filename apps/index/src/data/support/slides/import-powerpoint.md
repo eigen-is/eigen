@@ -48,7 +48,7 @@ A converted presentation takes the slide size closest to the file's: a widescree
 After an import into an open presentation, a message counts what didn't come across, for example "2 tables and 1 SmartArt graphic were not imported; 5 shapes were simplified."
 
 - A table, SmartArt graphic, or embedded object becomes a box that says what was there, so you can see the gap and rebuild it. The box is see-through, so a title behind it stays readable.
-- A chart Slides can't draw the way PowerPoint does, such as an area, scatter, doughnut, or combo chart, becomes a box that names the kind of chart and its title, for example **Scatter chart not imported**.
+- A chart Slides can't draw the way PowerPoint does, such as an area, scatter, doughnut, or combo chart, becomes a box that names the kind of chart and its title, for example **Scatter chart not imported**. A chart with more than 32 series, or more than 2,000 values in all, becomes a box that says **Chart not imported**, with its title.
 - A bent or curved connector, an arc, or a freeform line that isn't closed comes in without its arrowheads. Shadows, glows, and 3-D effects are left out.
 - Pictures come in uncropped and unflipped. A TIFF, EMF, or WMF picture becomes a box that says **Picture not imported**. So does every picture after the first 1,000, or once the pictures add up to more than the largest file you can upload (35 MB unless your administrator changed it).
 - A pattern fill becomes a plain color, a gradient keeps its first and last color, and a picture used to fill a shape is left out.
