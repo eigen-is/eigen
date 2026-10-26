@@ -22,7 +22,7 @@ How to prove a change works in the real product, not just in tests. Written for 
 
 - **Creating users**: the public `POST /auth/sign-up/email` is blocked (403, self-registration is off). Create test users server-side with `auth.api.signUpEmail` (see `apps/api/src/test/setup.ts`) or through the admin Users page, then sign in with `POST /auth/sign-in/email` to get the `better-auth.session_token` cookie.
 - **Convention**: one throwaway account per task, `<task>-verify@eigen.test` with password `<account>-password-123` (e.g. `cycle8-verify@eigen.test` / `cycle8-verify@eigen.test-password-123`). Never verify in a real user's drive. Leave the account's documents in place when they are useful reproducers; otherwise trash them (`DELETE /drive/:owner/:mount/path/:pathId`, soft delete).
-- **Cookie injection**: cookies are host-scoped, not port-scoped, so a cookie from `:8000` authenticates every app port. In Playwright: `context.addCookies([{ name: 'better-auth.session_token', value, domain: 'localhost', path: '/' }])`. A Docker install's cookie is `__Secure-better-auth.session_token`, even over http.
+- **Cookie injection**: cookies are host-scoped, not port-scoped, so a cookie from `:8000` authenticates every app port. In Playwright: `context.addCookies([{ name: 'better-auth.session_token', value, domain: 'localhost', path: '/' }])`. A release Docker install, such as a harness install, names its cookie `__Secure-better-auth.session_token`, even over http.
 
 ## Driving the apps headless
 
