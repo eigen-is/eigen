@@ -74,6 +74,11 @@ export class CollabRegistry {
         }
     }
 
+    // Whether the path is on its way to the trash, on its own or with a folder above it.
+    public isTrashing(mount: Mount, pathId: string): boolean {
+        return this.trashing.has(this.key(mount.id, pathId));
+    }
+
     // Runs a trash of the path and refuses every open at or below it until the trash is done. The
     // refused socket tries again, and by then the path is in the trash, so it gets a 404.
     public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {

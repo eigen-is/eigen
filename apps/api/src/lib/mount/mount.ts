@@ -526,6 +526,7 @@ export class Mount {
         const fileValue = this.isPathBased ? name : '';
 
         await this.withCreateLock(parentId, name, async () => {
+            this.assertLiveFolder(folderId, parentId);
             // Checked under the lock, because on `local` a rename that took the lock first owns the
             // key this create would replace.
             await this.assertUniqueName(parentId, name);
@@ -598,6 +599,7 @@ export class Mount {
 
         const searchable = isSearchableTextFile(mimeType, name);
         await this.withCreateLock(parentId, name, async () => {
+            this.assertLiveFolder(fileId, parentId);
             // Checked under the lock, because on `local` a rename that took the lock first owns the
             // key this create would replace.
             await this.assertUniqueName(parentId, name);
@@ -659,11 +661,24 @@ export class Mount {
         }
     }
 
+    // A create checks its folder before it writes any bytes. A folder that went to the trash while the
+    // create waited is a 404, the same as for a move. On `local` the create then holds the tree lock
+    // shared, so no trash can land before its row is in.
+    private assertLiveFolder(id: string, parentId: string): void {
+        const error = this.db.transaction((tx) => this.targetFolderErrorInTx(tx, id, parentId));
+        if (error) throw error;
+    }
+
     // assertUniqueName's SELECT leaves a race open: two creates can both pass it before either inserts.
-    // Off `local` no lock keeps a folder's permanent delete out of a create either.
+    // Off `local` no lock keeps a trash or a permanent delete of the folder out of a create either. So
+    // the folder is checked again in the transaction of the insert.
     private async insertPathRow(values: typeof paths.$inferInsert): Promise<void> {
         try {
-            await this.db.insert(paths).values(values);
+            this.db.transaction((tx) => {
+                const error = this.targetFolderErrorInTx(tx, values.id, values.parentId ?? null);
+                if (error) throw error;
+                tx.insert(paths).values(values).run();
+            });
         } catch (e) {
             rethrowPathWriteError(e, values.name);
         }

@@ -338,7 +338,7 @@ export class Drive {
         containerType: DriveContainerType = 'folder',
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const parent = await mount.getActivePath(parentId);
+        const parent = await this.getTargetFolder(mount, parentId);
         if (!isContainerType(parent.type)) {
             throw new ApiError(404, 'Parent folder not found');
         }
@@ -360,7 +360,7 @@ export class Drive {
         user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const parent = await mount.getActivePath(parentId);
+        const parent = await this.getTargetFolder(mount, parentId);
         if (!isContainerType(parent.type)) {
             throw new ApiError(404, 'Parent folder not found');
         }
@@ -419,7 +419,7 @@ export class Drive {
         user?: User,
     ): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
-        const parent = await mount.getActivePath(parentId);
+        const parent = await this.getTargetFolder(mount, parentId);
         if (parent.type !== DRIVE_TYPE_FOLDER) {
             throw new ApiError(404, 'Parent folder not found');
         }
@@ -462,7 +462,7 @@ export class Drive {
         user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const parent = await mount.getActivePath(parentId);
+        const parent = await this.getTargetFolder(mount, parentId);
         // A document container is a valid parent too. Copying a document to another drive writes its
         // databases into the new container this way.
         if (!isContainerType(parent.type)) throw new ApiError(400, 'Target is not a folder');
@@ -549,6 +549,14 @@ export class Drive {
         return updated;
     }
 
+    // The folder that a create, copy or move puts something in. A folder on its way to the trash is a
+    // 404 already, the same as one in the trash. Its trash closes the databases under it, and a
+    // document put there meanwhile could take edits it can't save.
+    private async getTargetFolder(mount: Mount, folderId: string): Promise<DrivePath> {
+        if (this.documents.isTrashing(mount, folderId)) throw new ApiError(404, 'Folder not found');
+        return mount.getActivePath(folderId);
+    }
+
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
         await this.getMount(mountId).updatePath(pathId, { details });
     }
@@ -562,7 +570,7 @@ export class Drive {
         const path = await mount.getActivePath(pathId);
         const oldParentId = path.parentId;
 
-        const targetParent = await mount.getActivePath(targetParentId);
+        const targetParent = await this.getTargetFolder(mount, targetParentId);
         if (targetParent.type !== DRIVE_TYPE_FOLDER) {
             throw new ApiError(404, 'Target parent is not a folder');
         }
@@ -625,6 +633,7 @@ export class Drive {
         if (await mount.isSelfOrDescendant(srcPathId, destParentId)) {
             throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
         }
+        await this.getTargetFolder(mount, destParentId);
         const copied = await mount.copyPath(srcPathId, destParentId, name, user);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
