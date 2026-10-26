@@ -1,4 +1,5 @@
-// Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback, and charts, each a Word chart.
+// Figures: a WebP as it is, the thumbnail Worker's PNG or JPEG of any other raster, an SVG beside its PNG fallback, and
+// charts, each a Word chart.
 
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';

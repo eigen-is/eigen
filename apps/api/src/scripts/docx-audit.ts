@@ -2215,7 +2215,7 @@ export const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = 
     },
     {
         kind: 'pictures re-encoded',
-        why: 'The export re-encodes a raster as PNG (a lossless source) or JPEG, no larger than OFFICE_IMAGE_MAX_SIZE, so its type or size comes back as the export made it',
+        why: 'The export re-encodes a raster other than WebP as PNG (a lossless source) or JPEG, and a WebP only past OFFICE_IMAGE_MAX_SIZE, as a WebP no larger than it, so its type or size comes back as the export made it',
         matches: ({ feature, at, b }, context) => {
             const name = nodeAt(context.a, at)?.attrs?.['mediaName'];
             return feature === 'figure media' && canonical(b) === canonical(context.prepared.get(String(name)));

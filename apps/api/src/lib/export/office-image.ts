@@ -1,5 +1,5 @@
-// The images the docx, pptx and xlsx writers embed: the PNG or JPEG a source becomes, the PNG an SVG falls back to, and
-// the media parts of one package.
+// The images the docx, pptx and xlsx writers embed: the WebP a source keeps or the PNG or JPEG it becomes, the PNG an
+// SVG falls back to, and the media parts of one package.
 
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { ExportMedia } from '../document/transform/protocol';
@@ -17,7 +17,7 @@ export type OfficeMedia = ExportMedia & { png?: ArrayBuffer };
 export const OFFICE_IMAGE_MAX_SIZE = 2560;
 
 // The part extension of each type encodeOfficeImage writes, which an Office package embeds as is.
-const RASTER_TYPES = new Set(['image/png', 'image/jpeg']);
+const RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const RASTER_EXTENSIONS = new Map(
     [...IMAGE_EXTENSION_BY_MIME].filter(([contentType]) => RASTER_TYPES.has(contentType)),
 );
@@ -28,44 +28,35 @@ export const OFFICE_IMAGE_CONTENT_TYPES: Record<string, string> = {
     svg: 'image/svg+xml',
 };
 
-// Lossless codings, which PNG keeps pixel for pixel. Every other type takes JPEG, a photo's size; one with alpha
-// retries as PNG.
+// Lossless codings, which PNG keeps pixel for pixel. Every other type but WebP takes JPEG, a photo's size; one with
+// alpha retries as PNG.
 const PNG_SOURCES = new Set(['image/png', 'image/gif']);
 
-// How far into a WebP the chunk walk reads.
-export const WEBP_SCAN_BYTES = 64 * 1024;
-
-// An Office image is a PNG or JPEG made from its source, since Word and PowerPoint for the web and Google Docs show no
-// WebP. `encode` is sharpResize, in the thumbnail Worker for a media file and in the transform process for a data:
-// src; its re-encode drops the EXIF, GPS included. `webp` is the start of a WebP source, at least WEBP_SCAN_BYTES of it.
+// An Office image is a WebP as it is, else a PNG or JPEG made from its source. `encode` is sharpResize, in the thumbnail
+// Worker for a media file and in the transform process for a data: src; its re-encode drops the EXIF, GPS included.
+// A WebP keeps `source`, its file's bytes, EXIF and all, unless it is larger than OFFICE_IMAGE_MAX_SIZE; any other
+// type, which never keeps them, may pass null and leave the read to the Worker.
 export async function encodeOfficeImage(
     name: string,
     mime: string,
-    webp: Buffer | null,
+    source: Buffer | null,
     encode: (options: WorkerInput['options']) => Promise<ImageResult | null>,
 ): Promise<ExportMedia | null> {
-    let format: 'png' | 'jpeg' = PNG_SOURCES.has(mime) ? 'png' : 'jpeg';
-    // A WebP's image chunk names its coding, which the thumbnail Worker doesn't report: VP8L is lossless; VP8 is lossy.
-    // An ICC profile, EXIF or alpha puts a VP8X header and other chunks first, so the walk reads past them.
-    const head = mime === 'image/webp' ? webp : null;
-    for (let at = 12; head && at + 8 <= head.byteLength; ) {
-        const chunk = head.toString('latin1', at, at + 4);
-        if (chunk === 'VP8L') format = 'png';
-        if (chunk === 'VP8L' || chunk === 'VP8 ') break;
-        const size = head.readUInt32LE(at + 4);
-        at += 8 + size + (size & 1);
-    }
-    const encodeAs = (format: 'png' | 'jpeg') =>
+    let format: 'png' | 'jpeg' | 'webp' = mime === 'image/webp' ? 'webp' : PNG_SOURCES.has(mime) ? 'png' : 'jpeg';
+    const encodeAs = (format: 'png' | 'jpeg' | 'webp') =>
         encode({ format, maxSize: OFFICE_IMAGE_MAX_SIZE, quality: 80, fit: 'inside' });
     let result = await encodeAs(format);
-    // JPEG has no alpha: a source that holds one (a VP8X WebP, an AVIF, a PNG stored as JPEG) takes PNG.
+    // JPEG has no alpha: a source that holds one (an AVIF, a PNG stored as JPEG) takes PNG.
     if (result?.hasAlpha && format === 'jpeg') {
         format = 'png';
         result = await encodeAs(format);
     }
     if (!result) return null;
-    const { data, width, height } = result;
-    return { name, contentType: `image/${format}`, data: toTransferableBuffer(data), width, height };
+    const { width, height } = result;
+    // The Worker reports the source's size, so a WebP that fits keeps its own bytes and the re-encode is dropped.
+    const kept = format === 'webp' && Math.max(width, height) <= OFFICE_IMAGE_MAX_SIZE ? source : null;
+    const data = toTransferableBuffer(kept ?? result.data);
+    return { name, contentType: `image/${format}`, data, width, height };
 }
 
 // The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a

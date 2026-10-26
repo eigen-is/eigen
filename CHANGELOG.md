@@ -38,6 +38,7 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 
 - **Find and replace** — ⇧⌘H opens it in every editor, as in Google Docs. In Docs, ⌥⌘F now inserts a footnote
 - **Printing from Docs** — Eigen prints through a PDF, so headers, footers and page numbers print too
+- **WebP pictures in downloads** — a WebP picture stays a WebP in a Word, Excel or PowerPoint download, at full quality and with its photo details, location included. Microsoft 365 shows it, but desktop Office 2016 and 2019 don't
 - **Nested numbered lists** — number by level, as in Google Docs: 1., then a., then i. A nested list that showed 1. 2. 3. on every level now shows a. or i. on the deeper levels. To keep 1. 2. 3., pick that style for the list again
 - **Text in Sheets** — long text spills into the empty cells next to it
 - **Alignment in Sheets** — numbers and dates line up on the right unless you align them yourself
