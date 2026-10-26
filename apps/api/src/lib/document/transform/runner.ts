@@ -66,9 +66,11 @@ export const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 // unit), $2 the CPU seconds, the rest the command. The kernel kills the process before the API when the host runs out
 // first; a refused data limit runs it unbounded with a warning, never an outage; the CPU limit bounds an orphan that
 // spins, soft only, so it ends by SIGXCPU, a crash, where a hard one's SIGKILL would read as out of memory; an abort,
-// an expected death here, writes no core.
+// an expected death here, writes no core. The core limit stops a kernel that writes cores to a file. A host that pipes
+// them to a handler, as Ubuntu's systemd-coredump does, ignores that limit, so the empty dump filter keeps the child's
+// gigabytes of reserved address space out of the pipe. The kernel holds the dying child, and its slot, until it is read.
 const LIMITED_COMMAND =
-    'echo 1000 > /proc/self/oom_score_adj; ulimit -d "$1" 2>/dev/null || echo "memory limit not applied" >&2; ulimit -St "$2"; ulimit -c 0; shift 2; exec "$@"';
+    'echo 1000 > /proc/self/oom_score_adj; echo 0 > /proc/self/coredump_filter; ulimit -d "$1" 2>/dev/null || echo "memory limit not applied" >&2; ulimit -St "$2"; ulimit -c 0; shift 2; exec "$@"';
 // GC and JIT threads spend CPU on every core beside the job's own, so the CPU limit is the deadline on each, plus slack.
 const CPU_SLACK_SECONDS = 60;
 // The machine's memory, the cgroup's where there is one, which Bun's constrainedMemory() answers both: a process
