@@ -177,12 +177,12 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ['small', () => ({ spacing: twips(SMALL_LOOK.letterSpacingPt), size: halfPoints(SMALL_LOOK.sizePt) })],
     [
         'code',
+        // Only inside a heading or title a size of its own, as textStyle's, or it would unset Small's before it.
         (_attrs, { blockPt }) => ({
             style: 'Code',
-            size:
-                blockPt === undefined
-                    ? undefined
-                    : halfPoints(cssPt(proseValue('.eigen-prose code', 'font-size'), blockPt)),
+            ...(blockPt !== undefined && {
+                size: halfPoints(cssPt(proseValue('.eigen-prose code', 'font-size'), blockPt)),
+            }),
         }),
     ],
     [

@@ -1004,6 +1004,16 @@ describe('docx writer — marks', () => {
         ]);
     });
 
+    // Only a forged peer marks code beside Small: the editor's Code mark excludes the others.
+    test("code outside a heading or title beside Small keeps Small's size", async () => {
+        expect(await runProps({ type: 'small' }, { type: 'code' })).toEqual([
+            ['rStyle', 'Code'],
+            ['spacing', '2'],
+            ['sz', '18'],
+            ['szCs', '18'],
+        ]);
+    });
+
     test('a text color and an Eigen font are written; rgb() is normalized', async () => {
         expect(
             await runProps({ type: 'textStyle', attrs: { color: 'rgb(192, 0, 0)', fontFamily: 'Source Serif 4' } }),
