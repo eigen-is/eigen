@@ -13,6 +13,7 @@ import {
     isCellRangeShape,
     isChartSpecKey,
     MAX_CHART_POINTS,
+    newSheetChartSpecParts,
     readChartLook,
     readChartSpec,
     sheetChartSpecWrites,
@@ -84,6 +85,11 @@ export function seriesName(name: RangeChartSeries['name'], resolver: CellResolve
     return typeof name === 'string' ? name : cellLabel(resolver.getCell(name.sheetId, name.row[0], name.column[0]));
 }
 
+// The text a chart reads from a cell: the string the grid shows, or a rich-text cell's runs.
+export function cellLabel(cell: Cell | null): string {
+    return chartLabel(String(cellDisplay(cell) ?? ''));
+}
+
 // A chart as the editor's overlay and the export draw it: its box clamped as stored, in the look it stores, its range
 // data read through the resolver, and value ticks in the axis's own format or else the first value cell's, Google's
 // "From source data".
@@ -101,14 +107,6 @@ export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): 
         look: readChartLook(chart),
         formatTick: (value) => numberDisplay(value, format),
     });
-}
-
-// The value axis's own format, or for a range chart the first value cell's.
-function valueFormat(spec: ChartSpec, resolver: CellResolver): string | undefined {
-    const { format } = spec.axes.y.labels;
-    if (format !== null) return format;
-    const first = spec.data.source === 'range' ? spec.data.series.find((s) => s.values)?.values : null;
-    return first ? resolver.getCell(first.sheetId, first.row[0], first.column[0])?.ct?.fa : undefined;
 }
 
 // The chart as a copy carries it to a host with no cells, its parts as text: its ranges read into inline data, and the
@@ -140,15 +138,6 @@ export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): Char
     ];
     const inline = { ...texts, ...chartSpecWrites(stored, change) };
     return exceedsChartSpecBytes(inline) ? null : inline;
-}
-
-function size(ref: CellRangeRef): number {
-    return (ref.row[1] - ref.row[0] + 1) * (ref.column[1] - ref.column[0] + 1);
-}
-
-// The text a chart reads from a cell: the string the grid shows, or a rich-text cell's runs.
-export function cellLabel(cell: Cell | null): string {
-    return chartLabel(String(cellDisplay(cell) ?? ''));
 }
 
 // Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or its
@@ -194,7 +183,29 @@ export function writeSheetChartSpec(chart: SheetChartSpecParts, writes: SheetCha
     }
 }
 
-// The same on a copy of the chart, sharing every record no write touched.
+// A chart's spec fields for a copy of it in this workbook: every prefixed key, a newer build's too, each record one of
+// its own, so the copy shares none with the chart. A part it lacks is empty, a keyed one an empty record.
+export function copySheetChartSpec(chart: SheetChart): SheetChartSpecParts {
+    const copy = newSheetChartSpecParts({});
+    for (const [key, value] of Object.entries(chart)) {
+        if (isChartSpecKey(key)) Object.assign(copy, { [key]: isRecord(value) ? { ...value } : value });
+    }
+    return copy;
+}
+
+// The value axis's own format, or for a range chart the first value cell's.
+function valueFormat(spec: ChartSpec, resolver: CellResolver): string | undefined {
+    const { format } = spec.axes.y.labels;
+    if (format !== null) return format;
+    const first = spec.data.source === 'range' ? spec.data.series.find((s) => s.values)?.values : null;
+    return first ? resolver.getCell(first.sheetId, first.row[0], first.column[0])?.ct?.fa : undefined;
+}
+
+function size(ref: CellRangeRef): number {
+    return (ref.row[1] - ref.row[0] + 1) * (ref.column[1] - ref.column[0] + 1);
+}
+
+// writeSheetChartSpec's writes on a copy of the chart, which shares every record no write touched.
 function withSheetChartSpecWrites(chart: SheetChart, writes: SheetChartSpecWrite[]): SheetChart {
     const next = { ...chart };
     for (const write of writes) {
@@ -204,25 +215,6 @@ function withSheetChartSpecWrites(chart: SheetChart, writes: SheetChartSpecWrite
     }
     writeSheetChartSpec(next, writes);
     return next;
-}
-
-// A chart's spec fields for a copy of it in this workbook: every prefixed key, a newer build's too, each record one of
-// its own, so the copy shares none with the chart. A part it lacks is empty, a keyed one an empty record.
-export function copySheetChartSpec(chart: SheetChart): SheetChartSpecParts {
-    const copy: SheetChartSpecParts = {
-        specChart: '',
-        specTitle: '',
-        specLegend: '',
-        specAxes: {},
-        specPlots: {},
-        specSeries: {},
-        specPoints: {},
-        specData: '',
-    };
-    for (const [key, value] of Object.entries(chart)) {
-        if (isChartSpecKey(key)) Object.assign(copy, { [key]: isRecord(value) ? { ...value } : value });
-    }
-    return copy;
 }
 
 // Stored data with every ref passed through `map`, which is told the key it sits under; undefined leaves it out. A ref
