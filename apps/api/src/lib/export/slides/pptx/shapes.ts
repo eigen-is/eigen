@@ -33,7 +33,7 @@ export function toEmu(slide: Slide, px: number): number {
 }
 
 // 1000ths of a percent, DrawingML's share of a whole.
-export function share(value: number): number {
+export function drawingShare(value: number): number {
     return Math.round(value * HUNDRED_PERCENT);
 }
 
@@ -42,7 +42,7 @@ function degrees(radians: number): number {
 }
 
 // Degrees clockwise as DrawingML's 60,000ths, within one turn.
-export function angle(value: number): number {
+export function drawingAngle(value: number): number {
     return Math.round(normalizeAngle(value) * DEGREE) % (360 * DEGREE);
 }
 
@@ -91,7 +91,7 @@ export function elementXml(el: VectorElement, slide: Slide): string {
             // Eigen's angles are the box-normalized circle's; DrawingML's pie takes the angles as drawn on the ellipse.
             const visual = (stored: number) => {
                 const theta = (stored * Math.PI) / 180;
-                return angle(degrees(Math.atan2(el.height * Math.sin(theta), el.width * Math.cos(theta))));
+                return drawingAngle(degrees(Math.atan2(el.height * Math.sin(theta), el.width * Math.cos(theta))));
             };
             const [adj1, adj2] = [visual(el.startAngle), visual(el.startAngle + el.sweepAngle)];
             // A pie whose angles meet draws the whole disc: a slice that thin draws nothing, one that full the disc.
@@ -208,7 +208,7 @@ export function spXml(
 }
 
 export function xfrmXml(slide: Slide, box: Box, flipH = false, flipV = false): string {
-    const rot = angle(box.angle);
+    const rot = drawingAngle(box.angle);
     const attrs = `${rot ? ` rot="${rot}"` : ''}${flipH ? ' flipH="1"' : ''}${flipV ? ' flipV="1"' : ''}`;
     return `<a:xfrm${attrs}><a:off x="${toEmu(slide, box.x)}" y="${toEmu(slide, box.y)}"/><a:ext cx="${toEmu(slide, box.width)}" cy="${toEmu(slide, box.height)}"/></a:xfrm>`;
 }
@@ -223,7 +223,7 @@ export function boxGeometry(el: Box & { corners: Corners }): string {
     const radius = cornerRadius(el);
     const side = Math.min(el.width, el.height);
     if (radius <= 0) return presetXml('rect');
-    return presetXml('roundRect', { adj: Math.min(50_000, share(radius / side)) });
+    return presetXml('roundRect', { adj: Math.min(50_000, drawingShare(radius / side)) });
 }
 
 // A rounded outline is its core's edges pushed out by the radius, joined by arcs about the core's corners.
@@ -247,7 +247,7 @@ function outlineGeometry(core: Point[], radius: number, box: Box, slide: Slide):
         if (i === 0)
             path += `<a:moveTo>${pt({ x: core[0].x + radius * Math.cos(n), y: core[0].y + radius * Math.sin(n) })}</a:moveTo>`;
         path += `<a:lnTo>${pt({ x: w.x + radius * Math.cos(n), y: w.y + radius * Math.sin(n) })}</a:lnTo>`;
-        path += `<a:arcTo wR="${r}" hR="${r}" stAng="${angle(degrees(n))}" swAng="${angle(degrees(next - n))}"/>`;
+        path += `<a:arcTo wR="${r}" hR="${r}" stAng="${drawingAngle(degrees(n))}" swAng="${drawingAngle(degrees(next - n))}"/>`;
     }
     return customXml(slide, box, `${path}<a:close/>`, true);
 }
@@ -269,9 +269,9 @@ export function fillXml(
 ): string {
     if (paint.type === 'solid') return solidFillXml(paint.color, opacity);
     const stops = gradientStops(paint.from, paint.to).map(
-        (stop) => `<a:gs pos="${share(stop.offset)}">${colorXml(stop.color, stop.opacity * opacity)}</a:gs>`,
+        (stop) => `<a:gs pos="${drawingShare(stop.offset)}">${colorXml(stop.color, stop.opacity * opacity)}</a:gs>`,
     );
     const css = (paint.angle * Math.PI) / 180;
     const along = degrees(Math.atan2(-Math.cos(css) * box.width, Math.sin(css) * box.height));
-    return `<a:gradFill rotWithShape="1"><a:gsLst>${stops.join('')}</a:gsLst><a:lin ang="${angle(along)}" scaled="0"/></a:gradFill>`;
+    return `<a:gradFill rotWithShape="1"><a:gsLst>${stops.join('')}</a:gsLst><a:lin ang="${drawingAngle(along)}" scaled="0"/></a:gradFill>`;
 }

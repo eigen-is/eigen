@@ -7,12 +7,12 @@ import { blipXml } from '../../../ooxml/drawingml';
 import type { OfficeImage } from '../../office-image';
 import { lineXml } from './lines';
 import type { Slide } from './package';
-import { boxGeometry, fillXml, presetXml, share, spXml, xfrmXml } from './shapes';
+import { boxGeometry, drawingShare, fillXml, presetXml, spXml, xfrmXml } from './shapes';
 
 function slideBlipXml(image: OfficeImage, slide: Slide, opacity: number): string {
     const rId = slide.part.relate('image', `../media/${image.part}`);
     const svgRId = image.svgPart && slide.part.relate('image', `../media/${image.svgPart}`);
-    return blipXml(rId, svgRId, opacity < 1 ? `<a:alphaModFix amt="${share(opacity)}"/>` : '');
+    return blipXml(rId, svgRId, opacity < 1 ? `<a:alphaModFix amt="${drawingShare(opacity)}"/>` : '');
 }
 
 // How much of each side cover cuts off the picture, or contain leaves empty in the box: one share of the whole, on the
@@ -47,7 +47,7 @@ export function pictureXml(el: VectorImageElement, slide: Slide, opacity: number
               height: fit.wide ? el.height * (1 - 2 * fit.cut) : el.height,
           }
         : el;
-    const cut = fit && share(fit.cut);
+    const cut = fit && drawingShare(fit.cut);
     const crop =
         el.objectFit === 'cover' && fit
             ? fit.wide
@@ -76,7 +76,7 @@ export function backgroundXml(background: BackgroundFill | null, frame: VectorFr
     let insets = '';
     if (fit) {
         const cover = background.fit === 'cover';
-        const inset = share(cover ? -fit.cut / (1 - 2 * fit.cut) : fit.cut);
+        const inset = drawingShare(cover ? -fit.cut / (1 - 2 * fit.cut) : fit.cut);
         insets = fit.wide === cover ? ` l="${inset}" r="${inset}"` : ` t="${inset}" b="${inset}"`;
     }
     return `<p:bg><p:bgPr><a:blipFill dpi="0" rotWithShape="1">${slideBlipXml(image, slide, 1)}<a:stretch><a:fillRect${insets}/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>`;
