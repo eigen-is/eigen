@@ -1,5 +1,6 @@
 // The docx reader's colour tests: Word's hex as a mark holds it, and whether a fill is one, a light grey, or too light
-// or dark for text on Eigen's paper. The run, paragraph and table readers decide a colour mark and a fill through them.
+// or dark for text on Eigen's paper. Readers such as the run and table readers decide a colour mark and a fill
+// through them.
 
 import { linearize } from '@workspace/lib/background';
 

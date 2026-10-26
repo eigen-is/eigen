@@ -229,7 +229,6 @@ function clamp(value: number): number {
     return Math.min(1, Math.max(0, value));
 }
 
-// Hue in degrees, saturation and lightness 0–1.
 // Channels from 0 to 1 as hue in degrees, saturation and luminance from 0 to 1, and back.
 export function toHsl(r: number, g: number, b: number): [number, number, number] {
     const max = Math.max(r, g, b);

@@ -1,6 +1,7 @@
 // The pptx reader's paint: a fill, a line or a background resolved through the slide's colour map and theme into a
 // colour, a gradient or a picture, as the canvas stores it. Each resolved colour, ramp and stop list is kept per
-// element, so a master's fill shows on every slide for the cost of one. The shape and text readers paint through it.
+// element, so a master's fill shows on every slide for the cost of one. Readers such as the shape and text readers
+// paint through it.
 
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
 import { normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@workspace/lib/vector';
@@ -88,7 +89,7 @@ const placeholderColors = new WeakMap<DrawingTheme, Map<string | undefined, Draw
 // Each phClr's colours back to the slide's, which any colour but phClr resolves the same with.
 const unplaced = new WeakMap<DrawingTheme, DrawingTheme>();
 
-// A slide's colours with a reference's phClr, one object for each, as colorOf keeps its answers by the object.
+// A slide's colours with a reference's phClr, one object for each, as resolvedColor keeps its answers by the object.
 function withPlaceholder(colors: DrawingTheme, phClr: string | undefined): DrawingTheme {
     let known = placeholderColors.get(colors);
     if (!known) {

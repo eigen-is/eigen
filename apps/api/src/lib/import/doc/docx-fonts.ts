@@ -1,5 +1,6 @@
 // Which bundled font, if any, a Word font draws in: Eigen's by name, a foreign one by its category, an unknown one
-// none. It reads the theme's fonts, the font table and a run's faces by script, for the run and paragraph readers.
+// none. It reads the theme's fonts, the font table and a run's faces by script, for readers such as the run and
+// paragraph readers.
 
 import { bundledFont, bundledFontOfCategory, DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { codePoint as dingbat } from 'dingbat-to-unicode';

@@ -1,6 +1,6 @@
 // The styles part read into one look per cell format (xf), resolved once: fonts, fills, alignment, borders, number
 // formats, theme colours and tints. It also reads the conditional formats' looks (dxf). The xlsx reader calls it once
-// per workbook, and the rich strings and rules readers reuse its font and colour readers.
+// per workbook. Other readers, such as the rich strings and the rules, reuse its font and colour readers.
 
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import type {

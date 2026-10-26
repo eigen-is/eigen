@@ -1,6 +1,6 @@
 // The docx reader's run and paragraph property readers, and the Styles chain that resolves a style's properties through
-// its basedOn parents, docDefaults and the table's conditional looks. The paragraph, run and table readers read every
-// property through it.
+// its basedOn parents, docDefaults and the table's conditional looks. Readers such as the paragraph and run readers
+// read their properties through it.
 
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
