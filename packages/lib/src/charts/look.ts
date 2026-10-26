@@ -1,5 +1,5 @@
-// A chart's look: one reader for a doc's and a sheet's stored fields, and the one map from any chart's look to the
-// painter's ChartPaint, so a chart paints the same wherever it lives.
+// A chart's look: one reader for a host's stored fields, such as a doc's or a sheet's, and the one map from any chart's
+// look to the painter's ChartPaint, so a chart paints the same wherever it lives.
 
 import type { ChartLook, ChartPaint } from '../types/chart';
 import { parseFill, serializeFill, TRANSPARENT_FILL } from '../vector/fill';
@@ -16,8 +16,8 @@ import { STROKE_STYLES } from '../vector/types';
 
 // Google's flat look on the page's own background, which a chart that stores no look draws. strokeColor draws the
 // baseline at full strength and the gridlines faint, so a mid gray gives a clear baseline and Google's light
-// gridlines. strokeWidth is every line's, a line series' too unless seriesStrokeWidth is set; 2 is Google's series line
-// width, so a line series reads at page scale. Solid marks draw no outline.
+// gridlines. strokeWidth is the width of every line. A line series draws at it too, unless seriesStrokeWidth is set.
+// 2 is Google's series line width, so a line series reads at page scale. Solid marks draw no outline.
 export const FLAT_CHART_LOOK: ChartLook = {
     fill: serializeFill(TRANSPARENT_FILL),
     color: '#202124',
@@ -28,8 +28,9 @@ export const FLAT_CHART_LOOK: ChartLook = {
     seed: 1,
 };
 
-// Through the canvas reader's validators, any peer or paste having written them. A missing field reads flat; a
-// missing fill is no background, as the flat look has none, and a missing series width draws at the stroke's.
+// Any peer or paste may have written these fields, so they are read through the canvas reader's validators. A missing
+// field reads flat. A missing fill is no background, as the flat look has none. A missing series width stays unset, so
+// the series draws at the stroke's width.
 export function readChartLook(src: Record<string, unknown>): ChartLook {
     return {
         fill: fillField(src['fill']),
@@ -43,7 +44,8 @@ export function readChartLook(src: Record<string, unknown>): ChartLook {
     };
 }
 
-// The fill's paint is the background and its hatch style the marks'; the stroke draws axes and gridlines.
+// The fill's paint is the background, and its hatch style is the marks'. The stroke draws the axes and gridlines. A
+// line series draws at seriesStrokeWidth, or at the stroke's width where that is unset.
 export function chartPaintOf(look: ChartLook): ChartPaint {
     return {
         color: look.color,

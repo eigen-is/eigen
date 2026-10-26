@@ -1,7 +1,7 @@
-// The stored-chart codec. A chart is stored as one JSON string or as a field per part, a keyed part on Sheets an entry
-// per key, and readChartSpec is the one reader every surface and importer runs: the spec as stored, and the view
-// resolved from it. The writers turn a change into only the parts or entries whose text it changed, so a peer's edit
-// of another entry stands, and build a new or pasted chart's parts with every keyed part present.
+// The stored-chart codec. A chart is stored as one JSON string or as a field per part. On Sheets a keyed part is an
+// entry per key. readChartSpec is the one reader every surface and importer runs, and it gives the spec as stored and
+// the view resolved from it. The writers turn a change into only the parts or entries whose text it changed, so a
+// peer's edit of another entry stands. They also build a new or pasted chart's parts with every keyed part present.
 
 import { isRecord } from '../core/guards';
 import type {
@@ -46,9 +46,9 @@ export const SHEET_CHART_KEYED_PART_KEYS: ReadonlySet<string> = new Set(
     PARTS.filter(isKeyedPart).map((part) => CHART_SPEC_PART_KEY[part]),
 );
 
-// Takes what peers store, a host's record of parts, so the size limit is measured on it. stored is what a writer applies
-// a change onto; past the size limit it is empty. A part past the depth limit or no JSON object is absent, a keyed one
-// empty, so the other parts still read.
+// Reads a host's record of parts, which is what peers store, so the size limit is measured on it. `stored` is what a
+// writer applies a change onto, and it is empty past the size limit. A part past the depth limit, or one that is no
+// JSON object, reads as absent, or as empty for a keyed part, so the other parts still read.
 export function readChartSpec(value: Readonly<Record<string, unknown>>): {
     stored: StoredChartSpec;
     spec: ChartSpec | null;
@@ -69,10 +69,10 @@ export function parseChartSpec(value: string): ChartSpec | null {
     return stored ? resolveChartSpec(stored) : null;
 }
 
-// Every prefixed key's text, as a canvas or a doc stores it and the clipboard carries it, off a host's record or a
-// stored Y.Map: a string as stored, whether it parses or not, and a Sheets keyed part's entries joined. A record under a
-// key this build doesn't know is left out, since how deep its entries sit is unknown. Null past the byte limit, counted
-// as exceedsChartSpecBytes counts, so a forged record of a million keys costs what fits under it.
+// Every prefixed key's text off a host's record or a stored Y.Map, as a canvas or a doc stores it and the clipboard
+// carries it. A string is kept as stored, whether it parses or not, and a Sheets keyed part's entries are joined. A
+// record under a key this build doesn't know is left out, since how deep its entries sit is unknown. Null past the
+// byte limit, counted as exceedsChartSpecBytes counts, so a forged record of a million keys costs what fits under it.
 export function chartSpecTexts(chart: Readonly<Record<string, unknown>> | YMapLike): Record<string, string> | null {
     const read = isYMapLike(chart) ? (key: string) => chart.get(key) : (key: string) => own(chart, key);
     const exceeds = chartSpecByteCounter();
@@ -225,18 +225,18 @@ export function mapChartSpecParts(text: (part: ChartSpecPart) => string): Record
     };
 }
 
-// A chart's parts as a canvas or a doc stores them: made from a spec, by an insert, an import or a test, or pasted as
-// another host's texts, each kept as it came and a newer build's part with them. Every part is there, a keyed one {}
-// when it has no entries, one the texts lack '' and a keyed one {}.
+// A chart's parts as a canvas or a doc stores them, made from a spec or from another host's pasted texts. Pasted texts
+// are kept as they came, a newer build's parts included. Every part is there: one the texts lack is '', or {} for a
+// keyed part.
 export function newChartSpecParts(from: ChartSpec | ChartSpecTexts): Record<ChartSpecPartKey, string> {
     if (isChartSpec(from)) return mapChartSpecParts((part) => JSON.stringify(from[part]));
     const text = (part: ChartSpecPart) => from[CHART_SPEC_PART_KEY[part]] ?? (isKeyedPart(part) ? '{}' : '');
     return { ...from, ...mapChartSpecParts(text) };
 }
 
-// The same on Sheets, where every keyed part is a record from the start: a recipe that made one and set an entry in it
-// would ship the record whole, and two peers' first entries would collide. A pasted keyed part's text is split into its
-// entries, so one that doesn't parse has none; every other text is kept as it came.
+// The same on Sheets, where every keyed part is a record from the start. A recipe that made the record and then set an
+// entry in it would ship the record whole, and two peers' first entries would collide. A pasted keyed part's text is
+// split into its entries, so one that doesn't parse has none. Every other text is kept as it came.
 export function newSheetChartSpecParts(from: ChartSpec | ChartSpecTexts): SheetChartSpecParts {
     const spec = isChartSpec(from) ? from : null;
     const texts: ChartSpecTexts = isChartSpec(from) ? {} : from;

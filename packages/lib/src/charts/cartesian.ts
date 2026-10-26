@@ -32,10 +32,11 @@ const SIN45 = Math.SQRT1_2;
 
 export type PaintedSeries = InlineChartSeries & { color: string; style: ChartSeriesStyle };
 
-// The axis left of the plot takes its title turned -90°, the one below takes it upright. A hidden axis gives its
-// labels' room to the plot and draws no line, the baseline being the category axis's; its title and the gridlines
-// stay. A 100% stack plots shares and labels its ticks as percents, whatever the source cells' format; its min and
-// max are shares too, Excel's c:min and c:max (1 is 100%). Null when the frame is too small for a plot.
+// The axis left of the plot takes its title turned -90°, and the one below takes it upright. A hidden axis gives its
+// labels' room to the plot. Its title and the gridlines stay. The baseline is the category axis's line, so a hidden
+// category axis draws none. A 100% stack plots shares and labels its ticks as percents, whatever the source cells'
+// format. Its min and max are shares too, as Excel's c:min and c:max are, where 1 is 100%. Null when the frame is too
+// small for a plot.
 export function layoutCartesian(
     ctx: Context,
     marks: Context,
@@ -81,9 +82,9 @@ export function layoutCartesian(
         const left = showNames
             ? frame.left + sideReserve + Math.max(0, ...fitted.map((name) => measure(ctx, name))) + gap
             : frame.left + sideReserve;
-        // Fewer ticks until their labels stop touching, each try as many as the last one's widest pair has
-        // room for; the end labels overhang the plot by half a label. Two is the fewest asked, and d3 can answer
-        // it with four, so the labels that still touch hide below.
+        // Each try asks for as many ticks as the last try's widest pair of labels has room for, until the labels
+        // stop touching. The end labels overhang the plot by half a label. Two is the fewest asked, and d3 can
+        // answer two with four, so the labels that still touch are hidden below.
         let n = Math.min(
             MAX_TICK_COUNT,
             Math.max(2, Math.floor((frame.right - left) / (fontSize * HORIZONTAL_TICK_SPACING))),
@@ -227,8 +228,8 @@ function barMarks(
     const ups: number[] = [];
     const downs: number[] = [];
     const slot = stacked ? band.width : band.width / series.length;
-    // An outline straddles its bar's edges, so a bar narrows by its outline to keep its slot, and side by
-    // side bars meet outline to outline; a slot thinner than two outlines thins the outline. A solid bar has none.
+    // An outline straddles its bar's edges, so a bar narrows by its outline to keep its slot. Bars side by side then
+    // meet outline to outline. A slot thinner than two outlines thins the outline. A solid bar has none.
     const stroke = isOutlined(ctx) ? Math.min(ctx.paint.strokeWidth, slot / 2) : 0;
     for (const [si, s] of series.entries()) {
         const fill = serializeFill({ type: 'solid', color: s.color, style: ctx.paint.fillStyle });

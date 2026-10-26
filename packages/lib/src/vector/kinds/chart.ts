@@ -33,9 +33,9 @@ export const chartKind = defineKind<VectorChartElement>({
         silhouette: 'box',
         creation: 'none',
     },
-    // The host's font goes into the spec, which every label reads it from.
-    // A new chart's line series draw at its stroke, so it starts with no series width; listed, so one an Office import
-    // sets is stored.
+    // The host's font goes into the spec, which every label reads it from. A new chart's line series draw at its
+    // stroke, so it has no series width. The key is listed without a value so the element stores the width an Office
+    // import sets.
     defaults: (style) => ({
         ...newChartSpecParts(sampleChartSpec('column', style.fontFamily)),
         fill: style.fill,

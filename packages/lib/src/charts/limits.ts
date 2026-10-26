@@ -1,7 +1,7 @@
 // The bounds on what one stored chart may hold. Every peer lays out and paints whatever any peer or a paste stores,
 // so these limits bound a chart's cost: its size, nesting depth, series and points, and the side of its box. They
 // also give the grammar of a chart's keys, such as a series id or a point's index, so a forged key can never reach
-// what a plain object inherits. The reader checks them before it parses, and the editors before they write.
+// what a plain object inherits. Readers check them before they parse, and editors before they write, for example.
 
 import { nanoid } from 'nanoid';
 import { isRecord } from '../core/guards';
@@ -9,11 +9,11 @@ import { MAX_PAPER_MM, mmToPx } from '../docs/eigendoc/page';
 import type { InlineChartData, StoredChartSpec } from '../types/chart';
 
 export const MAX_CHART_SPEC_BYTES = 64 * 1024;
-// Levels of [ and {, far past what Eigen writes: V8's JSON.stringify recurses, and throws at about 8,000 levels in
-// every writer that serializes what is stored.
+// Levels of [ and {, far past what Eigen writes. V8's JSON.stringify recurses, so every writer that serializes what is
+// stored throws at about 8,000 levels.
 export const MAX_CHART_SPEC_DEPTH = 32;
-// Entries one Sheets chart holds, its records' keys summed. The shortest entry a build writes, a one-character id at
-// '{}', is three bytes, so a chart holding more is past the byte limit and reads as nothing anyway.
+// The entries one Sheets chart holds, its records' keys summed. The shortest entry a build writes is three bytes, a
+// one-character id at '{}', so a chart holding more is past the byte limit and reads as nothing anyway.
 export const MAX_CHART_SPEC_ENTRIES = Math.floor(MAX_CHART_SPEC_BYTES / 3);
 export const MAX_CHART_SERIES = 32;
 // Range data counts its points when the sheet resolves it, since a selection can outgrow the limit.
@@ -68,8 +68,9 @@ export function own(target: StoredChartSpec, key: string): unknown {
     return Object.hasOwn(target, key) ? target[key] : undefined;
 }
 
-// A stored string, or on a host's record every prefixed key's name and text summed, known or not, a Sheets entry's key
-// and text both. The count stops at the limit, so a forged record of a million keys or entries costs what fits under it.
+// Whether a stored string, or a host's record, is past the byte limit. On a record it sums the name and text of every
+// prefixed key, known or not, and a Sheets entry counts its key and its text. The count stops at the limit, so a
+// forged record of a million keys or entries costs what fits under it.
 export function exceedsChartSpecBytes(value: string | Readonly<Record<string, unknown>>): boolean {
     if (typeof value === 'string') return byteBudget()(value);
     const exceeds = chartSpecByteCounter();
