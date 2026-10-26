@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { BATCH_BYTES, MAX_XLSX_ELEMENTS, readBudget } from '../../../lib/import/sheets/package';
-import { readSharedStrings, stringOf, textOf } from '../../../lib/import/sheets/strings';
+import { readSharedStrings, readString, sharedStringText } from '../../../lib/import/sheets/strings';
 import { parseOoxml } from '../../../lib/ooxml/ooxml';
 import { SML } from '../../fixtures/xlsx';
 
@@ -37,7 +37,7 @@ describe('a shared string', () => {
                 { v: ' and plain', it: 1, ff: bundledFont('Arial'), fc: '#000000' },
             ],
         });
-        expect(textOf(rich)).toBe('Bold and plain');
+        expect(sharedStringText(rich)).toBe('Bold and plain');
     });
 
     test("keeps a run without properties, and text beside the runs, as plain text, in its cell's font", () => {
@@ -98,6 +98,6 @@ describe('an inline string', () => {
     test('reads as a shared one does', () => {
         const is = parseOoxml(`<is xmlns="${SML}"><r><rPr><u/></rPr><t>x_x0041_</t></r></is>`) ?? undefined;
         if (!is) throw new Error('no element');
-        expect(stringOf(is, PALETTE)).toEqual({ text: 'xA', runs: [{ v: 'xA', un: 1 }] });
+        expect(readString(is, PALETTE)).toEqual({ text: 'xA', runs: [{ v: 'xA', un: 1 }] });
     });
 });

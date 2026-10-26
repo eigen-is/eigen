@@ -172,7 +172,7 @@ describe('Sheets xlsx export', () => {
         expect(cellAt(sheet, 0, 0)?.ct).toEqual({ fa: '[$€]#,##0.00', t: 'n' });
         expect(cellAt(sheet, 1, 0)?.ct).toEqual({ fa: '0.00%', t: 'n' });
         // The import recases a date's month to the Google convention, which numfmt renders identically (see
-        // normalizeMonthMinuteTokens in import/sheets/styles.ts).
+        // googleMonthMinute in import/sheets/styles.ts).
         expect(cellAt(sheet, 2, 0)?.ct).toEqual({ fa: 'M/d/yyyy', t: 'd' });
         expect(cellAt(sheet, 2, 0)?.v).toBe(45366);
     });

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { CountedWarningCode } from '../../../lib/document/transform/protocol';
+import { cellKey } from '../../../lib/import/sheets/cells';
 import { readRules } from '../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../lib/import/sheets/styles';
-import { cellKey } from '../../../lib/import/sheets/worksheet';
 import { parseOoxml } from '../../../lib/ooxml/ooxml';
 import { SML, sheetXml } from '../../fixtures/xlsx';
 

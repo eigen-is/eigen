@@ -50,12 +50,12 @@ export const CHART_SHEET_SIZE = { width: 977, height: 638 };
 
 // Requires names prefixes, not namespaces: the drawing vocabulary this reader reads. A chartex choice (waterfall,
 // funnel, …) falls back to its shape.
-const alternative = alternativeFor(new Set(['xdr', 'a', 'r', 'c']));
+const drawingAlternative = alternativeFor(new Set(['xdr', 'a', 'r', 'c']));
 
 const ANCHORS = new Set(['twoCellAnchor', 'oneCellAnchor', 'absoluteAnchor']);
 
 // The anchors of the drawing a sheet's part names; none when the part is missing, damaged or no drawing.
-export function readDrawing(
+export function readSheetDrawing(
     pkg: OoxmlPackage,
     rest: XmlElement | undefined,
     rels: ReadonlyMap<string, Relationship>,
@@ -65,7 +65,7 @@ export function readDrawing(
     const root = path === undefined ? undefined : optional(() => pkg.part(path));
     if (!path || !root || !hasXmlName(root, XDR_NS, 'wsDr')) return undefined;
     return {
-        anchors: ooxmlElements(root, alternative).filter(
+        anchors: ooxmlElements(root, drawingAlternative).filter(
             (element) => element.ns === XDR_NS && ANCHORS.has(element.local),
         ),
         rels: optional(() => pkg.relationships(path)) ?? new Map(),
@@ -108,7 +108,7 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
             const tracks = chartSheet ? 0 : [from, to].reduce((sum, at) => sum + (at ? at.col + at.row : 0), 0);
             const picture = chartSheet
                 ? undefined
-                : ooxmlElements(anchor, alternative).find((element) => hasXmlName(element, XDR_NS, 'pic'));
+                : ooxmlElements(anchor, drawingAlternative).find((element) => hasXmlName(element, XDR_NS, 'pic'));
             if (picture) {
                 const image = pictureOf(picture, rels, context, () => anchorBox(anchor, from, to, sheet), tracks);
                 if (image) (sheet.images ??= {})[image.id] = { ...image, index: paint() };
@@ -116,7 +116,7 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
                 continue;
             }
             // The c:chart the anchor's graphic frame shows.
-            const frame = ooxmlElements(anchor, alternative).find((element) =>
+            const frame = ooxmlElements(anchor, drawingAlternative).find((element) =>
                 hasXmlName(element, XDR_NS, 'graphicFrame'),
             );
             const graphic = frame && xmlChild(frame, A_NS, 'graphic');
@@ -130,7 +130,7 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
             const box =
                 spec &&
                 (chartSheet
-                    ? rounded({ x: 0, y: 0, ...(sizeOf(anchor) ?? CHART_SHEET_SIZE) })
+                    ? floatingBox({ x: 0, y: 0, ...(sizeOf(anchor) ?? CHART_SHEET_SIZE) })
                     : anchorBox(anchor, from, to, sheet));
             if (!root || !spec || !box) {
                 context.lost('charts-dropped');
@@ -177,7 +177,7 @@ function pictureOf(
     place: () => Box | undefined,
     tracks: number,
 ): Omit<SheetImage, 'index'> | undefined {
-    const fill = ooxmlChild(picture, XDR_NS, 'blipFill', alternative);
+    const fill = ooxmlChild(picture, XDR_NS, 'blipFill', drawingAlternative);
     const [svg, raster] = blipEmbeds(fill && xmlChild(fill, A_NS, 'blip'));
     const part = pictureMediaPart(context.pkg, rels, svg, 'xl/') ?? pictureMediaPart(context.pkg, rels, raster, 'xl/');
     if (!part || !context.spend(tracks + 1)) return undefined;
@@ -187,7 +187,7 @@ function pictureOf(
     const properties = xmlChild(picture, XDR_NS, 'spPr');
     const xfrm = properties && xmlChild(properties, A_NS, 'xfrm');
     const angle = normalizeAngle(Number(xfrm && xmlAttr(xfrm, '', 'rot')) / DEGREE || 0);
-    const { x, y, width, height } = rounded(anchoredBox(anchored, angle));
+    const { x, y, width, height } = floatingBox(anchoredBox(anchored, angle));
     return { id: crypto.randomUUID(), x, y, width, height, ...(angle !== 0 && { angle }), mediaName };
 }
 
@@ -223,19 +223,19 @@ function anchorBox(
     if (anchor.local === 'twoCellAnchor') {
         if (!from || !to) return undefined;
         const [start, end] = [point(from), point(to)];
-        return rounded({
+        return floatingBox({
             x: Math.min(start.x, end.x),
             y: Math.min(start.y, end.y),
             width: Math.abs(end.x - start.x),
             height: Math.abs(end.y - start.y),
         });
     }
-    if (anchor.local === 'oneCellAnchor') return from && size && rounded({ ...point(from), ...size });
+    if (anchor.local === 'oneCellAnchor') return from && size && floatingBox({ ...point(from), ...size });
     const position = xmlChild(anchor, XDR_NS, 'pos');
     const x = emu(position && xmlAttr(position, '', 'x'));
     const y = emu(position && xmlAttr(position, '', 'y'));
     return x !== undefined && y !== undefined && size
-        ? rounded({ x: x / EMU_PER_PX, y: y / EMU_PER_PX, ...size })
+        ? floatingBox({ x: x / EMU_PER_PX, y: y / EMU_PER_PX, ...size })
         : undefined;
 }
 
@@ -246,7 +246,8 @@ function sizeOf(anchor: XmlElement): Pick<Box, 'width' | 'height'> | undefined {
     return cx === undefined || cy === undefined ? undefined : { width: cx / EMU_PER_PX, height: cy / EMU_PER_PX };
 }
 
-function rounded({ x, y, width, height }: Box): Box {
+// Rounded to whole px and held on the grid by sheetFloatingBox, the clamp every sheet writer uses.
+function floatingBox({ x, y, width, height }: Box): Box {
     return sheetFloatingBox({
         x: Math.round(x),
         y: Math.round(y),

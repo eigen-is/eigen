@@ -31,9 +31,9 @@ import {
     TOP10_CONDITION,
     withoutFuturePrefixes,
 } from '../../ooxml/spreadsheetml';
+import { cellKey } from './cells';
 import type { DxfLook, ThemePalette } from './styles';
-import { colorOf, dxfLook, resolveColor } from './styles';
-import { cellKey } from './worksheet';
+import { dxfLook, resolveColor } from './styles';
 
 export type RulesContext = {
     dxfs: DxfLook[];
@@ -62,7 +62,7 @@ export function readRules(
         xmlChildren(rest, SML_NS, 'extLst')
             .flatMap((list) => xmlChildren(list, SML_NS, 'ext'))
             .flatMap((ext) => xmlChildren(ext, X14_NS, name));
-    const textOf = (element: XmlElement | undefined) => (element ? xmlText(element) : undefined);
+    const elementText = (element: XmlElement | undefined) => (element ? xmlText(element) : undefined);
 
     // The 2007 schema's elements and Excel 2010's, which hold the same rules in their own names; read lazily, as a
     // flood of rules costs only what is charged.
@@ -78,7 +78,7 @@ export function readRules(
             blocks: extensions('conditionalFormattings').flatMap((list) =>
                 xmlChildren(list, X14_NS, 'conditionalFormatting'),
             ),
-            sqrefOf: (block: XmlElement) => textOf(xmlChild(block, XM_NS, 'sqref')),
+            sqrefOf: (block: XmlElement) => elementText(xmlChild(block, XM_NS, 'sqref')),
             rulesOf: (block: XmlElement) => xmlChildren(block, X14_NS, 'cfRule'),
             formulasOf: (rule: XmlElement) => xmlChildren(rule, XM_NS, 'f'),
             lookOf: (rule: XmlElement) => dxfLook(xmlChild(rule, X14_NS, 'dxf'), context.palette),
@@ -125,14 +125,14 @@ export function readRules(
                 xmlChildren(list, SML_NS, 'dataValidation'),
             ),
             sqrefOf: (validation: XmlElement) => xmlAttr(validation, '', 'sqref'),
-            formulaOf: (validation: XmlElement, name: string) => textOf(xmlChild(validation, SML_NS, name)),
+            formulaOf: (validation: XmlElement, name: string) => elementText(xmlChild(validation, SML_NS, name)),
         },
         {
             validations: extensions('dataValidations').flatMap((list) => xmlChildren(list, X14_NS, 'dataValidation')),
-            sqrefOf: (validation: XmlElement) => textOf(xmlChild(validation, XM_NS, 'sqref')),
+            sqrefOf: (validation: XmlElement) => elementText(xmlChild(validation, XM_NS, 'sqref')),
             formulaOf: (validation: XmlElement, name: string) => {
                 const formula = xmlChild(validation, X14_NS, name);
-                return textOf(formula && xmlChild(formula, XM_NS, 'f'));
+                return elementText(formula && xmlChild(formula, XM_NS, 'f'));
             },
         },
     ];
@@ -224,7 +224,7 @@ function mapCfRule(
     if (type === 'colorScale' || type === 'dataBar') {
         const scale = xmlChild(rule, SML_NS, type);
         const stops = scale ? xmlChildren(scale, SML_NS, 'color') : [];
-        const colors = stops.map((stop) => resolveColor(colorOf(stop), palette)).filter((color) => color !== null);
+        const colors = stops.map((stop) => resolveColor(stop, palette)).filter((color) => color !== null);
         // A data bar is solid, as the editor's presets are.
         if (type === 'dataBar') return colors.length > 0 ? { type, cellrange: ranges, format: [colors[0]] } : undefined;
         if (colors.length !== stops.length || (colors.length !== 2 && colors.length !== 3)) return undefined;
@@ -298,9 +298,8 @@ function cfFormulaRule(
     };
 }
 
-// Excel string literals arrive wrapped in double quotes with embedded quotes
-// doubled ('"say ""hi"""'). Returns the unescaped inner text, or null when the
-// operand isn't a quoted literal.
+// Excel wraps a string literal in double quotes and doubles the quotes inside it ('"say ""hi"""'). This gives the text
+// inside, or null for an operand that is no quoted literal.
 function unquoteXlsxLiteral(txt: string): string | null {
     if (!(txt.startsWith('"') && txt.endsWith('"') && txt.length >= 2)) return null;
     return txt.slice(1, -1).replace(/""/g, '"');
@@ -312,7 +311,7 @@ function parseCfLiteral(operand: string): string | null {
     const txt = operand.trim();
     if (NUMERIC.test(txt)) return txt;
     const inner = unquoteXlsxLiteral(txt);
-    if (inner == null) return null;
+    if (inner === null) return null;
     const pct = inner.match(/^(-?\d+(?:\.\d+)?)%$/);
     return pct ? String(Number(pct[1]) / 100) : inner;
 }
@@ -324,10 +323,9 @@ function extractSearchText(formula: string | undefined): string | null {
     return match ? match[1].replace(/""/g, '"') : null;
 }
 
-// Column-wide validations ("D2:D1048576") are common in real workbooks, while the grid
-// covers only the data extent: a rule per cell of the column would put a multi-hundred-MB
-// dataVerification map into the snapshot JSON. DV-only blank rows below the data are a
-// legit pattern (pre-validated entry rows), hence the generous margins.
+// Real workbooks often validate a whole column ("D2:D1048576"), but the grid covers only the cells. A rule for every
+// cell of the column would put hundreds of MB of validations into the snapshot. So a validation stops this far past
+// the cells. The margins are wide, because empty rows below the data that are validated for entry are common.
 const DV_ROW_MARGIN = 1000;
 const DV_COL_MARGIN = 100;
 
@@ -389,14 +387,14 @@ function mapDataValidation(
     return rule;
 }
 
-// A quoted literal ('"Red,Green,Blue"') becomes the engine's comma-list form; anything
-// else is kept as a live range ref when valid — getDropdownList resolves refs (incl.
-// quoted cross-sheet names) natively, so source edits keep propagating. Defined names
-// are dropped program-wide; a garbage one-option dropdown is worse than no rule.
+// A quoted literal ('"Red,Green,Blue"') becomes the engine's comma-separated list. Anything else is kept as a range
+// reference when it is a valid one, so an edit to the source cells still changes the list. The editor resolves such a
+// reference itself, a quoted sheet name included. A defined name is never read, and a one-option list of its name
+// would be worse than no rule, so the rule goes.
 function listSource(raw: string | undefined): string | null {
     if (!raw) return null;
     const inner = unquoteXlsxLiteral(raw);
-    if (inner != null) return inner.length > 0 ? inner : null;
+    if (inner !== null) return inner.length > 0 ? inner : null;
     const ref = raw.startsWith('=') ? raw.slice(1) : raw;
     return iscelldata(ref) && inExcelGrid(ref) ? ref : null;
 }

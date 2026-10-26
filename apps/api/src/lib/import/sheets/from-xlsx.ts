@@ -1,4 +1,5 @@
-// xlsx bytes → Eigen's sheets, straight from the SpreadsheetML. Runs in the transform process.
+// Reads an xlsx file into Eigen's sheets, straight from the SpreadsheetML, with the pictures and the warnings for what
+// it left out. It runs in the transform process, which an xlsx import or convert hands the file to.
 
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
@@ -21,8 +22,8 @@ import { importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
 import type { Drawing } from './drawing';
-import { placeDrawings, readDrawing } from './drawing';
-import { readBudget, readInBatches, readPackage } from './package';
+import { placeDrawings, readSheetDrawing } from './drawing';
+import { readBudget, readInBatches, readXlsxPackage } from './package';
 import { readRules } from './rules';
 import { readSharedStrings } from './strings';
 import { defaultFontDigitWidth, readDxfs, readLooks, themePalette } from './styles';
@@ -36,24 +37,17 @@ export const MAX_CELLS = 4_000_000;
 // The snapshot spells a cell's text out per cell, its value, its display and a rich string's runs; real workbooks emit
 // under 120M characters.
 export const MAX_TEXT = 250_000_000;
-// A shared formula's copy is translated before it is weighed, at about 3M characters a second. The 986 workbooks of
-// the corpus translate at most 3.1M characters (a GOV.UK inspections workbook, 24,706 copies); five times that is
-// about 5 s.
+// A shared formula's copy is translated before it is weighed, at about 3M characters a second. The corpus translates
+// at most 3.1M characters, in a GOV.UK inspections workbook of 24,706 copies. Five times that is about 5 s.
 export const MAX_SHARED_FORMULA_TEXT = 16_000_000;
-// Recalc materialises a sheet's rows by its columns, each at least a default grid's (engine/defaults.ts), about 13 bytes
-// a slot, so a narrow sheet's span is far smaller than its grid. The 986 workbooks of the corpus build at most 27.3M
-// (docling's inflated test file, one sheet of a million rows); four times that recalcs in about a second at 1.4 GB.
+// Recalc materialises a sheet's rows by its columns, each at least a default grid's, at about 13 bytes a slot, so a
+// narrow sheet's span is far smaller than its grid. The corpus builds at most 27.3M, in docling's inflated test file of
+// one sheet of a million rows. Four times that recalcs in about a second at 1.4 GB.
 export const MAX_GRID_SLOTS = 110_000_000;
 
 export type XlsxOptions = {
-    // The upload cap, which bounds the pictures' bytes as an upload of each would be bounded.
     maxMediaBytes: number;
 };
-
-// The sheets alone, their pictures' media names left unresolved: the shape the tests and the audit compare.
-export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
-    return readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }).sheets;
-}
 
 // Every worksheet's grid and what lies past it, charged against the output budget as it is read. The cells count what
 // they emit, a value, a rich string's run, a border, a row's height or hidden flag, a merged or linked cell, a column's
@@ -66,7 +60,7 @@ export function readXlsx(
     options: XlsxOptions,
 ): { sheets: Sheet[]; media: ImportedMedia[]; warnings: TransformWarning[] } {
     try {
-        const book = readPackage(bytes);
+        const book = readXlsxPackage(bytes);
         const reads = readBudget();
         const palette = themePalette(book.theme);
         const looks = readLooks(book.styles, palette);
@@ -100,9 +94,10 @@ export function readXlsx(
             const id = `sheet-${sheets.length}`;
             if (!sheetIds.has(written.toLowerCase())) sheetIds.set(written.toLowerCase(), id);
             let name = written;
-            for (let copy = 2; named.has(name.toLowerCase()); copy++) {
+            if (named.has(written.toLowerCase())) {
+                let copy = 2;
+                while (taken.has(`${written} (${copy})`.toLowerCase())) copy++;
                 name = `${written} (${copy})`;
-                if (taken.has(name.toLowerCase())) name = written;
             }
             named.add(name.toLowerCase());
             taken.add(name.toLowerCase());
@@ -133,7 +128,7 @@ export function readXlsx(
             const rowHeight = sheetDefaultRowHeight(worksheet.sheet);
             const tallest = new Map<number, number>();
             for (const { r, c, v } of grid.celldata) {
-                const height = estimateCellHeight(v, c, r, merge, columnlen, columnWidth);
+                const height = estimateCellHeight(v, r, c, merge, columnlen, columnWidth);
                 if (height > Math.max(rowHeight, tallest.get(r) ?? 0)) tallest.set(r, height);
             }
             const rowlen: NonNullable<SheetConfig['rowlen']> = {};
@@ -168,7 +163,7 @@ export function readXlsx(
                 }),
             };
             sheets.push(sheet);
-            const drawing = readDrawing(book.pkg, rest, rels);
+            const drawing = readSheetDrawing(book.pkg, rest, rels);
             if (drawing) drawings.push({ sheet, chartSheet, ...drawing });
         }
         // An import replaces the document's sheets: none read is a file it can't read, never an empty spreadsheet.
@@ -191,29 +186,38 @@ export function readXlsx(
     }
 }
 
+// The sheets alone, their pictures' media names left unresolved: the shape the tests and the audit compare.
+export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
+    return readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }).sheets;
+}
+
+// Excel's default font size, which the estimate takes for a cell whose look names none.
 const DEFAULT_FONT_SIZE = 11;
 const LINE_HEIGHT_FACTOR = 1.35;
+// The padding a cell draws above and below its text, in px.
+const CELL_PADDING = 6;
+// An average glyph's width, as a share of the font size.
+const GLYPH_WIDTH = 0.6;
 
 function estimateCellHeight(
-    converted: FortuneCell,
-    c: number,
+    cell: FortuneCell,
     r: number,
+    c: number,
     merge: NonNullable<SheetConfig['merge']>,
     colWidthPx: Record<number, number>,
     defaultColWidth: number,
 ): number {
-    const fontSize = converted.fs ?? DEFAULT_FONT_SIZE;
+    const fontSize = cell.fs ?? DEFAULT_FONT_SIZE;
     const lineHeightPx = ptToPx(fontSize) * LINE_HEIGHT_FACTOR;
-    if (!cellWrapsText(converted)) {
-        return fontSize > DEFAULT_FONT_SIZE ? lineHeightPx + 6 : 0;
+    if (!cellWrapsText(cell)) {
+        return fontSize > DEFAULT_FONT_SIZE ? lineHeightPx + CELL_PADDING : 0;
     }
 
-    const text = String(cellDisplay(converted) ?? '');
-    if (!text) return lineHeightPx + 6;
+    const text = String(cellDisplay(cell) ?? '');
+    if (!text) return lineHeightPx + CELL_PADDING;
 
     let cellWidth = colWidthPx[c] ?? defaultColWidth;
-    const mergeKey = `${r}_${c}`;
-    const mergeInfo = merge[mergeKey];
+    const mergeInfo = merge[`${r}_${c}`];
     if (mergeInfo?.cs && mergeInfo.cs > 1) {
         cellWidth = 0;
         for (let ci = mergeInfo.c; ci < mergeInfo.c + mergeInfo.cs; ci++) {
@@ -221,10 +225,10 @@ function estimateCellHeight(
         }
     }
 
-    const charsPerLine = Math.max(1, cellWidth / (fontSize * 0.6));
+    const charsPerLine = Math.max(1, cellWidth / (fontSize * GLYPH_WIDTH));
     let totalLines = 0;
     for (const line of text.split('\n')) {
         totalLines += Math.max(1, Math.ceil(line.length / charsPerLine));
     }
-    return totalLines * lineHeightPx + 6;
+    return totalLines * lineHeightPx + CELL_PADDING;
 }

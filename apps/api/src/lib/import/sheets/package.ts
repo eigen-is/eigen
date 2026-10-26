@@ -25,7 +25,7 @@ export type XlsxPackage = {
     sharedStrings?: Uint8Array;
 };
 
-export function readPackage(bytes: Uint8Array): XlsxPackage {
+export function readXlsxPackage(bytes: Uint8Array): XlsxPackage {
     const pkg = openPackage(bytes, IMPORT_MESSAGES.xlsx);
     // By relationship, else where Excel puts the part.
     const workbookPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'xl/workbook.xml';
@@ -68,9 +68,9 @@ export const MAX_BATCH_BYTES = 12 * 1024 * 1024;
 
 // A node costs its parse and its memory whatever it emits, so the grids and the shared strings are charged their
 // elements before the first batch of a part is parsed, together, and a sqref its references before they are parsed: a
-// file of empty cells, rows or strings is refused before any is read. The 1,050 workbooks of the corpus hold at most
-// 7.3M (a Zenodo workbook of a million rows); a little over twice that keeps the cheapest flood, empty strings parsed at
-// about 0.3 µs each, near 5 s.
+// file of empty cells, rows or strings is refused before any is read. The corpus holds at most 7.3M, in a Zenodo
+// workbook of a million rows. A little over twice that keeps the cheapest flood, empty strings parsed at about 0.3 µs
+// each, near 5 s.
 export const MAX_XLSX_ELEMENTS = 16_000_000;
 
 export type ReadBudget = {
@@ -95,7 +95,7 @@ export function readBudget(): ReadBudget {
     };
 }
 
-// Bun has no streaming XML and a tree costs about 100× its text (core/xml.ts), so the children of the root, or of its
+// Bun has no streaming XML and a tree costs about 100 times its text, so the children of the root, or of its
 // child `container`, are parsed a batch at a time behind the part's prolog and start tags, so prefixes bind and a
 // DOCTYPE is still refused. The cut is checked: the rest must parse with a marker in the children's place, and each
 // batch alone, else the part is parsed whole. The rest is parsed first, so it is read before the children.

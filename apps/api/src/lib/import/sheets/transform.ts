@@ -1,5 +1,6 @@
-// The xlsx import's step in the transform process: the reader's sheets recalculated and encoded as the snapshot the
-// main thread commits.
+// The xlsx import's step in the transform process: the reader's sheets recalculated and encoded as the lean snapshot
+// JSON the main thread commits, beside the pictures its images name, which the main thread writes through Drive. The
+// reader's caps refuse a file with their own 413s, and a failed recalc comes back as a warning, never a failed import.
 
 import type { Sheet } from '@workspace/lib/sheets';
 import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
@@ -9,10 +10,6 @@ import type { SheetsImportJob, SheetsImportWorkerResult, TransformWarning } from
 import { toTransferableMedia, toTransferableText } from '../../document/transform/protocol';
 import { readXlsx } from './from-xlsx';
 
-// Uploaded xlsx bytes → the lean snapshot JSON the main thread commits, and the pictures its images name, which it
-// writes through Mount. Runs inside the transform process (child.ts owns execution; the conversion logic stays here in
-// import/, pure over the buffer). The reader's caps ride along inside readXlsx with their exact 413s, and a recalc
-// failure comes back as a warning — an import must never fail because recalc hiccuped.
 export function importXlsxToSheetsSnapshot(
     data: ArrayBuffer,
     job: Pick<SheetsImportJob, 'maxMediaBytes'>,
@@ -26,14 +23,9 @@ export function importXlsxToSheetsSnapshot(
     };
 }
 
-// Recompute formula cells through our engine once at import so the persisted
-// snapshot carries engine-verified v/m, and report which case happened: only a
-// successful recalc may be encoded as `computed`, which is what seeds the decoded
-// calcChain and keeps the read-path gate from firing for imported docs. The
-// importer's cached values are usually Excel's own, so this mainly reconciles
-// divergence; a recalc failure must not block the import, so the parsed sheets go
-// in uncomputed and an export recalcs them, under the same budget. recalcSheets syncs the computed values
-// into `celldata`, and the encoder drops the dense `data` matrix it also returns.
+// The recalc reconciles the values Excel cached with the engine's, so a later read needn't compute the sheets again.
+// Only a recalc that succeeded is stored as computed. A failure stores the sheets uncomputed with a warning, and an
+// export recalcs them under the same budget.
 function recalcImportedSheets(sheets: Sheet[], warnings: TransformWarning[]): { sheets: Sheet[]; computed: boolean } {
     try {
         return { sheets: recalcSheets(sheets, SERVER_RECALC_BUDGET), computed: true };

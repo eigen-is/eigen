@@ -1,6 +1,10 @@
+// A worksheet's grid, read a batch of rows at a time: each cell's value, display, type, formula, look and rich text,
+// the borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column
+// numbers. The xlsx reader calls it for each worksheet, after the merges and links that place cells of their own.
+
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { CellBorderSides, CellStyle, Cell as FortuneCell, InlineStringSegment } from '@workspace/lib/sheets';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { columnLabelToIndex, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
@@ -16,14 +20,12 @@ import {
 } from '../../ooxml/spreadsheetml';
 import { IMPORT_MESSAGES, TOO_MANY_CELLS } from '../messages';
 import type { SharedString } from './strings';
-import { stringOf, textOf } from './strings';
+import { readString, sharedStringText } from './strings';
 import type { Look, ThemePalette } from './styles';
 import { NO_LOOK } from './styles';
-import type { PlacedCell } from './worksheet';
-import { cellKey } from './worksheet';
 
-// A worksheet's grid, read a batch of rows at a time: each cell's value, display, type, formula, look and rich text,
-// the borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column numbers.
+// A cell a merge or a link places before the grid is read.
+export type PlacedCell = { r: number; c: number; v: FortuneCell };
 
 export type GridContext = {
     looks: Look[];
@@ -53,6 +55,11 @@ export type Grid = {
     dates: Set<number>;
 };
 
+// The grid's key of a cell, unique within a sheet.
+export function cellKey(r: number, c: number): number {
+    return r * REFERENCE_COLUMN_COUNT + c;
+}
+
 // `rows` are the <row> elements of <sheetData>, in the file's order.
 export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid {
     const grid: Grid = {
@@ -79,7 +86,7 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
     let r = -1;
     for (const row of rows) {
         const reference = xmlAttr(row, '', 'r');
-        r = indexOf(reference === undefined ? undefined : Number(reference), r, REFERENCE_ROW_COUNT);
+        r = trackIndex(reference === undefined ? undefined : Number(reference), r, REFERENCE_ROW_COUNT);
         const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
         // A custom height that draws no pixel is a row Excel draws as none, as the editor draws a hidden one.
         const pixels = Math.round(ptToPx(height));
@@ -95,7 +102,7 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
         let c = -1;
         for (const element of xmlChildren(row, SML_NS, 'c')) {
             const cellReference = xmlAttr(element, '', 'r');
-            c = indexOf(columnNumber(cellReference), c, REFERENCE_COLUMN_COUNT);
+            c = trackIndex(columnNumber(cellReference), c, REFERENCE_COLUMN_COUNT);
             // A cell naming another row than its row's is no Excel's.
             const named = rowNumber(cellReference);
             if (named !== undefined && named !== r + 1) continue;
@@ -119,7 +126,10 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
                 cell.bg === undefined &&
                 cell.fc === undefined;
             if (empty && !look.border) continue;
-            context.charge(placed ? 0 : 1, length(cell.v) + length(cell.m) + length(cell.f) + length(cell.ct?.fa));
+            context.charge(
+                placed ? 0 : 1,
+                textLength(cell.v) + textLength(cell.m) + textLength(cell.f) + textLength(cell.ct?.fa),
+            );
             if (look.border) grid.borderInfo[`${r}_${c}`] = look.border;
             if (empty) continue;
             context.placed.delete(key);
@@ -141,12 +151,12 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
     let date = false;
     if (type === 'inlineStr') {
         const is = xmlChild(element, SML_NS, 'is');
-        string = is && stringOf(is, context.palette);
-        value = (string && textOf(string)) || undefined;
+        string = is && readString(is, context.palette);
+        value = (string && sharedStringText(string)) || undefined;
     } else if (raw !== '') {
         if (type === 's') {
             string = context.strings[Number(raw)];
-            value = string === undefined ? undefined : textOf(string);
+            value = string === undefined ? undefined : sharedStringText(string);
         } else if (type === 'str' || type === 'e') value = raw;
         else if (type === 'b') value = Number.parseInt(raw, 10) !== 0;
         else if (type === 'd') {
@@ -179,16 +189,8 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         } else cell.m = typeof value === 'boolean' ? booleanDisplay(value) : value;
     }
     if (formula) cell.f = `=${formula}`;
-    const t = date
-        ? 'd'
-        : value === undefined
-          ? undefined
-          : typeof value === 'number'
-            ? 'n'
-            : typeof value === 'boolean'
-              ? 'b'
-              : 's';
-    // Fortune-sheet always pairs `t` with `fa`, General when the cell has no format.
+    const t = date ? 'd' : value === undefined ? undefined : VALUE_TYPE[typeof value];
+    // The editor always pairs `t` with `fa`, General when the cell has no format.
     if (t || look.fa) cell.ct = { fa: look.fa ?? 'General', ...(t && { t }) };
     return cell;
 }
@@ -229,6 +231,8 @@ function formulaOf(
     return functionCopy(anchor.text, r - anchor.r, c - anchor.c);
 }
 
+const VALUE_TYPE: Record<string, 'n' | 'b' | 's'> = { number: 'n', boolean: 'b', string: 's' };
+
 const DECIMAL = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
 // A date cell, as Strict and LibreOffice write one: ISO 8601, read as a serial in the 1900 system.
@@ -243,17 +247,12 @@ function isoSerial(text: string): number | undefined {
     return (ms - EXCEL_EPOCH_MS) / DAY_MS;
 }
 
-// The letters of a cell reference, 1-based; the digits are the row's. Four letters are past the last column already.
+// The letters of a cell reference, 1-based; the digits are the row's. Four letters are past the last column already,
+// so no more are read.
 function columnNumber(reference: string | undefined): number | undefined {
     if (reference === undefined) return undefined;
-    let column = 0;
-    let letters = 0;
-    for (; letters < Math.min(reference.length, 4); letters++) {
-        const code = reference.charCodeAt(letters) | 0x20;
-        if (code < 0x61 || code > 0x7a) break;
-        column = column * 26 + code - 0x60;
-    }
-    return letters > 0 ? column : Number.NaN;
+    const letters = /^[a-z]{1,4}/i.exec(reference);
+    return letters ? columnLabelToIndex(letters[0]) + 1 : Number.NaN;
 }
 
 // The digits after a cell reference's letters; undefined for none.
@@ -263,13 +262,13 @@ function rowNumber(reference: string | undefined): number | undefined {
 }
 
 // 0-based. A row or cell without its reference is the one after the previous.
-function indexOf(number: number | undefined, previous: number, count: number): number {
+function trackIndex(number: number | undefined, previous: number, count: number): number {
     const index = number === undefined ? previous + 1 : number - 1;
     if (!Number.isInteger(index) || index < 0) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
     if (index >= count) throw new ApiError(413, TOO_MANY_CELLS);
     return index;
 }
 
-function length(value: unknown): number {
+function textLength(value: unknown): number {
     return typeof value === 'string' ? value.length : 0;
 }
