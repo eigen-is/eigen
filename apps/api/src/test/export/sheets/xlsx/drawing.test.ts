@@ -296,9 +296,9 @@ describe('a picture', () => {
     test("an SVG goes in beside its PNG as the svgBlip, and a type Excel can't embed is left out and counted", () => {
         const lost: CountedWarningCode[] = [];
         const drawn: SheetImage = { ...BELOW, mediaName: 'drawing.svg' };
-        const avif: SheetImage = { ...BELOW, id: 'avif', index: 'a1', mediaName: 'still.avif' };
-        const sheet: Sheet = { name: 'Pictures', images: { below: drawn, avif } };
-        const pictures = officeImages([SVG, { ...PNG, name: 'still.avif', contentType: 'image/avif' }], 'xl/media');
+        const webp: SheetImage = { ...BELOW, id: 'webp', index: 'a1', mediaName: 'still.webp' };
+        const sheet: Sheet = { name: 'Pictures', images: { below: drawn, webp } };
+        const pictures = officeImages([SVG, { ...PNG, name: 'still.webp', contentType: 'image/webp' }], 'xl/media');
         const drawing = drawingOf(sheet, 2, [sheet], pictures, (code) => lost.push(code));
         expect(lost).toEqual(['images-dropped']);
         expect(pictures.files.map(({ name }) => name)).toEqual(['xl/media/image1.png', 'xl/media/image1.svg']);

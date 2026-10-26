@@ -13,11 +13,9 @@ import {
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';
-import sharp from 'sharp';
 import * as Y from 'yjs';
 import { exportDocument } from '../../lib/export/export-document';
 import { getHome } from '../../lib/home/get-home';
-import { readPptx } from '../../lib/import/slides/from-pptx';
 import { parseOoxml } from '../../lib/ooxml/ooxml';
 import { openZip } from '../../lib/ooxml/zip';
 import { sampleChartParts } from '../fixtures/chart-parts';
@@ -169,7 +167,7 @@ describe('deck export — assembled HTML surface', () => {
 });
 
 describe('deck export — pptx', () => {
-    test('a deck with text, a PNG, a WebP, an SVG and a chart writes a package whose every part parses', async () => {
+    test('a deck with text, a PNG, an SVG and a chart writes a package whose every part parses', async () => {
         const ctx = await getTestContext();
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, 'default', 'root');
         const deckPath = await drivePost<DrivePath>(
@@ -213,22 +211,12 @@ describe('deck export — pptx', () => {
                 'a3',
                 SLIDES_STYLE_DEFAULTS,
             );
-            writeElementInDoc(
-                collab.doc,
-                { type: 'image', ...on, mediaName: 'photo.webp' },
-                'a4',
-                SLIDES_STYLE_DEFAULTS,
-            );
         });
         const { mount, path } = await home.drive.resolveFile('default', deckPath.id);
         await seedDocumentMedia(mount, path, 'photo.png', TEST_PNG_BYTES);
         const svg =
             '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20"/></svg>';
         await seedDocumentMedia(mount, path, 'drawing.svg', new TextEncoder().encode(svg), 'image/svg+xml');
-        const webp = await sharp({ create: { width: 40, height: 20, channels: 3, background: '#2563eb' } })
-            .webp()
-            .toBuffer();
-        await seedDocumentMedia(mount, path, 'photo.webp', webp, 'image/webp');
 
         const result = await exportDocument(mount, path, 'pptx');
         expect([result.contentType, result.fileName]).toEqual([PPTX_MIME, 'Office deck.pptx']);
@@ -237,22 +225,12 @@ describe('deck export — pptx', () => {
         for (const name of zip.names().filter((n) => n.endsWith('.xml') || n.endsWith('.rels'))) {
             expect([name, parseOoxml(zip.read(name) ?? new Uint8Array()) !== null]).toEqual([name, true]);
         }
-        // The PNG re-encoded from its source, the SVG as itself beside the PNG the transform draws from it, and the WebP
-        // as its own bytes, which a reimport reads back as they were.
+        // The PNG re-encoded from its source, the SVG as itself beside the PNG the transform draws from it.
         expect(zip.names().filter((n) => n.startsWith('ppt/media/'))).toEqual([
             'ppt/media/image1.png',
             'ppt/media/image2.png',
             'ppt/media/image2.svg',
-            'ppt/media/image3.webp',
         ]);
-        expect(Buffer.from(zip.read('ppt/media/image3.webp') ?? []).equals(webp)).toBe(true);
-        expect(new TextDecoder().decode(zip.read('[Content_Types].xml'))).toContain(
-            '<Default Extension="webp" ContentType="image/webp"/>',
-        );
-        const reimported = readPptx(result.data, { maxMediaBytes: 1024 * 1024 }).media;
-        expect(
-            reimported.filter((item) => item.contentType === 'image/webp').map((item) => item.data.equals(webp)),
-        ).toEqual([true]);
         const signature = (name: string) =>
             Buffer.from(zip.read(name) ?? [])
                 .subarray(1, 4)

@@ -1138,7 +1138,7 @@ describe('doc export — docx data: figures', () => {
         });
         const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', async () => [], undefined);
         const zip = openZip(new Uint8Array(data));
-        return { data, zip, parts: zip.names().filter((name) => name.startsWith('word/media/')) };
+        return { zip, parts: zip.names().filter((name) => name.startsWith('word/media/')) };
     }
 
     const red = (width: number, height: number, alpha = 1) =>
@@ -1164,22 +1164,9 @@ describe('doc export — docx data: figures', () => {
         expect([format, width, height, exif]).toEqual(['jpeg', 2560, 853, undefined]);
     });
 
-    test('a data: WebP is its own bytes, transparent or not, and reads back as them', async () => {
-        const webp = await red(40, 40, 0).webp().toBuffer();
-        const { data, zip, parts } = await docxOf(dataUri('image/webp', webp));
-        expect(parts).toEqual(['word/media/image1.webp']);
-        expect(Buffer.from(zip.read('word/media/image1.webp') ?? []).equals(webp)).toBe(true);
-        const types = new TextDecoder().decode(zip.read('[Content_Types].xml'));
-        expect(types).toContain('<Default Extension="webp" ContentType="image/webp"/>');
-        const { media } = docxToPmJson(Buffer.from(data));
-        expect(media.map((item) => [item.contentType, item.data.equals(webp)])).toEqual([['image/webp', true]]);
-    });
-
-    test('a data: WebP past 2560 px shrinks to it, and stays a WebP', async () => {
-        const { zip, parts } = await docxOf(dataUri('image/webp', await red(3000, 1000).webp().toBuffer()));
-        expect(parts).toEqual(['word/media/image1.webp']);
-        const { format, width, height } = await sharp(zip.read('word/media/image1.webp')).metadata();
-        expect([format, width, height]).toEqual(['webp', 2560, 853]);
+    test('a transparent data: WebP takes PNG', async () => {
+        const { parts } = await docxOf(dataUri('image/webp', await red(40, 40, 0).webp().toBuffer()));
+        expect(parts).toEqual(['word/media/image1.png']);
     });
 
     // A web copy names its charset, and a media type is case-insensitive.
