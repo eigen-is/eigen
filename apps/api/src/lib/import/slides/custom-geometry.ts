@@ -75,7 +75,7 @@ export function customGeometry(
     custGeom: XmlElement,
     width: number,
     height: number,
-    mirrored = false,
+    mirrored: boolean,
     adjustments: GuideList = [],
 ): GeometryPath[] | undefined {
     const [avLst, gdLst, pathLst] = ['avLst', 'gdLst', 'pathLst'].map((local) => childOf(custGeom, A_NS, local));

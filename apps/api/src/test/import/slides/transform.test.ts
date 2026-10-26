@@ -94,7 +94,7 @@ describe('a pptx converted to a deck', () => {
             strokeWidth: 2,
         });
         expect(star).toMatchObject({
-            path: presetGeometry('star5', undefined, 200 * PX, 200 * PX)?.[0].path,
+            path: presetGeometry('star5', undefined, 200 * PX, 200 * PX, false)?.[0].path,
             closed: true,
             roughness: 0,
             strokeColor: 'transparent',

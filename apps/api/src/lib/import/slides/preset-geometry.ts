@@ -58,7 +58,7 @@ export function presetGeometry(
     avLst: XmlElement | undefined,
     width: number,
     height: number,
-    mirrored = false,
+    mirrored: boolean,
 ): GeometryPath[] | undefined {
     if (!presets) {
         const root = parseXml(readFileSync(PRESETS_FILE));
