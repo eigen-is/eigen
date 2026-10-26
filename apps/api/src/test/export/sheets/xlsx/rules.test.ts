@@ -54,6 +54,25 @@ const condition = (
 });
 
 describe('a conditional format', () => {
+    test('a rule a peer forged is dropped and counted, and a range past the grid is cut to it', () => {
+        const forged: unknown[] = [
+            { ...condition('greaterThan', ['1']), cellrange: [] },
+            { ...condition('textContains', ['x']), cellrange: [{ row: [2_000_000, 2_000_001], column: [0, 0] }] },
+            { ...condition('greaterThan', ['1']), cellrange: 'A1' },
+            { ...condition('greaterThan', ['1']), cellrange: [null] },
+            { ...condition('greaterThan', ['1']), conditionValue: 7 },
+            { type: 'dataBar', cellrange: RANGE },
+            condition('lessThan', ['5'], RED, [{ row: [1_048_570, 2_000_000], column: [16_380, 20_000] }]),
+        ];
+        // As a peer's update arrives: JSON no type checked.
+        const rules: ConditionalFormatRule[] = JSON.parse(JSON.stringify(forged));
+        const { xml, lost } = roundTrip({ conditionalFormatRules: rules });
+        expect(lost).toEqual(Array(6).fill('conditional-formats-dropped'));
+        expect(xml).toBe(
+            '<conditionalFormatting sqref="XFA1048571:XFD1048576"><cfRule type="cellIs" dxfId="0" priority="1" operator="lessThan"><formula>5</formula></cfRule></conditionalFormatting>',
+        );
+    });
+
     test('every rule kind the engine evaluates reads back as itself, in order', () => {
         const rules: ConditionalFormatRule[] = [
             condition('greaterThan', ['10']),
