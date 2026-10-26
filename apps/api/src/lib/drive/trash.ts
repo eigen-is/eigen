@@ -21,15 +21,15 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     const members = user ? await drive.getEffectiveMembers(mount.id, item.id) : [];
 
     // Open documents close before trashPath closes their databases, so each one saves its last state.
-    // Drive.deletePath refuses new opens until the trash is done, so one close is enough.
+    // Drive.deletePath refuses new opens until the trash is done.
     if (isContainerType(item.type)) {
         await closeCollabDocumentsRecursively(drive, mount, item.id);
-        await propagateACLRemovalRecursively(mount, item.id, user);
-    } else if (item.acl) {
-        await propagateSharedPathChange(item, item.acl, null, user ?? null);
     }
 
     const trashedItem = await mount.trashPath(item.id);
+    // The sharing goes once the trash is in, so a trash that fails leaves it as it was. The rows keep
+    // their ACL in the trash, so the walk below still finds every entry.
+    await propagateACLRemovalRecursively(mount, item.id, user);
     drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
     if (user) {
         mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
