@@ -147,9 +147,15 @@ export function chartCost(root: XmlElement): number {
 const alternative = alternativeFor(new Set(['c', 'a', 'r']));
 
 const UNSUPPORTED = new Error('unsupported chart');
+// A chart past the spec's caps on points or series. Eigen draws its kind, so it is told apart from one it can't draw.
+const TOO_LARGE = new Error('chart too large');
 
 function unsupported(): never {
     throw UNSUPPORTED;
+}
+
+function tooLarge(): never {
+    throw TOO_LARGE;
 }
 
 // Reads the chart as a spec, or as unsupported. Range data that can't be followed is read again from the caches.
@@ -168,12 +174,14 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
                 title: { text: title },
             }),
         );
-        return spec ? { spec } : unsupported();
+        // The spec is built within the caps on what each part holds, so a spec that doesn't parse holds too much.
+        return spec ? { spec } : tooLarge();
     } catch (error) {
-        if (error !== UNSUPPORTED) throw error;
+        if (error !== UNSUPPORTED && error !== TOO_LARGE) throw error;
         if (data !== 'cache') return readChart(root, { theme, data: 'cache' });
+        // A chart refused for its size names no kind, so its line doesn't read as a kind Eigen can't draw.
+        return { unsupported: { title, name: error === TOO_LARGE ? '' : chartName(groups) } };
     }
-    return { unsupported: { title, name: chartName(groups) } };
 }
 
 function chartSpec(
@@ -207,7 +215,7 @@ function chartSpec(
         isOnElement(child(axis, 'delete')) !== true && val(child(axis, 'tickLblPos')) !== 'none';
 
     const all = children(group, 'ser');
-    if (all.length > MAX_CHART_SERIES) unsupported();
+    if (all.length > MAX_CHART_SERIES) tooLarge();
     const ordered = all
         .map((ser, i) => ({ ser, order: count(val(child(ser, 'order'))) ?? i }))
         .sort((a, b) => a.order - b.order)
@@ -291,7 +299,7 @@ function chartSpec(
     // colour as c:varyColors says. A slice in its automatic colour is left out.
     const slices = (total: number): ChartSpec['points'] => {
         if (type !== 'pie' || !first) return {};
-        if (total > MAX_CHART_POINTS) unsupported();
+        if (total > MAX_CHART_POINTS) tooLarge();
         const points = new Map<number, string>();
         for (const point of children(first, 'dPt')) {
             const index = count(val(child(point, 'idx')));
@@ -432,7 +440,7 @@ function cachedText(tx: XmlElement | undefined): string | undefined {
     if (rich) return drawingLines(rich).join(' ').trim();
     const literal = child(tx, 'v');
     const points = children(child(child(tx, 'strRef'), 'strCache'), 'pt');
-    const text = literal ? xmlText(literal) : points.map((point) => xmlTrimmedText(child(point, 'v'))).join(' ');
+    const text = literal ? xmlText(literal) : points.map(pointText).join(' ');
     return text.replace(/\r?\n|\r/g, ' ');
 }
 
@@ -453,13 +461,19 @@ function cachedPoints(cache: XmlElement | undefined): (string | undefined)[] {
         total = 0;
         for (const point of points) total = Math.max(total, (count(xmlAttr(point, '', 'idx')) ?? -1) + 1);
     }
-    if (total > MAX_CHART_POINTS) unsupported();
+    if (total > MAX_CHART_POINTS) tooLarge();
     const values = new Array<string | undefined>(total).fill(undefined);
     for (const point of points) {
         const index = count(xmlAttr(point, '', 'idx'));
-        if (index !== undefined && index < total) values[index] = xmlTrimmedText(child(point, 'v'));
+        if (index !== undefined && index < total) values[index] = pointText(point);
     }
     return values;
+}
+
+// A point's c:v as written. A label keeps its spaces, as Excel shows them, and a number reads the same either way.
+function pointText(point: XmlElement): string {
+    const value = child(point, 'v');
+    return value ? xmlText(value) : '';
 }
 
 // A chart's c:f as a sheet's A1 cell or area. A ref Excel shows as #REF! is null, and a shape a range can't hold is

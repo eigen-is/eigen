@@ -382,13 +382,12 @@ describe('a chart with no spec', () => {
 });
 
 describe("the name of a chart with no spec, as PowerPoint's Insert Chart lists it", () => {
-    // A cache past the point limit makes any chart no spec, so a kind the reader draws can be named too.
-    const huge = `<c:val><c:numLit><c:ptCount val="1000000000"/></c:numLit></c:val>`;
-    const series = (extra = '') => `<c:ser><c:idx val="0"/><c:order val="0"/>${extra}${huge}</c:ser>`;
+    // Two value axes make any chart no spec, so a kind the reader draws can be named too.
+    const series = (extra = '') => `<c:ser><c:idx val="0"/><c:order val="0"/>${extra}</c:ser>`;
     const group = (local: string, options = '', extra = '', count = 1) =>
         `<c:${local}>${options}${Array.from({ length: count }, () => series(extra)).join('')}</c:${local}>`;
     const name = (plot: string) => {
-        const result = read(space(plot));
+        const result = read(space(`${plot}<c:valAx/><c:valAx/>`));
         if ('spec' in result) throw new Error('a spec');
         return result.unsupported.name;
     };
@@ -534,32 +533,30 @@ describe('the data from the caches', () => {
         });
     });
 
+    // A chart refused for its size is a kind Eigen draws, so its line names no kind.
     test('a cache past the point limit is no spec, and its declared count is never allocated', () => {
         const huge = `<c:barChart><c:barDir val="col"/><c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numLit><c:ptCount val="1000000000"/><c:pt idx="999999999"><c:v>1</c:v></c:pt></c:numLit></c:val></c:ser></c:barChart>`;
         const started = performance.now();
-        expect(read(space(huge + AXES, { head: title('Big') }))).toEqual({
-            unsupported: { title: 'Big', name: 'Clustered Column' },
-        });
+        expect(read(space(huge + AXES, { head: title('Big') }))).toEqual({ unsupported: { title: 'Big', name: '' } });
         expect(performance.now() - started).toBeLessThan(100);
         const noCount = huge.replace('<c:ptCount val="1000000000"/>', '');
-        expect(read(space(noCount + AXES))).toEqual({ unsupported: { title: '', name: 'Clustered Column' } });
+        expect(read(space(noCount + AXES))).toEqual({ unsupported: { title: '', name: '' } });
     });
 
-    test('more points in all than the limit, or more series than the limit, is no spec', () => {
+    test('more points in all than the limit, or more series than the limit, is no spec, and names no kind', () => {
         const half = Array.from({ length: MAX_CHART_POINTS / 2 + 1 }, (_, i) => i);
         expect(
-            'unsupported' in
-                read(
-                    space(
-                        bar([
-                            { idx: 0, name: 'A', values: half },
-                            { idx: 1, name: 'B', values: half },
-                        ]) + AXES,
-                    ),
+            read(
+                space(
+                    bar([
+                        { idx: 0, name: 'A', values: half },
+                        { idx: 1, name: 'B', values: half },
+                    ]) + AXES,
                 ),
-        ).toBe(true);
+            ),
+        ).toEqual({ unsupported: { title: '', name: '' } });
         const many = Array.from({ length: MAX_CHART_SERIES + 1 }, (_, idx) => ({ idx, name: `S${idx}`, values: [1] }));
-        expect('unsupported' in read(space(bar(many) + AXES))).toBe(true);
+        expect(read(space(bar(many) + AXES))).toEqual({ unsupported: { title: '', name: '' } });
         const max = Array.from({ length: MAX_CHART_SERIES }, (_, idx) => ({ idx, name: `S${idx}`, values: [1] }));
         expect(spec(space(bar(max) + AXES)).data.series).toHaveLength(MAX_CHART_SERIES);
     });

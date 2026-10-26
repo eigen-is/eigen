@@ -319,6 +319,17 @@ describe('writeChart with inline data', () => {
         expect(read(writeChart(spec, INLINE), 'cache')).toEqual(spec);
     });
 
+    test('a name and a category keep the spaces they start or end with', () => {
+        const spec = parsed(
+            defaultChartSpec('column', {
+                source: 'inline',
+                categories: [' lead', 'trail '],
+                series: [{ id: 's-1', name: ' Revenue ', values: [1, 2] }],
+            }),
+        );
+        expect(read(writeChart(spec, INLINE), 'cache')).toEqual(spec);
+    });
+
     test('a literal read through ranges reads as its literals', () => {
         const spec = sampleChartSpec('column');
         expect(read(writeChart(spec, INLINE), { ranges: ids })).toEqual(spec);
@@ -396,6 +407,10 @@ describe('writeChart with an embedded workbook', () => {
         ],
         ['a single category', inline('line', ['Only'], [{ id: 's-1', name: 'One', values: [3] }])],
         [
+            'names and categories that start or end with a space',
+            inline('column', [' lead', 'trail '], [{ id: 's-1', name: ' Revenue ', values: [1, 2] }]),
+        ],
+        [
             'an empty series beside a ragged one',
             inline(
                 'line',
@@ -424,7 +439,7 @@ describe('writeChart with an embedded workbook', () => {
     });
 
     test("the refs name Office's layout: names along row 1 from B, categories down A, each series down its column", () => {
-        const formulas = find(root(writeChart(SPECS[4][1], EMBEDDED)), 'f').map(xmlTrimmedText);
+        const formulas = find(root(writeChart(SPECS[5][1], EMBEDDED)), 'f').map(xmlTrimmedText);
         expect(formulas.slice(0, 3)).toEqual(['Sheet1!$B$1', 'Sheet1!$A$2:$A$3', 'Sheet1!$B$2:$B$3']);
         expect(formulas.slice(-3)).toEqual(['Sheet1!$AE$1', 'Sheet1!$A$2:$A$3', 'Sheet1!$AE$2:$AE$3']);
     });
