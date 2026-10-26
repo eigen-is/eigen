@@ -7,7 +7,8 @@ import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../constants/colors';
 import { DOCUMENT_FONT } from '../constants/fonts';
 import type { ChartAxisId, ChartSeriesStyle, ChartSpec, ChartType } from '../types/chart';
 
-// Google's inserted chart, which fits the default page's 642 px text column.
+// The size Google Docs and Sheets insert a chart at, which fits the default page's 642 px text column. A canvas chart
+// starts at a size of its own.
 export const CHART_DEFAULT_SIZE = { width: 600, height: 371 };
 
 // Eigen's document font, which a spec that names no font, or a font Eigen doesn't bundle, reads as.
