@@ -9,6 +9,7 @@ import { documentTransformRunner } from '../../lib/document/transform/runner';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
+import { MAX_DECOMPRESSED_BYTES } from '../../lib/ooxml/zip';
 import { getUserById } from '../../lib/user';
 import { box, buildPptx, graphicFrame, PIXEL_PNG, para, pic, rel, solid, sp, xfrm } from '../fixtures/pptx';
 import {
@@ -250,6 +251,29 @@ describe('Convert to Slides', () => {
             createSpy.mockRestore();
         }
         expect(await listing(parent.id)).toEqual(['pictures.pptx']);
+    }, 60_000);
+
+    test("a source larger than its row's size claim is read no further than the cap and refused", async () => {
+        const parent = await folder('convert-understated');
+        const uploaded = await upload(PPTX, 'understated.pptx', parent.id);
+        const alice = await getUserById(ctx.alice.user.id);
+        if (!alice) throw new Error('alice missing');
+        const drive = await getSharedDrive(ctx.alice.user.id, alice);
+        const { mount, path } = await drive.resolveFile(mountId, uploaded.id);
+        // The stored object grew past the cap out of band; the row still claims its upload's size.
+        const readSpy = spyOn(mount, 'readBytes').mockImplementation(
+            async (_id, limit) =>
+                new ArrayBuffer(Math.min(limit ?? Number.MAX_SAFE_INTEGER, MAX_DECOMPRESSED_BYTES + 1)),
+        );
+        try {
+            await expect(convertToDocument(drive, mount, path, 'eigenslides', alice)).rejects.toMatchObject({
+                status: 413,
+            });
+            expect(readSpy).toHaveBeenCalledWith(path.id, MAX_DECOMPRESSED_BYTES + 1);
+        } finally {
+            readSpy.mockRestore();
+        }
+        expect(await listing(parent.id)).toEqual(['understated.pptx']);
     }, 60_000);
 
     test('a .pptx that is no zip is refused before anything is created', async () => {

@@ -69,7 +69,9 @@ export async function convertToDocument(
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(sourcePath.size, format);
 
-    const bytes = await mount.readBytes(sourcePath.id);
+    // The row's size is only a claim, so the read stops one byte past the cap, and the transform's own check refuses
+    // what it read without the rest ever being buffered.
+    const bytes = await mount.readBytes(sourcePath.id, MAX_DECOMPRESSED_BYTES + 1);
     if (!bytes) throw new ApiError(404, 'File not found');
     const buffer = Buffer.from(bytes);
     const name = sourcePath.name.slice(0, -`.${format}`.length);
