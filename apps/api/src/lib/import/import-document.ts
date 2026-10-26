@@ -69,8 +69,8 @@ export async function convertToDocument(
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(sourcePath.size, format);
 
-    // The row's size is only a claim, so the read stops one byte past the cap, and the transform's own check refuses
-    // what it read without the rest ever being buffered.
+    // The row's size is only a claim, so the read stops one byte past the cap, and the byte-cap check before the
+    // transform refuses what it read without the rest ever being buffered.
     const bytes = await mount.readBytes(sourcePath.id, MAX_DECOMPRESSED_BYTES + 1);
     if (!bytes) throw new ApiError(404, 'File not found');
     const buffer = Buffer.from(bytes);
@@ -237,9 +237,8 @@ async function requireWritePermission(drive: DriveLike, path: DrivePath, user: U
 }
 
 // Through Drive, as an upload is: the ACL check, the drive event an open tab redraws on and the thumbnail. The images
-// count toward the quota at their inflated size, which the upload cap bounds as it would an upload of each. They are
-// charged before the first is written. Each import names its pictures with a prefix of its own, so every one is a
-// create.
+// count toward the quota at their inflated size. They are charged before the first is written.
+// Each import names its pictures with a prefix of its own, so every one is a create.
 async function saveImportedImages(
     drive: DriveLike,
     docPath: DrivePath,
