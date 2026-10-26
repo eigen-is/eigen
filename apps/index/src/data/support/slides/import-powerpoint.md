@@ -52,7 +52,7 @@ After an import into an open presentation, a message counts what didn't come acr
 - A bent or curved connector, an arc, or a freeform line that isn't closed comes in without its arrowheads. Shadows, glows, and 3-D effects are left out.
 - Pictures come in uncropped and unflipped. A TIFF, BMP, EMF, or WMF picture becomes a box that says **Picture not imported**. So does every picture after the first 1,000, or once the pictures add up to more than the largest file you can upload (35 MB unless your administrator changed it).
 - A pattern fill becomes a plain color, a gradient keeps its first and last color, and a picture used to fill a shape is left out.
-- Within one text box, every line takes the font, size, and color used most in that box.
+- Within one text box, every line takes the font, size, and color used most in that box. The message after an import counts such a box as a simplified text box.
 - Speaker notes, animations, and transitions aren't imported.
 
 A file with no slides converts to a presentation that opens like a new one, with its welcome slide. Imported into an open presentation, it changes nothing, and a message says "This presentation has no slides".
