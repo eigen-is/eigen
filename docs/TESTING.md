@@ -31,6 +31,12 @@ cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/drive/drive.t
 
 Both parts matter. Without the preload, a test file that imports `../lib` before `../setup` opens the server config under the checkout's own data root, where setup is done, so every test fails with `Setup already completed`. From the repo root, Bun also loads the root `.env` when there is one, and its settings (`PRODUCTION` among them) change what the server answers.
 
+`bun test` turns the value of a flag it doesn't know into a test-name filter, so `--concurrency 1` runs only the tests whose name holds "1". Its flags are `--concurrent`, `--max-concurrency=N` and `--parallel=N`. After you change a test command, check that the test count didn't drop.
+
+## `bun test` runs in UTC
+
+`bun test` sets `TZ=UTC`, so a bug that only shows at local midnight passes; formulajs, for one, builds its dates at local midnight. Run the date and sheet-engine suites once under `TZ=Europe/Amsterdam`, or set `process.env.TZ` in the test itself.
+
 ## Each API test file boots its own server
 
 `apps/api/src/test/test-env.ts` sets `EIGEN_DATA_ROOT` to a fresh `data-test/test-<pid>-<random>` dir per worker process. It must run before any app or auth module opens its SQLite files, so `setup.ts` and `preload.ts` both import it first. It prunes `data-test/` once per worker, by age alone: anything older than ten minutes is a dead run. A live sibling's dir is never that old, so a concurrent run keeps its own dir and the `data-test/test-<name>-<ts>` scratch dirs that unit tests make for themselves.
@@ -51,7 +57,9 @@ Each file has its own auth database, so it sees only the users and orgs it creat
 
 `--isolate` gives every test file a fresh global and module graph, and it needs Bun 1.4.1 or newer (`.bun-version`). Older Bun keeps many finished files' globals alive with no retainer reachable from JS, so a worker grows by the whole app graph, about 50 MB, per such file.
 
-Two pins are the app's own and outlive a file on any Bun: each Home's idle timeout and Elysia's sucrose cache sweep. Both are unref'd timers whose callbacks reach the module graph. The preload's `afterAll` clears them with `shutdownAllHomes()` and `clearSucroseCache(0)`.
+Two pins are the app's own and outlive a file on any Bun: each Home's idle timeout and Elysia's sucrose cache sweep. Both are unref'd timers whose callbacks reach the module graph. The preload's `afterAll` clears them with `shutdownAllHomes()` and `clearSucroseCache(0)`. A `(fail) (unnamed) hook timed out` after the last file is that `afterAll`.
+
+A native Worker that outlives its test file crashes the parallel suite with `panic: NAPI FATAL ERROR: napi_define_properties`, and the files after it abort. Register such a job on its Mount, as `thumbnailJobs` does, so `closeAllDatabases` drains it, resolving on the Worker's `close` event. Never add `documentTransformRunner.close()` to the preload.
 
 ## Locally files run in one process, in CI on four isolated workers
 
@@ -61,9 +69,13 @@ A plain local run stays sequential in one process. The per-file server boot (abo
 
 That one process also shares one data root, so a file that passes alone can fail a later one locally while CI stays green. Leave behind nothing a later file reads: server settings, archives in the backups folder, a socket file at a fixed path, a home no backup can verify (a corrupted document, a control character in a path) or a stray home with an s3 mount. A server backup test verifies every home in the data root and lists every archive, so it is the usual victim.
 
+`SQLITE_IOERR_VNODE` in a sandboxed run is the sandbox, not the code: run it once more outside the sandbox before you call it a failure. A loaded machine fakes timeouts too, so check `uptime` before you trust a timing or parallelism result, and keep a Mac awake through a long run (`caffeinate -ims bun run check`), since a sleep mid-run makes hooks time out.
+
 ## A module mock outlives its file
 
 Every workspace but the API runs its test files in one process, locally and in CI, and `mock.module` replaces a module for the rest of that run, not just the file that called it. A partial mock is a trap: a later file that imports an export the mock left out gets `undefined`, such as an `AuthProvider` that fails a render with "Element type is invalid". Spread the real module into the mock (`const realAuth = await import('@workspace/lib/auth')`, then `({ ...realAuth, useAuth: () => session })`). Have a mocked hook return one object, not a fresh literal per call, so a later file's effects that depend on it don't re-run forever.
+
+The same goes for globals. A file restores, never deletes, a global it didn't create. A happy-dom `Window` needs a `url`, or `api.ts` throws at load. A test spies on `auth.api.addMember`, not on the exported helper, because the hook calls the helper inside its own module. Moving a test file breaks its `import.meta.dir`-relative fixture paths.
 
 ## Resource bounds measure the child, and scale rather than time
 
@@ -119,6 +131,8 @@ The scripts in `docker/` are not part of `bun run test`. Each one copies the tra
 
 Every harness sources `docker/probe-lib.sh` first and adds only its own probes. The library's Compose view of the install (`dc`, `stack_up`) runs from that container as root, because a release install and its `.env.production` are root's, and on a Linux host the harness user cannot read them. Docker Desktop hides this by mapping ownership to your user.
 
+Docker's two image stores treat a moved tag differently. Docker Desktop's containerd store drops `repo@sha256:<old>` when its tag moves, even while a container runs it; Linux's classic store keeps it as a digest-only image, which a recent docker CLI lists only with `--all`. So the launcher pulls a pinned image back by digest before it reads one (its labels, the pre-update snapshot, a rollback), every `docker image ls` that must see digest-only images passes `--all`, and a launcher change runs on both stores: the Mac gate is containerd, CI's ubuntu the classic store.
+
 Run them one at a time: two started together can pick the same subnet. `./docker/test-all.sh` runs them in turn and prints one line per harness. Each script's header lists everything it probes.
 
 | Harness | What it proves |
@@ -141,7 +155,7 @@ Run them one at a time: two started together can pick the same subnet. `./docker
 
 `bun dedupe --check` fails when `bun.lock` holds two versions of a package that one version could satisfy. Two copies of `@codemirror/language` or of Radix's dismissable layer break at runtime without an error, and a dependency bump or `bun add` can bring a copy back. Run `bun dedupe` and commit the lockfile it writes.
 
-The 30 s per-test timeout is for CI. The runner is slower than a laptop, and bun's 5 s default fails a slow file there. Locally the default stays, so a slow test is caught where it is written. The tests that wait on a mail folder watcher are the exception: on a loaded Mac an `fs.watch` event alone can take longer than 5 s ([IMAP.md § A watcher checks that its directory is still the same one](IMAP.md#a-watcher-checks-that-its-directory-is-still-the-same-one)). Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file, so a worker's growth shows next to the file that caused it.
+The 30 s per-test timeout is for CI. The runner is slower than a laptop, and bun's 5 s default fails a slow file there. Locally the default stays, so a slow test is caught where it is written. The tests that wait on a mail folder watcher are the exception: on a loaded Mac an `fs.watch` event alone can take longer than 5 s ([IMAP.md § A watcher checks that its directory is still the same one](IMAP.md#a-watcher-checks-that-its-directory-is-still-the-same-one)). Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file, so a worker's growth shows next to the file that caused it. Exit code 143 is an out-of-memory kill, and `bun --filter` buffers a child's output, so the last test in the log is not the culprit.
 
 A second job, `launcher`, runs `docker/test-launcher.sh`. It needs no stack and no Bun, so it runs on a plain runner beside the check job.
 
