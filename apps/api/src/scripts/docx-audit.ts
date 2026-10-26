@@ -2087,7 +2087,7 @@ export function asWritten(
     // nested: inside a list, a quote or a cell, which owns the spacing of what it holds.
     const blocks = (nodes: JSONContent[], at: string, nested: boolean): JSONContent[] => {
         const out: JSONContent[] = [];
-        for (const node of nodes) {
+        for (const [index, node] of nodes.entries()) {
             const place = `${at}.${out.length}`;
             if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) {
                 out.push(node.content ? { ...node, content: blocks(node.content, place, true) } : node);
@@ -2126,7 +2126,7 @@ export function asWritten(
                     if (inline.length > 0) flush();
                     // The first piece takes the space above its textblock, which the reader keeps on a figure's paragraph
                     // past the figure's own margin. A paragraph's own space is its spaceBefore, a heading's or a title's
-                    // its look's too.
+                    // its look's too. The reader keeps it only past the space the textblock above leaves below it.
                     const own = node.attrs?.['spaceBefore'];
                     const look = ownTextLook(
                         node.type ?? '',
@@ -2139,7 +2139,9 @@ export function asWritten(
                     // A band writes no space above its first block, and a paragraph draws the Normal's anyway.
                     const floor = node.type === 'paragraph' ? imported.style.spaceBefore : 0;
                     const body = at.startsWith('body');
-                    const spaceBefore = body && !nested && pieces.length === 0 && above > floor ? above : null;
+                    const below = spaceBelowAsWritten(nodes[index - 1], imported.style);
+                    const kept = body && !nested && pieces.length === 0 && above > Math.max(floor, below);
+                    const spaceBefore = kept ? above : null;
                     const piece = { type: 'paragraph', attrs: { ...paragraphAttrs, spaceBefore }, content: [child] };
                     fresh.add(piece);
                     pieces.push(piece);
@@ -2191,6 +2193,16 @@ export function asWritten(
         changes,
         captions,
     };
+}
+
+// The space a textblock leaves below it as the writer writes it, in pt: its own space after, else its style's. Any other
+// block counts none.
+function spaceBelowAsWritten(node: JSONContent | undefined, style: Imported['style']): number {
+    if (!node || !PROSE_TEXTBLOCKS.includes(node.type ?? '')) return 0;
+    const own = node.attrs?.['spaceAfter'];
+    if (typeof own === 'number') return own;
+    if (node.type === 'paragraph') return style.spaceAfter;
+    return twipsToPt(ownTextLook(node.type ?? '', Number(node.attrs?.['level'] ?? 1), style, false)?.after ?? 0);
 }
 
 // The differences the writer explains, each with why it is no loss or a loss the writer accepts. A difference none
