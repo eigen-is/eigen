@@ -36,7 +36,15 @@ import type { DrawingTheme } from '../../ooxml/drawingml';
 import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
-import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES, textAlignOf } from '../../ooxml/wordml';
+import {
+    CHECKBOX_GLYPHS,
+    DEFAULT_RUN_SIZE,
+    LIST_LEVELS,
+    NOTE_SEPARATORS,
+    SINGLE_LINE,
+    STYLE_NAMES,
+    textAlignOf,
+} from '../../ooxml/wordml';
 import type { MediaFiles } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import type { Item, Para } from './assemble';
@@ -120,12 +128,12 @@ export function createReader(
     const page = { ...size, differentFirstPage: pkg.titlePg };
     const px = pagePx(page);
     const twips = pageTwips(page);
-    // Word's default is 10 pt; a size past the range lands in it, as a run's does.
-    const bodySize = 2 * (readFontSize((body.size ?? 20) / 2) ?? 10);
+    // A size past the range lands in it, as a run's does.
+    const bodySize = 2 * (readFontSize((body.size ?? DEFAULT_RUN_SIZE) / 2) ?? DEFAULT_RUN_SIZE / 2);
     const font = fontMark(byFace(' ', body.fonts, body, false)[0]?.font, fontTable) ?? DOCUMENT_FONT;
     const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
     // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
-    const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : 240;
+    const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? SINGLE_LINE) : SINGLE_LINE;
     for (const section of descendants(pkg.document.root, W_NS, 'sectPr'))
         if (section !== sectPr && !isDeepStrictEqual(sectionPage(section), size)) lost('section-pages-dropped');
     return {
@@ -143,7 +151,7 @@ export function createReader(
         colors: drawingTheme(pkg.theme),
         charts: new Map(),
         bodySize,
-        bodySizeCs: 2 * (readFontSize((body.sizeCs ?? body.size ?? 20) / 2) ?? 10),
+        bodySizeCs: 2 * (readFontSize((body.sizeCs ?? body.size ?? DEFAULT_RUN_SIZE) / 2) ?? DEFAULT_RUN_SIZE / 2),
         baseColor: body.color?.hex,
         normal: readNormalStyle({
             font,
@@ -415,13 +423,14 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const { normal } = reader;
     const normalBase = role.kind === 'paragraph' && scope.story !== 'note';
     const base = normalBase ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
-    const autoLine = (para: ParaProps) => ((para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : undefined);
+    const autoLine = (para: ParaProps) =>
+        (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? SINGLE_LINE) : undefined;
     const line = autoLine(props);
     const baseLine = autoLine(base);
     const mark: RunFace = {
         family:
             fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font) ?? normal.font,
-        size: paraRun.size ?? 20,
+        size: paraRun.size ?? DEFAULT_RUN_SIZE,
     };
     // Every run the writer counts: each run of text, whitespace too, and a field or a note reference in the style's run;
     // not the space a task's or a note's text starts with, which goes, as the writer writes the checkbox or the note's
@@ -596,7 +605,7 @@ export function isBodySizedRun(size: number | undefined, heading: number, body: 
 // Every run holding text body sized, which Word draws as body text, complex script at its szCs; the style's bold and
 // italic then stay as marks.
 function isBodySized(reader: Reader, p: XmlElement, heading: DocxRunProps): boolean {
-    const headingSize = heading.size ?? 20;
+    const headingSize = heading.size ?? DEFAULT_RUN_SIZE;
     const headingSizeCs = heading.sizeCs ?? headingSize;
     const faces = textFaces(reader, p, heading).map(({ complex, direct }) =>
         complex

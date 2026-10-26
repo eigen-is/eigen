@@ -12,7 +12,7 @@ import type { XmlElement } from '../../core/xml';
 import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
 import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../ooxml/ooxml';
-import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../ooxml/wordml';
+import { DEFAULT_HIGHLIGHT, DEFAULT_RUN_SIZE, PAGE_NUMBER_FIELDS } from '../../ooxml/wordml';
 import type { Item, Para } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
@@ -33,9 +33,9 @@ import {
 } from './styles';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
-// font and size are the face Word draws a run in, its size in half points, 20 where nothing sets one, which the
-// paragraph's line height counts. italic is whether Word draws a run italic: whether that is the mark waits for the
-// paragraph's node. equation is the text of an equation past a bound, which the text beside it is set off from.
+// font and size are the face Word draws a run in. The size is in half-points, and the paragraph's line height counts
+// it. italic is whether Word draws a run italic; whether that is the mark waits for the paragraph's node. equation is
+// the text of an equation past a bound, which the text beside it is set off from.
 export type Piece =
     | {
           kind: 'node';
@@ -398,7 +398,7 @@ function marksOf(
     if (full.vanish) return [];
     if (absorbed === 'all') {
         const faces = byFace(text, full.fonts, full, false, () => reader.pkg.pieces.charge(1));
-        return faces.map((face) => ({ ...face, marks: [], small: false, size: full.size ?? 20 }));
+        return faces.map((face) => ({ ...face, marks: [], small: false, size: full.size ?? DEFAULT_RUN_SIZE }));
     }
     const own = { ...paraRun };
     for (const key of absorbed) delete own[key];
@@ -415,14 +415,14 @@ function marksOf(
         const size = complex ? props.sizeCs : props.size;
         return size !== undefined && size <= SMALL_PRINT * (complex ? reader.bodySizeCs : reader.bodySize);
     };
-    // The docx's body draws at the doc's body size, and a heading, a title or a note at its own, so only a size apart
-    // from the one its node draws is a mark; in half-points, Word's default 10 pt where none is set.
+    // The docx's body draws at the doc's body size, and a heading, a title or a note at its own. So only a size apart
+    // from the one its node draws is a mark.
     const nodeRun =
         absorbed.includes('size') || scope.story === 'note'
             ? mergeRun(styles.docRun, paraRun)
             : { size: reader.bodySize, sizeCs: reader.bodySizeCs };
-    // In half points, Word's default 10 pt where none is set.
-    const sizeOf = (run: DocxRunProps, complex: boolean) => (complex ? (run.sizeCs ?? run.size) : run.size) ?? 20;
+    const sizeOf = (run: DocxRunProps, complex: boolean) =>
+        (complex ? (run.sizeCs ?? run.size) : run.size) ?? DEFAULT_RUN_SIZE;
     const fontSizeOf = (complex: boolean) => {
         const size = sizeOf(full, complex);
         return size === sizeOf(nodeRun, complex) ? undefined : readFontSize(size / 2);

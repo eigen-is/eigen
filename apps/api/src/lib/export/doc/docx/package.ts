@@ -7,7 +7,7 @@ import type { Lost } from '../../../document/transform/protocol';
 import { A_NS, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../../ooxml/ooxml';
 import type { PartRelationships } from '../../../ooxml/opc';
 import type { NOTE_SEPARATORS, StyleId } from '../../../ooxml/wordml';
-import { WORD_SETTINGS_URI } from '../../../ooxml/wordml';
+import { SINGLE_LINE, WORD_SETTINGS_URI } from '../../../ooxml/wordml';
 import type { OfficeCharts } from '../../office-chart';
 import type { OfficeImages } from '../../office-image';
 import type { FontSlot } from './fonts';
@@ -96,7 +96,7 @@ export function settingsXml(footnotes: boolean): string {
 
 // As Word writes them: single spaced with no space after, which Normal's spacing would add above the notes.
 export function separatorXml(type: (typeof NOTE_SEPARATORS)[number], index: number): string {
-    return `<w:footnote w:type="${type}" w:id="${index - 1}"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:${type}/></w:r></w:p></w:footnote>`;
+    return `<w:footnote w:type="${type}" w:id="${index - 1}"><w:p><w:pPr><w:spacing w:after="0" w:line="${SINGLE_LINE}" w:lineRule="auto"/></w:pPr><w:r><w:${type}/></w:r></w:p></w:footnote>`;
 }
 
 // Word's number opens a note's first paragraph, then a space.
