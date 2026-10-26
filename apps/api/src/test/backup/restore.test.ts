@@ -751,7 +751,7 @@ describe('Backup restore refuses an archive this server cannot open', () => {
                 remoteRoot.id,
                 new File([TEST_PNG_BYTES], 'remote.png', { type: 'image/png' }),
             );
-            await mount.drainPendingUploads({ flushNow: true });
+            await mount.uploadQueue?.drain({ flushNow: true });
             const artifact = await backup(user.id, new Date(Date.now() + 60_000), (manifest, folder) =>
                 stampSchemaVersion(manifest, folder, `home/mounts/${S3_MOUNT_ID}/metadata.db`, 7),
             );
@@ -1307,7 +1307,7 @@ describe('Backup restore refuses a member that is not a complete home', () => {
         try {
             const s3Root = (await mount.getRootFolder())!.id;
             await mount.createFile(s3Root, 'remote.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
-            await mount.drainPendingUploads({ flushNow: true });
+            await mount.uploadQueue?.drain({ flushNow: true });
             const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
             const epoch = getDataEpoch(user.id);
             const artifact = await backup(user.id, new Date(Date.now() + 120_000), undefined, 'full');

@@ -86,7 +86,7 @@ async function saveVersion(docId: string): Promise<Snapshot> {
     expect(res.status).toBe(200);
     const saved = (await res.json()) as Snapshot;
     // The version's upload is queued; the restore reads the stored object.
-    await mount.drainPendingUploads({ flushNow: true });
+    await mount.uploadQueue?.drain({ flushNow: true });
     return saved;
 }
 
@@ -260,7 +260,7 @@ describe('Collab WS open whose download fails', () => {
         const client = openCollabClient(docId);
         expect((await client.closed).code).toBe(COLLAB_STORAGE_UNAVAILABLE_CLOSE);
         expect(client.frames).not.toContain(MESSAGE_SYNC);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await storedBytes(dataKey)).toBe(before);
 
         fakeS3.faults.delete(dataKey);

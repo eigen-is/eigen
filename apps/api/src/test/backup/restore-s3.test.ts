@@ -152,7 +152,7 @@ describe('Backup restore of an s3 mount', () => {
         ).toBe(`${png.id}.webp`);
 
         await settleContainer(mount, doc.id);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         dataDbId = (await mount.getChildByName(doc.id, 'data.db'))!.id;
         pngId = png.id;
@@ -216,7 +216,7 @@ describe('Backup restore of an s3 mount', () => {
         const { mount: restored } = createHomeFaultMount(home, MOUNT_ID, BACKING);
         await restored.init();
         try {
-            await restored.drainPendingUploads({ flushNow: true });
+            await restored.uploadQueue?.drain({ flushNow: true });
 
             expect(await bytesInBucket(restored, pngKey)).toEqual(TEST_PNG_BYTES);
             expect(await bytesInBucket(restored, textKey)).toEqual(TEXT_BYTES);
@@ -242,7 +242,7 @@ describe('Backup restore of an s3 mount', () => {
         const { mount: restored } = createHomeFaultMount(await getHome(userId), MOUNT_ID, BACKING);
         await restored.init();
         try {
-            await restored.drainPendingUploads({ flushNow: true });
+            await restored.uploadQueue?.drain({ flushNow: true });
             expect(pendingUploadsOf(metadataPath)).toEqual([]);
             expect(await bytesInBucket(restored, keyOf(metadataPath, pngId))).toEqual(TEST_PNG_BYTES);
             expect(await bytesInBucket(restored, keyOf(metadataPath, textId))).toEqual(TEXT_BYTES);

@@ -2615,7 +2615,7 @@ describe('trash/restore content reindex', () => {
         // First index: a synced write marks the container dirty; the drain extracts body v1.
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await mount.flushContentReindex();
+        await mount.reindexQueue?.drain();
         expect(mount.searchPaths({ q: 'grendelone', limit: 20 }).some((h) => h.id === containerId)).toBe(true);
 
         // Dirty it again (the trash-time close syncs it, re-marking the container; the 2-min cap

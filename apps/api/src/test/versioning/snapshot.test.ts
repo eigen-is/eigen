@@ -34,7 +34,7 @@ describe('replaceContainerDataDb on an s3 mount', () => {
         source.close();
 
         // An upload of 'live' is still on the wire when the restore writes, and lands after it.
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         fault.parkWrites = true;
         await managed.flush();
         const storageKey = await mount.getStorageKey(dataDbId);
@@ -42,7 +42,7 @@ describe('replaceContainerDataDb on an s3 mount', () => {
         fault.parkWrites = false;
         await mount.replaceContainerDataDb(containerId, sourcePath);
         await fault.landAllRemaining();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         expect((await mount.getChildByName(containerId, 'data.db'))?.id).toBe(dataDbId);
         const stored = join(TEST_DIR, 'stored.db');

@@ -323,13 +323,6 @@ export class Drive {
         return merged.slice(0, opts.limit);
     }
 
-    // The search index catches up on its own. Waiting for it here is for tests and manual jobs.
-    public async flushContentReindex(): Promise<void> {
-        for (const mount of this.mounts.values()) {
-            await mount.flushContentReindex();
-        }
-    }
-
     // ---- Changing the tree ----
 
     public async createFolder(

@@ -113,6 +113,8 @@ export class Mount {
     private readonly baseDir: string;
     private readonly getLocalDatabase: LocalDatabaseGetter;
     private readonly extractContent?: ContentExtractor;
+    // One map holds three kinds of lock key: a path id, a folder id with a folded name for a create, and
+    // the one key that permanent deletes share. Ids are UUIDs, so the kinds never collide.
     private readonly pathLocks: Map<string, Promise<void>>;
     private readonly treeLock: RWLock;
 
@@ -1293,11 +1295,12 @@ export class Mount {
         return this.withPathLock(pathId, fn);
     }
 
-    // On `local` a storage key is a name path. A write that derives its key holds the tree lock shared,
-    // from resolving the key through the row write, and a folder rename holds it exclusive. Other
-    // backends have id keys and take no tree lock. The order is path lock, then document database slot,
-    // then tree lock. A create's lock comes right before the tree lock. A holder never takes the tree lock
-    // again: a shared lock inside a shared lock deadlocks once an exclusive one waits.
+    // On `local` a storage key is a name path, so a folder rename changes the keys of everything under
+    // it. A write that derives a key holds the tree lock shared until its row is written. A folder
+    // rename holds it exclusive. Other backends have id keys and take no tree lock. The locks are taken
+    // in one order: the path lock, then the document database slot, then the tree lock. A create's lock
+    // comes right before the tree lock. A holder never takes the tree lock a second time, because a
+    // shared lock inside a shared lock deadlocks once an exclusive one waits.
     public async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
         return this.isPathBased ? this.treeLock.shared(fn) : fn();
     }
@@ -1396,20 +1399,6 @@ export class Mount {
 
     public searchPaths(opts: { q: string; limit: number }): DrivePath[] {
         return searchIndex.searchPaths(this, opts);
-    }
-
-    // Drains the content reindex queue now and waits for it. The queue normally runs by itself. A
-    // mount whose init built no queue has nothing to drain.
-    public flushContentReindex(): Promise<void> {
-        return this.reindexQueue?.drain() ?? Promise.resolve();
-    }
-
-    // ---- Uploads ----
-
-    // Drains the pending uploads now. The queue normally runs by itself, and closeAllDatabases drains
-    // it at shutdown, so this is for tests. A mount without a queue has nothing to drain.
-    public drainPendingUploads(opts?: { flushNow?: boolean }): Promise<void> {
-        return this.uploadQueue?.drain(opts) ?? Promise.resolve();
     }
 
     // ---- Sizes ----

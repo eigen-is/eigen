@@ -45,7 +45,7 @@ function createS3Mount(id: string, bucket?: string): { mount: Mount; fault: Faul
 async function openSettledDoc(mount: Mount) {
     const { dataDbId } = await provisionDoc(mount);
     const managed = await mount.createDatabase(docConfig, dataDbId);
-    await mount.drainPendingUploads({ flushNow: true });
+    await mount.uploadQueue?.drain({ flushNow: true });
     return { dataDbId, managed };
 }
 
@@ -138,7 +138,7 @@ describe('edits while a PUT is stalled', () => {
         const land = async () => {
             fault.parkWrites = false;
             await fault.releaseOldestParked();
-            await mount.drainPendingUploads({ flushNow: true });
+            await mount.uploadQueue?.drain({ flushNow: true });
         };
         return { mount, dataDbId, putsStarted: () => fault.writeCount - writesBefore, land };
     }

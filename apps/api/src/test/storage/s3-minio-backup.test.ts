@@ -143,7 +143,7 @@ describe.skipIf(!live)('Backup round trip on a real S3 mount (MinIO)', () => {
             )
         ).id;
         // Everything the user uploaded is in the bucket before the backup reads it.
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         originalPngKey = keyOf(metadataPath, pngId);
         expect(await bytesInBucket(storage, originalPngKey)).toEqual(TEST_PNG_BYTES);
     });
@@ -220,7 +220,7 @@ describe.skipIf(!live)('Backup round trip on a real S3 mount (MinIO)', () => {
         );
         await restored.init();
         try {
-            await restored.drainPendingUploads({ flushNow: true });
+            await restored.uploadQueue?.drain({ flushNow: true });
             expect(restored.pendingUploadCount).toBe(0);
             expect(await bytesInBucket(storage, restoredPngKey)).toEqual(TEST_PNG_BYTES);
             expect(await bytesInBucket(storage, restoredTextKey)).toEqual(TEXT_BYTES);

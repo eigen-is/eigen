@@ -47,7 +47,7 @@ describe('Eigendoc docx import into an S3 mount', () => {
         }
         const { mount, drive } = s3;
         // Uploaded, so the read below comes from the bucket and not from the staged copy.
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         const mediaFolder = await mount.getChildByName(docPath.id, 'media');
         const [image] = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
         if (!image) throw new Error('media/ holds no picture');
