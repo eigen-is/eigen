@@ -532,6 +532,86 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
         expect(html).toContain('background:#d1f0d1');
     });
 
+    test('rules over a hundred thousand hidden rows evaluate only the rows that show', () => {
+        const cell = { v: 1, m: '1', ct: { fa: 'General', t: 'n' } };
+        const hidden = 100_000;
+        const data: Sheet['data'] = [[cell]];
+        data[hidden + 1] = [cell];
+        const sheet: Sheet = {
+            id: 'cf-hidden',
+            name: 'CFHidden',
+            celldata: [
+                { r: 0, c: 0, v: cell },
+                { r: hidden + 1, c: 0, v: cell },
+            ],
+            data,
+            config: { rowhidden: Object.fromEntries(Array.from({ length: hidden }, (_, i) => [i + 1, 0])) },
+            conditionalFormatRules: Array.from({ length: 500 }, () => ({
+                type: 'default' as const,
+                cellrange: [{ row: [0, hidden + 1], column: [0, 0] }],
+                format: { cellColor: '#d1f0d1' },
+                conditionName: 'formula',
+                conditionValue: ['=A1>0'],
+            })),
+        };
+        const started = performance.now();
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(performance.now() - started).toBeLessThan(1_000);
+        expect(html.match(/background:#d1f0d1/g)).toHaveLength(2);
+    });
+
+    test('a color scale takes its extremes over the rows that show', () => {
+        const number = (v: number) => ({ v, m: String(v), ct: { fa: 'General', t: 'n' } });
+        const cells = [number(1), number(1000), number(2)];
+        const sheet: Sheet = {
+            id: 'scale',
+            name: 'Scale',
+            celldata: cells.map((v, r) => ({ r, c: 0, v })),
+            data: cells.map((v) => [v]),
+            config: { rowhidden: { 1: 0 } },
+            conditionalFormatRules: [
+                {
+                    type: 'colorGradation',
+                    cellrange: [{ row: [0, 2], column: [0, 0] }],
+                    format: ['#ff0000', '#0000ff'],
+                },
+            ],
+        };
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        const fills = [...html.matchAll(/background:(#[0-9a-f]{6});[^>]*>(\d+)</g)].map(([, fill, text]) => [
+            text,
+            fill,
+        ]);
+        // The hidden 1,000 is no extreme, so 2 is the scale's top and 1 its bottom.
+        expect(fills).toEqual([
+            ['1', '#0000ff'],
+            ['2', '#ff0000'],
+        ]);
+    });
+
+    test('a top-N rule ranks a range over a hidden row as one range', () => {
+        const number = (v: number) => ({ v, m: String(v), ct: { fa: 'General', t: 'n' } });
+        const cells = [number(5), number(0), number(3)];
+        const sheet: Sheet = {
+            id: 'top',
+            name: 'Top',
+            celldata: cells.map((v, r) => ({ r, c: 0, v })),
+            data: cells.map((v) => [v]),
+            config: { rowhidden: { 1: 0 } },
+            conditionalFormatRules: [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 2], column: [0, 0] }],
+                    format: { cellColor: '#d1f0d1' },
+                    conditionName: 'top10',
+                    conditionValue: [1],
+                },
+            ],
+        };
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(html.match(/background:#d1f0d1[^>]*>\d+</g)).toEqual([expect.stringContaining('>5<')]);
+    });
+
     test('a key far above the grid costs the preview its own window, with no walk over the rows it names', () => {
         const sheet: Sheet = {
             id: 'far',

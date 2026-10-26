@@ -22,7 +22,7 @@ import {
     sheetFloatingBox,
 } from '@workspace/lib/sheets';
 import { getElementBounds } from '@workspace/lib/vector';
-import { richText, withCfRanges } from '@workspace/sheet/engine';
+import { ranksWithinRange, richText, withCfRanges } from '@workspace/sheet/engine';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 
 // A window keeps at most maxRows shown rows and maxCols shown columns from the top-left of the used range, and at most
@@ -132,7 +132,8 @@ export function windowedSheet(
             borderInfo: windowBorders(config.borderInfo, range),
             merge: windowMerges(merges, range),
         },
-        conditionalFormatRules: sheet.conditionalFormatRules && clipRulesToWindow(sheet.conditionalFormatRules, range),
+        conditionalFormatRules:
+            sheet.conditionalFormatRules && clipRulesToWindow(sheet.conditionalFormatRules, rows, cols),
     };
     return {
         sheet: windowed,
@@ -359,24 +360,59 @@ function windowMerges(merges: MergeCell[], range: GridRange): Record<string, Mer
 }
 
 // A rule may name the whole sheet while the window is small, and the evaluator visits every cell of every range,
-// running a formula rule's engine once per cell. Clipping keeps that work to what is rendered. A rule that misses the
-// window drops out, and a formula rule keeps its anchor (withCfRanges). No reader checks a rule's shape, so one a peer
-// stored without ranges, or with a range that has no rows or columns, drops out too.
-function clipRulesToWindow(
-    rules: ConditionalFormatRule[],
-    [firstRow, lastRow, firstCol, lastCol]: GridRange,
-): ConditionalFormatRule[] {
+// running a formula rule's engine once per cell. Clipping each range to the runs of shown rows and columns keeps that
+// work to what is rendered, so a range over a hundred thousand hidden rows costs the rows that show. A rule that ranks
+// within each range keeps its range whole from the first shown track to the last, or it would rank each run apart. A
+// rule that misses the window drops out, and a formula rule keeps its anchor (withCfRanges). No reader checks a rule's
+// shape, so one a peer stored without ranges, or with a range that has no rows or columns, drops out too.
+function clipRulesToWindow(rules: ConditionalFormatRule[], rows: number[], cols: number[]): ConditionalFormatRule[] {
+    const rowRuns = runsOf(rows);
+    const colRuns = runsOf(cols);
+    const rowSpan = spanOf(rowRuns);
+    const colSpan = spanOf(colRuns);
     const clipped: ConditionalFormatRule[] = [];
     for (const rule of rules) {
         const ranges = Array.isArray(rule.cellrange) ? rule.cellrange : [];
         if (!ranges.every((range) => Array.isArray(range?.row) && Array.isArray(range.column))) continue;
-        const cellrange = ranges
-            .map((range) => ({
-                row: [Math.max(range.row[0], firstRow), Math.min(range.row[1], lastRow)],
-                column: [Math.max(range.column[0], firstCol), Math.min(range.column[1], lastCol)],
-            }))
-            .filter((range) => range.row[0] <= range.row[1] && range.column[0] <= range.column[1]);
+        const [rowsOf, colsOf] = ranksWithinRange(rule) ? [rowSpan, colSpan] : [rowRuns, colRuns];
+        const cellrange = ranges.flatMap((range) =>
+            runsIn(rowsOf, range.row).flatMap((row) => runsIn(colsOf, range.column).map((column) => ({ row, column }))),
+        );
         if (cellrange.length > 0) clipped.push(withCfRanges(rule, cellrange));
     }
     return clipped;
+}
+
+// The runs of consecutive tracks in `tracks`, ascending, each as its first and last track.
+function runsOf(tracks: number[]): [number, number][] {
+    const runs: [number, number][] = [];
+    for (const track of tracks) {
+        const last = runs.at(-1);
+        if (last && last[1] === track - 1) last[1] = track;
+        else runs.push([track, track]);
+    }
+    return runs;
+}
+
+// The runs as one, from the first track of the first to the last track of the last.
+function spanOf(runs: [number, number][]): [number, number][] {
+    const last = runs.at(-1);
+    return last ? [[runs[0][0], last[1]]] : [];
+}
+
+// The runs, each cut to the span from first to last. A binary search finds the first run that reaches the span, so
+// the cost is the runs it returns.
+function runsIn(runs: [number, number][], [first, last]: number[]): [number, number][] {
+    let low = 0;
+    let high = runs.length;
+    while (low < high) {
+        const mid = (low + high) >> 1;
+        if (runs[mid][1] < first) low = mid + 1;
+        else high = mid;
+    }
+    const cut: [number, number][] = [];
+    for (let i = low; i < runs.length && runs[i][0] <= last; i++) {
+        cut.push([Math.max(runs[i][0], first), Math.min(runs[i][1], last)]);
+    }
+    return cut;
 }
