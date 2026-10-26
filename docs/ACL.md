@@ -206,7 +206,7 @@ The ACL model treats "can edit content" and "can manage access" as one permissio
 
 **Schema**: `sharingRestricted INTEGER NOT NULL DEFAULT 0` on `paths` (`apps/api/src/lib/mount/schema.ts`) and on `shared_paths` (`apps/api/src/lib/drive/sharedschema.ts`); `sharingRestricted: boolean` on `DrivePath`.
 
-**Enforcement**: `SharedDrive.updateACLDelta()` checks write permission first, so viewers get the generic "no write permission" 403 and never learn a restriction exists. Then `isEffectiveOwnerSync()` (a team member on a team path) decides: a restricted non-owner gets 403, and a non-owner's `sharingRestricted` value is silently dropped rather than applied. Chat `/invite` and the drive `access-check` (`canShare`) run the same check. The owner is unaffected: `getSharedDrive` hands the owner their own `Drive`, with no wrapper and no restriction check. `receiveSharedPathChange()` mirrors the flag into `shared_paths`, so recipients see the current restriction state.
+**Enforcement**: `SharedDrive.updateACLDelta()` checks write permission first, so viewers get the generic "no write permission" 403 and never learn a restriction exists. Then `isEffectiveOwner()` (a team member on a team path) decides: a restricted non-owner gets 403, and a non-owner's `sharingRestricted` value is silently dropped rather than applied. Chat `/invite` and the drive `access-check` (`canShare`) run the same check. The owner is unaffected: `getSharedDrive` hands the owner their own `Drive`, with no wrapper and no restriction check. `receiveSharedPathChange()` mirrors the flag into `shared_paths`, so recipients see the current restriction state.
 
 ### ACL Route
 
@@ -234,7 +234,7 @@ Leaving a share is a delete: `SharedDrive.deletePath` checks whether the path's 
 
 **Visibility blocked too.** An editor cannot flip a restricted file to `public-read`: same route, same check.
 
-**Team members are co-owners.** No team user logs in, so team members always arrive through `SharedDrive`. `isEffectiveOwnerSync()` uses `parseOwnerId()` plus pre-fetched `memberships.teamIds` to grant them full ACL control on team paths, including toggling the flag itself.
+**Team members are co-owners.** No team user logs in, so team members always arrive through `SharedDrive`. `isEffectiveOwner()` uses `parseOwnerId()` plus pre-fetched `memberships.teamIds` to grant them full ACL control on team paths, including toggling the flag itself.
 
 Integration tests: `apps/api/src/test/acl/acl-bubbling.test.ts`, `apps/api/src/test/acl/sharing-restricted.test.ts`.
 

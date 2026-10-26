@@ -59,7 +59,7 @@ A folder's permanent delete first removes every trash root whose `trashedFrom` l
 
 ## Only the drive owner sees and manages trash
 
-`SharedDrive` lets the effective owner alone (`isEffectiveOwnerSync`: the owner, or a member of the owning team) list, restore, permanently delete and empty. `listTrash` has its own check, so a collaborator cannot enumerate what the owner deleted. Trashing needs write access. A path shared directly with the caller is left instead of trashed ([ACL.md](ACL.md)).
+`SharedDrive` lets the effective owner alone (`requireDriveOwner`: the owner, or a member of the owning team) list, restore, permanently delete and empty, so a collaborator cannot enumerate what the owner deleted. Trashing needs write access. A path shared directly with the caller is left instead of trashed ([ACL.md](ACL.md)).
 
 `Drive.emptyTrash` loops `permanentlyDelete` per item, so every item gets the same sharing, SSE and history handling. An item that is gone or no longer in trash by its turn is skipped: a folder's delete took it with it, or a restore got its lock first. A single permanent delete of such an item is a 404. Trashing the mount root is a 400.
 

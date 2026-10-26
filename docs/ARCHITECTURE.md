@@ -191,7 +191,7 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 These patterns have caused bugs across multiple domains. The gated ones (MIME strings, `:ownerId`, hover-without-touch) are enforced by `scripts/check-standards.ts`; see [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).
 
 - **Query keys must include `ownerId`** for any owner-scoped data: [CODE-STANDARDS.md § Key Patterns](CODE-STANDARDS.md#key-patterns)
-- **Add a `SharedDrive` wrapper for every route-callable `Drive` method**, with the appropriate permission check (`withReadPermission`, `withWritePermission`, or owner check). See [§ Drive Architecture](#drive-architecture)
+- **Add a `SharedDrive` wrapper for every route-callable `Drive` method**, with the appropriate permission check (`requireRead`, `requireWrite` or `requireDriveOwner`). See [§ Drive Architecture](#drive-architecture)
 - **MIME type strings**: [§ Eigen file types](#eigen-file-types) (gated)
 - **`validateSearch` in shared routes must extract all URL params the route uses**: missing params (like `uid`) silently break detail panes for shared items
 - **Never mutate TanStack Query cache directly**: use `queryClient.setQueryData()` or `invalidateQueries()`, not direct object mutation on cached data
