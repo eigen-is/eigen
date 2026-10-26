@@ -1,4 +1,4 @@
-import { LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@workspace/lib/html';
+import { isElement, LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@workspace/lib/html';
 import { CSS_FETCH_FUNCTIONS, cssStatements, sheetText } from '@workspace/lib/mail/remote-content';
 import type { VectorScene } from '@workspace/lib/vector';
 import { stripNonXmlChars } from '@workspace/lib/xml';
@@ -36,9 +36,6 @@ const CSS_ALLOWED_URL = /url\([\t\n\f\r ]*(['"]?)([^'"()\s]+)\1[\t\n\f\r ]*\)/iy
 // WeasyPrint fails the whole export on `attr(name url)`.
 const CSS_OTHER_FETCHES = new RegExp(`${CSS_FETCH_FUNCTIONS.source}|attr\\(`, 'i');
 const NO_REFS: ReadonlySet<string> = new Set();
-
-// The element hook types its node as a bare Node.
-export const isElement = (node: Node): node is Element => node.nodeType === 1;
 
 // Fetched without a click, on any element DOMPurify keeps: `src` (img, video, audio, source,
 // input type=image), `poster`, and the legacy `background`. `srcset` is handled separately.

@@ -1,3 +1,7 @@
+// HTML as strings, for browser and server code alike: escaping, plain text to paragraphs and back, and the tags and
+// attributes a LightEditor body keeps, which the canvas and the API's exports filter to. The DOM-based helpers live
+// beside it in html-dom.
+
 export function escapeHtml(text: string): string {
     return text
         .replace(/&/g, '&amp;')
@@ -90,3 +94,8 @@ export const LIGHT_EDITOR_ATTRS = ['href', 'target', 'rel'];
 // vector, and the sanitized HTML is rendered through dangerouslySetInnerHTML by the canvas' rich-text
 // layer and the comment-card notes, and injected as live DOM in the drive hero.
 export const LIGHT_EDITOR_HREF = /^(https?:|mailto:)/i;
+
+// A DOM walk meets text and comments too; the element nodes are the ones with tags and attributes.
+export function isElement(node: Node): node is Element {
+    return node.nodeType === 1;
+}
