@@ -15,6 +15,7 @@ import {
     FONT_FAMILY_NUMBER,
     MAX_CELL_FORMATS,
     MAX_NUMBER_FORMAT_LENGTH,
+    NUMBER_FORMAT_LITERAL,
 } from '../../../ooxml/spreadsheetml';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from '../cell-style';
 
@@ -70,9 +71,9 @@ const BUILTIN_FORMAT_IDS = new Map(
 );
 const FIRST_CUSTOM_FORMAT = 164;
 
-// Google's `M` for month is Excel's `m`, which Excel tells from a minute by what sits beside it. Quoted text, an
-// escaped, skipped or repeated character, a bracket and AM/PM keep their case.
-const FORMAT_TOKENS = /"[^"]*"?|\\.|[_*].|\[[^\]]*\]?|am\/pm|a\/p|M/gi;
+// Google's `M` for month is Excel's `m`, which Excel tells from a minute by what sits beside it. A literal keeps its
+// case.
+const FORMAT_TOKENS = new RegExp(`${NUMBER_FORMAT_LITERAL.source}|M`, 'g');
 
 type Look = { numFmt: number; font: number; fill: number; alignment: string };
 

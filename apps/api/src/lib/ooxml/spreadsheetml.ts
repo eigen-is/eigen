@@ -1,5 +1,5 @@
 // Excel's vocabulary, one source for the xlsx writer that writes it and the xlsx reader that recognises it: content
-// types, the date systems, column widths in pixels, Excel's limits, built-in number formats, the _xHHHH_ escapes, the
+// types, the date systems, column widths in pixels, Excel's limits, number formats, the _xHHHH_ escapes, the
 // names of conditional formats and data validations, and the prefixes of the functions Excel added after 2007. The
 // OOXML every format shares sits in its own module.
 
@@ -151,6 +151,11 @@ export const BUILTIN_NUMBER_FORMATS = new Map<number, string>([
     [48, '##0.0E+0'],
     [49, '@'],
 ]);
+
+// The tokens of a number format whose letters are never date codes: quoted text, an escaped, skipped or repeated
+// character, a bracket and AM/PM. The reader and the writer both walk a format past them, so a letter in one is never
+// read as a month or a minute.
+export const NUMBER_FORMAT_LITERAL = /"[^"]*"?|\\.|[_*].|\[[^\]]*\]?|[aA][mM]\/[pP][mM]|[aA]\/[pP]/;
 
 // A font's category as styles.xml's <family> numbers it (ECMA-376 Part 1 § 18.8.18).
 export const FONT_FAMILY_NUMBER: Record<EigenFont['category'], number> = {
