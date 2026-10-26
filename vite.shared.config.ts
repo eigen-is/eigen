@@ -143,6 +143,8 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
                 },
                 output: {
                     codeSplitting: {
+                        // Third-party code only. A group takes its modules' dependencies along, so a group for a
+                        // workspace package pulls in ui and lib modules the entry imports, and every page preloads it.
                         groups: [
                             { name: 'react', test: /node_modules[\\/]react(?:-dom)?[\\/]/, priority: 7 },
                             { name: 'radix', test: /node_modules[\\/]@radix-ui[\\/]/, priority: 6 },
@@ -150,11 +152,6 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
                             { name: 'numfmt', test: /node_modules[\\/]numfmt[\\/]/, priority: 4 },
                             { name: 'tiptap', test: /node_modules[\\/](?:@tiptap[\\/]|prosemirror-)/, priority: 3 },
                             { name: 'codemirror', test: /node_modules[\\/](?:@codemirror|@lezer)[\\/]/, priority: 2 },
-                            {
-                                name: 'sheet',
-                                test: /(?:packages|node_modules[\\/]@workspace)[\\/]sheet[\\/]/,
-                                priority: 1,
-                            },
                         ],
                     },
                 },
