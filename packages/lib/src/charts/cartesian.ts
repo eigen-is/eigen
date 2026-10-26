@@ -11,6 +11,7 @@ import type {
     ChartSpec,
     InlineChartSeries,
 } from '../types/chart';
+import { isStackingChartType } from '../types/chart';
 import { serializeFill } from '../vector/fill';
 import type { Point } from '../vector/geometry';
 import type { VectorLinearElement } from '../vector/types';
@@ -52,7 +53,7 @@ export function layoutCartesian(
     const { x, y } = spec.axes;
     const horizontal = type === 'bar';
     const { stacking } = spec.plots[type];
-    const stacked = stacking !== 'none' && type !== 'line';
+    const stacked = stacking !== 'none' && isStackingChartType(type);
     const percent = stacked && stacking === 'percent';
     const values = percent ? shares(stored) : stored;
     const formatTick = percent ? formatPercentTick : sourceFormat;

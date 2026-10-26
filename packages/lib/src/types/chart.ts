@@ -25,6 +25,12 @@ export type LegendPosition = (typeof LEGEND_POSITIONS)[number];
 export type ChartBlanks = (typeof CHART_BLANKS)[number];
 export type ChartStacking = (typeof CHART_STACKINGS)[number];
 
+// Column and bar charts stack their series by their plot's stacking. A line or a pie keeps a stacking it is given, but
+// draws its series apart.
+export function isStackingChartType(type: ChartType): boolean {
+    return type === 'column' || type === 'bar';
+}
+
 // Sheets only. Zero-based, inclusive, row[0] <= row[1] and column[0] <= column[1].
 export type CellRangeRef = { sheetId: string; row: [number, number]; column: [number, number] };
 
