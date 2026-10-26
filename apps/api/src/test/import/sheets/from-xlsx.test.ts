@@ -163,7 +163,8 @@ describe('the reader', () => {
         const cells = cellsOf(sheet);
         expect(cells).toMatchObject({
             '0_0': { bl: 1, it: 1, fs: 14, ff: 'Inter', fc: '#1F4E79', bg: '#FFFF00', v: 'Name' },
-            '0_1': { un: 1, cl: 1, fs: 20, ff: 'Source Serif 4', fc: '#335693', bg: '#DBDBDB', ht: 0, vt: 0, tb: '2' },
+            // Accent 1, Darker 25% by ECMA-376's luminance shift: Excel's swatch rounds it to #305496.
+            '0_1': { un: 1, cl: 1, fs: 20, ff: 'Source Serif 4', fc: '#2F5597', bg: '#DBDBDB', ht: 0, vt: 0, tb: '2' },
             '0_2': { fs: 9, ff: 'JetBrains Mono', fc: '#F4B183', bg: '#00B050', ht: 2, vt: 1, rt: 45, m: '50.00%' },
             '1_1': { bl: 1, it: 1, fs: 14, ct: { t: 'inlineStr' } },
             '1_2': { ht: 1, rt: 'vertical', ct: { fa: '@' } },
@@ -485,7 +486,8 @@ describe("the reader's rules", () => {
                 cellrange: [{ row: [0, 9], column: [2, 2] }],
                 format: ['#63BE7B', '#FFEB84', '#F8696B'],
             },
-            { type: 'colorGradation', cellrange: [{ row: [0, 9], column: [2, 2] }], format: ['#B25E25', '#F8696B'] },
+            // Accent 2, Darker 25%, which Excel's swatch rounds to #C65911.
+            { type: 'colorGradation', cellrange: [{ row: [0, 9], column: [2, 2] }], format: ['#C55A11', '#F8696B'] },
         ]);
         expect(rules[10]).toMatchObject({
             cellrange: [

@@ -112,6 +112,35 @@ describe('a font', () => {
         expect(look.cell).toEqual({ fc: '#A2B9E2', fs: 10.5 });
     });
 
+    // ECMA-376 shifts the colour's HLS luminance by the tint. Excel's swatches for the Office theme work that out in
+    // whole steps of 1/240, so a channel can land up to two steps from the spec's: Text 2, Lighter 40% is exact. The
+    // RGB blend this replaced was up to 17 steps off on a dark colour lightened.
+    test("a tint shifts the theme colour's luminance, within two steps of Excel's palette", () => {
+        const tints = [
+            ['3', '0.39997558519241921', '#8497B0'],
+            ['3', '0.79998168889431442', '#D6DCE4'],
+            ['3', '-0.249977111117893', '#333F4F'],
+            ['4', '0.79998168889431442', '#D9E1F2'],
+            ['4', '0.59999389629810485', '#B4C6E7'],
+            ['4', '-0.249977111117893', '#305496'],
+            ['2', '-0.249977111117893', '#AEAAAA'],
+            ['2', '-0.499984740745262', '#757171'],
+        ];
+        const fonts = tints.map(([theme, tint]) => `<font><color theme="${theme}" tint="${tint}"/></font>`).join('');
+        const resolved = looks(
+            `<fonts><font/>${fonts}</fonts>${xfs('<xf/>', ...tints.map((_, index) => `<xf fontId="${index + 1}"/>`))}`,
+        ).slice(1);
+        const channels = (hex: string | undefined) =>
+            [1, 3, 5].map((at) => Number.parseInt(hex?.slice(at, at + 2) ?? '', 16));
+        expect(resolved[0].cell.fc).toBe('#8497B0');
+        for (const [index, [, , excel]] of tints.entries()) {
+            const steps = channels(resolved[index].cell.fc).map((channel, at) =>
+                Math.abs(channel - channels(excel)[at]),
+            );
+            expect(Math.max(...steps)).toBeLessThanOrEqual(2);
+        }
+    });
+
     test("a run's properties read as a font, its face named by rFont", () => {
         const rPr =
             parseOoxml(`<rPr xmlns="${SML}"><b/><rFont val="Courier New"/><color theme="1"/></rPr>`) ?? undefined;

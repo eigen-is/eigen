@@ -230,7 +230,8 @@ function clamp(value: number): number {
 }
 
 // Hue in degrees, saturation and lightness 0–1.
-function toHsl(r: number, g: number, b: number): [number, number, number] {
+// Channels from 0 to 1 as hue in degrees, saturation and luminance from 0 to 1, and back.
+export function toHsl(r: number, g: number, b: number): [number, number, number] {
     const max = Math.max(r, g, b);
     const min = Math.min(r, g, b);
     const lum = (max + min) / 2;
@@ -241,7 +242,7 @@ function toHsl(r: number, g: number, b: number): [number, number, number] {
     return [hue * 60, sat, lum];
 }
 
-function fromHsl(hue: number, sat: number, lum: number): [number, number, number] {
+export function fromHsl(hue: number, sat: number, lum: number): [number, number, number] {
     const chroma = (1 - Math.abs(2 * lum - 1)) * sat;
     const sector = (((hue % 360) + 360) % 360) / 60;
     const x = chroma * (1 - Math.abs((sector % 2) - 1));
