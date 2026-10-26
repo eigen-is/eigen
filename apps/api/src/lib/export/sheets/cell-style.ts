@@ -1,10 +1,10 @@
+// What both writers of a workbook read, the HTML renderer and the xlsx writer: the cells' resolver, the alignment
+// codes and the test for a real rotation. They live apart from the HTML renderer so the xlsx writer, which loads
+// alone, never pulls in the sanitizer behind it.
+
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import type { CellResolver } from '@workspace/sheet/engine';
 import { createArrayResolver } from '@workspace/sheet/engine';
-
-// What both Sheet[] emitters read: the HTML/PDF renderer (render.ts) and the xlsx writer (xlsx/). It lives here, as
-// the xlsx writer must not import render.ts, which would pull DOMPurify and jsdom (through sanitize) into the xlsx path
-// that transform.ts loads apart.
 
 // The sheets' cells as the export reads them: the dense data every sheet carries once materialized.
 export function sheetsResolver(sheets: Sheet[]): CellResolver {
