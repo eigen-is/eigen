@@ -2,7 +2,7 @@
 
 The command palette is the ⌘K dialog of Eigen's apps: one keyboard entry point to jump somewhere, create something, or search mail, files and help. This page lists what is left to build on it.
 
-**Status:** the first version is built. Its code is in `../../packages/lib/src/core/command-palette` and `../../packages/ui/src/components/layout/app/command-palette`, mounted by `AppShell.PaletteRunner`, and [ARCHITECTURE.md](../ARCHITECTURE.md) § Frontend has its row. It does jumps, creates, contacts, smart parses (email, URL), actions on the current selection, search over mail, files, the open document, comments and help, prefix scopes (`mail:`, `file:`, `doc:`, `>`, `@`, `?`) and the Tab scope chip. Its search grows by itself as [SEARCH.md](../SEARCH.md) indexes more content: document body hits reach it through the file provider without any palette change. None of the items below is built.
+**Status:** the palette is built, and [COMMAND-PALETTE.md](../COMMAND-PALETTE.md) describes it. This page designs the six items below, none of them built.
 
 | # | Item                                        | Effort | Blocked on                                    |
 |---|---------------------------------------------|--------|-----------------------------------------------|
@@ -141,12 +141,8 @@ growth — usage data should drive what's worth pinning surface for.
 
 ## Open questions
 
-1. **Top Hit confidence threshold**: the *shape* is settled in code (`rank.ts` — promote only
-   on a strong structural title match or a deterministic smart-parse, else show no Top Hit).
-   What stays open is the exact bar (how strong a prefix/contains match must be), tuned with
-   telemetry.
-2. **Mobile dialog form**: the entry point is shipped (compact `md:hidden` icon button in the
-   topbar); the dialog *form* on small screens is undecided — full-screen sheet vs. bottom drawer.
+1. **Top Hit confidence threshold**: the exact bar (how strong a prefix/contains match must be), tuned with telemetry. The shape is in [COMMAND-PALETTE.md § The Top Hit is a sure parse or a strong title match, never a guess](../COMMAND-PALETTE.md#the-top-hit-is-a-sure-parse-or-a-strong-title-match-never-a-guess).
+2. **Mobile dialog form**: the dialog *form* on small screens is undecided — full-screen sheet vs. bottom drawer.
 3. **`⌘↵` new tab as a modifier**: today new-tab exists only as a discrete "Open in new tab"
    command. Whether `⌘↵` on any focused result opens its URL in a new tab — and what it means
    for actions, which have no URL — is undecided.
