@@ -179,6 +179,7 @@ Signatures are as the code declares them. Types the signatures name but the modu
 - `blipXml(rId, svgRId, effects = '')`, `blipEmbeds(blip)`, `IMAGE_EXTENSION_BY_MIME`, `MIME_ALIASES`.
 - `ALGN_BY_ALIGN`, `ALIGN_BY_ALGN`, `ANCHOR_BY_ALIGN`, `ALIGN_BY_ANCHOR`, `LINE_END_BY_ARROWHEAD`, `ARROWHEAD_BY_LINE_END`, `PRESET_DASH_BY_STYLE`, `strokeStyleOf(dash)`.
 - `drawingLines(body: XmlElement): string[]`: a text body's plain text, a line per paragraph and break.
+- `clampTextSize(hundredths)`: a run's `sz`, held to the 1 to 4000 pt `ST_TextFontSize` allows.
 - `isSideways(degrees)`, `anchoredBox(box: Box, degrees: number): Box`.
 
 ### ooxml-chart.ts
@@ -187,16 +188,15 @@ Signatures are as the code declares them. Types the signatures name but the modu
 - `chartCost(root: XmlElement): number`: what to charge before `readChart`.
 - `readChart(root, { theme, data }): ChartRead`: `data` is `'cache'` or `{ ranges: (sheetName) => sheetId | undefined }`. The result is `{ spec }` or `{ unsupported: { title, name } }`.
 - `readChartPartLook(root, { theme, emuPerPx, host }): Pick<ChartLook, …>`: the background, label colour, stroke and line series width.
-- `droppedChart({ title, name }): string[]`, `CHART_NOT_IMPORTED`: what a format shows in place of an unsupported chart.
+- `droppedChart({ title, name }): string[]`, `CHART_NOT_IMPORTED`, `KIND_NOT_IMPORTED`: what a format shows in place of an unsupported chart. A chart past the spec's caps names no kind.
 - `CHART_CONTENT_TYPE`, `STACKING_BY_GROUPING`, `LEGEND_BY_POSITION`, `PERCENT_AXIS_FORMAT`, `ChartHost`.
 
 ### ooxml-chart-writer.ts
 
 - `writeChart(spec: ChartSpec, options: ChartWriteOptions): string`: `options` holds the `look`, the `frame` (`{ width, height, emuPerPx }`, the box Eigen lays the chart out in), and for range data `ranges` and `cache`. For an embedded workbook it also holds `workbook`, the r:id of the workbook.
-- `addChartPart(parts, spec, options): string`: adds a numbered chart part to an xlsx and returns its r:id.
 - `chartGraphicXml(rId: string): string`: the `a:graphic` a host frame shows the chart with.
 - `embeddedChartSheet(spec: ChartSpec): Sheet | undefined`: the sheet of a docx's or pptx's embedded workbook.
-- `chartLookSimplified(look, layer?): boolean`: whether the part draws the look plainer than Eigen does.
+- `chartLookSimplified(look, layer?): boolean`: whether the part draws the look plainer than Eigen does. `addOfficeChart` (`export/office-chart.ts`) adds a chart's part in all three formats and counts it with this.
 
 ### wordml.ts, spreadsheetml.ts, presentationml.ts
 
