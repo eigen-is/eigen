@@ -1,5 +1,6 @@
 // The docx import's step in the transform process: the reader's doc and bands to one Yjs update, as the editor
-// leaves them on open.
+// leaves them on open. It runs there so neither the reader nor the conversion to Yjs blocks the event loop. The main
+// thread commits the update and writes the images through Drive.
 
 import type { Node } from '@tiptap/pm/model';
 import { EditorState } from '@tiptap/pm/state';
@@ -13,8 +14,6 @@ import { toTransferableBuffer, toTransferableMedia } from '../../document/transf
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { readDocx } from './from-docx';
 
-// Runs in the transform process, so neither the reader nor the conversion to Yjs blocks the event loop. The main thread
-// commits the update and writes the images through Mount.
 export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
     job: Pick<DocImportJob, 'publicOrigin' | 'maxMediaBytes'>,

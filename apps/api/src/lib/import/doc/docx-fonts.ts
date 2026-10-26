@@ -1,12 +1,13 @@
+// Which bundled font, if any, a Word font draws in: Eigen's by name, a foreign one by its category, an unknown one
+// none. It reads the theme's fonts, the font table and a run's faces by script, for the run and paragraph readers.
+
 import { bundledFont, bundledFontOfCategory, DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { codePoint as dingbat } from 'dingbat-to-unicode';
 import type { XmlElement } from '../../core/xml';
-import { hasXmlName, xmlChild, xmlElements } from '../../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { A_NS, W_NS } from '../../ooxml/ooxml';
 import { FONT_FAMILY } from '../../ooxml/wordml';
 import { descendants, w, wChild } from './package';
-
-// Which bundled font, if any, a Word font draws in: Eigen's by name, a foreign one by its category, an unknown one none.
 
 const MONOSPACE_FONT = bundledFontOfCategory('monospace');
 
@@ -19,14 +20,14 @@ export type Languages = { bidi?: string; eastAsia?: string };
 // which the document's default language answers when the run names none; *EastAsia the a:ea face the same way.
 export function readTheme(root: XmlElement | undefined, defaults: Languages): Theme {
     const [scheme] = root ? descendants(root, A_NS, 'fontScheme') : [];
-    const typeface = (font: XmlElement | undefined) => font?.attributes['typeface'] || undefined;
+    const typeface = (font: XmlElement | undefined) => (font && xmlAttr(font, '', 'typeface')) || undefined;
     const faces = (local: string) => {
         const collection = scheme && xmlChild(scheme, A_NS, local);
         if (!collection) return undefined;
         const byScript = new Map(
             xmlElements(collection)
                 .filter((font) => hasXmlName(font, A_NS, 'font'))
-                .map((font) => [font.attributes['script'] ?? '', typeface(font)]),
+                .map((font) => [xmlAttr(font, '', 'script') ?? '', typeface(font)]),
         );
         const scripted = (face: 'cs' | 'ea') => (language: string | undefined) =>
             typeface(xmlChild(collection, A_NS, face)) ?? byScript.get(scriptOf(language) ?? '');
@@ -47,6 +48,16 @@ export function readTheme(root: XmlElement | undefined, defaults: Languages): Th
             return scripted.get(key);
         },
     };
+}
+
+// The ISO 15924 code the theme's a:font names, from a BCP 47 tag; a malformed tag from the file has none.
+function scriptOf(language: string | undefined): string | undefined {
+    if (!language) return undefined;
+    try {
+        return new Intl.Locale(language).maximize().script;
+    } catch {
+        return undefined;
+    }
 }
 
 // A run's faces by what they draw: ASCII, the rest of Latin, Greek and Cyrillic (high ANSI), East Asian scripts and
@@ -114,16 +125,6 @@ export function byFace(
     const last = pieces.at(-1);
     if (last) last.text = text.slice(start);
     return pieces;
-}
-
-// The ISO 15924 code the theme's a:font names, from a BCP 47 tag; a malformed tag from the file has none.
-function scriptOf(language: string | undefined): string | undefined {
-    if (!language) return undefined;
-    try {
-        return new Intl.Locale(language).maximize().script;
-    } catch {
-        return undefined;
-    }
 }
 
 // A name the map doesn't know, onto the bundled font of its fontTable.xml category, lowercase as the map's.

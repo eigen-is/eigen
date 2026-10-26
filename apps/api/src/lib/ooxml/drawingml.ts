@@ -329,6 +329,12 @@ export const IMAGE_EXTENSION_BY_MIME = new Map([
 // image/jpg is a common misspelling of a part's declared type.
 export const MIME_ALIASES = new Map([['image/jpg', 'image/jpeg']]);
 
+// The type of an image part by its extension, for a part the package gives no type, `jpg` included.
+export const IMAGE_MIME_BY_EXTENSION = new Map([
+    ...[...IMAGE_EXTENSION_BY_MIME].map(([mime, extension]): [string, string] => [extension, mime]),
+    ['jpg', 'image/jpeg'],
+]);
+
 // A picture's blip: its raster, and for an SVG the SVG's own part as the svgBlip extension, which Word, PowerPoint and
 // LibreOffice draw instead. Effects go first, as CT_Blip puts them before its extensions.
 export function blipXml(rId: string, svgRId: string | undefined, effects = ''): string {

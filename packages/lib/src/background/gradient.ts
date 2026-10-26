@@ -112,7 +112,8 @@ function fromLab([L, A, B]: Lab): string {
     return `#${hex2(channel(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s))}${hex2(channel(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s))}${hex2(channel(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s))}`;
 }
 
-function linearize(c: number): number {
+// An sRGB channel, 0 to 1, in linear light.
+export function linearize(c: number): number {
     return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }
 

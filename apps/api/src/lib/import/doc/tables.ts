@@ -14,12 +14,13 @@ import { hasXmlName, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK, TABLE_CELL_PADDING } from '../../document/looks';
 import { isOn, W_NS } from '../../ooxml/ooxml';
 import { MAX_TABLE_COLUMNS, NO_STORED_WIDTH, STYLE_NAMES, TWIPS_PER_PX } from '../../ooxml/wordml';
-import type { Item, Para } from './assemble';
-import { build, inlineText, isWhitespace } from './assemble';
-import { int, onOff, twipsOf, w, wChild } from './package';
+import type { Item, ParagraphItem } from './assemble';
+import { buildBlocks, inlineText, isWhitespace } from './assemble';
+import { isFill } from './colors';
+import { onOff, roundedInt, twipsOf, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks, WRAPPERS } from './paragraphs';
-import { isFill, mergeRun, shadingOf } from './styles';
+import { mergeRun, shadingOf } from './styles';
 
 type Row = { trPr?: XmlElement; cells: XmlElement[] };
 
@@ -103,7 +104,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         const extended: CellAttrs[] = [];
         // Short of Word's last column, which holds the row's cells.
         let column = Math.min(
-            Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0),
+            Math.max(0, roundedInt(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0),
             columns,
             MAX_TABLE_COLUMNS - 1,
         );
@@ -128,7 +129,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             }
             // Within the grid's columns left, or Word's limit where the grid names none.
             const colspan = Math.min(
-                Math.max(1, int(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1),
+                Math.max(1, roundedInt(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1),
                 Math.max(1, columns - column),
             );
             const start = index === 0 ? column - lead : column;
@@ -141,7 +142,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                     : cellItems(cell, rowIndex, colwidth, row.cells.slice(index + 1).flatMap(cellContent)).filter(
                           (item) => item.kind !== 'para' || !item.empty,
                       );
-            const content = build([...own, ...past]);
+            const content = buildBlocks([...own, ...past]);
             const type = header || isMarkedHeader(reader, cell) ? 'tableHeader' : 'tableCell';
             const fill = fillOf(cell, rowIndex);
             // A header's grey is the header's own look.
@@ -165,7 +166,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             last = unmerged(cell) ? { attrs, start } : undefined;
             column += colspan;
         }
-        const after = Math.min(Math.max(0, int(w(wChild(row.trPr, 'gridAfter'), 'val')) ?? 0), columns - column);
+        const after = Math.min(Math.max(0, roundedInt(w(wChild(row.trPr, 'gridAfter'), 'val')) ?? 0), columns - column);
         if (after > 0) {
             if (last) {
                 last.attrs.colspan += after;
@@ -231,7 +232,7 @@ function isMarkedHeader(reader: Reader, cell: XmlElement): boolean {
 
 // The writer's wrapped figure: a floating one-cell table holding the image and its caption.
 function floatingFigure(reader: Reader, items: Item[], float: XmlElement, grid: number[]): JSONContent | undefined {
-    const paras = items.filter((item): item is Para => item.kind === 'para' && !item.empty);
+    const paras = items.filter((item): item is ParagraphItem => item.kind === 'para' && !item.empty);
     if (paras.length !== items.filter((item) => item.kind !== 'para' || !item.empty).length) return undefined;
     const [image, caption, ...rest] = paras;
     const figures = image?.inlines.filter((node) => isFigureFrameNode(node.type)) ?? [];
@@ -284,11 +285,11 @@ function tableRows(table: XmlElement): Row[] {
 // Each cell over one grid column alone, with that column, past the row's gridBefore.
 function* cellsAlone(rows: Row[]): Generator<{ column: number; tcW: XmlElement | undefined }> {
     for (const row of rows) {
-        let column = Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0);
+        let column = Math.max(0, roundedInt(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0);
         for (const cell of row.cells) {
             if (column >= MAX_TABLE_COLUMNS) break;
             const tcPr = wChild(cell, 'tcPr');
-            const span = Math.max(1, int(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1);
+            const span = Math.max(1, roundedInt(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1);
             if (span === 1) yield { column, tcW: wChild(tcPr, 'tcW') };
             column += span;
         }

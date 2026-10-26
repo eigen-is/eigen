@@ -1,24 +1,26 @@
+// Word's list counters, emulated in document order: lists that share a definition continue, and a start override
+// restarts once. The paragraph reader asks it for each numbered paragraph's level, number and label.
+
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
 import { W_NS } from '../../ooxml/ooxml';
 import { LIST_LEVELS, spellNumber } from '../../ooxml/wordml';
 import { symbolOf } from './docx-fonts';
-import { int, onOff, w, wChild } from './package';
+import { onOff, roundedInt, w, wChild } from './package';
 import type { ParaProps, Styles } from './styles';
 import { MAX_CHAIN, readParaProps } from './styles';
 
-// Word's counters, emulated in document order: lists sharing a definition continue, a start override restarts once.
-
-// pPr: the level's paragraph properties, its indent, which sit between the paragraph style's and the paragraph's own;
-// style: the paragraph style the level numbers; legal: its label shows every number in arabic.
 type Level = {
     start: number;
     format: string;
     text: string;
+    // The level's paragraph properties, its indent, which sit between the paragraph style's and the paragraph's own.
     pPr: ParaProps;
     restart?: number;
     suffix: string;
+    // The paragraph style the level numbers.
     style?: string;
+    // The label shows every number in arabic.
     legal: boolean;
 };
 
@@ -141,7 +143,7 @@ export function readNumbering(root: XmlElement | undefined, styles: Styles): Num
             const levels = new Map<number, Level>();
             // Word draws nine levels; one past them is never drawn, and every paragraph would look through it.
             for (const lvl of xmlElements(element)) {
-                const ilvl = int(w(lvl, 'ilvl')) ?? 0;
+                const ilvl = roundedInt(w(lvl, 'ilvl')) ?? 0;
                 if (hasXmlName(lvl, W_NS, 'lvl') && ilvl >= 0 && ilvl < LIST_LEVELS) levels.set(ilvl, readLevel(lvl));
             }
             abstracts.set(w(element, 'abstractNumId') ?? '', {
@@ -154,7 +156,7 @@ export function readNumbering(root: XmlElement | undefined, styles: Styles): Num
             for (const override of xmlElements(element)) {
                 if (!hasXmlName(override, W_NS, 'lvlOverride')) continue;
                 const lvl = wChild(override, 'lvl');
-                overrides.set(int(w(override, 'ilvl')) ?? 0, {
+                overrides.set(roundedInt(w(override, 'ilvl')) ?? 0, {
                     start: startOf(wChild(override, 'startOverride')),
                     level: lvl && readLevel(lvl),
                 });
@@ -170,7 +172,7 @@ export function readNumbering(root: XmlElement | undefined, styles: Styles): Num
 
 // ECMA-376 says a missing start is 0; files that omit it are hand-made and mean 1.
 function startOf(element: XmlElement | undefined): number | undefined {
-    const start = int(w(element, 'val'));
+    const start = roundedInt(w(element, 'val'));
     if (start === undefined) return undefined;
     return start >= 0 && start <= MAX_START ? start : 1;
 }
@@ -187,7 +189,7 @@ function readLevel(lvl: XmlElement): Level {
         format: w(wChild(lvl, 'numFmt'), 'val') ?? 'decimal',
         text: font ? text.replace(PRIVATE_USE, (char) => symbolOf(font, char.charCodeAt(0)) ?? char) : text,
         pPr: readParaProps(wChild(lvl, 'pPr')),
-        restart: int(w(wChild(lvl, 'lvlRestart'), 'val')),
+        restart: roundedInt(w(wChild(lvl, 'lvlRestart'), 'val')),
         suffix: w(wChild(lvl, 'suff'), 'val') ?? 'tab',
         style: w(wChild(lvl, 'pStyle'), 'val'),
         legal: onOff(wChild(lvl, 'isLgl')) ?? false,

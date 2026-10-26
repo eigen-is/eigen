@@ -1,3 +1,7 @@
+// The docx reader's run and paragraph property readers, and the Styles chain that resolves a style's properties through
+// its basedOn parents, docDefaults and the table's conditional looks. The paragraph, run and table readers read every
+// property through it.
+
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
@@ -10,9 +14,10 @@ import {
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
 } from '../../ooxml/wordml';
+import { hexColor } from './colors';
 import type { Fonts, Script, Theme } from './docx-fonts';
 import { FONT_SLOTS } from './docx-fonts';
-import { halfPointsOf, int, onOff, twipsOf, w, wChild } from './package';
+import { halfPointsOf, onOff, roundedInt, twipsOf, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
 export type DocxRunProps = {
@@ -96,17 +101,6 @@ const HIGHLIGHT_COLORS = new Map([
     ['white', 'FFFFFF'],
 ]);
 
-// Six hex digits, after a '#' some converters write, or nothing: `auto`, a theme name or a typo is an explicit none.
-function hexColor(value: string | undefined): string | undefined {
-    if (value === undefined) return undefined;
-    return /^#?[0-9a-f]{6}$/i.test(value) ? value.slice(-6).toUpperCase() : '';
-}
-
-// A color as a mark holds it, from Word's hex.
-export function markColor(hex: string): string {
-    return `#${hex.toLowerCase()}`;
-}
-
 export function shadingOf(shd: XmlElement | undefined): string | undefined {
     if (!shd) return undefined;
     // nil is no shading, whatever fill it names: none, which wins over a table's or a style's.
@@ -115,39 +109,6 @@ export function shadingOf(shd: XmlElement | undefined): string | undefined {
     // Solid paints the pattern color. An auto one is black, with Word's auto text white on it; the fill stands in for
     // it, so auto text stays legible in the body color.
     return (val === 'solid' && hexColor(w(shd, 'color'))) || (hexColor(w(shd, 'fill')) ?? '');
-}
-
-// White is no fill: Word and Google Docs spell an unshaded cell or paragraph that way too.
-export function isFill(fill: string | undefined): boolean {
-    return !!fill && fill !== 'FFFFFF';
-}
-
-// A light grey, as the editor's code fill and its re-saves are: each channel at least D0 and within 18 of the others.
-export function isLightNeutral(fill: string | undefined): boolean {
-    if (!fill || !isFill(fill)) return false;
-    const channels = [0, 2, 4].map((at) => Number.parseInt(fill.slice(at, at + 2), 16));
-    return Math.min(...channels) >= 0xd0 && Math.max(...channels) - Math.min(...channels) <= 0x18;
-}
-
-// Contrast below 1.5 against white. On a fill the schema drops, Word draws such text legibly; on Eigen's paper it would
-// vanish, so it takes the body color.
-export function isLight(hex: string): boolean {
-    return 1.05 / (luminance(hex) + 0.05) < 1.5;
-}
-
-// White contrasts with it more than black: Word draws auto text on it white.
-export function isDark(hex: string): boolean {
-    const shade = luminance(hex) + 0.05;
-    return 1.05 / shade > shade / 0.05;
-}
-
-// WCAG's relative luminance.
-function luminance(hex: string): number {
-    const [red = 0, green = 0, blue = 0] = [0, 2, 4].map((at) => {
-        const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
-        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): DocxRunProps {
@@ -255,7 +216,7 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
             case 'numPr': {
                 const numId = w(wChild(child, 'numId'), 'val');
                 if (numId !== undefined) props.numId = numId;
-                const ilvl = int(w(wChild(child, 'ilvl'), 'val'));
+                const ilvl = roundedInt(w(wChild(child, 'ilvl'), 'val'));
                 if (ilvl !== undefined) props.ilvl = ilvl;
                 break;
             }
@@ -274,7 +235,7 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 props.pageBreakBefore = onOff(child);
                 break;
             case 'outlineLvl':
-                props.outlineLvl = int(w(child, 'val'));
+                props.outlineLvl = roundedInt(w(child, 'val'));
                 break;
             case 'pBdr': {
                 const borders: Borders = {};
@@ -283,7 +244,7 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                     if (border) borders[side] = !['nil', 'none'].includes(w(border, 'val') ?? 'none');
                 }
                 const left = wChild(child, 'left');
-                if (left) borders.bar = int(w(left, 'sz'));
+                if (left) borders.bar = roundedInt(w(left, 'sz'));
                 props.borders = borders;
                 break;
             }
