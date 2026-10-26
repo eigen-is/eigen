@@ -87,7 +87,6 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 - **Calendar** — looking up the calendar of a guest or of the organization answers that you have no access, instead of failing with a server error
 - **Calendar** — looking up the calendar of an account that doesn't exist answers the same as one you can't see, so it doesn't tell which accounts exist
 - **Excel theme colors** — a lighter or darker shade of a theme color, such as Text 2, Lighter 40%, comes into Sheets in the color Excel shows
-- **Excel row heights** — a row whose height was set by hand in Excel keeps that height in Sheets, even when it holds wrapped text
 
 ## [0.3.3] - 2026-10-13
 
