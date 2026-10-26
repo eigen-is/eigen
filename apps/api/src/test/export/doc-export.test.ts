@@ -573,6 +573,18 @@ describe('doc export — trailing breaks', () => {
         expect(body).toMatch(/<td[^>]*><p><br><\/p><\/td>/);
     });
 
+    test('a code block over 64 kB with no language renders plain, one with a language still highlights', () => {
+        const long = 'const a = 1;\n'.repeat(Math.ceil((64 * 1024) / 13) + 1);
+        const block = (language: string | null) => ({
+            type: 'doc',
+            content: [{ type: 'codeBlock', attrs: { language }, content: [{ type: 'text', text: long }] }],
+        });
+        const plain = renderDocHtml(block(null), () => null);
+        expect(plain).toStartWith('<pre><code class="hljs">const a = 1;\n');
+        expect(plain).not.toContain('<span');
+        expect(renderDocHtml(block('javascript'), () => null)).toContain('<span class="hljs-keyword">const</span>');
+    });
+
     test('an empty code block or one ending in a newline keeps its last line, one ending in text gets none', async () => {
         const code = (text?: string) => ({
             type: 'codeBlock',

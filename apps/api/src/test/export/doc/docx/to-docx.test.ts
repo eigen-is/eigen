@@ -1902,6 +1902,14 @@ describe('docx writer — code blocks', () => {
         expect([...(await styles()).keys()].filter((id) => id.startsWith('CodeBlock-'))).toEqual([]);
     });
 
+    test('a block over 64 kB with no language is written plain, one with a language still highlights', async () => {
+        const long = 'const a = 1;\n'.repeat(Math.ceil((64 * 1024) / 13) + 1);
+        const plain = xmlChildren(await bodyOf(doc(code(long))), W, 'p');
+        expect(plain.slice(0, 2).map(texts)).toEqual(['const a = 1;', 'const a = 1;']);
+        expect(plain.flatMap((paragraph) => descendants(paragraph, W, 'color'))).toEqual([]);
+        expect((await codeLines(doc(code(long, 'javascript'))))[0][0]).toEqual(['const', 'CBA6F7', undefined]);
+    });
+
     test("the Code Block style is the editor's dark box: borders as its padding, shading, mono at 286 auto", async () => {
         expect(xmlOf(style(await styles(), 'CodeBlock'))).toBe(
             '<w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/><w:basedOn w:val="Normal"/><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="11" w:color="1E1E2E"/><w:left w:val="single" w:sz="4" w:space="14" w:color="1E1E2E"/><w:bottom w:val="single" w:sz="4" w:space="11" w:color="1E1E2E"/><w:right w:val="single" w:sz="4" w:space="14" w:color="1E1E2E"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="1E1E2E"/><w:spacing w:before="165" w:after="165" w:line="286" w:lineRule="auto"/><w:ind w:left="290" w:right="290"/><w:contextualSpacing/></w:pPr><w:rPr><w:rFonts w:ascii="JetBrains Mono" w:hAnsi="JetBrains Mono" w:eastAsia="JetBrains Mono" w:cs="JetBrains Mono"/><w:color w:val="CDD6F4"/><w:sz w:val="19"/><w:szCs w:val="19"/></w:rPr></w:style>',
