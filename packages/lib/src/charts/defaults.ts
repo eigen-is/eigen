@@ -10,7 +10,7 @@ import type { ChartAxisId, ChartSeriesStyle, ChartSpec, ChartType } from '../typ
 // Google's inserted chart, which fits the default page's 642 px text column.
 export const CHART_DEFAULT_SIZE = { width: 600, height: 371 };
 
-// Google's chart font, and the one a spec that names none or a font Eigen doesn't bundle reads as.
+// Eigen's document font, which a spec that names no font, or a font Eigen doesn't bundle, reads as.
 export const DEFAULT_CHART_FONT = DOCUMENT_FONT;
 
 // Google's axes: a category axis without gridlines and a value axis with them, both shown, neither bounded.
@@ -97,7 +97,7 @@ export function chartSeriesStyle(spec: Pick<ChartSpec, 'series'>, id: string): C
     return Object.hasOwn(spec.series, id) ? spec.series[id] : DEFAULT_CHART_SERIES_STYLE;
 }
 
-// A point's own color, null for one that takes its series' or the palette's.
+// A point's own color, or null for one that takes the palette's color at its index.
 export function chartPointColor(spec: Pick<ChartSpec, 'points'>, id: string, index: number): string | null {
     const points = Object.hasOwn(spec.points, id) ? spec.points[id] : null;
     return points && Object.hasOwn(points, index) ? points[index].color : null;
