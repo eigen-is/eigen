@@ -21,6 +21,7 @@ import {
     mergedBorderSides,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
+    SHEET_DEFAULT_COL_WIDTH,
     SHEET_DEFAULT_FONT_SIZE,
     sheetColumnsWidth,
     sheetFloatingBox,
@@ -67,6 +68,9 @@ export const PREVIEW_SHEET_BUDGET: SheetBudget = { maxRows: 200, maxCols: 50, ma
 // key at XFD1048576 on as many sheets as it likes, and the sanitizer and WeasyPrint pay for every cell the walk writes.
 // A row whose every column is hidden still costs one.
 export const MAX_EXPORT_CELLS = 250_000;
+
+// The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.
+const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
 
 // Every td's defaults: inline in the preview, whose embedders strip the <head>, and the shared td{} rule in the export.
 // There is no vertical-align here, because buildCellStyle always writes one.
@@ -340,12 +344,12 @@ ${withFloatingOverlay(sheet, table, tableWidth, minRow, minCol, overlay)}
     return { html, truncated, cells: cellCount, size };
 }
 
-// The export's window cuts columns first. It keeps every row and the columns from the left that fit the cells left
-// with them. Only rows that pass the cells left on their own are cut too, to one column. With nothing left it keeps
-// nothing.
+// The export's window keeps the columns from the left up to one PDF page wide, and more of them while every row still
+// fits. Then it keeps the rows that fit the cells left.
 function exportWindow(cellsLeft: number, rows: number, cols: number): SheetBudget {
-    const maxCols = cellsLeft > 0 ? Math.min(cols, Math.max(1, Math.floor(cellsLeft / rows))) : 0;
-    return { maxRows: Math.floor(cellsLeft / Math.max(1, maxCols)), maxCols, maxCells: cellsLeft };
+    const pageCols = Math.min(cols, PAGE_COLUMNS);
+    const maxCols = Math.min(cols, Math.max(pageCols, Math.floor(cellsLeft / rows)));
+    return { maxRows: Math.min(rows, Math.floor(cellsLeft / Math.max(1, maxCols))), maxCols, maxCells: cellsLeft };
 }
 
 // The table inside a box that reaches the farthest image or chart, so what follows in the flow, the next sheet or the

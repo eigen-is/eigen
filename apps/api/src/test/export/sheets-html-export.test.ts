@@ -1379,7 +1379,7 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(out.html).not.toContain('>bottom<');
     }, 30_000);
 
-    test('a border key at XFD1048576 cuts the walk to the cap, one column of rows, quickly', () => {
+    test('a border key at XFD1048576 cuts the walk to the cap, one PDF page of columns, quickly', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'top left' } }]),
             config: {
@@ -1393,9 +1393,9 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(performance.now() - started).toBeLessThan(10_000);
         expect(out.cut).toEqual([sheet]);
         expect(out.html).toContain('>top left<');
-        expect(cols(out.html)).toBe(1);
-        expect(trs(out.html)).toBe(MAX_EXPORT_CELLS);
-        expect(tds(out.html)).toBe(MAX_EXPORT_CELLS);
+        expect(cols(out.html)).toBe(192);
+        expect(trs(out.html)).toBe(1302);
+        expect(tds(out.html)).toBe(192 * 1302);
     }, 30_000);
 
     test("a merge to XFD1048576 exports cut to the cap, its span with it, and the export's warning says so", async () => {
@@ -1413,10 +1413,63 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(performance.now() - started).toBeLessThan(10_000);
         expect(exported.warnings).toEqual([{ code: 'sheets-cut', count: 1 }]);
         const html = new TextDecoder().decode(exported.data);
-        expect(html).not.toContain('colspan=');
-        expect(html).toContain(`rowspan="${MAX_EXPORT_CELLS}"`);
-        expect(cols(html)).toBe(1);
+        expect(html).toContain('colspan="192"');
+        expect(html).toContain('rowspan="1302"');
+        expect(cols(html)).toBe(192);
         expect(tds(html)).toBe(1);
+    }, 30_000);
+
+    test('a sheet of a million rows keeps its ten columns and the rows that fit', () => {
+        const sheet: Sheet = {
+            id: 'tall',
+            name: 'Tall',
+            order: 0,
+            celldata: [
+                { r: 0, c: 0, v: { v: 'top left' } },
+                { r: 999_999, c: 9, v: { v: 'bottom right' } },
+            ],
+        };
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        expect(out.cut).toEqual([sheet]);
+        expect(cols(out.html)).toBe(10);
+        expect(trs(out.html)).toBe(25_000);
+    }, 30_000);
+
+    test('a sheet too tall for its columns keeps one PDF page of them and the rows that fit', () => {
+        const sheet: Sheet = {
+            id: 'big',
+            name: 'Big',
+            order: 0,
+            celldata: [
+                { r: 0, c: 0, v: { v: 'top left' } },
+                { r: 1999, c: 499, v: { v: 'bottom right' } },
+            ],
+        };
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        expect(out.cut).toEqual([sheet]);
+        expect(cols(out.html)).toBe(192);
+        expect(trs(out.html)).toBe(1302);
+    }, 30_000);
+
+    test('a sheet left fewer cells than its rows keeps all its columns and the rows that fit', () => {
+        const grid = (name: string, rows: number, columns: number): Sheet => ({
+            id: name,
+            name,
+            order: 0,
+            celldata: [
+                { r: 0, c: 0, v: { v: name } },
+                { r: rows - 1, c: columns - 1, v: { v: name } },
+            ],
+        });
+        // 3,089 rows of 80 columns spend 247,120 cells and leave 2,880.
+        const first = grid('first', 3089, 80);
+        const second = grid('second', 3925, 20);
+        const out = renderSheetsHtml([first, second], NO_MEDIA);
+        expect(out.cut).toEqual([second]);
+        const [firstHtml, secondHtml] = out.html.split('<div class="sheet').slice(1);
+        expect(trs(firstHtml)).toBe(3089);
+        expect(cols(secondHtml)).toBe(20);
+        expect(trs(secondHtml)).toBe(144);
     }, 30_000);
 
     test('a sheet of exactly the cap is not cut, and one more row cuts a column', () => {
@@ -1484,7 +1537,7 @@ describe('Sheets HTML export — the cell cap', () => {
         const sheets = [forged('s0'), forged('s1'), forged('s2')];
         const out = renderSheetsHtml(sheets, NO_MEDIA);
         expect(out.cut).toEqual(sheets);
-        expect(tds(out.html)).toBe(MAX_EXPORT_CELLS);
+        expect(tds(out.html)).toBe(192 * 1302);
         expect(out.html).toContain('>s0<');
         expect(out.html).not.toContain('>s1<');
         const doc = new Y.Doc();
