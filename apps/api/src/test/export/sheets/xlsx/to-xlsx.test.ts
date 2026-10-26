@@ -226,6 +226,42 @@ describe('the export keeps what a plain writer loses', () => {
         expect(warnings).toEqual([{ code: 'sheet-names-changed', count: 3 }]);
     });
 
+    test('a color a peer forged as no string is left out, rather than failing the export', async () => {
+        const range = [{ row: [0, 0], column: [0, 0] }];
+        const forged: unknown[] = [
+            {
+                name: 'Sheet1',
+                color: 5,
+                celldata: [{ r: 0, c: 0, v: { v: 'x', m: 'x', fc: 5, bg: 7, bl: 1 } }],
+                config: {
+                    borderInfo: [
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, l: { style: 1, color: 5 } } },
+                    ],
+                },
+                conditionalFormatRules: [
+                    { type: 'dataBar', cellrange: range, format: [5] },
+                    { type: 'colorGradation', cellrange: range, format: [1, 2] },
+                    {
+                        type: 'default',
+                        cellrange: range,
+                        format: { textColor: 5, cellColor: 6 },
+                        conditionName: 'greaterThan',
+                        conditionRange: [],
+                        conditionValue: ['1'],
+                    },
+                ],
+            },
+        ];
+        // As a peer's update arrives: JSON no type checked.
+        const sheets: Sheet[] = JSON.parse(JSON.stringify(forged));
+        const warnings: TransformWarning[] = [];
+        const bytes = exportXlsx(sheets, { warnings });
+        expect(entry(bytes, 'xl/styles.xml')).not.toContain('rgb=');
+        expect(entry(bytes, 'xl/worksheets/sheet1.xml')).not.toContain('tabColor');
+        expect(cellAt(xlsxToSheets(bytes)[0], 0, 0)).toMatchObject({ v: 'x', bl: 1 });
+        expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 2 }]);
+    });
+
     test('one workbook is always the same bytes', async () => {
         const sheets: Sheet[] = [
             {

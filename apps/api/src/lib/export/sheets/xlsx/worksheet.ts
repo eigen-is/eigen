@@ -59,7 +59,7 @@ export function worksheetPart(
     const links = linksXml(sheet, context, relationships);
     function* xml(): Generator<string> {
         const grid = sheetGrid(sheet, context);
-        const tabColor = sheet.color ? argbOf(sheet.color) : undefined;
+        const tabColor = argbOf(sheet.color);
         yield [
             `<worksheet xmlns="${SML_NS}" xmlns:r="${R_NS}">`,
             tabColor ? `<sheetPr><tabColor rgb="${tabColor}"/></sheetPr>` : '',
