@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { readGrid } from '../../../lib/import/sheets/cells';
+import type { PlacedCell } from '../../../lib/import/sheets/cells';
+import { cellKey, readGrid } from '../../../lib/import/sheets/cells';
 import { readBudget, readInBatches } from '../../../lib/import/sheets/package';
 import { readSharedStrings } from '../../../lib/import/sheets/strings';
 import { readLooks } from '../../../lib/import/sheets/styles';
-import type { PlacedCell } from '../../../lib/import/sheets/worksheet';
-import { cellKey } from '../../../lib/import/sheets/worksheet';
 import { parseOoxml } from '../../../lib/ooxml/ooxml';
 import { SML, sheetXml } from '../../fixtures/xlsx';
 

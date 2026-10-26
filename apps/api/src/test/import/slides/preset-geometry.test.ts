@@ -36,8 +36,8 @@ describe('the preset definitions', () => {
                 `../../../lib/import/slides/preset-geometry?${Date.now()}`
             );
             expect(read).not.toHaveBeenCalled();
-            fresh.presetGeometry('star5', undefined, 1000, 1000);
-            fresh.presetGeometry('can', undefined, 1000, 1000);
+            fresh.presetGeometry('star5', undefined, 1000, 1000, false);
+            fresh.presetGeometry('can', undefined, 1000, 1000, false);
             expect(read).toHaveBeenCalledTimes(1);
         } finally {
             read.mockRestore();
@@ -56,17 +56,17 @@ describe('the preset definitions', () => {
 
 describe('a preset', () => {
     test('draws its paths in the unit box for its default adjust values', () => {
-        expect(presetGeometry('triangle', undefined, 1000, 500)).toEqual([
+        expect(presetGeometry('triangle', undefined, 1000, 500, false)).toEqual([
             { path: 'M 0 1 L 0.5 0 L 1 1 Z', closed: true, filled: true, stroked: true },
         ]);
     });
 
     test("takes the shape's adjust values by name, ignoring one the preset does not define", () => {
-        expect(presetGeometry('triangle', avLst({ adj: 'val 0', other: 'val 100000' }), 1000, 500)).toEqual([
+        expect(presetGeometry('triangle', avLst({ adj: 'val 0', other: 'val 100000' }), 1000, 500, false)).toEqual([
             { path: 'M 0 1 L 0 0 L 1 1 Z', closed: true, filled: true, stroked: true },
         ]);
-        expect(presetGeometry('triangle', avLst({ w: 'val 0', x2: 'val 0' }), 1000, 500)).toEqual(
-            presetGeometry('triangle', undefined, 1000, 500),
+        expect(presetGeometry('triangle', avLst({ w: 'val 0', x2: 'val 0' }), 1000, 500, false)).toEqual(
+            presetGeometry('triangle', undefined, 1000, 500, false),
         );
     });
 
@@ -74,16 +74,18 @@ describe('a preset', () => {
         const repeated = parseOoxml(
             `<a:avLst ${NS}>${'<a:gd name="adj" fmla="val 0"/>'.repeat(5000)}<a:gd name="adj" fmla="val 100000"/></a:avLst>`,
         );
-        expect(presetGeometry('triangle', repeated ?? undefined, 1000, 500)?.[0].path).toBe('M 0 1 L 1 0 L 1 1 Z');
+        expect(presetGeometry('triangle', repeated ?? undefined, 1000, 500, false)?.[0].path).toBe(
+            'M 0 1 L 1 0 L 1 1 Z',
+        );
     });
 
     test('an unknown name is undefined, whatever an object would inherit', () => {
         for (const name of ['', 'notAPreset', '__proto__', 'constructor', 'toString', 'presetShapeDefinitons'])
-            expect(presetGeometry(name, undefined, 1000, 1000)).toBeUndefined();
+            expect(presetGeometry(name, undefined, 1000, 1000, false)).toBeUndefined();
     });
 
     test('paints each shade of its fill as a geometry of its own, after the plain fill and before the outline', () => {
-        const bevel = presetGeometry('bevel', undefined, 1000, 1000);
+        const bevel = presetGeometry('bevel', undefined, 1000, 1000, false);
         expect(bevel?.map(({ filled, stroked, shade }) => ({ filled, stroked, shade }))).toEqual([
             { filled: true, stroked: false, shade: undefined },
             { filled: true, stroked: false, shade: 0.2 },
@@ -96,7 +98,7 @@ describe('a preset', () => {
     });
 
     test("draws chartPlus's lines over its box, though the file lists them first", () => {
-        expect(presetGeometry('chartPlus', undefined, 1000, 1000)).toEqual([
+        expect(presetGeometry('chartPlus', undefined, 1000, 1000, false)).toEqual([
             { path: 'M 1 0 L 1 1 L 0 1 L 0 0 Z', closed: true, filled: true, stroked: false },
             { path: 'M 0.5 0 L 0.5 1 M 0 0.5 L 1 0.5', closed: false, filled: false, stroked: true },
         ]);
@@ -104,7 +106,7 @@ describe('a preset', () => {
 
     test("charges the read's work budget for each guide it evaluates", () => {
         withWorkBudget(10_000, () => {
-            presetGeometry('star32', undefined, 1000, 1000);
+            presetGeometry('star32', undefined, 1000, 1000, false);
             expect(affords(10_000 - 100)).toBe(false);
         });
     });
@@ -140,7 +142,7 @@ describe('every preset', () => {
     test('draws for its default adjust values at any aspect', () => {
         for (const name of names)
             for (const [width, height] of boxes)
-                expect(presetGeometry(name, undefined, width, height)?.length, name).toBeGreaterThan(0);
+                expect(presetGeometry(name, undefined, width, height, false)?.length, name).toBeGreaterThan(0);
     });
 
     // A hostile value may leave a sliver that draws nothing (a chord pinned to a 1/60,000° arc), never more than the caps.
@@ -148,7 +150,7 @@ describe('every preset', () => {
         for (const name of names) {
             for (const list of hostile) {
                 for (const [width, height] of boxes) {
-                    for (const { path } of presetGeometry(name, list, width, height) ?? []) {
+                    for (const { path } of presetGeometry(name, list, width, height, false) ?? []) {
                         expect(path.length).toBeLessThanOrEqual(MAX_PATH_BYTES);
                         expect(path.match(/[MLCQZ]/g)?.length ?? 0).toBeLessThanOrEqual(MAX_PATH_COMMANDS);
                         expect(path).toMatch(/^M( -?\d+(\.\d{1,4})?){2}( [MLCQZ]( -?\d+(\.\d{1,4})?)*)*$/);
@@ -167,10 +169,10 @@ describe('every preset', () => {
 describe('the overrides', () => {
     // downArrow upside down, as LibreOffice's presets (taken from PowerPoint) define upArrow.
     test("draw upArrow, which Ecma's file lacks, as downArrow turned upright", () => {
-        expect(presetGeometry('upArrow', undefined, 1000, 1000)).toEqual([
+        expect(presetGeometry('upArrow', undefined, 1000, 1000, false)).toEqual([
             { path: 'M 0 0.5 L 0.5 0 L 1 0.5 L 0.75 0.5 L 0.75 1 L 0.25 1 L 0.25 0.5 Z', ...FILLED },
         ]);
-        expect(presetGeometry('upArrow', avLst({ adj1: 'val 20000', adj2: 'val 25000' }), 1000, 2000)).toEqual([
+        expect(presetGeometry('upArrow', avLst({ adj1: 'val 20000', adj2: 'val 25000' }), 1000, 2000, false)).toEqual([
             { path: 'M 0 0.125 L 0.5 0 L 1 0.125 L 0.6 0.125 L 0.6 1 L 0.4 1 L 0.4 0.125 Z', ...FILLED },
         ]);
     });

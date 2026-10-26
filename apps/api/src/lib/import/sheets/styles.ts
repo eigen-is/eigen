@@ -1,3 +1,7 @@
+// The styles part read into one look per cell format (xf), resolved once: fonts, fills, alignment, borders, number
+// formats, theme colours and tints. It also reads the conditional formats' looks (dxf). The xlsx reader calls it once
+// per workbook. Other readers, such as the rich strings and the rules, reuse its font and colour readers.
+
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import type {
     BorderSide,
@@ -11,18 +15,17 @@ import { is_date, isValidNumberFormat } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
-import { readColorScheme, SCHEME_SLOTS } from '../../ooxml/drawingml';
+import { fromHsl, readColorScheme, SCHEME_SLOTS, toHsl } from '../../ooxml/drawingml';
 import { isOn, SML_NS } from '../../ooxml/ooxml';
-import { BUILTIN_NUMBER_FORMATS, MAX_NUMBER_FORMAT_LENGTH, maxDigitWidth } from '../../ooxml/spreadsheetml';
+import {
+    BUILTIN_NUMBER_FORMATS,
+    MAX_NUMBER_FORMAT_LENGTH,
+    maxDigitWidth,
+    NUMBER_FORMAT_LITERAL,
+} from '../../ooxml/spreadsheetml';
 import { IMPORT_MESSAGES } from '../messages';
 
-// The styles part read into one look per cell format (xf), resolved once: fonts, fills, alignment, borders, number
-// formats, theme colours and tints; and the conditional formats' looks (dxf).
-
 export type ThemePalette = string[];
-
-// An rgb, else a theme colour and its tint.
-type XlsxColor = { argb?: string; theme?: number; tint?: number };
 
 export type Look = {
     // The keys every cell of the format carries.
@@ -56,7 +59,7 @@ const VERTICAL_MAP = new Map<string, 0 | 1 | 2>([
     ['justify', 0],
 ]);
 
-// xlsx style name → ordinal, derived from the shared ordinal table (the reverse of its `name`).
+// The ordinal of each xlsx border style name, the reverse of the shared ordinal table.
 const BORDER_STYLE_MAP = new Map<string, number>(
     Object.entries(BORDER_STYLES).map(([ord, { name }]) => [name, Number(ord)]),
 );
@@ -83,7 +86,7 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
         // Any pattern but none paints its foreground; a gradient paints nothing.
         const pattern = xmlChild(fill, SML_NS, 'patternFill');
         if (!pattern || xmlAttr(pattern, '', 'patternType') === 'none') return null;
-        return resolveColor(colorOf(xmlChild(pattern, SML_NS, 'fgColor')), palette);
+        return resolveColor(xmlChild(pattern, SML_NS, 'fgColor'), palette);
     });
     const borders = list('borders', 'border').map((border) => bordersOf(border, palette));
     // Once per format, not per xf: a long code costs its canonical form and date test, and many xfs can name it.
@@ -96,7 +99,7 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
         const drawn = numFmt && isValidNumberFormat(numFmt) ? numFmt : undefined;
         const format = {
             numFmt: drawn,
-            fa: numFmt && normalizeMonthMinuteTokens(numFmt),
+            fa: numFmt && googleMonthMinute(numFmt),
             isDate: drawn !== undefined && is_date(drawn),
         };
         resolved.set(id, format);
@@ -145,7 +148,7 @@ export function dxfLook(dxf: XmlElement | undefined, palette: ThemePalette): Dxf
     const fill = dxf && xmlChild(dxf, SML_NS, 'fill');
     const pattern = fill && xmlChild(fill, SML_NS, 'patternFill');
     const color = (element: XmlElement | undefined, name: string) =>
-        resolveColor(colorOf(element && xmlChild(element, SML_NS, name)), palette);
+        resolveColor(element && xmlChild(element, SML_NS, name), palette);
     return {
         textColor: color(font, 'color'),
         cellColor:
@@ -177,7 +180,7 @@ export function fontLook(font: XmlElement | undefined, palette: ThemePalette): C
     const name = face && xmlAttr(face, '', 'val');
     const mapped = name && bundledFont(name);
     if (mapped) look.ff = mapped;
-    const color = resolveColor(colorOf(child('color')), palette);
+    const color = resolveColor(child('color'), palette);
     if (color) look.fc = color;
     return look;
 }
@@ -202,14 +205,14 @@ function bordersOf(border: XmlElement, palette: ThemePalette): CellBorderSides |
         const edge = xmlChild(border, SML_NS, name);
         const style = edge && BORDER_STYLE_MAP.get(xmlAttr(edge, '', 'style') ?? '');
         if (!edge || style === undefined) return undefined;
-        return { style, color: resolveColor(colorOf(xmlChild(edge, SML_NS, 'color')), palette) ?? '#000000' };
+        return { style, color: resolveColor(xmlChild(edge, SML_NS, 'color'), palette) ?? '#000000' };
     };
     const l = side('left');
     const r = side('right');
     const t = side('top');
     const b = side('bottom');
-    // Our slash `s` is a top-left → bottom-right diagonal, i.e. xlsx's diagonalDown; a diagonalUp-only border has no
-    // equivalent in our single-direction slash and is dropped.
+    // Eigen's slash `s` runs from the top left to the bottom right, as xlsx's diagonalDown does. Eigen draws one
+    // direction only, so a diagonalUp alone is dropped.
     const s = isOn(xmlAttr(border, '', 'diagonalDown')) ? side('diagonal') : undefined;
     const sides: CellBorderSides = {
         ...(l && { l }),
@@ -221,14 +224,14 @@ function bordersOf(border: XmlElement, palette: ThemePalette): CellBorderSides |
     return Object.keys(sides).length > 0 ? sides : undefined;
 }
 
-// An indexed colour is none.
-export function colorOf(element: XmlElement | undefined): XlsxColor | undefined {
+// An rgb colour, else a theme colour and its tint. An indexed colour is none.
+export function resolveColor(element: XmlElement | undefined, palette: ThemePalette): string | null {
     const rgb = element && xmlAttr(element, '', 'rgb');
-    if (rgb) return { argb: rgb };
-    const theme = element && xmlAttr(element, '', 'theme');
-    if (!element || !theme) return undefined;
-    const tint = Number.parseFloat(xmlAttr(element, '', 'tint') ?? '');
-    return { theme: Number.parseInt(theme, 10), ...(Number.isFinite(tint) && { tint }) };
+    if (rgb) return argbToHex(rgb);
+    const theme = Number.parseInt((element && xmlAttr(element, '', 'theme')) ?? '', 10);
+    if (!(theme >= 0 && theme < palette.length)) return null;
+    const tint = Number.parseFloat((element && xmlAttr(element, '', 'tint')) ?? '');
+    return Number.isFinite(tint) ? tinted(palette[theme], tint) : palette[theme];
 }
 
 function argbToHex(argb: string): string {
@@ -236,35 +239,20 @@ function argbToHex(argb: string): string {
     return `#${rgb.toUpperCase()}`;
 }
 
-export function resolveColor(color: XlsxColor | undefined, theme: ThemePalette): string | null {
-    if (!color) return null;
-    if (color.argb) {
-        const hex = argbToHex(color.argb);
-        return color.tint != null ? applyTint(hex, color.tint) : hex;
-    }
-    if (color.theme != null && color.theme >= 0 && color.theme < theme.length) {
-        const hex = theme[color.theme];
-        return color.tint != null ? applyTint(hex, color.tint) : hex;
-    }
-    return null;
-}
-
-function applyTint(hex: string, tint: number): string {
-    const raw = hex.replace('#', '');
-    let r = Number.parseInt(raw.substring(0, 2), 16);
-    let g = Number.parseInt(raw.substring(2, 4), 16);
-    let b = Number.parseInt(raw.substring(4, 6), 16);
-    if (tint > 0) {
-        r = Math.round(r + (255 - r) * tint);
-        g = Math.round(g + (255 - g) * tint);
-        b = Math.round(b + (255 - b) * tint);
-    } else {
-        r = Math.round(r * (1 + tint));
-        g = Math.round(g * (1 + tint));
-        b = Math.round(b * (1 + tint));
-    }
-    const toHex = (v: number) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0').toUpperCase();
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+// SpreadsheetML's tint shifts the colour's HLS luminance (ECMA-376 Part 1 § 18.3.1.15), as Excel draws it: toward black
+// by the share a negative tint names, toward white by a positive one.
+function tinted(hex: string, tint: number): string {
+    const value = Number.parseInt(hex.slice(1, 7), 16);
+    const [hue, sat, lum] = toHsl((value >> 16) / 255, ((value >> 8) & 0xff) / 255, (value & 0xff) / 255);
+    const shifted = tint < 0 ? lum * (1 + tint) : lum * (1 - tint) + tint;
+    const channels = fromHsl(hue, sat, Math.min(1, Math.max(0, shifted)));
+    return `#${channels
+        .map((channel) =>
+            Math.round(channel * 255)
+                .toString(16)
+                .padStart(2, '0'),
+        )
+        .join('')}`.toUpperCase();
 }
 
 // SpreadsheetML's theme indices swap each dark and light pair of a:clrScheme's order: 0=lt1, 1=dk1, 2=lt2, 3=dk2.
@@ -277,165 +265,77 @@ export function themePalette(theme: XmlElement | undefined): ThemePalette {
 }
 
 // Excel writes month and minute both as `m`, told apart by what sits beside it, and numfmt reads it so. The format
-// dialog follows Google (`M` month, `m` minute), so a stored month `mm` would edit as minutes: each run is recased by
-// numfmt's own rule (dateChunks), so only the case changes and the display never does. Only hours and seconds, which
-// make a run a minute, and minutes, which a later seconds resolves, take part; every other date token breaks the run.
+// dialog follows Google, `M` for a month and `m` for a minute, so a stored month `mm` would edit as minutes. So each
+// run is recased by numfmt's own rule (dateChunks): only the case changes, and the display never does. Only hours and
+// seconds, which make a run a minute, and minutes, which a later seconds resolves, take part. Every other date token
+// breaks the run.
 const DATE_HOUR = 1;
 const DATE_MIN = 2;
 const DATE_SEC = 4;
 
 type DateChunk = { size: number; used?: boolean; indeterminate?: boolean; mRef?: number };
 
-// Split on top-level `;` section separators, leaving separators inside quoted literals,
-// `\`-escapes and `[...]` brackets in place.
-function splitFormatSections(fmt: string): string[] {
-    const sections: string[] = [];
-    let current = '';
-    let i = 0;
-    while (i < fmt.length) {
-        const ch = fmt[i];
-        if (ch === '"') {
-            const end = fmt.indexOf('"', i + 1);
-            const stop = end === -1 ? fmt.length : end + 1;
-            current += fmt.slice(i, stop);
-            i = stop;
-        } else if (ch === '\\' && i + 1 < fmt.length) {
-            current += fmt.slice(i, i + 2);
-            i += 2;
-        } else if (ch === '[') {
-            const end = fmt.indexOf(']', i + 1);
-            const stop = end === -1 ? fmt.length : end + 1;
-            current += fmt.slice(i, stop);
-            i = stop;
-        } else if (ch === ';') {
-            sections.push(current);
-            current = '';
-            i += 1;
-        } else {
-            current += ch;
-            i += 1;
-        }
-    }
-    sections.push(current);
-    return sections;
-}
+// A literal, a section's end, a run of one date letter, or any other character.
+const FORMAT_TOKEN = new RegExp(
+    `${NUMBER_FORMAT_LITERAL.source}|;|[hH]+|[sS]+|[mM]+|[yY]+|[dD]+|[bB]+|[gG]+|e+|[aA]{3,}|[\\s\\S]`,
+    'g',
+);
 
-function normalizeSectionMonthMinute(section: string): string {
+function googleMonthMinute(numFmt: string): string {
+    if (!/[mM]/.test(numFmt)) return numFmt;
     const out: string[] = [];
-    const chunks: DateChunk[] = [];
-    let i = 0;
-    while (i < section.length) {
-        const rest = section.slice(i);
-        const ch = section[i];
-
-        if (ch === '"') {
-            const end = section.indexOf('"', i + 1);
-            const stop = end === -1 ? section.length : end + 1;
-            out.push(section.slice(i, stop));
-            i = stop;
-            continue;
-        }
-        // `\x` escape and `_x`/`*x` fill/skip all consume the next char as a literal —
-        // its letter must never be read as a date token.
-        if ((ch === '\\' || ch === '_' || ch === '*') && i + 1 < section.length) {
-            out.push(section.slice(i, i + 2));
-            i += 2;
-            continue;
-        }
-        // AM/PM and A/P carry `m`/`p` letters but are not adjacency tokens — skip whole.
-        const ampm = rest.match(/^(am\/pm|a\/p)/i);
-        if (ampm) {
-            out.push(ampm[0]);
-            i += ampm[0].length;
-            continue;
-        }
-        if (ch === '[') {
-            const end = section.indexOf(']', i + 1);
-            if (end !== -1) {
-                const inner = section.slice(i + 1, end);
-                if (/^m+$/i.test(inner)) {
-                    // Elapsed minutes `[m]`/`[mm]` — always minute, always lowercase.
-                    out.push(`[${'m'.repeat(inner.length)}]`);
-                    chunks.push({ size: DATE_MIN });
-                } else if (/^h+$/i.test(inner)) {
-                    out.push(section.slice(i, end + 1));
-                    chunks.push({ size: DATE_HOUR });
-                } else if (/^s+$/i.test(inner)) {
-                    out.push(section.slice(i, end + 1));
-                    chunks.push({ size: DATE_SEC });
-                } else {
-                    // Color / condition / currency locale — not a date token.
-                    out.push(section.slice(i, end + 1));
-                }
-                i = end + 1;
-                continue;
-            }
-        }
-
-        const hour = rest.match(/^[hH]+/);
-        if (hour) {
-            out.push(hour[0]);
+    let chunks: DateChunk[] = [];
+    for (const [token] of numFmt.matchAll(FORMAT_TOKEN)) {
+        const last = chunks.at(-1);
+        if (token === ';') {
+            // Each section has runs of its own.
+            chunks = [];
+            out.push(token);
+        } else if (/^\[m+\]$/i.test(token)) {
+            // Elapsed minutes are always minutes, written lowercase.
+            out.push(token.toLowerCase());
+            chunks.push({ size: DATE_MIN });
+        } else if (/^\[h+\]$|^h+$/i.test(token)) {
+            out.push(token);
             chunks.push({ size: DATE_HOUR });
-            i += hour[0].length;
-            continue;
-        }
-        const sec = rest.match(/^[sS]+/);
-        if (sec) {
-            out.push(sec[0]);
-            const last = chunks[chunks.length - 1];
-            let usedByMinute = false;
+        } else if (/^\[s+\]$/i.test(token)) {
+            out.push(token);
+            chunks.push({ size: DATE_SEC });
+        } else if (/^s+$/i.test(token)) {
+            out.push(token);
+            let used = false;
             if (last && last.size & DATE_MIN) {
-                usedByMinute = true;
-            } else if (last?.indeterminate && last.mRef != null) {
-                // Seconds resolve a deferred month back to a minute.
+                used = true;
+            } else if (last?.indeterminate && last.mRef !== undefined) {
+                // Seconds turn a month that waited for them back into a minute.
                 last.indeterminate = false;
                 last.size = DATE_MIN;
                 out[last.mRef] = out[last.mRef].toLowerCase();
-                usedByMinute = true;
+                used = true;
             }
-            chunks.push({ size: DATE_SEC, used: usedByMinute });
-            i += sec[0].length;
-            continue;
-        }
-        const month = rest.match(/^[mM]+/);
-        if (month) {
-            const len = month[0].length;
-            const idx = out.length;
-            if (len >= 3) {
-                // mmm/mmmm/mmmmm are always month names.
-                out.push('M'.repeat(len));
+            chunks.push({ size: DATE_SEC, used });
+        } else if (/^m+$/i.test(token)) {
+            const length = token.length;
+            if (length >= 3) {
+                // mmm, mmmm and mmmmm are always month names.
+                out.push('M'.repeat(length));
                 chunks.push({ size: 0 });
+            } else if (last && !last.used && last.size & (DATE_HOUR | DATE_SEC)) {
+                last.used = true;
+                out.push('m'.repeat(length));
+                chunks.push({ size: DATE_MIN });
             } else {
-                const last = chunks[chunks.length - 1];
-                if (last && !last.used && last.size & (DATE_HOUR | DATE_SEC)) {
-                    last.used = true;
-                    out.push('m'.repeat(len));
-                    chunks.push({ size: DATE_MIN });
-                } else {
-                    // Undecided → month for now; a later seconds token may flip it.
-                    out.push('M'.repeat(len));
-                    chunks.push({ size: 0, indeterminate: true, mRef: idx });
-                }
+                // A month, until a later seconds makes it a minute.
+                chunks.push({ size: 0, indeterminate: true, mRef: out.length });
+                out.push('M'.repeat(length));
             }
-            i += len;
-            continue;
-        }
-        // Other date tokens (year/day/b-year/era/weekday) only break hour/second adjacency.
-        const other = rest.match(/^([yY]+|[dD]+|[bB]+|[gG]+|e+|[aA]{3,})/);
-        if (other) {
-            out.push(other[0]);
+        } else if (/^([yYdDbBgGe]+|[aA]{3,})$/.test(token)) {
+            // The year, day, Buddhist year, era and weekday only break the run.
+            out.push(token);
             chunks.push({ size: 0 });
-            i += other[0].length;
-            continue;
+        } else {
+            out.push(token);
         }
-
-        out.push(ch);
-        i += 1;
     }
     return out.join('');
-}
-
-function normalizeMonthMinuteTokens(numFmt: string): string {
-    if (!/[mM]/.test(numFmt)) return numFmt;
-    return splitFormatSections(numFmt).map(normalizeSectionMonthMinute).join(';');
 }

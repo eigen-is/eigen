@@ -13,24 +13,15 @@ import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElement
 import { LINK_LOOK } from '../../document/looks';
 import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../ooxml/ooxml';
 import { DEFAULT_HIGHLIGHT, DEFAULT_RUN_SIZE, PAGE_NUMBER_FIELDS } from '../../ooxml/wordml';
-import type { Item, Para } from './assemble';
+import type { Item, ParagraphItem } from './assemble';
+import { isDark, isFill, isLight, isLightNeutral, markColor } from './colors';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
-import { alternative, onOff, w, wChild } from './package';
+import { onOff, w, wChild, wordAlternative } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readNote } from './paragraphs';
 import type { DocxRunProps, Role } from './styles';
-import {
-    ABSORBED,
-    isDark,
-    isFill,
-    isLight,
-    isLightNeutral,
-    markColor,
-    mergeRun,
-    readRunProps,
-    TOGGLES,
-} from './styles';
+import { ABSORBED, mergeRun, readRunProps, TOGGLES } from './styles';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
 // font and size are the face Word draws a run in. The size is in half-points, and the paragraph's line height counts
@@ -67,7 +58,7 @@ export type RunContext = {
     // What a text box anchored here holds, which follows the paragraph.
     pending: Item[];
     // The lines of those standing in for what a drawing left out, which the paragraph aligns as its own.
-    leftOut: Para[];
+    leftOut: ParagraphItem[];
 };
 
 // Content that doesn't show: a tracked deletion, and properties. Markers such as bookmarks and comment ranges hold
@@ -77,7 +68,7 @@ const SKIPPED_INLINE = new Set(['del', 'moveFrom', 'pPr', 'rPr', 'sdtPr', 'sdtEn
 export function walkInline(reader: Reader, elements: XmlElement[], context: RunContext): void {
     for (const element of elements) {
         if (isAlternateContent(element)) {
-            walkInline(reader, alternative(element), context);
+            walkInline(reader, wordAlternative(element), context);
             continue;
         }
         if (element.ns === M_NS && (element.local === 'oMath' || element.local === 'oMathPara')) {
@@ -156,7 +147,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
     let customMark = false;
     for (const child of children) {
         if (isAlternateContent(child)) {
-            readRunContent(reader, alternative(child), direct, context);
+            readRunContent(reader, wordAlternative(child), direct, context);
             continue;
         }
         if (child.ns === W_NS && child.local === 'fldChar') {
@@ -184,10 +175,10 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
                 pushText(reader, '\t', direct, linked);
                 break;
             case 'noBreakHyphen':
-                pushText(reader, '‑', direct, linked);
+                pushText(reader, '\u2011', direct, linked);
                 break;
             case 'softHyphen':
-                pushText(reader, '­', direct, linked);
+                pushText(reader, '\u00ad', direct, linked);
                 break;
             case 'sym': {
                 if (customMark) break;

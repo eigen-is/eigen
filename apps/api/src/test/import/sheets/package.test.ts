@@ -6,7 +6,7 @@ import {
     MAX_XLSX_ELEMENTS,
     readBudget,
     readInBatches,
-    readPackage,
+    readXlsxPackage,
 } from '../../../lib/import/sheets/package';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
 import { writeZip, ZipError } from '../../../lib/ooxml/zip';
@@ -28,7 +28,7 @@ function thrown(run: () => unknown): unknown {
 
 describe('the workbook', () => {
     test('lists its worksheets in order, by name, part and visibility', () => {
-        const book = readPackage(
+        const book = readXlsxPackage(
             xlsxFixture({
                 sheets: [{ name: 'One' }, { name: 'Two', state: 'hidden' }, { name: 'Three', state: 'veryHidden' }],
             }),
@@ -45,7 +45,7 @@ describe('the workbook', () => {
     test('is found through the package relationships, its sheets through its own, a chartsheet among them; a link is no sheet', () => {
         const rel = (id: string, type: string, target: string, mode = '') =>
             `<Relationship Id="${id}" Type="${R}/${type}" Target="${target}"${mode}/>`;
-        const book = readPackage(
+        const book = readXlsxPackage(
             writeZip([
                 {
                     name: '_rels/.rels',
@@ -76,7 +76,7 @@ describe('the workbook', () => {
     test('a part several sheets name is one sheet, named and placed by the last of them', () => {
         const rel = (id: string, target: string) =>
             `<Relationship Id="${id}" Type="${R}/worksheet" Target="${target}"/>`;
-        const book = readPackage(
+        const book = readXlsxPackage(
             writeZip([
                 {
                     name: '_rels/.rels',
@@ -99,7 +99,7 @@ describe('the workbook', () => {
     });
 
     test("finds the styles, theme and shared strings through the workbook's relationships", () => {
-        const book = readPackage(
+        const book = readXlsxPackage(
             xlsxFixture({
                 sheets: [{}],
                 styles: '<fonts/>',
@@ -115,7 +115,7 @@ describe('the workbook', () => {
     });
 
     test('a damaged styles or theme part costs the looks, not the workbook', () => {
-        const book = readPackage(
+        const book = readXlsxPackage(
             xlsxFixture({
                 sheets: [{}],
                 parts: [
@@ -129,7 +129,7 @@ describe('the workbook', () => {
     });
 
     test('Strict namespaces read as transitional', () => {
-        const book = readPackage(
+        const book = readXlsxPackage(
             writeZip([
                 {
                     name: '_rels/.rels',
@@ -151,17 +151,17 @@ describe('the workbook', () => {
     });
 
     test('a package without a workbook is not a valid xlsx file; an encrypted one says so', () => {
-        const noWorkbook = thrown(() => readPackage(writeZip([{ name: 'word/document.xml', data: '<x/>' }])));
+        const noWorkbook = thrown(() => readXlsxPackage(writeZip([{ name: 'word/document.xml', data: '<x/>' }])));
         expect(noWorkbook).toBeInstanceOf(ApiError);
         expect(noWorkbook).toMatchObject({ status: 400, message: 'Not a valid xlsx file' });
         const ole = new Uint8Array(4096);
         ole.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
         ole.set(Buffer.from('EncryptedPackage', 'utf16le'), 1024);
-        expect(thrown(() => readPackage(ole))).toMatchObject({
+        expect(thrown(() => readXlsxPackage(ole))).toMatchObject({
             status: 400,
             message: 'This spreadsheet is password-protected. Remove the password in Excel and import it again.',
         });
-        expect(thrown(() => readPackage(new Uint8Array(100)))).toBeInstanceOf(ZipError);
+        expect(thrown(() => readXlsxPackage(new Uint8Array(100)))).toBeInstanceOf(ZipError);
     });
 });
 

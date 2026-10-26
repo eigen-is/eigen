@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
-import { readPackage } from '../../../lib/import/slides/package';
+import { readPptxPackage } from '../../../lib/import/slides/package';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
 import {
     box,
@@ -173,7 +173,7 @@ describe('a pptx package', () => {
         const half = { shapes: ' '.repeat(MAX_PACKAGE_XML_BYTES / 2 + 1) };
         expect(refusal(buildPptx({ slides: [half, half] }))).toEqual(tooLarge);
         // Under it, the same shapes read.
-        expect(() => readPackage(buildPptx({ slides: [{ shapes: '<a/>'.repeat(1000) }] }))).not.toThrow();
+        expect(() => readPptxPackage(buildPptx({ slides: [{ shapes: '<a/>'.repeat(1000) }] }))).not.toThrow();
     });
 
     test('[Content_Types].xml and a chart part spend it too, refusing the file before anything is read from them', () => {

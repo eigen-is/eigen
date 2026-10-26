@@ -72,6 +72,15 @@ describe('a number format', () => {
         expect(malformed).toMatchObject({ numFmt: undefined, fa: '0;M00[h', isDate: false });
     });
 
+    // The lexer is numfmt's: a fill or skip takes the next character, and an unclosed bracket takes the rest. `_"` hides the quote, so the m after it is a month.
+    test('a degenerate code is cased as its lexer reads it', () => {
+        const codes = ['h_;mm', '[yyyy mm', '[s]_"x;m"'];
+        const formats = looks(
+            `<numFmts>${codes.map((code, index) => `<numFmt numFmtId="${164 + index}" formatCode="${code.replaceAll('"', '&quot;')}"/>`).join('')}</numFmts>${xfs('<xf/>', ...codes.map((_, index) => `<xf numFmtId="${164 + index}"/>`))}`,
+        );
+        expect(formats.slice(1).map((look) => look.fa)).toEqual(['h_;mm', '[yyyy mm', '[s]_"x;M"']);
+    });
+
     test('cell formats naming more than 1,000 formats are too large', () => {
         const ids = Array.from({ length: 1_001 }, (_, index) => 164 + index);
         const many = (count: number) =>
@@ -110,6 +119,35 @@ describe('a font', () => {
             `${font('<color theme="4" tint="0.5"/><name val="Wingdings Fancy"/><sz val="10.5"/>')}${xfs('<xf/>', '<xf fontId="1"/>')}`,
         );
         expect(look.cell).toEqual({ fc: '#A2B9E2', fs: 10.5 });
+    });
+
+    // ECMA-376 shifts the colour's HLS luminance by the tint. Excel's swatches for the Office theme work that out in
+    // whole steps of 1/240, so a channel can land up to two steps from the spec's: Text 2, Lighter 40% is exact. The
+    // RGB blend this replaced was up to 17 steps off on a dark colour lightened.
+    test("a tint shifts the theme colour's luminance, within two steps of Excel's palette", () => {
+        const tints = [
+            ['3', '0.39997558519241921', '#8497B0'],
+            ['3', '0.79998168889431442', '#D6DCE4'],
+            ['3', '-0.249977111117893', '#333F4F'],
+            ['4', '0.79998168889431442', '#D9E1F2'],
+            ['4', '0.59999389629810485', '#B4C6E7'],
+            ['4', '-0.249977111117893', '#305496'],
+            ['2', '-0.249977111117893', '#AEAAAA'],
+            ['2', '-0.499984740745262', '#757171'],
+        ];
+        const fonts = tints.map(([theme, tint]) => `<font><color theme="${theme}" tint="${tint}"/></font>`).join('');
+        const resolved = looks(
+            `<fonts><font/>${fonts}</fonts>${xfs('<xf/>', ...tints.map((_, index) => `<xf fontId="${index + 1}"/>`))}`,
+        ).slice(1);
+        const channels = (hex: string | undefined) =>
+            [1, 3, 5].map((at) => Number.parseInt(hex?.slice(at, at + 2) ?? '', 16));
+        expect(resolved[0].cell.fc).toBe('#8497B0');
+        for (const [index, [, , excel]] of tints.entries()) {
+            const steps = channels(resolved[index].cell.fc).map((channel, at) =>
+                Math.abs(channel - channels(excel)[at]),
+            );
+            expect(Math.max(...steps)).toBeLessThanOrEqual(2);
+        }
     });
 
     test("a run's properties read as a font, its face named by rFont", () => {

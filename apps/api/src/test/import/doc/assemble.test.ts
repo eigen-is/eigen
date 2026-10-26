@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { QUOTE_LOOK } from '../../../lib/document/looks';
-import type { Item, Para } from '../../../lib/import/doc/assemble';
-import { build } from '../../../lib/import/doc/assemble';
+import type { Item, ParagraphItem } from '../../../lib/import/doc/assemble';
+import { buildBlocks } from '../../../lib/import/doc/assemble';
 
 // Items in, blocks out: the assembly rules without XML.
 
 const ITEM_INDENT = 720;
 
-function para(text: string, extra: Partial<Para> = {}): Para {
+function para(text: string, extra: Partial<ParagraphItem> = {}): ParagraphItem {
     return {
         kind: 'para',
         role: { kind: 'paragraph' },
@@ -24,7 +24,7 @@ function para(text: string, extra: Partial<Para> = {}): Para {
     };
 }
 
-function item(text: string, ilvl = 0, number = 1): Para {
+function item(text: string, ilvl = 0, number = 1): ParagraphItem {
     return para(text, {
         indLeft: ITEM_INDENT * (ilvl + 1),
         list: {
@@ -48,7 +48,7 @@ function outline(node: JSONContent): string {
     return children.length > 0 ? `${node.type}[${children.map(outline).join(' | ')}]` : (node.type ?? '');
 }
 
-const assembled = (items: Item[]) => build(items).map(outline);
+const assembled = (items: Item[]) => buildBlocks(items).map(outline);
 
 describe('lists', () => {
     test('items nest by level within one list and keep counting after a nested one', () => {
@@ -90,7 +90,7 @@ describe('lists', () => {
 // Depth comes from Word's level within one list; a list of another definition nests only where its number starts at or
 // right of the open item's text.
 describe('lists of two definitions', () => {
-    const bullet = (text: string, key: string, numberAt: number, indLeft = numberAt + 360): Para =>
+    const bullet = (text: string, key: string, numberAt: number, indLeft = numberAt + 360): ParagraphItem =>
         para(text, {
             indLeft,
             numberAt,
@@ -229,7 +229,7 @@ describe('floats', () => {
     test("a float anchored in a numbered heading follows the heading's number", () => {
         const heading = para('2. ', { role: { kind: 'heading', level: 1 }, labelled: true });
         heading.inlines.push({ type: 'text', text: 'Results' });
-        const [block] = build([{ kind: 'float', figure }, heading]);
+        const [block] = buildBlocks([{ kind: 'float', figure }, heading]);
         expect(block?.content?.map((node) => (node.type === 'text' ? node.text : node.type))).toEqual([
             '2. ',
             'figure',

@@ -15,6 +15,9 @@ import { A_NS, ASVG_NS, emu, R_NS } from './ooxml';
 // The widest line ST_LineWidth allows, 1584 pt.
 const MAX_LINE_WIDTH = 20_116_800;
 
+// The width Office draws a line at when its a:ln states none: 0.75 pt.
+export const DEFAULT_LINE_WIDTH_EMU = 9525;
+
 // An a:ln width in EMU, or undefined when the file states none the schema allows. A crafted width such as 1e300
 // would otherwise reach the canvas as a stroke wider than any slide.
 export function lineWidthEmu(value: string | undefined): number | undefined {
@@ -226,8 +229,8 @@ function clamp(value: number): number {
     return Math.min(1, Math.max(0, value));
 }
 
-// Hue in degrees, saturation and lightness 0–1.
-function toHsl(r: number, g: number, b: number): [number, number, number] {
+// Channels from 0 to 1 as hue in degrees, saturation and luminance from 0 to 1, and back.
+export function toHsl(r: number, g: number, b: number): [number, number, number] {
     const max = Math.max(r, g, b);
     const min = Math.min(r, g, b);
     const lum = (max + min) / 2;
@@ -238,7 +241,7 @@ function toHsl(r: number, g: number, b: number): [number, number, number] {
     return [hue * 60, sat, lum];
 }
 
-function fromHsl(hue: number, sat: number, lum: number): [number, number, number] {
+export function fromHsl(hue: number, sat: number, lum: number): [number, number, number] {
     const chroma = (1 - Math.abs(2 * lum - 1)) * sat;
     const sector = (((hue % 360) + 360) % 360) / 60;
     const x = chroma * (1 - Math.abs((sector % 2) - 1));
@@ -328,6 +331,12 @@ export const IMAGE_EXTENSION_BY_MIME = new Map([
 
 // image/jpg is a common misspelling of a part's declared type.
 export const MIME_ALIASES = new Map([['image/jpg', 'image/jpeg']]);
+
+// The type of an image part by its extension, for a part the package gives no type, `jpg` included.
+export const IMAGE_MIME_BY_EXTENSION = new Map([
+    ...[...IMAGE_EXTENSION_BY_MIME].map(([mime, extension]): [string, string] => [extension, mime]),
+    ['jpg', 'image/jpeg'],
+]);
 
 // A picture's blip: its raster, and for an SVG the SVG's own part as the svgBlip extension, which Word, PowerPoint and
 // LibreOffice draw instead. Effects go first, as CT_Blip puts them before its extensions.

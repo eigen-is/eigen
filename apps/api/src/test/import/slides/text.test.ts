@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { MAX_HTML_BYTES } from '@workspace/lib/vector';
 import type { XmlElement } from '../../../lib/core/xml';
 import { xmlChild } from '../../../lib/core/xml';
+import type { Lost } from '../../../lib/document/transform/protocol';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import type { SlideTheme } from '../../../lib/import/slides/inherit';
 import { richTextOf } from '../../../lib/import/slides/text';
@@ -61,7 +62,7 @@ type Source = {
     rels?: Map<string, Relationship>;
 };
 
-function textOf(paragraphs: string, source: Source = {}) {
+function textOf(paragraphs: string, source: Source = {}, lost: Lost = UNCOUNTED) {
     return richTextOf(
         {
             body: txBody(paragraphs, source.bodyPr, source.lstStyle),
@@ -75,7 +76,7 @@ function textOf(paragraphs: string, source: Source = {}) {
         },
         THEME,
         WIDE_DECK,
-        UNCOUNTED,
+        lost,
     );
 }
 
@@ -300,6 +301,27 @@ describe('inline marks', () => {
             textDecoration: 'none',
             html: '<p>Bold <u>Text</u></p>',
         });
+    });
+
+    // The box takes one size, colour and font; runs that differ in them lose theirs, so the import says so once.
+    test('runs that differ in size, colour or font count the box as simplified; marks alone do not', () => {
+        const counted = (paragraphs: string) => {
+            const codes: string[] = [];
+            textOf(paragraphs, {}, (code) => codes.push(code));
+            return codes;
+        };
+        expect(counted(`<a:p>${run('Big', ' sz="4000"')}${run('small', ' sz="1200"')}</a:p>`)).toEqual([
+            'text-simplified',
+        ]);
+        expect(counted(`<a:p>${run('red', '', schemeFill('accent2'))}</a:p><a:p>${run('plain')}</a:p>`)).toEqual([
+            'text-simplified',
+        ]);
+        expect(
+            counted(`<a:p>${run('serif', '', '<a:latin typeface="Times New Roman"/>')}${run(' sans')}</a:p>`),
+        ).toEqual(['text-simplified']);
+        expect(counted(`<a:p>${run('Bold', ' b="1"')}${run(' and plain')}</a:p>`)).toEqual([]);
+        // A run of spaces draws no characters, so its size is no loss.
+        expect(counted(`<a:p>${run('Text')}${run(' ', ' sz="4000"')}</a:p>`)).toEqual([]);
     });
 
     test('u="none" and strike="noStrike" are no marks', () => {

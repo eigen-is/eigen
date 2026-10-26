@@ -1,5 +1,11 @@
+// A worksheet past its grid: the default column width and row height, the tab colour, the column widths and hidden
+// columns, the merges, the frozen panes and gridlines, the filter's span and the hyperlinks. A merge's cells and a
+// link's cell are placed before the grid is read, so the grid's cell there takes them, and a place the grid holds no
+// cell for still gets one. Only what the file holds is walked: a merge's cells after its area is charged, a column
+// range's columns after they are, and each column once.
+
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
-import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
+import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../core/xml';
@@ -7,16 +13,10 @@ import { xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { isOn, R_NS, SML_NS } from '../../ooxml/ooxml';
 import type { Relationship } from '../../ooxml/opc';
 import { columnWidthToPx, DEFAULT_BASE_COL_WIDTH, DEFAULT_ROW_HEIGHT_PT } from '../../ooxml/spreadsheetml';
+import type { PlacedCell } from './cells';
+import { cellKey } from './cells';
 import type { ThemePalette } from './styles';
-import { colorOf, resolveColor } from './styles';
-
-// A worksheet past its grid: the default column width and row height, the tab colour, the column widths and hidden
-// columns, the merges, the frozen panes and gridlines, the filter's span and the hyperlinks. A merge's cells and a
-// link's cell are placed before the grid is read, so the grid's cell there takes them, and a place the grid holds no
-// cell for still gets one. Only what the file holds is walked: a merge's cells after its area is charged, a column
-// range's columns after they are, and each column once.
-
-export type PlacedCell = { r: number; c: number; v: FortuneCell };
+import { resolveColor } from './styles';
 
 export type WorksheetContext = {
     // The sheet's id, which a linked cell's backref names.
@@ -40,10 +40,6 @@ export type Worksheet = {
     placed: Map<number, PlacedCell>;
 };
 
-export function cellKey(r: number, c: number): number {
-    return r * REFERENCE_COLUMN_COUNT + c;
-}
-
 export function readWorksheet(rest: XmlElement | undefined, context: WorksheetContext): Worksheet {
     const worksheet: Worksheet = {
         config: {},
@@ -52,7 +48,7 @@ export function readWorksheet(rest: XmlElement | undefined, context: WorksheetCo
     };
     if (!rest) return worksheet;
     const properties = xmlChild(rest, SML_NS, 'sheetPr');
-    const color = resolveColor(colorOf(properties && xmlChild(properties, SML_NS, 'tabColor')), context.palette);
+    const color = resolveColor(properties && xmlChild(properties, SML_NS, 'tabColor'), context.palette);
     if (color) worksheet.sheet.color = color;
     readColumns(rest, context, worksheet.config);
     // Before the links, so a merge finds only merges placed.
@@ -76,8 +72,8 @@ export function readWorksheet(rest: XmlElement | undefined, context: WorksheetCo
                 },
             };
     }
-    // Only the span: a column's criteria need the editor's condition model, and a filter without them is what a fresh
-    // one writes (state/modules/filter.ts createFilter).
+    // Only the span is read. A column's criteria need the editor's condition model, and a filter without them is what
+    // the editor's own new filter holds.
     const autoFilter = xmlChild(rest, SML_NS, 'autoFilter');
     const filter = autoFilter && parseA1Range(xmlAttr(autoFilter, '', 'ref') ?? '');
     if (filter)
@@ -187,7 +183,7 @@ function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: 
         const rel = context.rels.get(xmlAttr(element, R_NS, 'id') ?? '');
         const target = rel?.external ? rel.target : undefined;
         // A relationship to `#` beside the location, as ExcelJS writes an internal link, is the location.
-        const link = mapHyperlink(
+        const link = hyperlinkOf(
             target !== undefined && !target.startsWith('#')
                 ? `${target}${location ? `#${location}` : ''}`
                 : location !== undefined
@@ -201,7 +197,7 @@ function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: 
         const placed = worksheet.placed.get(key);
         context.charge(placed ? 0 : 1, link.linkAddress.length);
         hyperlink[`${r}_${c}`] = link;
-        // The linked cell carries a backref, which patch.ts's cell ops key off.
+        // The linked cell carries a backref to its link, which the editor's cell edits look up.
         const hl = { r, c, id: context.id };
         if (placed) placed.v.hl = hl;
         else worksheet.placed.set(key, { r, c, v: { hl } });
@@ -209,19 +205,19 @@ function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: 
     if (Object.keys(hyperlink).length > 0) worksheet.sheet.hyperlink = hyperlink;
 }
 
-// A target is a web or mail address as written, or `#` and a place in the workbook. Scheme safety is enforced at
-// navigation and export time by resolveWebLink (@workspace/lib/sheets/web-link).
-function mapHyperlink(target: string | undefined): { linkType: string; linkAddress: string } | null {
-    if (target == null || target.trim().length === 0) return null;
+// A target is a web or mail address as written, or `#` and a place in the workbook. A web address's scheme is checked
+// where it is followed or exported, by resolveWebLink.
+function hyperlinkOf(target: string | undefined): { linkType: string; linkAddress: string } | undefined {
+    if (target === undefined || target.trim().length === 0) return undefined;
     if (!target.startsWith('#')) return { linkType: 'webpage', linkAddress: target };
     const location = target.slice(1);
-    if (location.length === 0) return null;
+    if (location.length === 0) return undefined;
     // Quoted sheet name ('My Sheet', 'It''s') with an optional !ref tail. Sheet names may legally contain '!', so
     // don't split the quoted form on it.
     const quoted = location.match(/^('(?:[^']|'')*')(!.+)?$/);
     if (quoted) {
-        // goToLink's sheet branch matches sheet names by exact equality → strip the quotes; cellrange keeps the quoted
-        // form (getcellrange parses it).
+        // The editor finds a sheet link's sheet by its exact name, so the quotes go. A cell range keeps them, as the
+        // editor's range parser reads the quoted form.
         return quoted[2]
             ? { linkType: 'cellrange', linkAddress: location }
             : { linkType: 'sheet', linkAddress: unquoteSheetName(quoted[1]) };

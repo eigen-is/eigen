@@ -1,3 +1,7 @@
+// The pptx import's step in the transform process: the reader's slides encoded as one Yjs update of frames and
+// elements, so the reader and the encoding both stay off the event loop. The main thread inserts the slides or
+// replaces the deck's with them, and writes the pictures through Drive.
+
 import {
     generateNKeysBetween,
     newFrameId,
@@ -12,8 +16,6 @@ import { importError } from '../messages';
 import { readPptx } from './from-pptx';
 import { PPTX_STYLE } from './shapes';
 
-// Runs in the transform process: the reader and the Yjs encoding both stay off the event loop. The main thread
-// appends the update through document/slides.ts, which reads it back through the canvas reader, and writes the media.
 export function importPptxToSlidesUpdate(
     data: ArrayBuffer,
     job: Pick<SlidesImportJob, 'deck' | 'maxMediaBytes'>,
@@ -23,8 +25,8 @@ export function importPptxToSlidesUpdate(
     try {
         const doc = new Y.Doc();
         doc.transact(() => {
-            // A Convert's or a replace's deck takes the page; on an inserting Import… it is the open deck's own, and the
-            // insert leaves that deck's meta alone (document/slides.ts).
+            // A Convert's or a replace's deck takes the page. On an inserting Import… it is the open deck's own, and the
+            // insert leaves that deck's meta alone.
             const meta = doc.getMap('meta');
             meta.set('slideSize', page.slideSize);
             meta.set('slideWidth', page.slideWidth);

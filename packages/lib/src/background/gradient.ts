@@ -1,14 +1,6 @@
-// The stop list behind every gradient we paint, in one place so CSS and SVG say the same thing.
-//
-// Both renderers interpolate a two-stop ramp in sRGB, and so does WeasyPrint — which takes red → blue
-// through a washed-out gray-purple. Sampling the ramp here in OKLab and emitting the samples as plain
-// sRGB stops moves the interpolation into our code: canvas, thumbnails, previews, SVG export and PDF
-// all render the same stop list, so all of them show the same perceptually even ramp.
-//
-// A gradient end may be the transparent sentinel, and both renderers read that as transparent BLACK:
-// `#e60076 → transparent` then ramps through dark pink and paints a dirty band across the middle of
-// the shape. CSS and SVG both carry opacity beside the color, so a transparent end is emitted as the
-// OTHER end's color at opacity 0 — the ramp keeps its hue and only fades out.
+// The stop list behind every gradient we paint, so CSS and SVG say the same thing. It samples the ramp in OKLab and
+// hands out plain sRGB stops, so canvas, thumbnails, SVG export and PDF all show the same even ramp. A transparent end
+// takes the other end's color at opacity 0, so the ramp fades out and does not pass through black.
 
 import { TRANSPARENT_COLOR } from '../vector/fill';
 import { round4 } from '../vector/outline';
@@ -25,7 +17,8 @@ type Lab = [number, number, number];
 // defs stay small.
 const GRADIENT_STOP_COUNT = 9;
 
-// The stored gradient as sampled stops. A transparent end borrows its neighbor's color, so an
+// The stored gradient as sampled stops. CSS, SVG and WeasyPrint all interpolate two stops in sRGB, which turns red to
+// blue into a washed-out gray-purple. A transparent end borrows its neighbor's color, so an
 // alpha-0 stop never drags the ramp toward black and a plain lerp is all the alpha channel needs; a
 // gradient transparent at both ends paints nothing, so the color there is arbitrary.
 export function gradientStops(from: string, to: string, count: number = GRADIENT_STOP_COUNT): GradientStop[] {
@@ -112,7 +105,8 @@ function fromLab([L, A, B]: Lab): string {
     return `#${hex2(channel(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s))}${hex2(channel(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s))}${hex2(channel(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s))}`;
 }
 
-function linearize(c: number): number {
+// An sRGB channel, 0 to 1, in linear light.
+export function linearize(c: number): number {
     return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }
 

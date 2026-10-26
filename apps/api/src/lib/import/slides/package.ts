@@ -80,7 +80,7 @@ export type DeckWalk = {
 };
 
 // The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
-export function readPackage(bytes: Uint8Array): PptxPackage {
+export function readPptxPackage(bytes: Uint8Array): PptxPackage {
     // Every part it parses, [Content_Types].xml and the relationships too, spends the package's one parse budget.
     const pkg = openPackage(bytes, IMPORT_MESSAGES.pptx);
     const read = (path: string | undefined, kind: PartKind): Part | undefined => {
@@ -152,7 +152,7 @@ const alternativeOf = alternativeFor(PRESENTATION_PREFIXES);
 const alternatives = cachedBy<null, XmlElement[]>();
 
 // A layout's or master's is unwrapped again for every colour map its shapes are read with.
-export function alternative(element: XmlElement): XmlElement[] {
+export function presentationAlternative(element: XmlElement): XmlElement[] {
     return alternatives(element, null, () => {
         charge(element.children.length);
         return alternativeOf(element);

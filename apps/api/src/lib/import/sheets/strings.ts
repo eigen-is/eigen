@@ -1,3 +1,6 @@
+// The workbook's shared strings, read in batches, and a cell's inline string, each as plain or rich text. A rich string
+// keeps its runs beside the text a cell shows. The grid reader looks a cell's string up here.
+
 import type { InlineStringSegment } from '@workspace/lib/sheets';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlChild, xmlElements, xmlText } from '../../core/xml';
@@ -8,8 +11,7 @@ import { readInBatches } from './package';
 import type { ThemePalette } from './styles';
 import { fontLook } from './styles';
 
-// Shared and inline strings. A rich string keeps its runs beside the text a cell shows: a run with properties in its own
-// font, and one without, or text beside the runs, as a plain string, in its cell's.
+// A run with properties is in its own font. A run without, or text beside the runs, is a plain string in its cell's.
 export type SharedString = string | { text: string; runs: (string | InlineStringSegment)[] };
 
 export function readSharedStrings(
@@ -19,12 +21,12 @@ export function readSharedStrings(
 ): SharedString[] {
     const strings: SharedString[] = [];
     for (const si of part ? readInBatches(part, undefined, 'si', budget).children : [])
-        strings.push(stringOf(si, palette));
+        strings.push(readString(si, palette));
     return strings;
 }
 
 // An <si> or an <is>: its text and runs, never a phonetic run's reading of them.
-export function stringOf(element: XmlElement, palette: ThemePalette): SharedString {
+export function readString(element: XmlElement, palette: ThemePalette): SharedString {
     const runs: (string | InlineStringSegment)[] = [];
     let rich = false;
     for (const child of xmlElements(element)) {
@@ -40,6 +42,6 @@ export function stringOf(element: XmlElement, palette: ThemePalette): SharedStri
     return rich ? { text, runs } : text;
 }
 
-export function textOf(string: SharedString): string {
+export function sharedStringText(string: SharedString): string {
     return typeof string === 'string' ? string : string.text;
 }

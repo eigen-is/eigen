@@ -5,6 +5,10 @@
 
 import { ApiError } from '../core/errors';
 
+// A reader that weighs the Yjs update it emits counts a string attribute as one unit per this many characters. The
+// update spells the attribute out for every node or mark that carries it, at about 3.5 bytes a character.
+export const CHARS_PER_UNIT = 512;
+
 export type Budget = {
     // Throws the 413 once the units charged pass the limit, and for an amount that is no count of work.
     charge(units: number): void;

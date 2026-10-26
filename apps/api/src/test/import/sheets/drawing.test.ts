@@ -13,7 +13,7 @@ import { solidFill } from '@workspace/lib/vector';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { IMPORT_MESSAGES } from '../../../lib/import/messages';
-import { CHART_SHEET_SIZE, partsText, placeDrawings, readDrawing } from '../../../lib/import/sheets/drawing';
+import { CHART_SHEET_SIZE, partsText, placeDrawings, readSheetDrawing } from '../../../lib/import/sheets/drawing';
 import { readXlsx } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
 import { drawingTheme, IMAGE_EXTENSION_BY_MIME } from '../../../lib/ooxml/drawingml';
@@ -340,7 +340,7 @@ describe('a worksheet chart', () => {
             }),
             IMPORT_MESSAGES.xlsx,
         );
-        const drawing = readDrawing(
+        const drawing = readSheetDrawing(
             pkg,
             pkg.part('xl/worksheets/sheet1.xml'),
             pkg.relationships('xl/worksheets/sheet1.xml'),

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_PATH_BYTES, MAX_PATH_COMMANDS, parsePathCommands } from '@workspace/lib/vector';
 import type { XmlElement } from '../../../lib/core/xml';
-import type { CustomGeometry } from '../../../lib/import/slides/custom-geometry';
+import type { GeometryPath } from '../../../lib/import/slides/custom-geometry';
 import {
     closedPath,
     customGeometry,
@@ -35,8 +35,8 @@ const path = (body: string, attributes = 'w="100" h="100"') => `<a:path ${attrib
 const SQUARE = moveTo(0, 0) + lnTo(100, 0) + lnTo(100, 100) + lnTo(0, 100) + CLOSE;
 
 // In a 1000 × 1000 EMU shape.
-const geometry = (paths: string, guides = '') => customGeometry(custGeom(paths, guides), 1000, 1000);
-const only = (paths: string, guides = ''): CustomGeometry | undefined => {
+const geometry = (paths: string, guides = '') => customGeometry(custGeom(paths, guides), 1000, 1000, false);
+const only = (paths: string, guides = ''): GeometryPath | undefined => {
     const found = geometry(paths, guides);
     expect(found?.length).toBe(1);
     return found?.[0];
@@ -232,13 +232,13 @@ describe('coordinate spaces', () => {
 
     test("a path with no w or h, or 0, spans the shape's EMU extent", () => {
         const geometryIn = (attributes: string) =>
-            customGeometry(custGeom(path(moveTo(0, 0) + lnTo(2000, 500), attributes)), 4000, 1000)?.[0].path;
+            customGeometry(custGeom(path(moveTo(0, 0) + lnTo(2000, 500), attributes)), 4000, 1000, false)?.[0].path;
         expect(geometryIn('')).toBe('M 0 0 L 0.5 0.5');
         expect(geometryIn('w="0" h="0"')).toBe('M 0 0 L 0.5 0.5');
     });
 
     test('a box of no height puts every y at 0', () => {
-        expect(customGeometry(custGeom(path(moveTo(0, 0) + lnTo(1000, 50), '')), 1000, 0)?.[0].path).toBe(
+        expect(customGeometry(custGeom(path(moveTo(0, 0) + lnTo(1000, 50), '')), 1000, 0, false)?.[0].path).toBe(
             'M 0 0 L 1 0',
         );
     });
@@ -386,7 +386,7 @@ describe('fill and stroke', () => {
         // A donut whose ring is 10% and 5% of its box.
         for (const adj of [10_000, 5000]) {
             const avLst = parseOoxml(`<a:avLst ${NS}><a:gd name="adj" fmla="val ${adj}"/></a:avLst>`) ?? undefined;
-            const [donut] = presetGeometry('donut', avLst, 1000, 1000) ?? [];
+            const [donut] = presetGeometry('donut', avLst, 1000, 1000, false) ?? [];
             expect(windings(donut?.path)).toEqual([1, -1]);
         }
     });
@@ -404,7 +404,7 @@ describe('fill and stroke', () => {
 
     test('a custGeom with no pathLst, no path, or only empty ones draws nothing', () => {
         const empty = parseOoxml(`<a:custGeom ${NS}><a:avLst/><a:gdLst/></a:custGeom>`);
-        expect(empty && customGeometry(empty, 1000, 1000)).toBeUndefined();
+        expect(empty && customGeometry(empty, 1000, 1000, false)).toBeUndefined();
         expect(geometry('')).toBeUndefined();
         expect(geometry(path('') + path(moveTo(5, 5)))).toBeUndefined();
     });
@@ -571,11 +571,11 @@ describe('caps', () => {
     test("charges the read's work budget for its guides, commands and outline, and is undrawn where it can't cover them", () => {
         const geometryOf = custGeom(path(SQUARE), '<a:gd name="g" fmla="val 1"/>');
         withWorkBudget(1000, () => {
-            customGeometry(geometryOf, 1000, 1000);
+            customGeometry(geometryOf, 1000, 1000, false);
             // 11 nodes, and the 4 points of the outline that finds the square outermost.
             expect(affords(1000 - 15)).toBe(true);
             expect(affords(1000 - 14)).toBe(false);
         });
-        expect(withWorkBudget(3, () => customGeometry(geometryOf, 1000, 1000))).toBeUndefined();
+        expect(withWorkBudget(3, () => customGeometry(geometryOf, 1000, 1000, false))).toBeUndefined();
     });
 });

@@ -1,3 +1,7 @@
+// Turns the paragraph reader's items into the doc's blocks: floats and captions join their paragraph, quotes nest by
+// depth, lists by level, and code lines join into code blocks. The body, a band, a note and a table cell each go
+// through it.
+
 import type { JSONContent } from '@tiptap/core';
 import { isFigureFrameNode, ptToTwips, readParagraphFormat, twipsToPt } from '@workspace/lib/docs/eigendoc';
 import { readStoredEquation } from '../../document/equation';
@@ -13,9 +17,7 @@ import { LIST_FORMATS, LIST_LEVELS, LIST_TYPES } from '../../ooxml/wordml';
 import type { ListRef } from './numbering';
 import type { Role } from './styles';
 
-// Items → blocks: floats and captions join their paragraph, quotes nest by depth, lists by level, code lines join.
-
-export type Para = {
+export type ParagraphItem = {
     kind: 'para';
     role: Role;
     inlines: JSONContent[];
@@ -29,7 +31,7 @@ export type Para = {
     numberAt?: number;
     quote: number;
     // A quote inside a list item above it: that item, whose quote depth it sits at.
-    inItem?: Para;
+    inItem?: ParagraphItem;
     // The writer's code box, whose indent counts its quotes.
     boxed?: boolean;
     // A tracked deletion of the mark: accepted, the content joins the next paragraph.
@@ -43,9 +45,8 @@ export type Para = {
     // The side of the text frame it stands in, which holds a wrapped figure and its caption.
     frame?: 'left' | 'right';
     hairline: boolean;
-    // What it sets apart from the docx's Normal, in pt, and its own indent in twips, which counts from its container's
-    // text; an item's holds its number.
-    // baseBefore and baseAfter are the spaces its style or the Normal gives it.
+    // What it sets apart from the docx's Normal, in pt. baseBefore and baseAfter are the spaces its style or the Normal
+    // gives it. The indent below is its own, in twips, counted from its container's text; an item's holds its number.
     format?: {
         lineSpacing?: number;
         spaceBefore?: number;
@@ -57,7 +58,7 @@ export type Para = {
 };
 
 export type Item =
-    | Para
+    | ParagraphItem
     | { kind: 'break' }
     | { kind: 'boundary' }
     // A rule's or a table's quote: the writer indents either in a quote to the quote's text.
@@ -78,7 +79,7 @@ export function isWhitespace(node: JSONContent): boolean {
     return node.type === 'text' && ASCII_WHITESPACE.test(node.text ?? '');
 }
 
-export function build(raw: Item[]): JSONContent[] {
+export function buildBlocks(raw: Item[]): JSONContent[] {
     const items = attachFloatsAndCaptions(joinDeletedMarks(raw));
     assignQuotes(items);
     return buildLevel(items, 0);
@@ -100,11 +101,11 @@ export function inlineText(nodes: JSONContent[]): string {
 }
 
 // Word's Caption style, or a short line of small text, as Google Docs flattens the style.
-export function isCaptionLike(para: Para): boolean {
+export function isCaptionLike(para: ParagraphItem): boolean {
     return !para.empty && (para.role.kind === 'caption' || (para.small && !para.list && !para.task));
 }
 
-export function isFigureOnly(para: Para): boolean {
+export function isFigureOnly(para: ParagraphItem): boolean {
     return (
         para.inlines.some((node) => isFigureFrameNode(node.type)) &&
         para.inlines.every((node) => isFigureFrameNode(node.type) || isWhitespace(node))
@@ -125,7 +126,7 @@ function isBlank(item: Item | undefined): boolean {
 
 // The joined paragraph is the next one, with its own properties: its mark is the one that stays; a run joins at once.
 function joinDeletedMarks(raw: Item[]): Item[] {
-    let joined: Para[] = [];
+    let joined: ParagraphItem[] = [];
     return raw.filter((item, index) => {
         if (item.kind !== 'para') return true;
         if (item.joinsNext && raw[index + 1]?.kind === 'para') {
@@ -204,7 +205,7 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
     return items;
 }
 
-export function paraOf(inlines: JSONContent[]): Para {
+export function paraOf(inlines: JSONContent[]): ParagraphItem {
     return {
         kind: 'para',
         role: { kind: 'paragraph' },
@@ -223,11 +224,11 @@ export function paraOf(inlines: JSONContent[]): Para {
 // in the item. A quote's list items carry the list's indent too, so their depth is the numbering level's base.
 function assignQuotes(items: Item[]): void {
     // The open list items, outermost first: a block goes in the innermost it sits in, and closes those inside.
-    const opens: Para[] = [];
-    const closeTo = (host: Para | undefined) => {
+    const opens: ParagraphItem[] = [];
+    const closeTo = (host: ParagraphItem | undefined) => {
         opens.length = host ? opens.indexOf(host) + 1 : 0;
     };
-    let previous: Para | undefined;
+    let previous: ParagraphItem | undefined;
     let plain = 0;
     for (const item of items) {
         if (item.kind === 'table' || item.kind === 'hr') {
@@ -280,7 +281,7 @@ function assignQuotes(items: Item[]): void {
 
 // The writer numbers a level from a base, the quotes' indent around the list, its hanging indent per level past it; a
 // base off a quote's text is another editor's.
-function listDepth(list: NonNullable<Para['list']>): number | undefined {
+function listDepth(list: NonNullable<ParagraphItem['list']>): number | undefined {
     const depth = quotesPast((list.pPr.indLeft ?? 0) + (list.pPr.indFirst ?? 0) * (list.ilvl + 1), 0);
     return depth || undefined;
 }
@@ -294,7 +295,7 @@ function quotesPast(indent: number, container: number): number | undefined {
 }
 
 // The writer sets a checkbox at its container's text, a quote's indent per quote past the item it sits in.
-function taskDepth(checkbox: number, open: Para | undefined): number | undefined {
+function taskDepth(checkbox: number, open: ParagraphItem | undefined): number | undefined {
     const depth = quotesPast(checkbox, open?.indLeft ?? 0);
     if (depth === undefined) return undefined;
     return (open?.quote ?? 0) + depth || undefined;
@@ -302,7 +303,11 @@ function taskDepth(checkbox: number, open: Para | undefined): number | undefined
 
 // The writer indents a table or a rule to its container's text, a quote's indent per quote past the item it sits in.
 // Nothing else marks it, so it joins a deeper quote only after a paragraph in it.
-function blockDepth(block: Item & { kind: 'hr' | 'table' }, host: Para | undefined, previous: Para | undefined): void {
+function blockDepth(
+    block: Item & { kind: 'hr' | 'table' },
+    host: ParagraphItem | undefined,
+    previous: ParagraphItem | undefined,
+): void {
     const depth = quotesPast(block.indent, host?.indLeft ?? 0);
     if (depth === undefined) return;
     const quote = (host?.quote ?? 0) + depth;
@@ -318,7 +323,11 @@ function blockDepth(block: Item & { kind: 'hr' | 'table' }, host: Para | undefin
 // The writer sets a code box its own indent in from its container, and each quote around it a quote's indent in from
 // the margin or the item's text, past the item's own quotes; other editors indent code as text, so another indent nests
 // it only right after a quote, in that quote.
-function codeDepth(code: Para, opens: Para[], previous: Para | undefined): Para | undefined {
+function codeDepth(
+    code: ParagraphItem,
+    opens: ParagraphItem[],
+    previous: ParagraphItem | undefined,
+): ParagraphItem | undefined {
     const box = code.indLeft - CODE_BLOCK_LOOK.indent;
     const item = itemPast(opens, box);
     const depth = quotesPast(box, item?.indLeft ?? 0);
@@ -337,12 +346,12 @@ function codeDepth(code: Para, opens: Para[], previous: Para | undefined): Para 
 }
 
 // The innermost open item whose text an indent is at or right of.
-function itemUnder(opens: Para[], indent: number): Para | undefined {
+function itemUnder(opens: ParagraphItem[], indent: number): ParagraphItem | undefined {
     return opens.findLast((open) => indentedUnder(indent, open.indLeft));
 }
 
 // The innermost open item an indent sits at or whole quotes past, as the writer sets a block in it.
-function itemPast(opens: Para[], indent: number): Para | undefined {
+function itemPast(opens: ParagraphItem[], indent: number): ParagraphItem | undefined {
     return opens.findLast((open) => quotesPast(indent, open.indLeft) !== undefined);
 }
 
@@ -583,7 +592,7 @@ function buildFlow(items: Item[]): JSONContent[] {
     return blocks;
 }
 
-function isBreakOnly(para: Para): boolean {
+function isBreakOnly(para: ParagraphItem): boolean {
     return (
         para.inlines.some((node) => node.type === 'hardBreak') &&
         para.inlines.every((node) => node.type === 'hardBreak' || isWhitespace(node))
@@ -629,7 +638,7 @@ function indentedUnder(indent: number, itemIndent: number): boolean {
 }
 
 // Across lists an item nests by where its number starts, at or right of the open item's text; a task by its indent.
-function nestsUnder(para: Para, text: number, inTask: boolean): boolean {
+function nestsUnder(para: ParagraphItem, text: number, inTask: boolean): boolean {
     return para.numberAt !== undefined && !inTask
         ? para.numberAt >= text - INDENT_TOLERANCE
         : para.indLeft > text + INDENT_TOLERANCE;
@@ -640,7 +649,7 @@ function nestsUnder(para: Para, text: number, inTask: boolean): boolean {
 // the text of the item it lands in is its own. Eigen draws a space above anyway, in twips, under a table: the writer
 // adds a space before to it, so only what passes it is the paragraph's, and none where that is its style's or the
 // Normal's.
-function formatOf(para: Para, edge: number | undefined, above?: number): Record<string, number> {
+function formatOf(para: ParagraphItem, edge: number | undefined, above?: number): Record<string, number> {
     const { indent, format } = para;
     const past = indent && edge !== undefined && para.quote === 0 ? indent.left - edge : undefined;
     const before = format?.spaceBefore;
@@ -663,14 +672,14 @@ function formatOf(para: Para, edge: number | undefined, above?: number): Record<
 // split at its figure keeps its space above that way. Readers collapse a paragraph's space above with the one the block
 // above leaves below it, so a space no larger than that one, `below` in twips, is the block above's. A plain paragraph
 // draws its style's space above anyway, so a space no larger than that one is no space of its own either.
-function figureSpaceBefore(para: Para, below: number): number | undefined {
+function figureSpaceBefore(para: ParagraphItem, below: number): number | undefined {
     const before = para.format?.spaceBefore;
     const past = before === undefined ? 0 : Math.round(ptToTwips(before) - FIGURE_MARGIN.top);
     const base = para.role.kind === 'paragraph' ? Math.round(ptToTwips(para.format?.baseBefore ?? 0)) : 0;
     return past > Math.max(below, base) ? twipsToPt(past) : undefined;
 }
 
-function textblockOf(para: Para, edge: number | undefined, above?: number, below = 0): JSONContent {
+function textblockOf(para: ParagraphItem, edge: number | undefined, above?: number, below = 0): JSONContent {
     const { textAlign, inlines: content } = para;
     if (isFigureOnly(para)) {
         for (const figure of content) {
@@ -690,7 +699,7 @@ function textblockOf(para: Para, edge: number | undefined, above?: number, below
 
 // A list that draws as an untyped one does at its depth stores no type, so it numbers by depth as Google's 1. a. i.
 // does; any other keeps its own, a nested decimal one '1'. A format Eigen has no type for draws decimal, as Word's would.
-function listType(para: Para, stack: Open[]): string | null {
+function listType(para: ParagraphItem, stack: Open[]): string | null {
     const type = LIST_TYPES.get(para.list?.format ?? '') ?? '1';
     const numbered = stack.filter((open) => open.kind === 'orderedList').length;
     return LIST_FORMATS.get(type) === untypedListFormat(numbered) ? null : type;
@@ -712,7 +721,7 @@ function numberWithin(node: JSONContent, numbered: number, depth = 0): void {
 
 // Lists nest by Word's level within one list; across lists by where the number starts, at or right of the open item's
 // text, and tasks by indent. A number that doesn't follow starts a new list.
-function placeItem(para: Para, textblock: JSONContent, stack: Open[], closeLists: (to: number) => void): void {
+function placeItem(para: ParagraphItem, textblock: JSONContent, stack: Open[], closeLists: (to: number) => void): void {
     // An item opens on a paragraph: a checkbox in a heading makes a task of the heading's text.
     const paragraph: JSONContent =
         textblock.type === 'paragraph'

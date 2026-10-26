@@ -1,17 +1,17 @@
+// A shape's a:prstGeom: one of the few presets a canvas kind draws, else the paths ECMA-376's preset definitions draw.
+// The definitions are Ecma's own file, committed unchanged with its notice: each preset is its avLst's defaults, gdLst
+// and pathLst, as a custGeom spells them. The shape reader calls it for every preset shape.
+
 import { readFileSync } from 'node:fs';
 import type { Corners } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
 import { parseXml, xmlElements } from '../../core/xml';
 import { A_NS } from '../../ooxml/ooxml';
-import type { CustomGeometry } from './custom-geometry';
+import type { GeometryPath } from './custom-geometry';
 import { customGeometry } from './custom-geometry';
 import type { GuideList } from './guides';
 import { guideListOf } from './guides';
 import { cachedBy, childOf } from './lookup';
-
-// A shape's a:prstGeom: one of the few presets a canvas kind draws, else the paths ECMA-376's preset definitions draw.
-// The file is Ecma's, unchanged (NOTICE beside it): each preset is its avLst's defaults, gdLst and pathLst, as custGeom
-// spells them.
 
 export type PresetKind = { type: 'ellipse' } | { type: 'rectangle' | 'diamond'; corners: Corners };
 
@@ -58,8 +58,8 @@ export function presetGeometry(
     avLst: XmlElement | undefined,
     width: number,
     height: number,
-    mirrored = false,
-): CustomGeometry[] | undefined {
+    mirrored: boolean,
+): GeometryPath[] | undefined {
     if (!presets) {
         const root = parseXml(readFileSync(PRESETS_FILE));
         const found = new Map(root ? xmlElements(root).map((definition) => [definition.local, definition]) : []);

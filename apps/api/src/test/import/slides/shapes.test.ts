@@ -342,7 +342,7 @@ describe('kinds', () => {
         const [arrow, text, triangle] = deck.slides[0].elements;
         expect(arrow).toMatchObject({
             type: 'path',
-            path: presetGeometry('rightArrow', undefined, 200 * PX, 100 * PX)?.[0].path,
+            path: presetGeometry('rightArrow', undefined, 200 * PX, 100 * PX, false)?.[0].path,
             closed: true,
             strokeColor: '#00ff00',
         });

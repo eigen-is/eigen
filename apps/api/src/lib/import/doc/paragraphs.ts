@@ -1,5 +1,5 @@
 // The docx reader's block walk: it turns every paragraph into items in document order, so Word's counters run in
-// order across tables, text boxes and notes, and build turns the items into blocks. A paragraph keeps what it sets
+// order across tables, text boxes and notes, and buildBlocks turns the items into blocks. A paragraph keeps what it sets
 // apart from the docx's Normal or its style.
 
 import { isDeepStrictEqual } from 'node:util';
@@ -47,20 +47,28 @@ import {
 } from '../../ooxml/wordml';
 import type { MediaFiles } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
-import type { Item, Para } from './assemble';
-import { build, isFigureOnly, isWhitespace } from './assemble';
+import type { Item, ParagraphItem } from './assemble';
+import { buildBlocks, isFigureOnly, isWhitespace } from './assemble';
+import { isFill, isLightNeutral, markColor } from './colors';
 import type { FontTable, Theme } from './docx-fonts';
 import { byFace, fontMark, isMonospaceFont, readFontTable, readTheme } from './docx-fonts';
 import type { DocxChart } from './drawings';
 import type { Numbering } from './numbering';
 import { readNumbering } from './numbering';
 import type { DocxPackage } from './package';
-import { alternative, descendants, twipsOf, w, wChild } from './package';
+import { descendants, twipsOf, w, wChild, wordAlternative } from './package';
 import type { Field, Piece, RunContext } from './runs';
 import { walkInline } from './runs';
 import type { DocxRunProps, ParaProps, Role } from './styles';
-import { isFill, isLightNeutral, markColor, mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
+import { mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
 import { readTable } from './tables';
+
+// The elements that only wrap content, such as a content control's or a tracked insertion's: their children are read
+// in their place.
+export const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
+
+// y-tiptap spreads a paragraph's children into one call, which overflows near 500,000; the corpus's most is 274.
+export const MAX_INLINE_NODES = 50_000;
 
 export type Reader = {
     pkg: DocxPackage;
@@ -196,7 +204,7 @@ function sectionPage(sectPr: XmlElement | undefined): PageSetup {
 export function readDocument(reader: Reader): JSONContent[] {
     const body = wChild(reader.pkg.document.root, 'body');
     if (!body) return [];
-    return build(readBlocks(reader, xmlElements(body), { part: reader.pkg.document, story: 'body', tables: 0 }));
+    return buildBlocks(readBlocks(reader, xmlElements(body), { part: reader.pkg.document, story: 'body', tables: 0 }));
 }
 
 // A header or footer part's blocks, read as the body's are, through the part's own relationships, its lists counting
@@ -206,14 +214,14 @@ export function readBand(reader: Reader, part: Part): JSONContent[] {
     reader.fields.length = 0;
     const { numbering } = reader;
     reader.numbering = numbering.restarted();
-    const blocks = build(readBlocks(reader, xmlElements(part.root), { part, story: 'band', tables: 0 }));
+    const blocks = buildBlocks(readBlocks(reader, xmlElements(part.root), { part, story: 'band', tables: 0 }));
     reader.numbering = numbering;
     const last = blocks.at(-1);
     if (last?.attrs?.['spaceAfter'] == null) return blocks;
     return [...blocks.slice(0, -1), { ...last, attrs: { ...last.attrs, spaceAfter: null } }];
 }
 
-// Endnotes are footnotes (S9): Google Docs has none, and Word draws both from one kind of part. The separators and the
+// Endnotes are footnotes: Google Docs has none, and Word draws both from one kind of part. The separators and the
 // notice no reference names are no notes.
 function noteElements(pkg: DocxPackage): Map<string, { part: Part; note: XmlElement }> {
     const notes = new Map<string, { part: Part; note: XmlElement }>();
@@ -253,7 +261,9 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     reader.fields = [];
     reader.numbering = numbering.restarted();
     reader.openNotes.push(note);
-    const blocks = build(readBlocks(reader, xmlElements(found.note), { part: found.part, story: 'note', tables: 0 }));
+    const blocks = buildBlocks(
+        readBlocks(reader, xmlElements(found.note), { part: found.part, story: 'note', tables: 0 }),
+    );
     reader.openNotes.pop();
     reader.fields = fields;
     reader.numbering = numbering;
@@ -281,15 +291,10 @@ function weightOf(nodes: JSONContent[]): number {
     return nodes.reduce((sum, node) => sum + 1 + (node.marks?.length ?? 0) + weightOf(node.content ?? []), 0);
 }
 
-export const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
-
-// y-tiptap spreads a paragraph's children into one call, which overflows near 500,000; the corpus's most is 274.
-export const MAX_INLINE_NODES = 50_000;
-
 // flatMap, not a spread push: a body inside one content control can hold more items than a call takes arguments.
 export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope): Item[] {
     return elements.flatMap((element): Item[] => {
-        if (isAlternateContent(element)) return readBlocks(reader, alternative(element), scope);
+        if (isAlternateContent(element)) return readBlocks(reader, wordAlternative(element), scope);
         if (element.ns !== W_NS) return [];
         if (element.local === 'p') return readParagraph(reader, element, scope);
         if (element.local === 'tbl') return readTable(reader, element, scope);
@@ -476,7 +481,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             : { left: props.indLeft ?? 0, right: props.indRight ?? 0, firstLine: props.indFirst ?? 0 };
 
     const captionColor = markColor(CAPTION_LOOK.color);
-    const markSize = direct.markSize ?? styles.run(styleId).size ?? 24;
+    const markSize = direct.markSize ?? styles.run(styleId).size ?? DEFAULT_RUN_SIZE;
     // A paragraph whose mark and text are hidden is not there at all.
     const markHidden = direct.markHidden ?? styles.run(styleId).vanish ?? false;
     const items: Item[] = [];
@@ -519,11 +524,11 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             pt !== undefined && ownTwips !== undefined && pt === twipsToPt(ownTwips) ? undefined : pt;
         // The writer's styles write a node's own line in the Normal's font.
         const ownLine = own && Math.round(lineMultiple(own.line, normal.font) * 100);
-        const lineSpacing =
+        const keptLineSpacing =
             format.lineSpacing !== undefined && Math.round(format.lineSpacing * 100) === ownLine
                 ? undefined
                 : format.lineSpacing;
-        const para: Para = {
+        const para: ParagraphItem = {
             kind: 'para',
             role: kind,
             inlines: content,
@@ -546,7 +551,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
             // Word spaces a split paragraph above its first line and below its last.
             format: {
-                lineSpacing,
+                lineSpacing: keptLineSpacing,
                 spaceBefore: index === 0 ? unlessOwn(format.spaceBefore, own?.before) : undefined,
                 baseBefore: twipsToPt(base.before ?? 0),
                 baseAfter: twipsToPt(base.after ?? 0),
@@ -579,7 +584,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         } else if (item.kind === 'table') item.indent += indLeft;
         items.push(item);
     }
-    for (const line of context.leftOut) line.textAlign = textAlign;
+    for (const leftOut of context.leftOut) leftOut.textAlign = textAlign;
     if (props.sectionBreak && scope.story === 'body') items.push({ kind: 'break' });
     return items;
 }
