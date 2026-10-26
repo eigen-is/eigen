@@ -141,7 +141,7 @@ Run them one at a time: two started together can pick the same subnet. `./docker
 
 `bun dedupe --check` fails when `bun.lock` holds two versions of a package that one version could satisfy. Two copies of `@codemirror/language` or of Radix's dismissable layer break at runtime without an error, and a dependency bump or `bun add` can bring a copy back. Run `bun dedupe` and commit the lockfile it writes.
 
-The 30 s per-test timeout is for CI alone. The runner is slower than a laptop, and bun's 5 s default fails a slow file there. Locally the default stays, so a slow test is caught where it is written. Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file, so a worker's growth shows next to the file that caused it.
+The 30 s per-test timeout is for CI. The runner is slower than a laptop, and bun's 5 s default fails a slow file there. Locally the default stays, so a slow test is caught where it is written. The tests that wait on a mail folder watcher are the exception: on a loaded Mac an `fs.watch` event alone can take longer than 5 s ([IMAP.md § A watcher checks that its directory is still the same one](IMAP.md#a-watcher-checks-that-its-directory-is-still-the-same-one)). Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file, so a worker's growth shows next to the file that caused it.
 
 A second job, `launcher`, runs `docker/test-launcher.sh`. It needs no stack and no Bun, so it runs on a plain runner beside the check job.
 

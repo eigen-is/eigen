@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { evictHome } from '../../lib/home/get-home';
-import { boxDir } from '../mail-test-helpers';
+import { boxDir, WATCHER_TEST_TIMEOUT_MS } from '../mail-test-helpers';
 import type { TestUser } from '../setup';
 import { assertJson, authedRequest, collectSSE, createTestUser, eventually, getTestContext } from '../setup';
 
@@ -140,35 +141,50 @@ describe('Mail read in another mail app', () => {
         }
     }
 
-    test('while an Eigen tab is open reads the notification without anyone opening Mail', async () => {
-        const user = await createTestUser(`mail-tab-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail Tab');
-        // A fresh home whose mail nobody listed; the open tab is only an event stream.
-        await evictHome(user.id);
-        const tab = await collectSSE(user.id);
-        try {
+    test(
+        'while an Eigen tab is open reads the notification without anyone opening Mail',
+        async () => {
+            const user = await createTestUser(`mail-tab-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail Tab');
+            // A fresh home whose mail nobody listed; the open tab is only an event stream.
+            await evictHome(user.id);
+            const tab = await collectSSE(user.id);
+            try {
+                await deliverEmail(user.email, 'phone@external.com', 'Read on the phone', 'body');
+                expect(await mailNewUnread(user)).toBe(true);
+
+                readOnThePhone(user);
+                // The watcher's event can come seconds late on macOS, so the test waits for the tab to hear the bell change.
+                await tab.next((event) => event.type === SSEventType.NOTIFICATION_CHANGED);
+                expect(await mailNewUnread(user)).toBe(false);
+            } finally {
+                tab.stop();
+            }
+        },
+        WATCHER_TEST_TIMEOUT_MS,
+    );
+
+    test(
+        'before any Eigen tab is open reads the notification once one opens',
+        async () => {
+            const user = await createTestUser(
+                `mail-notab-${Date.now()}@test.eigen.is`,
+                'testpassword123',
+                'Mail No Tab',
+            );
+            await evictHome(user.id);
             await deliverEmail(user.email, 'phone@external.com', 'Read on the phone', 'body');
+            readOnThePhone(user);
+            // Nobody watches the folders yet, so the index has not heard of it.
             expect(await mailNewUnread(user)).toBe(true);
 
-            readOnThePhone(user);
-            await eventually(async () => ((await mailNewUnread(user)) ? undefined : true), 'the notification read');
-        } finally {
-            tab.stop();
-        }
-    });
-
-    test('before any Eigen tab is open reads the notification once one opens', async () => {
-        const user = await createTestUser(`mail-notab-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail No Tab');
-        await evictHome(user.id);
-        await deliverEmail(user.email, 'phone@external.com', 'Read on the phone', 'body');
-        readOnThePhone(user);
-        // Nobody watches the folders yet, so the index has not heard of it.
-        expect(await mailNewUnread(user)).toBe(true);
-
-        const tab = await collectSSE(user.id);
-        try {
-            await eventually(async () => ((await mailNewUnread(user)) ? undefined : true), 'the notification read');
-        } finally {
-            tab.stop();
-        }
-    });
+            const tab = await collectSSE(user.id);
+            try {
+                await tab.next((event) => event.type === SSEventType.NOTIFICATION_CHANGED);
+                expect(await mailNewUnread(user)).toBe(false);
+            } finally {
+                tab.stop();
+            }
+        },
+        WATCHER_TEST_TIMEOUT_MS,
+    );
 });
