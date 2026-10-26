@@ -2136,7 +2136,10 @@ export function asWritten(
                     );
                     const above =
                         typeof own === 'number' ? own : node.type === 'paragraph' ? 0 : twipsToPt(look?.before ?? 0);
-                    const spaceBefore = !nested && pieces.length === 0 && above > 0 ? above : null;
+                    // A band writes no space above its first block, and a paragraph draws the Normal's anyway.
+                    const floor = node.type === 'paragraph' ? imported.style.spaceBefore : 0;
+                    const body = at.startsWith('body');
+                    const spaceBefore = body && !nested && pieces.length === 0 && above > floor ? above : null;
                     const piece = { type: 'paragraph', attrs: { ...paragraphAttrs, spaceBefore }, content: [child] };
                     fresh.add(piece);
                     pieces.push(piece);
