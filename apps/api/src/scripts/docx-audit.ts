@@ -26,6 +26,7 @@ import {
     isFigureFrameNode,
     PROSE_TEXTBLOCKS,
     pageTwips,
+    twipsToPt,
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../lib/core/xml';
 import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
@@ -2123,7 +2124,20 @@ export function asWritten(
                     floating.push(child);
                 } else if (isBlockFigure(child)) {
                     if (inline.length > 0) flush();
-                    const piece = { type: 'paragraph', attrs: paragraphAttrs, content: [child] };
+                    // The first piece takes the space above its textblock, which the reader keeps on a figure's paragraph
+                    // past the figure's own margin. A paragraph's own space is its spaceBefore, a heading's or a title's
+                    // its look's too.
+                    const own = node.attrs?.['spaceBefore'];
+                    const look = ownTextLook(
+                        node.type ?? '',
+                        Number(node.attrs?.['level'] ?? 1),
+                        imported.style,
+                        false,
+                    );
+                    const above =
+                        typeof own === 'number' ? own : node.type === 'paragraph' ? 0 : twipsToPt(look?.before ?? 0);
+                    const spaceBefore = !nested && pieces.length === 0 && above > 0 ? above : null;
+                    const piece = { type: 'paragraph', attrs: { ...paragraphAttrs, spaceBefore }, content: [child] };
                     fresh.add(piece);
                     pieces.push(piece);
                     split = true;

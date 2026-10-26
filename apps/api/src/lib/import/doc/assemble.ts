@@ -661,11 +661,13 @@ function formatOf(para: Para, edge: number | undefined, above?: number): Record<
 
 // The figure draws its own margin above it, so only the space past that margin is the paragraph's. A heading the writer
 // split at its figure keeps its space above that way. Readers collapse a paragraph's space above with the one the block
-// above leaves below it, so a space no larger than that one, `below` in twips, is the block above's.
+// above leaves below it, so a space no larger than that one, `below` in twips, is the block above's. A plain paragraph
+// draws its style's space above anyway, so a space no larger than that one is no space of its own either.
 function figureSpaceBefore(para: Para, below: number): number | undefined {
     const before = para.format?.spaceBefore;
-    const past = before === undefined ? 0 : ptToTwips(before) - FIGURE_MARGIN.top;
-    return past > below ? twipsToPt(past) : undefined;
+    const past = before === undefined ? 0 : Math.round(ptToTwips(before) - FIGURE_MARGIN.top);
+    const base = para.role.kind === 'paragraph' ? Math.round(ptToTwips(para.format?.baseBefore ?? 0)) : 0;
+    return past > Math.max(below, base) ? twipsToPt(past) : undefined;
 }
 
 function textblockOf(para: Para, edge: number | undefined, above?: number, below = 0): JSONContent {
