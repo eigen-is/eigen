@@ -8,7 +8,7 @@ import { isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigend
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
-import { blipEmbeds, IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../../ooxml/drawingml';
+import { blipEmbeds, IMAGE_EXTENSION_BY_MIME } from '../../ooxml/drawingml';
 import {
     A_NS,
     C_NS,
@@ -33,7 +33,7 @@ import {
     readChartPartLook,
 } from '../../ooxml/ooxml-chart';
 import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
-import { IMAGE_TYPES, mediaPart, PICTURE_NOT_IMPORTED } from '../image-types';
+import { declaredImageType, IMAGE_TYPES, mediaPart, PICTURE_NOT_IMPORTED } from '../image-types';
 import type { Item, Para } from './assemble';
 import { inlineText, isCaptionLike, isFigureOnly, paraOf } from './assemble';
 import { descendants, int } from './package';
@@ -41,27 +41,21 @@ import type { Reader, Scope } from './paragraphs';
 import { readBlocks } from './paragraphs';
 import type { RunContext } from './runs';
 
-// A part the package gives no type takes its extension's, and a misspelt type its alias; both only through the
-// allowlist, so a part declared as anything else is still never stored. A WMF or EMF figure shows its alt text in a
-// broken image, and an export leaves it out.
+// A part the package gives no type takes its extension's, as Word reads one. Only a type of the allowlist is stored.
 const MIME_BY_EXTENSION = new Map([
     ...[...IMAGE_EXTENSION_BY_MIME].map(([mime, extension]): [string, string] => [extension, mime]),
     ['jpg', 'image/jpeg'],
 ]);
 
 function imageType(reader: Reader, path: string): string | undefined {
-    const declared = reader.pkg.contentTypeOf(path);
-    if (declared) return MIME_ALIASES.get(declared) ?? declared;
+    if (reader.pkg.contentTypeOf(path)) return declaredImageType(reader.pkg, path);
     return MIME_BY_EXTENSION.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase());
 }
 
-// sharp has no loader for these, so no screen preview shows them.
-export const UNSHOWN_IMAGE_TYPES = new Set(['image/bmp', 'image/x-wmf', 'image/x-emf']);
-
-// One media file per image part, named in encounter order; none for a part that is missing or of no image type, whose
-// bytes don't read, or past the pictures' caps.
-function pictureName(reader: Reader, path: string): string | undefined {
-    const part = mediaPart(reader.pkg.zip, path, imageType(reader, path), IMAGE_TYPES);
+// One media file per image part, named in encounter order. A part that is missing or of no image type, whose bytes
+// don't read, or that is past the pictures' caps has none.
+function pictureName(reader: Reader, path: string | undefined): string | undefined {
+    const part = path && mediaPart(reader.pkg.zip, path, imageType(reader, path), IMAGE_TYPES);
     return part && reader.files.name(part);
 }
 
@@ -111,8 +105,9 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         for (const picture of pictures) {
             const [blip] = descendants(picture, A_NS, 'blip');
             const [svg, raster] = blipEmbeds(blip);
-            const path = partPath(svg, context.scope) ?? partPath(raster, context.scope);
-            const name = path && pictureName(reader, path);
+            const name =
+                pictureName(reader, partPath(svg, context.scope)) ??
+                pictureName(reader, partPath(raster, context.scope));
             if (!name) {
                 // A blip that names nothing is an empty frame. A linked picture, or one embedded from outside the file,
                 // lives outside it, so its alt text stays after the line.
@@ -120,7 +115,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
                 const outside =
                     [svg, raster].some((id) => id && rels.get(id)?.external) ||
                     (blip && !raster && xmlAttr(blip, R_NS, 'link'));
-                if (path || svg || raster || outside) pictureLeftOut(reader, context, outside ? alt : null);
+                if (svg || raster || outside) pictureLeftOut(reader, context, outside ? alt : null);
                 continue;
             }
             const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];
@@ -290,14 +285,15 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
                 reader.lost('band-content-dropped');
                 continue;
             }
-            const path = partPath(xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid'), context.scope);
-            const name = path && pictureName(reader, path);
+            const id = xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid');
+            const name = pictureName(reader, partPath(id, context.scope));
+            const alt = shape.attributes['alt'] || xmlAttr(data, O_NS, 'title') || null;
             if (!name) {
-                if (path) pictureLeftOut(reader, context, null);
+                // A linked picture lives outside the file, so its alt text stays after the line, as a DrawingML one's.
+                if (id) pictureLeftOut(reader, context, context.scope.part.rels.get(id)?.external ? alt : null);
                 continue;
             }
             const width = vmlWidthPx(shape.attributes['style'] ?? '', reader.columnPx);
-            const alt = shape.attributes['alt'] || xmlAttr(data, O_NS, 'title') || null;
             context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, width } } });
         }
         for (const box of descendants(shape, W_NS, 'txbxContent'))

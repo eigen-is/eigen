@@ -11,9 +11,8 @@ import type { TransformWarning } from '../../document/transform/protocol';
 import { lossCounter } from '../../document/transform/protocol';
 import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
 import type { ImportedMedia } from '../image-types';
-import { importMedia } from '../image-types';
+import { importMedia, UNSHOWN_IMAGE_TYPES } from '../image-types';
 import { IMPORT_MESSAGES, importError } from '../messages';
-import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { CHARS_PER_UNIT, MAX_DOCX_WEIGHT, readPackage } from './package';
 import { createReader, readBand, readDocument } from './paragraphs';
 
@@ -106,8 +105,8 @@ export function readDocx(
             const band = checked(blocks);
             if (bandHasContent(band, readStoredEquation)) bands[root] = band;
         }
-        // Only the media a kept figure names: a flattened block's figures went with it. No browser draws an unshown type:
-        // each figure of one shows its alt text in a broken image.
+        // Only the media a kept figure names, since a flattened block's figures went with it. Each figure of an unshown
+        // type shows its alt text in a broken image.
         const unshown = new Set(
             files.media.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).map((image) => image.name),
         );
