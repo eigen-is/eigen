@@ -1,3 +1,8 @@
+// The item actions of a Drive file view and the dialogs behind them, such as rename, move, share and
+// delete. A view's capabilities decide which actions it offers, and the command palette gets the same
+// set.
+
+import { useIsGuest } from '@workspace/lib/auth';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import { downloadDriveFile } from '@workspace/lib/download';
 import {
@@ -51,6 +56,7 @@ export function useDriveLayoutDialogs({
     const deletePathsMutation = useDeletePaths();
     const isCoarsePointer = useIsCoarsePointer();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
+    const isGuest = useIsGuest();
     const { exportPath, isExporting } = useDocumentExport();
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [pendingDeletePaths, setPendingDeletePaths] = useState<DrivePath[]>([]);
@@ -145,7 +151,8 @@ export function useDriveLayoutDialogs({
     const onDelete = capabilities.canDelete ? handleDeletePaths : undefined;
     const onRename = capabilities.canRename ? dialogs.rename.openDialog : undefined;
     const onShareClick = capabilities.canShare ? dialogs.share.openDialog : undefined;
-    const onEmailCollaborators = capabilities.canShare ? dialogs.email.openDialog : undefined;
+    // A guest may not mail people through the server, as a guest may not share.
+    const onEmailCollaborators = capabilities.canShare && !isGuest ? dialogs.email.openDialog : undefined;
 
     // Publish the route-local dialog handlers to the palette. Quick preview is
     // intentionally omitted — it goes via CommandContext.openPreview (a global, from

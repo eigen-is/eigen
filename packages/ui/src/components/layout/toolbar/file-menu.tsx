@@ -1,5 +1,10 @@
+// The File menu on the toolbar of an open Eigen document, such as a doc, a sheet or a board. It
+// creates, opens, renames, downloads, shares and trashes the document, and opens its version history.
+// It also hands those actions to the command palette, so the menu and the palette offer the same ones.
+
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
+import { useIsGuest } from '@workspace/lib/auth';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
@@ -82,6 +87,9 @@ export function FileMenu({
     const canExport = !!onExport && downloadFormats.length > 0;
     const canDownload = canExport || !!onDownloadSvg;
     const navigate = useNavigate();
+    const isGuest = useIsGuest();
+    // A guest may not mail people through the server, as a guest may not share.
+    const canEmail = canWrite && !isGuest;
 
     // Mounted by every eigendoc toolbar, so one publish gives ⌘K the open doc's actions
     // across all four apps. The doc is published as the selection upstream
@@ -90,7 +98,7 @@ export function FileMenu({
         onShare: onAccessDialogOpen,
         onExport: canExport && onExport ? (_, format) => onExport(format) : undefined,
         onRename: canWrite ? () => setRenameOpen(true) : undefined,
-        onEmailCollaborators: canWrite ? () => setEmailOpen(true) : undefined,
+        onEmailCollaborators: canEmail ? () => setEmailOpen(true) : undefined,
         onDelete: canWrite ? () => setDeleteOpen(true) : undefined,
     });
 
@@ -138,7 +146,7 @@ export function FileMenu({
                 <DropdownMenuItem onClick={onAccessDialogOpen}>
                     <UserRoundPlus className="h-4 w-4" /> Share
                 </DropdownMenuItem>
-                {canWrite && (
+                {canEmail && (
                     <DropdownMenuItem onClick={() => setEmailOpen(true)}>
                         <Mail className="h-4 w-4" /> Email collaborators
                     </DropdownMenuItem>

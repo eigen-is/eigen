@@ -551,6 +551,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/email-collaborators',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
             return await drive.emailCollaborators(
                 params.mountId,
