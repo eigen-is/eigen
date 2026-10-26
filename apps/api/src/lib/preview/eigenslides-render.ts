@@ -1,3 +1,7 @@
+// A deck's preview body: its first slides as compositor pages, the same HTML the PDF export prints. It runs in the
+// transform process, so it reaches neither the Mount nor the transform seam, and its media resolves through the URL
+// map the main thread prepared.
+
 import { CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
 import type { MediaResolver } from '@workspace/lib/vector';
 import {
@@ -15,15 +19,10 @@ import { sanitizeExportHtml, sanitizeSceneHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 import { capPreviewElements } from './preview-scene';
 
-// Materialized doc → the deck's first slides as compositor pages, the same HTML the PDF export
-// prints. Runs inside the transform process. This module must not reach the Mount or the transform
-// seam. Media resolves through the URL map the main thread prepared (the Worker has no Mount).
-//
-// Filtered on the two levels eigenvector-render.ts documents: each rich-text body through the shared
-// ref restriction first, then the assembled page as a whole, with the media URLs allow-listed so the
-// compositor's own hrefs survive.
 const PREVIEW_MAX_SLIDES = 8;
 
+// Filtered twice, as a drawing's preview is: each rich-text body through the shared ref restriction first, then the
+// assembled page as a whole, with the media URLs allow-listed so the compositor's own hrefs survive.
 export function renderEigenslidesPreviewBody(
     doc: Y.Doc,
     mediaUrls: Map<string, string>,
