@@ -86,6 +86,8 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 - **Large files** — a file too large for the server's memory to import, export, preview or index is refused, instead of taking the server down
 - **Calendar** — looking up the calendar of a guest or of the organization answers that you have no access, instead of failing with a server error
 - **Calendar** — looking up the calendar of an account that doesn't exist answers the same as one you can't see, so it doesn't tell which accounts exist
+- **Very large spreadsheets** — a web page or PDF download of a sheet holds its first 250,000 cells, instead of running until the export fails
+- **Long code blocks** — a code block longer than 64 KB without a language downloads at once, as plain text, instead of stalling the export
 
 ## [0.3.3] - 2026-10-13
 

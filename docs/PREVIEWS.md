@@ -58,7 +58,7 @@ Generations are shared per cache name, the first one and the background one alik
 
 Loose bytes render in one of three modes. Markdown goes through markdown-it with raw HTML off. Code goes through lowlight. Plain text becomes `<p>` paragraphs, not `<pre>`, because `eigen-prose` paints every `<pre>` as a dark code block and a `.txt` should read like prose.
 
-One ceiling bounds every loose-bytes preview, Drive and mail alike: `TEXT_PREVIEW_MAX_BYTES` (1 MiB). The decode and the highlighter run on the API event loop, per request. Drive refuses on the row's `size` before it reads a byte. A container is not measured against it, because its size is its databases, not the body the transform renders. `getPreviewMode` on the client applies the same gate, so the overlay shows the file card rather than a panel the route would 404.
+One ceiling bounds every loose-bytes preview, Drive and mail alike: `TEXT_PREVIEW_MAX_BYTES` (1 MiB). The decode and the highlighter run on the API event loop, per request. A code file past 64 KB in no language the highlighter knows shows as plain text, as automatic detection tries every grammar. Drive refuses on the row's `size` before it reads a byte. A container is not measured against it, because its size is its databases, not the body the transform renders. `getPreviewMode` on the client applies the same gate, so the overlay shows the file card rather than a panel the route would 404.
 
 ## An Eigen document previews a slice, off the event loop
 
