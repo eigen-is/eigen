@@ -208,16 +208,16 @@ describe('htmlToPdf with a stub WeasyPrint', () => {
         expect(result.ms).toBeLessThan(5_000);
     }, 15_000);
 
-    // The wrapper the transform child runs under: the OOM killer takes the render before the API, and a data limit.
+    // The wrapper the transform child runs under: the OOM killer takes the render before the API, a data limit, and no core.
     test.skipIf(process.platform !== 'linux')(
         'a render runs under the limits a transform child takes',
         async () => {
             const { outcomes } = await exportWithStubPython(
                 'echo 70.0; exit 0',
-                '/bin/cat /proc/self/oom_score_adj; /bin/grep -E "^Max (data size|core file size)" /proc/self/limits',
+                '/bin/cat /proc/self/oom_score_adj /proc/self/coredump_filter; /bin/grep -E "^Max (data size|core file size)" /proc/self/limits',
             );
             const [{ pdf }] = outcomes;
-            expect(pdf).toStartWith('1000\n');
+            expect(pdf).toStartWith('1000\n00000000\n');
             expect(pdf).not.toMatch(/Max data size\s+unlimited/);
             expect(pdf).toMatch(/Max core file size\s+0\s/);
         },

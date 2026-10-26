@@ -110,6 +110,7 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
             // What the Linux wrapper set, read back from inside.
             const body = JSON.stringify({
                 oomScoreAdj: readFileSync('/proc/self/oom_score_adj', 'utf8').trim(),
+                coredumpFilter: readFileSync('/proc/self/coredump_filter', 'utf8').trim(),
                 limits: readFileSync('/proc/self/limits', 'utf8'),
                 jit: process.env['BUN_JSC_jitMemoryReservationSize'],
             });
