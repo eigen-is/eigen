@@ -1,16 +1,21 @@
+// Small pieces that Mount and its sibling modules share, such as the SQL that finds a path's ancestors,
+// the errors of a paths write, and how a mount's config and storage backend are built. The backup uses
+// some of them too, for a mount that no Home has open.
+
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
-import { type SQL, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { getS3Config } from '../config/server-settings';
 import { ApiError } from '../core';
-import { LocalStorage, S3Storage, type StorageBackend } from '../storage';
+import type { StorageBackend } from '../storage';
+import { LocalStorage, S3Storage } from '../storage';
 
-// Subquery: ids of every eigendoc container (every EIGEN_DOC_TYPES row) and
-// every path descended from one. Embedded as `parentId NOT IN (…)` to filter out
-// container internals (data.db, media, embedded chats) — file rows the user
-// never sees in the drive UI and shouldn't see in search.
+// The ids of every Eigen document container and of every path inside one. A query adds it as
+// `parentId NOT IN (…)` to leave out the insides of documents, such as their data.db, media and
+// comment chats. The user never sees those rows in Drive, so search must not show them either.
 export const docContainerDescendantIds = sql`
     WITH RECURSIVE doc_tree AS (
         SELECT id FROM paths
@@ -24,8 +29,8 @@ export const docContainerDescendantIds = sql`
     SELECT id FROM doc_tree
 `;
 
-// Subquery: each of `pathIds` plus every ancestor up to the mount root. Embedded as `id IN (…)` so one
-// query fetches whole chains (findStorageKey walks one down, getBreadcrumbs walks each up).
+// Each of `pathIds` and every folder above it, up to the mount root. A query adds it as `id IN (…)`, so
+// one query reads whole chains, such as for a breadcrumb.
 export function ancestorIds(...pathIds: string[]): SQL {
     return sql`
         WITH RECURSIVE ancestors AS (
@@ -40,22 +45,49 @@ export function ancestorIds(...pathIds: string[]): SQL {
     `;
 }
 
-// The v7 partial unique index (parentId, LOWER(name)) WHERE trashedAt IS NULL closes the concurrent
-// same-name races the create INSERTs and rename/move/restore UPDATEs can't; translate its violation
-// into the SAME 409 assertUniqueName raises (single-threaded callers pass that SELECT first, so only
-// the race tail lands here). Match on the index name bun:sqlite puts in the message so an unrelated
-// UNIQUE (the id PRIMARY KEY) still surfaces as a real error rather than a spurious 409.
-export function rethrowDuplicateActiveName(e: unknown, name: string): never {
+// The 409 of a create, rename, move or restore whose name a live sibling has already.
+export function nameTakenError(name: string): ApiError {
+    return new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+}
+
+// What a write to a paths row throws when it raced another write. The unique index on the parent and
+// the lower-case name of live rows refuses a second sibling of one name. That is the same 409 that
+// assertUniqueName gives. The check matches the index by name, so a clash on the id stays a real error.
+// The foreign key on parentId refuses a row under a folder that was deleted meanwhile, and that is a 404.
+export function rethrowPathWriteError(e: unknown, name: string): never {
     if (e instanceof Error && e.message.includes(`index 'idx_paths_unique_active_name'`)) {
-        throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+        throw nameTakenError(name);
+    }
+    if (e instanceof Error && e.message.includes('FOREIGN KEY constraint failed')) {
+        throw new ApiError(404, 'Folder not found');
     }
     throw e;
 }
 
-// A document working copy must be a real SQLite db. The 16-byte magic header is the cheapest proof;
-// a 0-byte or partial download (an empty/failed S3 GET) fails it. Used to refuse opening such a file
-// as a fresh empty doc and re-uploading it over good stored bytes, and by
-// the upload queue to refuse PUTting a corrupted staged copy over the good stored object.
+// A rename, move, trash or restore on `local` moves the bytes first and then writes the row. A disk rename
+// that throws leaves both as they were, and a row write that throws moves the bytes back. A crash or a
+// failed move-back still leaves them apart. The next trash or restore then goes by what is on disk.
+export async function renameThenWriteRow(
+    rename: (oldKey: string, newKey: string) => Promise<void>,
+    fromKey: string,
+    toKey: string,
+    writeRow: () => Promise<void>,
+): Promise<void> {
+    await rename(fromKey, toKey);
+    try {
+        await writeRow();
+    } catch (e) {
+        await rename(toKey, fromKey).catch((undo: unknown) => {
+            console.error(`[Mount] Could not move ${toKey} back to ${fromKey} after a failed row write:`, undo);
+        });
+        throw e;
+    }
+}
+
+// A document's working copy must be a real SQLite database. The 16-byte header is the cheapest proof,
+// and an empty or partial download fails it. An open refuses such a file, so it never starts an empty
+// document and uploads it over good stored bytes. The upload queue refuses to upload one for the same
+// reason.
 export function isSqliteFile(filePath: string): boolean {
     let fd: number | null = null;
     try {
@@ -71,10 +103,9 @@ export function isSqliteFile(filePath: string): boolean {
     }
 }
 
-// What Mount.getTotalSize answers, for a mount nobody has opened — the admin usage view sizes every
-// home at once, and booting a Home apiece is seconds each. Read-write on purpose: a WAL database
-// whose owner is not holding it open has no -shm beside it, and a read-only open of one fails
-// outright. Only ever used for this SELECT.
+// What Mount.getTotalSize answers, for a mount nobody has open. The admin usage view sizes every home at
+// once, and opening each Home would take seconds. The open is read-write on purpose. A WAL database that
+// nobody holds open has no -shm file beside it, and a read-only open of it fails. Only this SELECT runs.
 export function readMountTotalSize(metadataPath: string): number {
     if (!fs.existsSync(metadataPath)) return 0;
     const db = new Database(metadataPath, { readwrite: true, create: false });
@@ -89,11 +120,11 @@ export function readMountTotalSize(metadataPath: string): number {
     }
 }
 
-// A recovered temp is the live working copy after an unclean shutdown: it should be the stored db
-// (plus any unsynced writes), never a fraction of it. Refuse it if it isn't a valid SQLite, or if it
-// has collapsed far below the last-known stored size (a tiny fresh-init db where a multi-MB doc was) —
-// either signals corrupt/empty bytes that must not be adopted and re-uploaded over the good object.
-// The -wal counts toward the size: a crash leaves every write since the last checkpoint only there.
+// After an unclean shutdown, the temp file left behind is the live working copy. It should hold the
+// stored database and maybe some writes that never synced, never a fraction of it. So a temp that is no
+// SQLite file, or that is far smaller than the last stored size, is refused. Its bytes are empty or
+// corrupt, and adopting them would upload them over the good object. The -wal file counts toward the
+// size, because a crash leaves every write since the last checkpoint only there.
 const RECOVERY_COLLAPSE_FLOOR_BYTES = 64 * 1024;
 const RECOVERY_COLLAPSE_RATIO = 0.5;
 export function isViableRecoveryTemp(tempPath: string, knownSize: number): boolean {
@@ -121,24 +152,22 @@ export function createMountConfig(id: string, settings: Omit<MountSettings, 'ena
     };
 }
 
-// Which destination an s3 mount's uploads are paced against: one provider's rate-limit domain, and
-// the presence of a key is also what stands up the write-behind queue at all (Mount.init). Gated on
-// the storage TYPE, not on the credentials: `createMountConfig` passes a settings `s3Config` through
-// whatever the backend is, and a local mount carrying a stale one must not get a queue over its
-// LocalStorage. `!config.s3Config` only narrows the type: createMountStorage refuses an s3 mount
-// without one. Infra strings only, never user data.
+// The destination an s3 mount's uploads are paced against, which is one provider's rate limit. A mount
+// with a key gets an upload queue at init, and one without gets none. The key depends on the storage
+// type, not on the credentials. A local mount can carry an old s3Config in its settings, and it must
+// not get a queue over its local storage. The key holds the endpoint and bucket only, never user data.
 export function buildUploadDestinationKey(config: MountConfig): string | undefined {
     if (config.storageType !== 's3' || !config.s3Config) return undefined;
     return `${config.s3Config.endpoint}/${config.s3Config.bucket}`;
 }
 
-// The one place a mount's storage backend is built from its config. `Mount` calls it for the live
-// mount; lib/backup calls it for a safety copy's mounts, whose stored objects it has to clean up
-// with no Home to ask. `baseDir` is the mount's own folder; the s3 backend has no use for it.
+// Builds a mount's storage backend from its config. Mount calls it for a live mount, and the backup calls
+// it for the mounts of a safety copy, whose stored objects it cleans up with no Home to ask. `baseDir` is
+// the mount's own folder, which the s3 backend doesn't use.
 export function createMountStorage(config: MountConfig, baseDir: string): StorageBackend {
     if (config.storageType === 's3') {
-        // The one refusal of an s3 mount with no bucket to be: every caller builds its storage
-        // before anything else, so nothing downstream has to ask again.
+        // Every caller builds the storage before anything else, so this is the one place that refuses
+        // an s3 mount with no bucket.
         if (!config.s3Config) {
             throw new Error(
                 `Mount '${config.id}' uses S3 storage but no S3 configuration found. Configure S3 in admin settings first.`,
@@ -146,7 +175,7 @@ export function createMountStorage(config: MountConfig, baseDir: string): Storag
         }
         return new S3Storage(config.s3Config);
     }
-    // LocalStorage is a strict superset of the flat-key backend; mount.ts gates all
-    // mkdir/rename/deleteDir calls behind isPathBased, so the extra methods are inert for local-key.
+    // LocalStorage serves both local layouts. Mount calls its folder methods, such as rename, only on
+    // a path-based mount, so an id-keyed mount never uses them.
     return new LocalStorage(baseDir);
 }

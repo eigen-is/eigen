@@ -61,7 +61,7 @@ describe('container data.db row size', () => {
         await managed.flush();
 
         const liveSize = statSync(mount.getTempPath(dataDbId)).size;
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         const objectSize = await mount.storage.size(await mount.getStorageKey(dataDbId));
         expect(objectSize).not.toBeNull();
         expect(objectSize!).toBeLessThan(liveSize);
@@ -70,7 +70,7 @@ describe('container data.db row size', () => {
 
         // Nothing changed since the last sync, so close must leave the row on the object's size.
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect((await mount.getPath(dataDbId))!.size).toBe(objectSize!);
     });
 

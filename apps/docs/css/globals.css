@@ -55,3 +55,56 @@
         margin-bottom: 0 !important;
     }
 }
+
+/* The editor's footnotes, which the exports draw their own way (export/doc/transform.ts). A reference is its number,
+   raised as Google draws it; its note is no DOM of the body's. */
+.tiptap .footnote-ref {
+    vertical-align: super;
+    font-size: 0.75em;
+    line-height: 0;
+    cursor: pointer;
+}
+
+/* The notes after the text, as Google's pageless document collects them: under a short rule, at Google's and Word's
+   10 pt footnote text, each after its raised number, closed or open in its editor alike. */
+.footnote-list {
+    margin-top: 2em;
+    color: var(--doc-color, #1a1a2e);
+
+    &::before {
+        content: "";
+        display: block;
+        width: 33%;
+        margin-bottom: 0.5em;
+        border-top: 1px solid var(--color-border);
+    }
+
+    /* FOOTNOTE_FONT_SIZE (@workspace/lib/constants/fonts), which the toolbar's size box and the exports read. */
+    li {
+        display: flex;
+        gap: 0.25em;
+        margin-top: 0.25em;
+        font-size: 10pt;
+    }
+
+    li > :last-child {
+        flex: 1;
+        min-width: 0;
+    }
+
+    /* Raised and smaller, as the reference's number. */
+    .footnote-number {
+        font-size: 0.75em;
+        line-height: 1.6;
+    }
+
+    /* The note's text at its item's size, not the doc's Normal. */
+    .eigen-prose {
+        font-size: 1em;
+    }
+
+    .eigen-prose p {
+        margin-bottom: 0;
+        line-height: 1.4;
+    }
+}

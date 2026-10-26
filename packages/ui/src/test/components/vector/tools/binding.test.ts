@@ -1,4 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import type {
+    VectorArrowElement,
+    VectorElement,
+    VectorImageElement,
+    VectorRichTextElement,
+    VectorShapeElement,
+} from '@workspace/lib/vector';
 import {
     anchorToScene,
     bindingAnchor,
@@ -14,11 +21,6 @@ import {
     shapeAnchorPoints,
     solidFill,
     VECTOR_STYLE_DEFAULTS,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorImageElement,
-    type VectorRichTextElement,
-    type VectorShapeElement,
 } from '@workspace/lib/vector';
 import { bindArrow, bindFocusPoint, bindingCandidate } from '../../../../components/vector/tools/binding';
 

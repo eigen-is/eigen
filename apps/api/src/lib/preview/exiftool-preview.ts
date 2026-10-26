@@ -1,3 +1,8 @@
+// The preview a camera or an editor embedded in a file, such as a RAW photo or a PSD, pulled out with exiftool. The
+// thumbnail Worker calls extractEmbeddedPreview as its fallback when sharp can't read the file, and the preview and the
+// export ask isExiftoolCandidate whether a file can try it. The binary is the system's exiftool, else the one the
+// exiftool-vendored package ships.
+
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -6,9 +11,9 @@ import { isExiftoolExtension } from '@workspace/lib/constants';
 
 const execFileAsync = promisify(execFile);
 
-// execFile kills the child natively on timeout (SIGKILL, so a wedged exiftool can't linger).
-// The preview worker's 30s terminate() reaps the worker, not its OS child — without this a
-// hostile file could orphan an exiftool process per open. Matches the video subproc timeout.
+// execFile kills an exiftool that runs past this with SIGKILL, so a hostile file can't keep one running. Its timer lives
+// in the thumbnail Worker, though. When that Worker is terminated at its own timeout, a call still running is left to
+// finish on its own, as terminate() doesn't stop a child process.
 const EXIFTOOL_TIMEOUT_MS = 20_000;
 
 export function isExiftoolCandidate(mimeType: string, fileName: string): boolean {

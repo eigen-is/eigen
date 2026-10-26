@@ -4,6 +4,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { getServerConfig } from '../../lib/config/server-config';
+import { flushContentReindex } from '../mount-test-helpers';
 import {
     addMember,
     addTeamMount,
@@ -103,8 +104,8 @@ describe('Search team fan-out', () => {
 
         // Drain each team home's content reindex queue so the plaintext bodies become searchable.
         const { getHome } = await import('../../lib/home');
-        await (await getHome(team1Owner)).drive.flushContentReindex();
-        await (await getHome(team2Owner)).drive.flushContentReindex();
+        await flushContentReindex((await getHome(team1Owner)).drive);
+        await flushContentReindex((await getHome(team2Owner)).drive);
     });
 
     test('a member finds a team doc by NAME and by BODY content via ?teams=1', async () => {

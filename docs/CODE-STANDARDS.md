@@ -13,6 +13,9 @@ This codebase values **simplicity, directness, and consistency** over cleverness
 - Trust the type system: no defensive null checks on typed data, no fallback defaults for required fields. Validate at system boundaries (user input, external APIs), trust internal code everywhere else
 - Consistency over originality: new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
 - Fewer lines beat more: removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
+- No placeholders: no stub method, type, field or flag for later. Code lands with its first real caller
+- Fix the root cause, through the framework's own pipeline: a guest session goes through better-auth's API, never a row inserted by hand. Code that routes around a framework is a hack
+- Code that wipes or overwrites data first writes a timestamped copy it can be restored from, and a failed copy stops the wipe; skip it only when there is nothing to lose. A guard alone is not enough: a flag kept in another file than the data it guards can be wrong about that data
 
 ## Review Hot Spots
 
@@ -24,11 +27,13 @@ Types flow end-to-end: Elysia route handler return type → Eden Treaty → hook
 
 - No `as any`: fix the type at the source (route handler return type, schema definition), never by casting in hooks
 - No `as Type` on Eden Treaty responses: add an explicit return type to the backend route handler or domain method, using the shared type from `packages/lib/src/types/`
-- Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it
+- Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it. The exception is `@workspace/math`, a leaf package with no dependencies, which owns its own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
 - `type` over `interface`, except when methods are needed
 - Infer locally, annotate publicly: no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
-- `import type` for type-only imports, separate from value imports
+- `import type` for type-only imports, as a statement of its own next to the value import from the same module (`import type { A } from 'x'` and `import { b } from 'x'`), so each import fits on one line
 - Drizzle `.$inferSelect` for DB row types: never redefine column types by hand
+- One type per concept: pass `User` or `DrivePath` even when a function reads two of its fields, never a narrower projection type. Convert a library's narrower shape where it enters. Test fixtures may keep their own
+- Only `apps/api`'s tsconfig sets `noPropertyAccessFromIndexSignature`; `packages/sheet`'s does not, so an index-signature read that compiles there fails in the API
 
 ## Code Style
 
@@ -36,8 +41,16 @@ Examples per rule: [CODE-EXAMPLES.md § Code Style](CODE-EXAMPLES.md#code-style)
 
 - English everywhere: code, comments, docs, commit messages
 - No JSDoc: code should be self-documenting
-- Comments only for high-complexity code or functions whose use isn't obvious to a maintainer of this repo, and they explain WHY, never WHAT: simplified technical English, concision over grammar. Most code needs zero comments; no comment beats slop, and reviewers flag comment slop the same as dead code
+- Every `.ts`/`.tsx` source file, `scripts/` and the `packages/sheet` fork included, opens with a header comment and a blank line: two to five plain lines on what the file does, why it exists, and where it sits in the bigger picture (who calls it, when it runs). It stays true whatever other files do: what other files own (kinds, parts, callers) appears only as examples, never as a complete list. No file paths or doc links, which go stale. Test files, generated files and config files have none, and neither does a barrel that only re-exports, whose path already says what it holds. An older file without one gets it the first time someone changes it
+- Beyond the header, comments only for high-complexity code or functions whose use isn't obvious to a maintainer of this repo, and they explain WHY, never WHAT. Write plain English that a non-native reader understands on the first read: short sentences, common words. Most code needs zero comments; no comment beats slop, and reviewers flag comment slop the same as dead code
+- A comment exists to clarify. Write it the way you would explain the code to a colleague sitting next to you: whole sentences, one thought each, the reason first. Don't pack several facts into one sentence with commas and semicolons, and don't write in shorthand only the author can decode. If a comment doesn't make the code easier to understand, delete it
+- Every class member states its access: `public`, `private` or `protected`, the narrowest that compiles
+- Class members in this order: fields, constructor, getters, lifecycle (init, close), then the rest
+- File names are kebab-case (`get-home.ts`); route files follow TanStack Router's naming. Named exports only, no `export default`, except in a config file whose tool requires one (`vite.config.ts`, the Drizzle config). An older file that breaks either is fixed when someone cleans it up
 - Backend errors use `ApiError`: `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`; internal invariants (db not open, missing config) may use `throw new Error()`
+- Think about every `await`: a bare async call returns a truthy Promise, so `if (!asyncFn())` is always false. Fire-and-forget has a `.catch()`. Skip the `await` when blocking would hurt response time and failure is acceptable
+- Sanitize user-provided paths: refuse `..`, `/` and control characters before filesystem or header use, and never put raw user input into an HTTP header
+- `for (const x of arr)`, not `arr.forEach` (es-toolkit's `forEach(coll, fn)` excepted). Flip one when you touch it
 - Theme tokens, not colors: `text-muted-foreground`, `bg-muted`, not `text-gray-500`; `selection-handle` for selection UI
 - Use `cn()` for class merging: from `@workspace/ui/lib/utils`, never raw `clsx`/`twMerge` or string concatenation
 - Name for grep-ability; don't shadow libraries: `use*`, `Eigen*`, `*Dialog`, `*Provider`, `invalidate*`, `*Keys`; never reuse a name a dependency owns (`useSearchQuery`, not `useSearch`) or give three helpers one name (`isMobile`)
@@ -61,8 +74,9 @@ Workspace imports resolve through each package's `exports` map, with no tsconfig
 | `@workspace/lib/api` | Eden Treaty API client factories |
 | `@workspace/lib/date` | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) |
 | `@workspace/lib/validation` | Shared FE/BE validation schemas |
+| `@workspace/math` | The math package's one barrel: the equation tree, its OMML, MathML and LaTeX readers and writers, and the LaTeX command table ([MATH.md](MATH.md)) |
 
-**User-visible dates are day-month-year**: "5 January 2026", "5 Jan", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Format through `formatDayMonth` / `formatDate` in `@workspace/lib/date` (they assemble the order from the `'en'` locale's parts; `'en-GB'` spells a short September "Sept" in browsers), and write hand-built shapes as `d MMM yyyy`. Spelling everywhere else stays en-US.
+**User-visible dates are day-month-year**: "5 January 2026", "5 Jan", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Format through `formatDayMonth` / `formatDate` in `@workspace/lib/date` (they assemble the order from the `'en'` locale's parts; `'en-GB'` spells a short September "Sept" in browsers), and write hand-built shapes as `d MMM yyyy`. Every `toLocale*String` on a date passes `'en'`, never `[]` or no locale, or a Dutch browser writes "januari" into the English UI; a sibling that passes `[]` is a bug to fix on touch. A plain number's `.toLocaleString()` stays as it is. Spelling everywhere else stays en-US: fix British spelling on touch.
 
 ## Key Patterns
 
@@ -72,6 +86,7 @@ Worked examples: [CODE-EXAMPLES.md § Key Patterns](CODE-EXAMPLES.md#key-pattern
 - **API client (Eden Treaty)**: `driveApi({ ownerId })({ mountId }).folder({ pathId }).get()`; types flow directly from the Elysia route definitions, no manual type sync
 - **Error handling**: in hooks (`packages/lib/src/core/[domain]/hooks/`), never in app components: every `useMutation` has `onError` using `onMutationError` from `api-error.ts`; apps never add `try/catch` + `toast.error()`. Full pattern: [NOTIFICATIONS.md](NOTIFICATIONS.md)
 - **Invalidation functions**: export `invalidateFoo(queryClient, ...)` next to the query keys; apps call these, never `useQueryClient` + `invalidateQueries()` directly
+- **Timestamps are `Date` end to end**: an `INTEGER` column of Unix seconds with Drizzle `mode: 'timestamp'`, routes that return `Date` (never `.toISOString()`), and shared types that say `Date`, because Eden's reviver turns the ISO string back into one. A path-param time bound stays `t.Numeric()`. `assertJson<T>` in the API tests and a raw `fetch` + `res.json()` skip the reviver, so revive at that seam. The reviver also turns a bare `YYYY-MM-DD` into a `Date`, so date-only payloads go through `plainApi`
 
 ## Self-Review Checklist
 
@@ -85,8 +100,14 @@ Before declaring any task complete, review every changed file against this list:
 - Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen?
 - Do new `useQuery` hooks have `enabled` guards and `staleTime`?
 - Does the new code match the patterns and naming of its neighbors?
+- Does every file you changed open with a header comment that is still true?
+- Would a colleague understand every comment you wrote on the first read, and does each one clarify something the code doesn't say?
 - Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a `// Why:` comment? (See [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none))
 
 ## Standards Gates
 
-The mechanical rules are enforced, not just documented: Biome carries what it can express, and `bun scripts/check-standards.ts` (part of `bun run check`) counts twelve metrics over `apps/` and `packages/`: seven hard zeros and five ratcheting counts whose allowance in `scripts/standards-baseline.json` can fall but never rise (`bun run standards:update` after a cleanup). What each metric catches: [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).
+The mechanical rules are enforced, not just documented: Biome carries what it can express, and `bun scripts/check-standards.ts` (part of `bun run check`) counts fourteen metrics over `apps/` and `packages/`: nine hard zeros and five ratcheting counts whose allowance in `scripts/standards-baseline.json` can fall but never rise (`bun run standards:update` after a cleanup). What each metric catches: [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).
+
+Biome also enforces the import and class rules in § Code Style: `style/useImportType` with `separatedType`, and `style/useConsistentMemberAccessibility` with `explicit`.
+
+Never restructure code only to silence a lint rule. Use a lint-clean idiom that reads naturally (`/\p{Cc}/gu` for control characters), else a `biome-ignore` with a one-line reason and `bun run standards:update`. The ratchet stops laziness, not natural code.

@@ -1,13 +1,14 @@
 import { describe, expect, test } from 'bun:test';
+import { readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import { CLIPBOARD_SVG_MAX_ELEMENTS, extractClipboardSvgMetadata } from '@workspace/lib/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { VectorChartElement, VectorElement, VectorMeta } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SCENE_META,
     ELEMENT_KINDS,
     readElementsClipboardItem,
     VECTOR_STYLE_DEFAULTS,
-    type VectorElement,
-    type VectorMeta,
 } from '@workspace/lib/vector';
 import { Window } from 'happy-dom';
 import { buildSelectionData } from '../../../../components/vector/tools/clipboard';
@@ -28,7 +29,7 @@ g.Node = window.Node;
 // so the sync copy path stays byte-free and the ref resolves against the target's media/ on paste. A
 // still-pending upload (no portable path) is left out of the whole payload.
 
-const meta: VectorMeta = { background: 'transparent' };
+const meta: VectorMeta = DEFAULT_SCENE_META;
 
 const BASE = { ...DEFAULT_ELEMENT_PROPS, x: 0, y: 0, width: 100, height: 60, angle: 0 };
 
@@ -63,6 +64,17 @@ const richtext = (id: string, index: string, html = '<p>hello</p>'): VectorEleme
     fontSize: 20,
     strokeColor: '#111111',
     color: '#e03131',
+});
+
+const chart = (id: string, index: string, over: Partial<VectorChartElement> = {}): VectorElement => ({
+    ...BASE,
+    ...ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS),
+    id,
+    type: 'chart',
+    index,
+    width: 640.5,
+    height: 400,
+    ...over,
 });
 
 const elbowArrow = (id: string, index: string): VectorElement => ({
@@ -117,10 +129,10 @@ describe('buildSelectionData', () => {
         const text = data.items.find((i) => i.type === 'text');
         expect(text?.text).toBe('hello');
         // The FULL modeled set: dropping bold/italic/underline/spacing here is how they stopped
-        // surviving a copy into docs.
+        // surviving a copy into docs. The size crosses in pt: 20 px at 96 dpi.
         expect(text?.typography).toEqual({
             fontFamily: 'Excalifont',
-            fontSize: 20,
+            fontSize: 15,
             textAlign: 'left',
             color: '#e03131',
             fontWeight: 'normal',
@@ -130,6 +142,14 @@ describe('buildSelectionData', () => {
             letterSpacing: 0,
             lineHeight: 1.2,
         });
+    });
+
+    // A deck crosses at its own width: on a 960 pt deck an 88 px box is 44 pt.
+    test("a deck's text item carries its size in the deck's pt", () => {
+        const title = { ...richtext('t1', 'a0'), fontSize: 88 };
+        const { data } = buildSelectionData([title], ['t1'], meta, 'f1', () => undefined, 960);
+        const text = data.items.find((i) => i.type === 'text');
+        expect(text?.typography?.fontSize).toBe(44);
     });
 
     test('an image ships the image item beside the elements item, by name and never by bytes', () => {
@@ -204,6 +224,65 @@ describe('buildSelectionData', () => {
             () => undefined,
         );
         expect(data.svg?.startsWith('<svg')).toBe(true);
+    });
+
+    test('a chart ships a chart item, its spec as stored and its look, for the apps that place no elements', () => {
+        const el = chart('c1', 'a0');
+        const { data } = buildSelectionData([el], ['c1'], meta, '', () => undefined);
+        expect(data.items.map((i) => i.type)).toEqual(['elements', 'chart']);
+        if (el.type !== 'chart') throw new Error('expected a chart');
+        expect(data.items[1]).toEqual({
+            type: 'chart',
+            parts: expect.any(Object),
+            width: 640.5,
+            height: 400,
+            look: {
+                fill: el.fill,
+                color: el.color,
+                strokeColor: el.strokeColor,
+                strokeWidth: el.strokeWidth,
+                strokeStyle: el.strokeStyle,
+                roughness: el.roughness,
+                seed: el.seed,
+            },
+        });
+        const item = data.items[1];
+        expect(item.type === 'chart' && readChartSpec(item.parts).spec).toEqual(
+            sampleChartSpec('column', 'Excalifont'),
+        );
+        expect(readElementsClipboardItem(data.items)?.elements).toEqual([el]);
+    });
+
+    // The parts as stored text, so a newer build's part and one that doesn't parse reach the other app as they are here.
+    test('a chart item carries a part a newer build added and a part that does not parse', () => {
+        const el = Object.assign(chart('c1', 'a0', { specTitle: '{"text":' }), { specFuture: '{"later":true}' });
+        const { data } = buildSelectionData([el], ['c1'], meta, '', () => undefined);
+        expect(data.items[1]).toMatchObject({ parts: { specTitle: '{"text":', specFuture: '{"later":true}' } });
+    });
+
+    test('a chart-only selection ships NO svg, so docs and sheets paste a live chart and not a picture', () => {
+        const { data } = buildSelectionData(
+            [chart('c1', 'a0'), chart('c2', 'a1')],
+            ['c1', 'c2'],
+            meta,
+            '',
+            () => undefined,
+        );
+        expect(data.svg).toBeUndefined();
+        expect(data.items.filter((i) => i.type === 'chart')).toHaveLength(2);
+    });
+
+    test('a chart beside a shape keeps the svg, and a chart that draws its placeholder ships no chart item', () => {
+        const { data } = buildSelectionData(
+            [rect('r1', 'a0'), chart('c1', 'a1')],
+            ['r1', 'c1'],
+            meta,
+            '',
+            () => undefined,
+        );
+        expect(data.svg?.startsWith('<svg')).toBe(true);
+        const broken = buildSelectionData([chart('c1', 'a0', { specData: '{' })], ['c1'], meta, '', () => undefined);
+        expect(broken.data.items.map((i) => i.type)).toEqual(['elements']);
     });
 
     test('a selection past the element cap ships the typed items alone', () => {

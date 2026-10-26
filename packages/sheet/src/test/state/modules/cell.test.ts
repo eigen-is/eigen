@@ -11,14 +11,17 @@ import { Window } from 'happy-dom';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { evaluateConditionalFormat } from '../../../engine/conditional-format';
 import type { CellType } from '../../../engine/types';
+import { setCellValue as apiSetCellValue } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
 import {
     getCellValue,
     getFormulaHtml,
     getInlineStringHTML,
+    normalizedCellAttr,
     setCellValue,
     updateCell,
 } from '../../../state/modules/cell';
+import { groupValuesRefresh } from '../../../state/modules/formula-exec';
 import { clearMeasureTextCache } from '../../../state/modules/text';
 import type { CellMatrix, SheetConfig } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
@@ -156,6 +159,20 @@ describe('state/modules/cell — updateCell auto-height', () => {
         const synced = applyPatches(base, filterPatch(patches));
         expect(synced.sheets[0].config?.rowlen?.[0]).toBe(grown.sheets[0].config?.rowlen?.[0]);
     });
+
+    test('a rich edit recomputes the formulas that read the cell', () => {
+        const ctx = editContext();
+        ctx.sheets[0].data![0][0] = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Cherry', bl: 1 }] } };
+        apiSetCellValue(ctx, 0, 1, '=A1&"!"', null);
+        expect(ctx.sheets[0].data![0][1]?.v).toBe('Cherry!');
+        const input = win.document.createElement('div');
+        input.innerHTML = '<span style="font-weight: bold;">Kiwi</span>';
+        updateCell(ctx, 0, 0, input as unknown as HTMLDivElement, undefined, measuringCanvas());
+        // The workbook applies the recomputed values after the edit, as here.
+        groupValuesRefresh(ctx);
+        expect(ctx.sheets[0].data![0][0]?.ct?.t).toBe('inlineStr');
+        expect(ctx.sheets[0].data![0][1]?.v).toBe('Kiwi!');
+    });
 });
 
 describe('state/modules/cell — setCellValue typed numbers', () => {
@@ -210,6 +227,34 @@ describe('state/modules/cell — setCellValue typed numbers', () => {
             data,
         );
         expect(styles['0_0']?.cellColor).toBe('#ff0000');
+    });
+});
+
+// Excel's General alignment: a cell without its own puts numbers and dates right, booleans and errors centred, text
+// left (ht 0 centre, 1 left, 2 right).
+describe('state/modules/cell — normalizedCellAttr General alignment', () => {
+    function typed(text: string) {
+        const ctx = contextFactory({}) as Context;
+        const data: CellMatrix = [[null]];
+        setCellValue(ctx, 0, 0, data, text);
+        return data[0][0] ?? {};
+    }
+
+    test('numbers and dates go right, booleans and errors centre, text left', () => {
+        expect(['42', '12%', '2024-01-05', '1,000.50'].map((text) => normalizedCellAttr(typed(text), 'ht'))).toEqual([
+            '2',
+            '2',
+            '2',
+            '2',
+        ]);
+        expect(['TRUE', '#N/A'].map((text) => normalizedCellAttr(typed(text), 'ht'))).toEqual(['0', '0']);
+        expect(['abc', "'42", '0x10'].map((text) => normalizedCellAttr(typed(text), 'ht'))).toEqual(['1', '1', '1']);
+        expect(normalizedCellAttr({ v: '#DIV/0!', m: '#DIV/0!', ct: { fa: 'General', t: 's' } }, 'ht')).toBe('0');
+    });
+
+    test("a cell's own alignment wins", () => {
+        expect(normalizedCellAttr({ ...typed('42'), ht: 1 }, 'ht')).toBe('1');
+        expect(normalizedCellAttr({ ...typed('abc'), ht: 0 }, 'ht')).toBe('0');
     });
 });
 

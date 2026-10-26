@@ -1,11 +1,10 @@
 import { isNil } from 'es-toolkit/compat';
-import { booleanDisplay } from '../../engine/format';
+import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
+import type { Cell } from '../../engine/types';
+import type { CellMatrix, Context, DataVerificationRule, SingleRange } from '..';
 import {
-    type CellMatrix,
-    type Context,
     colLocationByIndex,
-    type DataVerificationRule,
     diff,
     getCellValue,
     getcellrange,
@@ -20,8 +19,8 @@ import {
     jfrefreshgrid,
     mergeBorder,
     normalizedAttr,
+    normalizedCellAttr,
     rowLocationByIndex,
-    type SingleRange,
     setCellValue,
 } from '..';
 import type { Rect } from '../types';
@@ -100,12 +99,12 @@ export function getDropdownList(ctx: Context, txt: string) {
                 }
 
                 const cell = d[r][c];
-
-                if (!cell?.v) {
+                const value = cellValue(cell);
+                if (!cell || !value) {
                     continue;
                 }
 
-                const v = cell.m || cell.v;
+                const v = cellDisplay(cell) || value;
 
                 if (!list.includes(v)) {
                     list.push(v);
@@ -344,9 +343,21 @@ export function isCheckboxChecked(item: DataVerificationRule, cellValue: CellVal
     return String(cellValue).toUpperCase() === item.value1.toUpperCase();
 }
 
-// `horizonAlign`/`verticalAlign` are the normalized ht/vt attrs
+// A tick box sits where the cell's own alignment puts it. Else one drawn alone is centred, as in Google Sheets, so a
+// ticked, an unticked and an empty box sit in one place, and one with a label beside it sits left, so the label keeps
+// the cell's width.
+export function checkboxAlign(
+    cell: Cell | null | undefined,
+    rule: DataVerificationRule,
+    value: CellValueForValidation,
+): number {
+    if (cell?.ht != null) return Number(normalizedCellAttr(cell, 'ht'));
+    return showsCheckboxLabel(rule, value) ? 1 : 0;
+}
+
+// `horizonAlign` is checkboxAlign's and `verticalAlign` the normalized vt attr
 // (ht 0 center / 1 left / 2 right, vt 0 middle / 1 top / 2 bottom); an empty
-// cell yields NaN, which lands on the same left/middle default the painter uses.
+// cell's vt is NaN, which lands on the same middle default the painter uses.
 export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: number): CellGlyphRect {
     let x = box.left + CHECKBOX_PADDING;
     if (horizonAlign === 0) {
@@ -378,10 +389,12 @@ export function getCellDataVerification(ctx: Context, r: number, c: number) {
 // any other, so a tick box can be copied, extended through and read in the fx
 // bar without flipping.
 export function isCheckboxClick(ctx: Context, r: number, c: number, box: Rect, x: number, y: number) {
-    if (getCellDataVerification(ctx, r, c)?.type !== 'checkbox') return false;
+    const rule = getCellDataVerification(ctx, r, c);
+    if (rule?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
     if (!d) return false;
-    const rect = checkboxRect(box, Number(normalizedAttr(d, r, c, 'ht')), Number(normalizedAttr(d, r, c, 'vt')));
+    const align = checkboxAlign(d[r]?.[c], rule, getRealCellValue(r, c, d));
+    const rect = checkboxRect(box, align, Number(normalizedAttr(d, r, c, 'vt')));
     return x >= rect.x && x <= rect.x + rect.size && y >= rect.y && y <= rect.y + rect.size;
 }
 

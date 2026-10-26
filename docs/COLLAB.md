@@ -15,7 +15,7 @@ The sections follow the places where this picture needs care: big documents and 
 - The blobs in `data.db` are zstd on disk and raw on the wire, and the reader takes compressed and raw rows alike ([§ Yjs blobs](#yjs-blobs-are-zstd-on-disk-and-raw-on-the-wire)).
 - A read-only peer can still send awareness, so it is validated before it is applied ([§ Awareness frames](#awareness-frames-are-validated-before-apply)).
 - The route sends a heartbeat during a cold load, or the client would close the silent socket and retry forever ([§ The route speaks first](#the-route-speaks-first-during-a-cold-load)).
-- The WebSocket uses a dedicated deflate compressor, because Safari drops a connection after a frame from Bun's default one ([§ Deflated frames](#a-deflated-frame-never-ends-the-deflate-stream)).
+- The WebSocket uses Bun's shared deflate compressor, which is safe for Safari since Bun 1.4.4 and costs no per-socket zlib state ([§ Deflated frames](#a-deflated-frame-never-ends-the-deflate-stream)).
 - A backup restore rotates the home's data epoch, an id that changes only when the home's data is replaced, so a reconnecting tab reloads instead of syncing its old state over the restored copy ([§ Home replacement](#home-replacement-closes-every-socket)).
 - The editor waits on a latched `loaded`, never on `synced`, so a short outage keeps it mounted ([§ The client gates on `loaded`](#the-client-gates-on-loaded-never-synced)).
 
@@ -44,7 +44,7 @@ The same 30 s window bounds the whole-state sync reply, because a frame only cou
 
 ## A deflated frame never ends the deflate stream
 
-Bun's default compressor (`perMessageDeflate: true`, shared by all sockets) deflates a message under ~9 KB into a complete deflate stream, with the final-block bit (BFINAL) set. RFC 7692 allows that, but Safari on macOS and iOS delivers such a frame and then drops the connection ("The network connection was lost", a 1006 close on the server). Chrome accepts it. A doc edited by more than ~170 Yjs clients has a state vector over 1 KiB, so its very first frame, sync step 1, is deflated and Safari never loads it: the socket loops open → dropped → retry. So `app.ts` sets the dedicated `32KB` compressor, which always ends a frame with a sync flush and leaves the stream open, as browsers do themselves. It costs 32 KB of zlib state per socket and deflates a large sheet as well as the 256 KB `dedicated` one. `collab-ws-payload.test.ts` reads a deflated frame off a raw socket under the app config and fails on BFINAL.
+`app.ts` sets `perMessageDeflate: true`, Bun's compressor shared by all sockets. A dedicated one would hold ~282 KB of zlib state per socket on Bun 1.4.4 (its release notes: 149 KB before they honoured the window sizes; a shared one ~8 KB, unmeasured on 1.4.4). RFC 7692 lets a compressor end a message's deflate stream with the final-block bit (BFINAL), but Safari on macOS and iOS then delivers the frame and drops the connection ("The network connection was lost", a 1006 close on the server). Chrome accepts it. A doc edited by more than ~170 Yjs clients has a state vector over 1 KiB, so its very first frame, sync step 1, is deflated and Safari would never load it: the socket loops open → dropped → retry. Bun's shared compressor did exactly that for small messages until 1.4.4, which ends a frame with a sync flush and leaves the stream open, as browsers do themselves, so the Bun version is pinned. `collab-ws-payload.test.ts` reads a deflated frame off a raw socket under the app config and fails on BFINAL.
 
 ## The route refuses before it speaks
 
@@ -60,7 +60,7 @@ The route keeps its per-socket state (the `opened` gate, the drive, the document
 
 ## Read is checked at open, write on every message
 
-The route checks read once, when the socket opens, and write on every binary frame, so a writer demoted to reader loses write with the next frame. `CollabDocument.handleMessage` drops a sync update from a peer without write and still answers its sync step 1 and awareness.
+The route checks read once, when the socket opens, and write on every binary frame, so a writer demoted to reader loses write with the next frame. `CollabDocument.handleMessage` drops a sync update from a peer without write and still answers its sync step 1 and awareness. The route keeps each socket's session in a map keyed on `ws.raw`: Elysia's Bun WebSocket adapter hands every open, message and close a fresh wrapper, so a map keyed on `ws` never matches between events.
 
 A revoked read would otherwise keep receiving broadcasts until the socket drops. So `Drive.updateACL` and `Drive.movePath` call `enforceReadAccessBelow` (`apps/api/src/lib/drive/collab-registry.ts`), which walks every open document at or below the path and closes each connection that lost read with 1008. It re-checks read per connection rather than diffing the removed ACL entries, because read inherits from the whole ancestor chain: revoking a folder share must reach the documents inside it. Removing a member from a team does not re-check: a removed member keeps a socket that is already open ([ROADMAP.md](ROADMAP.md)).
 
@@ -68,9 +68,19 @@ A revoked read would otherwise keep receiving broadcasts until the socket drops.
 
 `CollabDocument.scheduleClose` waits `CLOSE_LINGER_MS` (60 s) after the last connection drops before tearing the document down, so a reload or a brief disconnect reattaches to the loaded document instead of re-paying the load. A new subscribe cancels the timer.
 
-## A drive that is shutting down refuses a new open
+So a server-side writer opens the document right before it writes, never before an await that can outlast the linger, such as a transform. A write into a closed document's Y.Doc throws nothing and is neither saved nor broadcast. An import reads what it needs early as a value and opens the document again for the commit (`importIntoDocument`).
+
+## A drive, mount or trash that is closing refuses a new open
 
 Once `Drive.destruct` starts its sweep of the open documents, the registry (`apps/api/src/lib/drive/collab-registry.ts`) answers every open with a 503. A document that registered after that sweep would never be destructed, and the mount teardown that follows would close its database under it.
+
+One mount closes the same way. When a team mount gets new storage or is turned off, `Drive.removeMount` destructs that mount's open documents before it closes the mount's databases, so each document saves its last edits. The registry then answers an open on the old `Mount` with a 503. The closed sockets reconnect to the new `Mount`, and the handshake syncs the edits a tab made in between. `apps/api/src/test/drive/collab-registry.test.ts` pins it.
+
+A trash closes the documents under a path, then the databases, and only then marks the path trashed. A document opened in between would save its edits into a closed `data.db`. So while `Drive.deletePath` runs, the registry answers an open of the path or of anything under it with a 503 ([SOFT-DELETE.md](SOFT-DELETE.md#trash-closes-what-is-open-under-the-item-first)). The registry collects those ids before the trash starts, so a document created or moved inside the folder meanwhile is not refused. Its database closes with the rest, so the trash closes every document still open under the path right after `Mount.trashPath` returns.
+
+## An open waits for data.db and never makes one
+
+`Drive.create` makes a document's `data.db` and `comments.db` together with its container. A copy makes the container first and copies the files into it after, so an open in between finds no `data.db`. `CollabDocument.init` answers that open with a 503, and the socket gets the storage-unavailable close and retries until the copy is done. An open that made an empty `data.db` instead would stop the copy with a 409 and leave half a container with an empty document. A container whose copy stopped before its `data.db` landed never opens ([ROADMAP.md](ROADMAP.md)). `apps/api/src/test/collab/collab-open-during-copy.test.ts` pins it.
 
 ## Modified moves for an update, never for an open or a close
 

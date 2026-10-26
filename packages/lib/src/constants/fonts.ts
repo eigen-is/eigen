@@ -1,22 +1,93 @@
+import { pxToPt } from '../docs/eigendoc/page';
+
+// lineHeight: its single line as a multiple of its size, (usWinAscent + usWinDescent) / unitsPerEm of its Regular, as Word
+// and Google Docs draw it; the API's fonts.test.ts pins each against the TTF.
 export type EigenFont = {
     name: string;
     family: string;
     category: 'sans-serif' | 'serif' | 'monospace' | 'hand-drawn';
     weights: number[];
+    lineHeight: number;
 };
 
 // Order is load-bearing: numeric xlsx font indices (ff) index into this array, [0] is the
 // default in docs and sheets (the canvas has its own, DEFAULT_FONT_FAMILY), and a category's
 // first font is the one a foreign font of that category maps to.
 export const EIGEN_FONTS: EigenFont[] = [
-    { name: 'Inter', family: "'Inter', sans-serif", category: 'sans-serif', weights: [400, 500, 600, 700] },
-    { name: 'Source Serif 4', family: "'Source Serif 4', serif", category: 'serif', weights: [400, 600, 700] },
-    { name: 'JetBrains Mono', family: "'JetBrains Mono', monospace", category: 'monospace', weights: [400, 700] },
-    { name: 'Excalifont', family: "'Excalifont', cursive", category: 'hand-drawn', weights: [400] },
+    {
+        name: 'Inter',
+        family: "'Inter', sans-serif",
+        category: 'sans-serif',
+        weights: [400, 500, 600, 700],
+        lineHeight: 1.21,
+    },
+    {
+        name: 'Source Serif 4',
+        family: "'Source Serif 4', serif",
+        category: 'serif',
+        weights: [400, 600, 700],
+        lineHeight: 1.371,
+    },
+    {
+        name: 'JetBrains Mono',
+        family: "'JetBrains Mono', monospace",
+        category: 'monospace',
+        weights: [400, 700],
+        lineHeight: 1.32,
+    },
+    { name: 'Excalifont', family: "'Excalifont', cursive", category: 'hand-drawn', weights: [400], lineHeight: 1.26 },
 ];
 
 // A doc's text draws in it without a font mark, so a paste or an import gives it none.
 export const DOCUMENT_FONT = EIGEN_FONTS[0].name;
+
+// A family's single line; one no font of Eigen's names draws in the document's.
+export function fontLineHeight(name: string): number {
+    return (EIGEN_FONTS.find((font) => font.name === name) ?? EIGEN_FONTS[0]).lineHeight;
+}
+
+// A paragraph's CSS line-height is its line spacing times the document font's single line, as CSS can't know the fonts
+// of a paragraph's runs.
+export const DOCUMENT_LINE_RATIO = fontLineHeight(DOCUMENT_FONT);
+
+// A doc's text draws at it without a size mark: eigen-prose.css's body, in pt.
+export const DOCUMENT_FONT_SIZE = 11;
+
+// Small's: eigen-prose.css's small, in pt.
+export const SMALL_FONT_SIZE = 9;
+
+// A footnote's text, at Google's and Word's footnote size, in pt: the editor's notes (the Docs app's globals.css), the
+// exports' and the docx's Footnote Text.
+export const FOOTNOTE_FONT_SIZE = 10;
+
+// Google Docs' and Sheets' font sizes, in pt, both of which step by 1.
+export const MIN_FONT_SIZE = 1;
+export const MAX_FONT_SIZE = 400;
+
+// Any peer, paste or file writes a size, so only a finite number is one; it lands in the range, in Word's half points.
+export function readFontSize(value: unknown): number | undefined {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+    return snapFontSize(value);
+}
+
+export function snapFontSize(size: number): number {
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(size * 2) / 2));
+}
+
+// pt and px are a size; em, rem, % and keywords are relative to what the source drew around them.
+const ABSOLUTE_SIZE = /^(\d*\.?\d+)(pt|px)$/;
+
+// A CSS font-size as a size in pt: pt as it is, px at CSS's 96 dpi.
+export function readCssFontSize(css: string): number | undefined {
+    const match = ABSOLUTE_SIZE.exec(css.trim());
+    if (!match) return undefined;
+    const size = Number(match[1]);
+    return readFontSize(match[2] === 'px' ? pxToPt(size) : size);
+}
+
+export function nextFontSize(size: number, by: 1 | -1): number {
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size + by));
+}
 
 // The vocabulary a stored `fontFamily` must be one of — a name, never a CSS stack. Readers validate
 // against this so an unrecognised value falls back instead of reaching a CSS declaration.
@@ -105,4 +176,80 @@ export function bundledFontOfCategory(category: EigenFont['category']): string |
 export function bundledFont(name: string): string | undefined {
     const category = FONT_CATEGORY_MAP.get(name.trim().toLowerCase());
     return category && bundledFontOfCategory(category);
+}
+
+// A CSS stack's first family the map knows: Google Docs and Word write a font before its generic family.
+export function bundledFontOfStack(stack: string): string | undefined {
+    return stack
+        .split(',')
+        .map((family) => bundledFont(family.replace(/['"]/g, '')))
+        .find((bundled) => bundled !== undefined);
+}
+
+// smallCaps: the face has the OpenType smcp glyphs, the only small caps WeasyPrint draws.
+type EigenFontFace = {
+    family: string;
+    file: string;
+    weight: string;
+    style: 'normal' | 'italic';
+    smallCaps?: true;
+};
+
+// The woff2 faces of EIGEN_FONTS, each a file under packages/ui/src/assets/fonts/: the files fonts.css loads, which an
+// export (the API's export/fonts.ts) and a downloaded image (the canvas's image writer) embed.
+export const FONT_FACES = [
+    { family: 'Inter', file: 'inter/Inter-Variable.woff2', weight: '100 900', style: 'normal' },
+    { family: 'Inter', file: 'inter/Inter-Variable-Italic.woff2', weight: '100 900', style: 'italic' },
+    {
+        family: 'Source Serif 4',
+        file: 'source-serif/SourceSerif4-Variable.woff2',
+        weight: '200 900',
+        style: 'normal',
+        smallCaps: true,
+    },
+    {
+        family: 'Source Serif 4',
+        file: 'source-serif/SourceSerif4-Variable-Italic.woff2',
+        weight: '200 900',
+        style: 'italic',
+    },
+    {
+        family: 'JetBrains Mono',
+        file: 'jetbrains-mono/JetBrainsMono-Variable.woff2',
+        weight: '100 800',
+        style: 'normal',
+    },
+    { family: 'Excalifont', file: 'excalifont/Excalifont-Regular.woff2', weight: '400', style: 'normal' },
+] as const satisfies readonly EigenFontFace[];
+
+export type BundledFontFace = (typeof FONT_FACES)[number];
+export type FontFaceFile = BundledFontFace['file'];
+
+// The faces of just the given families (EIGEN_FONTS names); an unknown family has none.
+export function fontFacesOf(families: Iterable<string>): BundledFontFace[] {
+    const wanted = new Set(families);
+    return FONT_FACES.filter((face) => wanted.has(face.family));
+}
+
+// The faces text drawn in these families and styles needs, each once: a family's italic face for an italic or oblique
+// run, its upright one otherwise and where it has no italic, which the browser slants.
+export function fontFacesFor(uses: Iterable<{ family: string; style: string }>): BundledFontFace[] {
+    const wanted = new Set<string>();
+    for (const { family, style } of uses) {
+        const italic =
+            style !== 'normal' && FONT_FACES.some((face) => face.family === family && face.style === 'italic');
+        wanted.add(`${family}|${italic ? 'italic' : 'normal'}`);
+    }
+    return FONT_FACES.filter((face) => wanted.has(`${face.family}|${face.style}`));
+}
+
+// One face as the @font-face rule that embeds it, its bytes a data: URI.
+export function fontFaceCss(face: BundledFontFace, dataUri: string): string {
+    return `@font-face {
+    font-family: "${face.family}";
+    src: url("${dataUri}") format("woff2");
+    font-weight: ${face.weight};
+    font-style: ${face.style};
+    font-display: swap;
+}`;
 }

@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { DEFAULT_CHART_SERIES_STYLE, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -155,7 +156,7 @@ describe('eigensheets preview (floating images)', () => {
             celldata: [{ r: 0, c: 0, v: cell }],
             data: [[cell]],
             config: {},
-            images: [{ id: 'img_1', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 }],
+            images: { img_1: { id: 'img_1', index: 'a0', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 } },
         };
         const doc = new Y.Doc();
         seedSheetsDoc(doc, [sheet], []);
@@ -182,16 +183,17 @@ describe('eigensheets preview (floating images)', () => {
             name: 'Offset',
             celldata: [{ r: 4, c: 2, v: cell }],
             config: {},
-            images: [
-                {
+            images: {
+                img_1: {
                     id: 'img_1',
+                    index: 'a0',
                     mediaName: 'chart.png',
                     x: 4 * SHEET_DEFAULT_COL_WIDTH,
                     y: 6 * SHEET_DEFAULT_ROW_HEIGHT,
                     width: 160,
                     height: 120,
                 },
-            ],
+            },
         };
         const media = new Map([['chart.png', IMAGE_URL]]);
         // The C5 origin takes two columns and four rows off the stored geometry.
@@ -212,7 +214,7 @@ describe('eigensheets preview (floating images)', () => {
             name: 'Above',
             celldata: [{ r: 4, c: 2, v: cell }],
             config: {},
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 160, height: 60 }],
+            images: { img_1: { id: 'img_1', index: 'a0', mediaName: 'chart.png', x: 0, y: 0, width: 160, height: 60 } },
         };
         const doc = new Y.Doc();
         seedSheetsDoc(doc, [sheet], []);
@@ -231,27 +233,27 @@ describe('eigensheets preview (floating images)', () => {
         doc.destroy();
     });
 
-    // A sheet with nothing but a chart takes the blank-grid branch, which renders its own overlay.
-    function seedChartOnlySheet(x: number): Y.Doc {
+    // A sheet with nothing but an image takes the blank-grid branch, which renders its own overlay.
+    function seedImageOnlySheet(x: number): Y.Doc {
         const sheet: Sheet = {
-            id: 'chart',
-            name: 'Chart',
+            id: 'image',
+            name: 'Image',
             celldata: [],
             data: [],
             config: {},
-            images: [{ id: 'img_1', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 }],
+            images: { img_1: { id: 'img_1', index: 'a0', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 } },
         };
         const doc = new Y.Doc();
         seedSheetsDoc(doc, [sheet], []);
         return doc;
     }
 
-    test('a chart-only sheet clips its overlay to the budget window as well', () => {
-        const far = seedChartOnlySheet(20_000);
+    test('an image-only sheet clips its overlay to the budget window as well', () => {
+        const far = seedImageOnlySheet(20_000);
         expect(renderEigensheetsPreviewBody(far, new Map([['chart.png', IMAGE_URL]])).body).not.toContain('<img');
         far.destroy();
 
-        const origin = seedChartOnlySheet(0);
+        const origin = seedImageOnlySheet(0);
         expect(renderEigensheetsPreviewBody(origin, new Map([['chart.png', IMAGE_URL]])).body).toContain(
             `src="${IMAGE_URL}"`,
         );
@@ -264,6 +266,99 @@ describe('eigensheets preview (floating images)', () => {
         expect(body).toContain('Grid');
         expect(body).not.toContain('<img');
         doc.destroy();
+    });
+});
+
+// A chart draws from the stored values: the preview never recalcs, so a formula cell without one is a gap.
+describe('eigensheets preview (charts)', () => {
+    test("the chart reaches the body as SVG with its cells' labels and values", () => {
+        const cell = (v: string | number) => ({
+            v,
+            m: String(v),
+            ct: { fa: 'General', t: typeof v === 'number' ? 'n' : 'g' },
+        });
+        const ref = (row: [number, number], column: [number, number]) => ({ sheetId: 'data', row, column });
+        const sheet: Sheet = {
+            id: 'data',
+            name: 'Data',
+            celldata: [
+                { r: 0, c: 0, v: cell('Team') },
+                { r: 0, c: 1, v: cell('Points') },
+                { r: 1, c: 0, v: cell('Ajax') },
+                { r: 1, c: 1, v: cell(42) },
+                { r: 2, c: 0, v: cell('PSV') },
+                { r: 2, c: 1, v: { f: '=B2*2' } },
+            ],
+            config: {},
+            charts: {
+                c1: {
+                    id: 'c1',
+                    index: 'a0',
+                    x: 200,
+                    y: 0,
+                    width: 400,
+                    height: 300,
+                    ...newSheetChartSpecParts({
+                        ...sampleChartSpec('column'),
+                        title: { text: 'Scores' },
+                        series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
+                        data: {
+                            source: 'range',
+                            categories: ref([1, 2], [0, 0]),
+                            series: [
+                                {
+                                    id: 's-1',
+                                    name: ref([0, 0], [1, 1]),
+                                    values: ref([1, 2], [1, 1]),
+                                },
+                            ],
+                        },
+                    }),
+                },
+            },
+        };
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+        const { body } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
+        const svg = body.slice(body.indexOf('<svg'), body.indexOf('</svg>'));
+        expect(body).toContain('left:200px;top:0px;width:400px;height:300px');
+        for (const label of ['>Scores<', '>Ajax<', '>PSV<', '>Points<']) expect(svg).toContain(label);
+        // PSV's formula has no stored value and the preview computes none, so the axis stops near Ajax's 42.
+        expect(svg).toContain('>40<');
+        expect(svg).not.toContain('>80<');
+        doc.destroy();
+    });
+
+    // The truncated notice follows the overlay's box in the flow, so the box reaches the lowest chart, cut at
+    // the budget window, whose edge clips a chart that crosses it.
+    const chartBelow = (y: number): Sheet => ({
+        id: 'below',
+        name: 'Below',
+        celldata: [{ r: 0, c: 0, v: { v: 'Grid', m: 'Grid', ct: { fa: 'General', t: 'g' } } }],
+        config: {},
+        charts: {
+            c1: {
+                id: 'c1',
+                index: 'a0',
+                x: 0,
+                y,
+                width: 400,
+                height: 300,
+                ...newSheetChartSpecParts(sampleChartSpec('column')),
+            },
+        },
+    });
+
+    test('the overlay box is as tall as the chart below the table, so the truncated notice starts under it', () => {
+        const { html, truncated } = renderSheetsPreviewHtml([chartBelow(40), chartBelow(40)], NO_MEDIA);
+        expect(truncated).toBe(true);
+        expect(html).toContain('position:relative;width:400px;min-height:340px;overflow:hidden');
+    });
+
+    test('a chart crossing the budget window is clipped at its edge', () => {
+        const bottom = PREVIEW_SHEET_BUDGET.maxRows * SHEET_DEFAULT_ROW_HEIGHT;
+        const { html } = renderSheetsPreviewHtml([chartBelow(bottom - 100)], NO_MEDIA);
+        expect(html).toContain(`min-height:${bottom}px;overflow:hidden`);
     });
 });
 
@@ -436,9 +531,43 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
         const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         expect(html).toContain('background:#d1f0d1');
     });
+
+    test('a key far above the grid costs the preview its own window, with no walk over the rows it names', () => {
+        const sheet: Sheet = {
+            id: 'far',
+            name: 'Far',
+            celldata: [{ r: 0, c: 0, v: { v: 'a', m: 'a' } }],
+            config: { rowhidden: { 3: 0 }, borderInfo: { '-10000000_0': { b: { style: 1, color: '#000' } } } },
+        };
+        const started = performance.now();
+        const { html, truncated } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(performance.now() - started).toBeLessThan(500);
+        expect(truncated).toBe(false);
+        expect(html).toContain('>a<');
+        expect(html.match(/<tr /g)).toHaveLength(1);
+    });
+});
+
+describe('eigensheets export and preview (hidden sheets)', () => {
+    // The tabs a reader sees are the sheets an export prints, as Excel prints them.
+    test('a hidden sheet renders in neither the export nor the preview', () => {
+        const sheetOf = (id: string, text: string, hide?: number): Sheet => {
+            const cell = { v: text, m: text, ct: { fa: 'General', t: 's' } };
+            return { id, name: id, ...(hide && { hide }), celldata: [{ r: 0, c: 0, v: cell }], data: [[cell]] };
+        };
+        const sheets = [sheetOf('First', 'secret', 1), sheetOf('Second', 'shown'), sheetOf('Third', 'unseen', 1)];
+        const { html } = renderSheetsHtml(sheets, NO_MEDIA);
+        expect(html).toContain('shown');
+        expect(html).not.toContain('secret');
+        expect(html).not.toContain('unseen');
+        const preview = renderSheetsPreviewHtml(sheets, NO_MEDIA);
+        expect(preview.html).toContain('shown');
+        expect(preview.html).not.toContain('secret');
+        expect(preview.truncated).toBe(false);
+    });
 });
 
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
-// an intentional renderer or preview-budget change. Last move: the table takes the
-// body's FONT_STACK_SANS (2026-10-12).
-const GOLDEN_BODY_SHA256 = '67ba3cd82d871c20fb15de38060d10a4c45a073a7ff0bd8bcd4542ea92acb0c9';
+// an intentional renderer or preview-budget change. Last move: a number without an
+// alignment of its own aligns right, as the grid draws one (2026-10-23).
+const GOLDEN_BODY_SHA256 = '7d0ff12d8071b362a2cbf1984ad330502aecdf7181a2139ef045c9200f86a943';

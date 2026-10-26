@@ -1,7 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
-import { DEFAULT_ELEMENT_PROPS, ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS, type VectorElement } from '@workspace/lib/vector';
+import type { StyleDefaults, VectorElement } from '@workspace/lib/vector';
+import {
+    buildElementsClipboardItem,
+    DEFAULT_ELEMENT_PROPS,
+    ELEMENT_KINDS,
+    generateNKeysBetween,
+    readElementsClipboardItem,
+    readVectorFromDoc,
+    SLIDES_STYLE_DEFAULTS,
+    VECTOR_STYLE_DEFAULTS,
+    writeElementInDoc,
+} from '@workspace/lib/vector';
 import { Window } from 'happy-dom';
+import * as Y from 'yjs';
 import { planElementsPaste } from '../../../../components/vector/tools/paste-elements';
 
 // A pasted rich-text partial goes through the LightEditor sanitizer, which needs a DOM.
@@ -115,5 +127,33 @@ describe('planElementsPaste', () => {
         expect(plan.partials[0]?.type).toBe('arrow');
         expect(plan.arrowRemaps[0]?.index).toBe(0);
         expect([...plan.cloneIds]).toEqual([[0, 'a1']]);
+    });
+});
+
+// ⌘C in a deck, ⌘V in a drawing, and back: the wire, the reader and the planner carry a size as stored, so a pptx's
+// unsnapped 117.33… px comes home to the bit, whatever each app shows of it.
+describe('a size copied between a deck and a drawing', () => {
+    const SIZE = 117.33333333333334;
+
+    function pasteInto(source: Y.Doc, style: StyleDefaults): Y.Doc {
+        const item = buildElementsClipboardItem(readVectorFromDoc(source).elements, '');
+        const wire = JSON.parse(JSON.stringify(item));
+        const read = readElementsClipboardItem([wire]);
+        if (!read) throw new Error('no elements on the wire');
+        const target = new Y.Doc();
+        const { partials } = planElementsPaste(read.elements, [], null);
+        const keys = generateNKeysBetween(null, null, partials.length);
+        for (const [i, partial] of partials.entries()) writeElementInDoc(target, partial, keys[i], style);
+        return target;
+    }
+
+    test('keeps every bit of a text box and an arrow label', () => {
+        const deck = new Y.Doc();
+        writeElementInDoc(deck, { ...richtext('t1', '<p>Title</p>'), fontSize: SIZE }, 'a0', SLIDES_STYLE_DEFAULTS);
+        writeElementInDoc(deck, { ...arrow('a1', ''), text: 'label', fontSize: SIZE }, 'a1', SLIDES_STYLE_DEFAULTS);
+        const drawing = pasteInto(deck, VECTOR_STYLE_DEFAULTS);
+        expect(readVectorFromDoc(drawing).elements.map((el) => 'fontSize' in el && el.fontSize)).toEqual([SIZE, SIZE]);
+        const back = pasteInto(drawing, SLIDES_STYLE_DEFAULTS);
+        expect(readVectorFromDoc(back).elements.map((el) => 'fontSize' in el && el.fontSize)).toEqual([SIZE, SIZE]);
     });
 });

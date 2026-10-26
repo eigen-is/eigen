@@ -1,12 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    DEFAULT_ELEMENT_PROPS,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
-    solidFill,
-    type VectorFrame,
-    type VectorShapeElement,
-} from '@workspace/lib/vector';
+import type { VectorFrame, VectorShapeElement } from '@workspace/lib/vector';
+import { DEFAULT_ELEMENT_PROPS, SLIDE_SIZES, solidFill } from '@workspace/lib/vector';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FrameView, sameThumbnail } from '../../../components/vector/frame-view';
@@ -15,8 +9,7 @@ const frame = (over: Partial<VectorFrame> = {}): VectorFrame => ({
     id: 'f1',
     index: 'a0',
     name: 'Slide 1',
-    width: FRAME_WIDTH,
-    height: FRAME_HEIGHT,
+    ...SLIDE_SIZES['16:9'],
     background: '',
     ...over,
 });

@@ -6,11 +6,22 @@
 // innermost active gesture wins over the canvas' layered-Escape (CANVAS.md), exactly as ObjectTransform
 // claims Escape mid-resize.
 
+import type {
+    Box,
+    CanvasViewport,
+    NewVectorElement,
+    PinPatch,
+    Point,
+    StyleDefaults,
+    VectorArrowElement,
+    VectorBindableElement,
+    VectorElement,
+    VectorElementPatch,
+    VectorLinearElement,
+} from '@workspace/lib/vector';
 import {
     arrowRoute,
-    type Box,
     baseDefaultsFor,
-    type CanvasViewport,
     distance,
     ELEMENT_KINDS,
     elbowBindPoint,
@@ -19,24 +30,18 @@ import {
     isBindable,
     linearLocalToScene,
     normalizeLinear,
-    type PinPatch,
-    type Point,
     parseBinding,
     parsePoints,
+    randomSeed,
     renormalize,
-    type StyleDefaults,
     serializePressures,
     unpinSegment,
-    type VectorArrowElement,
-    type VectorBindableElement,
-    type VectorElement,
-    type VectorLinearElement,
 } from '@workspace/lib/vector';
-import { createElement, Fragment, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
+import { sealed } from '@workspace/ui/components/properties-panel';
+import type { MutableRefObject, ReactNode } from 'react';
+import { createElement, Fragment, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
-import { randomSeed } from '../hooks/element-writes';
-import { type NewVectorElement, sealed, type VectorElementPatch } from '../hooks/use-canvas-doc';
 import type { VectorTool } from '../hooks/use-tool';
 import { FocusIndicators, FocusPointHandles, SnapDots } from './arrow-affordances';
 import {
@@ -50,8 +55,10 @@ import {
 } from './binding';
 import { ElbowPinHandles } from './elbow-pin-handles';
 import { markErase } from './eraser';
-import { extendFreedrawStroke, type FreedrawStroke, startFreedrawStroke } from './freedraw';
-import { distinctCount, type LineDraft, previewPoints, snapSegment, startLineDraft } from './line';
+import type { FreedrawStroke } from './freedraw';
+import { extendFreedrawStroke, startFreedrawStroke } from './freedraw';
+import type { LineDraft } from './line';
+import { distinctCount, previewPoints, snapSegment, startLineDraft } from './line';
 import { LinePointHandles } from './point-handles';
 import { isFreedrawSpike } from './touch-gestures';
 

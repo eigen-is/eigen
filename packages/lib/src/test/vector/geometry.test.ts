@@ -3,13 +3,13 @@ import { RoughGenerator } from 'roughjs/bin/generator';
 import { elbowBindPoint } from '../../vector/elbow-heading';
 import { elbowRoute } from '../../vector/elbow-route';
 import { solidFill } from '../../vector/fill';
+import type { Box, Point } from '../../vector/geometry';
 import {
     anchorToScene,
     applyResize,
     arrowCurveBeziers,
     arrowheadGeometry,
     arrowLabelBox,
-    type Box,
     bindingAnchor,
     bindingDistance,
     bindingGap,
@@ -37,34 +37,30 @@ import {
     normalizeFixedPoint,
     normalizeLinear,
     outlinePoint,
-    type Point,
-    parsePoints,
     projectFixedPointOntoDiagonal,
     remapBinding,
     rescalePoints,
     resizeLinear,
     resizeRotatedRect,
     rotatePoint,
-    serializePoints,
     shapeAnchorPoints,
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
 import { ELEMENT_KINDS } from '../../vector/kinds';
 import { outlineDistance } from '../../vector/outline';
-import {
-    arrowsBoundTo,
-    type Corners,
-    DEFAULT_ELEMENT_PROPS,
-    serializeBinding,
-    type VectorArrowElement,
-    type VectorBindableElement,
-    type VectorElement,
-    type VectorLinearElement,
-    type VectorRectangleElement,
-    type VectorRichTextElement,
-    type VectorShapeElement,
+import { parsePoints, serializePoints } from '../../vector/points';
+import type {
+    Corners,
+    VectorArrowElement,
+    VectorBindableElement,
+    VectorElement,
+    VectorLinearElement,
+    VectorRectangleElement,
+    VectorRichTextElement,
+    VectorShapeElement,
 } from '../../vector/types';
+import { arrowsBoundTo, DEFAULT_ELEMENT_PROPS, serializeBinding } from '../../vector/types';
 import { byIdOf, richtext } from './element-factories';
 
 const box = (over: Partial<Box>): Box => ({ x: 0, y: 0, width: 100, height: 60, angle: 0, ...over });

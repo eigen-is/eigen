@@ -1,6 +1,7 @@
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import {
+    ChoiceMenuItems,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -9,16 +10,16 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
-import { Check, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { is_date } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
 import { DATE_FORMAT_PRESETS, handleNumberFormat } from '../../state';
+import type { FormatSegment } from './format-pattern';
 import {
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
-    type FormatSegment,
     getDateToken,
     previewPattern,
     serializeSegments,
@@ -57,20 +58,14 @@ function TokenChip({
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="sheet-mousedown-cancel">
-                {token.variants.map((v) => (
-                    <DropdownMenuItem key={v.pattern} onClick={() => onVariantChange(v.pattern)}>
-                        <span className="flex w-4 shrink-0 items-center justify-center">
-                            {v.pattern === segment.pattern && <Check className="size-4" />}
-                        </span>
-                        <span>
-                            {v.label} ({v.example})
-                        </span>
-                    </DropdownMenuItem>
-                ))}
+                <ChoiceMenuItems
+                    value={segment.pattern}
+                    options={token.variants.map((v) => ({ value: v.pattern, label: `${v.label} (${v.example})` }))}
+                    onChange={onVariantChange}
+                />
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onDelete}>
-                    <span className="w-4 shrink-0" />
-                    <span>Delete</span>
+                <DropdownMenuItem variant="destructive" inset onClick={onDelete}>
+                    Delete
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>

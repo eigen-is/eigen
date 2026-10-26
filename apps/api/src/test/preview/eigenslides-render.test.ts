@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
-import { FRAME_WIDTH, type VectorScene } from '@workspace/lib/vector';
+import type { VectorMeta, VectorScene } from '@workspace/lib/vector';
+import { DEFAULT_SCENE_META, FRAME_WIDTH } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-render';
 import { buildGoldenDeckScene, GOLDEN_BEYOND_CAP, GOLDEN_MEDIA_NAME, seedDeckDoc } from '../fixtures/golden-documents';
@@ -89,12 +90,19 @@ describe('renderEigenslidesPreviewBody', () => {
         // getOrCacheText stores only a non-empty body: an empty one re-runs the whole document
         // transform (Yjs load + Worker) on every single request, forever, and never settles.
         const doc = new Y.Doc();
-        seedDeckDoc(doc, { elements: [], frames: [], meta: { background: 'transparent' } });
+        seedDeckDoc(doc, { elements: [], frames: [], meta: DEFAULT_SCENE_META });
         const { body, warnings } = renderEigenslidesPreviewBody(doc, new Map());
         doc.destroy();
         expect(body.match(/class="canvas-page"/g)).toHaveLength(1);
         expect(body).toContain('background-color:#ffffff');
         expect(warnings).toEqual([]);
+    });
+
+    test("a 4:3 deck previews 4:3 pages, and an empty one previews a blank page of the deck's size", () => {
+        const fourThree: VectorMeta = { ...DEFAULT_SCENE_META, slideSize: '4:3' };
+        const fitBox = `<div class="page-fit" style="--page-w:${CANVAS_PREVIEW_WIDTH}px;--page-ar:960/720">`;
+        expect(previewOfScene({ ...buildGoldenDeckScene(), meta: fourThree })).toContain(fitBox);
+        expect(previewOfScene({ elements: [], frames: [], meta: fourThree })).toContain(fitBox);
     });
 
     test('the prepared media URLs survive as an image element and a frame background', () => {

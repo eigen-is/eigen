@@ -3,12 +3,16 @@ import './test-env';
 import { Database } from 'bun:sqlite';
 import { expect } from 'bun:test';
 import { treaty } from '@elysiajs/eden';
-import { type DrivePath, type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
+import type { DrivePath, MountInfo, OrgTeam } from '@workspace/lib/types';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { EmailDraft } from '@workspace/lib/types/mail';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
+import type { Snapshot } from '@workspace/lib/types/versioning';
+import { eq } from 'drizzle-orm';
+import { user as userSchema } from '../../auth-schema';
 import { app } from '../app';
-import { auth } from '../lib/auth/auth';
+import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getStorageType, updateServerSettings } from '../lib/config/server-settings';
 import { drainACLFanOuts } from '../lib/drive/acl-propagation';
 import { getHome } from '../lib/home';
@@ -48,15 +52,32 @@ async function bootServer(): Promise<void> {
     }
 }
 
+export type SSECollector = {
+    events: SSEvent[];
+    next: (match: (event: SSEvent) => boolean) => Promise<void>;
+    stop: () => void;
+};
+
 // In-process SSE listener: subscribes to a user's Home broadcast stream (opening the Home if needed)
 // and collects every event until stop() is called. Resolves once subscribed, so nothing broadcast
-// after the await is missed.
-export async function collectSSE(userId: string): Promise<{ events: SSEvent[]; stop: () => void }> {
+// after the await is missed. next() resolves on the first matching event, already collected or still to
+// come, so a test can wait for what an open tab hears instead of polling a route on a time budget.
+export async function collectSSE(userId: string): Promise<SSECollector> {
     const events: SSEvent[] = [];
-    const listener = (event: SSEvent) => events.push(event);
+    const waiters = new Set<{ match: (event: SSEvent) => boolean; resolve: () => void }>();
+    const listener = (event: SSEvent) => {
+        events.push(event);
+        for (const waiter of waiters) {
+            if (!waiter.match(event)) continue;
+            waiters.delete(waiter);
+            waiter.resolve();
+        }
+    };
     const home = await getHome(userId);
     home.subscribeSSE(listener);
-    return { events, stop: () => home.unsubscribeSSE(listener) };
+    const next = (match: (event: SSEvent) => boolean): Promise<void> =>
+        events.some(match) ? Promise.resolve() : new Promise((resolve) => waiters.add({ match, resolve }));
+    return { events, next, stop: () => home.unsubscribeSSE(listener) };
 }
 
 export type TestUser = {
@@ -141,6 +162,17 @@ export async function createTestUserOnStorage(storageType: ServerStorageType, na
     } finally {
         await updateServerSettings({ defaults: { mount: { storageType: before } } });
     }
+}
+
+// A signed-in guest on an external address. The admin API only creates users and admins, so the
+// role is set straight in the auth database.
+export async function createTestGuest(name: string): Promise<TestUser> {
+    const email = `${name.toLowerCase().replaceAll(' ', '-')}-${crypto.randomUUID()}@external.com`;
+    const password = crypto.randomUUID();
+    const created = await auth.api.createUser({ body: { email, password, name, role: 'user' } });
+    getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();
+    const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });
+    return { id: created.user.id, email, name, sessionToken: extractSessionToken(signIn.headers) };
 }
 
 export async function signsIn(email: string, password: string): Promise<boolean> {
@@ -267,6 +299,30 @@ export async function driveGet<T = DrivePath>(
 ): Promise<T> {
     const res = await authedRequest(token, driveUrl(ownerId, mountId, ...parts));
     return res.status !== 200 ? ([] as T) : ((await res.json()) as T);
+}
+
+export async function listVersions(
+    token: string,
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+): Promise<Snapshot[]> {
+    return driveGet<Snapshot[]>(token, ownerId, mountId, `file/${pathId}/versions`);
+}
+
+export async function restoreVersion(
+    token: string,
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    snapshotName: string,
+): Promise<void> {
+    const res = await authedRequest(
+        token,
+        `/drive/${ownerId}/${mountId}/file/${pathId}/versions/${encodeURIComponent(snapshotName)}/restore`,
+        { method: 'POST' },
+    );
+    if (res.status !== 200) throw new Error(`restoreVersion failed: ${res.status} ${await res.text()}`);
 }
 
 export type PermissionResult = { canRead: boolean; canWrite: boolean };

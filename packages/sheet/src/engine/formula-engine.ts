@@ -1,5 +1,7 @@
 import { DependencyIndex } from './dependency-index';
+import { cellValue } from './format';
 import { ERROR_REF, Parser } from './parser';
+import { ERROR_VALUE } from './parser/error';
 import { dateToSerial } from './parser/helper/number';
 import type {
     Cell,
@@ -18,12 +20,11 @@ export function isFormula(value: unknown): boolean {
 }
 
 function getCellValue(cell: Cell | null | undefined): unknown {
-    if (cell == null) return undefined;
-    if (cell.ct?.t === 'n') {
+    if (cell?.ct?.t === 'n') {
         const n = Number(cell.v);
         return Number.isNaN(n) ? cell.v : n;
     }
-    return cell.v;
+    return cellValue(cell);
 }
 
 function inferType(value: unknown): EvaluationResult['type'] {
@@ -34,11 +35,15 @@ function inferType(value: unknown): EvaluationResult['type'] {
 }
 
 export class FormulaEngine {
-    state: FormulaEngineState;
+    public state: FormulaEngineState;
     private parser: Parser;
     private currentResolver: CellResolver | null = null;
+    // The cells range reads have cost; a read that would pass `maxCellsRead` fails before it reads.
+    public cellsRead = 0;
+    private readonly maxCellsRead: number;
 
-    constructor() {
+    public constructor({ maxCellsRead = Number.POSITIVE_INFINITY } = {}) {
+        this.maxCellsRead = maxCellsRead;
         this.state = {
             execFunctionGlobalData: {},
             formulaCellInfoMap: null,
@@ -96,6 +101,10 @@ export class FormulaEngine {
                 if (emptyCol) startCol = 0;
                 endRow = emptyRow ? lastRow : Math.min(endRow, lastRow);
                 endCol = emptyCol ? lastCol : Math.min(endCol, lastCol);
+                if (endRow >= startRow && endCol >= startCol) {
+                    this.cellsRead += (endRow - startRow + 1) * (endCol - startCol + 1);
+                    if (this.cellsRead > this.maxCellsRead) throw Error(ERROR_VALUE);
+                }
 
                 const fragment: unknown[][] = [];
                 for (let row = startRow; row <= endRow; row++) {
@@ -118,15 +127,15 @@ export class FormulaEngine {
         );
     }
 
-    evaluate(formula: string, sheetId: string, resolver: CellResolver): EvaluationResult {
+    public evaluate(formula: string, sheetId: string, resolver: CellResolver): EvaluationResult {
         return this.evaluateCompiled(this.compile(formula), sheetId, resolver);
     }
 
-    compile(formula: string): CompiledFormula {
+    public compile(formula: string): CompiledFormula {
         return this.parser.compile(formula.substring(1));
     }
 
-    evaluateCompiled(
+    public evaluateCompiled(
         compiled: CompiledFormula,
         sheetId: string,
         resolver: CellResolver,
@@ -135,11 +144,17 @@ export class FormulaEngine {
     ): EvaluationResult {
         this.currentResolver = resolver;
         try {
-            const { error, result } = this.parser.evaluate(compiled, { sheetId, rowOffset, colOffset });
+            const { error, result: evaluated } = this.parser.evaluate(compiled, { sheetId, rowOffset, colOffset });
 
             if (error != null) {
                 return { value: error, display: error, type: 'error' };
             }
+
+            // The engine has no spill, so an array result (a bare range, XLOOKUP's matched row,
+            // TRANSPOSE) keeps its top-left value: the value Excel's spill anchor holds, so a recalc
+            // of an imported anchor lands on Excel's cached value.
+            let result = evaluated;
+            while (Array.isArray(result)) result = result[0];
 
             if (result instanceof Date) {
                 // A Date result stores as its Excel serial — the same convention the
@@ -149,9 +164,7 @@ export class FormulaEngine {
                 return { value: serial, display: String(serial), type: 'date' };
             }
 
-            // Cell-scoped formulas produce scalars. Range references can
-            // surface arrays if a formula evaluates to a bare range — coerce
-            // those (and any other non-primitive) to a string for storage.
+            // Any other non-primitive is stored as its string.
             const value: Cell['v'] =
                 typeof result === 'string' || typeof result === 'number' || typeof result === 'boolean'
                     ? result

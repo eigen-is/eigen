@@ -2,14 +2,8 @@ import { isMailAppEnabled } from '../config/env';
 import type { User } from '../user';
 import { getMemberships, getOrgRole } from '../user';
 import { ApiError } from './errors';
-import {
-    matchesCidr,
-    normalizeIp,
-    type Route,
-    readRouteTable,
-    scopeTrustedNetworks,
-    type TrustedNetworks,
-} from './trusted-networks';
+import type { Route, TrustedNetworks } from './trusted-networks';
+import { matchesCidr, normalizeIp, readRouteTable, scopeTrustedNetworks } from './trusted-networks';
 
 const DEFAULT_TRUSTED = '127.0.0.0/8,::1';
 

@@ -1,27 +1,31 @@
 import { escapeHtml } from '@workspace/lib/html';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
+import { columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
-import { booleanDisplay, cellWrapsText, numberDisplay, parseCellInput } from '../../engine/format';
+import {
+    booleanDisplay,
+    cellWrapsText,
+    dropRuns,
+    generalAlign,
+    numberDisplay,
+    parseCellInput,
+    richText,
+} from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import type { Range, RangeOrWholeAxis, Selection } from '../types';
-import { getSheetIndex, indexToColumnChar, rgbToHex, styleObjectToCss } from '../utils';
+import { getSheetIndex, rgbToHex, styleObjectToCss } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
 import { describeValidationRule, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
 import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
-import {
-    convertSpanToShareString,
-    cssDomKeyForAttr,
-    isInlineStringCell,
-    isInlineStringCT,
-    type StyleAttr,
-    type UnderlineHints,
-} from './inline-string';
+import type { StyleAttr, UnderlineHints } from './inline-string';
+import { convertSpanToShareString, cssDomKeyForAttr, isInlineStringCell, isInlineStringCT } from './inline-string';
 import { getCellTextInfo } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 
@@ -46,7 +50,7 @@ export function normalizedCellAttr(cell: Cell, attr: keyof Cell, defaultFontSize
     } else if (attr.substring(0, 2) === 'bs') {
         value ||= 'none';
     } else if (attr === 'ht' || attr === 'vt') {
-        const defaultValue = attr === 'ht' ? '1' : '0';
+        const defaultValue = attr === 'ht' ? generalAlign(cell) : '0';
         value = !isNil(value) ? value.toString() : defaultValue;
         if (['0', '1', '2'].indexOf(value.toString()) === -1) {
             value = defaultValue;
@@ -54,7 +58,8 @@ export function normalizedCellAttr(cell: Cell, attr: keyof Cell, defaultFontSize
     } else if (attr === 'fs') {
         value ||= defaultFontSize.toString();
     } else if (attr === 'tb') {
-        value ||= '0';
+        // Text overflows unless set to clip ('0') or wrap ('2'), as in Google Sheets and Excel.
+        value ||= '1';
     }
 
     return value;
@@ -104,6 +109,8 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
 
         if (d?.ct && d.ct.t === 'd') {
             retv = d.m;
+        } else if (attr === 'v' || attr === 'm') {
+            retv = richText(d) ?? retv;
         }
     }
 
@@ -152,6 +159,11 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         }
     } else {
         vupdate = v;
+    }
+
+    // A rich write, runs with no value or formula, brings its runs; any other write drops the cell's.
+    if (cell != null && !(isPlainObject(v) && isNil(v.f) && isRealNull(vupdate) && richText(v) !== undefined)) {
+        dropRuns(cell);
     }
 
     if (isRealNull(vupdate)) {
@@ -263,18 +275,8 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
 }
 
 export function getRealCellValue(r: number, c: number, data: CellMatrix, attr?: keyof Cell) {
-    let value = getCellValue(r, c, data, 'm');
-    if (isNil(value)) {
-        value = getCellValue(r, c, data, attr);
-        if (isNil(value)) {
-            const ct = getCellValue(r, c, data, 'ct');
-            if (isInlineStringCT(ct)) {
-                value = ct.s;
-            }
-        }
-    }
-
-    return value;
+    const value = getCellValue(r, c, data, 'm');
+    return isNil(value) ? getCellValue(r, c, data, attr) : value;
 }
 
 // A number stored as text (qp === 1) that still reads as a number. The painter marks it with a
@@ -686,6 +688,10 @@ export function updateCell(
                     }
                 }
             }
+        } else {
+            // A rich edit's dependents read its runs, as a plain edit's read its value.
+            delFunctionGroup(ctx, r, c);
+            execFunctionGroup(ctx, r, c, curv);
         }
         value = curv;
     } else {
@@ -859,7 +865,7 @@ export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAx
     }
 
     if (isWholeColumnRef(range)) {
-        return `${sheettxt + indexToColumnChar(range.column[0])}:${indexToColumnChar(range.column[1])}`;
+        return `${sheettxt + columnIndexToLabel(range.column[0])}:${columnIndexToLabel(range.column[1])}`;
     }
     if (isWholeRowRef(range)) {
         return `${sheettxt + (range.row[0] + 1)}:${range.row[1] + 1}`;
@@ -867,9 +873,9 @@ export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAx
 
     const { row, column } = range;
     if (column[0] === column[1] && row[0] === row[1]) {
-        return sheettxt + indexToColumnChar(column[0]) + (row[0] + 1);
+        return sheettxt + columnIndexToLabel(column[0]) + (row[0] + 1);
     }
-    return `${sheettxt + indexToColumnChar(column[0]) + (row[0] + 1)}:${indexToColumnChar(column[1])}${row[1] + 1}`;
+    return `${sheettxt + columnIndexToLabel(column[0]) + (row[0] + 1)}:${columnIndexToLabel(column[1])}${row[1] + 1}`;
 }
 
 // Convert a string like A1:A2 to a selection range array
@@ -967,7 +973,7 @@ export function getFontStyleByCell(
         if (key === 'ff' && typeof value === 'string' && value) {
             style.fontFamily = `'${value}', sans-serif`;
         }
-        if (key === 'fs' && valueNum !== 10) {
+        if (key === 'fs' && valueNum !== SHEET_DEFAULT_FONT_SIZE) {
             style.fontSize = `${valueNum}pt`;
         }
         if ((key === 'fc' && value !== '#000000') || checksCF?.textColor) {

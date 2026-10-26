@@ -9,11 +9,12 @@
 // state, never stored on an element.
 
 import { normalizeAngle } from '@workspace/lib/vector';
-import { Checkbox } from '@workspace/ui/components/checkbox';
-import { useId, useRef } from 'react';
+import { useRef } from 'react';
 import { MergedNumberInput } from './merged-number-input';
-import { isMixed, type MergedValue } from './merged-value';
+import type { MergedValue } from './merged-value';
+import { isMixed } from './merged-value';
 import { PropertyRow, PropertySection } from './properties-panel';
+import { PropertyCheckbox } from './property-checkbox';
 
 // Canonical geometry fields (Box names). The host maps these to its own element update + units.
 export type TransformFields = Partial<{
@@ -57,7 +58,6 @@ export function TransformSection({
     aspectLocked = false,
     onAspectLockChange,
 }: TransformSectionProps) {
-    const aspectId = useId();
     const sizeOff = disabled || sizeDisabled;
     const showAspect = !sizeOff && onAspectLockChange !== undefined;
 
@@ -114,16 +114,11 @@ export function TransformSection({
                 </PropertyRow>
             </div>
             {showAspect && (
-                <div className="flex items-center gap-2">
-                    <Checkbox
-                        id={aspectId}
-                        checked={aspectLocked}
-                        onCheckedChange={(c) => onAspectLockChange?.(c === true)}
-                    />
-                    <label htmlFor={aspectId} className="text-xs text-muted-foreground cursor-pointer select-none">
-                        Keep aspect ratio
-                    </label>
-                </div>
+                <PropertyCheckbox
+                    label="Keep aspect ratio"
+                    checked={aspectLocked}
+                    onCheckedChange={(locked) => onAspectLockChange?.(locked)}
+                />
             )}
             {/* No min/max: the row is built to take an out-of-range entry and WRAP it — bounds here
                 would clamp a typed -90 to 0 before normalizeAngle ever saw it. */}

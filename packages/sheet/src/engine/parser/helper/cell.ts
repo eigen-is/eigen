@@ -1,3 +1,10 @@
+import {
+    columnIndexToLabel,
+    columnLabelToIndex,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+} from '@workspace/lib/sheets';
+
 export type CellCoordinate = {
     index: number;
     label: string;
@@ -15,29 +22,6 @@ export function rowIndexToLabel(row: number): string {
     return row >= 0 ? `${row + 1}` : '';
 }
 
-const COLUMN_LABEL_BASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-const COLUMN_LABEL_BASE_LENGTH = COLUMN_LABEL_BASE.length;
-
-// Base-26 decode, e.g. "A" → 0, "Z" → 25, "AA" → 26.
-export function columnLabelToIndex(label: string): number {
-    const upperLabel = label.toUpperCase();
-    let result = 0;
-    for (let i = 0, j = upperLabel.length - 1; i < upperLabel.length; i += 1, j -= 1) {
-        result += COLUMN_LABEL_BASE_LENGTH ** j * (COLUMN_LABEL_BASE.indexOf(upperLabel[i]) + 1);
-    }
-    return result - 1;
-}
-
-export function columnIndexToLabel(column: number): string {
-    let result = '';
-    let n = column;
-    while (n >= 0) {
-        result = COLUMN_LABEL_BASE[n % COLUMN_LABEL_BASE_LENGTH] + result;
-        n = Math.floor(n / COLUMN_LABEL_BASE_LENGTH) - 1;
-    }
-    return result;
-}
-
 // The two sheet-name spellings a reference may carry (`Sheet1!A1`, `'My Sheet'!A1`); every
 // reference regex in the engine composes from these.
 export const SIMPLE_SHEET_NAME = '[A-Za-z0-9_\\u00C0-\\u02AF]+';
@@ -53,6 +37,13 @@ export function unquoteSheetName(raw: string): string {
 // Inverse of unquoteSheetName: single-quote wrap with embedded quotes doubled.
 export function quoteSheetName(name: string): string {
     return `'${name.replace(/'/g, "''")}'`;
+}
+
+const SIMPLE_NAME = new RegExp(`^${SIMPLE_SHEET_NAME}$`);
+
+// The name as a ref's sheet prefix spells it: bare when it can be, quoted otherwise.
+export function sheetRefName(name: string): string {
+    return SIMPLE_NAME.test(name) ? name : quoteSheetName(name);
 }
 
 // Split a cell label like `Sheet1!$A$1` into [row, column, sheetName], null when
@@ -76,10 +67,6 @@ export function toLabel(row: CellCoordinate, column: CellCoordinate): string {
     const columnLabel = (column.isAbsolute ? '$' : '') + columnIndexToLabel(column.index);
     return columnLabel + rowLabel;
 }
-
-// Excel's grid (A1:XFD1048576): imported workbooks carry refs this far out, past the sheet's own insert limits.
-export const REFERENCE_ROW_COUNT = 1048576;
-export const REFERENCE_COLUMN_COUNT = 16384;
 
 // `$` and a missing axis (`A:A`, `1:1`) stay put; null means the copy left the grid (#REF!).
 export function offsetCoordinate(

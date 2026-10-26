@@ -72,6 +72,9 @@ export type OutlineShape =
     | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number }
     | { kind: 'polyline'; points: Point[] };
 
+// No edge, so nothing docks to it: a degenerate shape's outline, and a mis-dispatched element's.
+export const EMPTY_OUTLINE: OutlineShape = { kind: 'polygon', corners: [] };
+
 export function rectOutline(box: OutlineBox, radius: number, gap: number): OutlineShape {
     if (radius <= 0) return { kind: 'polygon', corners: sharpRectOffset(box, gap) };
     const r = clamp(radius, 0, roundRadius(box, 'rectangle'));
@@ -79,7 +82,7 @@ export function rectOutline(box: OutlineBox, radius: number, gap: number): Outli
 }
 
 export function diamondOutline(box: OutlineBox, radius: number, gap: number): OutlineShape {
-    if (box.width === 0 || box.height === 0) return { kind: 'polygon', corners: [] };
+    if (box.width === 0 || box.height === 0) return EMPTY_OUTLINE;
     if (radius <= 0) return { kind: 'polygon', corners: sharpDiamondOffset(box, gap) };
     const r = clamp(radius, 0, roundRadius(box, 'diamond'));
     return { kind: 'rounded', core: diamondCore(box, r), radius: r + gap };
@@ -135,7 +138,7 @@ export function outlineDistance(shape: OutlineShape, p: Point): number {
 // instead of the sharp box behind a rounded corner.
 export function outlineContains(shape: OutlineShape, p: Point): boolean {
     if (shape.kind === 'rounded') return coreDistance(p, shape.core) <= shape.radius;
-    if (shape.kind === 'polygon') return shape.corners.length > 2 && insideConvex(p, shape.corners);
+    if (shape.kind === 'polygon') return shape.corners.length > 2 && insidePolygon(p, shape.corners);
     if (shape.kind === 'ellipse') {
         if (shape.rx <= 0 || shape.ry <= 0) return false;
         return ((p.x - shape.cx) / shape.rx) ** 2 + ((p.y - shape.cy) / shape.ry) ** 2 <= 1;
@@ -209,6 +212,23 @@ function coreDistance(p: Point, core: Point[]): number {
     let best = Number.POSITIVE_INFINITY;
     for (const [a, b] of coreEdges(core)) best = Math.min(best, distanceToSegment(p, a, b));
     return core.length > 2 && insideConvex(p, core) ? -best : best;
+}
+
+// Not insideConvex: a pie slice past 180° is a non-convex polygon.
+function insidePolygon(p: Point, poly: Point[]): boolean {
+    for (const [a, b] of coreEdges(poly)) if (distanceToSegment(p, a, b) < EPS) return true;
+    return pointInPolygon(p, poly);
+}
+
+// Even-odd ray cast. The edge itself is either side, so a caller that counts it checks it first.
+export function pointInPolygon(p: Point, points: Point[]): boolean {
+    let inside = false;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const a = points[i];
+        const b = points[j];
+        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    return inside;
 }
 
 function insideConvex(p: Point, poly: Point[]): boolean {
@@ -311,6 +331,87 @@ function corePath(core: Point[], r: number): string {
     const first = parts[0].slice(2);
     parts.push(`A ${n(r)} ${n(r)} 0 0 1 ${first}`, 'Z');
     return parts.join(' ');
+}
+
+// --- path data ----------------------------------------------------------------------------------
+//
+// A path element's `path`: absolute M/L/C/Q/Z in its unit box, so its numbers alone scale it. The points
+// each command takes; Z returns to the subpath's start.
+const PATH_COMMAND_POINTS = { M: 1, L: 1, C: 3, Q: 2, Z: 0 } as const;
+// Control points may overshoot the box a little; a 1e15 would reach roughjs and every viewBox.
+export const PATH_COORD_MIN = -2;
+export const PATH_COORD_MAX = 3;
+// ASCII separators only, so a valid path's length is its bytes, which MAX_PATH_BYTES caps.
+const PATH_SPACE = ' \t\r\n';
+const PATH_TOKEN = /[ \t\r\n,]*(?:([A-Za-z])|([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?))/y;
+
+type PathOp = keyof typeof PATH_COMMAND_POINTS;
+export type PathCommand = { op: PathOp; points: Point[] };
+
+function isPathOp(v: string): v is PathOp {
+    return Object.hasOwn(PATH_COMMAND_POINTS, v);
+}
+
+// The five commands in SVG syntax, numbers clamped and rounded to 4 decimals; null for anything else:
+// another command, a relative one, a missing or extra number, a subpath that doesn't start with M, or a
+// separator other than ASCII space, tab, CR, LF or comma. The reader's parseNormalizedPath caps it;
+// every consumer reads the canonical string it stores.
+export function parsePathCommands(d: string): PathCommand[] | null {
+    const commands: PathCommand[] = [];
+    let current: PathCommand | null = null;
+    // A point's x, read and waiting for its y.
+    let x: number | null = null;
+    let end = d.length;
+    while (end > 0 && PATH_SPACE.includes(d[end - 1])) end--;
+    PATH_TOKEN.lastIndex = 0;
+    while (PATH_TOKEN.lastIndex < end) {
+        const token = PATH_TOKEN.exec(d);
+        if (!token) return null;
+        const [, op, value] = token;
+        if (op !== undefined) {
+            if (!isPathOp(op) || !complete(current)) return null;
+            if ((current === null || current.op === 'Z') && op !== 'M') return null;
+            current = { op, points: [] };
+            commands.push(current);
+            continue;
+        }
+        const v = Number(value);
+        if (current === null || complete(current) || !Number.isFinite(v)) return null;
+        const coord = round4(clamp(v, PATH_COORD_MIN, PATH_COORD_MAX));
+        if (x === null) {
+            x = coord;
+        } else {
+            current.points.push({ x, y: coord });
+            x = null;
+        }
+    }
+    return complete(current) ? commands : null;
+}
+
+function complete(command: PathCommand | null): boolean {
+    return command === null || command.points.length === PATH_COMMAND_POINTS[command.op];
+}
+
+export function serializePath(commands: PathCommand[]): string {
+    const parts: string[] = [];
+    for (const { op, points } of commands) {
+        parts.push(op);
+        for (const p of points) parts.push(`${p.x}`, `${p.y}`);
+    }
+    return parts.join(' ');
+}
+
+// A stored `path` in the element's local frame at its box size: the one mapping render draws and the hit
+// test, the outline and the pptx writer read. [] for a string that never went through the reader.
+export function scaledPathCommands(path: string, width: number, height: number): PathCommand[] {
+    return (parsePathCommands(path) ?? []).map(({ op, points }) => ({
+        op,
+        points: points.map((p) => ({ x: n(p.x * width), y: n(p.y * height) })),
+    }));
+}
+
+export function scaleNormalizedPath(path: string, width: number, height: number): string {
+    return serializePath(scaledPathCommands(path, width, height));
 }
 
 // --- primitives ---------------------------------------------------------------------------------

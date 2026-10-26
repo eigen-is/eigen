@@ -1,10 +1,11 @@
+import { useIsSharedWithMe } from '@workspace/lib/drive';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { DrivePath } from '@workspace/lib/types';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { Copy, CopyPlus, FolderInput, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
-import { ContextMenuAnchor } from '../context-menu';
+import { ContextMenuAnchor, MenuSections } from '../context-menu';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { DriveItemMenuItems } from './drive-item-menu';
 import type { useDriveItemController } from './use-drive-item-controller';
@@ -78,6 +79,7 @@ function DriveItemActionsMenu({
         [contextMenu.item, items, canWrite],
     );
     const runner = useFileActionRunner(subject, siblings);
+    const isSharedWithMe = useIsSharedWithMe();
 
     const isSingleSelect = contextItems.length === 1;
     const contextMenuItemHref = isSingleSelect && contextMenu.item ? getItemHref?.(contextMenu.item) : undefined;
@@ -104,56 +106,63 @@ function DriveItemActionsMenu({
                     />
                 )}
                 {!isSingleSelect && contextItems.length > 0 && (
-                    <>
-                        {onMoveTo && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onMoveTo(contextItems);
-                                    contextMenu.close();
-                                }}
-                                className="flex items-center"
-                            >
-                                <FolderInput className="h-4 w-4 mr-2" />
-                                Move {contextItems.length} items to…
-                            </DropdownMenuItem>
-                        )}
-                        {onCopyTo && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onCopyTo(contextItems);
-                                    contextMenu.close();
-                                }}
-                                className="flex items-center"
-                            >
-                                <Copy className="h-4 w-4 mr-2" />
-                                Copy {contextItems.length} items to…
-                            </DropdownMenuItem>
-                        )}
-                        {onDuplicate && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onDuplicate(contextItems);
-                                    contextMenu.close();
-                                }}
-                                className="flex items-center"
-                            >
-                                <CopyPlus className="h-4 w-4 mr-2" />
-                                Duplicate {contextItems.length} items
-                            </DropdownMenuItem>
-                        )}
-                    </>
-                )}
-                {!isSingleSelect && allowDelete && contextItems.length > 0 && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onDelete?.(contextItems);
-                            contextMenu.close();
-                        }}
-                        className="flex items-center"
-                    >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Move {contextItems.length} items to trash
-                    </DropdownMenuItem>
+                    <MenuSections
+                        create={
+                            onDuplicate && (
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        onDuplicate(contextItems);
+                                        contextMenu.close();
+                                    }}
+                                >
+                                    <CopyPlus className="h-4 w-4" />
+                                    Duplicate {contextItems.length} items
+                                </DropdownMenuItem>
+                            )
+                        }
+                        organize={
+                            <>
+                                {onMoveTo && (
+                                    <DropdownMenuItem
+                                        onClick={() => {
+                                            onMoveTo(contextItems);
+                                            contextMenu.close();
+                                        }}
+                                    >
+                                        <FolderInput className="h-4 w-4" />
+                                        Move {contextItems.length} items to…
+                                    </DropdownMenuItem>
+                                )}
+                                {onCopyTo && (
+                                    <DropdownMenuItem
+                                        onClick={() => {
+                                            onCopyTo(contextItems);
+                                            contextMenu.close();
+                                        }}
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                        Copy {contextItems.length} items to…
+                                    </DropdownMenuItem>
+                                )}
+                            </>
+                        }
+                        destructive={
+                            allowDelete && (
+                                <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() => {
+                                        onDelete?.(contextItems);
+                                        contextMenu.close();
+                                    }}
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    {contextItems.every(isSharedWithMe)
+                                        ? `Remove ${contextItems.length} shared items`
+                                        : `Move ${contextItems.length} items to trash`}
+                                </DropdownMenuItem>
+                            )
+                        }
+                    />
                 )}
             </ContextMenuAnchor>
             {runner.dialogs}

@@ -1,14 +1,21 @@
 import { describe, expect, test } from 'bun:test';
+import type { VectorFrame } from '../../vector/frames';
 import {
+    canvasPtToPx,
+    canvasPxToPt,
     elementsInFrame,
-    FRAME_ASPECT_RATIO,
     FRAME_FIELDS,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
     framesFrom,
+    MAX_SLIDE_WIDTH,
+    MIN_SLIDE_WIDTH,
     nearestFrameId,
+    nearestSlideSize,
     pointInFrame,
-    type VectorFrame,
+    SLIDE_SIZES,
+    slideFontSize,
+    slidePtToPx,
+    slidePxToPt,
+    snapSlideFontSize,
 } from '../../vector/frames';
 import { SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { shape } from './element-factories';
@@ -18,18 +25,79 @@ function frames(...ids: string[]): VectorFrame[] {
         id,
         index: `a${i}`,
         name: '',
-        width: FRAME_WIDTH,
-        height: FRAME_HEIGHT,
+        ...SLIDE_SIZES['16:9'],
         background: '',
     }));
 }
 
-describe('frames', () => {
-    // The one fact a test can hold that the declarations don't: every frame in this programme is 16:9
-    // at 1920x1080, and the size is a constant rather than a stored field.
-    test('every frame is 16:9 at 1920x1080', () => {
-        expect([FRAME_WIDTH, FRAME_HEIGHT]).toEqual([1920, 1080]);
-        expect(FRAME_ASPECT_RATIO).toBeCloseTo(16 / 9);
+describe('SLIDE_SIZES', () => {
+    // Google's sizes: both 10 in wide, so a 4:3 slide is the 16:9 one with 360 px more height and a
+    // switch moves nothing off the page.
+    test('16:9 is 1920x1080 and 4:3 keeps the width at 1920x1440', () => {
+        expect(SLIDE_SIZES).toEqual({ '16:9': { width: 1920, height: 1080 }, '4:3': { width: 1920, height: 1440 } });
+    });
+});
+
+describe('canvasPxToPt', () => {
+    // A drawing prints at CSS's 96 dpi, so that is the pt a canvas px crosses the clipboard as.
+    test("a drawing's px is 3/4 pt, and back", () => {
+        expect(canvasPxToPt(20, undefined)).toBe(15);
+        expect(canvasPtToPx(15, undefined)).toBe(20);
+        expect(canvasPtToPx(canvasPxToPt(48, undefined), undefined)).toBe(48);
+    });
+
+    // A deck crosses at its own width: 960 pt is 2 px a pt.
+    test("a deck's px is its own pt, and back", () => {
+        expect(canvasPxToPt(88, 960)).toBe(44);
+        expect(canvasPtToPx(44, 960)).toBe(88);
+        expect(canvasPxToPt(48, 720)).toBe(18);
+    });
+});
+
+describe("a deck's pt", () => {
+    // Google's 10 in deck is 8/3 px a pt; PowerPoint's 13.33 in widescreen 2.
+    test('converts at the deck width, both ways', () => {
+        expect(slidePtToPx(44, 960)).toBe(88);
+        expect(slidePxToPt(88, 960)).toBe(44);
+        expect(slidePxToPt(slidePtToPx(44, 720), 720)).toBe(44);
+        expect(slidePxToPt(48, 720)).toBe(18);
+    });
+
+    // What the pptx reader computes for Google's 44 pt title: 44 × 12,700 EMU at 1920 / 9,144,000 px an EMU.
+    test('shows a stored px on the half-point grid, in fonts.ts range', () => {
+        expect(slideFontSize(117.33333333333334, 720)).toBe(44);
+        expect(slideFontSize(117.4, 720)).toBe(44);
+        expect(slideFontSize(29, 720)).toBe(11);
+        expect(slideFontSize(28.1, 720)).toBe(10.5);
+        expect(slideFontSize(0.01, 720)).toBe(1);
+        expect(slideFontSize(1e6, 720)).toBe(400);
+    });
+
+    // ST_SlideSizeCoordinate's 1 to 56 in holds both sides of every slide size; a 16:9 height is the short side.
+    test("every deck's p:sldSz is within PowerPoint's 1 to 56 in", () => {
+        for (const { width, height } of Object.values(SLIDE_SIZES)) {
+            expect(slidePxToPt(height, MIN_SLIDE_WIDTH)).toBeGreaterThanOrEqual(72);
+            expect(slidePxToPt(width, MAX_SLIDE_WIDTH)).toBeLessThanOrEqual(4032);
+        }
+        expect(slidePxToPt(SLIDE_SIZES['16:9'].height, MIN_SLIDE_WIDTH)).toBe(72);
+    });
+
+    test("snaps an imported size to the deck's half points", () => {
+        expect(snapSlideFontSize(117.33333333333334, 720)).toBe(slidePtToPx(44, 720));
+        expect(snapSlideFontSize(88.4, 960)).toBe(88);
+    });
+});
+
+describe('nearestSlideSize', () => {
+    test("PowerPoint's and Google's widescreen sizes, and 16:10, are 16:9", () => {
+        expect(nearestSlideSize(12_192_000, 6_858_000)).toBe('16:9');
+        expect(nearestSlideSize(9_144_000, 5_143_500)).toBe('16:9');
+        expect(nearestSlideSize(1920, 1200)).toBe('16:9');
+    });
+
+    test('4:3 and A4 landscape are 4:3', () => {
+        expect(nearestSlideSize(9_144_000, 6_858_000)).toBe('4:3');
+        expect(nearestSlideSize(10_692_000, 7_560_000)).toBe('4:3');
     });
 });
 
@@ -51,18 +119,18 @@ describe('pointInFrame', () => {
     test('the page and its edges are inside', () => {
         expect(pointInFrame({ x: 0, y: 0 }, page)).toBe(true);
         expect(pointInFrame({ x: 960, y: 540 }, page)).toBe(true);
-        expect(pointInFrame({ x: FRAME_WIDTH, y: FRAME_HEIGHT }, page)).toBe(true);
+        expect(pointInFrame({ x: page.width, y: page.height }, page)).toBe(true);
     });
 
     test('the letterbox backdrop around it is outside', () => {
         expect(pointInFrame({ x: -1, y: 540 }, page)).toBe(false);
         expect(pointInFrame({ x: 960, y: -1 }, page)).toBe(false);
-        expect(pointInFrame({ x: FRAME_WIDTH + 1, y: 540 }, page)).toBe(false);
-        expect(pointInFrame({ x: 960, y: FRAME_HEIGHT + 1 }, page)).toBe(false);
+        expect(pointInFrame({ x: page.width + 1, y: 540 }, page)).toBe(false);
+        expect(pointInFrame({ x: 960, y: page.height + 1 }, page)).toBe(false);
     });
 });
 
-test('FRAME_FIELDS is the stored key allow-list, and excludes the constant size', () => {
+test('FRAME_FIELDS is the stored key allow-list, and excludes the size the deck sets', () => {
     expect(FRAME_FIELDS).toEqual(['id', 'index', 'name', 'background']);
 });
 

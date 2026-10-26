@@ -5,7 +5,8 @@ import { resolveContacts } from '../contacts/get-contacts';
 import { requireSelf } from '../core/access';
 import { readBoundedBody, readBoundedBodyBytes } from '../core/http';
 import { DAV_BODY_MAX_BYTES } from '../dav/body';
-import { type CollectionPath, parseCollectionPath } from '../dav/href';
+import type { CollectionPath } from '../dav/href';
+import { parseCollectionPath } from '../dav/href';
 import { parsePropfind, wantsBrief } from '../dav/propfind';
 import { davError } from '../dav/xml';
 import {

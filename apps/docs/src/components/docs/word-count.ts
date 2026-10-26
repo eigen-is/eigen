@@ -1,14 +1,19 @@
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
-import { readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { isFigureFrameNode, readEquation, readFigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
+import { textOutsideNotes } from './extensions/footnote';
 
 export type TextCounts = { words: number; characters: number; charactersExcludingSpaces: number };
 
 const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' });
 
-// A leaf ends the word before it; a figure adds its caption, never its alt text or media name.
-const leafText = (node: Node) =>
-    `\n${node.type.name === 'figure' ? (readFigureAttrs(node.attrs).caption ?? '') : ''}\n`;
+// A leaf ends the word before it; a figure or a chart adds its caption, never its alt text, media name or chart text,
+// and an equation its text.
+function leafText(node: Node): string {
+    if (isFigureFrameNode(node.type.name)) return `\n${readFigureFrameAttrs(node.attrs).caption ?? ''}\n`;
+    if (node.type.name === 'equation') return `\n${readEquation(node.attrs).text}\n`;
+    return '\n\n';
+}
 
 function countGraphemes(text: string): number {
     let count = 0;
@@ -26,9 +31,10 @@ function countText(text: string): TextCounts {
     };
 }
 
-// The whole doc, and the selection when it holds any range (a table's cells are several).
+// The whole doc, and the selection when it holds any range (a table's cells are several). A footnote's note counts
+// nothing, as in Google Docs, and its reference ends the word before it.
 export function countWords({ doc, selection }: EditorState): { document: TextCounts; selection: TextCounts | null } {
-    const textOf = (from: number, to: number) => doc.textBetween(from, to, '\n', leafText);
+    const textOf = (from: number, to: number) => textOutsideNotes(doc, from, to, '\n', '\n', leafText);
     return {
         document: countText(textOf(0, doc.content.size)),
         selection: selection.empty

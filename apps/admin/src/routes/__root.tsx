@@ -1,6 +1,7 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { useAddTeamMember, useIsOrgOwner, useSetupStatus, useTeams } from '@workspace/lib/admin';
-import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
+import type { RouterAppContext } from '@workspace/lib/auth';
+import { useAuth } from '@workspace/lib/auth';
 import { SETUP_LINK_PARAM } from '@workspace/lib/constants/setup';
 import { usePublicConfig } from '@workspace/lib/public';
 import { useServerSettings } from '@workspace/lib/settings';

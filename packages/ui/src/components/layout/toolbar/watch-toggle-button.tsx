@@ -47,7 +47,7 @@ export function WatchMenuItem({ ownerId, mountId, pathId }: WatchToggleButtonPro
     const { direct, label, isPending, toggle } = useWatchToggle(ownerId, mountId, pathId);
     return (
         <DropdownMenuItem disabled={isPending} onClick={toggle}>
-            {direct ? <BellRing className="mr-2" /> : <Bell className="mr-2" />}
+            {direct ? <BellRing /> : <Bell />}
             {label}
         </DropdownMenuItem>
     );

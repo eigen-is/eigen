@@ -7,13 +7,15 @@
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { NUDGE_STEP, NUDGE_STEP_LARGE, type VectorElement } from '@workspace/lib/vector';
+import type { VectorElement, VectorElementPatch, ZOp } from '@workspace/lib/vector';
+import { NUDGE_STEP, NUDGE_STEP_LARGE } from '@workspace/lib/vector';
+import { holdCapture } from '@workspace/ui/components/properties-panel';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type * as Y from 'yjs';
-import { useZOrderHotkeys, type ZOp } from '../../properties-panel/z-order';
+import { useZOrderHotkeys } from '../../properties-panel/z-order';
 import { applyZOrder, deleteSelection, duplicateSelection } from './selection-ops';
-import { holdCapture, type VectorElementPatch } from './use-canvas-doc';
-import { VECTOR_TOOLS, type VectorTool } from './use-tool';
+import type { VectorTool } from './use-tool';
+import { VECTOR_TOOLS } from './use-tool';
 
 type CanvasKeyboardParams = {
     enabled: boolean;
@@ -26,6 +28,7 @@ type CanvasKeyboardParams = {
     undoManager: Y.UndoManager | null;
     deleteElements: (ids: string[]) => void;
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
+    reorderElements: (ids: string[], selectedIds: string[], op: ZOp) => void;
     duplicateElements: (ids: string[], dx: number, dy: number) => string[];
     onInsertImage?: () => void;
 };
@@ -200,7 +203,7 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     // fed vector's fractional-index write.
     const arrange = useCallback((op: ZOp) => {
         const p = live.current;
-        applyZOrder(op, p.elements, p.selectedIds, p.updateElements, p.undoManager);
+        applyZOrder(op, p.elements, p.selectedIds, p.reorderElements, p.undoManager);
     }, []);
     useZOrderHotkeys(enabled && hasSelection, arrange);
 }

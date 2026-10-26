@@ -6,12 +6,28 @@ import {
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
+import type { ChartType } from '@workspace/lib/types/chart';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
+import type {
+    Box,
+    ImageSize,
+    MarqueeMode,
+    NewVectorElement,
+    Point,
+    SnapLine,
+    SnapTargets,
+    StyleDefaults,
+    VectorArrowElement,
+    VectorElement,
+    VectorElementPatch,
+    ZOp,
+} from '@workspace/lib/vector';
 import {
     arrowRoute,
-    type Box,
     boxCenter,
+    canvasImageName,
     computeSnapTargets,
     elementBounds,
     elementsInFrame,
@@ -20,67 +36,76 @@ import {
     fitImageSize,
     getElementsBounds,
     IMAGE_CASCADE_OFFSET,
-    type ImageSize,
     isLinearElement,
     isTransparentColor,
-    type MarqueeMode,
     marqueeMode,
     NEW_TEXT_BOX_SIZE,
     orderByFractionalIndex,
-    type Point,
     paintsNothing,
     parseIdList,
     parsePoints,
     pointInFrame,
+    randomSeed,
     resizeLinear,
     rotatePoint,
     SNAP_SCREEN_THRESHOLD,
-    type SnapLine,
-    type SnapTargets,
-    type StyleDefaults,
     SVG_NS,
     sceneBounds,
     snapBoxToTargets,
-    type VectorArrowElement,
-    type VectorElement,
 } from '@workspace/lib/vector';
 import { CommentIndicator } from '@workspace/ui/components/comments';
-import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
+import { sealed } from '@workspace/ui/components/properties-panel';
 import { cn } from '@workspace/ui/lib/utils';
 import { ImageIcon } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useDialogOpen } from '../../hooks/use-dialog-open';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
-import { useContextMenu } from '../context-menu';
+import type { MenuSectionsProps } from '../context-menu';
+import {
+    ClipboardMenuItems,
+    ContextMenuAnchor,
+    MenuSections,
+    ObjectContextMenu,
+    useContextMenu,
+} from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
 import { HintPill } from '../hint-pill';
 import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
-import type { ZOp } from '../properties-panel/z-order';
-import { CanvasObjectMenu } from './canvas-object-menu';
+import { ObjectTransform } from '../transform/object-transform';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
 import { EmptyOutlines } from './empty-outline';
-import { randomSeed } from './hooks/element-writes';
-import { applyZOrder, deleteSelection, duplicateSelection } from './hooks/selection-ops';
+import {
+    applyZOrder,
+    convertElementToShapes,
+    deleteSelection,
+    duplicateSelection,
+    selectionShapes,
+} from './hooks/selection-ops';
 import { dropOutsideTextSelection, useCanvasClipboard } from './hooks/use-canvas-clipboard';
-import { type CanvasDoc, type NewVectorElement, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
+import type { CanvasDoc } from './hooks/use-canvas-doc';
 import { useCanvasKeyboard } from './hooks/use-canvas-keyboard';
-import { type CanvasPeerState, type PublishCursor, peerOnFrame } from './hooks/use-canvas-presence';
+import type { CanvasPeerState, PublishCursor } from './hooks/use-canvas-presence';
+import { peerOnFrame } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import { useSpaceHeld } from './hooks/use-space-held';
 import type { VectorTool } from './hooks/use-tool';
 import { useViewport } from './hooks/use-viewport';
 import { ELEMENT_KIND_UI } from './kinds';
+import { newChartElement } from './kinds/chart';
 import { CANVAS_PAPER_CLASS, canvasSurfaceClass, FramePage } from './paper';
-import { arrowLabelEditing, type EditingState } from './text-editing';
+import type { EditingState } from './text-editing';
+import { arrowLabelEditing } from './text-editing';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
 import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
 import { boundsToBox, boxToBounds, elementBox } from './tools/boxes';
-import { type CreatingState, creatingElement, isBoxTool, newShapeBox, normalizeRect } from './tools/create-shape';
+import type { CreatingState } from './tools/create-shape';
+import { creatingElement, isBoxTool, newShapeBox, normalizeRect } from './tools/create-shape';
 import { SnapGuides } from './tools/snap-guides';
 import { useTouchGestures } from './tools/touch-gestures';
 import { useDrawingTools } from './tools/use-drawing-tools';
@@ -123,7 +148,10 @@ type Gesture = { pointerId: number } & (
 export type CanvasHandle = {
     insertFiles: (files: File[]) => void;
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
+    insertChart: (type: ChartType) => void;
     centerOn: (el: VectorElement) => void;
+    // Every element the canvas shows, on its background, as the SVG the browser draws (Vector's File › Download).
+    downloadDrawing: () => void;
 };
 
 type CanvasEditorProps = {
@@ -146,6 +174,8 @@ type CanvasEditorProps = {
     // Owner + mount of THIS document, for cross-mount image paste (re-upload into our media/ folder).
     ownerId: string;
     mountId: string;
+    // The document's file name, which a downloaded image is named for, less its extension.
+    fileName: string;
     // Selection is lifted to the editor so the properties panel and canvas share one source (the
     // slides editor/canvas idiom).
     selectedIds: string[];
@@ -173,8 +203,8 @@ type CanvasEditorProps = {
     onSwipeFrame?: (delta: number) => void;
     // Opens the host's image picker on the image key; the toolbar gets the same callback.
     onInsertImage?: () => void;
-    // A right-click on empty canvas; the deck opens its slide menu. Omitted, the browser's menu shows.
-    onEmptyContextMenu?: (e: React.MouseEvent) => void;
+    // The host's rows on a right-click on empty canvas, below the canvas' own Paste: the deck's slide rows.
+    backgroundMenu?: Omit<MenuSectionsProps, 'clipboard'>;
 };
 
 // The live, interactive canvas surface — one absolutely positioned layer per element, with the
@@ -194,6 +224,7 @@ export function CanvasEditor({
     canEdit,
     ownerId,
     mountId,
+    fileName,
     selectedIds,
     setSelectedIds,
     toggle,
@@ -207,8 +238,9 @@ export function CanvasEditor({
     searchActiveId,
     onSwipeFrame,
     onInsertImage,
-    onEmptyContextMenu,
+    backgroundMenu,
 }: CanvasEditorProps) {
+    const imageName = stripEigenExtension(fileName);
     const {
         elements,
         meta,
@@ -221,6 +253,8 @@ export function CanvasEditor({
         deleteElements,
         deleteElementsUntracked,
         duplicateElements,
+        replaceElement,
+        reorderElements,
         undoManager,
         provider,
     } = doc;
@@ -291,9 +325,12 @@ export function CanvasEditor({
     // the two never coexist and each owns a different commit contract: a label commits once on close,
     // a rich-text box writes on every change.
     const [richTextEditId, setRichTextEditId] = useState<string | null>(null);
+    // The element whose kind's EditDialog a double-click opened (a chart's Edit data).
+    const [editDialogId, setEditDialogId] = useState<string | null>(null);
     // The object context menu (right-click) — the singleton surface; item is the right-clicked
     // element id, its ops act on the selection below.
     const objectContextMenu = useContextMenu<string>();
+    const backgroundContextMenu = useContextMenu<true>();
 
     const gestureRef = useRef<Gesture | null>(null);
     // First onTransform of a resize/rotate is the de-facto gesture start (ObjectTransform fires it
@@ -467,6 +504,7 @@ export function CanvasEditor({
         undoManager,
         deleteElements,
         updateElements,
+        reorderElements,
         duplicateElements,
         onInsertImage,
     });
@@ -845,21 +883,16 @@ export function CanvasEditor({
         ],
     );
 
-    // Publish the handle for the host (cleared on unmount so a stale canvas never places or pans).
-    useEffect(() => {
-        if (!canvasRef) return;
-        canvasRef.current = {
-            insertFiles: (files) => void insertImageFiles(files, viewportCenterScene()),
-            insertDrivePaths,
-            centerOn: (el) => {
-                const box = elementBox(el);
-                centerOn(box.x + box.width / 2, box.y + box.height / 2);
-            },
-        };
-        return () => {
-            canvasRef.current = null;
-        };
-    }, [canvasRef, insertImageFiles, viewportCenterScene, insertDrivePaths, centerOn]);
+    // Insert → Chart: the sample chart at the viewport center, selected, one undo step.
+    const insertChart = useCallback(
+        (type: ChartType) => {
+            const id = sealed(undoManager, () =>
+                addElement(newChartElement(type, viewportCenterScene(), viewport, styleDefaults)),
+            );
+            if (id) setSelectedIds([id]);
+        },
+        [undoManager, addElement, viewportCenterScene, viewport, styleDefaults, setSelectedIds],
+    );
 
     // Image ingestion is gated on a real upload target (a fresh .eigenvector scaffolds media/, so
     // this is normally present) and is closed while a text overlay owns paste + the pointer.
@@ -870,7 +903,7 @@ export function CanvasEditor({
     // the drag-over affordance shows only when insertion is actually possible.
     // ⌘C/⌘X/⌘V, the menu clipboard rows and the whole paste ladder live in the sibling hook (the
     // canvas only hands it the scene, the selection and the frame-stamped writers).
-    const { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText } = useCanvasClipboard({
+    const { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText, downloadImage } = useCanvasClipboard({
         canEdit,
         textEditingRef,
         containerRef,
@@ -895,6 +928,35 @@ export function CanvasEditor({
         resolveMediaUrl,
         uploadFile: uploadFile.mutateAsync,
     });
+
+    // Publish the handle for the host (cleared on unmount so a stale canvas never places or pans).
+    useEffect(() => {
+        if (!canvasRef) return;
+        canvasRef.current = {
+            insertFiles: (files) => void insertImageFiles(files, viewportCenterScene()),
+            insertDrivePaths,
+            insertChart,
+            centerOn: (el) => {
+                const box = elementBox(el);
+                centerOn(box.x + box.width / 2, box.y + box.height / 2);
+            },
+            downloadDrawing: () => downloadImage(imageName, ordered, meta.background),
+        };
+        return () => {
+            canvasRef.current = null;
+        };
+    }, [
+        canvasRef,
+        insertImageFiles,
+        viewportCenterScene,
+        insertDrivePaths,
+        insertChart,
+        centerOn,
+        downloadImage,
+        imageName,
+        ordered,
+        meta.background,
+    ]);
 
     // In frame mode the letterbox backdrop is not the canvas: the frame clips its overhang, so an
     // element created out there — and the in-place editor over it — would be invisible. The infinite
@@ -927,10 +989,11 @@ export function CanvasEditor({
     }, imagesEnabled);
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
-    // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay;
-    // any kind with an in-place editor opens that instead, inside its own layer; empty canvas starts a
-    // new box there (Excalidraw's openNewText — rich text is the only text kind, so nothing to choose),
-    // placed like the text tool's own click: the starting box with its corner on the point.
+    // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay; a
+    // kind with an edit dialog opens that (a chart's data); any kind with an in-place editor opens that
+    // instead, inside its own layer; empty canvas starts a new box there (Excalidraw's openNewText — rich
+    // text is the only text kind, so nothing to choose), placed like the text tool's own click: the
+    // starting box with its corner on the point.
     const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canEdit || tool !== 'select' || textEditing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
@@ -938,6 +1001,7 @@ export function CanvasEditor({
         const hit = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'arrow') return openEditArrowLabel(hitEl);
+        if (hitEl && ELEMENT_KIND_UI[hitEl.type].EditDialog) return setEditDialogId(hitEl.id);
         if (hitEl && !ELEMENT_KIND_UI[hitEl.type].InPlaceEditor) return;
         const id = hitEl
             ? hitEl.id
@@ -946,7 +1010,7 @@ export function CanvasEditor({
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
-    // Right-click on an element opens the object menu (empty canvas goes to onEmptyContextMenu). Like
+    // Right-click on an element opens the object menu, on empty canvas the background menu. Like
     // slides, a right-click on an element outside the current selection selects it first, so the menu
     // ops act on the target; a right-click inside the selection keeps the whole selection. The canvas
     // uses hit-testing (elements have no per-node DOM), so this lives on the container, not per object.
@@ -961,15 +1025,15 @@ export function CanvasEditor({
         }
         const p = clientToScene(e.clientX, e.clientY);
         const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
-        // A viewer's menu is the image download alone, so only an image opens it.
+        // A viewer's menu is the download alone, which an image without its file yet doesn't have.
         if (!canEdit) {
             const hit = hitId ? committedById.get(hitId) : undefined;
-            if (hit?.type === 'image' && resolveMediaPath(hit.mediaName))
+            if (hit && (hit.type !== 'image' || resolveMediaPath(hit.mediaName)))
                 objectContextMenu.handleContextMenu(e, hit.id);
             return;
         }
         if (!hitId) {
-            onEmptyContextMenu?.(e);
+            backgroundContextMenu.handleContextMenu(e, true);
             return;
         }
         if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
@@ -978,12 +1042,32 @@ export function CanvasEditor({
 
     // Menu ops act on the full selection, wired to the same writes as ⌘[/] , ⌘D, and Delete so the
     // menu and the keyboard stay one behavior (one sealed undo step each).
-    const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, updateElements, undoManager);
+    const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, reorderElements, undoManager);
     const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
     const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
     // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
     const menuItemId = objectContextMenu.item;
     const menuElement = menuItemId ? committedById.get(menuItemId) : undefined;
+    // Download image draws the selection, or for a viewer, who selects nothing, the element right-clicked; a single
+    // image downloads only its original file.
+    const menuSelection = canEdit
+        ? ordered.filter((el) => selectedIds.includes(el.id))
+        : menuElement
+          ? [menuElement]
+          : [];
+    const onMenuDownloadImage =
+        menuItemId && !(menuSelection.length === 1 && menuSelection[0].type === 'image')
+            ? () => downloadImage(canvasImageName(menuSelection, imageName), menuSelection)
+            : undefined;
+    // Laid out only while the menu is open.
+    const menuShapes = useMemo(
+        () => (menuItemId ? selectionShapes(selectedIds, committedById) : []),
+        [menuItemId, selectedIds, committedById],
+    );
+    const editDialogElement = editDialogId ? committedById.get(editDialogId) : undefined;
+    const EditDialog = editDialogElement ? ELEMENT_KIND_UI[editDialogElement.type].EditDialog : undefined;
+    const onMenuConvertToShapes = () =>
+        convertElementToShapes(selectedIds[0], menuShapes, replaceElement, setSelectedIds, undoManager);
     // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
     // the sibling module; the canvas only dispatches. Its second-finger takeover ends any live one-finger
     // gesture through this callback (a draw draft in the tools hook, else a canvas create/move/marquee).
@@ -1415,6 +1499,15 @@ export function CanvasEditor({
             onDoubleClick={onDoubleClick}
             onContextMenu={onContextMenu}
             onPaste={onPaste}
+            // A press is the canvas' gesture. With text selected over the scene, Safari drags that selection
+            // from any press (Chrome from selectable text), and the page then gets no pointerup. A drag that
+            // starts in a text editor stays its own; a selection's drag starts at its text node.
+            onDragStart={(e) => {
+                const from = e.target instanceof Text ? e.target.parentElement : e.target;
+                const editor =
+                    from instanceof HTMLTextAreaElement || (from instanceof HTMLElement && from.isContentEditable);
+                if (!editor) e.preventDefault();
+            }}
             {...fileDropProps}
         >
             {/* The scene: plain SCENE units, one layer div per element. pointer-events-none — hit
@@ -1633,18 +1726,43 @@ export function CanvasEditor({
                     {Math.round(zoom * 100)}%
                 </HintPill>
             )}
-            <CanvasObjectMenu
+            <ObjectContextMenu
                 contextMenu={objectContextMenu}
                 canEdit={canEdit}
                 imagePath={menuElement?.type === 'image' ? resolveMediaPath(menuElement.mediaName) : undefined}
+                onDownloadImage={onMenuDownloadImage}
                 onArrange={onMenuArrange}
-                onCopy={onMenuCopy}
                 onCut={onMenuCut}
+                onCopy={onMenuCopy}
                 onPaste={onMenuPaste}
                 onDuplicate={onMenuDuplicate}
                 onDelete={onMenuDelete}
+                onConvertToShapes={menuShapes.length > 0 ? onMenuConvertToShapes : undefined}
                 onComment={onAddComment && menuItemId ? () => onAddComment(menuItemId) : undefined}
             />
+            <ContextMenuAnchor contextMenu={backgroundContextMenu} className="min-w-48">
+                <MenuSections {...backgroundMenu} clipboard={<ClipboardMenuItems onPaste={onMenuPaste} />} />
+            </ContextMenuAnchor>
+            {editDialogElement && EditDialog && (
+                // Portaled to the body, but React bubbles its events up this tree, and the canvas' own
+                // pointer, double-click and paste handlers must not act on a click or paste in the dialog.
+                <div
+                    className="contents"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onPointerMove={(e) => e.stopPropagation()}
+                    onPointerUp={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    onContextMenu={(e) => e.stopPropagation()}
+                    onPaste={(e) => e.stopPropagation()}
+                    onDragStart={(e) => e.stopPropagation()}
+                >
+                    <EditDialog
+                        element={editDialogElement}
+                        onChange={(fields) => sealed(undoManager, () => updateElement(editDialogElement.id, fields))}
+                        onClose={() => setEditDialogId(null)}
+                    />
+                </div>
+            )}
         </div>
     );
 }

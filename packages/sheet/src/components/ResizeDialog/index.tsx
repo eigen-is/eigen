@@ -4,7 +4,8 @@ import { Input } from '@workspace/ui/components/input';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { api, type Context, getSheetConfig } from '../../state';
+import type { Context } from '../../state';
+import { api, getSheetConfig } from '../../state';
 
 // Engine limits, in pixels. The legacy inline item validated column width to 2038
 // but capped its <input> at 545 (copy-pasted from the row case) — fixed here.

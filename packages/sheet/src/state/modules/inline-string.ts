@@ -1,7 +1,7 @@
 import { indexOf, isEmpty, kebabCase } from 'es-toolkit/compat';
-import type { Cell, CellMatrix, CellStyle, InlineStringSegment } from '../../engine/types';
+import type { Cell, CellStyle, InlineStringSegment } from '../../engine/types';
 import type { Context } from '../context';
-import { getCellValue, getFontStyleByCell } from './cell';
+import { getFontStyleByCell } from './cell';
 import { selectTextContent, selectTextContentCross } from './cursor';
 
 type InlineStringCell = Cell & { ct: { t: 'inlineStr'; s: InlineStringSegment[] } };
@@ -75,22 +75,6 @@ export function isInlineStringCT(ct: Cell['ct'] | null | undefined): ct is Inlin
     return ct?.t === 'inlineStr' && (ct?.s?.length ?? 0) > 0;
 }
 
-export function getInlineStringNoStyle(r: number, c: number, data: CellMatrix) {
-    const ct = getCellValue(r, c, data, 'ct');
-    if (isInlineStringCT(ct)) {
-        const strings = ct.s;
-        let value = '';
-        for (let i = 0; i < strings.length; i += 1) {
-            const strObj = strings[i];
-            if (strObj.v) {
-                value += strObj.v;
-            }
-        }
-        return value;
-    }
-    return '';
-}
-
 export function convertCssToStyleList(cssText: string, originCell: Cell) {
     if (isEmpty(cssText)) {
         return {};
@@ -127,7 +111,7 @@ export function convertCssToStyleList(cssText: string, originCell: Cell) {
         }
 
         if (key === 'font-size') {
-            styleList.fs = parseInt(value, 10);
+            styleList.fs = Number.parseFloat(value);
         }
 
         if (key === 'color') {

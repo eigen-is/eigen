@@ -49,11 +49,11 @@ This proposal adds a spam filter to Eigen's own mail server. Today every message
 Full architecture in [IMAP.md](../IMAP.md). The facts that drive this design:
 
 - **Inbound**: internet → Postfix (:25) → pipe transport `eigen-deliver`
-  (`../../docker/postfix/eigen-deliver`) → `POST /mail/deliver/:to` (`apps/api/src/routes/mail.ts:47`)
-  → `Mail.mailboxDeliver` (`apps/api/src/lib/mail/mail-domain.ts:134`), which **always** does
+  (`../../docker/postfix/eigen-deliver`) → `POST /mail/deliver/:to` (the `/mail/deliver/:to` route in `apps/api/src/routes/mail.ts`)
+  → `Mail.mailboxDeliver` (`apps/api/src/lib/mail/mail-domain.ts`), which **always** does
   `store.append('', message)` — INBOX.
 - **Outbound from the API uses the same listener.** `sendMail` relays via `SMTP_HOST=postfix`
-  port 25 (`apps/api/src/lib/core/mailer.ts:39-45`, `docker-compose.yml:53-54`) — so port 25
+  port 25 (`createTransport` in `apps/api/src/lib/core/mailer.ts`, `SMTP_HOST` in `docker-compose.yml`) — so port 25
   carries both internet mail and Eigen's own outbound, and the design must exempt the latter.
 - **Submission listeners inherit milters.** `submission` (587) and `smtps` (465) are separate
   `smtpd` services in `../../docker/postfix/master.cf.template` with no `-o smtpd_milters` override —
@@ -61,28 +61,28 @@ Full architecture in [IMAP.md](../IMAP.md). The facts that drive this design:
 - **"Report Spam" is a pure folder move** with no semantics attached: `handleReportSpamByIds`
   (`../../apps/mail/src/components/mail/hooks/use-mail-actions.ts`) → `PUT /mail/:ownerId/message/move`
   → `Mail.messageMove` → Maildir rename + DB update. The button is shown in **every** non-Junk
-  mailbox, including Trash and Sent (`apps/mail/src/components/mail/email-detail.tsx:47`), and
-  the folder-picker move to Junk already toasts "Reported as spam" (`use-mail-actions.ts:272`).
+  mailbox, including Trash and Sent (the `onReportSpam` button in `apps/mail/src/components/mail/email-detail.tsx`), and
+  the folder-picker move to Junk already toasts "Reported as spam" (`moveEmailByIdOnly` in `use-mail-actions.ts`).
 - **Undo is a replayed move.** The single-slot undo (`z` / toast) records `{from, to}` and moves
   the message back. It carries no intent — "undo a spam report from Trash" and "delete spam"
   are both `Junk → Trash` on the wire, so folder transitions alone cannot express training
   semantics.
 - **iMIP runs only at delivery.** `processInboundImip` has exactly one call site,
-  `mailboxDeliver` (`mail-domain.ts:142`) — anything skipped there is never replayed.
+  `mailboxDeliver` (`mail-domain.ts`) — anything skipped there is never replayed.
 - **Junk is already a first-class mailbox**: in `STANDARD_MAILBOXES`
-  (`apps/api/src/lib/core/constants.ts:33`), mapped to IMAP `\Junk`
-  (`apps/api/src/lib/mail/mailutils.ts:12`), excluded from search
-  (`apps/api/src/lib/mail/maildb.ts:12`).
+  (`packages/lib/src/constants/mailboxes.ts`), mapped to IMAP `\Junk`
+  (`docker/dovecot/dovecot.conf`), excluded from search
+  (`SEARCH_EXCLUDED_MAILBOXES` in `apps/api/src/lib/mail/maildb.ts`).
 - **Milter infrastructure exists**: OpenDKIM at `inet:127.0.0.1:8891` with
-  `milter_default_action = accept` (`docker/postfix/main.cf.template:33-37`). But the
-  OpenDKIM-failure fallback runs `sed -i '/milter/d'` (`docker/postfix/entrypoint.sh:95`),
+  `milter_default_action = accept` (the DKIM milter block in `docker/postfix/main.cf.template`). But the
+  OpenDKIM-failure fallback runs `sed -i '/milter/d'` (`docker/postfix/entrypoint.sh`),
   which would also delete any rspamd milter line — the fallback must become targeted.
 - **The Docker subnet is configurable, and Postfix templates it.** `./eigen setup` falls back through `172.30.0.0/24`, `172.31.0.0/24` and `10.20-23.0.0/24` when `172.20.0.0/24` conflicts (`SUBNET_CANDIDATES` in `apps/api/src/cli/configure.ts`), and `mynetworks` and OpenDKIM's TrustedHosts render from `EIGEN_SUBNET` (compose passes it to the postfix container; entrypoint envsubst), scoped to loopback plus the bridge subnet minus its gateway. The API stays inside `mynetworks` on any fallback subnet, and rspamd reads the same `EIGEN_SUBNET` for its trusted networks, minus the same gateway.
 - **A recursive resolver already runs**: the `mail` profile includes `unbound`
-  (`docker-compose.yml:106`), which Postfix uses via `dns:`. This matters — DNSBL/URIBL lookups
+  (`docker-compose.yml`), which Postfix uses via `dns:`. This matters — DNSBL/URIBL lookups
   are refused or lied to through public resolvers like 8.8.8.8, and are the usual pain point of
   an rspamd deployment. Here it's already solved.
-- **New-mail notifications** fire in the `received` store callback (`mail-domain.ts:80-97`) for
+- **New-mail notifications** fire in the `received` store callback (`Mail.init` in `mail-domain.ts`) for
   every new message regardless of mailbox.
 
 ## Design
@@ -247,7 +247,7 @@ One row, written only for the rare quarantined invitation, gives exactly-once se
 repeated Junk round-trips can't double-apply, and INBOX-delivered mail (already processed)
 never has a row so rescuing it never re-processes.
 
-**Notification suppression.** The `received` callback (`mail-domain.ts:80-97`) skips
+**Notification suppression.** The `received` callback (`Mail.init` in `mail-domain.ts`) skips
 `notifications.persist` for messages arriving in Junk; the `MAIL_RECEIVED` SSE still fires so
 the Junk count updates.
 

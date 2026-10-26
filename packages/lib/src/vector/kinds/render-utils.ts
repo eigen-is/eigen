@@ -4,31 +4,91 @@
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { svgGradientStops } from '../../background/gradient';
+import { getFontFamily } from '../../constants/fonts';
 import { escapeXml } from '../../core/xml';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
-import { isClosedPath, type Point, round } from '../geometry';
-import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
+import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
+import type { Box, Point } from '../geometry';
+import { arrowCurveBeziers, isClosedPath } from '../geometry';
 import {
-    type FillStyle,
-    isLinearElement,
-    type VectorArrowElement,
-    type VectorImageElement,
-    type VectorLinearElement,
-    type VectorRichTextElement,
-    type VectorShapeElement,
+    cornerRadius,
+    diamondOutline,
+    ellipseOutline,
+    outlinePath,
+    rectOutline,
+    scaleNormalizedPath,
+    sharpDiamondOffset,
+} from '../outline';
+import { DEG_TO_RAD, round } from '../points';
+import type {
+    FillStyle,
+    TextLine,
+    VectorArrowElement,
+    VectorElement,
+    VectorImageElement,
+    VectorLinearElement,
+    VectorPathElement,
+    VectorPieElement,
+    VectorRichTextElement,
+    VectorShapeElement,
 } from '../types';
+import { isLinearElement } from '../types';
+
+// The SVG namespace, one spelling for every surface that writes it: the viewports scene-layers emits,
+// the documents scene-to-svg serializes, a standalone chart and the live <svg> nodes the canvas mounts.
+export const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// The most degrees of a slice's arc one cubic draws.
+const ARC_PIECE = 45;
 
 // Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
 type FillSource = { id: string; fill: string };
 
-// What the one rough box drawable serves: the closed shapes, plus the two DOM boxes whose border it is.
-type RoughBoxElement = VectorShapeElement | VectorImageElement | VectorRichTextElement;
+// What the one rough box drawable serves: the closed shapes, the pie slice and the path, plus the two DOM
+// boxes whose border it is.
+type RoughBoxElement =
+    | VectorShapeElement
+    | VectorPieElement
+    | VectorPathElement
+    | VectorImageElement
+    | VectorRichTextElement;
 
 // A closed box's rough drawing. The generator is per-call: seeded roughjs output depends only on
 // el.seed. The linecap rides the paths (the caller owns the placing <g>).
 export function renderRoughShape(el: RoughBoxElement): string {
-    const paths = drawableToSvg(shapeDrawable(new RoughGenerator(), el));
-    return `${'fill' in el ? fillDefs(el) : ''}<g stroke-linecap="round">${paths}</g>`;
+    const outline = boxOutlinePath(el);
+    const drawable = shapeDrawable(new RoughGenerator(), el, outline);
+    // A gradient's defs ride along only when the fill paints.
+    const defs = 'fill' in el && drawable.options.fill !== undefined ? fillDefs(el) : '';
+    return `${defs}<g stroke-linecap="round">${drawableToSvg(drawable, { id: el.id, d: outline })}</g>`;
+}
+
+// The dashed box an element draws where its content can't be shown: a picture with no file, a chart that
+// doesn't read.
+export const PLACEHOLDER_STROKE = 'fill="none" stroke="#9ca3af" stroke-width="1" stroke-dasharray="6 6"';
+
+// An element's own group: translated to its position, then rotated about its center (SVG rotate() takes
+// degrees, as `angle` stores them). Every kind draws in its local frame inside one.
+export function elementGroupOpen(el: VectorElement): string {
+    const opacity = el.opacity !== 100 ? ` opacity="${round(el.opacity / 100)}"` : '';
+    return `<g transform="${elementTransform(el)}"${opacity}>`;
+}
+
+function elementTransform(box: Box): string {
+    const translate = `translate(${round(box.x)} ${round(box.y)})`;
+    if (box.angle === 0) return translate;
+    return `${translate} rotate(${round(box.angle)} ${round(box.width / 2)} ${round(box.height / 2)})`;
+}
+
+// One line of plain SVG text, which every surface draws (WeasyPrint ignores foreignObject). `y` is the
+// line's top and the baseline sits the font's offset below it; a turned line turns about (x, y). Bold is
+// 600, the weight of Inter's and JetBrains Mono's bundled bold faces; Source Serif's is 700, so its width
+// table reserves slightly more than the line draws, and Excalifont has only a regular face.
+export function svgTextLine({ text, x, y, anchor, fontFamily, fontSize, bold, color, rotate }: TextLine): string {
+    const baseline = y + getVerticalOffset(fontFamily, fontSize, getLineHeightPx(fontFamily, fontSize));
+    const turn = rotate === 0 ? '' : ` transform="rotate(${round(rotate)} ${round(x)} ${round(y)})"`;
+    const weight = bold ? ' font-weight="600"' : '';
+    return `<text x="${round(x)}" y="${round(baseline)}"${turn} font-family="${escapeXml(getFontFamily(fontFamily))}" font-size="${round(fontSize)}px"${weight} fill="${escapeXml(color)}" text-anchor="${anchor}" style="white-space: pre;">${escapeXml(text)}</text>`;
 }
 
 // Ported from Excalidraw's getFreeDrawSvgPath: a chain of quadratic segments whose control points are
@@ -50,25 +110,54 @@ function med(a: number[], b: number[]): number[] {
     return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 }
 
-function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement): Drawable {
-    if (el.type === 'ellipse') {
+// The box's own outline in its local frame: what a slice, a path and a rounded corner draw through gen.path, and what
+// every hatch is clipped to.
+function boxOutlinePath(el: RoughBoxElement): string {
+    const box = { x: 0, y: 0, width: el.width, height: el.height };
+    if (el.type === 'ellipse' || isWholeSlice(el)) return outlinePath(ellipseOutline(box, 0));
+    // A slice is SVG arcs, as a rounded corner is: roughjs's own arc samples 20° steps at any size and leads in
+    // from inside the rim, which facets a large slice. roughjs draws an arc as one cubic per up to 120°, which
+    // bulges 0.15% of the radius; one per ARC_PIECE bulges as little as its ellipse.
+    if (el.type === 'pie') {
+        const rx = el.width / 2;
+        const ry = el.height / 2;
+        const rim = (deg: number) =>
+            `${round(rx + rx * Math.cos(deg * DEG_TO_RAD))} ${round(ry + ry * Math.sin(deg * DEG_TO_RAD))}`;
+        const pieces = Math.ceil(el.sweepAngle / ARC_PIECE);
+        let d = `M ${round(rx)} ${round(ry)} L ${rim(el.startAngle)}`;
+        for (let i = 1; i <= pieces; i++) {
+            d += ` A ${round(rx)} ${round(ry)} 0 0 1 ${rim(el.startAngle + (el.sweepAngle * i) / pieces)}`;
+        }
+        return `${d} Z`;
+    }
+    // A path is its own SVG path, scaled from the unit box.
+    if (el.type === 'path') return scaleNormalizedPath(el.path, el.width, el.height);
+    if (el.type === 'diamond') return outlinePath(diamondOutline(box, cornerRadius(el, 'diamond'), 0));
+    return outlinePath(rectOutline(box, cornerRadius(el, 'rectangle'), 0));
+}
+
+// A whole slice is the ellipse: a slice's path would draw its two radii as a seam.
+function isWholeSlice(el: RoughBoxElement): boolean {
+    return el.type === 'pie' && el.sweepAngle >= 360;
+}
+
+function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement, outline: string): Drawable {
+    if (el.type === 'ellipse' || isWholeSlice(el)) {
         return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, roughOptions(el, false));
     }
-    const box = { x: 0, y: 0, width: el.width, height: el.height };
-    const radius = cornerRadius(el, el.type === 'diamond' ? 'diamond' : 'rectangle');
-    const rounded = radius > 0;
+    if (el.type === 'pie') return gen.path(outline, roughOptions(el, true));
+    if (el.type === 'path') return gen.path(outline, roughOptions(el, el.closed));
+    const rounded = cornerRadius(el, el.type === 'diamond' ? 'diamond' : 'rectangle') > 0;
     const options = roughOptions(el, rounded);
     // Straight corners keep roughjs's own rectangle/polygon generators; a rounded one is the shared
     // outline path, the same curve docking intersects.
-    if (!rounded) {
-        if (el.type !== 'diamond') return gen.rectangle(0, 0, el.width, el.height, options);
-        return gen.polygon(
-            sharpDiamondOffset(box, 0).map((p): [number, number] => [p.x, p.y]),
-            options,
-        );
-    }
-    const outline = el.type === 'diamond' ? diamondOutline(box, radius, 0) : rectOutline(box, radius, 0);
-    return gen.path(outlinePath(outline), options);
+    if (rounded) return gen.path(outline, options);
+    if (el.type !== 'diamond') return gen.rectangle(0, 0, el.width, el.height, options);
+    const box = { x: 0, y: 0, width: el.width, height: el.height };
+    return gen.polygon(
+        sharpDiamondOffset(box, 0).map((p): [number, number] => [p.x, p.y]),
+        options,
+    );
 }
 
 // Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
@@ -103,13 +192,14 @@ function roughOptions(el: RoughBoxElement, continuousPath: boolean): Options {
     // A shape with its border switched off (capabilities.strokeOptional): roughjs's own 'none' skips
     // the outline sets entirely, so the fill still paints and no invisible path is serialized.
     if (isTransparentColor(el.strokeColor)) options.stroke = 'none';
-    // An image carries no Fill at all, and roughjs then draws the outline alone — its border.
-    if ('fill' in el) {
+    // An image carries no Fill at all and an open path has nothing to fill: roughjs then draws the
+    // outline alone.
+    if ('fill' in el && (el.type !== 'path' || el.closed)) {
         const { fill, fillStyle } = fillOptions(el);
         options.fill = fill;
         options.fillStyle = fillStyle;
     }
-    if (el.type === 'ellipse') options.curveFitting = 1;
+    if (el.type === 'ellipse' || el.type === 'pie') options.curveFitting = 1;
     return options;
 }
 
@@ -190,9 +280,15 @@ function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: 
     return undefined;
 }
 
+// A hatch's clip: the outline it fills and the element its clipPath id is scoped to. roughjs strokes hachure,
+// cross-hatch and zigzag past the shape (a zigzag by about 3px at any size), which shows on a small one, so the
+// strokes draw inside the outline and the outline itself stays unclipped. A solid fill is the outline already.
+export type HatchClip = { id: string; d: string };
+
 // Fill sets come before the outline in `sets`, so drawing in order layers fill under stroke.
-export function drawableToSvg(drawable: Drawable): string {
+export function drawableToSvg(drawable: Drawable, clip?: HatchClip): string {
     const o = drawable.options;
+    let hatch = '';
     let out = '';
     for (const set of drawable.sets) {
         const d = opsToPath(set);
@@ -203,10 +299,20 @@ export function drawableToSvg(drawable: Drawable): string {
         } else if (set.type === 'fillPath') {
             out += `<path d="${d}" fill="${escapeXml(o.fill ?? 'none')}" stroke="none"/>`;
         } else if (set.type === 'fillSketch') {
-            out += `<path d="${d}" stroke="${escapeXml(o.fill ?? 'none')}" stroke-width="${round(o.fillWeight)}" fill="none"/>`;
+            hatch += `<path d="${d}" stroke="${escapeXml(o.fill ?? 'none')}" stroke-width="${round(o.fillWeight)}" fill="none"/>`;
         }
     }
-    return out;
+    if (hatch === '' || !clip?.d) return hatch + out;
+    const id = svgId('hatch', clip.id);
+    return `<defs><clipPath id="${id}"><path d="${clip.d}"/></clipPath></defs><g clip-path="url(#${id})">${hatch}</g>${out}`;
+}
+
+// A closed line's outline, which its hatch is clipped to: the polygon, or a round line's curve as roughjs draws it.
+export function loopPath(points: Point[], curved: boolean): string {
+    if (!curved || points.length < 2) return outlinePath({ kind: 'polygon', corners: points });
+    const at = (p: Point) => `${round(p.x)} ${round(p.y)}`;
+    const curves = arrowCurveBeziers(points).map(([, c1, c2, end]) => `C ${at(c1)} ${at(c2)} ${at(end)}`);
+    return `M ${at(points[0])} ${curves.join(' ')} Z`;
 }
 
 // The whole roughjs serializer: move→M, lineTo→L, bcurveTo→C, coordinates to 2 decimals.

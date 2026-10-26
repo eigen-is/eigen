@@ -9,6 +9,10 @@ export const mailRootOf = (userId: string) => join(TEST_DATA_DIR, 'home', userId
 export const maildirOf = (userId: string) => join(mailRootOf(userId), 'Maildir');
 export const boxDir = (userId: string, mailbox: string) => maildirFolder(maildirOf(userId), mailbox);
 
+// CI's per-test budget, for a test that waits on a folder watcher. Under load on macOS an fs.watch event
+// arrives seconds late, and each watcher blocks the event loop while it attaches: twelve can pass bun's 5 s default.
+export const WATCHER_TEST_TIMEOUT_MS = 30_000;
+
 // Fabricates a Maildir++ folder the way Dovecot does: a dot-prefixed directory with cur/new/tmp and
 // the `maildirfolder` marker. Eigen itself makes no folder but the standard six.
 export function seedMaildirFolder(userId: string, mailbox: string): void {

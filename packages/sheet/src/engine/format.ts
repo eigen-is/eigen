@@ -1,7 +1,7 @@
 import numeral from 'numeral';
 import { format, isDateFormat } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
-import type { Cell, CellMatrix, CellType } from './types';
+import type { Cell, CellMatrix, CellType, FormulaArg } from './types';
 import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } from './validation';
 
 // Canonical display for a boolean cell — Excel's uppercase TRUE/FALSE. The xlsx
@@ -11,9 +11,64 @@ export function booleanDisplay(value: boolean): string {
     return value ? 'TRUE' : 'FALSE';
 }
 
+// Excel's General alignment, for a cell without its own, as the editor and the HTML export draw it: numbers and dates right, booleans and errors centred, text
+// left. An imported error keeps a text type, so its value decides too.
+export function generalAlign(cell: Cell | null | undefined): '0' | '1' | '2' {
+    const value = cell?.v;
+    if (typeof value === 'number') return '2';
+    if (typeof value === 'boolean' || cell?.ct?.t === 'e') return '0';
+    return typeof value === 'string' && valueIsError(value) ? '0' : '1';
+}
+
+// A number as text, in a formula and on the clipboard: Excel's 15 significant digits, so 0.1+0.2 is "0.3", and
+// E notation past 15 digits, as for a 16-digit card number (1.23456789012346E+15). A tiny one goes E where
+// JavaScript does, below 1E-6.
+export function numberText(value: number): string {
+    const rounded = Number(value.toPrecision(15));
+    const text = Math.abs(rounded) >= 1e15 ? rounded.toExponential() : String(rounded);
+    const [mantissa, exponent] = text.split('e');
+    return exponent === undefined ? mantissa : `${mantissa}E${exponent[0]}${exponent.slice(1).padStart(2, '0')}`;
+}
+
+// A value as text joins it (`&`, TEXTJOIN, CONCAT): a boolean upper-case, a formulajs Date as the serial the grid
+// stores, not as Date.toString().
+export function valueText(value: FormulaArg | Date): string {
+    if (typeof value === 'boolean') return booleanDisplay(value);
+    if (value instanceof Date) return numberText(dateToSerial(value));
+    if (typeof value === 'number') return numberText(value);
+    return value?.toString() ?? '';
+}
+
 // Wrap breaks text only; the value decides too, since a formula typed into a text cell keeps its ct.t.
 export function cellWrapsText(cell: Cell): boolean {
     return cell.tb === '2' && typeof cell.v !== 'number' && cell.ct?.t !== 'n' && cell.ct?.t !== 'd';
+}
+
+// A rich-text cell keeps its text in its runs; neither `v` nor `m` holds it.
+function inlineStringText(ct: CellType): string {
+    return (ct.s ?? []).map((run) => run.v ?? '').join('');
+}
+
+// A cell's text when it is rich text, so every reader of a value or a display reads one source; undefined otherwise.
+export function richText(cell: Cell | null | undefined): string | undefined {
+    return cell?.ct?.t === 'inlineStr' && cell.ct.s?.length ? inlineStringText(cell.ct) : undefined;
+}
+
+// The value a reader compares, sorts or counts: a rich cell's text, any other cell's `v`.
+export function cellValue(cell: Cell | null | undefined): Cell['v'] {
+    return cell ? (richText(cell) ?? cell.v) : undefined;
+}
+
+// The text the grid shows: a rich cell's runs, else `m`, else `v`.
+export function cellDisplay(cell: Cell | null | undefined): Cell['v'] {
+    return cell ? (richText(cell) ?? cell.m ?? cell.v) : undefined;
+}
+
+// A plain write over a rich cell drops its runs, which would otherwise outrank the value written.
+export function dropRuns(cell: Cell) {
+    if (cell.ct?.t !== 'inlineStr') return;
+    delete cell.ct.s;
+    cell.ct.t = 'g';
 }
 
 export function parseCellInput(value: string | number | boolean): [string, CellType, string | number | boolean] {
@@ -263,6 +318,8 @@ export function numberDisplay(value: Cell['v'] | null, fa = 'General'): string {
         return update('General', value);
     }
 }
+
+export { isValidFormat as isValidNumberFormat } from 'numfmt';
 
 export function is_date(fmt: number | string): boolean {
     if (typeof fmt !== 'string') return false;

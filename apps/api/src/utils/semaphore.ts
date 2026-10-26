@@ -4,10 +4,16 @@ export class Semaphore {
     private active = 0;
     private waiters: (() => void)[] = [];
 
-    constructor(private readonly max: number) {}
+    public constructor(private readonly max: number) {}
 
-    async run<T>(fn: () => Promise<T>): Promise<T> {
-        await this.acquire();
+    // The callers queued behind the running ones.
+    public get waiting(): number {
+        return this.waiters.length;
+    }
+
+    // A waiter whose signal aborts leaves the queue and rejects with the signal's reason, so nothing it holds waits on.
+    public async run<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+        await this.acquire(signal);
         try {
             return await fn();
         } finally {
@@ -15,12 +21,24 @@ export class Semaphore {
         }
     }
 
-    private async acquire(): Promise<void> {
+    private async acquire(signal?: AbortSignal): Promise<void> {
+        signal?.throwIfAborted();
         if (this.active < this.max) {
             this.active++;
             return;
         }
-        await new Promise<void>((resolve) => this.waiters.push(resolve));
+        await new Promise<void>((resolve, reject) => {
+            const waiter = () => {
+                signal?.removeEventListener('abort', leave);
+                resolve();
+            };
+            const leave = () => {
+                this.waiters.splice(this.waiters.indexOf(waiter), 1);
+                reject(signal?.reason);
+            };
+            signal?.addEventListener('abort', leave, { once: true });
+            this.waiters.push(waiter);
+        });
     }
 
     private release(): void {

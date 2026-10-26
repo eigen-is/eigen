@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun check --no-script",
+    "test": "bun test"
   },
   "dependencies": {
     "@workspace/sheet": "workspace:*",
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
     "y-websocket": "^3.1.0",
-    "yjs": "^13.6.32"
+    "yjs": "^13.6.33"
   }
 }

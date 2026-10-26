@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { Contacts } from '../lib/contacts/contacts';
-import { makeTestHome, type TestHome } from './home-test-helpers';
+import type { TestHome } from './home-test-helpers';
+import { makeTestHome } from './home-test-helpers';
 
 // One scratch root per test run, wiped by each test file's beforeAll.
 export const CONTACTS_TEST_ROOT = join(import.meta.dir, `../../../../data-test/test-contacts-${Date.now()}`);

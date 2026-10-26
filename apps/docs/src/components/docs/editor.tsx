@@ -1,155 +1,109 @@
-import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import type { Node } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
-import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
+import { EditorContent } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
-import {
-    classifyPaste,
-    clipboardTextItemHasContent,
-    hasRichHtmlBeyondMarker,
-    materializeClipboardSvg,
-    needsReUpload,
-    reUploadImage,
-} from '@workspace/lib/clipboard';
-import { useCollabDoc } from '@workspace/lib/collab';
+import { useCollabDoc, useYjsUndoState } from '@workspace/lib/collab';
 import {
     findCardIdByChatName,
     useCommentFilter,
     useCommentLifecycle,
     useDocumentPanels,
 } from '@workspace/lib/comments';
-import { userColor } from '@workspace/lib/constants/colors';
-import { getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, getDocExtensions, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
+import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
-    isPendingMediaName,
-    MediaResolverProvider,
-    useCopyToMediaFolder,
-    useMediaResolver,
-    useUploadFile,
-    useZombieMediaSweep,
-} from '@workspace/lib/drive';
-import { useIsCoarsePointer } from '@workspace/lib/media';
+    BAND_ROOTS,
+    bandEdge,
+    FIRST_PAGE_BAND,
+    normalStyleProperties,
+    PAGE_ROOT,
+    pagePx,
+    pageStylesheet,
+    readNormalStyle,
+    readPageSetup,
+    STYLE_ROOT,
+} from '@workspace/lib/docs/eigendoc';
+import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
+import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
-import { renderPresenceCaret } from '@workspace/ui/components/collab';
+import { downloadChartImage } from '@workspace/ui/components/charts';
+import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import {
-    type CommentContextMenuItem,
     CommentLifecycleDialogs,
     CommentLifecycleMenuItems,
     CommentMenuItems,
     PanelColumn,
 } from '@workspace/ui/components/comments';
-import { ContextMenuAnchor, DownloadImageMenuItem, useContextMenu } from '@workspace/ui/components/context-menu';
+import {
+    ClipboardMenuItems,
+    ContextMenuAnchor,
+    DownloadImageMenuItem,
+    DownloadOriginalImageMenuItem,
+    MenuSections,
+    useContextMenu,
+} from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
-import { common, createLowlight } from 'lowlight';
+import { Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
-import { insertEigenItems, writeDocsClipboard } from './clipboard';
+import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
+import { chartClipboardItem, pasteFromClipboard, runClipboardCommand } from './clipboard';
+import { useBandEditors, useDocEditor, useDocMedia } from './doc-editor';
 import { EditorToolbar } from './editor-toolbar';
-import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
-import { Figure } from './extensions/figure';
-import { EditorTable } from './extensions/table';
-import { TableWidthClamp } from './extensions/table-width-clamp';
-import { textColumnWidth } from './extensions/text-column';
+import { equationMenuSections } from './equation-menu-sections';
+import { EquationPropertiesPanel } from './equation-properties-panel';
+import {
+    addCommentAnchor,
+    CommentMark,
+    canAnchorComment,
+    commentAnchorText,
+    commentCardIdAt,
+    nodeCommentCardId,
+    removeCommentAnchors,
+    selectCommentAnchor,
+    updateCommentDecorations,
+} from './extensions/comment-mark';
+import type { EquationOptions } from './extensions/equation';
+import { insertNote } from './extensions/footnote';
 import { FigurePropertiesPanel } from './figure-properties-panel';
+import { FootnoteList } from './footnote-list';
 import { useActiveComments } from './hooks/use-active-comments';
-import { cleanPastedHTML } from './paste';
+import { useOpenNote } from './hooks/use-open-note';
+import type { SelectionPanel } from './hooks/use-selection-panel';
+import { useSelectionPanel } from './hooks/use-selection-panel';
+import { cellBackground, selectCellCommands } from './hooks/use-toolbar-state';
+import { useYMapRead } from './hooks/use-y-map-read';
+import { updateNormalStyle } from './normal-style';
+import { BandControls, PageBands } from './page-band';
+import type { PageNumberPreset } from './page-numbers';
+import { applyPageNumberPreset } from './page-numbers';
+import { createDocUndoManager, writePageSetup } from './page-setup';
+import { tableMenuSections } from './table-menu-sections';
 import { TablePropertiesPanel } from './table-properties-panel';
 
-function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: number; end: number }[] {
-    const anchors: { node: Node; pos: number; end: number }[] = [];
-    doc.descendants((node, pos) => {
-        if (nodeCommentCardId(node) === cardId) anchors.push({ node, pos, end: pos + node.nodeSize });
-    });
-    return anchors;
-}
-
-function swapFigureMediaName(editor: Editor, pendingName: string, newName: string | null) {
-    const positions: number[] = [];
-    editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'figure' && node.attrs.mediaName === pendingName) {
-            positions.push(pos);
-        }
-        return true;
-    });
-    if (positions.length === 0) return;
-    editor.commands.command(({ tr, dispatch }) => {
-        // Iterate in reverse so earlier positions stay valid after later deletes
-        for (let i = positions.length - 1; i >= 0; i--) {
-            const pos = positions[i];
-            const node = tr.doc.nodeAt(pos);
-            if (!node) continue;
-            if (newName === null) {
-                tr.delete(pos, pos + node.nodeSize);
-            } else {
-                tr.setNodeAttribute(pos, 'mediaName', newName);
-            }
-        }
-        if (dispatch) dispatch(tr);
-        return true;
-    });
-}
-
-// The textStyle `fontFamily` attr is an EIGEN_FONTS name, but a stored doc may hold a full CSS stack and
-// y-prosemirror hydrates without parseHTML, so this pass collapses a known stack to its name on editable
-// load. renderHTML maps the name back to the same stack. Kept out of the undo history.
-function normalizeFontFamilyMarks(editor: Editor) {
-    const markType = editor.schema.marks.textStyle;
-    if (!markType) return;
-    const targets: { from: number; to: number; attrs: Record<string, unknown> }[] = [];
-    editor.state.doc.descendants((node, pos) => {
-        if (!node.isText) return;
-        const mark = node.marks.find((m) => m.type === markType);
-        if (!mark) return;
-        const family = mark.attrs.fontFamily;
-        if (typeof family !== 'string' || !family) return;
-        const canon = getFontName(family);
-        if (canon === family) return;
-        targets.push({ from: pos, to: pos + node.nodeSize, attrs: { ...mark.attrs, fontFamily: canon } });
-    });
-    if (targets.length === 0) return;
-    editor.commands.command(({ tr, dispatch }) => {
-        for (const { from, to, attrs } of targets) {
-            tr.addMark(from, to, markType.create(attrs));
-        }
-        tr.setMeta('addToHistory', false);
-        if (dispatch) dispatch(tr);
-        return true;
-    });
-}
-
-const lowlight = createLowlight(common);
-
-// The page at 96 dpi, for the layout math below and the text column before the page mounts.
-const PAGE_PX = pagePx(DEFAULT_PAGE_SETUP);
-// Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
-const TEXT_COLUMN_RIGHT_PX = PAGE_PX.width - PAGE_PX.margin.right;
-const TEXT_COLUMN_WIDTH_PX = TEXT_COLUMN_RIGHT_PX - PAGE_PX.margin.left;
-const PAGE_STYLESHEET = pageStylesheet(DEFAULT_PAGE_SETUP, '[data-document]');
+// What a cell's or an equation's right-click menu is about: the editor it is in and the comment card under the pointer.
+type NodeMenuItem = { editor: Editor; comment: CommentContextMenuItem | null };
+type TableMenuItem = NodeMenuItem & { cells: ReturnType<typeof selectCellCommands> & { cellBackground: string } };
+type EquationMenuItem = NodeMenuItem & { display: boolean };
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
-// Above this the panel clears the centered page outright: every value below is pinned, so stop storing width.
-const PANEL_CLEAR_WIDTH_PX = 2 * (TEXT_COLUMN_RIGHT_PX + PANEL_INTRUSION_PX) - PAGE_PX.width;
 
 export const CollaborativeEditor = ({
     path,
@@ -168,7 +122,7 @@ export const CollaborativeEditor = ({
     initialChatName?: string;
     initialSearchTerm?: string;
 }) => {
-    // No UndoManager: y-prosemirror's history plugin owns undo.
+    // No undoScope: the editor builds its own UndoManager for y-prosemirror's history plugin.
     const {
         doc: yDoc,
         provider,
@@ -200,6 +154,7 @@ export const CollaborativeEditor = ({
                         provider={provider}
                         canWrite={canWrite}
                         offline={offline}
+                        unsyncedEdits={unsyncedEdits}
                         storageUnavailable={storageUnavailable}
                         mediaFolderId={mediaFolderId}
                         chatFolderId={chatFolderId}
@@ -219,6 +174,7 @@ const TiptapEditor = ({
     path,
     canWrite,
     offline,
+    unsyncedEdits,
     storageUnavailable,
     mediaFolderId,
     chatFolderId,
@@ -231,6 +187,7 @@ const TiptapEditor = ({
     path: DrivePath;
     canWrite: boolean;
     offline: boolean;
+    unsyncedEdits: boolean;
     storageUnavailable: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
@@ -239,13 +196,10 @@ const TiptapEditor = ({
     initialSearchTerm?: string;
 }) => {
     const auth = useAuth();
-    const uploadFile = useUploadFile(path.ownerId, path.mountId);
-    const copyToMediaFolder = useCopyToMediaFolder(path.ownerId, path.mountId);
-    const { resolveMediaPath, startUpload } = useMediaResolver();
+    const media = useDocMedia(path);
     const [addOpen, setAddOpen] = useState(false);
     const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
     const { isMobile } = useLayout();
-    const isCoarsePointer = useIsCoarsePointer();
     const {
         panel,
         commentPanelOpen,
@@ -260,19 +214,34 @@ const TiptapEditor = ({
     const [docHeight, setDocHeight] = useState(0);
     // The image panel's button and Format › Image › Replace image open the same picker.
     const [replacePickerOpen, setReplacePickerOpen] = useState(false);
+    // The chart panel's Edit data and a double-click on a chart open one dialog, for the selected chart.
+    const [chartDataOpen, setChartDataOpen] = useState(false);
+    const closeChartData = useCallback(() => setChartDataOpen(false), []);
     const needsScaleRef = useRef(false);
     const documentRef = useRef<HTMLDivElement | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-    const editorRef = useRef<ReturnType<typeof useEditor>>(null);
     const handleAddCommentRef = useRef<(() => void) | null>(null);
     const allCommentsRef = useRef<CommentEntry[]>([]);
     const cardsRef = useRef<Record<string, CommentCard>>({});
-    // The extensions keep the closures they were created with, so the figure menu reads this render's state here.
+    // The extensions keep the closures they were created with, so the figure, table and equation menus read this render's
+    // state here.
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
-    const mediaFolderIdRef = useRef(mediaFolderId);
-    mediaFolderIdRef.current = mediaFolderId;
-    const resolveMediaPathRef = useRef(resolveMediaPath);
-    resolveMediaPathRef.current = resolveMediaPath;
+    const tableContextMenuRef = useRef<(editor: Editor, pos: number, event: MouseEvent) => boolean>(() => false);
+    const equationContextMenuRef = useRef<(editor: Editor, node: Node, pos: number, event: React.MouseEvent) => void>(
+        () => {},
+    );
+    const editEquationRef = useRef(() => {});
+    const openNoteRef = useRef((_pos: number) => {});
+    const insertFootnoteRef = useRef((): boolean => false);
+    const leaveNoteRef = useRef(() => {});
+    const [undoManager] = useState(() => createDocUndoManager(yDoc));
+    const pageSetup = useYMapRead(yDoc.getMap(PAGE_ROOT), readPageSetup);
+    const writeSetup = (from: PageSetup, to: PageSetup) => writePageSetup(yDoc, undoManager, from, to);
+    const normalStyle = useYMapRead(yDoc.getMap(STYLE_ROOT), readNormalStyle);
+    // The page at 96 dpi, for the layout math below and the text column before the page mounts.
+    const page = pagePx(pageSetup);
+    // Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
+    const textColumnRight = page.width - page.margin.right;
 
     const commentMenuItem = (cardId: string | null): CommentContextMenuItem | null => {
         const card = cardId ? cardsRef.current[cardId] : undefined;
@@ -281,13 +250,10 @@ const TiptapEditor = ({
         return { card, entry };
     };
 
-    const getEditorMaxWidth = useCallback(() => {
-        return textColumnWidth(documentRef.current) ?? TEXT_COLUMN_WIDTH_PX;
-    }, []);
-
     const [setScrollContainer, scrollSize] = useElementSize(scrollContainerRef);
-    // Past PANEL_CLEAR_WIDTH_PX the page and the panel no longer contend, so the layout math stops there.
-    const containerWidth = Math.min(scrollSize.width, PANEL_CLEAR_WIDTH_PX);
+    // Past this the panel clears the centered page outright and every value below is pinned, so the math stops there.
+    const panelClearWidth = 2 * (textColumnRight + PANEL_INTRUSION_PX) - page.width;
+    const containerWidth = Math.min(scrollSize.width, panelClearWidth);
 
     // Hand-rolled rather than useElementSize: this measures the BORDER box, and stays quiet while
     // unscaled so a doc that needs no scaling never re-renders on its own growth.
@@ -318,19 +284,31 @@ const TiptapEditor = ({
         [isMobile, openComments],
     );
 
-    const editor = useEditor(
+    // Every editor's equations open the one Equation panel and menu.
+    const equation: Omit<EquationOptions, 'onOpenComment'> = {
+        onEdit: isMobile ? undefined : () => editEquationRef.current(),
+        onContextMenu: (...args) => equationContextMenuRef.current(...args),
+    };
+    const editor = useDocEditor(
         {
+            media,
+            yDoc,
+            provider,
             editable: canWrite,
+            target: { undoManager, cardIds: () => new Set(Object.keys(cardsRef.current)) },
+            figure: {
+                onOpenComment: handleCommentClick,
+                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
+            },
+            chart: {
+                onOpenComment: handleCommentClick,
+                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
+                onEditData: () => setChartDataOpen(true),
+            },
+            equation: { ...equation, onOpenComment: handleCommentClick },
+            table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
+            footnote: { onOpen: (pos) => openNoteRef.current(pos), onInsert: () => insertFootnoteRef.current() },
             extensions: [
-                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment', 'table'] }),
-                // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
-                // drags nothing, and a tap beside a border would start a drag that swallows the caret.
-                EditorTable.configure({ resizable: !isCoarsePointer }),
-                Figure.configure({
-                    onOpenComment: handleCommentClick,
-                    onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
-                }),
-                TableWidthClamp,
                 SearchHighlight,
                 CommentMark.configure({
                     onCommentClick: handleCommentClick,
@@ -339,192 +317,122 @@ const TiptapEditor = ({
                         if (item) commentContextMenu.openAt(item, event.clientX, event.clientY);
                     },
                     onSelectionContextMenu: (event) => {
+                        if (!handleAddCommentRef.current) return false;
                         selectionContextMenu.openAt(true, event.clientX, event.clientY);
+                        return true;
                     },
                     onAddComment: () => handleAddCommentRef.current?.(),
                     onToggleCommentPanel: toggleComments,
                 }),
-                Collaboration.configure({
-                    document: yDoc,
-                }),
-                CollaborationCaret.configure({
-                    provider,
-                    // userId is what the server's awareness gate checks; without it every frame is dropped
-                    user: {
-                        name: auth.user!.name,
-                        color: userColor(auth.user!.id),
-                        userId: auth.user!.id,
-                    },
-                    render: (user: Record<string, string>) =>
-                        renderPresenceCaret({ name: user.name, color: user.color }),
-                }),
             ],
-            editorProps: {
-                attributes: {
-                    class: 'eigen-prose',
-                },
-                handleDOMEvents: {
-                    copy: (view, event) => writeDocsClipboard(view, event, resolveMediaPathRef.current),
-                    cut: (view, event) => writeDocsClipboard(view, event, resolveMediaPathRef.current),
-                },
-                transformPastedHTML: (html: string) =>
-                    cleanPastedHTML(html, getEditorMaxWidth(), new Set(Object.keys(cardsRef.current))),
-                handleDrop: (view, event) => {
-                    if (!event.dataTransfer) return false;
-                    const files = Array.from(event.dataTransfer.files);
-                    const imageFile = files.find((f) => f.type.startsWith('image/'));
-                    if (imageFile && mediaFolderIdRef.current) {
-                        event.preventDefault();
-                        const dropPos = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                        if (dropPos) {
-                            const tr = view.state.tr.setSelection(Selection.near(view.state.doc.resolve(dropPos.pos)));
-                            view.dispatch(tr);
-                        }
-                        handleImageUpload(imageFile).catch(() => {});
-                        return true;
-                    }
-                    return false;
-                },
-                handlePaste: (_view, event) => {
-                    if (!event.clipboardData) return false;
-                    const paste = classifyPaste(event.clipboardData);
-                    const mediaFolderId = mediaFolderIdRef.current;
-
-                    // A vector SVG payload (or a pasted SVG document) lands as a figure through the exact
-                    // image-upload path — stored in media/, served as-is, rendered by <image>. Its images
-                    // are name-referenced (eigen-media:); materialize re-uploads each into our media/ and
-                    // rewrites the svg's refs before it's stored.
-                    if (paste.svg && mediaFolderId) {
-                        event.preventDefault();
-                        materializeClipboardSvg(paste.svg.svg, paste.svg.items, mediaFolderId, uploadFile.mutateAsync)
-                            .then(handleImageUpload)
-                            .catch(() => {});
-                        return true;
-                    }
-
-                    if (paste.eigen) {
-                        // Images take this path for the cross-mount re-upload, a docs copy's through its own
-                        // HTML; text only when text/html is marker-only (a canvas text copy), so a sheets table
-                        // still parses in PM. Claimed only with an item this editor can place, or ⌘V on a bare
-                        // `elements` item is dead.
-                        const hasImage = paste.eigen.items.some((i) => i.type === 'image');
-                        const hasText = paste.eigen.items.some(
-                            (i) => i.type === 'text' && clipboardTextItemHasContent(i),
-                        );
-                        if (hasImage || (hasText && !hasRichHtmlBeyondMarker(event.clipboardData))) {
-                            event.preventDefault();
-                            if (editorRef.current) {
-                                insertEigenItems(
-                                    editorRef.current,
-                                    paste.eigen.items,
-                                    paste.html,
-                                    pastedMediaName,
-                                ).catch(() => {});
-                            }
-                            return true;
-                        }
-                    }
-
-                    const imageFile = paste.imageFiles[0];
-                    if (imageFile && mediaFolderId) {
-                        event.preventDefault();
-                        handleImageUpload(imageFile).catch(() => {});
-                        return true;
-                    }
-                    return false;
-                },
-            },
         },
-        [handleCommentClick],
+        [handleCommentClick, isMobile],
     );
-
+    // The body's editor is built anew with its comment handler, and an upload settles into whichever holds the doc then.
+    const editorRef = useRef<Editor | null>(null);
     editorRef.current = editor;
 
-    const { canUndo, canRedo } = useEditorState({
-        editor,
-        selector: ({ editor: e }) => {
-            if (!e) return { canUndo: false, canRedo: false };
-            const pluginState = yUndoPluginKey.getState(e.state);
-            const um = pluginState?.undoManager;
-            return {
-                canUndo: (um?.undoStack.length ?? 0) > 0,
-                canRedo: (um?.redoStack.length ?? 0) > 0,
-            };
-        },
+    // The band being edited in place: a writer's, on a desktop or a tablet. Explicit rather than the focused editor,
+    // as a menu takes focus when it opens. Losing write access or the desktop leaves it, and a first page's band hands
+    // over to the other pages' once Different first page goes off, a collaborator's untick too.
+    const bandsAllowed = canWrite && !isMobile;
+    const [editingBand, setEditingBand] = useState<BandRoot | null>(null);
+    if (editingBand && !bandsAllowed) setEditingBand(null);
+    else if (editingBand && !pageSetup.differentFirstPage && editingBand !== bandEdge(editingBand)) {
+        setEditingBand(bandEdge(editingBand));
+    }
+    // Esc puts the caret back where it was in the body.
+    const leaveBand = () => {
+        setEditingBand(null);
+        editor.commands.focus();
+    };
+    const bands = useBandEditors({
+        media,
+        yDoc,
+        provider,
+        editable: canWrite,
+        editing: editingBand,
+        onLeave: leaveBand,
+        equation,
+        table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
     });
-
-    const handleImageUpload = async (file: File) => {
-        if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
-        const { pendingName, promise } = startUpload(file);
-        editorRef.current.chain().focus().setFigure({ mediaName: pendingName }).run();
-        const result = await promise;
-        if (editorRef.current) {
-            swapFigureMediaName(editorRef.current, pendingName, result?.name ?? null);
-        }
+    // The open footnote's one live editor, kept as long as the doc is open; it holds whichever note is open. A writer's
+    // on a desktop or a tablet, as a band is.
+    const noteEditor = useDocEditor({
+        media,
+        yDoc,
+        provider: null,
+        editable: canWrite,
+        target: { body: () => editorRef.current, onLeave: () => leaveNoteRef.current() },
+        equation,
+    });
+    const notes = useOpenNote(editor, noteEditor, bandsAllowed);
+    leaveNoteRef.current = notes.leave;
+    const openNote = (pos: number, at: { left: number; top: number } | null) => {
+        setEditingBand(null);
+        notes.open(pos, { focus: true, at, selection: null });
     };
-
-    const handleReplaceImage = async (file: File) => {
-        if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
-        const { pendingName, promise } = startUpload(file);
-        // Reset width so the new image's aspect ratio is recomputed on load
-        editorRef.current.chain().focus().updateFigure({ mediaName: pendingName, width: null }).run();
-        const result = await promise;
-        if (!editorRef.current) return;
-        swapFigureMediaName(editorRef.current, pendingName, result?.name ?? null);
+    openNoteRef.current = (pos) => {
+        if (bandsAllowed) openNote(pos, null);
     };
-
-    const handleImagePickFromDrive = async (paths: DrivePath[]) => {
-        if (!mediaFolderIdRef.current || !editorRef.current) return;
-        const results = await copyToMediaFolder
-            .mutateAsync({ paths, mediaFolderId: mediaFolderIdRef.current })
-            .catch(() => null);
-        if (!results) return;
-        for (const result of results) {
-            editorRef.current.chain().focus().setFigure({ mediaName: result.name }).run();
-        }
+    // Google's Insert › Footnote: the reference after the selection, and its note open with the caret in it. Where no
+    // note opens, a viewer's and a phone's, none goes in: ⌘⌥F from a phone's keyboard would leave one nobody can edit.
+    const insertFootnote = () => {
+        const pos = bandsAllowed ? insertNote(editor) : null;
+        if (pos !== null) openNoteRef.current(pos);
+        return pos !== null;
     };
-
-    const handleReplaceImageFromDrive = async (paths: DrivePath[]) => {
-        if (!mediaFolderIdRef.current || !editorRef.current || paths.length === 0) return;
-        const replaced = editorRef.current.getAttributes('figure').mediaName;
-        const result = await copyToMediaFolder
-            .mutateAsync({ paths: [paths[0]], mediaFolderId: mediaFolderIdRef.current })
-            .catch(() => null);
-        // The selection may have left the figure during the copy; the copied file then stays unreferenced in media/.
-        if (result?.[0] && editorRef.current?.isActive('figure', { mediaName: replaced })) {
-            editorRef.current.chain().focus().updateFigure({ mediaName: result[0].name, width: null }).run();
-        }
+    insertFootnoteRef.current = insertFootnote;
+    const activeEditor = editingBand ? bands[editingBand] : notes.anchor ? noteEditor : editor;
+    // A double-click puts the caret where it was, a menu at the band's end.
+    const enterBand = (root: BandRoot, at?: { left: number; top: number }) => {
+        notes.close();
+        setEditingBand(root);
+        const band = bands[root];
+        band.commands.focus((at && band.view.posAtCoords(at)?.pos) ?? 'end');
     };
-
-    // The name a pasted image item is stored under: another document's file is re-uploaded into this
-    // one's media/ first, and skipped if that fails rather than falling back to an unresolvable name.
-    const pastedMediaName = async (item: EigenClipboardImageItem): Promise<string | null> => {
-        const currentMediaFolderId = mediaFolderIdRef.current;
-        if (!needsReUpload(item.sourceParentId, currentMediaFolderId) || !currentMediaFolderId) return item.mediaName;
-        const result = await reUploadImage(
-            item.sourcePathId,
-            item.sourceOwnerId,
-            item.sourceMountId,
-            currentMediaFolderId,
-            uploadFile.mutateAsync,
-            item.mediaName,
-        );
-        return result?.mediaName ?? null;
+    // Page 1's header tops the long page, and the other pages' footer ends it.
+    const entryBand = (edge: BandEdge) =>
+        edge === 'header' && pageSetup.differentFirstPage ? FIRST_PAGE_BAND.header : edge;
+    const applyPreset = (preset: PageNumberPreset) => {
+        applyPageNumberPreset(bands, preset, pageSetup, writeSetup);
+        enterBand(entryBand(preset.band));
     };
+    // An image goes where the caret is and settles into that editor: a band's lives as long as the doc, and the body's
+    // is read again once the upload lands. A note's settles in the body, which holds every note.
+    const insertTarget = editingBand
+        ? () => bands[editingBand]
+        : notes.anchor
+          ? () => noteEditor
+          : () => editorRef.current;
+    const settleTarget = notes.anchor ? () => editorRef.current : insertTarget;
+
+    // From the undo manager's own events: it moves an undone step onto the redo stack after the transaction that undid
+    // it, so an editor transaction reads the stacks too early.
+    const { canUndo, canRedo } = useYjsUndoState(
+        // A note's history is the body's.
+        editingBand ? (yUndoPluginKey.getState(bands[editingBand].state)?.undoManager ?? null) : undoManager,
+        canWrite,
+    );
 
     const handleAddComment = () => {
-        if (!editor || !chatFolderId) return;
+        if (!chatFolderId) return;
         const { from, to } = editor.state.selection;
         const text = commentAnchorText(editor.state.doc, from, to);
         if (!text.trim()) return;
         setPendingMarkRange({ from, to, text });
         setAddOpen(true);
     };
-    handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
+    handleAddCommentRef.current = canWrite && chatFolderId ? handleAddComment : null;
 
-    const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
-    const lastPanelRef = useRef<'figure' | 'table'>('figure');
-    if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
+    const { selectionPanel, equationFieldRef, editEquation, insertEquation } = useSelectionPanel(
+        activeEditor,
+        isMobile,
+        closePanels,
+    );
+    editEquationRef.current = editEquation;
+    const lastPanelRef = useRef<Exclude<SelectionPanel, 'document'>>('figure');
+    if (selectionPanel !== 'document') lastPanelRef.current = selectionPanel;
 
     const activeComments = useActiveComments(editor);
     const lifecycle = useCommentLifecycle({
@@ -547,55 +455,58 @@ const TiptapEditor = ({
     const selectionContextMenu = useContextMenu<boolean>();
     const figureContextMenu = useContextMenu<{
         imagePath: DrivePath | undefined;
+        chart: EigenClipboardChartItem | null;
         comment: CommentContextMenuItem | null;
     }>();
-    const canAddComment = canWrite && !!chatFolderId;
     // Opens only when a row will render; otherwise the browser's own menu shows.
     figureContextMenuRef.current = (node, pos, event) => {
-        const imagePath = resolveMediaPath(node.attrs.mediaName ?? '');
+        const imagePath = media.resolveMediaPath(node.attrs.mediaName ?? '');
+        const chart = node.type.name === 'chart' ? chartClipboardItem(node) : null;
         const comment = commentMenuItem(nodeCommentCardId(node));
-        if (!imagePath && !comment && !canAddComment) return;
+        if (!canWrite && !imagePath && !chart && !comment) return;
         // Selected first, so Add comment anchors to it.
-        editor?.commands.setNodeSelection(pos);
-        figureContextMenu.handleContextMenu(event, { imagePath, comment });
+        editor.commands.setNodeSelection(pos);
+        figureContextMenu.handleContextMenu(event, { imagePath, chart, comment });
     };
+    const menuChart = figureContextMenu.item?.chart;
+
+    // A writer's table and equation menus, about what was right-clicked in `editor`: the body's, the band's being edited
+    // or the open note's. A viewer, and a band not being edited, keep the browser's.
+    const tableContextMenu = useContextMenu<TableMenuItem>();
+    tableContextMenuRef.current = (target, pos, event) => {
+        if (!target.isEditable) return false;
+        // A right-click inside the selection keeps it, so a cell selection merges; elsewhere the caret goes there.
+        const { state } = target;
+        if (!state.selection.ranges.some(({ $from, $to }) => $from.pos <= pos && pos <= $to.pos)) {
+            target.view.dispatch(state.tr.setSelection(Selection.near(state.doc.resolve(pos))));
+        }
+        const cells = { ...selectCellCommands(target, true), cellBackground: cellBackground(target.state) };
+        const comment = commentMenuItem(commentCardIdAt(event.target));
+        tableContextMenu.openAt({ editor: target, cells, comment }, event.clientX, event.clientY);
+        return true;
+    };
+    const equationContextMenu = useContextMenu<EquationMenuItem>();
+    equationContextMenuRef.current = (target, node, pos, event) => {
+        if (!target.isEditable) return;
+        // Selected as a click selects it, which opens its panel.
+        target.chain().setNodeSelection(pos).setMeta('pointer', true).run();
+        const comment = commentMenuItem(nodeCommentCardId(node));
+        equationContextMenu.handleContextMenu(event, { editor: target, display: node.attrs.display === true, comment });
+    };
+    // Edit equation opens the panel once the menu has closed, or the menu would hand the focus back from its field.
+    const afterEquationMenuRef = useRef<(() => void) | null>(null);
 
     const removeCommentMarks = (cardId: string) => {
-        if (!editor) return;
-        const { tr } = editor.state;
-        const commentType = editor.state.schema.marks.comment;
-        for (const { node, pos, end } of findCommentAnchors(editor.state.doc, cardId)) {
-            if (node.type.name === 'figure') tr.setNodeAttribute(pos, 'commentCardId', null);
-            else tr.removeMark(pos, end, commentType);
-        }
-        editor.view.dispatch(tr);
+        removeCommentAnchors(editor, cardId);
     };
 
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
-            if (!editor || !pendingMarkRange) return;
+            if (!pendingMarkRange) return;
             const range = pendingMarkRange;
-            const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (card) => {
-                const node = editor.state.doc.nodeAt(range.from);
-                if (node?.type.name === 'figure' && range.to === range.from + node.nodeSize) {
-                    editor.view.dispatch(editor.state.tr.setNodeAttribute(range.from, 'commentCardId', card.id));
-                    return;
-                }
-                editor
-                    .chain()
-                    .focus()
-                    .setTextSelection({ from: range.from, to: range.to })
-                    .setComment(card.id)
-                    // A figure the selection spans would keep the mark only until reload; it anchors by attribute.
-                    .command(({ tr }) => {
-                        tr.doc.nodesBetween(range.from, range.to, (n, pos) => {
-                            if (n.type.name === 'figure')
-                                tr.removeMark(pos, pos + n.nodeSize, n.type.schema.marks.comment);
-                        });
-                        return true;
-                    })
-                    .run();
-            });
+            const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (card) =>
+                addCommentAnchor(editor, range, card.id),
+            );
             if (assignee !== undefined && card?.chatName) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
@@ -607,7 +518,6 @@ const TiptapEditor = ({
 
     // Sync resolved IDs + colors into the ProseMirror decoration plugin
     useEffect(() => {
-        if (!editor) return;
         const resolved = new Set<string>();
         const colorMap = new Map<string, string>();
         for (const cardId of activeComments.ids) {
@@ -622,66 +532,32 @@ const TiptapEditor = ({
         updateCommentDecorations(editor, resolved, colorMap);
     }, [editor, cards, allComments, activeComments.ids]);
 
-    useEffect(() => {
-        if (!editor) return;
-        const onUpdate = () => {
-            if (editor.isActive('figure')) setSidebarContext('figure');
-            else if (editor.isActive('table')) setSidebarContext('table');
-            else setSidebarContext('document');
-        };
-        editor.on('selectionUpdate', onUpdate);
-        return () => {
-            editor.off('selectionUpdate', onUpdate);
-        };
-    }, [editor]);
-
-    // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
-    // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
-    useZombieMediaSweep({
-        ready: !!editor,
-        scan: () => {
-            const names: string[] = [];
-            editor?.state.doc.descendants((node) => {
-                if (
-                    node.type.name === 'figure' &&
-                    typeof node.attrs.mediaName === 'string' &&
-                    isPendingMediaName(node.attrs.mediaName)
-                ) {
-                    names.push(node.attrs.mediaName);
-                }
-                return true;
-            });
-            return names;
-        },
-        remove: (names) => {
-            if (!editor) return;
-            for (const name of names) swapFigureMediaName(editor, name, null);
-        },
-    });
-
-    // One-shot: collapse any legacy full-stack fontFamily marks to their EIGEN_FONTS name once the
-    // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
-    // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
-    useEffect(() => {
-        if (!editor || !canWrite) return;
-        normalizeFontFamilyMarks(editor);
-    }, [editor, canWrite]);
-
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
+    // Find searches the body, so ⌘F leaves a band.
+    const handleSearchOpenChange = useCallback(
+        (open: boolean) => {
+            if (open) setEditingBand(null);
+            onSearchOpenChange(open);
+        },
+        [onSearchOpenChange],
+    );
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
+    // The properties panels follow the editor that has the selection. A chart's edits its data through the body's undo
+    // manager, so a note's chart opens none.
+    const showSidebar =
+        !isMobile &&
+        (panel !== null ||
+            (canWrite && selectionPanel !== 'document' && (selectionPanel !== 'chart' || activeEditor === editor)));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
-    const centredSlack = Math.max(0, (containerWidth - PAGE_PX.width) / 2);
+    const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
     const panelLeft = containerWidth - PANEL_INTRUSION_PX;
-    const panelOverlap = showSidebar ? Math.max(0, centredSlack + TEXT_COLUMN_RIGHT_PX - panelLeft) : 0;
+    const panelOverlap = showSidebar ? Math.max(0, centredSlack + textColumnRight - panelLeft) : 0;
     const canShift = containerWidth > 0 && panelOverlap <= centredSlack;
     const canvasShift = canShift ? panelOverlap : 0;
     const canvasScale =
-        containerWidth === 0
-            ? 1
-            : Math.min(1, containerWidth / PAGE_PX.width, canShift ? 1 : panelLeft / TEXT_COLUMN_RIGHT_PX);
+        containerWidth === 0 ? 1 : Math.min(1, containerWidth / page.width, canShift ? 1 : panelLeft / textColumnRight);
     const needsScale = canvasScale < 1;
 
     // The document observer stays quiet while unscaled, so seed the height on the way in.
@@ -690,23 +566,13 @@ const TiptapEditor = ({
         if (needsScale && documentRef.current) setDocHeight(documentRef.current.offsetHeight);
     }, [needsScale]);
 
-    if (!editor) return null;
-
-    const handleScrollToComment = (cardId: string) => {
-        const anchors = findCommentAnchors(editor.state.doc, cardId);
-        if (anchors.length === 0) return;
-        const { node, pos } = anchors[0];
-        const chain = editor.chain().focus();
-        const selected = node.type.name === 'figure' ? chain.setNodeSelection(pos) : chain.setTextSelection(pos);
-        selected.scrollIntoView().run();
-    };
-
     // Desktop reveals the anchor and switches an activity tap over to comments; the mobile pane hides
     // the editor, so it just opens the card.
     const openCard = (cardId: string) => {
+        setEditingBand(null);
         if (!isMobile) {
             openComments();
-            handleScrollToComment(cardId);
+            selectCommentAnchor(editor, cardId);
         }
         setOpenCardId(cardId);
     };
@@ -730,12 +596,69 @@ const TiptapEditor = ({
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
+            setEditingBand(null);
             openComments();
             // The mobile pane hides the editor, so scrolling would drive a view nobody can see.
-            if (!isMobile) handleScrollToComment(cardId);
+            if (!isMobile) selectCommentAnchor(editor, cardId);
             setOpenCardId(cardId);
         },
     };
+
+    // A cell's or an equation's comment rows: the card's under the pointer, else Add comment where one anchors, which
+    // is in the body only. The card's Delete goes last, with the cell's or the equation's.
+    const commentRows = (item: NodeMenuItem, anchors: boolean) => (
+        <CommentLifecycleMenuItems
+            lifecycle={lifecycle}
+            item={item.comment}
+            canWrite={canWrite}
+            onAddComment={item.editor === editor && chatFolderId && anchors ? handleAddComment : undefined}
+            part="rows"
+        />
+    );
+    const commentDelete = (item: NodeMenuItem) => (
+        <CommentLifecycleMenuItems
+            lifecycle={lifecycle}
+            item={item.comment}
+            canWrite={canWrite}
+            onDelete={removeCommentMarks}
+            part="delete"
+        />
+    );
+    const tableItem = tableContextMenu.item;
+    const tableRows = tableItem && tableMenuSections(tableItem.editor, tableItem.cells);
+    const equationItem = equationContextMenu.item;
+    const equationRows =
+        equationItem &&
+        equationMenuSections(
+            equationItem.editor,
+            equationItem.display,
+            isMobile
+                ? undefined
+                : () => {
+                      afterEquationMenuRef.current = editEquation;
+                  },
+        );
+
+    const bandControls = editingBand && (
+        <BandControls
+            band={editingBand}
+            editor={bands[editingBand]}
+            setup={pageSetup}
+            onSetupChange={writeSetup}
+            onDifferentFirstPage={(differentFirstPage) => {
+                writeSetup(pageSetup, { ...pageSetup, differentFirstPage });
+                // Ticked, what was typed stays the other pages' and the caret goes into page 1's new band, as in Google.
+                const edge = bandEdge(editingBand);
+                if (differentFirstPage) enterBand(FIRST_PAGE_BAND[edge]);
+                else if (editingBand !== edge) enterBand(edge);
+            }}
+            onPageNumbers={applyPreset}
+            onRemove={() => {
+                bands[editingBand].commands.clearContent();
+                leaveBand();
+            }}
+        />
+    );
 
     return (
         <>
@@ -746,7 +669,7 @@ const TiptapEditor = ({
                         controller={docSearchController}
                         commentSearch={commentSearch}
                         initialSearchTerm={initialSearchTerm}
-                        onOpenChange={onSearchOpenChange}
+                        onOpenChange={handleSearchOpenChange}
                         // right-68 = panel width + the bar's own gutter.
                         barClassName={cn('top-14', showSidebar && 'right-68')}
                         // No .focus(): focus stays in the bar so the user can keep replacing after ⌘Z.
@@ -759,13 +682,22 @@ const TiptapEditor = ({
                             toolbarBorder="always"
                             toolbar={
                                 <EditorToolbar
-                                    editor={editor}
+                                    editor={activeEditor}
+                                    body={editor}
                                     path={path}
                                     canWrite={canWrite}
                                     offline={offline}
+                                    unsyncedEdits={unsyncedEdits}
                                     storageUnavailable={storageUnavailable}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
+                                    pageSetup={pageSetup}
+                                    onPageSetupChange={writeSetup}
+                                    onUpdateNormalStyle={
+                                        editingBand || notes.anchor
+                                            ? undefined
+                                            : () => updateNormalStyle(yDoc, undoManager, editor, normalStyle)
+                                    }
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     // Always offered: desktop draws the side panel, mobile the Column.
                                     onToggleCommentPanel={toggleComments}
@@ -773,16 +705,31 @@ const TiptapEditor = ({
                                     onToggleActivityPanel={toggleActivity}
                                     activityPanelOpen={activityPanelOpen}
                                     assignedCommentCount={assignedCount}
-                                    onImageUpload={mediaFolderId ? handleImageUpload : undefined}
-                                    onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
+                                    onImageUpload={
+                                        mediaFolderId
+                                            ? (file) => media.uploadImage(insertTarget, file, settleTarget)
+                                            : undefined
+                                    }
+                                    onImagePickFromDrive={
+                                        mediaFolderId
+                                            ? (paths) => media.insertFromDrive(insertTarget, paths)
+                                            : undefined
+                                    }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
+                                    // Comments anchor in the body only, and a band's or a note's equation comes from a paste
+                                    // or a Word file, which its panel edits: Insert greys both out there.
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
+                                    onInsertEquation={insertEquation}
+                                    onInsertFootnote={bandsAllowed ? insertFootnote : undefined}
+                                    inNote={!!notes.anchor}
+                                    onEnterBand={bandsAllowed ? (edge) => enterBand(entryBand(edge)) : undefined}
+                                    onPageNumbers={bandsAllowed ? applyPreset : undefined}
                                 />
                             }
                         >
                             <div className="h-full relative overflow-hidden">
                                 {/* The page box, and on paper the @page margins in its place; the printed clone matches it too. */}
-                                <style>{PAGE_STYLESHEET}</style>
+                                <style>{pageStylesheet(pageSetup, '[data-document]')}</style>
                                 <div
                                     ref={setScrollContainer}
                                     className={cn(
@@ -790,32 +737,110 @@ const TiptapEditor = ({
                                         needsScale && 'overflow-x-hidden',
                                     )}
                                     onClick={(e) => {
-                                        if (e.target === scrollContainerRef.current) {
+                                        if (e.target === scrollContainerRef.current && !editingBand) {
                                             editor.commands.blur();
                                         }
                                     }}
+                                    // While a band is edited a press in the body leaves it, the caret where it landed,
+                                    // as in Google, and one in another band moves there, as that band is read-only
+                                    // until entered; a press anywhere else would focus nothing, leaving the band
+                                    // edited with Esc and typing reaching nothing, so it keeps the caret. A portaled
+                                    // menu or dialog is the band's own. An open note is left and kept alike, and
+                                    // another note opens itself.
+                                    onMouseDown={
+                                        notes.anchor && !editingBand
+                                            ? (e) => {
+                                                  const target = e.target;
+                                                  if (
+                                                      !(target instanceof Element) ||
+                                                      !e.currentTarget.contains(target) ||
+                                                      noteEditor.view.dom.contains(target)
+                                                  ) {
+                                                      return;
+                                                  }
+                                                  if (target.closest('[data-page-body]')) notes.close();
+                                                  else e.preventDefault();
+                                              }
+                                            : editingBand
+                                              ? (e) => {
+                                                    const target = e.target;
+                                                    if (
+                                                        !(target instanceof Element) ||
+                                                        !e.currentTarget.contains(target)
+                                                    ) {
+                                                        return;
+                                                    }
+                                                    if (target.closest('[data-page-body]')) {
+                                                        setEditingBand(null);
+                                                        return;
+                                                    }
+                                                    const pressed = BAND_ROOTS.find((root) =>
+                                                        bands[root].view.dom.contains(target),
+                                                    );
+                                                    if (pressed === editingBand) return;
+                                                    e.preventDefault();
+                                                    if (pressed)
+                                                        enterBand(pressed, { left: e.clientX, top: e.clientY });
+                                                }
+                                              : undefined
+                                    }
                                 >
                                     <div
                                         data-document="true"
                                         className={cn(
                                             // eigen-paper: the page always renders light, in dark mode too (globals.css)
-                                            'eigen-paper grid bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
+                                            // Rows: the header band, the body, the notes, the footer band.
+                                            'eigen-paper grid grid-rows-[auto_1fr_auto_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
                                             !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}
-                                        style={
-                                            needsScale
+                                        // The doc's Normal, which the body and the bands draw unformatted text in.
+                                        style={{
+                                            ...normalStyleProperties(normalStyle),
+                                            ...(needsScale
                                                 ? {
                                                       transform: `scale(${canvasScale})`,
                                                       transformOrigin: 'top left',
                                                       marginBottom: -(1 - canvasScale) * docHeight,
                                                   }
-                                                : canvasShift > 0
-                                                  ? { transform: `translateX(${-canvasShift}px)` }
-                                                  : undefined
-                                        }
+                                                : canvasShift > 0 && { transform: `translateX(${-canvasShift}px)` }),
+                                        }}
                                     >
-                                        <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
+                                        <PageBands
+                                            edge="header"
+                                            editors={bands}
+                                            setup={pageSetup}
+                                            editing={editingBand}
+                                            onEnter={
+                                                bandsAllowed
+                                                    ? (root, at) => enterBand(root ?? entryBand('header'), at)
+                                                    : undefined
+                                            }
+                                            controls={bandControls}
+                                        />
+                                        <EditorContent
+                                            editor={editor}
+                                            data-page-body
+                                            className="row-start-2 h-full min-w-0 tiptap-wrapper"
+                                        />
+                                        <FootnoteList
+                                            body={editor}
+                                            note={noteEditor}
+                                            open={notes.anchor}
+                                            onOpen={bandsAllowed ? openNote : undefined}
+                                        />
+                                        <PageBands
+                                            edge="footer"
+                                            editors={bands}
+                                            setup={pageSetup}
+                                            editing={editingBand}
+                                            onEnter={
+                                                bandsAllowed
+                                                    ? (root, at) => enterBand(root ?? entryBand('footer'), at)
+                                                    : undefined
+                                            }
+                                            controls={bandControls}
+                                        />
                                     </div>
                                 </div>
                                 {/* Unmounted when closed. The stable gutter ends the panel left of the scrollbar. */}
@@ -826,11 +851,23 @@ const TiptapEditor = ({
                                                 <PanelColumn activePanel={panel} {...panelProps} />
                                             ) : lastPanelRef.current === 'figure' ? (
                                                 <FigurePropertiesPanel
-                                                    editor={editor}
+                                                    editor={activeEditor}
+                                                    blockOnly={!!editingBand}
                                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                                 />
+                                            ) : lastPanelRef.current === 'chart' ? (
+                                                <ChartPropertiesPanel
+                                                    editor={editor}
+                                                    undoManager={undoManager}
+                                                    onEditData={() => setChartDataOpen(true)}
+                                                />
+                                            ) : lastPanelRef.current === 'equation' ? (
+                                                <EquationPropertiesPanel
+                                                    editor={activeEditor}
+                                                    fieldRef={equationFieldRef}
+                                                />
                                             ) : (
-                                                <TablePropertiesPanel editor={editor} />
+                                                <TablePropertiesPanel editor={activeEditor} />
                                             )}
                                         </div>
                                     </div>
@@ -848,10 +885,12 @@ const TiptapEditor = ({
                 onOpenChange={setReplacePickerOpen}
                 title="Replace image"
                 canPick={(item) => isImageMime(item.mimeType)}
-                onPickFromDrive={handleReplaceImageFromDrive}
-                onPickFromDevice={(files) => files[0] && handleReplaceImage(files[0])}
+                onPickFromDrive={(paths) => media.replaceFromDrive(insertTarget, paths)}
+                onPickFromDevice={(files) => files[0] && media.replaceImage(insertTarget, files[0], settleTarget)}
                 accept="image/*"
             />
+
+            {chartDataOpen && <ChartDataEditor editor={editor} undoManager={undoManager} onClose={closeChartData} />}
 
             <CardFormDialog
                 open={addOpen}
@@ -877,17 +916,104 @@ const TiptapEditor = ({
             />
 
             <ContextMenuAnchor contextMenu={figureContextMenu}>
-                <DownloadImageMenuItem path={figureContextMenu.item?.imagePath} />
-                {figureContextMenu.item?.imagePath && (figureContextMenu.item.comment || canAddComment) && (
-                    <DropdownMenuSeparator />
-                )}
-                <CommentLifecycleMenuItems
-                    lifecycle={lifecycle}
-                    item={figureContextMenu.item?.comment ?? null}
-                    canWrite={canWrite}
-                    onAddComment={chatFolderId ? handleAddComment : undefined}
-                    onDelete={removeCommentMarks}
+                <MenuSections
+                    clipboard={
+                        <ClipboardMenuItems
+                            onCut={canWrite ? () => runClipboardCommand(editor, 'cut') : undefined}
+                            onCopy={() => runClipboardCommand(editor, 'copy')}
+                        />
+                    }
+                    output={
+                        (figureContextMenu.item?.imagePath || menuChart) && (
+                            <>
+                                <DownloadOriginalImageMenuItem path={figureContextMenu.item?.imagePath} />
+                                <DownloadImageMenuItem
+                                    onDownload={menuChart ? () => downloadChartImage(menuChart) : undefined}
+                                />
+                            </>
+                        )
+                    }
+                    collaborate={
+                        <CommentLifecycleMenuItems
+                            lifecycle={lifecycle}
+                            item={figureContextMenu.item?.comment ?? null}
+                            canWrite={canWrite}
+                            onAddComment={chatFolderId ? handleAddComment : undefined}
+                            part="rows"
+                        />
+                    }
+                    destructive={
+                        <>
+                            {canWrite && (
+                                <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() => editor.chain().focus().deleteSelection().run()}
+                                >
+                                    <Trash2 className="h-4 w-4" /> Delete
+                                </DropdownMenuItem>
+                            )}
+                            <CommentLifecycleMenuItems
+                                lifecycle={lifecycle}
+                                item={figureContextMenu.item?.comment ?? null}
+                                canWrite={canWrite}
+                                onDelete={removeCommentMarks}
+                                part="delete"
+                            />
+                        </>
+                    }
                 />
+            </ContextMenuAnchor>
+
+            <ContextMenuAnchor contextMenu={tableContextMenu}>
+                {tableItem && tableRows && (
+                    <MenuSections
+                        {...tableRows}
+                        clipboard={
+                            <ClipboardMenuItems
+                                onCut={() => runClipboardCommand(tableItem.editor, 'cut')}
+                                onCopy={() => runClipboardCommand(tableItem.editor, 'copy')}
+                                onPaste={() => void pasteFromClipboard(tableItem.editor).catch(() => {})}
+                            />
+                        }
+                        collaborate={commentRows(tableItem, canAnchorComment(tableItem.editor.state))}
+                        destructive={
+                            <>
+                                {tableRows.destructive}
+                                {commentDelete(tableItem)}
+                            </>
+                        }
+                    />
+                )}
+            </ContextMenuAnchor>
+
+            <ContextMenuAnchor
+                contextMenu={equationContextMenu}
+                onCloseAutoFocus={(e) => {
+                    const after = afterEquationMenuRef.current;
+                    afterEquationMenuRef.current = null;
+                    e.preventDefault();
+                    if (after) after();
+                    else equationContextMenu.restoreFocus();
+                }}
+            >
+                {equationItem && equationRows && (
+                    <MenuSections
+                        {...equationRows}
+                        clipboard={
+                            <ClipboardMenuItems
+                                onCut={() => runClipboardCommand(equationItem.editor, 'cut')}
+                                onCopy={() => runClipboardCommand(equationItem.editor, 'copy')}
+                            />
+                        }
+                        collaborate={commentRows(equationItem, true)}
+                        destructive={
+                            <>
+                                {equationRows.destructive}
+                                {commentDelete(equationItem)}
+                            </>
+                        }
+                    />
+                )}
             </ContextMenuAnchor>
 
             <ContextMenuAnchor contextMenu={selectionContextMenu}>

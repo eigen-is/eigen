@@ -4,7 +4,8 @@
 // down by one AbortController: on release, on Escape, and on unmount if a remote peer deletes the element
 // mid-drag. Each handle keeps its own move/commit bodies; only the harness lives here.
 
-import { type MutableRefObject, useEffect, useRef } from 'react';
+import type { MutableRefObject } from 'react';
+import { useEffect, useRef } from 'react';
 
 type HandleDragOptions = {
     // Screen px the pointer must travel before the drag goes live. 0 (the default) is live from the

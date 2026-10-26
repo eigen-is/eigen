@@ -1,10 +1,18 @@
-import { EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
-import type { TitleType } from '@workspace/lib/docs/eigendoc';
-import { cssColorToHex } from './colors';
-import { proseValue, proseValueIfSet } from './prose-css';
-
 // The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognises it where a
 // re-save drops the writer's styles and keeps it as direct formatting.
+
+import {
+    DOCUMENT_LINE_RATIO,
+    EIGEN_FONT_NAMES,
+    FOOTNOTE_FONT_SIZE,
+    fontLineHeight,
+    getFontName,
+} from '@workspace/lib/constants/fonts';
+import type { NormalStyle, TitleType } from '@workspace/lib/docs/eigendoc';
+import { DOC_PROSE_CLASS, listTypeOfStyle, ptToTwips } from '@workspace/lib/docs/eigendoc';
+import { LIST_FORMATS, LIST_LEVELS, SINGLE_LINE } from '../ooxml/wordml';
+import { cssColorToHex } from './colors';
+import { proseValue, proseValueIfSet } from './prose-css';
 
 // rem against the 16 px root, px at 96 dpi, em against the element's own size.
 export function cssPt(length: string, emPt: number): number {
@@ -16,7 +24,7 @@ export function cssPt(length: string, emPt: number): number {
 }
 
 export function twips(pt: number): number {
-    return Math.round(pt * 20);
+    return Math.round(ptToTwips(pt));
 }
 
 export function halfPoints(pt: number): number {
@@ -52,6 +60,11 @@ export const BODY = {
     sizePt: cssPt(proseValue('.eigen-prose', 'font-size'), 12),
     color: proseColor('.eigen-prose', 'color'),
 };
+
+// A length an element in the body text takes, in twips.
+export function proseTwips(selector: string, property: string): number {
+    return twips(cssPt(proseValue(selector, property), BODY.sizePt));
+}
 
 // A solid border shorthand, its width in eighths of a point.
 export function proseBorder(selector: string, property: string): Omit<Border, 'space'> {
@@ -127,6 +140,10 @@ export const CAPTION_LOOK = {
     color: proseColor('.eigen-prose figcaption', 'color'),
 };
 
+// A note's text is Word's FootnoteText, single spaced with no space after, at the footnote size Google's notes take
+// too. eigen-prose.css can't give it, as the editor lists its notes off the page's prose.
+export const FOOTNOTE_LOOK = { sizePt: FOOTNOTE_FONT_SIZE, line: SINGLE_LINE, after: 0 };
+
 type TextLook = { color?: string; italic?: true };
 
 // The color and italic eigen-prose.css gives an element's text, where it gives any: a highlighted code token's, a heading's.
@@ -158,6 +175,137 @@ export function nodeLook(type: string, level = 1): TextLook {
     return type === 'title' || type === 'subtitle' ? TITLE_LOOKS[type] : {};
 }
 
+export function lineHeightPt(value: string, sizePt: number): number {
+    return /^[\d.]+$/.test(value) ? Number(value) * sizePt : cssPt(value, sizePt);
+}
+
+// A heading's or title's size, spacing and line. One without its own size or line height inherits the prose root's,
+// as h5 and h6 do, so its size is the Normal's.
+export function textMetrics(selector: string, normalPt: number) {
+    const size = proseValueIfSet(selector, 'font-size');
+    const sizePt = size === undefined ? normalPt : cssPt(size, BODY.sizePt);
+    const line = proseValueIfSet(selector, 'line-height') ?? proseValue('.eigen-prose', 'line-height');
+    const tracking = proseValueIfSet(selector, 'letter-spacing');
+    return {
+        sizePt,
+        before: twips(cssPt(proseValue(selector, 'margin-top'), sizePt)),
+        after: twips(cssPt(proseValue(selector, 'margin-bottom'), sizePt)),
+        line: lineHeightPt(line, sizePt),
+        tracking: tracking === undefined ? undefined : twips(cssPt(tracking, sizePt)),
+    };
+}
+
+// A multiple of the font's own line height, so the pitch is the CSS one: Google Docs reads every atLeast as single.
+export function autoLine(linePt: number, sizePt: number, font: string): number {
+    return Math.round((SINGLE_LINE * linePt) / (sizePt * fontLineHeight(font)));
+}
+
+// The auto line Word draws a line spacing at in the Normal's font. CSS draws a line spacing in Inter's line.
+export function normalLine(lineSpacing: number, normal: NormalStyle): number {
+    return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
+}
+
+// normalLine's inverse: the line spacing an auto line written in this font draws.
+export function lineMultiple(written: number, font: string): number {
+    return (written * fontLineHeight(font)) / DOCUMENT_LINE_RATIO / SINGLE_LINE;
+}
+
+// A run's family and size in half-points, which the height of its line follows.
+export type RunFace = { family: string; size: number };
+
+// Word draws an auto line in the tallest face on it, the paragraph mark's included; CSS draws its line at the largest
+// size alone, in the mark's family. The writer writes the line of a paragraph all in one family times this, and the
+// reader divides it back out. Mixed families are 1: the writer leaves their line alone.
+export function familyLineScale(mark: RunFace, faces: RunFace[]): number {
+    const family = faces[0]?.family;
+    if (family === undefined || faces.some((face) => face.family !== family)) return 1;
+    let tallest = fontLineHeight(mark.family) * mark.size;
+    let largest = mark.size;
+    for (const face of faces) {
+        tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
+        largest = Math.max(largest, face.size);
+    }
+    return (fontLineHeight(mark.family) * largest) / tallest;
+}
+
+type OwnLook = { sizePt: number; before: number; after: number; line: number };
+
+// What a text node draws with no mark or format of its own. The docx writer's styles write it, so the reader and the
+// audit read it as no format. The size is in points, the space before and after in twips, and the auto line in the
+// Normal's font. A note's paragraph draws Word's FootnoteText over the Normal.
+export function ownTextLook(type: string, level: number, normal: NormalStyle, inNote: boolean): OwnLook | undefined {
+    if (inNote) return noteTextLook(normal);
+    if (type === 'paragraph') return normalTextLook(normal);
+    if (type === 'heading') return sizedTextLook(`.eigen-prose h${Math.min(level, HEADING_LOOKS.length)}`, normal);
+    return type === 'title' || type === 'subtitle' ? sizedTextLook(TITLE_SELECTORS[type], normal) : undefined;
+}
+
+export function normalTextLook(normal: NormalStyle): OwnLook {
+    return {
+        sizePt: normal.size,
+        before: twips(normal.spaceBefore),
+        after: twips(normal.spaceAfter),
+        line: normalLine(normal.lineSpacing, normal),
+    };
+}
+
+export function noteTextLook(normal: NormalStyle): OwnLook {
+    return {
+        sizePt: FOOTNOTE_LOOK.sizePt,
+        before: twips(normal.spaceBefore),
+        after: FOOTNOTE_LOOK.after,
+        line: FOOTNOTE_LOOK.line,
+    };
+}
+
+// A heading's or a title's, by its selector, with its letter spacing.
+export function sizedTextLook(selector: string, normal: NormalStyle): OwnLook & { tracking: number | undefined } {
+    const metrics = textMetrics(selector, normal.size);
+    return { ...metrics, line: autoLine(metrics.line, metrics.sizePt, normal.font) };
+}
+
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };
 
+const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
+
+// A cell's padding in twips: a table nested in a cell fits inside it.
+export const TABLE_CELL_PADDING = {
+    vertical: twips(cssPt(boxSide(CELL_PADDING, 'top'), BODY.sizePt)),
+    horizontal: twips(cssPt(boxSide(CELL_PADDING, 'left'), BODY.sizePt)),
+};
+
+// In twips: the margin above and below a block figure, which the paragraph holding it draws.
+const FIGURE_MARGIN_CSS = proseValue('.eigen-prose .figure', 'margin');
+export const FIGURE_MARGIN = {
+    top: twips(cssPt(boxSide(FIGURE_MARGIN_CSS, 'top'), BODY.sizePt)),
+    bottom: twips(cssPt(boxSide(FIGURE_MARGIN_CSS, 'bottom'), BODY.sizePt)),
+};
+
+// In twips: the writer spaces the block after an in-flow table by it, and the reader takes that space as the table's.
+export const TABLE_MARGIN = twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt));
+
+// In twips: the margin the writer gives an outermost list's and a quote's last block, and to a table that ends one, so
+// the block after it.
+export const BLOCK_MARGINS = {
+    ul: twips(cssPt(proseValue('.eigen-prose ul', 'margin-bottom'), BODY.sizePt)),
+    ol: twips(cssPt(proseValue('.eigen-prose ol', 'margin-bottom'), BODY.sizePt)),
+    blockquote: twips(cssPt(proseValue('.eigen-prose blockquote', 'margin-bottom'), BODY.sizePt)),
+};
+
 export const LINK_LOOK = { color: proseColor('.eigen-prose a', 'color') };
+
+// eigen-prose.css numbers a list that stores no type by the numbered lists it sits in: `ol`, then Docs' `ol ol` and on.
+const UNTYPED_LIST_FORMATS = Array.from({ length: LIST_LEVELS }, (_, depth) => {
+    const nested = Array(depth + 1)
+        .fill('ol')
+        .join(' ');
+    const style = proseValue(depth === 0 ? '.eigen-prose ol' : `.${DOC_PROSE_CLASS} ${nested}`, 'list-style-type');
+    const format = LIST_FORMATS.get(listTypeOfStyle(style) ?? '');
+    if (!format) throw new Error(`eigen-prose.css numbers a list in ${style}, which Word has no format for`);
+    return format;
+});
+
+// The numFmt an untyped list draws in, `numbered` lists deep; past Word's levels as its last.
+export function untypedListFormat(numbered: number): string {
+    return UNTYPED_LIST_FORMATS[Math.min(numbered, LIST_LEVELS - 1)] ?? 'decimal';
+}

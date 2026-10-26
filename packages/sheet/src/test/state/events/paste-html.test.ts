@@ -12,12 +12,12 @@
 // never assert on internal call sequences.
 
 import { describe, expect, it, spyOn } from 'bun:test';
-import { SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_FONT_SIZE, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handlePaste } from '../../../state/events/paste';
-import { copy, rangeValueToHtml, selectionCache } from '../../../state/modules/selection';
+import { copy, rangeValueToClipboard, selectionCache } from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
 import { pastedHtmlFactory } from '../factories/pasted-html';
 
@@ -192,6 +192,47 @@ describe('HTML-table paste — style extraction', () => {
         expect(d[3][0]?.it).toBe(1); // font-style:italic
         expect(d[2][0]?.un).toBe(1); // text-decoration:underline
         expect(d[0][0]?.un).toBeUndefined(); // text-decoration:none stays un-set
+    });
+
+    it.each([
+        ["'Times New Roman', serif", 'Source Serif 4'],
+        ['"Source Serif 4", serif', 'Source Serif 4'],
+        ['Calibri', 'Inter'],
+        ['Wingdings, "Courier New", monospace', 'JetBrains Mono'],
+    ])('a td in %s pastes in %s', (stack, font) => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, `<table><tr><td style="font-family: ${stack.replaceAll('"', '&quot;')}">x</td></tr></table>`);
+        expect(ctx.sheets[0].data![0][0]?.ff).toBe(font);
+    });
+
+    it('a td in a font the map does not know, or in none, keeps the sheet default', () => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, '<table><tr><td style="font-family: Wingdings">x</td><td>y</td></tr></table>');
+        expect(ctx.sheets[0].data![0][0]?.ff).toBeUndefined();
+        expect(ctx.sheets[0].data![0][1]?.ff).toBeUndefined();
+    });
+
+    // Eigen's own copy writes a size inline in pt; a web page's is often px, which is 3/4 pt at 96 dpi.
+    it('reads a font size in pt as pt and in px at 96 dpi, inline or from the class block', () => {
+        const ctx = makeCtx();
+        pasteHtml(
+            ctx,
+            '<html><head><style>\n<!--td\n\t{color:black;}\n.xl72\n\t{font-size:16px;}\n.xl73\n\t{font-size:12.0pt;}\n-->\n</style></head><body><table><tr>' +
+                '<td style="font-size:14pt">a</td>' +
+                '<td style="font-size:16px">b</td>' +
+                '<td class=xl72>c</td>' +
+                '<td class=xl73>d</td>' +
+                '<td>e</td>' +
+                '</tr></table></body></html>',
+        );
+
+        expect(ctx.sheets[0].data![0].slice(0, 5).map((cell) => cell?.fs)).toEqual([
+            14,
+            12,
+            12,
+            12,
+            SHEET_DEFAULT_FONT_SIZE,
+        ]);
     });
 
     it('sets cl=1 for a <s> strikethrough inside the td', () => {
@@ -408,7 +449,7 @@ describe('Copy HTML — numeric cells carry their full value', () => {
     function copiedHtml(cell: Cell): string {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][0] = cell;
-        return rangeValueToHtml(ctx, 'id_1', [{ row: [0, 0], column: [0, 0] }]) ?? '';
+        return rangeValueToClipboard(ctx, 'id_1', [{ row: [0, 0], column: [0, 0] }])?.html ?? '';
     }
 
     it('a General number too long for General pastes back whole', () => {
@@ -433,7 +474,7 @@ describe('Copy HTML — numeric cells carry their full value', () => {
         ctx.sheets[0].data![0][0] = { v: 123456789012, m: '1.23457E+11', f: '=A2', ct: { fa: 'General', t: 'n' } };
         ctx.selections = single(0, 0);
         copy(ctx);
-        const html = rangeValueToHtml(ctx, 'id_1', ctx.selections) ?? '';
+        const html = rangeValueToClipboard(ctx, 'id_1', ctx.selections)?.html ?? '';
         ctx.selections = single(0, 1);
         pasteHtml(ctx, html);
         expect(ctx.sheets[0].data![0][1]?.f).toBe('=B2');

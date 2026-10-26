@@ -1,10 +1,12 @@
-import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import { isNil, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
+import { MAX_SHEET_NAME_LENGTH } from '../../engine/a1-notation';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
-import { type Context, firstVisibleSheetId, updateContextWithSheetData } from '../context';
+import type { Context } from '../context';
+import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
@@ -46,6 +48,7 @@ export function changeSheet(
 
     cancelNormalSelected(ctx);
     ctx.dataVerificationDropDownList = false;
+    ctx.activeObject = undefined;
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;
     const record = ctx.sheetScrollRecord[id];
@@ -82,10 +85,9 @@ export function applySheetView(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
     const sheet = ctx.sheets[index];
-    ctx.defaultrowlen = sheet.defaultRowHeight ?? SHEET_DEFAULT_ROW_HEIGHT;
-    ctx.defaultcollen = sheet.defaultColWidth ?? SHEET_DEFAULT_COL_WIDTH;
+    ctx.defaultrowlen = sheetDefaultRowHeight(sheet);
+    ctx.defaultcollen = sheetDefaultColWidth(sheet);
     ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
-    ctx.insertedImgs = sheet.images;
     // A sheet added this recipe has no data until the Workbook effect initializes it.
     if (sheet.data) updateContextWithSheetData(ctx, sheet.data);
     applySheetFilter(ctx);
@@ -204,7 +206,7 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     }
 
     if (
-        txt.length > 31 ||
+        txt.length > MAX_SHEET_NAME_LENGTH ||
         txt.charAt(0) === "'" ||
         txt.charAt(txt.length - 1) === "'" ||
         /[：:\\/？?*[\]]+/.test(txt)

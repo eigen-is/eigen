@@ -1,52 +1,69 @@
+// Trash for one mount: a trashed item stays a row in the paths table, marked trashed and moved under
+// the mount root, and on `local` its bytes move into data/.trash/. Mount calls these for Drive, such as
+// a trash, a restore, a permanent delete and the purge of expired trash at mount open.
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { and, desc, eq, isNotNull, isNull, type SQL, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
-import { rethrowDuplicateActiveName } from './helpers';
+import { renameThenWriteRow, rethrowPathWriteError } from './helpers';
 import type { Mount } from './mount';
-import { isReservedName, trashStorageKey } from './names';
+import { foldName, isReservedName, trashStorageKey } from './names';
 import { paths } from './schema';
 
-// Soft delete over the mount's paths table: trash re-parents to the root with
-// trashedAt/trashedFrom bookkeeping; path-based storage also moves the bytes into
-// data/.trash/. See docs/SOFT-DELETE.md.
-
 export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath> {
-    const item = await mount.getPath(pathId);
-    if (!item) throw new ApiError(404, 'Path not found');
-    if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-
     const root = await mount.getRootFolder();
     if (!root) throw new ApiError(500, 'Root folder not found');
+    if (pathId === root.id) throw new ApiError(400, 'Cannot trash root folder');
 
-    // Flush + close cached DBs BEFORE the storage rename, so their final bytes are written to the
-    // current location and then moved into .trash/ with everything else — and so no post-trash
-    // sync writes a data.db outside .trash/ (a chat's data.db is never closed by the collab path).
+    // The open databases under the item close before the storage rename. Their last bytes then land at
+    // the old key and move into .trash/ with the rest. A later sync can't write a data.db outside
+    // .trash/ either. The collab close never closes a chat's data.db, so this one does.
     await closeCachedDbsUnder(mount, pathId);
 
     return mount.withPathLock(pathId, () =>
         mount.withTreeExclusive(async () => {
-            let trashKey: string | undefined;
-            if (mount.isPathBased && mount.storage.rename) {
-                const oldKey = await mount.getStorageKey(pathId);
-                trashKey = trashStorageKey(pathId, item.name);
-                await mount.storage.rename(oldKey, trashKey);
-            }
+            // Read under the lock: a move while this waited would leave a stale trashedFrom, and a second
+            // trash of one item would record the mount root as its original folder.
+            const item = await mount.getActivePath(pathId);
 
-            // Not updatePath(): it validates the name, asserts uniqueness against active siblings and
-            // renames storage — none of which a trash write wants.
+            // Not updatePath(), which checks the name against live siblings and renames storage. A
+            // trash wants neither.
             const now = new Date();
-            await mount.db
-                .update(paths)
-                .set({
-                    trashedAt: now,
-                    trashedFrom: item.parentId,
-                    parentId: root.id,
-                    ...(trashKey !== undefined ? { file: trashKey } : {}),
-                    updatedAt: now,
-                })
-                .where(eq(paths.id, pathId));
+            const writeRow = async (file?: string): Promise<void> => {
+                await mount.db
+                    .update(paths)
+                    .set({
+                        trashedAt: now,
+                        trashedFrom: item.parentId,
+                        parentId: root.id,
+                        ...(file !== undefined ? { file } : {}),
+                        updatedAt: now,
+                    })
+                    .where(eq(paths.id, pathId));
+            };
+
+            if (mount.isPathBased && mount.storage.rename) {
+                const rename = mount.storage.rename.bind(mount.storage);
+                const trashKey = trashStorageKey(pathId, item.name);
+                const oldKey = await mount.getStorageKey(pathId);
+                // Bytes at the trash key alone are this item's, left by a crash or a failed move-back, so this
+                // finishes that trash. Beside bytes at the old key they are an orphan that only this row could
+                // have written.
+                const atTrashKey = onDisk(mount, trashKey);
+                if (atTrashKey && !onDisk(mount, oldKey)) {
+                    await writeRow(trashKey);
+                } else {
+                    if (atTrashKey) await moveAside(rename, trashKey, trashKey);
+                    await renameThenWriteRow(rename, oldKey, trashKey, () => writeRow(trashKey));
+                }
+            } else {
+                await writeRow();
+            }
 
             if (item.type !== 'file') {
                 trashDescendants(mount, pathId, now);
@@ -73,68 +90,98 @@ export async function listTrash(mount: Mount): Promise<DrivePath[]> {
     return results.map((r) => mount.toDrivePath(r));
 }
 
-// trashedFrom is trash bookkeeping, not part of DrivePath — permanentlyDelete
-// needs the original parent to notify the old folder's watchers.
+// trashedFrom stays on the server and is not part of DrivePath. A permanent delete needs it to notify
+// the watchers of the folder the item left.
 export async function getTrashedFrom(mount: Mount, pathId: string): Promise<string | null> {
     const row = await mount.db.select({ trashedFrom: paths.trashedFrom }).from(paths).where(eq(paths.id, pathId)).get();
     return row?.trashedFrom ?? null;
 }
 
 export async function restorePath(mount: Mount, pathId: string): Promise<DrivePath> {
-    const row = await mount.db.select().from(paths).where(eq(paths.id, pathId)).get();
-    if (!row) throw new ApiError(404, 'Path not found');
-    if (!row.trashedFrom) throw new ApiError(400, 'Item is not in trash');
-
     const root = await mount.getRootFolder();
     if (!root) throw new ApiError(500, 'Root folder not found');
 
-    let targetParentId = root.id;
-    const originalParent = await mount.getPath(row.trashedFrom);
-    if (originalParent && !originalParent.trashedAt) {
-        targetParentId = originalParent.id;
-    }
-
-    // A legacy row named `.trash` (pre-guard) counts as a conflict too — restoring it verbatim
-    // would alias the real trash dir. The row is still trashed, so it never matches itself.
-    let restoreName = row.name;
-    const conflict = isReservedName(restoreName) || (await mount.getChildByName(targetParentId, restoreName)) !== null;
-    if (conflict) {
-        const siblings = await mount.db
-            .select({ name: paths.name })
-            .from(paths)
-            .where(and(eq(paths.parentId, targetParentId), isNull(paths.trashedAt)))
-            .all();
-        const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
-        restoreName = getUniqueFileName(row.name, usedNames);
-    }
-
     return mount.withPathLock(pathId, () =>
         mount.withTreeExclusive(async () => {
-            // A create raced past the pre-lock check may own this key on `local`, and a storage rename replaces.
-            await mount.assertUniqueName(targetParentId, restoreName);
-            if (mount.isPathBased && mount.storage.rename) {
-                const currentKey = await mount.getStorageKey(pathId);
-                const parentPath = await mount.getStorageKey(targetParentId);
-                const targetKey = parentPath ? `${parentPath}/${restoreName}` : restoreName;
-                await mount.storage.rename(currentKey, targetKey);
+            // Read under the lock. A trash of the original folder while this waited would otherwise restore
+            // into it. On `local` a create since an earlier name check owns the key that a rename replaces.
+            const row = await mount.db.select().from(paths).where(eq(paths.id, pathId)).get();
+            if (!row) throw new ApiError(404, 'Path not found');
+            if (!row.trashedFrom) throw new ApiError(400, 'Item is not in trash');
+
+            // The original folder takes the item back only where a move could put it. Otherwise the
+            // item goes to the root.
+            const trashedFrom = row.trashedFrom;
+            const targetParentId = mount.db.transaction((tx) => mount.targetFolderErrorInTx(tx, pathId, trashedFrom))
+                ? root.id
+                : trashedFrom;
+
+            // A row named `.trash` from before the name rule counts as a conflict too, because restoring
+            // it under that name would alias the real trash folder. The row is still trashed, so it never
+            // matches itself.
+            let restoreName = row.name;
+            const conflict =
+                isReservedName(restoreName) || (await mount.getChildByName(targetParentId, restoreName)) !== null;
+            if (conflict) {
+                const siblings = await mount.db
+                    .select({ name: paths.name })
+                    .from(paths)
+                    .where(and(eq(paths.parentId, targetParentId), isNull(paths.trashedAt)))
+                    .all();
+                const usedNames = new Set(siblings.map((s) => foldName(s.name)));
+                restoreName = getUniqueFileName(row.name, usedNames);
             }
 
-            // On `local` the re-check above 409'd a raced create before any bytes moved; elsewhere the index does.
             const now = new Date();
-            try {
-                await mount.db
-                    .update(paths)
-                    .set({
-                        parentId: targetParentId,
-                        trashedAt: null,
-                        trashedFrom: null,
-                        name: restoreName,
-                        ...(mount.isPathBased ? { file: restoreName } : {}),
-                        updatedAt: now,
-                    })
-                    .where(eq(paths.id, pathId));
-            } catch (e) {
-                rethrowDuplicateActiveName(e, restoreName);
+            // Off `local` no lock keeps a trash of the target folder out, so the check shares the
+            // transaction of the row write.
+            const writeRow = async (): Promise<void> => {
+                try {
+                    mount.db.transaction((tx) => {
+                        const error = mount.targetFolderErrorInTx(tx, pathId, targetParentId);
+                        if (error) throw error;
+                        tx.update(paths)
+                            .set({
+                                parentId: targetParentId,
+                                trashedAt: null,
+                                trashedFrom: null,
+                                name: restoreName,
+                                ...(mount.isPathBased ? { file: restoreName } : {}),
+                                updatedAt: now,
+                            })
+                            .where(eq(paths.id, pathId))
+                            .run();
+                    });
+                } catch (e) {
+                    rethrowPathWriteError(e, restoreName);
+                }
+            };
+
+            if (mount.isPathBased && mount.storage.rename) {
+                const rename = mount.storage.rename.bind(mount.storage);
+                const parentKey = await mount.getStorageKey(targetParentId);
+                const targetKey = parentKey ? `${parentKey}/${restoreName}` : restoreName;
+                const currentKey = await mount.getStorageKey(pathId);
+                // The mirror of trash. Bytes at the target alone are this item's, left by a restore whose row
+                // write was lost. Beside bytes still in the trash they are a leftover, unless a live row's
+                // name points at them on disk.
+                const occupant = await renameTarget(mount, targetParentId, targetKey, currentKey);
+                if (occupant === 'live') {
+                    throw new ApiError(
+                        409,
+                        `"${restoreName}" is taken on disk by another item; rename that, then restore`,
+                    );
+                }
+                if (occupant === 'leftover' && !onDisk(mount, currentKey)) {
+                    await writeRow();
+                } else {
+                    if (occupant === 'leftover') {
+                        await moveAside(rename, targetKey, trashStorageKey(pathId, restoreName));
+                    }
+                    await renameThenWriteRow(rename, currentKey, targetKey, writeRow);
+                }
+            } else {
+                await writeRow();
             }
 
             if (row.type !== 'file') {
@@ -143,7 +190,7 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
 
             await mount.invalidateSizesFrom(targetParentId);
 
-            // Rows trashed while contentDirty=1 were skipped by the drain (trashedAt filter) — re-drive it.
+            // The reindex skips trashed rows, so rows that went to trash with contentDirty set wait for this kick.
             mount.reindexQueue?.kick();
 
             return mount.getActivePath(pathId);
@@ -151,9 +198,50 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
     );
 }
 
-// Every descendant of parentId, transitively. sql.raw emits a bare column name — an
-// interpolated ${paths.parentId} renders table-qualified, which is invalid behind the `p.`
-// alias and in a SET clause.
+// On `local` a key is a path under data/. A folder's key is a directory, which storage.exists() misses.
+function onDisk(mount: Mount, key: string): boolean {
+    return fs.existsSync(path.join(mount.dataDir, key));
+}
+
+// What a `local` disk rename of sourceKey onto targetKey, or a create at targetKey, would replace.
+// - `source` is the item itself, which a rename that changes only the case finds on a case-insensitive disk.
+// - `live` is a live sibling's bytes, whose name the disk folds onto the target, though no name in the table
+//   matches. Both names lead to the same inode.
+// - `leftover` is bytes that no row owns.
+export async function renameTarget(
+    mount: Mount,
+    parentId: string,
+    targetKey: string,
+    sourceKey?: string,
+): Promise<'free' | 'source' | 'live' | 'leftover'> {
+    const stat = (key: string) => fs.statSync(path.join(mount.dataDir, key), { throwIfNoEntry: false });
+    const target = stat(targetKey);
+    if (!target) return 'free';
+    const sameInode = (other: fs.Stats | undefined) => other?.ino === target.ino && other.dev === target.dev;
+    if (sourceKey !== undefined && sameInode(stat(sourceKey))) return 'source';
+    const parentKey = path.posix.dirname(targetKey);
+    const siblings = await mount.db
+        .select({ file: paths.file })
+        .from(paths)
+        .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
+        .all();
+    return siblings.some((s) => sameInode(stat(path.posix.join(parentKey, s.file)))) ? 'live' : 'leftover';
+}
+
+// Moves aside bytes that no row owns. They stay in .trash/ for the operator instead of being deleted,
+// because they may hold versions or media that the item lacks.
+export async function moveAside(
+    rename: (oldKey: string, newKey: string) => Promise<void>,
+    key: string,
+    asideBase: string,
+): Promise<void> {
+    const aside = `${asideBase}.stale-${Date.now()}`;
+    console.warn(`[Mount] ${key} belongs to no row; moved aside to ${aside}`);
+    await rename(key, aside);
+}
+
+// Every descendant of parentId. sql.raw writes a bare column name. An interpolated ${paths.parentId}
+// comes out table-qualified, which is invalid behind the `p.` alias and in a SET clause.
 function descendantsOf(parentId: string): SQL {
     return sql`
         WITH RECURSIVE descendants AS (
@@ -164,7 +252,6 @@ function descendantsOf(parentId: string): SQL {
     `;
 }
 
-// Recursively set trashedAt on all non-trashed descendants
 function trashDescendants(mount: Mount, parentId: string, now: Date): void {
     const epoch = Math.floor(now.getTime() / 1000);
     mount.db.run(sql`
@@ -175,7 +262,7 @@ function trashDescendants(mount: Mount, parentId: string, now: Date): void {
     `);
 }
 
-// Recursively clear trashedAt on descendants, skipping independently trashed items
+// A descendant the user trashed on its own has its own trashedFrom, and stays in trash.
 function restoreDescendants(mount: Mount, parentId: string, now: Date): void {
     const epoch = Math.floor(now.getTime() / 1000);
     mount.db.run(sql`
@@ -188,32 +275,6 @@ function restoreDescendants(mount: Mount, parentId: string, now: Date): void {
     `);
 }
 
-export async function permanentlyDeleteFromTrash(mount: Mount, pathId: string): Promise<void> {
-    const row = await mount.db.select().from(paths).where(eq(paths.id, pathId)).get();
-    if (!row) return;
-    if (!row.trashedAt) throw new ApiError(400, 'Item is not in trash');
-
-    if (row.type !== 'file') {
-        const descendantIds = mount.collectDescendantIds(pathId);
-        const allIds = [pathId, ...descendantIds];
-        const orphans = await mount.db
-            .select({ id: paths.id })
-            .from(paths)
-            .where(
-                sql`${paths.trashedFrom} IN (${sql.join(
-                    allIds.map((id) => sql`${id}`),
-                    sql`, `,
-                )})`,
-            )
-            .all();
-        for (const orphan of orphans) {
-            await mount.deletePath(orphan.id);
-        }
-    }
-
-    await mount.deletePath(pathId);
-}
-
 export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void> {
     const cutoffEpoch = Math.floor((Date.now() - maxAgeDays * 24 * 60 * 60 * 1000) / 1000);
     const expired = await mount.db
@@ -222,6 +283,61 @@ export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void
         .where(sql`${paths.trashedFrom} IS NOT NULL AND ${paths.trashedAt} < ${cutoffEpoch}`)
         .all();
     for (const row of expired) {
+        // A mount close aborts its downloads and then waits for this loop, so the loop stops here.
+        if (mount.downloads.signal.aborted) return;
         await permanentlyDeleteFromTrash(mount, row.id);
     }
+}
+
+// Runs under the item's path lock, which trash and restore take too, and reads the row inside it. So a
+// restore that got the lock first is never undone. It returns false when the item is gone or not in trash.
+// A legacy trashedFrom can point back into the folder being deleted. Path locks are not reentrant, so the
+// delete skips every item it has already taken on (`seen`). Two deletes of trash roots that point into
+// each other would each hold one root and wait on the other, so a mount runs one delete at a time.
+export async function permanentlyDeleteFromTrash(mount: Mount, pathId: string): Promise<boolean> {
+    return mount.withPathLock('trash/permanent-delete', () => deleteTrashRoot(mount, pathId, new Set()));
+}
+
+async function deleteTrashRoot(mount: Mount, pathId: string, seen: Set<string>): Promise<boolean> {
+    seen.add(pathId);
+    return mount.withPathLock(pathId, async () => {
+        const row = await mount.db
+            .select({ type: paths.type, trashedAt: paths.trashedAt })
+            .from(paths)
+            .where(eq(paths.id, pathId))
+            .get();
+        if (!row?.trashedAt) return false;
+
+        if (row.type !== 'file') {
+            // Each one is a trash root of its own, so a restore may race it too.
+            for (const orphan of trashRootsFrom(mount, pathId)) {
+                if (!seen.has(orphan.id)) await deleteTrashRoot(mount, orphan.id, seen);
+            }
+        }
+
+        await mount.deletePath(pathId);
+        return true;
+    });
+}
+
+// The trash roots a folder's permanent delete takes with it: the items trashed on their own from inside
+// the folder, and from inside those in turn. Drive reads them before the delete to tell their watchers.
+export async function listTrashRootsInside(mount: Mount, folderId: string): Promise<DrivePath[]> {
+    const found = new Map<string, DrivePath>();
+    const collect = (id: string): void => {
+        for (const row of trashRootsFrom(mount, id)) {
+            if (row.id === folderId || found.has(row.id)) continue;
+            found.set(row.id, mount.toDrivePath(row));
+            collect(row.id);
+        }
+    };
+    collect(folderId);
+    return [...found.values()];
+}
+
+// The trash roots whose original folder is the path or lies under it. They hang under the mount root,
+// and once the path is deleted they could never go back to it.
+function trashRootsFrom(mount: Mount, pathId: string): (typeof paths.$inferSelect)[] {
+    const allIds = [pathId, ...mount.collectDescendantIds(pathId)];
+    return mount.db.select().from(paths).where(inArray(paths.trashedFrom, allIds)).all();
 }

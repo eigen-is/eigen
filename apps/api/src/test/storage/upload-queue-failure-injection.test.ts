@@ -6,10 +6,10 @@ import type { DatabaseConfig } from '../../lib/core';
 import type { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { setShutdownDrainDeadline } from '../../lib/sync';
+import type { FaultStorage } from '../fault-storage-helpers';
 import {
     countBackingRows,
     createFaultMount,
-    type FaultStorage,
     provisionDoc,
     restorePutTimeout,
     shrinkPutTimeout,
@@ -69,7 +69,7 @@ describe('process death mid-drain', () => {
         // Ack the create-time schema PUT first (createDatabase flushes on a temp-copy mount), so
         // the one parked write below is exactly the {1,2} upload under test.
         const managed = await m1.mount.createDatabase(docConfig, dataDbId);
-        await m1.mount.drainPendingUploads({ flushNow: true });
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
         expect(m1.mount.pendingUploadCount).toBe(0);
 
         // Enqueue {1,2} and let the drain enter the PUT, then park it there — the process "dies"
@@ -90,7 +90,7 @@ describe('process death mid-drain', () => {
         // re-enqueue the persisted row and the replay must land the staged bytes.
         const m2 = createS3Mount('death-mid-put');
         await m2.mount.init();
-        await m2.mount.drainPendingUploads({ flushNow: true });
+        await m2.mount.uploadQueue?.drain({ flushNow: true });
         expect(m2.mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(2);
         expect(readdirSync(m2.mount.stagingDir)).toHaveLength(0);
@@ -112,7 +112,7 @@ describe('process death mid-drain', () => {
         const managed = await m1.mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await m1.mount.closeDatabase(dataDbId);
-        await m1.mount.drainPendingUploads({ flushNow: true });
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
         expect(m1.mount.pendingUploadCount).toBe(1);
 
         // Land the staged bytes by hand — the PUT acked, then the process died before the row
@@ -131,7 +131,7 @@ describe('process death mid-drain', () => {
         // Restart: the leftover row replays; the duplicate PUT is idempotent and the row clears.
         const m2 = createS3Mount('death-pre-ack');
         await m2.mount.init();
-        await m2.mount.drainPendingUploads({ flushNow: true });
+        await m2.mount.uploadQueue?.drain({ flushNow: true });
         expect(m2.mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
         expect(readdirSync(m2.mount.stagingDir)).toHaveLength(0);
@@ -148,14 +148,14 @@ describe('corrupted staged copy', () => {
         const managed = await m1.mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await m1.mount.drainPendingUploads({ flushNow: true });
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(m1.mount, dataDbId, TEST_DIR)).toBe(1);
 
         // Outage: a new write {1,2} stages + queues but never acks.
         m1.fault.failNextWrites = 9999;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await m1.mount.closeDatabase(dataDbId);
-        await m1.mount.drainPendingUploads({ flushNow: true });
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
         expect(m1.mount.pendingUploadCount).toBe(1);
 
         // Disk damage in the replay window truncates the staged copy to 0 bytes; the durable row
@@ -172,7 +172,7 @@ describe('corrupted staged copy', () => {
         m1.mount.uploadQueue?.close();
         const m2 = createS3Mount('staging-truncated');
         await m2.mount.init();
-        await m2.mount.drainPendingUploads({ flushNow: true });
+        await m2.mount.uploadQueue?.drain({ flushNow: true });
         expect(m2.mount.pendingUploadCount).toBe(0);
         expect(readdirSync(m2.mount.stagingDir)).toHaveLength(0);
 
@@ -197,7 +197,7 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
 
         // Ack the create-time schema PUT so the one orphan below is exactly the {1} upload.
         const managed = await m1.mount.createDatabase(docConfig, dataDbId);
-        await m1.mount.drainPendingUploads({ flushNow: true });
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
         expect(m1.mount.pendingUploadCount).toBe(0);
 
         // Sync {1}: its PUT parks (stalled) and the 50ms ceiling fails the attempt into backoff.
@@ -207,7 +207,7 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         await managed.flush(); // stages {1}, kicks the drain, parks in storage.write
         await waitFor(() => m1.fault.parkedCount === 1);
         restorePutTimeout(m1.mount); // the parked PUT keeps its armed 50ms deadline
-        await m1.mount.drainPendingUploads(); // returns once the timeout fired and the row backed off
+        await m1.mount.uploadQueue?.drain(); // returns once the timeout fired and the row backed off
         expect(m1.mount.pendingUploadCount).toBe(1);
 
         // The user keeps typing and closes the doc: {1,2} stages, supersedes the row, and — with
@@ -215,7 +215,7 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         m1.fault.parkWrites = false;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await m1.mount.closeDatabase(dataDbId);
-        await m1.mount.drainPendingUploads({ flushNow: true });
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
         expect(m1.mount.pendingUploadCount).toBe(0);
         expect(readdirSync(m1.mount.stagingDir)).toHaveLength(0);
         expect(existsSync(m1.mount.getTempPath(dataDbId))).toBe(false);
@@ -233,7 +233,7 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         // A later restart+reopen converges on the newest synced bytes {1,2}.
         const m2 = createS3Mount('orphan-regression');
         await m2.mount.init();
-        await m2.mount.drainPendingUploads({ flushNow: true });
+        await m2.mount.uploadQueue?.drain({ flushNow: true });
         const reopened = await m2.mount.openDatabase(docConfig, dataDbId);
         expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(2);
     });
@@ -255,7 +255,7 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         queue.enqueueStaged(key, first, false);
         await waitFor(() => fault.parkedCount === 1);
         restorePutTimeout(mount);
-        await mount.drainPendingUploads();
+        await mount.uploadQueue?.drain();
         expect(mount.pendingUploadCount).toBe(1);
 
         // v2 supersedes it and acks while the orphan is unsettled, so its bytes are retained.
@@ -263,7 +263,7 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         const second = queue.newStagingPath();
         writeFileSync(second, 'v2');
         queue.enqueueStaged(key, second, false);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
 
         // The orphan lands, rolling the object back to v1; its settlement re-stages the retained v2.
@@ -286,13 +286,13 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         const key = buildStorageKey(dataDbId, 'data.db');
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
-        await mount.drainPendingUploads({ flushNow: true }); // ack the create-time schema PUT
+        await mount.uploadQueue?.drain({ flushNow: true }); // ack the create-time schema PUT
         shrinkPutTimeout(mount, 50);
         fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId); // enqueues; drain parks in storage.write
         await waitFor(() => fault.parkedCount === 1);
-        await mount.drainPendingUploads(); // 50ms ceiling fires; the attempt is failed into backoff
+        await mount.uploadQueue?.drain(); // 50ms ceiling fires; the attempt is failed into backoff
 
         // Permanent delete while the orphan is still pending server-side: cancels the row, unlinks
         // the staged copy, deletes the (not-yet-existing) object.
@@ -319,7 +319,7 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         const key = buildStorageKey(dataDbId, 'data.db');
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
-        await mount.drainPendingUploads({ flushNow: true }); // ack the create-time schema PUT
+        await mount.uploadQueue?.drain({ flushNow: true }); // ack the create-time schema PUT
         shrinkPutTimeout(mount, 250);
         fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
@@ -329,7 +329,7 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         // Permanent delete while the PUT is parked and the 250ms ceiling has NOT fired yet.
         await mount.deletePath(containerId);
         expect(mount.pendingUploadCount).toBe(0);
-        await mount.drainPendingUploads(); // returns once the ceiling fired and the PUT was failed
+        await mount.uploadQueue?.drain(); // returns once the ceiling fired and the PUT was failed
 
         // The orphan lands after the delete; its settlement must re-issue the delete.
         await fault.releaseOldestParked();
@@ -345,7 +345,7 @@ describe('supersede while a PUT is in flight (no timeout involved)', () => {
         const { dataDbId } = await provisionDoc(mount);
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
-        await mount.drainPendingUploads({ flushNow: true }); // ack the create-time schema PUT
+        await mount.uploadQueue?.drain({ flushNow: true }); // ack the create-time schema PUT
 
         // PUT {1} parks mid-flight (no timeout — default ceiling). The key is in inFlight, so the
         // superseding enqueue must leave its staged copy alone for the worker to clean up.
@@ -363,12 +363,12 @@ describe('supersede while a PUT is in flight (no timeout involved)', () => {
         // then pick up the {1,2} row and land it.
         fault.parkWrites = false;
         await fault.releaseOldestParked();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2);
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(readdirSync(mount.stagingDir)).toHaveLength(0); // both staged copies cleaned up
     });
 });

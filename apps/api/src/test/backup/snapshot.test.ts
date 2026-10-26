@@ -22,6 +22,7 @@ import { avatarNameOf } from '../../lib/contacts/card-store';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
+import type { TestUser } from '../setup';
 import {
     addMember,
     addTeamMount,
@@ -37,7 +38,6 @@ import {
     getTestContext,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
-    type TestUser,
 } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -73,7 +73,7 @@ async function sha256Of(filePath: string): Promise<string> {
 
 function syncUpdateMessage(doc: Y.Doc): Uint8Array {
     const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collabDocument.ts)
+    encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collab-document.ts)
     syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(doc));
     return encoding.toUint8Array(encoder);
 }

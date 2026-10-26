@@ -5,7 +5,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { readEigendocFromDoc } from '../../lib/document/doc';
 import { getHome } from '../../lib/home';
-import { createFakeS3Mount, type FakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
+import type { FakeS3Mount } from '../fault-storage-helpers';
+import { createFakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
 import { assertJson, authedRequest, collectSSE, getTestContext, TEST_PNG_BYTES } from '../setup';
 
@@ -37,7 +38,7 @@ describe('Eigendoc docx import into an S3 mount', () => {
         try {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${MOUNT_ID}/file/${docPath.id}/import`,
+                `/drive/${ctx.alice.user.id}/${MOUNT_ID}/file/${docPath.id}/import?mode=replace`,
                 { method: 'POST', body: await buildGoldenDocx(TEST_PNG_BYTES) },
             );
             expect((await assertJson<{ success: boolean }>(res)).success).toBe(true);
@@ -46,19 +47,20 @@ describe('Eigendoc docx import into an S3 mount', () => {
         }
         const { mount, drive } = s3;
         // Uploaded, so the read below comes from the bucket and not from the staged copy.
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         const mediaFolder = await mount.getChildByName(docPath.id, 'media');
-        const image = mediaFolder && (await mount.getChildByName(mediaFolder.id, GOLDEN_DOCX_IMAGE_NAME));
-        if (!image) throw new Error(`${GOLDEN_DOCX_IMAGE_NAME} missing from media/`);
+        const [image] = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
+        if (!image) throw new Error('media/ holds no picture');
+        expect(image.name).toMatch(GOLDEN_DOCX_IMAGE_NAME);
         const key = await mount.getStorageKey(image.id);
         const before = s3.fake.gets.get(key) ?? 0;
         const file = await mount.readFile(image.id);
-        if (!file) throw new Error(`${GOLDEN_DOCX_IMAGE_NAME} unreadable`);
+        if (!file) throw new Error(`${image.name} unreadable`);
         expect(Buffer.from(await file.arrayBuffer())).toEqual(Buffer.from(TEST_PNG_BYTES));
         expect(s3.fake.gets.get(key) ?? 0).toBeGreaterThan(before);
 
         const json = readEigendocFromDoc((await drive.getCollabDocument(MOUNT_ID, docPath.id)).doc);
-        expect(JSON.stringify(json)).toContain(GOLDEN_DOCX_IMAGE_NAME);
+        expect(JSON.stringify(json)).toContain(image.name);
         expect(
             sse.events.some((event) => event.type === SSEventType.DRIVE_FILE_UPLOADED && event.path.id === image.id),
         ).toBe(true);

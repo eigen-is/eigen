@@ -10,7 +10,8 @@ import { isNewerRevision, patchEvent, stampInvitationLink, storedOrganizerAddres
 import type { EventPatch, Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../ical/wall-clock';
-import { actorDisplayName, type User } from '../user';
+import type { User } from '../user';
+import { actorDisplayName } from '../user';
 import type { Calendar } from './calendar';
 import * as events from './events';
 import { composeRsvpReply } from './imip';

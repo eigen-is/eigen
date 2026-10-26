@@ -7,7 +7,8 @@ import type { DatabaseConfig } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { setShutdownDrainDeadline } from '../../lib/sync';
-import { countRowsInFile, createFaultMount, createGetLocalDatabase, type FaultStorage } from '../fault-storage-helpers';
+import type { FaultStorage } from '../fault-storage-helpers';
+import { countRowsInFile, createFaultMount, createGetLocalDatabase } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 // Regression net for AUDIT_MOUNT § P1 (finding 2a + siblings): a cached document DB syncs to a
@@ -152,7 +153,7 @@ describe('delete/trash must evict the cached document DB (no resurrection, no le
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await backing.exists(storageKey)).toBe(true); // the object really lives at the probed key
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run(); // open + dirty
         expect(existsSync(mount.getTempPath(dataDbId))).toBe(true);
@@ -164,7 +165,7 @@ describe('delete/trash must evict the cached document DB (no resurrection, no le
         expect(existsSync(mount.getTempPath(dataDbId))).toBe(false);
         expect(mount.pendingUploadCount).toBe(0);
 
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await backing.exists(storageKey)).toBe(false); // never resurrected
     });
 });
@@ -185,7 +186,7 @@ describe('id-stable backends are unaffected by the fix', () => {
         await mount.updatePath(containerId, { parentId: dstId }); // no storage move for s3
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         const reopened = await mount.openDatabase(docConfig, dataDbId);
         expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(2);

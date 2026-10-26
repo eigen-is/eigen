@@ -1,43 +1,74 @@
+// The docx reader's block walk: it turns every paragraph into items in document order, so Word's counters run in
+// order across tables, text boxes and notes, and buildBlocks turns the items into blocks. A paragraph keeps what it sets
+// apart from the docx's Normal or its style.
+
+import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
+import { DOCUMENT_FONT, readFontSize } from '@workspace/lib/constants/fonts';
+import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import {
+    flattenNestedFootnotes,
+    PROSE_TEXTBLOCKS,
+    pagePx,
+    pageTwips,
+    ptToMm,
+    readNormalStyle,
+    readPageSetup,
+    twipsToMm,
+    twipsToPt,
+} from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
-import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
-import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
-import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
-import type { MediaPart } from './drawings';
-import { Numbering } from './numbering';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlElements, xmlText } from '../../core/xml';
+import type { RunFace } from '../../document/looks';
 import {
-    alternative,
-    DOCUMENT_TOO_LARGE,
-    type DocxPackage,
-    descendants,
-    is,
-    isAlternateContent,
-    type Part,
-    twipsOf,
-    w,
-    wChild,
-} from './package';
-import { type Field, type Piece, type RunContext, walkInline } from './runs';
+    CAPTION_LOOK,
+    CODE_BLOCK_LOOK,
+    familyLineScale,
+    lineMultiple,
+    nodeLook,
+    ownTextLook,
+    QUOTE_LOOK,
+    TASK_DONE_LOOK,
+} from '../../document/looks';
+import type { Lost } from '../../document/transform/protocol';
+import type { DrawingTheme } from '../../ooxml/drawingml';
+import { drawingTheme } from '../../ooxml/drawingml';
+import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
+import type { Part } from '../../ooxml/opc';
 import {
-    type DocxRunProps,
-    isFill,
-    isLightNeutral,
-    markColor,
-    mergePara,
-    mergeRun,
-    type Role,
-    readParaProps,
-    readRunProps,
-    Styles,
-} from './styles';
+    CHECKBOX_GLYPHS,
+    DEFAULT_RUN_SIZE,
+    LIST_LEVELS,
+    NOTE_SEPARATORS,
+    SINGLE_LINE,
+    STYLE_NAMES,
+    textAlignOf,
+} from '../../ooxml/wordml';
+import type { MediaFiles } from '../image-types';
+import { IMPORT_MESSAGES } from '../messages';
+import type { Item, ParagraphItem } from './assemble';
+import { buildBlocks, isFigureOnly, isWhitespace } from './assemble';
+import { isFill, isLightNeutral, markColor } from './colors';
+import type { FontTable, Theme } from './docx-fonts';
+import { byFace, fontMark, isMonospaceFont, readFontTable, readTheme } from './docx-fonts';
+import type { DocxChart } from './drawings';
+import type { Numbering } from './numbering';
+import { readNumbering } from './numbering';
+import type { DocxPackage } from './package';
+import { descendants, twipsOf, w, wChild, wordAlternative } from './package';
+import type { Field, Piece, RunContext } from './runs';
+import { walkInline } from './runs';
+import type { DocxRunProps, ParaProps, Role } from './styles';
+import { mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
 import { readTable } from './tables';
 
-// The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
-// text boxes and notes; assemble.ts turns the items into blocks.
+// The elements that only wrap content, such as a content control's or a tracked insertion's: their children are read
+// in their place.
+export const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
 
-type NoteRef = { type: 'footnote' | 'endnote'; id: string; number: number };
+// y-tiptap spreads a paragraph's children into one call, which overflows near 500,000; the corpus's most is 274.
+export const MAX_INLINE_NODES = 50_000;
 
 export type Reader = {
     pkg: DocxPackage;
@@ -45,121 +76,225 @@ export type Reader = {
     fontTable: FontTable;
     styles: Styles;
     numbering: Numbering;
-    images: MediaPart[];
-    imageNames: Map<string, string>;
-    // By type and id, in the order first referenced: a note is read once however often it is referenced.
-    notes: Map<string, NoteRef>;
+    // Named per import, so a replace's pictures land beside the ones a restored version names.
+    files: MediaFiles;
+    // Each note by type and id, its part beside it, and each as read at its depth: a note is read once per depth
+    // however often it is referenced. The notes being read, outermost first.
+    noteElements: Map<string, { part: Part; note: XmlElement }>;
+    notes: Map<string, { content: JSONContent[]; weight: number }>;
+    openNotes: string[];
     fields: Field[];
-    // Charts and SmartArt, whose graphic the schema can't hold, and the parts of theirs read: each is read once.
-    graphicsDropped: number;
+    // The parts of a SmartArt's or a band's chart read: each is read once.
     graphicParts: Set<string>;
+    // The theme's colours a chart's series take, and each chart part as read.
+    colors: DrawingTheme;
+    charts: Map<XmlElement, DocxChart>;
     // The body's size in half-points, its complex script's, and its color, which no run needs a mark for.
     bodySize: number;
     bodySizeCs: number;
     baseColor: string | undefined;
+    // The docx's Normal as the doc stores it, which a run in its font and a paragraph in its format need no mark for.
+    normal: NormalStyle;
+    // The doc holds one page, the body's final section's; its text column places anchors and caps widths.
+    page: PageSetup;
     columnTwips: number;
+    columnPx: number;
+    // What the doc can't hold, by kind: SmartArt, whose graphic the schema can't hold, a chart that came in as words, an
+    // earlier section whose page differs from the doc's, a picture a band anchored, which it holds as a block figure,
+    // and what a band drops (a picture behind the text or a VML one, a letterhead or a watermark, a note reference).
+    lost: Lost;
     publicOrigin: string | undefined;
 };
 
-// Per part: its relationships, whether its breaks page, the tables around it, the table style, the cell's width in px
-// and whether the text sits on a fill the schema drops.
+// Per part: its relationships, the story it tells (only the body's breaks page, and only the body's pictures float), the
+// tables around it, the table style, the cell's width in px, whether the text sits on a fill the schema drops, and the
+// cell fill drawn behind it.
 export type Scope = {
     part: Part;
-    inNote: boolean;
+    story: 'body' | 'note' | 'band';
     tables: number;
     tableRun?: DocxRunProps;
     room?: number;
     onFill?: boolean;
+    fill?: string;
 };
 
-export function createReader(pkg: DocxPackage, publicOrigin: string | undefined): Reader {
+export function createReader(
+    pkg: DocxPackage,
+    files: MediaFiles,
+    lost: Lost,
+    publicOrigin: string | undefined,
+): Reader {
     const defaults = wChild(wChild(wChild(pkg.styles, 'docDefaults'), 'rPrDefault'), 'rPr');
     const lang = wChild(defaults, 'lang');
     const theme = readTheme(pkg.theme, { bidi: w(lang, 'bidi'), eastAsia: w(lang, 'eastAsia') });
     const styles = new Styles(pkg.styles, theme);
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
+    const fontTable = readFontTable(pkg.fontTable);
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
-    const margin = wChild(sectPr, 'pgMar');
+    const size = sectionPage(sectPr);
+    const page = { ...size, differentFirstPage: pkg.titlePg };
+    const px = pagePx(page);
+    const twips = pageTwips(page);
+    // A size past the range lands in it, as a run's does.
+    const bodySize = 2 * (readFontSize((body.size ?? DEFAULT_RUN_SIZE) / 2) ?? DEFAULT_RUN_SIZE / 2);
+    const font = fontMark(byFace(' ', body.fonts, body, false)[0]?.font, fontTable) ?? DOCUMENT_FONT;
+    const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
+    // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
+    const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? SINGLE_LINE) : SINGLE_LINE;
+    for (const section of descendants(pkg.document.root, W_NS, 'sectPr'))
+        if (section !== sectPr && !isDeepStrictEqual(sectionPage(section), size)) lost('section-pages-dropped');
     return {
         pkg,
         theme,
-        fontTable: readFontTable(pkg.fontTable),
+        fontTable,
         styles,
-        numbering: new Numbering(pkg.numbering, styles),
-        images: [],
-        imageNames: new Map(),
+        numbering: readNumbering(pkg.numbering, styles),
+        files,
+        noteElements: noteElements(pkg),
         notes: new Map(),
+        openNotes: [],
         fields: [],
-        graphicsDropped: 0,
         graphicParts: new Set(),
-        // Word's default is 10 pt.
-        bodySize: body.size ?? 20,
-        bodySizeCs: body.sizeCs ?? body.size ?? 20,
+        colors: drawingTheme(pkg.theme),
+        charts: new Map(),
+        bodySize,
+        bodySizeCs: 2 * (readFontSize((body.sizeCs ?? body.size ?? DEFAULT_RUN_SIZE) / 2) ?? DEFAULT_RUN_SIZE / 2),
         baseColor: body.color?.hex,
-        columnTwips:
-            (twipsOf(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
-            (twipsOf(w(margin, 'left')) ?? 1440) -
-            (twipsOf(w(margin, 'right')) ?? 1440),
+        normal: readNormalStyle({
+            font,
+            size: bodySize / 2,
+            lineSpacing: lineMultiple(line, font),
+            spaceBefore: twipsToPt(para.before ?? 0),
+            spaceAfter: twipsToPt(para.after ?? 0),
+            color: body.color?.hex && markColor(body.color.hex),
+        }),
+        page,
+        columnTwips: twips.width - twips.margin.left - twips.margin.right,
+        columnPx: Math.floor(px.width - px.margin.left - px.margin.right),
+        lost,
         publicOrigin,
     };
+}
+
+// Word draws a margin a section leaves out at 1 in; a size it leaves out is the default A4.
+const WORD_MARGIN_MM = ptToMm(72);
+
+// Through the one reader of a stored page, so a file's page is clamped as a peer's is, a band's distance from the edge
+// within its margin too. w:orient is not read: Word draws the page w by h whatever it says.
+function sectionPage(sectPr: XmlElement | undefined): PageSetup {
+    const size = wChild(sectPr, 'pgSz');
+    const margin = wChild(sectPr, 'pgMar');
+    const mm = (element: XmlElement | undefined, local: string) => {
+        const twips = twipsOf(w(element, local));
+        return twips === undefined ? undefined : twipsToMm(twips);
+    };
+    return readPageSetup({
+        width: mm(size, 'w'),
+        height: mm(size, 'h'),
+        marginTop: mm(margin, 'top') ?? WORD_MARGIN_MM,
+        marginRight: mm(margin, 'right') ?? WORD_MARGIN_MM,
+        marginBottom: mm(margin, 'bottom') ?? WORD_MARGIN_MM,
+        marginLeft: mm(margin, 'left') ?? WORD_MARGIN_MM,
+        headerDistance: mm(margin, 'header'),
+        footerDistance: mm(margin, 'footer'),
+    });
 }
 
 export function readDocument(reader: Reader): JSONContent[] {
     const body = wChild(reader.pkg.document.root, 'body');
     if (!body) return [];
-    const blocks = build(
-        readBlocks(reader, xmlElements(body), { part: reader.pkg.document, inNote: false, tables: 0 }),
-    );
-    const notes = readNotes(reader);
-    if (notes.length > 0) blocks.push({ type: 'orderedList', attrs: { start: 1, type: null }, content: notes });
-    return blocks;
+    return buildBlocks(readBlocks(reader, xmlElements(body), { part: reader.pkg.document, story: 'body', tables: 0 }));
 }
 
-// Notes as Eigen holds them: a [n] reference, and at the end one numbered list with a back link per note.
-// A note referenced inside a note joins the end of the map, which this loop still reaches.
-function readNotes(reader: Reader): JSONContent[] {
-    const items: JSONContent[] = [];
-    const index = (part: Part | undefined, type: NoteRef['type']) => {
-        const byId = new Map<string, XmlElement>();
-        for (const note of part ? xmlElements(part.root) : []) {
+// A header or footer part's blocks, read as the body's are, through the part's own relationships, its lists counting
+// on their own as a band's do in Eigen. A band's last block draws no space after (PAGE_BAND_CLASS), so one the docx sets
+// there isn't kept.
+export function readBand(reader: Reader, part: Part): JSONContent[] {
+    reader.fields.length = 0;
+    const { numbering } = reader;
+    reader.numbering = numbering.restarted();
+    const blocks = buildBlocks(readBlocks(reader, xmlElements(part.root), { part, story: 'band', tables: 0 }));
+    reader.numbering = numbering;
+    const last = blocks.at(-1);
+    if (last?.attrs?.['spaceAfter'] == null) return blocks;
+    return [...blocks.slice(0, -1), { ...last, attrs: { ...last.attrs, spaceAfter: null } }];
+}
+
+// Endnotes are footnotes: Google Docs has none, and Word draws both from one kind of part. The separators and the
+// notice no reference names are no notes.
+function noteElements(pkg: DocxPackage): Map<string, { part: Part; note: XmlElement }> {
+    const notes = new Map<string, { part: Part; note: XmlElement }>();
+    for (const [type, part] of [
+        ['footnote', pkg.footnotes],
+        ['endnote', pkg.endnotes],
+    ] as const) {
+        if (!part) continue;
+        for (const note of xmlElements(part.root)) {
             const id = w(note, 'id');
-            if (note.local === type && id !== undefined && !byId.has(id)) byId.set(id, note);
+            const separator = NOTE_SEPARATORS.some((kind) => kind === w(note, 'type'));
+            const key = `${type}-${id}`;
+            if (note.local === type && id !== undefined && !separator && !notes.has(key))
+                notes.set(key, { part, note });
         }
-        return byId;
-    };
-    const byType = {
-        footnote: index(reader.pkg.footnotes, 'footnote'),
-        endnote: index(reader.pkg.endnotes, 'endnote'),
-    };
-    for (const ref of reader.notes.values()) {
-        const part = ref.type === 'footnote' ? reader.pkg.footnotes : reader.pkg.endnotes;
-        const note = byType[ref.type].get(ref.id);
-        if (!part || !note) continue;
-        reader.fields.length = 0;
-        const blocks = build(readBlocks(reader, xmlElements(note), { part, inNote: true, tables: 0 }));
-        if (blocks[0]?.type === 'paragraph') trimStart(blocks[0].content ?? []);
-        const back: JSONContent[] = [
-            { type: 'text', text: ' ' },
-            { type: 'text', text: '↑', marks: [{ type: 'link', attrs: { href: `#${ref.type}-ref-${ref.id}` } }] },
-        ];
-        const last = blocks.at(-1);
-        if (last?.type === 'paragraph') last.content = [...(last.content ?? []), ...back];
-        else blocks.push({ type: 'paragraph', content: back });
-        if (blocks[0]?.type !== 'paragraph') blocks.unshift({ type: 'paragraph' });
-        items.push({ type: 'listItem', content: blocks });
     }
-    return items;
+    return notes;
 }
 
-export const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
+// A note's paragraphs, read through its part's own relationships, once per depth however often it is referenced: each
+// copy past the first is charged as the pieces no tag counts are. A note referenced in a note is its text there; one
+// referenced deeper, or from inside itself, is dropped, so the walk nests at most twice and a note's text is the same
+// whichever reference reads it first. Its lists count on their own, as a note's do in Eigen. Undefined for a note the
+// file lacks.
+export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: string): JSONContent[] | undefined {
+    const note = `${type}-${id}`;
+    const key = `${note}@${reader.openNotes.length}`;
+    const read = reader.notes.get(key);
+    if (read) {
+        reader.pkg.pieces.charge(read.weight);
+        return read.content;
+    }
+    const found = reader.noteElements.get(note);
+    if (!found || reader.openNotes.length > 1 || reader.openNotes.includes(note)) return undefined;
+    // A field open in the body around the reference stays open there, and so do the body's list counters.
+    const { fields, numbering } = reader;
+    reader.fields = [];
+    reader.numbering = numbering.restarted();
+    reader.openNotes.push(note);
+    const blocks = buildBlocks(
+        readBlocks(reader, xmlElements(found.note), { part: found.part, story: 'note', tables: 0 }),
+    );
+    reader.openNotes.pop();
+    reader.fields = fields;
+    reader.numbering = numbering;
+    const paragraphs = blocks.flatMap(noteParagraphs);
+    trimStart(paragraphs[0]?.content ?? []);
+    const content =
+        flattenNestedFootnotes({
+            type: 'footnote',
+            content: paragraphs.length > 0 ? paragraphs : [{ type: 'paragraph' }],
+        }).content ?? [];
+    reader.notes.set(key, { content, weight: weightOf(content) });
+    return content;
+}
 
-// y-tiptap spreads a paragraph's children into one call, which overflows near 500,000; the corpus's most is 274.
-export const MAX_INLINE_NODES = 50_000;
+// A note holds paragraphs: a heading's or a code block's text is one, and a list's, a quote's or a table's paragraphs
+// are its own. A rule or a break holds none.
+function noteParagraphs(block: JSONContent): JSONContent[] {
+    if (block.type === 'paragraph') return [block];
+    if (PROSE_TEXTBLOCKS.includes(block.type ?? '') || block.type === 'codeBlock')
+        return [{ type: 'paragraph', ...(block.content && { content: block.content }) }];
+    return (block.content ?? []).flatMap(noteParagraphs);
+}
+
+function weightOf(nodes: JSONContent[]): number {
+    return nodes.reduce((sum, node) => sum + 1 + (node.marks?.length ?? 0) + weightOf(node.content ?? []), 0);
+}
 
 // flatMap, not a spread push: a body inside one content control can hold more items than a call takes arguments.
 export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope): Item[] {
     return elements.flatMap((element): Item[] => {
-        if (isAlternateContent(element)) return readBlocks(reader, alternative(element), scope);
+        if (isAlternateContent(element)) return readBlocks(reader, wordAlternative(element), scope);
         if (element.ns !== W_NS) return [];
         if (element.local === 'p') return readParagraph(reader, element, scope);
         if (element.local === 'tbl') return readTable(reader, element, scope);
@@ -198,7 +333,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
-    const context: RunContext = { scope: runScope, paraStyle: styleId, role, pieces: [], pending: [] };
+    const context: RunContext = { scope: runScope, paraStyle: styleId, role, pieces: [], pending: [], leftOut: [] };
     walkInline(
         reader,
         xmlElements(p).filter((child) => child.ns !== W_NS || child.local !== 'pPr'),
@@ -221,6 +356,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const breakOnly = halves.length > 1 && !halves.some(isShown);
     const list = listed && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
     const props = mergePara(styled, list?.pPr ?? {}, direct);
+    const textAlign = textAlignOf(props.jc, props.bidi);
 
     // Google Docs flattens the Code Block style: every run holding text monospace on the writer's fill, or on a light
     // grey of any shade, as other editors shade code.
@@ -286,12 +422,70 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             node: { type: 'text', text: list?.suffix === 'nothing' ? label : `${label} ` },
         });
 
+    // What the paragraph sets apart from the docx's Normal, or a heading, a title, a quote or a note from its style,
+    // whose look is the node's. The writer rescales the line of a paragraph all in one family (familyLineScale), which
+    // this undoes over the same faces, so a line Word draws as the Normal's reads as none.
+    const { normal } = reader;
+    const normalBase = role.kind === 'paragraph' && scope.story !== 'note';
+    const base = normalBase ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
+    const autoLine = (para: ParaProps) =>
+        (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? SINGLE_LINE) : undefined;
+    const line = autoLine(props);
+    const baseLine = autoLine(base);
+    const mark: RunFace = {
+        family:
+            fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font) ?? normal.font,
+        size: paraRun.size ?? DEFAULT_RUN_SIZE,
+    };
+    // Every run the writer counts: each run of text, whitespace too, and a field or a note reference in the style's run;
+    // not the space a task's or a note's text starts with, which goes, as the writer writes the checkbox or the note's
+    // number and the space after it apart.
+    const noteNumbered =
+        scope.story === 'note' &&
+        descendants(p, W_NS, 'footnoteRef').length + descendants(p, W_NS, 'endnoteRef').length > 0;
+    const start =
+        task || noteNumbered ? pieces.findIndex((piece) => !(piece.kind === 'node' && isWhitespace(piece.node))) : 0;
+    const faces = pieces.slice(Math.max(0, start)).flatMap((piece) => {
+        if (piece.kind !== 'node') return [];
+        if (piece.node.type === 'pageNumber' || piece.node.type === 'footnote') return [mark];
+        if (piece.node.type !== 'text' || !piece.node.text || piece.size === undefined) return [];
+        return [{ family: fontMark(piece.font, reader.fontTable, normal.font) ?? normal.font, size: piece.size }];
+    });
+    // An at-least Normal reads as single, so the Normal's own line is the one to compare with. A style draws its line in
+    // its own font, the style's run's. The writer writes a rescaled line on the paragraph itself, so a node read against
+    // its style that takes its line from the style reads as none, whatever family its runs are in.
+    const baseSpacing = normalBase
+        ? normal.lineSpacing
+        : baseLine === undefined
+          ? undefined
+          : lineMultiple(baseLine, mark.family);
+    const multiple = line === undefined ? undefined : lineMultiple(line / familyLineScale(mark, faces), mark.family);
+    const lineSpacing =
+        multiple !== undefined &&
+        (normalBase || direct.line !== undefined || list?.pPr.line !== undefined) &&
+        (baseSpacing === undefined || Math.round(multiple * 100) !== Math.round(baseSpacing * 100))
+            ? multiple
+            : undefined;
+    const before = props.before ?? 0;
+    const after = props.after ?? 0;
+    // A cell's paragraphs take their spacing from the cell.
+    const format = {
+        lineSpacing,
+        spaceBefore: scope.tables > 0 || before === (base.before ?? 0) ? undefined : twipsToPt(before),
+        spaceAfter: scope.tables > 0 || after === (base.after ?? 0) ? undefined : twipsToPt(after),
+    };
+    // An item's indent holds its number or checkbox.
+    const indent =
+        list || task
+            ? undefined
+            : { left: props.indLeft ?? 0, right: props.indRight ?? 0, firstLine: props.indFirst ?? 0 };
+
     const captionColor = markColor(CAPTION_LOOK.color);
-    const markSize = direct.markSize ?? styles.run(styleId).size ?? 24;
+    const markSize = direct.markSize ?? styles.run(styleId).size ?? DEFAULT_RUN_SIZE;
     // A paragraph whose mark and text are hidden is not there at all.
     const markHidden = direct.markHidden ?? styles.run(styleId).vanish ?? false;
     const items: Item[] = [];
-    if (props.pageBreakBefore && !scope.inNote) items.push({ kind: 'break' });
+    if (props.pageBreakBefore && scope.story === 'body') items.push({ kind: 'break' });
     const split = halves.length > 1;
     let numbered = false;
     for (const [index, half] of halves.entries()) {
@@ -307,20 +501,38 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (look.color) stripLook(half, undefined, look.color);
         const content = half.flatMap((piece) => (piece.kind === 'node' ? [piece.node] : []));
         if (!numbered && task) trimStart(content);
-        if (content.length > MAX_INLINE_NODES) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        if (content.length > MAX_INLINE_NODES) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
         const visible = isShown(half);
         const isRule = half.some((piece) => piece.kind === 'hr');
         if ((split || markHidden || direct.markDeleted) && !visible && !isRule) continue;
         const halfTexts = half.filter(
             (piece) => piece.kind === 'node' && piece.node.type === 'text' && piece.node.text?.trim(),
         );
-        const para: Para = {
+        // An empty heading is the blank line Word shows, not a heading's height; an empty title stays one, as Word
+        // draws it at the title's height.
+        const kind: Role = visible
+            ? role
+            : isRule
+              ? { kind: 'hr' }
+              : role.kind === 'heading'
+                ? { kind: 'paragraph' }
+                : role;
+        // A size or a space the node draws in Eigen is none: the writer's style holds it, so it would come back as none.
+        const own = ownTextLook(kind.kind, kind.kind === 'heading' ? kind.level : 1, normal, scope.story === 'note');
+        if (own) for (const node of content) dropOwn(node, 'fontSize', own.sizePt);
+        const unlessOwn = (pt: number | undefined, ownTwips: number | undefined) =>
+            pt !== undefined && ownTwips !== undefined && pt === twipsToPt(ownTwips) ? undefined : pt;
+        // The writer's styles write a node's own line in the Normal's font.
+        const ownLine = own && Math.round(lineMultiple(own.line, normal.font) * 100);
+        const keptLineSpacing =
+            format.lineSpacing !== undefined && Math.round(format.lineSpacing * 100) === ownLine
+                ? undefined
+                : format.lineSpacing;
+        const para: ParagraphItem = {
             kind: 'para',
-            // An empty heading is the blank line Word shows, not a heading's height; an empty title stays one, as Word
-            // draws it at the title's height.
-            role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
+            role: kind,
             inlines: content,
-            textAlign: alignmentOf(props.jc, props.bidi),
+            textAlign,
             continued: numbered,
             indLeft,
             quote,
@@ -337,6 +549,15 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                         ),
                 ),
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
+            // Word spaces a split paragraph above its first line and below its last.
+            format: {
+                lineSpacing: keptLineSpacing,
+                spaceBefore: index === 0 ? unlessOwn(format.spaceBefore, own?.before) : undefined,
+                baseBefore: twipsToPt(base.before ?? 0),
+                baseAfter: twipsToPt(base.after ?? 0),
+                spaceAfter: index === halves.length - 1 ? unlessOwn(format.spaceAfter, own?.after) : undefined,
+            },
+            indent,
         };
         if (!numbered && list && !SIZED.has(role.kind)) para.list = { ...list, ilvl };
         if (!numbered && task) para.task = task;
@@ -344,7 +565,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (boxed) para.boxed = true;
         if (direct.markDeleted && index === halves.length - 1) para.joinsNext = true;
         if (label && index === 0) para.labelled = true;
-        // A framed paragraph holding only an image is a wrapped figure.
+        // A framed paragraph holding only an image or a chart is a wrapped figure.
         if (props.frame) para.frame = props.frame;
         if (props.frame && isFigureOnly(para)) {
             for (const node of content)
@@ -363,7 +584,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         } else if (item.kind === 'table') item.indent += indLeft;
         items.push(item);
     }
-    if (props.sectionBreak && !scope.inNote) items.push({ kind: 'break' });
+    for (const leftOut of context.leftOut) leftOut.textAlign = textAlign;
+    if (props.sectionBreak && scope.story === 'body') items.push({ kind: 'break' });
     return items;
 }
 
@@ -373,27 +595,30 @@ function textFaces(reader: Reader, p: XmlElement, paraRun: DocxRunProps) {
         const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
         const props = mergeRun(paraRun, reader.styles.run(direct.style), direct);
         return xmlElements(run)
-            .filter((child) => is(child, W_NS, 't'))
-            .flatMap((t) => byFace(xmlText(t), props.fonts, props, true, reader.pkg.chargePiece))
+            .filter((child) => hasXmlName(child, W_NS, 't'))
+            .flatMap((t) => byFace(xmlText(t), props.fonts, props, true, () => reader.pkg.pieces.charge(1)))
             .filter((face) => face.text.trim())
             .map((face) => ({ ...face, direct }));
     });
 }
 
-// Every run holding text set by hand below its heading's size and at most the body's, which Word draws as body
-// text, complex script at its szCs; the style's bold and italic then stay as marks.
+// A run holding text set by hand below its heading's size and at most the body's, in half points. The audit reads it
+// as the reader does.
+export function isBodySizedRun(size: number | undefined, heading: number, body: number): boolean {
+    return size !== undefined && size < heading && size <= body;
+}
+
+// Every run holding text body sized, which Word draws as body text, complex script at its szCs; the style's bold and
+// italic then stay as marks.
 function isBodySized(reader: Reader, p: XmlElement, heading: DocxRunProps): boolean {
-    const headingSize = heading.size ?? 20;
+    const headingSize = heading.size ?? DEFAULT_RUN_SIZE;
     const headingSizeCs = heading.sizeCs ?? headingSize;
     const faces = textFaces(reader, p, heading).map(({ complex, direct }) =>
         complex
             ? { size: direct.sizeCs, heading: headingSizeCs, body: reader.bodySizeCs }
             : { size: direct.size, heading: headingSize, body: reader.bodySize },
     );
-    return (
-        faces.length > 0 &&
-        faces.every(({ size, heading, body }) => size !== undefined && size < heading && size <= body)
-    );
+    return faces.length > 0 && faces.every(({ size, heading, body }) => isBodySizedRun(size, heading, body));
 }
 
 // A code style draws code only where every run holding text is monospace, an empty line where its mark is;
@@ -447,34 +672,20 @@ function trimStart(inlines: JSONContent[]): void {
 }
 
 function stripLook(pieces: Piece[], toggle: string | undefined, color: string): void {
-    const hex = markColor(color);
     for (const piece of pieces) {
-        if (piece.kind !== 'node' || !piece.node.marks) continue;
-        piece.node.marks = piece.node.marks.flatMap((mark) => {
-            if (mark.type === toggle) return [];
-            if (mark.type !== 'textStyle' || mark.attrs?.['color'] !== hex) return [mark];
-            const attrs = { ...mark.attrs, color: null };
-            return Object.values(attrs).some((value) => value !== null) ? [{ ...mark, attrs }] : [];
-        });
-        if (piece.node.marks.length === 0) delete piece.node.marks;
+        if (piece.kind !== 'node') continue;
+        if (piece.node.marks && toggle) piece.node.marks = piece.node.marks.filter((mark) => mark.type !== toggle);
+        dropOwn(piece.node, 'color', markColor(color));
     }
 }
 
-// Left is the default, so no attribute (Google Docs writes it on every paragraph); start and end follow the direction.
-function alignmentOf(jc: string | undefined, bidi: boolean | undefined): string | null {
-    switch (jc) {
-        case 'center':
-            return 'center';
-        case 'right':
-            return 'right';
-        case 'start':
-            return bidi ? 'right' : null;
-        case 'end':
-            return bidi ? null : 'right';
-        case 'both':
-        case 'distribute':
-            return 'justify';
-        default:
-            return null;
-    }
+// A font mark's value the node draws itself goes, and the mark with it when nothing else is left.
+function dropOwn(node: JSONContent, key: 'color' | 'fontSize', value: string | number): void {
+    if (!node.marks) return;
+    node.marks = node.marks.flatMap((mark) => {
+        if (mark.type !== 'textStyle' || mark.attrs?.[key] !== value) return [mark];
+        const attrs = { ...mark.attrs, [key]: null };
+        return Object.values(attrs).some((held) => held !== null) ? [{ ...mark, attrs }] : [];
+    });
+    if (node.marks.length === 0) delete node.marks;
 }

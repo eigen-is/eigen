@@ -1,6 +1,6 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl, getDrivePreviewUrl } from '@workspace/lib/api';
-import { DEFAULT_PAGE_SETUP, pageBoxStyle } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, DOC_PROSE_CLASS, normalStyleProperties, pageBoxStyle } from '@workspace/lib/docs/eigendoc';
 import { useTextPreview } from '@workspace/lib/drive';
 import { getPreviewMode, subjectInfo } from '@workspace/lib/file-subject';
 import { useMailTextPreview } from '@workspace/lib/mail';
@@ -242,8 +242,6 @@ function MailTextPreviewContent({ part }: { part: MailPartRef }) {
     return <TextPreviewBody data={data} isLoading={isLoading} />;
 }
 
-const DOC_PAGE_BOX_STYLE = pageBoxStyle(DEFAULT_PAGE_SETUP);
-
 function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefined; isLoading: boolean }) {
     if (isLoading) {
         return (
@@ -265,8 +263,17 @@ function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefi
         <div className={cn(PREVIEW_PANE_CLASS, 'overflow-auto rounded bg-background')}>
             {data.mode === 'eigendoc' ? (
                 // eigen-paper: the page renders light like the editor's; the prose inside escapes the dark rules.
-                <div className="eigen-paper mx-auto bg-background" style={DOC_PAGE_BOX_STYLE}>
-                    <div className="eigen-prose tiptap" dangerouslySetInnerHTML={{ __html: data.body }} />
+                <div
+                    className="eigen-paper mx-auto bg-background"
+                    style={{
+                        ...pageBoxStyle(data.page ?? DEFAULT_PAGE_SETUP),
+                        ...(data.style && normalStyleProperties(data.style)),
+                    }}
+                >
+                    <div
+                        className={cn('eigen-prose tiptap', DOC_PROSE_CLASS)}
+                        dangerouslySetInnerHTML={{ __html: data.body }}
+                    />
                 </div>
             ) : data.mode === 'eigenslides' ? (
                 <div className="p-8 bg-muted/50 min-h-full">

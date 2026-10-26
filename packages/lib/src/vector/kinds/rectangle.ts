@@ -1,6 +1,8 @@
-import { boxCenter, hitTestBox, type Point, rotatePoint } from '../geometry';
+import type { Point } from '../geometry';
+import { boxCenter, hitTestBox, rotatePoint } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
-import { CORNERS, DEFAULT_CORNERS, type VectorRectangleElement } from '../types';
+import type { VectorRectangleElement } from '../types';
+import { CORNERS, DEFAULT_CORNERS } from '../types';
 import { defineKind } from './kind';
 import { fillField, oneOf } from './read-fields';
 import { isUnpainted, renderRoughShape } from './render-utils';

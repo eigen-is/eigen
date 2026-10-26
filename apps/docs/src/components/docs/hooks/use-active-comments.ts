@@ -6,7 +6,7 @@ import { commentAnchorText, nodeCommentCardId } from '../extensions/comment-mark
 const EMPTY_ACTIVE: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
 
 // Active comment cards + their anchor text, derived from the editor's comment anchors (the `comment`
-// mark on text, `commentCardId` on a figure). Doc-model specific (walks the ProseMirror doc), so it
+// mark on text, `commentCardId` on a figure or an equation). Doc-model specific (walks the ProseMirror doc), so it
 // stays a per-app hook — the slides/sheets siblings walk their own models. Debounced 200ms and
 // refreshed on every editor update.
 export function useActiveComments(editor: Editor | null): ActiveComments {

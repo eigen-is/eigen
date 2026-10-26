@@ -1,20 +1,22 @@
 import { isStorageType } from '../constants/mount';
+import type {
+    BackupEntry,
+    BackupJob,
+    BackupLevel,
+    BackupManifest,
+    BackupReason,
+    BackupVerifyRecord,
+    ServerArchive,
+    ServerArchiveManifest,
+    ServerArchiveSidecar,
+    ServerArchiveUpload,
+} from '../types/backup';
 import {
     BACKUP_JOB_STATES,
     BACKUP_KINDS,
     BACKUP_LEVELS,
     BACKUP_REASONS,
     BACKUP_VERIFY_STATUSES,
-    type BackupEntry,
-    type BackupJob,
-    type BackupLevel,
-    type BackupManifest,
-    type BackupReason,
-    type BackupVerifyRecord,
-    type ServerArchive,
-    type ServerArchiveManifest,
-    type ServerArchiveSidecar,
-    type ServerArchiveUpload,
 } from '../types/backup';
 import type { MountConfig, S3Config } from '../types/mount';
 import { parseOwnerId } from '../types/owner';

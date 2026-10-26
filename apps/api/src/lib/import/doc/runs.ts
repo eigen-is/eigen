@@ -1,32 +1,42 @@
+// The docx reader's runs: walkInline turns a paragraph's runs, fields, hyperlinks, notes and equations into pieces,
+// each text with the marks Word draws it in as far as the Normal and the node don't already. The paragraph reader
+// calls it and sorts the pieces into blocks.
+
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
-import type { Caps } from '@workspace/lib/docs/eigendoc';
-import { DEFAULT_HIGHLIGHT, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
-import { trimXmlSpace, XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
+import { readFontSize } from '@workspace/lib/constants/fonts';
+import type { Caps, PageNumberKind } from '@workspace/lib/docs/eigendoc';
+import { PAGE_NUMBER_KINDS } from '@workspace/lib/docs/eigendoc';
+import { MathError, readOmml, readOmmlText, writeMathml } from '@workspace/math';
+import type { XmlElement } from '../../core/xml';
+import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
-import type { Item } from './assemble';
+import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../ooxml/ooxml';
+import { DEFAULT_HIGHLIGHT, DEFAULT_RUN_SIZE, PAGE_NUMBER_FIELDS } from '../../ooxml/wordml';
+import type { Item, ParagraphItem } from './assemble';
+import { isDark, isFill, isLight, isLightNeutral, markColor } from './colors';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
-import { alternative, descendants, isAlternateContent, onOff, w, wChild } from './package';
+import { onOff, w, wChild, wordAlternative } from './package';
 import type { Reader, Scope } from './paragraphs';
-import {
-    ABSORBED,
-    type DocxRunProps,
-    isDark,
-    isFill,
-    isLight,
-    isLightNeutral,
-    markColor,
-    mergeRun,
-    type Role,
-    readRunProps,
-    TOGGLES,
-} from './styles';
+import { readNote } from './paragraphs';
+import type { DocxRunProps, Role } from './styles';
+import { ABSORBED, mergeRun, readRunProps, TOGGLES } from './styles';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
-// italic is whether Word draws a run italic: whether that is the mark waits for the paragraph's node.
+// font and size are the face Word draws a run in. The size is in half-points, and the paragraph's line height counts
+// it. italic is whether Word draws a run italic; whether that is the mark waits for the paragraph's node. equation is
+// the text of an equation past a bound, which the text beside it is set off from.
 export type Piece =
-    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string; italic?: boolean }
+    | {
+          kind: 'node';
+          node: JSONContent;
+          small?: boolean;
+          font?: string;
+          size?: number;
+          italic?: boolean;
+          equation?: true;
+      }
     | { kind: 'break' }
     | { kind: 'clear' }
     | { kind: 'checkbox'; checked: boolean }
@@ -47,6 +57,8 @@ export type RunContext = {
     pieces: Piece[];
     // What a text box anchored here holds, which follows the paragraph.
     pending: Item[];
+    // The lines of those standing in for what a drawing left out, which the paragraph aligns as its own.
+    leftOut: ParagraphItem[];
 };
 
 // Content that doesn't show: a tracked deletion, and properties. Markers such as bookmarks and comment ranges hold
@@ -56,12 +68,16 @@ const SKIPPED_INLINE = new Set(['del', 'moveFrom', 'pPr', 'rPr', 'sdtPr', 'sdtEn
 export function walkInline(reader: Reader, elements: XmlElement[], context: RunContext): void {
     for (const element of elements) {
         if (isAlternateContent(element)) {
-            walkInline(reader, alternative(element), context);
+            walkInline(reader, wordAlternative(element), context);
             continue;
         }
         if (element.ns === M_NS && (element.local === 'oMath' || element.local === 'oMathPara')) {
-            const text = mathText(element);
-            if (text) pushText(reader, text, {}, context);
+            // Word shows no field's code.
+            if (reader.fields.at(-1)?.inCode) continue;
+            // CT_OMathPara holds its equations directly: none in a tracked deletion or an alternative.
+            const display = element.local === 'oMathPara';
+            for (const oMath of display ? xmlChildren(element, M_NS, 'oMath') : [element])
+                pushEquation(reader, oMath, display, context);
             continue;
         }
         if (element.ns !== W_NS) {
@@ -84,7 +100,14 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
                 break;
             }
             case 'fldSimple': {
-                const link = hyperlinkField(reader, w(element, 'instr') ?? '');
+                const instr = w(element, 'instr') ?? '';
+                const kind = pageNumberKind(instr);
+                if (kind) {
+                    if (!reader.fields.at(-1)?.inCode)
+                        context.pieces.push({ kind: 'node', node: { type: 'pageNumber', attrs: { kind } } });
+                    break;
+                }
+                const link = hyperlinkField(reader, instr);
                 walkInline(reader, xmlElements(element), link ? { ...context, link } : context);
                 break;
             }
@@ -106,19 +129,25 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
     }
 }
 
-// Math as text until the schema holds math; each object and run of an equation is a word of its own.
-function mathText(element: XmlElement): string {
-    const equations = element.local === 'oMath' ? [element] : descendants(element, M_NS, 'oMath');
-    return equations
-        .flatMap((equation) => xmlElements(equation).map((part) => descendants(part, M_NS, 't').map(xmlText).join('')))
-        .filter(Boolean)
-        .join(' ');
+// An equation past a bound of the package is its text.
+function pushEquation(reader: Reader, oMath: XmlElement, display: boolean, context: RunContext): void {
+    try {
+        const mathml = writeMathml(readOmml(oMath));
+        reader.pkg.mathml.charge(mathml.length);
+        context.pieces.push({ kind: 'node', node: { type: 'equation', attrs: { mathml, display } } });
+    } catch (error) {
+        if (!(error instanceof MathError)) throw error;
+        pushText(reader, readOmmlText(oMath), {}, context, true);
+    }
 }
 
 function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunProps, context: RunContext): void {
+    // A note numbers 1, 2, 3, so the text a custom mark draws in its place (w:customMarkFollows) goes: the run's text up
+    // to a tab, and only where a note was made.
+    let customMark = false;
     for (const child of children) {
         if (isAlternateContent(child)) {
-            readRunContent(reader, alternative(child), direct, context);
+            readRunContent(reader, wordAlternative(child), direct, context);
             continue;
         }
         if (child.ns === W_NS && child.local === 'fldChar') {
@@ -138,19 +167,21 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
         }
         switch (child.local) {
             case 't':
-                pushText(reader, runText(child), direct, linked);
+                if (!customMark) pushText(reader, runText(child), direct, linked);
                 break;
             case 'tab':
             case 'ptab':
+                customMark = false;
                 pushText(reader, '\t', direct, linked);
                 break;
             case 'noBreakHyphen':
-                pushText(reader, '‑', direct, linked);
+                pushText(reader, '\u2011', direct, linked);
                 break;
             case 'softHyphen':
-                pushText(reader, '­', direct, linked);
+                pushText(reader, '\u00ad', direct, linked);
                 break;
             case 'sym': {
+                if (customMark) break;
                 const unicode = symbolOf(w(child, 'font') ?? '', Number.parseInt(w(child, 'char') ?? '', 16));
                 if (unicode) pushText(reader, unicode, direct, linked);
                 break;
@@ -159,8 +190,8 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
             case 'cr': {
                 const type = w(child, 'type');
                 if (type === 'page') {
-                    // A note isn't paged.
-                    if (!context.scope.inNote) context.pieces.push({ kind: 'break' });
+                    // Only the body is paged.
+                    if (context.scope.story === 'body') context.pieces.push({ kind: 'break' });
                 } else if (type !== 'column') {
                     const clear = w(child, 'clear');
                     context.pieces.push(
@@ -178,19 +209,18 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
                 break;
             case 'footnoteReference':
             case 'endnoteReference': {
-                const type = child.local === 'footnoteReference' ? 'footnote' : 'endnote';
-                const id = w(child, 'id') ?? '';
-                const key = `${type}-${id}`;
-                const note = reader.notes.get(key) ?? { type, id, number: reader.notes.size + 1 };
-                reader.notes.set(key, note);
-                context.pieces.push({
-                    kind: 'node',
-                    node: {
-                        type: 'text',
-                        text: `[${note.number}]`,
-                        marks: [{ type: 'link', attrs: { href: `#${type}-${id}` } }, { type: 'superscript' }],
-                    },
-                });
+                // A band's schema holds no note: the note is the body's text's.
+                if (context.scope.story === 'band') {
+                    reader.lost('band-content-dropped');
+                    break;
+                }
+                const content = readNote(
+                    reader,
+                    child.local === 'footnoteReference' ? 'footnote' : 'endnote',
+                    w(child, 'id') ?? '',
+                );
+                if (content) context.pieces.push({ kind: 'node', node: { type: 'footnote', content } });
+                customMark = !!content && isOn(w(child, 'customMarkFollows')) === true;
                 break;
             }
             case 'ruby':
@@ -207,7 +237,8 @@ function runText(t: XmlElement): string {
     return kept.replace(/[\r\n]/g, ' ');
 }
 
-// A complex field keeps its result and drops its code; a HYPERLINK field links its result, a form checkbox is a checkbox.
+// A complex field keeps its result and drops its code; a HYPERLINK field links its result, a form checkbox is a checkbox,
+// and a PAGE or NUMPAGES field is the page number node, its result skipped as a code is: the digits a page last had.
 function fieldChar(reader: Reader, element: XmlElement, context: RunContext): void {
     const type = w(element, 'fldCharType');
     if (type === 'begin') {
@@ -218,15 +249,28 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
         const field = reader.fields.at(-1);
         const outer = reader.fields.at(-2);
         if (field) {
-            field.inCode = outer?.inCode ?? false;
+            field.inCode = (outer?.inCode ?? false) || pageNumberKind(field.code) !== undefined;
             field.link = hyperlinkField(reader, field.code) ?? outer?.link;
             field.toc = outer?.toc || /^TOC\b/i.test(field.code.trim());
         }
     } else if (type === 'end') {
         const field = reader.fields.pop();
-        if (field?.checkbox !== undefined && !reader.fields.at(-1)?.inCode)
-            context.pieces.push({ kind: 'checkbox', checked: field.checkbox });
+        const kind = field && pageNumberKind(field.code);
+        if (reader.fields.at(-1)?.inCode) return;
+        if (field?.checkbox !== undefined) context.pieces.push({ kind: 'checkbox', checked: field.checkbox });
+        else if (kind) context.pieces.push({ kind: 'node', node: { type: 'pageNumber', attrs: { kind } } });
     }
+}
+
+// PAGE and NUMPAGES whatever their switches, which may follow the name with no space; a field's name is
+// case-insensitive. A doc is one section, so SECTIONPAGES is its page count.
+function pageNumberKind(code: string): PageNumberKind | undefined {
+    const name = code
+        .trim()
+        .split(/[\s\\]/, 1)[0]
+        ?.toUpperCase();
+    if (name === 'SECTIONPAGES') return 'pages';
+    return PAGE_NUMBER_KINDS.find((kind) => PAGE_NUMBER_FIELDS[kind] === name);
 }
 
 function linkOf(reader: Reader, element: XmlElement, scope: Scope): Link | undefined {
@@ -280,19 +324,30 @@ function hyperlinkField(reader: Reader, code: string): Link | undefined {
     return linkTo(reader, anchor ? `${target}#${anchor}` : target, tooltip);
 }
 
-export function pushText(reader: Reader, text: string, direct: DocxRunProps, context: RunContext): void {
+// An equation's text is set off from the text beside it by a space where none is, as inlineText sets off an equation.
+export function pushText(
+    reader: Reader,
+    text: string,
+    direct: DocxRunProps,
+    context: RunContext,
+    equation?: true,
+): void {
     if (!text) return;
-    for (const { text: part, marks, small, font, italic } of marksOf(reader, text, direct, context)) {
+    const last = context.pieces.at(-1);
+    const before = last?.kind === 'node' && last.node.type === 'text' ? last : undefined;
+    const joins = before && !/\s$/.test(before.node.text ?? '') && !/^\s/.test(text);
+    const spaced = joins && (equation || before.equation) ? ` ${text}` : text;
+    for (const { text: part, marks, small, font, size, italic } of marksOf(reader, spaced, direct, context)) {
         const node = marks.length > 0 ? { type: 'text', text: part, marks } : { type: 'text', text: part };
-        context.pieces.push({ kind: 'node', node, small, font, italic });
+        context.pieces.push({ kind: 'node', node, small, font, size, italic, ...(equation && { equation }) });
     }
 }
 
 type Marks = NonNullable<JSONContent['marks']>;
 
 // Small print is at most this share of the body size, so the writer's 9 pt in 11 is small and a body style a point
-// smaller is still body text.
-export const SMALL_PRINT = 0.85;
+// smaller is still body text: a line of it may be a figure's caption.
+const SMALL_PRINT = 0.85;
 
 // Link looks a re-save writes as direct formatting, color to whether it underlines: the editor's, Google Docs' and
 // Word's Hyperlink style; any color from the theme's link colors underlines too. The editor draws its own, so on a link
@@ -314,7 +369,7 @@ function marksOf(
     text: string,
     direct: DocxRunProps,
     context: RunContext,
-): { text: string; marks: Marks; small: boolean; font?: string; italic?: boolean }[] {
+): { text: string; marks: Marks; small: boolean; font?: string; size: number; italic?: boolean }[] {
     const { styles } = reader;
     const { role, scope, link } = context;
     const absorbed = ABSORBED[role.kind];
@@ -333,8 +388,8 @@ function marksOf(
     const full = mergeRun(styles.docRun, paraRun, charRun, direct);
     if (full.vanish) return [];
     if (absorbed === 'all') {
-        const faces = byFace(text, full.fonts, full, false, reader.pkg.chargePiece);
-        return faces.map((face) => ({ ...face, marks: [], small: false }));
+        const faces = byFace(text, full.fonts, full, false, () => reader.pkg.pieces.charge(1));
+        return faces.map((face) => ({ ...face, marks: [], small: false, size: full.size ?? DEFAULT_RUN_SIZE }));
     }
     const own = { ...paraRun };
     for (const key of absorbed) delete own[key];
@@ -351,9 +406,23 @@ function marksOf(
         const size = complex ? props.sizeCs : props.size;
         return size !== undefined && size <= SMALL_PRINT * (complex ? reader.bodySizeCs : reader.bodySize);
     };
+    // The docx's body draws at the doc's body size, and a heading, a title or a note at its own. So only a size apart
+    // from the one its node draws is a mark.
+    const nodeRun =
+        absorbed.includes('size') || scope.story === 'note'
+            ? mergeRun(styles.docRun, paraRun)
+            : { size: reader.bodySize, sizeCs: reader.bodySizeCs };
+    const sizeOf = (run: DocxRunProps, complex: boolean) =>
+        (complex ? (run.sizeCs ?? run.size) : run.size) ?? DEFAULT_RUN_SIZE;
+    const fontSizeOf = (complex: boolean) => {
+        const size = sizeOf(full, complex);
+        return size === sizeOf(nodeRun, complex) ? undefined : readFontSize(size / 2);
+    };
     const complexLook =
-        !!props.boldCs !== !!props.bold || !!props.italicCs !== !!props.italic || isSmall(true) !== isSmall(false);
-    const faces = byFace(text, full.fonts, full, complexLook, reader.pkg.chargePiece);
+        !!props.boldCs !== !!props.bold ||
+        !!props.italicCs !== !!props.italic ||
+        fontSizeOf(true) !== fontSizeOf(false);
+    const faces = byFace(text, full.fonts, full, complexLook, () => reader.pkg.pieces.charge(1));
 
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];
@@ -363,8 +432,9 @@ function marksOf(
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
-    // Explicit black is Word's and Google Docs' default, a mark lost in dark mode; auto on a dark highlight is white.
+    // Explicit black is Word's and Google Docs' default, a mark lost in dark mode; auto on a dark highlight or cell is white.
     const hex = props.color?.hex;
+    const behind = isFill(shade) ? shade : scope.fill;
     const color =
         hex &&
         hex !== reader.baseColor &&
@@ -372,7 +442,7 @@ function marksOf(
         linkLook === undefined &&
         !(scope.onFill && !isFill(shade) && isLight(hex))
             ? hex
-            : !full.color?.hex && !asLink && isFill(shade) && isDark(shade)
+            : !full.color?.hex && !asLink && behind && isDark(behind)
               ? 'FFFFFF'
               : undefined;
     // Word draws capitals over small caps.
@@ -385,26 +455,28 @@ function marksOf(
         const shape: Marks = [];
         if (complex ? props.boldCs : props.bold) shape.push({ type: 'bold' });
         const italic = !!(complex ? props.italicCs : props.italic);
-        if (small) shape.push({ type: 'small' });
         // Code is a monospace run in a code style or on a light grey, the editor's look of any shade; a foreign
         // monospace run alone is a font.
         const code =
             isMonospaceFont(font, reader.fontTable) && (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
-        if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font };
-        const fontFamily = fontMark(font, reader.fontTable);
+        const size = sizeOf(full, complex);
+        if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font, size };
+        const fontFamily = fontMark(font, reader.fontTable, reader.normal.font);
+        const fontSize = fontSizeOf(complex);
         const textStyle: Marks =
-            color || fontFamily || caps
+            color || fontFamily || caps || fontSize
                 ? [
                       {
                           type: 'textStyle',
                           attrs: {
                               color: color ? markColor(color) : null,
                               fontFamily: fontFamily ?? null,
+                              fontSize: fontSize ?? null,
                               caps,
                           },
                       },
                   ]
                 : [];
-        return { text: part, marks: [...marks, ...shape, ...textStyle, ...highlight], small, font, italic };
+        return { text: part, marks: [...marks, ...shape, ...textStyle, ...highlight], small, font, size, italic };
     });
 }

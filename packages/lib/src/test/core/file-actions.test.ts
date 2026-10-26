@@ -2,10 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { ICS_MAX_BYTES } from '../../constants/calendar';
 import { VCARD_MAX_BYTES } from '../../constants/contact';
 import { EML_MAX_BYTES } from '../../constants/mail';
-import { DOCX_MIME, XLSX_MIME } from '../../constants/mime';
+import { DOCX_MIME, PPTX_MIME, XLSX_MIME } from '../../constants/mime';
 import { fileActionsFor } from '../../core/file-actions';
 import { subjectFromMailAttachment, subjectFromPath } from '../../core/file-subject';
-import { type DrivePath, type DrivePathType, EML_MIME, ICS_MIME } from '../../types/drive';
+import type { DrivePath, DrivePathType } from '../../types/drive';
+import { EML_MIME, ICS_MIME } from '../../types/drive';
 import type { FileActionId, FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
@@ -52,6 +53,15 @@ describe('fileActionsFor on a Drive item', () => {
             ids: ['quick-look', 'download', 'convert-to-document'],
         },
         {
+            item: path({ name: 'Pitch.pptx', type: 'file', mimeType: PPTX_MIME }),
+            ids: ['quick-look', 'download', 'convert-to-slides'],
+        },
+        // A macro deck or a template is not a .pptx, and the convert refuses it.
+        {
+            item: path({ name: 'Pitch.pptm', type: 'file', mimeType: PPTX_MIME }),
+            ids: ['quick-look', 'download'],
+        },
+        {
             item: path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' }),
             ids: ['quick-look', 'download', 'import-contacts'],
         },
@@ -72,6 +82,10 @@ describe('fileActionsFor on a Drive item', () => {
         },
         {
             item: path({ name: 'report', type: 'file', mimeType: DOCX_MIME }),
+            ids: ['quick-look', 'download'],
+        },
+        {
+            item: path({ name: 'pitch', type: 'file', mimeType: PPTX_MIME }),
             ids: ['quick-look', 'download'],
         },
         // Over the import ceiling the row is gone: the route answers a bigger vCard with a 413.
@@ -105,6 +119,7 @@ describe('fileActionsFor on a Drive item', () => {
     test('a read-only listing offers no convert', () => {
         const xlsx = path({ name: 'Budget.xlsx', type: 'file', mimeType: XLSX_MIME });
         const docx = path({ name: 'Report.docx', type: 'file', mimeType: DOCX_MIME });
+        const pptx = path({ name: 'Pitch.pptx', type: 'file', mimeType: PPTX_MIME });
         const readOnly = false;
         expect(fileActionsFor(subjectFromPath(xlsx, readOnly)).map((action) => action.id)).toEqual([
             'quick-look',
@@ -114,8 +129,13 @@ describe('fileActionsFor on a Drive item', () => {
             'quick-look',
             'download',
         ]);
+        expect(fileActionsFor(subjectFromPath(pptx, readOnly)).map((action) => action.id)).toEqual([
+            'quick-look',
+            'download',
+        ]);
         expect(fileActionsFor(subjectFromPath(xlsx, true)).map((action) => action.id)).toContain('convert-to-sheet');
         expect(fileActionsFor(subjectFromPath(docx, true)).map((action) => action.id)).toContain('convert-to-document');
+        expect(fileActionsFor(subjectFromPath(pptx, true)).map((action) => action.id)).toContain('convert-to-slides');
     });
 
     test('an .eml imports to mail right up to the ceiling', () => {

@@ -8,7 +8,8 @@
 // plain ring the host draws itself, so this component is simply not mounted for it (no
 // `showResize` prop — an ObjectTransform that can't transform isn't rendered).
 
-import { type Box, normalizeAngle, resizeRotatedRect, snapAngle } from '@workspace/lib/vector';
+import type { Box } from '@workspace/lib/vector';
+import { normalizeAngle, resizeRotatedRect, snapAngle } from '@workspace/lib/vector';
 import { cn } from '@workspace/ui/lib/utils';
 import { RotateCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -41,6 +42,8 @@ function cursorFor(cursorIndex: number, angle: number): string {
     return RESIZE_CURSORS[step % 4];
 }
 
+const defaultFormatSize = (box: Box) => `${Math.round(box.width)} × ${Math.round(box.height)}`;
+
 function sameBox(a: Box, b: Box): boolean {
     return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height && a.angle === b.angle;
 }
@@ -70,6 +73,8 @@ export type ObjectTransformProps = {
     // the box (aspect-lock / from-center), so it can't fight those. A host that doesn't snap omits
     // it (vector), which is a full no-op — zero behavior change.
     snapBox?: (b: Box) => Box;
+    // The resize readout's text. Defaults to the box's width × height in scene units, rounded.
+    formatSize?: (box: Box) => string;
     // Per-move LOCAL preview — never a Yjs write. The host feeds the result back in as `box`.
     onTransform: (next: Box) => void;
     // Fires exactly once per gesture at pointerup / window-blur / pointercancel, with angle
@@ -80,6 +85,10 @@ export type ObjectTransformProps = {
     // closure are captured at pointerdown, and a viewport change mid-drag would silently
     // invalidate both.
     onCommit: (next: Box, start: Box) => void;
+    // Fires once per gesture, however it ends: after the commit, after an Escape's reset, after a press
+    // that never moved, or when this chrome unmounts mid-drag. A host that keeps its preview in state
+    // clears it here, as no other callback marks the end of a gesture that commits nothing.
+    onGestureEnd?: () => void;
 };
 
 export function ObjectTransform({
@@ -90,8 +99,10 @@ export function ObjectTransform({
     resizeMode = 'free',
     minSize = DEFAULT_MIN_SIZE,
     snapBox,
+    formatSize = defaultFormatSize,
     onTransform,
     onCommit,
+    onGestureEnd,
 }: ObjectTransformProps) {
     const [rotating, setRotating] = useState(false);
     // Frozen while any grip drag is active so a resize that shrinks the on-screen box below the side
@@ -102,7 +113,16 @@ export function ObjectTransform({
     // mid-drag would unmount us before teardown runs and leak them. One AbortController per gesture,
     // also aborted on unmount, guarantees removal.
     const dragAbort = useRef<AbortController | null>(null);
-    useEffect(() => () => dragAbort.current?.abort(), []);
+    const gestureEnd = useRef(onGestureEnd);
+    gestureEnd.current = onGestureEnd;
+    useEffect(
+        () => () => {
+            if (!dragAbort.current || dragAbort.current.signal.aborted) return;
+            dragAbort.current.abort();
+            gestureEnd.current?.();
+        },
+        [],
+    );
 
     const startResize = (e: React.PointerEvent, mode: string) => {
         e.preventDefault();
@@ -176,10 +196,12 @@ export function ObjectTransform({
             if (latest && !sameBox(latest, snapshot)) {
                 onCommit({ ...latest, angle: normalizeAngle(latest.angle) }, snapshot);
             }
+            onGestureEnd?.();
         };
         const cancel = () => {
             teardown();
             onTransform(snapshot);
+            onGestureEnd?.();
         };
         const onEnd = (pe: PointerEvent) => {
             if (pe.pointerId === pointerId) commit();
@@ -263,10 +285,12 @@ export function ObjectTransform({
             if (latest && !sameBox(latest, snapshot)) {
                 onCommit({ ...latest, angle: normalizeAngle(latest.angle) }, snapshot);
             }
+            onGestureEnd?.();
         };
         const cancel = () => {
             teardown();
             onTransform(snapshot);
+            onGestureEnd?.();
         };
         const onEnd = (pe: PointerEvent) => {
             if (pe.pointerId === pointerId) commit();
@@ -338,12 +362,12 @@ export function ObjectTransform({
                 // checklist item 3). `dragging && !rotating` is exactly a resize in flight (rotate
                 // sets both, resize only `dragging`); move is host-side, so it never mounts this.
                 // Sits below the box, counter-rotated like the angle pill so it stays upright on a
-                // rotated element. Values are the live box in the host's units, rounded.
+                // rotated element. Values are the live box, worded by the host's formatSize.
                 <div
                     className="absolute left-1/2 top-full mt-2 pointer-events-none whitespace-nowrap rounded bg-foreground px-1.5 py-0.5 text-xs text-background"
                     style={{ transform: `translateX(-50%) rotate(${-box.angle}deg)` }}
                 >
-                    {Math.round(box.width)} × {Math.round(box.height)}
+                    {formatSize(box)}
                 </div>
             )}
         </div>

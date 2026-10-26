@@ -10,6 +10,8 @@ A copy gives every file a new id but keeps its name. A reference by name therefo
 
 Two things keep it safe. `Mount.assertUniqueName` refuses a second live item with the same name in a folder, case-insensitively. And the folders are fixed: media in `{doc}/media/`, comment threads in `{doc}/chat/`, a chat's attachments in `{chat}/media/`. An upload that collides is renamed (`getUniqueFileName`, `apps/api/src/lib/drive/naming.ts`), so a caller always stores the name the upload returned, not the one it sent.
 
+An Office import writes its pictures without that rename, so it picks names no folder holds: the docx, pptx and xlsx readers prefix every picture with the format and a uuid of the import's own (`xlsx-<uuid>-image-1.png`, `importMedia` in `import/image-types.ts`). An import into an open document therefore lands beside its media and overwrites none, and a version restored after a replace still finds its own pictures ([EXPORT.md](EXPORT.md#a-replace-saves-a-version-first)).
+
 ## Each document kind keeps its names in fixed fields
 
 | Document | Field | Names |
@@ -46,7 +48,7 @@ A tab closed mid-upload leaves its `pending:` name in the document, and no one c
 
 ## A download bypasses the preview
 
-`resolveMediaUrl` serves `/preview`, which re-encodes a raster image as WebP of at most 2560 px. So every embedded image's context menu carries `DownloadImageMenuItem` (`packages/ui/src/components/context-menu/object-menu-items.tsx`), which resolves the path and calls `downloadDriveFile` for the original bytes and name. A pending upload or a deleted file has no path, so the row hides. Downloading is a read, so viewers get it too: the canvas object menu shrinks to that row, a sheets image opens its own menu instead of the cell's, and a docs figure opens Download plus the comment rows ([COMMENTS.md](COMMENTS.md#a-docs-image-opens-its-own-menu-and-paints-its-own-mark)).
+`resolveMediaUrl` serves `/preview`, which re-encodes a raster image as WebP of at most 2560 px. So every embedded image's context menu carries `DownloadOriginalImageMenuItem` (`packages/ui/src/components/context-menu/object-menu-items.tsx`), which resolves the path and calls `downloadDriveFile` for the original bytes and name. A pending upload or a deleted file has no path, so the row hides. Downloading is a read, so viewers get it too: the canvas object menu shrinks to the download rows, a sheets image opens its own menu instead of the cell's, and a docs figure opens Download plus the comment rows ([COMMENTS.md](COMMENTS.md#a-docs-image-opens-its-own-menu-and-paints-its-own-mark)).
 
 ## The clipboard carries ids, the document stores names
 

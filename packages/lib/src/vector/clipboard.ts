@@ -3,10 +3,12 @@
 // hostile peer write — one validator, no second field list to drift.
 
 import type { EigenClipboardElementsItem, EigenClipboardItem, EigenClipboardTypography } from '../types/clipboard';
-import { DUPLICATE_OFFSET, getElementsBounds, type Point } from './geometry';
-import { ELEMENT_FIELDS } from './kinds';
+import type { Point } from './geometry';
+import { DUPLICATE_OFFSET, getElementsBounds } from './geometry';
+import { storedElementFields } from './kinds';
 import { letterSpacingField, lineHeightField, oneOf } from './kinds/read-fields';
 import { readElementFromFields } from './read-vector';
+import type { VectorElement, VectorRichTextElement } from './types';
 import {
     DEFAULT_RICHTEXT_PROPS,
     FONT_STYLES,
@@ -14,15 +16,11 @@ import {
     TEXT_ALIGNS,
     TEXT_DECORATIONS,
     VERTICAL_ALIGNS,
-    type VectorElement,
-    type VectorRichTextElement,
 } from './types';
 
 function storedRecord(el: VectorElement): Record<string, string | number | boolean> {
-    const source: Record<string, unknown> = { ...el };
     const record: Record<string, string | number | boolean> = {};
-    for (const field of ELEMENT_FIELDS) {
-        const value = source[field];
+    for (const [field, value] of storedElementFields(el)) {
         if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
             record[field] = value;
         }
@@ -62,7 +60,7 @@ export function readElementsClipboardItem(
         // host's paste handler, after its preventDefault, and swallow the paste silently.
         if (!record || typeof record !== 'object') continue;
         // The document reader IS the trust boundary: enums, clamps and color tokens all apply.
-        const el = readElementFromFields({ get: (key: string) => record[key] });
+        const el = readElementFromFields(new Map(Object.entries(record)));
         if (el) elements.push(el);
     }
     return { elements, sourceFrameId: typeof item.sourceFrameId === 'string' ? item.sourceFrameId : '' };

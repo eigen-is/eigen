@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { isS3ConfigValid, keepsSavedSecret, type S3Config } from '../../types/mount';
+import type { S3Config } from '../../types/mount';
+import { isS3ConfigValid, keepsSavedSecret } from '../../types/mount';
 
 const SAVED: S3Config = {
     endpoint: 'https://s3.example.com',

@@ -19,7 +19,7 @@ export function isEnoent(e: unknown): boolean {
 export class LocalFilesystem {
     private baseDir: string;
 
-    constructor(baseDir: string) {
+    public constructor(baseDir: string) {
         this.baseDir = path.resolve(baseDir);
         fs.mkdirSync(this.baseDir, { recursive: true });
     }
@@ -28,7 +28,7 @@ export class LocalFilesystem {
         return resolveWithinBase(this.baseDir, filePath);
     }
 
-    async write(filePath: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile | string): Promise<number> {
+    public async write(filePath: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile | string): Promise<number> {
         const fullPath = this.getFilePath(filePath);
         const dir = path.dirname(fullPath);
         fs.mkdirSync(dir, { recursive: true });
@@ -37,7 +37,7 @@ export class LocalFilesystem {
 
     // A rename or unlink reaches the platter only once its directory is fsynced, and a mount that refuses the fsync must not fail it.
     // On macOS fsync here and in writeDurable only reaches the drive's cache (no F_FULLFSYNC), so a power loss can still lose a write.
-    async syncDir(dirPath: string): Promise<void> {
+    public async syncDir(dirPath: string): Promise<void> {
         try {
             const handle = await fsPromises.open(this.getFilePath(dirPath), 'r');
             try {
@@ -54,7 +54,7 @@ export class LocalFilesystem {
     }
 
     // The bytes must be on the platter before any name points at them.
-    async writeDurable(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
+    public async writeDurable(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
         const fullPath = this.getFilePath(filePath);
         fs.mkdirSync(path.dirname(fullPath), { recursive: true });
         try {
@@ -73,20 +73,20 @@ export class LocalFilesystem {
     }
 
     // Destination-only: a staging name nothing indexes gets swept, so a second fsync would tax every delivery.
-    async renameDurable(oldPath: string, newPath: string): Promise<void> {
+    public async renameDurable(oldPath: string, newPath: string): Promise<void> {
         await this.rename(oldPath, newPath);
         await this.syncDir(path.dirname(newPath));
     }
 
     // Both ends, because an index over the source directory must not get the old name back after it says the file moved.
-    async moveDurable(from: string, to: string): Promise<void> {
+    public async moveDurable(from: string, to: string): Promise<void> {
         await this.renameDurable(from, to);
         const fromDir = path.dirname(from);
         if (fromDir !== path.dirname(to)) await this.syncDir(fromDir);
     }
 
     // A file already gone is the outcome the caller wanted; the fsync stops a power loss resurrecting the name.
-    async unlinkDurable(filePath: string): Promise<void> {
+    public async unlinkDurable(filePath: string): Promise<void> {
         try {
             await fsPromises.unlink(this.getFilePath(filePath));
         } catch (error) {
@@ -96,7 +96,7 @@ export class LocalFilesystem {
     }
 
     // A reader only ever sees the whole old file or the whole new one; the temp is `.`-prefixed so a sweep finds it.
-    async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
+    public async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
         const tempPath = path.join(
             path.dirname(filePath),
             `.${path.basename(filePath)}${ATOMIC_TEMP_INFIX}${randomUUID()}`,
@@ -112,7 +112,7 @@ export class LocalFilesystem {
     }
 
     // Age-gated since a young temp may be a live write about to rename; unlink, since `delete` reaps the emptied parent.
-    async sweepAtomicTemps(dir: string, maxAgeMs: number): Promise<void> {
+    public async sweepAtomicTemps(dir: string, maxAgeMs: number): Promise<void> {
         const now = Date.now();
         for (const name of await this.list(dir)) {
             if (!name.startsWith('.') || !name.includes(ATOMIC_TEMP_INFIX)) continue;
@@ -125,7 +125,7 @@ export class LocalFilesystem {
         }
     }
 
-    async delete(filePath: string): Promise<boolean> {
+    public async delete(filePath: string): Promise<boolean> {
         try {
             const fullPath = this.getFilePath(filePath);
             if (fs.existsSync(fullPath)) {
@@ -140,16 +140,16 @@ export class LocalFilesystem {
         }
     }
 
-    async exists(filePath: string): Promise<boolean> {
+    public async exists(filePath: string): Promise<boolean> {
         return await this.file(filePath).exists();
     }
 
     // For a library that opens a file by name (bun:sqlite) instead of going through this class; still resolved within the base.
-    absolutePath(filePath: string): string {
+    public absolutePath(filePath: string): string {
         return this.getFilePath(filePath);
     }
 
-    async size(filePath: string): Promise<number | null> {
+    public async size(filePath: string): Promise<number | null> {
         const file = this.file(filePath);
         if (await file.exists()) {
             return file.size;
@@ -157,7 +157,7 @@ export class LocalFilesystem {
         return null;
     }
 
-    async list(dirPath: string): Promise<string[]> {
+    public async list(dirPath: string): Promise<string[]> {
         const fullPath = this.getFilePath(dirPath);
         try {
             const entries = await fsPromises.readdir(fullPath, { withFileTypes: true });
@@ -167,12 +167,12 @@ export class LocalFilesystem {
         }
     }
 
-    async mkdir(dirPath: string): Promise<void> {
+    public async mkdir(dirPath: string): Promise<void> {
         const fullPath = this.getFilePath(dirPath);
         fs.mkdirSync(fullPath, { recursive: true });
     }
 
-    async rename(oldPath: string, newPath: string): Promise<void> {
+    public async rename(oldPath: string, newPath: string): Promise<void> {
         const fullOldPath = this.getFilePath(oldPath);
         const fullNewPath = this.getFilePath(newPath);
         const newDir = path.dirname(fullNewPath);
@@ -180,7 +180,7 @@ export class LocalFilesystem {
         await fsPromises.rename(fullOldPath, fullNewPath);
     }
 
-    async dirExists(dirPath: string): Promise<boolean> {
+    public async dirExists(dirPath: string): Promise<boolean> {
         const fullPath = this.getFilePath(dirPath);
         try {
             const stat = await fsPromises.stat(fullPath);
@@ -190,7 +190,7 @@ export class LocalFilesystem {
         }
     }
 
-    async dirSize(dirPath: string): Promise<number> {
+    public async dirSize(dirPath: string): Promise<number> {
         const fullPath = this.getFilePath(dirPath);
         let totalSize = 0;
         try {
@@ -208,9 +208,9 @@ export class LocalFilesystem {
         return totalSize;
     }
 
-    async readdir(dirPath: string): Promise<string[]>;
-    async readdir(dirPath: string, options: { withFileTypes: true }): Promise<fs.Dirent[]>;
-    async readdir(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | fs.Dirent[]> {
+    public async readdir(dirPath: string): Promise<string[]>;
+    public async readdir(dirPath: string, options: { withFileTypes: true }): Promise<fs.Dirent[]>;
+    public async readdir(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | fs.Dirent[]> {
         const fullPath = this.getFilePath(dirPath);
         if (options?.withFileTypes) {
             return await fsPromises.readdir(fullPath, { withFileTypes: true });
@@ -218,21 +218,21 @@ export class LocalFilesystem {
         return await fsPromises.readdir(fullPath);
     }
 
-    async stat(filePath: string): Promise<fs.Stats> {
+    public async stat(filePath: string): Promise<fs.Stats> {
         const fullPath = this.getFilePath(filePath);
         return await fsPromises.stat(fullPath);
     }
 
-    async unlink(filePath: string): Promise<void> {
+    public async unlink(filePath: string): Promise<void> {
         const fullPath = this.getFilePath(filePath);
         await fsPromises.unlink(fullPath);
     }
 
-    file(filePath: string): BunFile {
+    public file(filePath: string): BunFile {
         return Bun.file(this.getFilePath(filePath));
     }
 
-    watch(relativePath: string, callback: fs.WatchListener<string>): fs.FSWatcher {
+    public watch(relativePath: string, callback: fs.WatchListener<string>): fs.FSWatcher {
         return fs.watch(this.getFilePath(relativePath), callback);
     }
 

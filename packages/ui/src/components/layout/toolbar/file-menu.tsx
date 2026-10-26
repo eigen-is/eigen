@@ -1,5 +1,10 @@
+// The File menu on the toolbar of an open Eigen document, such as a doc, a sheet or a board. It
+// creates, opens, renames, downloads, shares and trashes the document, and opens its version history.
+// It also hands those actions to the command palette, so the menu and the palette offer the same ones.
+
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
+import { useIsGuest } from '@workspace/lib/auth';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
@@ -20,8 +25,10 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { Download, FileText, Folder, type LucideIcon, Mail, Pencil, Trash2, Upload, UserRoundPlus } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import { Download, FileText, Folder, Mail, Pencil, Trash2, Upload, UserRoundPlus } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { DriveCreateEigenDoc } from '../../drive/drive-create-eigendoc';
 import { DriveDeleteItem } from '../../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../../drive/drive-email-collaborators';
@@ -44,12 +51,15 @@ type FileMenuProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
     onImport?: () => void;
-    importLabel?: string;
     onExport?: (format: ExportFormat) => void;
+    // A drawing's SVG, which the open editor writes rather than the export route.
+    onDownloadSvg?: () => void;
     createLabel: string;
     createIcon?: LucideIcon;
     createType: EigenDocType;
     children?: ReactNode;
+    // An editor that takes focus back once the menu closes passes its keep-focus handler.
+    onCloseAutoFocus?: (event: Event) => void;
 };
 
 export function FileMenu({
@@ -57,12 +67,13 @@ export function FileMenu({
     canWrite,
     onAccessDialogOpen,
     onImport,
-    importLabel,
     onExport,
+    onDownloadSvg,
     createLabel,
     createIcon: CreateIcon = FileText,
     createType,
     children,
+    onCloseAutoFocus,
 }: FileMenuProps) {
     const [createOpen, setCreateOpen] = useState(false);
     const [openPickerOpen, setOpenPickerOpen] = useState(false);
@@ -73,80 +84,83 @@ export function FileMenu({
     const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
     const openConfig = OPEN_LABELS[createType];
     const downloadFormats = exportFormatsFor(createType);
-    const canDownload = !!onExport && downloadFormats.length > 0;
+    const canExport = !!onExport && downloadFormats.length > 0;
+    const canDownload = canExport || !!onDownloadSvg;
     const navigate = useNavigate();
+    const isGuest = useIsGuest();
+    // A guest may not mail people through the server, as a guest may not share.
+    const canEmail = canWrite && !isGuest;
 
     // Mounted by every eigendoc toolbar, so one publish gives ⌘K the open doc's actions
     // across all four apps. The doc is published as the selection upstream
     // (useEigenDocEditorRoute); usePaletteSelectionActions stabilises these handlers.
     usePaletteSelectionActions({
         onShare: onAccessDialogOpen,
-        onExport: canDownload && onExport ? (_, format) => onExport(format) : undefined,
+        onExport: canExport && onExport ? (_, format) => onExport(format) : undefined,
         onRename: canWrite ? () => setRenameOpen(true) : undefined,
-        onEmailCollaborators: canWrite ? () => setEmailOpen(true) : undefined,
+        onEmailCollaborators: canEmail ? () => setEmailOpen(true) : undefined,
         onDelete: canWrite ? () => setDeleteOpen(true) : undefined,
     });
 
     return (
         <>
-            <ToolbarMenu label="File">
-                {/* Section 1: Create & Open */}
+            <ToolbarMenu label="File" onCloseAutoFocus={onCloseAutoFocus}>
                 <DropdownMenuItem onClick={() => setCreateOpen(true)}>
-                    <CreateIcon className="h-4 w-4 mr-2" /> {createLabel}
+                    <CreateIcon className="h-4 w-4" /> {createLabel}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setOpenPickerOpen(true)}>
-                    <Folder className="h-4 w-4 mr-2" /> Open…
+                    <Folder className="h-4 w-4" /> Open…
                 </DropdownMenuItem>
                 {canWrite && onImport && (
                     <DropdownMenuItem onClick={onImport}>
-                        <Upload className="h-4 w-4 mr-2" /> {importLabel ?? 'Import…'}
+                        <Upload className="h-4 w-4" /> Import…
                     </DropdownMenuItem>
                 )}
 
-                {/* Section 2: Export & Rename */}
-                {(canDownload || canWrite) && <DropdownMenuSeparator />}
-                {canDownload && onExport && (
+                <DropdownMenuSeparator />
+                {canDownload && (
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
-                            <Download className="h-4 w-4 mr-2" /> Download
+                            <Download className="h-4 w-4" /> Download
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
-                            {downloadFormats.map((format) => (
-                                <DropdownMenuItem key={format} onClick={() => onExport(format)}>
-                                    {EXPORT_FORMAT_LABELS[format]}
-                                </DropdownMenuItem>
-                            ))}
+                            {onDownloadSvg && (
+                                <DropdownMenuItem onClick={onDownloadSvg}>SVG image (.svg)</DropdownMenuItem>
+                            )}
+                            {onExport &&
+                                downloadFormats.map((format) => (
+                                    <DropdownMenuItem key={format} onClick={() => onExport(format)}>
+                                        {EXPORT_FORMAT_LABELS[format]}
+                                    </DropdownMenuItem>
+                                ))}
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                 )}
                 {canWrite && (
                     <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-                        <Pencil className="h-4 w-4 mr-2" /> Rename
+                        <Pencil className="h-4 w-4" /> Rename
                     </DropdownMenuItem>
                 )}
 
-                {/* Section 3: Share */}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onAccessDialogOpen}>
-                    <UserRoundPlus className="h-4 w-4 mr-2" /> Share
+                    <UserRoundPlus className="h-4 w-4" /> Share
                 </DropdownMenuItem>
-                {canWrite && (
+                {canEmail && (
                     <DropdownMenuItem onClick={() => setEmailOpen(true)}>
-                        <Mail className="h-4 w-4 mr-2" /> Email collaborators
+                        <Mail className="h-4 w-4" /> Email collaborators
                     </DropdownMenuItem>
                 )}
 
-                {/* Section 4: Version history & Print */}
-                {(canWrite || children) && <DropdownMenuSeparator />}
+                <DropdownMenuSeparator />
                 {canWrite && <VersionHistoryMenu path={path} onRequestRestore={setPendingSnapshot} />}
                 {children}
 
-                {/* Section 5: Move to trash */}
                 {canWrite && (
                     <>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
-                            <Trash2 className="h-4 w-4 mr-2" /> Move to trash
+                        <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
+                            <Trash2 className="h-4 w-4" /> Move to trash
                         </DropdownMenuItem>
                     </>
                 )}

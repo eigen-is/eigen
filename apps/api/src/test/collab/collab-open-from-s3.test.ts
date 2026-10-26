@@ -3,19 +3,14 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { COLLAB_EPOCH_MESSAGE } from '@workspace/lib/constants/collab';
 import * as decoding from 'lib0/decoding';
-import { MESSAGE_AWARENESS, MESSAGE_SYNC } from '../../lib/collab/collabDocument';
-import type Drive from '../../lib/drive/drive';
+import { MESSAGE_AWARENESS, MESSAGE_SYNC } from '../../lib/collab/collab-document';
+import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
 import type { User } from '../../lib/user';
 import type { FakeS3Server } from '../fake-s3-server';
-import {
-    createFakeS3Mount,
-    type FakeS3Mount,
-    removeFakeS3Mount,
-    settleContainer,
-    waitFor,
-} from '../fault-storage-helpers';
+import type { FakeS3Mount } from '../fault-storage-helpers';
+import { createFakeS3Mount, removeFakeS3Mount, settleContainer, waitFor } from '../fault-storage-helpers';
 import { getTestContext } from '../setup';
 
 // Collab opens whose data.db comes over Bun's real S3 client from a fake S3; needs a listening server (app.handle() never upgrades).

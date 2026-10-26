@@ -40,7 +40,7 @@ This proposal lets a user download an Eigen document from Drive as one file and 
 
 **Conversion already makes a document from a file.** `convertToDocument` (`apps/api/src/lib/import/import-document.ts`) turns an xlsx or docx into a new document next to it: the transform Worker parses, then the main thread runs `drive.create`, applies the update to the new collab document and writes the media. Nothing is created before the Worker succeeds.
 
-**Eigen has its own zip.** `apps/api/src/lib/core/zip.ts` reads with `openZip`, bounded per entry and in total (`MAX_DECOMPRESSED_BYTES`, 200 MB; `MAX_ZIP_ENTRIES`, 10,000), and writes with `writeZip`, every entry dated the DOS epoch. The docx writer uses it.
+**Eigen has its own zip.** `apps/api/src/lib/ooxml/zip.ts` reads with `openZip`, bounded per entry and in total (`MAX_DECOMPRESSED_BYTES`, 200 MB; `MAX_ZIP_ENTRIES`, 10,000), and writes with `writeZip`, every entry dated the DOS epoch. The docx writer uses it.
 
 **An upload trusts the client's MIME.** `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) keeps the multipart part's media type, and `finalizeUpload` stores it. `Mount.getPathsByMimeType` lists by MIME alone. So a plain file uploaded as `application/eigendoc` shows up in the Docs app's list as if it were a document.
 
@@ -121,7 +121,7 @@ The ROADMAP's Frozen-format column flags this row for the same reason.
 
 `driveInfo` gives a container a `downloadUrl`: the export URL with format `eigen`. Download in every Drive menu then works for a document as it does for a file.
 
-The main thread gathers, the Worker packs, as with every export ([EXPORT.md](../EXPORT.md#the-worker-renders-and-the-main-thread-prepares)). The main thread reads the document's state the way the other exports read it, reads every media file, and reads each thread's messages through `ChatRoom` and its index row through `CommentIndex`, without the whispers. Root-relative links in a doc become absolute through `absoluteHref`, as the docx export does, so a link back to the source server still works from another one. The Worker builds the zip with `writeZip`.
+The main thread gathers, the Worker packs, as with every export ([EXPORT.md](../EXPORT.md#the-transform-process-renders-and-the-main-thread-prepares)). The main thread reads the document's state the way the other exports read it, reads every media file, and reads each thread's messages through `ChatRoom` and its index row through `CommentIndex`, without the whispers. Root-relative links in a doc become absolute through `absoluteHref`, as the docx export does, so a link back to the source server still works from another one. The Worker builds the zip with `writeZip`.
 
 A document whose package would exceed what `openZip` accepts is refused on export with a message that says so. No file goes out that cannot come back (Open question 3).
 
@@ -157,7 +157,7 @@ An assignee who is not a member of the new document stays the assignee, as histo
 | An attachment in chat, a card or a mail draft | Stays a file |
 | Drive's own Copy of a package file | Stays a file |
 
-A package that stays a file gets a file action, **Open as document**, beside Convert to Document. It runs the convert route, whose job is exactly this: a new document from a file next to it. `CONVERT_TARGETS` and the convert route learn the package as a source, and the route takes an optional target folder for the Save to Drive picker. That changes an existing route; it adds none.
+A package that stays a file gets a file action, **Open as document**, beside Convert to Document. It runs the convert route, whose job is exactly this: a new document from a file next to it. `CONVERT_SOURCES` and the convert route learn the package as a source, and the route takes an optional target folder for the Save to Drive picker. That changes an existing route; it adds none.
 
 A package stored as a file is stored as `application/zip`, never as the container's MIME. That is the broken window above: `finalizeUpload` replaces any `DRIVE_MIME_*` the client sends for a plain file, for every upload, so no file wears a document's MIME and shows up in an app's list.
 

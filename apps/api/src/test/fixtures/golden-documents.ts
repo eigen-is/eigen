@@ -1,31 +1,34 @@
+import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import type { BandRoot, FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { VectorElement, VectorFrame, VectorRichTextElement, VectorScene } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_RICHTEXT_PROPS,
+    DEFAULT_SCENE_META,
     FRAME_FIELDS,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
     generateNKeysBetween,
+    SLIDE_SIZES,
     serializeBackgroundFill,
     serializeFill,
     solidFill,
     TRANSPARENT_FILL,
-    type VectorElement,
-    type VectorFrame,
-    type VectorRichTextElement,
-    type VectorScene,
 } from '@workspace/lib/vector';
+import type { MathRow } from '@workspace/math';
+import { readOmml, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
-import { writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import type { DocxMedia } from '../../lib/export/doc/to-docx';
+import type { OfficeMedia } from '../../lib/export/office-image';
 import type { Mount } from '../../lib/mount';
+import { parseOoxml } from '../../lib/ooxml/ooxml';
+import { sampleChartParts } from './chart-parts';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
 // (preview/export golden tests and the responsiveness benchmark). Everything is
@@ -210,8 +213,56 @@ function marked(text: string, ...marks: NonNullable<JSONContent['marks']>): JSON
     return { type: 'text', text, marks };
 }
 
-// Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
-// to the schema's, so a new node fails there until it is added here.
+// (a+b)/2 with a red a, and the sum of i² from i = 1 to n.
+export const GOLDEN_FRACTION: MathRow = [
+    {
+        kind: 'fraction',
+        numerator: [
+            { kind: 'identifier', text: 'a', color: '#C00000' },
+            { kind: 'operator', text: '+' },
+            { kind: 'identifier', text: 'b' },
+        ],
+        denominator: [{ kind: 'number', text: '2' }],
+        line: 'bar',
+    },
+];
+
+export const GOLDEN_SUM: MathRow = [
+    {
+        kind: 'nary',
+        operator: '∑',
+        limits: 'under',
+        sub: [
+            { kind: 'identifier', text: 'i' },
+            { kind: 'operator', text: '=' },
+            { kind: 'number', text: '1' },
+        ],
+        sup: [{ kind: 'identifier', text: 'n' }],
+        body: [{ kind: 'scripts', base: [{ kind: 'identifier', text: 'i' }], sup: [{ kind: 'number', text: '2' }] }],
+    },
+];
+
+export function equation(mathml: string, display = false): JSONContent {
+    return { type: 'equation', attrs: { mathml, display, commentCardId: null } };
+}
+
+// The 108 Word equations of the math package's corpus, as the docx import reads them.
+export function corpusEquations(): { row: MathRow; display: boolean }[] {
+    const corpus: { omml: string; display: boolean }[] = JSON.parse(
+        fs.readFileSync(
+            new URL('../../../../../packages/math/src/test/fixtures/omml-corpus.json', import.meta.url),
+            'utf8',
+        ),
+    );
+    return corpus.map(({ omml, display }) => {
+        const oMath = parseOoxml(omml);
+        if (!oMath) throw new Error('a corpus equation does not parse');
+        return { row: readOmml(oMath), display };
+    });
+}
+
+// Every node and mark the docx writer maps, with each variant it special-cases. doc/docx/to-docx.test.ts holds its type
+// set to the schema's, so a new node fails there until it is added here.
 export function buildAllFeaturesDocJson(): JSONContent {
     const link = { type: 'link', attrs: { href: 'https://example.com/a b', title: 'Example' } };
     const cell = (type: string, attrs: Record<string, unknown>, ...content: JSONContent[]): JSONContent => ({
@@ -294,6 +345,48 @@ export function buildAllFeaturesDocJson(): JSONContent {
                     { type: 'text', text: 'First line\tafter a tab' },
                     { type: 'hardBreak' },
                     { type: 'text', text: 'second line' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'A claim with a note' },
+                    {
+                        type: 'footnote',
+                        content: [
+                            {
+                                type: 'paragraph',
+                                content: [
+                                    { type: 'text', text: 'See ' },
+                                    marked('the source', link),
+                                    { type: 'text', text: ', in ' },
+                                    marked('bold', { type: 'bold' }),
+                                    { type: 'text', text: '.' },
+                                ],
+                            },
+                            paragraph('A second paragraph of the note.'),
+                        ],
+                    },
+                    { type: 'text', text: '.' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Half the sum is ' },
+                    equation(writeMathml(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}')),
+                    { type: 'text', text: ', and the squares add up to' },
+                    equation(writeMathml(GOLDEN_SUM, '\\sum_{i=1}^{n}{i^{2}}'), true),
+                    { type: 'text', text: 'for every n.' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Page ' },
+                    { type: 'pageNumber', attrs: { kind: 'page' } },
+                    { type: 'text', text: ' of ' },
+                    { type: 'pageNumber', attrs: { kind: 'pages' } },
                 ],
             },
             { type: 'paragraph', attrs: { textAlign: 'center' } },
@@ -430,7 +523,18 @@ export function buildAllFeaturesDocJson(): JSONContent {
             },
             small('One of two tables in a row'),
             small('Two of two'),
-            paragraph('After the tables.'),
+            // The fixture's media holds no chart drawing, so the docx writes none, and the Google Docs re-save, which predates
+            // the chart, still reads the paragraph.
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'After the tables.' },
+                    {
+                        type: 'chart',
+                        attrs: { ...sampleChartParts('column'), width: 480, height: 297 },
+                    },
+                ],
+            },
             figure({ mediaName: 'chart.png', width: 320, alignment: 'left', caption: 'A chart, left', alt: 'Chart' }),
             figure({ mediaName: 'photo.jpeg', width: null, alt: 'A photo at its own size' }),
             figure({ mediaName: 'diagram.svg', width: 200, caption: 'An SVG', commentCardId: 'card-2' }),
@@ -473,7 +577,7 @@ function figure(attrs: FigureAttrs): JSONContent {
 
 // The all-features doc's media as the docx prep hands it over: sizes from the thumbnail Worker, an SVG beside its PNG.
 // The writer never decodes a raster, so marker bytes stand in for the PNG and the JPEG.
-export function buildAllFeaturesDocMedia(): DocxMedia[] {
+export function buildAllFeaturesDocMedia(): OfficeMedia[] {
     return [
         { name: 'chart.png', contentType: 'image/png', data: toTransferableText('chart png'), width: 800, height: 500 },
         {
@@ -498,8 +602,19 @@ export function buildAllFeaturesDocMedia(): DocxMedia[] {
 
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
     const tempDoc = prosemirrorJSONToYDoc(docSchema(), json, 'default');
-    writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
+    commitEigendocImport(doc, {
+        update: Y.encodeStateAsUpdate(tempDoc),
+        page: DEFAULT_PAGE_SETUP,
+        style: DEFAULT_NORMAL_STYLE,
+    });
     tempDoc.destroy();
+}
+
+// A band as a peer writes it, through the server's whole schema, so a test can write a node a band's schema lacks.
+export function seedBand(doc: Y.Doc, root: BandRoot, ...content: JSONContent[]): void {
+    const band = prosemirrorJSONToYDoc(docSchema(), { type: 'doc', content }, root);
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(band));
+    band.destroy();
 }
 
 // A deck is a canvas of frames: one frame per slide, its elements storing frame-relative
@@ -513,8 +628,7 @@ function deckFrame(id: string, index: string, background: BackgroundFill | null)
         id,
         index,
         name: '',
-        width: FRAME_WIDTH,
-        height: FRAME_HEIGHT,
+        ...SLIDE_SIZES['16:9'],
         background: serializeBackgroundFill(background),
     };
 }
@@ -607,7 +721,7 @@ export function buildGoldenDeckScene(): VectorScene {
         );
     }
 
-    return { elements, frames, meta: { background: 'transparent' } };
+    return { elements, frames, meta: DEFAULT_SCENE_META };
 }
 
 // Rich text only — no media, so the deck renders without a seeded media/ folder. Every frame carries
@@ -644,7 +758,7 @@ export function buildHeavyDeckScene(frameCount = 60, elementsPerFrame = 6): Vect
             );
         }
     }
-    return { elements, frames, meta: { background: 'transparent' } };
+    return { elements, frames, meta: DEFAULT_SCENE_META };
 }
 
 // A follow-up edit in its own transaction, the way an editor session writes one, so
@@ -847,10 +961,10 @@ export function buildGoldenVectorScene(): VectorScene {
             fill: serializeFill({ type: 'gradient', from: '#e60076', to: '#2563eb', angle: 45, style: 'hachure' }),
         },
     ];
-    return { elements, frames: [], meta: { background: 'transparent' } };
+    return { elements, frames: [], meta: DEFAULT_SCENE_META };
 }
 
-// Write a VectorScene into a Y.Doc the way use-canvas-doc.ts persists one: a per-element Y.Map under
+// Write a VectorScene into a Y.Doc the way lib's write-vector.ts persists one: a per-element Y.Map under
 // `elements`, a per-frame Y.Map under `frames`, and the `meta` root. read-vector reads only the
 // whitelisted keys, so setting every own field is safe.
 export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {
@@ -865,11 +979,11 @@ export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {
         }
         for (const frame of scene.frames) {
             const yFrame = new Y.Map<unknown>();
-            // width/height are constants, never stored — FRAME_FIELDS is the allow-list.
+            // width/height come from meta.slideSize, never a frame's own keys — FRAME_FIELDS is the allow-list.
             for (const field of FRAME_FIELDS) yFrame.set(field, frameField(frame, field));
             framesMap.set(frame.id, yFrame);
         }
-        metaMap.set('background', scene.meta.background);
+        for (const [key, value] of Object.entries(scene.meta)) metaMap.set(key, value);
     });
 }
 

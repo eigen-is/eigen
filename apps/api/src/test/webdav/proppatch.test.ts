@@ -1,8 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { parseXml, XML_NAMESPACE, type XmlElement, xmlChild } from '../../lib/core/xml';
+import type { XmlElement } from '../../lib/core/xml';
+import { parseXml, XML_NAMESPACE, xmlChild } from '../../lib/core/xml';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getUserById } from '../../lib/user';
-import { getTestContext, type TestContext } from '../setup';
+import type { TestContext } from '../setup';
+import { getTestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV PROPPATCH', () => {

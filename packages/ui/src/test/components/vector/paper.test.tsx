@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { FRAME_HEIGHT, FRAME_WIDTH, serializeBackgroundFill, type VectorFrame } from '@workspace/lib/vector';
+import type { VectorFrame } from '@workspace/lib/vector';
+import { SLIDE_SIZES, serializeBackgroundFill } from '@workspace/lib/vector';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { canvasSurfaceClass, FramePage } from '../../../components/vector/paper';
 
@@ -7,8 +8,7 @@ const frame = (over: Partial<VectorFrame> = {}): VectorFrame => ({
     id: 'f1',
     index: 'a0',
     name: 'Slide 1',
-    width: FRAME_WIDTH,
-    height: FRAME_HEIGHT,
+    ...SLIDE_SIZES['16:9'],
     background: serializeBackgroundFill({ type: 'solid', color: '#ffffff' }),
     ...over,
 });

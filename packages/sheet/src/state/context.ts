@@ -1,9 +1,16 @@
-import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import {
+    SHEET_COLUMN_HEADER_HEIGHT,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_FONT_SIZE,
+    SHEET_DEFAULT_ROW_HEIGHT,
+    SHEET_ROW_HEADER_WIDTH,
+} from '@workspace/lib/sheets';
 import { isNil, sortBy } from 'es-toolkit/compat';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
 import { FormulaCache } from './modules';
 import type { CellGlyph } from './modules/cell-glyph';
+import type { FloatingRef } from './modules/floating';
 import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
 import type {
@@ -12,7 +19,6 @@ import type {
     FilterEntry,
     FilterOptions,
     GlobalCache,
-    Image,
     LinkCardProps,
     Presence,
     RangeDialogProps,
@@ -49,9 +55,8 @@ export type Context = {
     addDefaultRows: number;
     fullscreenmode: boolean;
     devicePixelRatio: number;
-    insertedImgs?: Image[];
-    editingInsertedImgs?: Image;
-    activeImg?: string;
+    // The selected image or chart on the current sheet.
+    activeObject?: FloatingRef;
     presences?: Presence[];
     // Transient find highlight state (UI-only, never persisted/synced — like
     // formulaRangeHighlight; filterPatch drops non-sheets[*] patches).
@@ -183,8 +188,6 @@ export type Context = {
     cellSelectExtending: boolean; // selection fill-down
     cellSelectExtendIndex: number[];
 
-    chart_selection: unknown;
-
     showGridLines: boolean;
     allowEdit: boolean;
 
@@ -275,8 +278,8 @@ export function defaultContext(refs: RefValues): Context {
         toolbarHeight: 41,
         infobarHeight: 57,
         calculatebarHeight: 29,
-        rowHeaderWidth: 46,
-        columnHeaderHeight: 20,
+        rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
+        columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
         cellMainSrollBarSize: 12,
         tableContentSize: [0, 0],
 
@@ -324,7 +327,6 @@ export function defaultContext(refs: RefValues): Context {
         shiftAnchor: undefined,
 
         iscopyself: true,
-        activeImg: undefined,
 
         orderbyindex: 0, // sort index
 
@@ -338,13 +340,11 @@ export function defaultContext(refs: RefValues): Context {
         cellSelectExtending: false, // selection fill-down
         cellSelectExtendIndex: [],
 
-        chart_selection: {},
-
         showGridLines: true,
         allowEdit: true,
 
         fontList: [],
-        defaultFontSize: 10,
+        defaultFontSize: SHEET_DEFAULT_FONT_SIZE,
 
         formatPainterOn: false,
         formatPainterOnce: false,
@@ -391,7 +391,8 @@ export function getSheetConfig(ctx?: Context, id?: string | null) {
     return ctx.sheets?.[i]?.config;
 }
 
-// Accumulated in locals and assigned once: per-row writes through the immer draft cost ~3x on 100k rows.
+// Accumulated in locals and assigned once: per-row writes through the immer draft cost ~3x on 100k rows. A track is its
+// stored size with the gridline drawn on its last pixel, as Excel counts it and the export draws it.
 function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
     const cfg = getSheetConfig(ctx);
     const rowlen = cfg?.rowlen;
@@ -403,7 +404,7 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
     const visibledatarow: number[] = [];
     let rh_height = 0;
     for (let r = 0; r < rowCount; r += 1) {
-        if (rowhidden?.[r] == null) rh_height += (rowlen?.[r] || defaultrowlen) + 1;
+        if (rowhidden?.[r] == null) rh_height += rowlen?.[r] || defaultrowlen;
         visibledatarow.push(rh_height);
     }
     ctx.visibledatarow = visibledatarow;
@@ -418,7 +419,7 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
         // geometry recompute — persisting the clamp would ship an op and take an undo
         // entry from a render pass, on every client independently.
         if (!columnlen?.[c] && firstRow?.[c] && width > 300) width = 300;
-        if (colhidden?.[c] == null) ch_width += width + 1;
+        if (colhidden?.[c] == null) ch_width += width;
         visibledatacolumn.push(ch_width);
     }
     ctx.visibledatacolumn = visibledatacolumn;

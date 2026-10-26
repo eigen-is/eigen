@@ -1,8 +1,9 @@
 import type { BorderType } from '@workspace/lib/sheets';
 import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
-import { is_date, numberDisplay, parseCellInput } from '../../engine/format';
+import { cellValue, is_date, numberDisplay, parseCellInput } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
 import { clipToUsedExtent, getSheetIndex, isAllowEdit } from '../utils';
 import { applyBorder, clearSides } from './border';
@@ -13,12 +14,8 @@ import { israngeseleciton } from './formula-editor';
 import { execFunctionGroup, execfunction } from './formula-exec';
 import { createFormulaRangeSelect, rangeSetValue, setCaretPosition } from './formula-range';
 import { showLinkCard } from './hyperlink';
-import {
-    inlineStyleAffectAttribute,
-    type StyleAttr,
-    updateInlineStringFormat,
-    updateInlineStringFormatOutside,
-} from './inline-string';
+import type { StyleAttr } from './inline-string';
+import { inlineStyleAffectAttribute, updateInlineStringFormat, updateInlineStringFormatOutside } from './inline-string';
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
 import { selectIsOverlap } from './selection';
@@ -228,10 +225,7 @@ function setAttr(
 }
 
 function checkNoNullValue(cell: Cell | null) {
-    let v: Cell | Cell['v'] | null = cell;
-    if (isPlainObject(v)) {
-        v = (v as Cell).v;
-    }
+    const v = cellValue(cell);
 
     if (
         !isRealNull(v) &&
@@ -245,16 +239,13 @@ function checkNoNullValue(cell: Cell | null) {
 }
 
 function checkNoNullValueAll(cell: Cell | null) {
-    let v: Cell | Cell['v'] | null = cell;
-    if (isPlainObject(v)) {
-        v = (v as Cell).v;
-    }
+    return !isRealNull(cellValue(cell));
+}
 
-    if (!isRealNull(v)) {
-        return true;
-    }
-
-    return false;
+// A cell autosum must not write over: one holding a value or text.
+function holdsValue(cell: Cell | null) {
+    const v = cellValue(cell);
+    return v != null && v.toString().length > 0;
 }
 
 function getNoNullValue(d: CellMatrix, st_x: number, ed: number, type: string) {
@@ -272,7 +263,7 @@ function getNoNullValue(d: CellMatrix, st_x: number, ed: number, type: string) {
 
         if (checkNoNullValue(cell)) {
             hasValueStart = r;
-        } else if (cell == null || cell.v == null || cell.v === '') {
+        } else if (!holdsValue(cell)) {
             nullNum += 1;
 
             if (nullNum >= 40) {
@@ -489,7 +480,7 @@ function singleFormulaInput(
         }
 
         /* Note: exclude the cell itself during search to prevent a cell formula from referencing itself */
-        if (cell != null && cell.v != null && cell.v.toString().length > 0) {
+        if (holdsValue(cell)) {
             let c = ed_m + 1;
 
             if (type === 'c') {
@@ -498,7 +489,7 @@ function singleFormulaInput(
                 cell = d[fix][ed_m + 1];
             }
 
-            while (cell != null && cell.v != null && cell.v.toString().length > 0) {
+            while (holdsValue(cell)) {
                 c += 1;
                 let len = null;
 

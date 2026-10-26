@@ -12,15 +12,8 @@
 // it owns its drag lifecycle (document listeners under an AbortController) and reports the live points
 // via `onPreview`, committing once on release. Freedraw shows no handles.
 
-import {
-    type Box,
-    linearLocalToScene,
-    linearSceneToLocal,
-    type Point,
-    parsePoints,
-    type VectorArrowElement,
-    type VectorLinearElement,
-} from '@workspace/lib/vector';
+import type { Box, Point, VectorArrowElement, VectorLinearElement } from '@workspace/lib/vector';
+import { linearLocalToScene, linearSceneToLocal, parsePoints } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
 import { useState } from 'react';
 import { useHandleDrag } from './use-handle-drag';

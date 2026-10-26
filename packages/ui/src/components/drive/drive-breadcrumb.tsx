@@ -1,4 +1,5 @@
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import {
     Breadcrumb,
     BreadcrumbItem,

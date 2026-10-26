@@ -31,6 +31,12 @@ cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/drive/drive.t
 
 Both parts matter. Without the preload, a test file that imports `../lib` before `../setup` opens the server config under the checkout's own data root, where setup is done, so every test fails with `Setup already completed`. From the repo root, Bun also loads the root `.env` when there is one, and its settings (`PRODUCTION` among them) change what the server answers.
 
+`bun test` turns the value of a flag it doesn't know into a test-name filter, so `--concurrency 1` runs only the tests whose name holds "1". Its flags are `--concurrent`, `--max-concurrency=N` and `--parallel=N`. After you change a test command, check that the test count didn't drop.
+
+## `bun test` runs in UTC
+
+`bun test` sets `TZ=UTC`, so a bug that only shows at local midnight passes; formulajs, for one, builds its dates at local midnight. Run the date and sheet-engine suites once under `TZ=Europe/Amsterdam`, or set `process.env.TZ` in the test itself.
+
 ## Each API test file boots its own server
 
 `apps/api/src/test/test-env.ts` sets `EIGEN_DATA_ROOT` to a fresh `data-test/test-<pid>-<random>` dir per worker process. It must run before any app or auth module opens its SQLite files, so `setup.ts` and `preload.ts` both import it first. It prunes `data-test/` once per worker, by age alone: anything older than ten minutes is a dead run. A live sibling's dir is never that old, so a concurrent run keeps its own dir and the `data-test/test-<name>-<ts>` scratch dirs that unit tests make for themselves.
@@ -51,23 +57,58 @@ Each file has its own auth database, so it sees only the users and orgs it creat
 
 `--isolate` gives every test file a fresh global and module graph, and it needs Bun 1.4.1 or newer (`.bun-version`). Older Bun keeps many finished files' globals alive with no retainer reachable from JS, so a worker grows by the whole app graph, about 50 MB, per such file.
 
-Two pins are the app's own and outlive a file on any Bun: each Home's idle timeout and Elysia's sucrose cache sweep. Both are unref'd timers whose callbacks reach the module graph. The preload's `afterAll` clears them with `shutdownAllHomes()` and `clearSucroseCache(0)`.
+Two pins are the app's own and outlive a file on any Bun: each Home's idle timeout and Elysia's sucrose cache sweep. Both are unref'd timers whose callbacks reach the module graph. The preload's `afterAll` clears them with `shutdownAllHomes()` and `clearSucroseCache(0)`. A `(fail) (unnamed) hook timed out` after the last file is that `afterAll`.
+
+A native Worker that outlives its test file crashes the parallel suite with `panic: NAPI FATAL ERROR: napi_define_properties`, and the files after it abort. Register such a job on its Mount, as `thumbnailJobs` does, so `closeAllDatabases` drains it, resolving on the Worker's `close` event. Never add `documentTransformRunner.close()` to the preload.
 
 ## Locally files run in one process, in CI on four isolated workers
 
 `--parallel=N` implies `--isolate`, so every file gets its own `EIGEN_DATA_ROOT` and its own server. No two files share a Home singleton or a SQLite file, which is what makes running them concurrently safe.
 
-A plain local run stays sequential in one process. The per-file server boot (about 1 s) is the price of `--isolate`, and on a laptop with few spare cores it eats the parallel gain, because many files spawn their own transform and thumbnail Worker threads on top of the test worker. CI runs `--parallel=4`, the runner's core count, for the isolation, not the speed. One sequential process holds every Home of the run and stalls on what ran before, and bun's file order differs per run on Linux. So a test that leans on what an earlier file left behind, such as a file written without waiting or a setting another test changed, passes the local run and fails CI: run the `--parallel=4` command below before main gets a push.
+A plain local run stays sequential in one process. The per-file server boot (about 1 s) is the price of `--isolate`, and on a laptop with few spare cores it eats the parallel gain, because many files spawn their own transform processes and thumbnail Worker threads on top of the test worker. CI runs `--parallel=4`, the runner's core count, for the isolation, not the speed. One sequential process holds every Home of the run and stalls on what ran before, and bun's file order differs per run on Linux. So a test that leans on what an earlier file left behind, such as a file written without waiting or a setting another test changed, passes the local run and fails CI: run the `--parallel=4` command below before main gets a push.
 
 That one process also shares one data root, so a file that passes alone can fail a later one locally while CI stays green. Leave behind nothing a later file reads: server settings, archives in the backups folder, a socket file at a fixed path, a home no backup can verify (a corrupted document, a control character in a path) or a stray home with an s3 mount. A server backup test verifies every home in the data root and lists every archive, so it is the usual victim.
 
+`SQLITE_IOERR_VNODE` in a sandboxed run is the sandbox, not the code: run it once more outside the sandbox before you call it a failure. A loaded machine fakes timeouts too, so check `uptime` before you trust a timing or parallelism result, and keep a Mac awake through a long run (`caffeinate -ims bun run check`), since a sleep mid-run makes hooks time out.
+
+## A module mock outlives its file
+
+Every workspace but the API runs its test files in one process, locally and in CI, and `mock.module` replaces a module for the rest of that run, not just the file that called it. A partial mock is a trap: a later file that imports an export the mock left out gets `undefined`, such as an `AuthProvider` that fails a render with "Element type is invalid". Spread the real module into the mock (`const realAuth = await import('@workspace/lib/auth')`, then `({ ...realAuth, useAuth: () => session })`). Have a mocked hook return one object, not a fresh literal per call, so a later file's effects that depend on it don't re-run forever.
+
+The same goes for globals. A file restores, never deletes, a global it didn't create. A happy-dom `Window` needs a `url`, or `api.ts` throws at load. A test spies on `auth.api.addMember`, not on the exported helper, because the hook calls the helper inside its own module. Moving a test file breaks its `import.meta.dir`-relative fixture paths.
+
 ## Resource bounds measure the child, and scale rather than time
 
-A test that bounds memory runs the work in a child process and reads the child's peak with `peakRss()` (`apps/api/src/test/rss-test-helpers.ts`): on Linux a child's `maxRSS` starts at the high-water mark of the process that spawned it, so CI's worker would read its own 1 GB, and `VmHWM` in `/proc/self/status` is the child's alone. A test that guards against a quadratic compares CPU at n with CPU at a fraction of n instead of holding an absolute bound, because a CI runner spends two to four times this Mac's CPU and the old quadratic was only a few times slower at test sizes. A Bun Worker sees `TMPDIR` as it was when its process started, so a test that needs a private temp dir runs the work in a child process with its own `TMPDIR` and working directory.
+A test that bounds memory runs the work in a child process and reads the child's peak with `peakRss()` (`apps/api/src/lib/core/peak-rss.ts`, which the transform process reports with too): on Linux a child's `maxRSS` starts at the high-water mark of the process that spawned it, so CI's worker would read its own 1 GB, and `VmHWM` in `/proc/self/status` is the child's alone. A test that guards against a quadratic compares CPU at n with CPU at a fraction of n instead of holding an absolute bound, because a CI runner spends two to four times this Mac's CPU and the old quadratic was only a few times slower at test sizes. A Bun Worker sees `TMPDIR` as it was when its process started, so a test that needs a private temp dir runs the work in a child process with its own `TMPDIR` and working directory. A child that hands back more than 64 KB on stdout writes it with `await Bun.write(Bun.stdout, …)`: once any module reads `process.stdout` (lib0 does at import, so anything that reaches yjs), Bun cuts a `console.log` into the pipe at 64 KB when the process exits.
+
+## The transform's memory limit is tested on Linux only
+
+macOS refuses `setrlimit` for the data segment, so the transform process runs without a memory limit there ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#a-child-runs-under-the-machines-memory)). Its tests run under `describe.skipIf(process.platform !== 'linux')` in `document-transform-runner.test.ts`, and the slow one in `import/doc/limits.test.ts` also needs `CI` or `EIGEN_SLOW_TESTS`. CI proves them on Linux amd64; on a Mac run them in `oven/bun:1.4.2-slim` with a copy of the checkout and a `bun install --frozen-lockfile` inside the container, since the Mac's `node_modules` holds macOS binaries.
 
 ## Slow end-to-end suites run on CI only
 
 A suite that takes tens of seconds skips unless `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1` is set. The demo seeder contract test, `server/seed-demo.test.ts`, spawns the whole seeder in about 30 s. Run it with `EIGEN_SLOW_TESTS=1 bun run test:api` after you touch `apps/api/src/scripts/demo/` or a reader it decodes with.
+
+## Each Office writer has a corpus round-trip gate
+
+`apps/api/src/scripts/xlsx-audit.ts`, `docx-audit.ts` and `pptx-audit.ts` each have a `roundtrip` mode, the gate a change to that format's writer passes. Every corpus file the reader imports is written by our writer, its pictures prepared as an export prepares them, and imported again, and the two imports are compared: a workbook key by key, a doc node by node with its bands, page and Normal, a deck slide by slide and element by element in z-order, each length in the EMU the writer writes. A picture compares by its type and pixel size, since an import names its media afresh, and a chart with its series ids numbered by place (`seriesIdsByPlace`), since an id is identity for merging edits, not content. Each file runs in a child process of its own under a time and memory cap, so a hang or a blow-up is a result, not the end of the run. A file the first import refuses, or the writer refuses (an empty deck), is skipped.
+
+A difference is listed when the format's `LISTED` table explains it, with a predicate that calls the writer's own helpers and a why that stands alone; any other is unlisted. The run writes `summary.md`, every kind with its count and examples, and the charts the first import left out by the kind their placeholder names, since a chart neither import holds is no difference, and exits 1 on a crash, a cut or an unlisted difference. `--writer <module>` runs another writer, which is how each script's test plants a broken one. The runner, the classification and the summary are `office-audit.ts`, shared by the three. The corpora are private, so a run's output stays outside the repo. Run one at a time: a heavy file's child peaks at several GB.
+
+```bash
+bun apps/api/src/scripts/xlsx-audit.ts roundtrip <corpus dir...> --out /tmp/xlsx-roundtrip
+bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out /tmp/docx-roundtrip
+bun apps/api/src/scripts/pptx-audit.ts roundtrip <corpus dir...> --out /tmp/pptx-roundtrip
+```
+
+A refactor that must not change what a writer writes proves it byte for byte. `--dump <dir>` keeps each file our writer wrote as `<dir>/<corpus dir name>/<path in it>.<format>`, and refuses a dir another run filled. The writers are deterministic, so a run before the change and one after compare with `diff -rq`, which names every file whose bytes differ and every file only one run wrote:
+
+```bash
+bun apps/api/src/scripts/xlsx-audit.ts roundtrip <corpus dir...> --out /tmp/before --dump /tmp/before-bytes
+# the change
+bun apps/api/src/scripts/xlsx-audit.ts roundtrip <corpus dir...> --out /tmp/after --dump /tmp/after-bytes
+diff -rq /tmp/before-bytes /tmp/after-bytes
+```
 
 ## Storage faults are parked and driven, never slept through
 
@@ -90,6 +131,8 @@ The scripts in `docker/` are not part of `bun run test`. Each one copies the tra
 
 Every harness sources `docker/probe-lib.sh` first and adds only its own probes. The library's Compose view of the install (`dc`, `stack_up`) runs from that container as root, because a release install and its `.env.production` are root's, and on a Linux host the harness user cannot read them. Docker Desktop hides this by mapping ownership to your user.
 
+Docker's two image stores treat a moved tag differently. Docker Desktop's containerd store drops `repo@sha256:<old>` when its tag moves, even while a container runs it; Linux's classic store keeps it as a digest-only image, which a recent docker CLI lists only with `--all`. So the launcher pulls a pinned image back by digest before it reads one (its labels, the pre-update snapshot, a rollback), every `docker image ls` that must see digest-only images passes `--all`, and a launcher change runs on both stores: the Mac gate is containerd, CI's ubuntu the classic store.
+
 Run them one at a time: two started together can pick the same subnet. `./docker/test-all.sh` runs them in turn and prints one line per harness. Each script's header lists everything it probes.
 
 | Harness | What it proves |
@@ -105,14 +148,14 @@ Run them one at a time: two started together can pick the same subnet. `./docker
 
 ## CI
 
-`.github/workflows/check.yml` runs on every push and pull request to `main`. Its `check` job installs with `--frozen-lockfile`, then runs `bun dedupe --check`, `bun run lint`, `bun run typecheck` and `bun run primitives:check`, then the tests:
+`.github/workflows/check.yml` runs on every push to `main` or a `release-*` branch and on every pull request to `main`. Its `check` job installs with `--frozen-lockfile`, then runs `bun dedupe --check`, `bun run lint`, `bun run typecheck` (each workspace runs `bun check --no-script`) and `bun run primitives:check`, then the tests:
 
 - `bun --filter '!@apps/api' test --timeout 30000`: the package suites, one sequential process each. They still depend on file order, which a [ROADMAP.md](ROADMAP.md) row tracks.
 - `bun --filter '@apps/api' test --parallel=4 --timeout 30000`: the API suite on four isolated workers.
 
 `bun dedupe --check` fails when `bun.lock` holds two versions of a package that one version could satisfy. Two copies of `@codemirror/language` or of Radix's dismissable layer break at runtime without an error, and a dependency bump or `bun add` can bring a copy back. Run `bun dedupe` and commit the lockfile it writes.
 
-The 30 s per-test timeout is for CI alone. The runner is slower than a laptop, and bun's 5 s default fails a slow file there. Locally the default stays, so a slow test is caught where it is written. Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file, so a worker's growth shows next to the file that caused it.
+The 30 s per-test timeout is for CI. The runner is slower than a laptop, and bun's 5 s default fails a slow file there. Locally the default stays, so a slow test is caught where it is written. The tests that wait on a mail folder watcher are the exception: on a loaded Mac an `fs.watch` event alone can take longer than 5 s ([IMAP.md § A watcher checks that its directory is still the same one](IMAP.md#a-watcher-checks-that-its-directory-is-still-the-same-one)). Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file, so a worker's growth shows next to the file that caused it. Exit code 143 is an out-of-memory kill, and `bun --filter` buffers a child's output, so the last test in the log is not the culprit.
 
 A second job, `launcher`, runs `docker/test-launcher.sh`. It needs no stack and no Bun, so it runs on a plain runner beside the check job.
 

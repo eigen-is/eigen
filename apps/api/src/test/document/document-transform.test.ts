@@ -2,18 +2,21 @@ import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
+import { DEFAULT_NORMAL_STYLE, PAGE_ROOT, pageRecord, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
+import type { Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
+    DRIVE_MIME_SLIDES,
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_SHEETS,
-    type DrivePath,
+    DRIVE_TYPE_SLIDES,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
-import ExcelJS from 'exceljs';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
@@ -21,34 +24,44 @@ import * as collabSchema from '../../lib/collab/schema';
 import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
-import { openZip } from '../../lib/core/zip';
-import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import {
+    commitEigendocImport,
+    readEigendocBands,
+    readEigendocFromDoc,
+    readEigendocPage,
+    readEigendocStyle,
+} from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
-import { readSheetsFromDoc } from '../../lib/document/sheets';
+import { readSheetsFromDoc, SERVER_RECALC_BUDGET } from '../../lib/document/sheets';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
-import {
-    type DocumentTransformRequest,
-    type DocumentTransformResponse,
-    toTransferableBuffer,
-    toTransferableText,
+import type {
+    DocumentTransformRequest,
+    DocumentTransformResponse,
+    TransformError,
 } from '../../lib/document/transform/protocol';
+import { toTransferableBuffer, toTransferableText } from '../../lib/document/transform/protocol';
 import { runTransformToBytes, runTransformToExtractedText } from '../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import type { Drive } from '../../lib/drive';
-import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { writeDocx } from '../../lib/export/doc/docx/to-docx';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
 import { collectExportMedia } from '../../lib/export/media';
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
-import { type DocxImage, docxToPmJson } from '../../lib/import/doc/from-docx';
+import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import type { ImportedMedia } from '../../lib/import/image-types';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
+import { IMPORT_MESSAGES } from '../../lib/import/messages';
+import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
+import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/ooxml/zip';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
 import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-render';
 import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-render';
+import * as previewCache from '../../lib/preview/preview-cache';
 import * as thumbnails from '../../lib/shared/thumbnails';
 import type { User } from '../../lib/user';
 import {
@@ -64,7 +77,7 @@ import {
     seedEigendoc,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
-import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
+import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME, unprefixed } from '../fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
 import {
     exportBytes,
@@ -73,6 +86,7 @@ import {
     previewBody,
     readPersistedDoc,
 } from '../fixtures/transform-results';
+import { linkRels, OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import {
     authedRequest,
     driveGet,
@@ -279,7 +293,7 @@ describe('document transform (eigensheets preview)', () => {
             expect(fromDoc.recalcError).toBe('forced recalc failure');
             expect(fromDoc.sheets[0].celldata?.[0]?.v?.v).toBe('replayed-value');
 
-            const exported = await renderEigensheetsExport(doc, 'html', 'Warned', []);
+            const exported = await renderEigensheetsExport(doc, 'html', 'Warned', async () => []);
             expect(exported.warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
             expect(new TextDecoder().decode(exported.data)).toContain('replayed-value');
 
@@ -287,6 +301,29 @@ describe('document transform (eigensheets preview)', () => {
             const { body, warnings } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
             expect(warnings).toEqual([]);
             expect(body).toContain('replayed-value');
+        } finally {
+            mock.module('@workspace/sheet/engine', () => original);
+        }
+    });
+
+    test("the export's recalc runs under the server's budget", () => {
+        const original = { ...engine };
+        const budgets: unknown[] = [];
+        mock.module('@workspace/sheet/engine', () => ({
+            ...original,
+            recalcSheets: (sheets: Sheet[], options?: { maxDependencyBlocks?: number; maxCellsRead?: number }) => {
+                budgets.push(options);
+                return original.recalcSheets(sheets, options);
+            },
+        }));
+        try {
+            const doc = new Y.Doc();
+            const sheets: Sheet[] = [
+                { id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata: [{ r: 0, c: 0, v: { f: '=1+1' } }] },
+            ];
+            doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
+            expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(2);
+            expect(budgets).toEqual([SERVER_RECALC_BUDGET]);
         } finally {
             mock.module('@workspace/sheet/engine', () => original);
         }
@@ -457,11 +494,11 @@ describe('document transform (eigensheets preview)', () => {
     }, 60_000);
 });
 
-// Pinned bytes of the golden fixture's export documents (the html download and the
-// wrapped document fed to htmlToPdf). Regenerate only for an intentional renderer
-// change — last moved by the table taking the body's FONT_STACK_SANS (2026-10-12).
-const GOLDEN_EXPORT_HTML_SHA256 = '7237285629cf37d274ebdccb41375c534f13a8fc29602d19a79e530dd269c391';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'e411e94a27817d76929b53fb8a033e62a2ebf94cc6a7e537297368d6bee168a4';
+// The golden workbook's HTML download and the document fed to WeasyPrint, its @page fit to the widest and tallest
+// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved by a blank tab taking
+// no page, so the workbook's empty last sheet no longer prints a blank page).
+const GOLDEN_EXPORT_HTML_SHA256 = '5d8d4f9fb19e32dfb54b8141344ed24685f1a74987a4f52537defef9d91c79be';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = '195a8367e85db72cead4e0e4b3e0d6049cc741501e3241a698452e3abf77dcc9';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
@@ -486,62 +523,104 @@ describe('document transform (eigensheets export)', () => {
             format: 'pdf-html',
             title: 'golden-export',
         } as const;
-        const html = await runTransformToBytes(golden.mount, golden.path, { ...job, media: [] }, {});
+        const { data: html } = await runTransformToBytes(golden.mount, golden.path, job, {});
         expect(sha256(html)).toBe(GOLDEN_EXPORT_PDF_HTML_SHA256);
+    }, 120_000);
+
+    // An export has no format to blame, so a child that ran out of memory is the server's failure.
+    test('an export whose child ran out of memory is a 500', async () => {
+        const runSpy = interceptRunOnce('export', async () => ({
+            ok: false as const,
+            error: { code: 'out-of-memory' as const, message: 'Out of memory' },
+        }));
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/file/${golden.path.id}/export/html`,
+            );
+            expect(res.status).toBe(500);
+        } finally {
+            errorSpy.mockRestore();
+            runSpy.mockRestore();
+        }
     }, 120_000);
 
     test('xlsx export through the Worker returns a parseable workbook', async () => {
         const result = await exportDocument(golden.mount, golden.path, 'xlsx');
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(result.data);
-        expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual(['Dashboard', 'Data', 'Empty']);
-        const dashboard = workbook.getWorksheet('Dashboard');
-        expect(dashboard?.getCell('B2').value).toBe(48);
-        // Recalc ran in the Worker before ExcelJS built the workbook.
-        expect(dashboard?.getCell('F2').value).toMatchObject({ formula: 'SUM(B2:E2)', result: GOLDEN_ROW1_TOTAL });
+        const sheets = xlsxToSheets(result.data);
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Dashboard', 'Data', 'Empty']);
+        const cell = (r: number, c: number) => sheets[0].celldata?.find((d) => d.r === r && d.c === c)?.v;
+        expect(cell(1, 1)).toMatchObject({ v: 48 });
+        // Recalc ran in the Worker before the workbook was written.
+        expect(cell(1, 5)).toMatchObject({ f: '=SUM(B2:E2)', v: GOLDEN_ROW1_TOTAL });
     }, 120_000);
 });
 
 // Recorded from the import pipeline (xlsxToSheets + recalcImportedSheets +
 // encodeSheetsSnapshot) over buildImportFixture(), so the Worker and the main
 // thread are proven to emit the same bytes. Regenerate only for an intentional
-// converter or wire-format change (last moved by the snapshot v2 format).
-const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '310a4f1b918d8901737343cddd8bcad48487d706af4440b3d28670c398b2a4ae';
+// converter or wire-format change (last moved when a number without an alignment of its
+// own stopped storing a right one: the editor aligns by type).
+const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '02d90a244fc30b98a94a4ba9b075efa96617815380d1bd8ee60a61c7dea0f8f2';
 
 // Small but representative workbook: values, a stale cached formula result the
 // import recalc must correct, styles, a date format, a merge, a column width, a
 // second sheet and a hyperlink.
 async function buildImportFixture(): Promise<ArrayBuffer> {
-    const workbook = new ExcelJS.Workbook();
-    const data = workbook.addWorksheet('Data');
-    data.getCell('A1').value = 'Region';
-    data.getCell('B1').value = 'Count';
-    data.getCell('A2').value = 'North';
-    data.getCell('B2').value = 42;
-    data.getCell('A3').value = 'South';
-    data.getCell('B3').value = 7;
-    data.getCell('B4').value = { formula: 'SUM(B2:B3)', result: 999 };
-    data.getCell('A1').font = { bold: true, color: { argb: 'FF0000FF' } };
-    data.getCell('B1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
-    const dated = data.getCell('C2');
-    dated.value = new Date(Date.UTC(2024, 2, 15));
-    dated.numFmt = 'dd/mm/yyyy';
-    data.getColumn(1).width = 18;
-    data.mergeCells('A6:B6');
-    data.getCell('A6').value = 'Merged footer';
-
-    const notes = workbook.addWorksheet('Notes');
-    notes.getCell('A1').value = 'Second sheet';
-    notes.getCell('A2').value = { text: 'link', hyperlink: 'https://example.com/report' };
-
-    return toTransferableBuffer(new Uint8Array(await workbook.xlsx.writeBuffer()));
+    return toTransferableBuffer(
+        xlsxFixture({
+            colors: OFFICE_COLORS,
+            styles: styleSheet({
+                numFmts: { 164: 'dd/mm/yyyy' },
+                fonts: ['<font><b/><color rgb="FF0000FF"/></font>'],
+                fills: ['<fill><patternFill patternType="solid"><fgColor rgb="FFEEEEEE"/></patternFill></fill>'],
+                xfs: [
+                    '<xf numFmtId="0" fontId="1" fillId="0" borderId="0"/>',
+                    '<xf numFmtId="0" fontId="0" fillId="2" borderId="0"/>',
+                    '<xf numFmtId="164" fontId="0" fillId="0" borderId="0"/>',
+                ],
+            }),
+            parts: [linkRels(2, ['https://example.com/report'])],
+            sheets: [
+                {
+                    name: 'Data',
+                    before: '<cols><col min="1" max="1" width="18" customWidth="1"/></cols>',
+                    data: rowsXml([
+                        ['A1', 'Region', 1],
+                        ['B1', 'Count', 2],
+                        ['A2', 'North'],
+                        ['B2', 42],
+                        ['C2', 45366, 3], // 2024-03-15
+                        ['A3', 'South'],
+                        ['B3', 7],
+                        ['B4', { formula: 'SUM(B2:B3)', result: 999 }],
+                        ['A6', 'Merged footer'],
+                    ]),
+                    after: '<mergeCells count="1"><mergeCell ref="A6:B6"/></mergeCells>',
+                },
+                {
+                    name: 'Notes',
+                    data: rowsXml([
+                        ['A1', 'Second sheet'],
+                        ['A2', 'link'],
+                    ]),
+                    after: '<hyperlinks><hyperlink ref="A2" r:id="rId1"/></hyperlinks>',
+                },
+            ],
+        }),
+    );
 }
 
 async function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
-    return authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`, {
-        method: 'POST',
-        body,
-    });
+    return authedRequest(
+        ctx.alice.user.sessionToken,
+        `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import?mode=replace`,
+        {
+            method: 'POST',
+            body,
+        },
+    );
 }
 
 // The xlsx and docx import/convert failure contracts are identical — same routes, same
@@ -555,6 +634,7 @@ type ImportFormatFixture = {
     build: () => Promise<ArrayBuffer>;
     readState: (pathId: string) => Promise<unknown>;
     expectSeeded: (state: unknown) => void;
+    tooLarge: string;
 };
 
 async function liveState(pathId: string, read: (doc: Y.Doc) => unknown): Promise<unknown> {
@@ -571,6 +651,7 @@ const XLSX_FIXTURE: ImportFormatFixture = {
     build: buildImportFixture,
     readState: (pathId) => liveState(pathId, (doc) => doc.getMap('state').get('snapshot')),
     expectSeeded: (state) => expect(typeof state).toBe('string'),
+    tooLarge: IMPORT_MESSAGES.xlsx.tooLarge,
 };
 
 const DOCX_FIXTURE: ImportFormatFixture = {
@@ -581,15 +662,28 @@ const DOCX_FIXTURE: ImportFormatFixture = {
     build: () => buildGoldenDocx(TEST_PNG_BYTES),
     readState: (pathId) => liveState(pathId, readEigendocFromDoc),
     expectSeeded: (state) => expect((state as JSONContent).content?.length).toBeGreaterThan(0),
+    tooLarge: IMPORT_MESSAGES.docx.tooLarge,
 };
 
-async function expectFailedImportLeavesTargetUntouched(fixture: ImportFormatFixture): Promise<void> {
+// A crashed child is the server's failure; one that ran out of memory says the file was too large for it, in the
+// format's words.
+const FAILED_IMPORTS = [
+    ['crashed', 500, () => 'Internal server error'],
+    ['out-of-memory', 413, (fixture: ImportFormatFixture) => fixture.tooLarge],
+] as const;
+
+async function expectFailedImportLeavesTargetUntouched(
+    fixture: ImportFormatFixture,
+    code: TransformError['code'],
+    status: number,
+    message: string,
+): Promise<void> {
     const target = await drivePost<DrivePath>(
         ctx.alice.user.sessionToken,
         ctx.alice.user.id,
         mountId,
         `folder/${rootId}/create/${fixture.createType}`,
-        { fileName: `${fixture.extension}-import-crash-target` },
+        { fileName: `${fixture.extension}-import-${code}-target` },
     );
     expect((await importRequest(target.id, await fixture.build())).status).toBe(200);
     const before = await fixture.readState(target.id);
@@ -597,12 +691,13 @@ async function expectFailedImportLeavesTargetUntouched(fixture: ImportFormatFixt
 
     const runSpy = interceptRunOnce('import', async () => ({
         ok: false as const,
-        error: { code: 'crashed' as const, message: 'forced failure' },
+        error: { code, message: 'forced failure' },
     }));
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
     try {
         const res = await importRequest(target.id, await fixture.build());
-        expect(res.status).toBe(500);
+        expect(res.status).toBe(status);
+        expect(await res.text()).toBe(message);
         expect(await fixture.readState(target.id)).toEqual(before);
     } finally {
         errorSpy.mockRestore();
@@ -653,10 +748,18 @@ async function expectFailedConvertCreatesNoDestination(fixture: ImportFormatFixt
     }
 }
 
+const XLSX_JOB = { maxMediaBytes: 35 * 1024 * 1024 };
+
 describe('document transform (xlsx import)', () => {
     test('Worker import equals the pre-move parse + recalc pipeline', async () => {
         const response = await documentTransformRunner.run(
-            { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data: await buildImportFixture() },
+            {
+                kind: 'import',
+                sourceFormat: 'xlsx',
+                targetType: 'eigensheets',
+                maxMediaBytes: XLSX_JOB.maxMediaBytes,
+                data: await buildImportFixture(),
+            },
             EXPORT_OPTIONS,
         );
         const snapshotJson = importSnapshot(response);
@@ -664,7 +767,7 @@ describe('document transform (xlsx import)', () => {
         expect(response.ok && response.warnings).toEqual([]);
 
         // The same pure pipeline the Worker dispatches to, run on this thread.
-        const direct = await importXlsxToSheetsSnapshot(await buildImportFixture());
+        const direct = importXlsxToSheetsSnapshot(await buildImportFixture(), XLSX_JOB);
         expect(snapshotJson).toBe(new TextDecoder().decode(direct.snapshotJson));
         // The stale cached SUM(B2:B3)=999 was recomputed at import.
         const sheets = decodeSheetsSnapshot(snapshotJson);
@@ -696,7 +799,7 @@ describe('document transform (xlsx import)', () => {
             },
         }));
         try {
-            const { snapshotJson, warnings } = await importXlsxToSheetsSnapshot(await buildImportFixture());
+            const { snapshotJson, warnings } = importXlsxToSheetsSnapshot(await buildImportFixture(), XLSX_JOB);
             expect(warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
             const sheets = decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
             // Parsed values survive: the xlsx's own stale cached result, not a failure.
@@ -717,7 +820,10 @@ describe('document transform (xlsx import)', () => {
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Warned', order: 0, celldata: [], config: {} }];
         const runSpy = interceptRunOnce('import', async () => ({
             ok: true as const,
-            result: { snapshotJson: new TextEncoder().encode(JSON.stringify(sheets)).buffer as ArrayBuffer },
+            result: {
+                snapshotJson: new TextEncoder().encode(JSON.stringify(sheets)).buffer as ArrayBuffer,
+                images: [],
+            },
             warnings: [{ code: 'recalc-failed' as const, message: 'forced' }],
         }));
         const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
@@ -734,63 +840,36 @@ describe('document transform (xlsx import)', () => {
         }
     }, 120_000);
 
-    test('a failed import Worker leaves the target document untouched', async () => {
-        await expectFailedImportLeavesTargetUntouched(XLSX_FIXTURE);
-    }, 120_000);
+    test.each(FAILED_IMPORTS)(
+        'an import whose child %s is a %d and leaves the target untouched',
+        async (code, status, message) => {
+            await expectFailedImportLeavesTargetUntouched(XLSX_FIXTURE, code, status, message(XLSX_FIXTURE));
+        },
+        120_000,
+    );
 
-    test('a failed convert Worker creates no destination document', async () => {
+    test('a failed convert creates no destination document', async () => {
         await expectFailedConvertCreatesNoDestination(XLSX_FIXTURE);
     }, 120_000);
 });
 
-// Recorded from the pre-Worker doc/slides pipeline on the golden fixtures (preview
-// generators, the html downloads, and the wrapped documents fed to WeasyPrint), so the
-// move off-thread is proven byte-identical. Regenerate only
-// for an intentional renderer change. The embedded media data URI comes from the
-// screen-preview pipeline (sharp → WebP), so a preview-encoder change moves the
-// export hashes legitimately. The deck hashes were re-recorded when the deck moved onto the canvas
-// compositor: a slide is a `canvas-page` of scene layers now, so the bytes differ by construction —
-// and again when every screen-rendered page gained the shared `.page-fit` wrapper, which the preview
-// body now carries too so the lightbox and the drive hero can scale a page below its own width. The three
-// deck hashes moved again when gradients started sampling in OKLab: the deck's one slide-background
-// gradient now emits nine stops instead of two, and substituting that stop list back reproduces the
-// previous hashes byte-for-byte, so nothing else in the deck bytes moved. The deck's html hash moved
-// once more when the fallback ladder's bottom step was sized for the narrowest viewport it serves
-// rather than for its own breakpoint: one CSS scale value in the wrapping document, nothing else. All three
-// moved again when the two DOM boxes started drawing their paint with roughjs: the bordered image gained a
-// rough border path, and every painted rich-text box gained an svg backdrop before its text div while its
-// style dropped the CSS background and radius. The two doc export hashes moved when the page came from
-// the one page setup: the @page rule, the .page padding and the print CSS comments, and nothing else.
-// They moved again when the export resolved the weight scale to values (headings 500, bold 600) and dropped the
-// editor-only search flash: those lines, and nothing else.
-// And again when the page box, @page and the print reset came from one page stylesheet: the same rules, reordered.
-// And again when the page break gained its dashed rule, its float clear and its print rule: those lines, and nothing else.
-// And again when the dark-drop stopped leaving the dark theme's tail and a stray brace, and the two print blocks merged: those lines, and nothing else.
-// And again when the flattener dropped the CSS comments and prefixed every item of a comma list, the body stopped repeating the prose size and line height, and headings inherit the font size: those lines, and nothing else.
-// And again when the flattener kept declarations that precede a nested rule on their own rule, so the editor's .tiptap block reaches the export (repeated spaces kept, ligatures off), and the page wrapper lost its whitespace: those lines, and nothing else.
-// And again when the print extras stopped repeating the body font and color eigen-prose sets: that rule, and nothing else.
-// The preview and both doc hashes moved when a figure became spans its paragraph holds, the .figure box the editor draws, and a table's margin, a list item's floats and the float margins moved into eigen-prose.css: those, and nothing else.
-// And again when a textblock ending in a figure took the trailing <br> ProseMirror gives it: that <br>, and nothing else.
-// The docx hash is the writer's own output (to-docx.ts) with its embedded fonts; its image is the thumbnail
-// Worker's PNG of the source, so a writer, font or encoder change moves it. It moved when a figure's margin became an
-// inset inside its paragraph's spacing: the golden figure paragraph's spacing, and nothing else.
-// The HTML hashes moved when the print CSS named .figure and let a table or quote holding a page break split.
-// And again when a done task's strike moved from its content div to the blocks in it but a nested task list: that rule.
-// And again when an ordered list took its marker style inline and eigen-prose.css lost its four ol[type] rules: those.
-// All six html and pdf-html hashes (sheets, doc, deck) moved when the export documents gained the Content-Security-Policy meta after the charset meta: that line, and nothing else (the old hashes come back with it stripped).
-// The sheets pdf-html and both doc hashes moved when one builder sanitized every export body keeping link targets: a target="_blank" on each link, and nothing else (the old hashes come back with it stripped; WeasyPrint prints the same PDF bytes).
-// Both doc HTML hashes moved when Heading 5 and 6 took Google Docs' look: eigen-prose.css's h5 and h6 rules and their first-child margin, and nothing else. The docx hash moved with them: Heading5's and Heading6's grey and Heading6's italic in styles.xml, and nothing else.
-// Both doc HTML hashes moved again when an italic mark in Heading 6 drew upright: the h6 em rule, and a blank line where the second dark rule is dropped, and nothing else.
-// Both doc HTML hashes moved again when a numbered list right after another ran on at the items' step: the two ol + ol rules, and nothing else.
-// Both doc HTML hashes moved again when docs gained the title and subtitle: their two rules and their place in the clear-floats list, and nothing else. The docx hash moved with them: the Title and Subtitle styles in styles.xml, and nothing else.
-// Both doc HTML hashes moved again when the grey of Heading 5, 6 and the subtitle became one rule and the print extras lost the dead text-align classes and the clear-floats list eigen-prose.css carries: those lines, and nothing else.
+// The golden fixtures' renders through the Worker, pinned byte for byte, so a hash moves only with an intentional
+// renderer change, recorded again with it. Each embeds the golden image as its pipeline encodes it, so an encoder
+// change moves it too.
+// The doc's preview body: its first 20 blocks, the truncation marker, media as an embed URL, sanitized.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'aa6092a5dcf13d1ed7a3bb9bdb1e7ebd8911d98b67949bb2871755af003823d3';
+// The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
+// paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '5cb21d5397765e68a4c13d2274e99d1606d7dbc725d16f3a1627141108059f05';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'ae55c6039177891ead1c5977dfaeebc124627658dd346940818423882d36625f';
+// The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
+// libdeflate.
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'bd883985e840cef1ce64fb32910275793ad0ec43b10d20f87e9849ee90f9a491';
+// The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
+// The two exports embed canvas-text.css whole, its comments too, so they last moved with its header comment.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'd5d43916d2df3b5c85bbeea6a7273527aa6838fa8a48012ba369005ce5e3050c';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '8e95237c637e358447508983b2fb27d3d7a20dd81a6622c976d188e57f7c61e4';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'ecaf8cfcc7d68e1388c6c291039d74a500b894a6bb5bccbe3dd5ffb5c6aab5d6';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '4dcf24f76d0d0d82df636bfcd9f14fd327bf728c0d8840a9fb80f8199b5b1c3b';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.
@@ -867,6 +946,36 @@ describe('document transform (eigendoc)', () => {
         expect(preview.body).toBe(body);
     }, 120_000);
 
+    test('the preview carries the page the doc stores, never from a body cached before it had one', async () => {
+        const letter = {
+            width: 279.4,
+            height: 215.9,
+            margin: { top: 10, right: 10, bottom: 10, left: 10 },
+            headerDistance: 8,
+            footerDistance: 10,
+            differentFirstPage: false,
+        };
+        const { mount, path: seeded } = await seedGoldenDocument('letter-doc', 'doc', (doc) => {
+            const map = doc.getMap(PAGE_ROOT);
+            for (const [key, value] of Object.entries(pageRecord(letter))) map.set(key, value);
+        });
+        const home = await getHome(ctx.alice.user.id);
+        const { path: current } = await home.drive.resolveFile(mountId, seeded.id);
+        fs.mkdirSync(mount.previewsDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(mount.previewsDir, `${current.id}-${current.updatedAt.getTime()}.f6.json`),
+            JSON.stringify({ body: '<p>cached before the page</p>' }),
+        );
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${current.id}/text-preview`,
+        );
+        const preview = await res.json();
+        expect(preview.body).toContain('Quarterly Report');
+        expect(preview.page).toEqual(letter);
+    }, 120_000);
+
     test('html export is byte-identical to the pre-move pipeline', async () => {
         const result = await exportDocument(golden.mount, golden.path, 'html');
         expect(sha256(result.data)).toBe(GOLDEN_DOC_EXPORT_HTML_SHA256);
@@ -874,7 +983,7 @@ describe('document transform (eigendoc)', () => {
 
     test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
         // The stage before htmlToPdf: the wrapped document WeasyPrint renders.
-        const html = await runDocumentExport(
+        const { data: html } = await runDocumentExport(
             { documentType: 'eigendoc', format: 'pdf-html' },
             golden.mount,
             golden.path,
@@ -909,26 +1018,33 @@ describe('document transform (eigendoc)', () => {
         expect(body.length).toBeLessThan(1000);
     }, 60_000);
 
-    test('export media crosses the boundary as transferred buffers', async () => {
+    test('export media crosses the boundary as copies the caller keeps', async () => {
         const { mount, path } = golden;
-        const media = await collectExportMedia(mount, path, 'html');
+        const media = await collectExportMedia(mount, path, 'html', [GOLDEN_MEDIA_NAME], new AbortController().signal);
         expect(media).toHaveLength(1);
         expect(media[0].name).toBe(GOLDEN_MEDIA_NAME);
 
+        const asked: string[][] = [];
         const response = await documentTransformRunner.run(
             {
                 kind: 'export',
                 documentType: 'eigendoc',
                 format: 'html',
                 title: path.name,
-                media,
                 publicOrigin: undefined,
                 source: await captureCollabSource(mount, path),
             },
-            EXPORT_OPTIONS,
+            {
+                ...EXPORT_OPTIONS,
+                prepareMedia: async (names) => {
+                    asked.push(names);
+                    return media;
+                },
+            },
         );
-        // Ownership moved to the Worker, and the bytes came back as a data URI.
-        expect(media[0].data.byteLength).toBe(0);
+        // The child named the figure's media, got a copy, and the bytes came back as a data URI.
+        expect(asked).toEqual([[GOLDEN_MEDIA_NAME]]);
+        expect(media[0].data.byteLength).toBeGreaterThan(0);
         expect(Buffer.from(exportBytes(response)).toString('utf-8')).toContain('src="data:image/webp;base64,');
     }, 120_000);
 
@@ -941,11 +1057,15 @@ describe('document transform (eigendoc)', () => {
                 documentType: 'eigendoc',
                 format: 'html',
                 title: path.name,
-                media: [{ name: GOLDEN_MEDIA_NAME, contentType: 'image/svg+xml', data: toTransferableText(svg) }],
                 publicOrigin: undefined,
                 source: await captureCollabSource(mount, path),
             },
-            EXPORT_OPTIONS,
+            {
+                ...EXPORT_OPTIONS,
+                prepareMedia: async () => [
+                    { name: GOLDEN_MEDIA_NAME, contentType: 'image/svg+xml', data: toTransferableText(svg) },
+                ],
+            },
         );
         const html = Buffer.from(exportBytes(response)).toString('utf-8');
         const base64 = html.match(/src="data:image\/svg\+xml;base64,([^"]+)"/)?.[1] ?? '';
@@ -965,11 +1085,15 @@ describe('document transform (eigendoc)', () => {
                 documentType: 'eigendoc',
                 format: 'docx',
                 title: path.name,
-                media: [{ name: GOLDEN_MEDIA_NAME, contentType: 'image/svg+xml', data: toTransferableText(svg) }],
                 publicOrigin: undefined,
                 source: await captureCollabSource(mount, path),
             },
-            EXPORT_OPTIONS,
+            {
+                ...EXPORT_OPTIONS,
+                prepareMedia: async () => [
+                    { name: GOLDEN_MEDIA_NAME, contentType: 'image/svg+xml', data: toTransferableText(svg) },
+                ],
+            },
         );
         const zip = openZip(new Uint8Array(exportBytes(response)));
         const part = (pattern: RegExp) =>
@@ -1000,19 +1124,166 @@ describe('document transform (eigendoc)', () => {
         expect(calls).toBe(0);
     }, 120_000);
 
-    // The prep's clock is skewed and its deadline signal fired by hand, so no test waits out 120 s.
+    // A doc whose body holds one figure per name, beside its media folder.
+    async function seedFigureDoc(fileName: string, names: string[]): Promise<{ mount: Mount; path: DrivePath }> {
+        const created = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        seedEigendoc((await home.drive.getCollabDocument(mountId, created.id)).doc, {
+            type: 'doc',
+            content: names.map((mediaName) => ({
+                type: 'paragraph',
+                content: [{ type: 'figure', attrs: { mediaName } }],
+            })),
+        });
+        return home.drive.resolveFile(mountId, created.id);
+    }
+
+    // A deleted or replaced image stays in media/, and an import that failed leaves its pictures there.
+    test('an export reads only the media its document names', async () => {
+        const doc = await seedFigureDoc('named-media', ['shown.png']);
+        await seedDocumentMedia(doc.mount, doc.path, 'shown.png', TEST_PNG_BYTES);
+        const unused = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg">${' '.repeat(1024 * 1024)}</svg>`);
+        for (let i = 0; i < 8; i++) {
+            await seedDocumentMedia(doc.mount, doc.path, `unused-${i}.svg`, unused, 'image/svg+xml');
+        }
+        const read = spyOn(previewCache, 'getScreenPreview');
+        let names: string[] = [];
+        try {
+            const { data: html } = await runDocumentExport(
+                { documentType: 'eigendoc', format: 'html' },
+                doc.mount,
+                doc.path,
+            );
+            names = read.mock.calls.map(([, file]) => file.name);
+            expect(html.toString('utf-8')).toContain('src="data:image/webp;base64,');
+        } finally {
+            read.mockRestore();
+        }
+        expect(names).toEqual(['shown.png']);
+    }, 120_000);
+
+    // Declared sizes, the bytes stored are a small PNG or SVG: what a row says is all the cap reads before a file. The
+    // doc is deleted after, since its declared sizes count against the user's quota.
+    async function withDeclaredMedia(
+        fileName: string,
+        files: [name: string, mime: string, size: number][],
+        run: (doc: { mount: Mount; path: DrivePath }) => Promise<void>,
+    ): Promise<void> {
+        const doc = await seedFigureDoc(
+            fileName,
+            files.map(([name]) => name),
+        );
+        try {
+            const mediaFolder = await doc.mount.getChildByName(doc.path.id, 'media');
+            if (!mediaFolder) throw new Error('no media folder');
+            const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"/>');
+            for (const [name, mime, size] of files) {
+                const bytes = mime === 'image/svg+xml' ? svg : TEST_PNG_BYTES;
+                await doc.mount.createFile(mediaFolder.id, name, mime, size, bytes);
+            }
+            await run(doc);
+        } finally {
+            await doc.mount.deletePath(doc.path.id);
+        }
+    }
+
+    // HTML and PDF send each raster's screen preview, at most 2560 px of WebP, whatever the photo weighs.
+    test('photos past MAX_DECOMPRESSED_BYTES in all export as their previews', async () => {
+        const half = MAX_DECOMPRESSED_BYTES / 2 + 1;
+        const photos: [string, string, number][] = [
+            ['a.png', 'image/png', half],
+            ['b.png', 'image/png', half],
+        ];
+        await withDeclaredMedia('heavy-photos', photos, async (doc) => {
+            const { data: html } = await runDocumentExport(
+                { documentType: 'eigendoc', format: 'html' },
+                doc.mount,
+                doc.path,
+            );
+            expect(html.toString('utf-8').match(/src="data:image\/webp;base64,/g)).toHaveLength(2);
+        });
+    }, 120_000);
+
+    // An SVG travels as its own bytes, so its row's size is what the export would hold.
+    test('SVGs past MAX_DECOMPRESSED_BYTES in all are a 413 before any read', async () => {
+        const half = MAX_DECOMPRESSED_BYTES / 2 + 1;
+        const svgs: [string, string, number][] = [
+            ['a.svg', 'image/svg+xml', half],
+            ['b.svg', 'image/svg+xml', half],
+        ];
+        await withDeclaredMedia('heavy-svgs', svgs, async (doc) => {
+            const read = spyOn(previewCache, 'getScreenPreview');
+            try {
+                const failure = await exportDocument(doc.mount, doc.path, 'pdf').catch((err: unknown) => err);
+                expect(read).not.toHaveBeenCalled();
+                expect(failure).toMatchObject({ status: 413 });
+            } finally {
+                read.mockRestore();
+            }
+        });
+    }, 120_000);
+
+    // A docx re-encodes each image from its source, read whole: one source past the cap is refused before its read.
+    test('a docx source past MAX_DECOMPRESSED_BYTES is a 413 before it is read', async () => {
+        await withDeclaredMedia('heavy-source', [['a.png', 'image/png', MAX_DECOMPRESSED_BYTES + 1]], async (doc) => {
+            const encode = spyOn(thumbnails, 'generateImagePreview');
+            try {
+                const failure = await runDocumentExport(
+                    { documentType: 'eigendoc', format: 'docx' },
+                    doc.mount,
+                    doc.path,
+                ).catch((err: unknown) => err);
+                expect(encode).not.toHaveBeenCalled();
+                expect(failure).toMatchObject({ status: 413 });
+            } finally {
+                encode.mockRestore();
+            }
+        });
+    }, 120_000);
+
+    test.each(['html', 'docx'] as const)(
+        'a %s export canceled during its media prep reads no more',
+        async (format) => {
+            const doc = await seedFigureDoc(`canceled-prep-${format}`, ['a.png', 'b.png', 'c.png']);
+            for (const name of ['a.png', 'b.png', 'c.png'])
+                await seedDocumentMedia(doc.mount, doc.path, name, TEST_PNG_BYTES);
+            const controller = new AbortController();
+            const encode = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
+                controller.abort();
+                return null;
+            });
+            let calls = -1;
+            try {
+                await runDocumentExport(
+                    { documentType: 'eigendoc', format },
+                    doc.mount,
+                    doc.path,
+                    controller.signal,
+                ).catch(() => {});
+                calls = encode.mock.calls.length;
+            } finally {
+                encode.mockRestore();
+            }
+            expect(calls).toBe(1);
+        },
+        120_000,
+    );
+
+    // The prep runs inside the job, under its deadline, dialed down here so no test waits out 120 s.
     test("a docx's media prep spends from the export's deadline, and once it is spent queues no more media and times out", async () => {
-        const doc = await seedGoldenDocument('deadline-doc', 'doc');
-        await seedDocumentMedia(doc.mount, doc.path, 'second.png', TEST_PNG_BYTES);
-        const { deadlineMs } = TRANSFORM_LIMITS.export;
-        const deadline = new AbortController();
-        const now = performance.now.bind(performance);
-        let skew = 0;
-        const clock = spyOn(performance, 'now').mockImplementation(() => now() + skew);
-        const timeout = spyOn(AbortSignal, 'timeout').mockImplementation(() => deadline.signal);
+        const doc = await seedFigureDoc('deadline-doc', ['a.png', 'b.png']);
+        for (const name of ['a.png', 'b.png']) await seedDocumentMedia(doc.mount, doc.path, name, TEST_PNG_BYTES);
+        const limits = TRANSFORM_LIMITS.export;
+        const { deadlineMs } = limits;
+        limits.deadlineMs = 4_000;
         const encode = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
-            skew += deadlineMs;
-            deadline.abort();
+            await Bun.sleep(4_500);
             return null;
         });
         let failure: unknown;
@@ -1021,11 +1292,10 @@ describe('document transform (eigendoc)', () => {
             failure = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, doc.mount, doc.path).catch(
                 (err: unknown) => err,
             );
+            await Bun.sleep(600);
             calls = encode.mock.calls.length;
-            expect(timeout.mock.calls).toEqual([[deadlineMs]]);
         } finally {
-            clock.mockRestore();
-            timeout.mockRestore();
+            limits.deadlineMs = deadlineMs;
             encode.mockRestore();
         }
         expect(calls).toBe(1);
@@ -1040,16 +1310,26 @@ describe('document transform (eigendoc)', () => {
                 documentType: 'eigendoc',
                 format: 'docx',
                 title: path.name,
-                media: await collectExportMedia(mount, path, 'docx'),
                 publicOrigin: undefined,
                 source: await captureCollabSource(mount, path),
             },
-            EXPORT_OPTIONS,
+            {
+                ...EXPORT_OPTIONS,
+                prepareMedia: (names, signal) => collectExportMedia(mount, path, 'docx', names, signal),
+            },
         );
         const docx = Buffer.from(exportBytes(response));
         const persisted = await readPersistedDoc(mount, path);
-        const media = await collectExportMedia(mount, path, 'docx');
-        const direct = await eigendocToDocx(readEigendocFromDoc(persisted), media, path.name, undefined);
+        const media = await collectExportMedia(mount, path, 'docx', [GOLDEN_MEDIA_NAME], new AbortController().signal);
+        const direct = writeDocx(
+            {
+                json: readEigendocFromDoc(persisted),
+                bands: readEigendocBands(persisted),
+                page: readEigendocPage(persisted),
+                style: readEigendocStyle(persisted),
+            },
+            { title: path.name, media, lost: () => {} },
+        );
         persisted.destroy();
         expect(docx.equals(Buffer.from(direct))).toBe(true);
         expect(sha256(docx)).toBe(GOLDEN_DOC_EXPORT_DOCX_SHA256);
@@ -1058,7 +1338,10 @@ describe('document transform (eigendoc)', () => {
 
 describe('document transform (docx round trip)', () => {
     // The docx export as the Download menu runs it (the media prep, the Worker), read back as an import reads it.
-    async function roundTrip(fileName: string, json: JSONContent): Promise<{ json: JSONContent; images: DocxImage[] }> {
+    async function roundTrip(
+        fileName: string,
+        json: JSONContent,
+    ): Promise<{ json: JSONContent; media: ImportedMedia[] }> {
         const created = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -1076,7 +1359,7 @@ describe('document transform (docx round trip)', () => {
         const svg =
             '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><circle cx="75" cy="75" r="70"/></svg>';
         await seedDocumentMedia(mount, path, 'diagram.svg', Buffer.from(svg), 'image/svg+xml');
-        const docx = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, mount, path);
+        const { data: docx } = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, mount, path);
         return docxToPmJson(docx, { publicOrigin: getPublicOrigin() });
     }
 
@@ -1099,13 +1382,18 @@ describe('document transform (docx round trip)', () => {
     }
 
     // The words of every text block and caption, in no order: a floating figure's caption moves before its paragraph.
+    // A break or an equation ends a word; a page number is its field's cached 1, which the reader keeps as text.
     function words(json: JSONContent): string[] {
         const chunks: string[] = [];
         const walk = (node: JSONContent) => {
             const caption = node.attrs?.['caption'];
             if (node.type === 'figure' && typeof caption === 'string') chunks.push(caption);
-            const inline = node.content?.filter((child) => child.type === 'text' || child.type === 'hardBreak') ?? [];
-            if (inline.length > 0) chunks.push(inline.map((child) => child.text ?? ' ').join(''));
+            const inline =
+                node.content?.filter((child) =>
+                    ['text', 'hardBreak', 'equation', 'pageNumber'].includes(child.type ?? ''),
+                ) ?? [];
+            const textOf = (child: JSONContent) => (child.type === 'pageNumber' ? '1' : (child.text ?? ' '));
+            if (inline.length > 0) chunks.push(inline.map(textOf).join(''));
             for (const child of node.content ?? []) walk(child);
         };
         walk(json);
@@ -1187,17 +1475,18 @@ describe('document transform (docx round trip)', () => {
             .toJSON();
         const imported = await roundTrip('kept', json);
         expect(numberMedia(imported.json)).toEqual(numberMedia(json));
-        expect(imported.images.map((image) => image.contentType)).toEqual(['image/png']);
+        expect(imported.media.map((image) => image.contentType)).toEqual(['image/png']);
     }, 120_000);
 
     // test/import/doc/round-trip.test.ts pins every node; this is the Download path, its media prep and Worker.
     test('the all-features doc comes back with all its text, its links into Eigen root-relative', async () => {
         const original = buildAllFeaturesDocJson();
-        const { json, images } = await roundTrip('all-features', original);
+        const { json, media } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
         expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);
-        // One media file per image part, the SVG as itself rather than its PNG fallback.
-        expect(images.map((image) => image.contentType)).toEqual(['image/png', 'image/jpeg', 'image/svg+xml']);
+        // One media file per image part, and an SVG comes back as itself rather than its PNG fallback.
+        // The chart is a Word chart, so it brings no media file.
+        expect(media.map((image) => image.contentType)).toEqual(['image/png', 'image/jpeg', 'image/svg+xml']);
     }, 120_000);
 });
 
@@ -1249,9 +1538,9 @@ describe('document transform (eigenslides)', () => {
     }, 120_000);
 
     test('pdf-html export matches the pinned golden bytes', async () => {
-        // The PDF arm keeps each page unscaled on its own sheet; only the screen arm wraps a page
+        // The PDF arm lays each page out at 1:1 on its own sheet; only the screen arm wraps a page
         // in the container-query fit box.
-        const html = await runDocumentExport(
+        const { data: html } = await runDocumentExport(
             { documentType: 'eigenslides', format: 'pdf-html' },
             golden.mount,
             golden.path,
@@ -1275,10 +1564,12 @@ describe('document transform (eigenslides)', () => {
                     documentType: 'eigenslides',
                     format: 'html',
                     title: stripEigenExtension(path.name),
-                    media: await collectExportMedia(mount, path, 'html'),
                     source: await captureCollabSource(mount, path),
                 },
-                EXPORT_OPTIONS,
+                {
+                    ...EXPORT_OPTIONS,
+                    prepareMedia: (names, signal) => collectExportMedia(mount, path, 'html', names, signal),
+                },
             );
             expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
             // The skipped edit is gone, the base write still renders.
@@ -1350,14 +1641,25 @@ describe('document transform (eigenvector)', () => {
 // a Yjs commit into a fresh document) over buildGoldenDocx(), so the move
 // off-thread is proven equivalent: the Worker must hand back a Yjs update whose
 // applied document reads back identically, and the extracted image bytes must
-// survive the transfer untouched. Regenerate only for an intentional converter change.
-const GOLDEN_DOCX_PM_JSON_SHA256 = 'a10269abb8310898d89830d5dc5912645b76ce686437d7afa7888a7fe0813860';
+// survive the boundary untouched. Regenerate only for an intentional converter change. Hashed with the media prefix
+// dropped, as each import draws its own.
+// The JSON hash moved when prose textblocks gained the six paragraph format attributes: each null on every paragraph,
+// heading, title and subtitle, as the golden docx sets no spacing or indent apart from its Normal, and nothing else (the
+// old hash comes back with them stripped).
+const GOLDEN_DOCX_PM_JSON_SHA256 = '424f0c917b7b20413cec0cb9df2ee633d55680c912f481a732fda37b43bf665d';
 const GOLDEN_DOCX_DOCUMENT_SHA256 = '9f8f4cf82dfe57e683d68d449cf1cf65158ee2bfde59984c3f50bfb836136c70';
 
 describe('document transform (docx import)', () => {
     async function runDocxImport(data: ArrayBuffer): Promise<DocumentTransformResponse> {
         return documentTransformRunner.run(
-            { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', publicOrigin: undefined, data },
+            {
+                kind: 'import',
+                sourceFormat: 'docx',
+                targetType: 'eigendoc',
+                publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
+                data,
+            },
             EXPORT_OPTIONS,
         );
     }
@@ -1374,34 +1676,44 @@ describe('document transform (docx import)', () => {
     }
 
     test('the reference parse + Yjs commit pipeline matches the pinned goldens', async () => {
-        const { json, images } = docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
-        expect(sha256(JSON.stringify(json))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
-        expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
-            { name: GOLDEN_DOCX_IMAGE_NAME, contentType: 'image/png' },
+        const { json, media } = docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
+        expect(sha256(unprefixed(JSON.stringify(json)))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
+        expect(media.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
+            { name: expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME), contentType: 'image/png' },
         ]);
-        expect(images[0].data).toEqual(Buffer.from(TEST_PNG_BYTES));
+        expect(media[0].data).toEqual(Buffer.from(TEST_PNG_BYTES));
 
         const doc = new Y.Doc();
         seedEigendoc(doc, json);
-        expect(sha256(JSON.stringify(readEigendocFromDoc(doc)))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
+        expect(sha256(unprefixed(JSON.stringify(readEigendocFromDoc(doc))))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
         doc.destroy();
     }, 120_000);
 
     test('Worker import returns a Yjs update that commits to the golden document', async () => {
         const response = await runDocxImport(await buildGoldenDocx(TEST_PNG_BYTES));
-        const { update, images } = importDocUpdate(response);
+        const { update, page, style, images } = importDocUpdate(response);
         expect(response.ok && response.warnings).toEqual([]);
+        // The golden docx sets no docDefaults: Word's 10 pt, single, nothing after.
+        expect(style).toEqual({ ...DEFAULT_NORMAL_STYLE, size: 10, lineSpacing: 1, spaceAfter: 0 });
+
+        // The page and the Normal travel beside the update, never in it: commitEigendocImport sets their keys on the
+        // live doc.
+        const updateOnly = new Y.Doc();
+        Y.applyUpdate(updateOnly, new Uint8Array(update));
+        expect(updateOnly.share.has(PAGE_ROOT)).toBe(false);
+        expect(updateOnly.share.has(STYLE_ROOT)).toBe(false);
+        updateOnly.destroy();
 
         const doc = new Y.Doc();
-        writeEigendocUpdateToYjs(doc, new Uint8Array(update));
+        commitEigendocImport(doc, { update: new Uint8Array(update), page, style });
         const committed = readEigendocFromDoc(doc);
         doc.destroy();
-        expect(committed).toEqual(await referenceDocument());
-        expect(sha256(JSON.stringify(committed))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
+        expect(unprefixed(JSON.stringify(committed))).toBe(unprefixed(JSON.stringify(await referenceDocument())));
+        expect(sha256(unprefixed(JSON.stringify(committed)))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
 
-        // The extracted image crossed the boundary as a transferred buffer, byte-intact.
+        // The extracted image crossed the boundary byte-intact.
         expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
-            { name: GOLDEN_DOCX_IMAGE_NAME, contentType: 'image/png' },
+            { name: expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME), contentType: 'image/png' },
         ]);
         expect(Buffer.from(images[0].data)).toEqual(Buffer.from(TEST_PNG_BYTES));
     }, 120_000);
@@ -1412,13 +1724,89 @@ describe('document transform (docx import)', () => {
         expect(!response.ok && response.error).toMatchObject({ status: 400, message: 'Not a valid docx file' });
     }, 120_000);
 
-    test('a failed import Worker leaves the target document untouched', async () => {
-        await expectFailedImportLeavesTargetUntouched(DOCX_FIXTURE);
-    }, 120_000);
+    test.each(FAILED_IMPORTS)(
+        'an import whose child %s is a %d and leaves the target untouched',
+        async (code, status, message) => {
+            await expectFailedImportLeavesTargetUntouched(DOCX_FIXTURE, code, status, message(DOCX_FIXTURE));
+        },
+        120_000,
+    );
 
-    test('a failed convert Worker creates no destination document', async () => {
+    test('a failed convert creates no destination document', async () => {
         await expectFailedConvertCreatesNoDestination(DOCX_FIXTURE);
     }, 120_000);
+});
+
+// openZip refuses an archive past the byte cap anyway, so a file that large is refused before it is read or copied
+// to the transform process, in its format's words.
+// A convert checks write on the destination folder before anything else it pays for.
+const WRITABLE_DRIVE = { canWrite: async () => true } as unknown as Drive;
+// An insert into a deck opens it for its frame, which a refused import must not pay for either.
+const UNOPENED_DRIVE = {
+    getCollabDocument: () => {
+        throw new Error('a refused import opened the document');
+    },
+} as unknown as Drive;
+
+describe('document transform (input bound)', () => {
+    test.each([
+        [DRIVE_TYPE_SHEETS, DRIVE_MIME_SHEETS, IMPORT_MESSAGES.xlsx.tooLarge],
+        [DRIVE_TYPE_DOC, DRIVE_MIME_DOC, IMPORT_MESSAGES.docx.tooLarge],
+        [DRIVE_TYPE_SLIDES, DRIVE_MIME_SLIDES, IMPORT_MESSAGES.pptx.tooLarge],
+    ])('an import past the byte cap into a %s is 413 and never runs', async (type, mimeType, message) => {
+        const runSpy = spyOn(documentTransformRunner, 'run');
+        try {
+            const upload = Buffer.allocUnsafe(MAX_DECOMPRESSED_BYTES + 1);
+            const path = { id: 'too-large', type, mimeType } as DrivePath;
+            const error = await importIntoDocument(
+                UNOPENED_DRIVE,
+                path,
+                upload,
+                { mode: 'replace' },
+                {} as unknown as User,
+            ).catch((reason: unknown) => reason);
+            expect(error).toMatchObject({ status: 413, message });
+            expect(runSpy.mock.calls.filter(([request]) => request.kind === 'import')).toHaveLength(0);
+        } finally {
+            runSpy.mockRestore();
+        }
+    });
+
+    test.each([
+        ['eigensheets', 'large.xlsx', IMPORT_MESSAGES.xlsx.tooLarge],
+        ['eigendoc', 'large.docx', IMPORT_MESSAGES.docx.tooLarge],
+    ] as const)(
+        'a convert to %s of a stored file past the byte cap is 413 and never reads it',
+        async (target, name, message) => {
+            const mount = {
+                readBytes: () => {
+                    throw new Error('a convert read a stored file past the byte cap');
+                },
+            } as unknown as Mount;
+            const path = { id: 'too-large', parentId: 'parent', name, size: MAX_DECOMPRESSED_BYTES + 1 } as DrivePath;
+            const error = await convertToDocument(WRITABLE_DRIVE, mount, path, target, {} as unknown as User).catch(
+                (reason: unknown) => reason,
+            );
+            expect(error).toMatchObject({ status: 413, message });
+        },
+    );
+
+    test('a convert of a large file of another type is the 400 its type answers, not a 413', async () => {
+        const path = {
+            id: 'too-large',
+            parentId: 'parent',
+            name: 'large.txt',
+            size: MAX_DECOMPRESSED_BYTES + 1,
+        } as DrivePath;
+        const error = await convertToDocument(
+            {} as unknown as Drive,
+            {} as unknown as Mount,
+            path,
+            'eigensheets',
+            {} as unknown as User,
+        ).catch((reason: unknown) => reason);
+        expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to Sheets' });
+    });
 });
 
 describe('document transform (admission)', () => {
@@ -1480,17 +1868,23 @@ describe('document transform (admission)', () => {
                 throw new Error('a refused import copied the upload');
             },
         });
-        const drive = {} as unknown as Drive;
         const user = {} as unknown as User;
 
         for (const target of [
             { type: DRIVE_TYPE_SHEETS, mimeType: DRIVE_MIME_SHEETS },
             { type: DRIVE_TYPE_DOC, mimeType: DRIVE_MIME_DOC },
+            { type: DRIVE_TYPE_SLIDES, mimeType: DRIVE_MIME_SLIDES },
         ]) {
             const refuse = refuseAdmissionOnce();
             let error: unknown;
             try {
-                await importIntoDocument(drive, { id: 'refused', ...target } as DrivePath, upload, user);
+                await importIntoDocument(
+                    UNOPENED_DRIVE,
+                    { id: 'refused', ...target } as DrivePath,
+                    upload,
+                    { mode: 'replace' },
+                    user,
+                );
             } catch (err) {
                 error = err;
             } finally {
@@ -1513,7 +1907,7 @@ describe('document transform (admission)', () => {
         const refuse = refuseAdmissionOnce();
         let error: unknown;
         try {
-            await convertToDocument({} as unknown as Drive, mount, path, 'eigensheets', user);
+            await convertToDocument(WRITABLE_DRIVE, mount, path, 'eigensheets', user);
         } catch (err) {
             error = err;
         } finally {

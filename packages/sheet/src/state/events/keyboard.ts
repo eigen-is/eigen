@@ -1,7 +1,9 @@
 import { cloneDeep, isEmpty, isNil } from 'es-toolkit/compat';
+import { cellValue } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
 import { hideCRCount } from '..';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
 import { handleCut } from '../modules/clipboard';
 import { cellFocus, checkboxChange, getCellDataVerification } from '../modules/data-verification';
@@ -14,6 +16,20 @@ import { getNowDateTime, getSheetIndex, isAllowEdit } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy } from './copy';
 
+// Enter and Tab commit the open edit and select the edited cell, then each moves on from it.
+function commitEdit(ctx: Context, cellInput: HTMLDivElement, canvas?: CanvasRenderingContext2D) {
+    const [r, c] = ctx.editingCellPosition;
+    updateCell(ctx, r, c, cellInput, undefined, canvas);
+    ctx.selections = [
+        {
+            row: [r, r],
+            column: [c, c],
+            row_focus: r,
+            column_focus: c,
+        },
+    ];
+}
+
 export function handleGlobalEnter(
     ctx: Context,
     cellInput: HTMLDivElement,
@@ -23,16 +39,7 @@ export function handleGlobalEnter(
     if ((e.altKey || e.metaKey) && ctx.editingCellPosition.length > 0) {
         e.preventDefault();
     } else if (ctx.editingCellPosition.length > 0) {
-        const [r, c] = ctx.editingCellPosition;
-        updateCell(ctx, r, c, cellInput, undefined, canvas);
-        ctx.selections = [
-            {
-                row: [r, r],
-                column: [c, c],
-                row_focus: r,
-                column_focus: c,
-            },
-        ];
+        commitEdit(ctx, cellInput, canvas);
         moveHighlightCell(ctx, 'down', 1, 'rangeOfSelect');
         e.preventDefault();
     } else if ((ctx.selections?.length ?? 0) > 0) {
@@ -68,8 +75,9 @@ function moveToEdge(
 
     while (r >= 0 && c >= 0 && (colDelta === 0 ? r : c) < maxRowCol - 1) {
         if (
-            !isNil(sheetData?.[r]?.[c]?.v) &&
-            (isNil(sheetData?.[r - rowDelta]?.[c - colDelta]?.v) || isNil(sheetData?.[r + rowDelta]?.[c + colDelta]?.v))
+            !isNil(cellValue(sheetData[r]?.[c])) &&
+            (isNil(cellValue(sheetData[r - rowDelta]?.[c - colDelta])) ||
+                isNil(cellValue(sheetData[r + rowDelta]?.[c + colDelta])))
         ) {
             break;
         }
@@ -85,10 +93,11 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
     if (isNil(idx)) return;
 
-    const file = ctx.sheets[idx];
-    if (!file?.row || !file.column) return;
-    const maxRow = file.row;
-    const maxCol = file.column;
+    // The grid's own size: a sheet's `row` and `column` are set only once a row or column is inserted.
+    const sheetData = ctx.sheets[idx]?.data;
+    if (!sheetData?.length) return;
+    const maxRow = sheetData.length;
+    const maxCol = sheetData[0]?.length ?? 0;
     const last: Selection | undefined =
         ctx.selections && ctx.selections.length > 0 ? ctx.selections[ctx.selections.length - 1] : undefined;
     if (!last) return;
@@ -105,8 +114,6 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     const horizontalOffset = currC - endC !== 0 ? currC - endC : currC - startC;
     const verticalOffset = currR - endR !== 0 ? currR - endR : currR - startR;
 
-    const sheetData = file.data;
-    if (!sheetData) return;
     let selectedLimit: number;
 
     switch (e.key) {
@@ -151,6 +158,8 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     }
 }
 
+const floatingObjectSelected = (ctx: Context) => ctx.activeObject != null;
+
 export function handleWithCtrlOrMetaKey(
     ctx: Context,
     cache: GlobalCache,
@@ -194,8 +203,9 @@ export function handleWithCtrlOrMetaKey(
         // Ctrl + B: bold
         handleBold(ctx, cellInput);
     } else if (e.code === 'KeyC') {
-        // Ctrl + C: copy
-        handleCopy(ctx);
+        // Ctrl + C: copy. A selected chart or image copies itself in the Workbook's copy listener, and the
+        // cells behind it are not marked copied.
+        if (!floatingObjectSelected(ctx)) handleCopy(ctx);
         e.stopPropagation();
         return;
     } else if (e.code === 'KeyV') {
@@ -208,7 +218,7 @@ export function handleWithCtrlOrMetaKey(
         e.stopPropagation();
         return;
     } else if (e.code === 'KeyX') {
-        handleCut(ctx);
+        if (!floatingObjectSelected(ctx)) handleCut(ctx);
         e.stopPropagation();
         return;
     } else if (e.code === 'KeyZ') {
@@ -371,15 +381,8 @@ export function handleGlobalKeyDown(
         if (!allowEdit) return;
         handleGlobalEnter(ctx, cellInput, e, canvas);
     } else if (kstr === 'Tab') {
-        if (ctx.editingCellPosition.length > 0) {
-            return;
-        }
-
-        if (e.shiftKey) {
-            moveHighlightCell(ctx, 'right', -1, 'rangeOfSelect');
-        } else {
-            moveHighlightCell(ctx, 'right', 1, 'rangeOfSelect');
-        }
+        if (ctx.editingCellPosition.length > 0) commitEdit(ctx, cellInput, canvas);
+        moveHighlightCell(ctx, 'right', e.shiftKey ? -1 : 1, 'rangeOfSelect');
         e.preventDefault();
     } else if (kstr === 'F2') {
         if (!allowEdit) return;

@@ -1,22 +1,29 @@
-export {
-    columnIndexToLabel,
-    columnLabelToIndex,
-    extractLabel,
-    quoteSheetName,
-    rowIndexToLabel,
-    rowLabelToIndex,
-    toLabel,
-    unquoteSheetName,
-} from './parser/helper/cell';
+// A1 notation, the text form of a cell or a range such as Sheet1!$A$1:B3: parsing it, writing it, and the rules a
+// sheet name follows in it. The formula parser's helpers own the low-level pieces, and this module re-exports them.
+// The API imports it too, for example to read an Office chart's refs, so it stays free of React and the sheet's state.
 
 import {
     columnIndexToLabel,
     columnLabelToIndex,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+} from '@workspace/lib/sheets';
+import type { CellRangeRef } from '@workspace/lib/types/chart';
+import { rowIndexToLabel, rowLabelToIndex, SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
+
+export {
+    extractLabel,
+    quoteSheetName,
     rowIndexToLabel,
     rowLabelToIndex,
-    SHEET_NAME_PREFIX,
+    sheetRefName,
+    toLabel,
     unquoteSheetName,
 } from './parser/helper/cell';
+
+// Excel's limit on a sheet name's length and the characters it refuses in one; it refuses a quote at either end too.
+export const MAX_SHEET_NAME_LENGTH = 31;
+export const SHEET_NAME_FORBIDDEN = /[\\/?*[\]:]/g;
 
 export type CellRef = { col: number; row: number };
 
@@ -54,6 +61,23 @@ export function parseA1Range(range: string): A1Range | null {
     return { sheet, start, end: { col: endColIndex, row: endRowIndex } };
 }
 
+// A range's rows and columns as a CellRangeRef holds them, each pair in order, or null for one past Excel's grid.
+export function a1RangeRef({ start, end }: A1Range): Pick<CellRangeRef, 'row' | 'column'> | null {
+    const row: [number, number] = [Math.min(start.row, end.row), Math.max(start.row, end.row)];
+    const column: [number, number] = [Math.min(start.col, end.col), Math.max(start.col, end.col)];
+    return row[1] < REFERENCE_ROW_COUNT && column[1] < REFERENCE_COLUMN_COUNT ? { row, column } : null;
+}
+
 export function toA1(row: number, col: number): string {
     return columnIndexToLabel(col) + rowIndexToLabel(row);
+}
+
+// A cell or a rectangle as A1 text, one cell without the colon; `absolute` is Excel's $A$1 form.
+export function rangeToA1(
+    { row, column }: { row: readonly number[]; column: readonly number[] },
+    absolute = false,
+): string {
+    const cell = (r: number, c: number) => (absolute ? `$${columnIndexToLabel(c)}$${rowIndexToLabel(r)}` : toA1(r, c));
+    const start = cell(row[0], column[0]);
+    return row[0] === row[1] && column[0] === column[1] ? start : `${start}:${cell(row[1], column[1])}`;
 }

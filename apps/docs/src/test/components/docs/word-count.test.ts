@@ -3,7 +3,13 @@ import { expect, test } from 'bun:test';
 import { getSchema } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { readLatex, writeMathml } from '@workspace/math';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { countWords } from '../../../components/docs/word-count';
+import { sampleChartParts } from '../../fixtures/chart-parts';
+
+// An equation reads its stored MathML with DOMParser.
+installHappyDom();
 
 const schema = getSchema(getDocExtensions());
 
@@ -61,6 +67,20 @@ test("a figure's caption counts, its alt text and media name do not", () => {
     expect(counts(content)).toEqual({ words: 5, characters: 22, charactersExcludingSpaces: 20 });
 });
 
+// As Google Docs counts a chart: an image, whose own titles and labels are no words of the doc.
+test('a chart counts as an image does, by its caption alone', () => {
+    const chart = { type: 'chart', attrs: { ...sampleChartParts('bar'), caption: 'Sales by month' } };
+    const content = [{ type: 'paragraph', content: [text('See'), chart, text('below')] }];
+    expect(counts(content)).toEqual({ words: 5, characters: 22, charactersExcludingSpaces: 20 });
+});
+
+// Its linear form, which spaces only where an operand ends: an empty equation counts nothing.
+test("an equation's linear form counts as words apart from the text beside it", () => {
+    const equation = (latex: string) => ({ type: 'equation', attrs: { mathml: writeMathml(readLatex(latex), latex) } });
+    const content = [{ type: 'paragraph', content: [text('area'), equation('\\sin x'), equation(''), text('m')] }];
+    expect(counts(content)).toEqual({ words: 4, characters: 10, charactersExcludingSpaces: 9 });
+});
+
 test('a non-Latin script counts its words and characters', () => {
     expect(counts([paragraph('Привет мир'), paragraph('Γειά σου κόσμε')])).toEqual({
         words: 5,
@@ -83,4 +103,14 @@ test('a caret counts no selection; a range counts itself beside the whole doc', 
         selection: { words: 2, characters: 9, charactersExcludingSpaces: 8 },
         document: { words: 4, characters: 21, charactersExcludingSpaces: 18 },
     });
+});
+
+// Google Docs counts no footnote, and the reference ends the word before it.
+test("a footnote's note counts nothing, in the doc and a selection across its reference", () => {
+    const note = { type: 'footnote', content: [paragraph('Hello world'), paragraph('again')] };
+    const doc = state([{ type: 'paragraph', content: [text('Claim'), note, text('more words')] }]);
+    expect(countWords(doc).document).toEqual({ words: 3, characters: 15, charactersExcludingSpaces: 14 });
+
+    const all = doc.apply(doc.tr.setSelection(TextSelection.create(doc.doc, 1, doc.doc.content.size - 1)));
+    expect(countWords(all).selection?.words).toBe(3);
 });

@@ -1,16 +1,17 @@
 import type { ConditionalFormatRule, DefaultConditionalFormatRule, SingleRange } from '@workspace/lib/sheets';
+import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { X } from 'lucide-react';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { getSheetIndex, indexToColumnChar } from '../../state';
+import { getSheetIndex } from '../../state';
 import { RULE_COPY } from './ConditionRules';
 
 function formatRange(range: SingleRange): string {
-    const c1 = indexToColumnChar(range.column[0]);
-    const c2 = indexToColumnChar(range.column[1]);
+    const c1 = columnIndexToLabel(range.column[0]);
+    const c2 = columnIndexToLabel(range.column[1]);
     const r1 = range.row[0] + 1;
     const r2 = range.row[1] + 1;
     if (r1 === r2 && c1 === c2) return `${c1}${r1}`;

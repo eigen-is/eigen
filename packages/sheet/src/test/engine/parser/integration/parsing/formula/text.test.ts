@@ -115,6 +115,10 @@ describe('.parse() text formulas', () => {
             error: '#VALUE!',
             result: null,
         });
+        expect(parser!.parse('FIND("o", "FooBar", 3)')).toMatchObject({ error: null, result: 3 });
+        // A start_num not above 0 is #VALUE!, an empty one too.
+        expect(parser!.parse('FIND("o", "FooBar", 0)')).toMatchObject({ error: '#VALUE!', result: null });
+        expect(parser!.parse('FIND("o", "FooBar",)')).toMatchObject({ error: '#VALUE!', result: null });
     });
 
     xit('FIXED', () => {
@@ -218,6 +222,14 @@ describe('.parse() text formulas', () => {
             error: null,
             result: 'oo Ba',
         });
+    });
+
+    it('NUMBERVALUE', () => {
+        expect(parser!.parse('NUMBERVALUE("1.5")')).toMatchObject({ error: null, result: 1.5 });
+        expect(parser!.parse('NUMBERVALUE("1.234,5", ",", ".")')).toMatchObject({ error: null, result: 1234.5 });
+        // Text it can't read is #VALUE!, not a blank.
+        expect(parser!.parse('NUMBERVALUE("abc")')).toMatchObject({ error: '#VALUE!', result: null });
+        expect(parser!.parse('NUMBERVALUE("1.5",,)')).toMatchObject({ error: '#VALUE!', result: null });
     });
 
     it('PROPER', () => {
@@ -354,6 +366,8 @@ describe('.parse() text formulas', () => {
             error: null,
             result: 5,
         });
+        expect(parser!.parse('SEARCH("bar", "foo bar", 0.5)')).toMatchObject({ error: '#VALUE!', result: null });
+        expect(parser!.parse('SEARCH("bar", "foo bar",)')).toMatchObject({ error: '#VALUE!', result: null });
     });
 
     xit('SPLIT', () => {
@@ -403,6 +417,9 @@ describe('.parse() text formulas', () => {
     it('TEXT', () => {
         expect(parser!.parse('TEXT()')).toMatchObject({ error: '#VALUE!', result: null });
         expect(parser!.parse('TEXT(1234.99)')).toMatchObject({ error: '#VALUE!', result: null });
+        // An empty format_text, typed or a blank cell, is empty text, as in Excel.
+        expect(parser!.parse('TEXT(1234.99, "")')).toMatchObject({ error: null, result: '' });
+        expect(parser!.parse('TEXT("abc", A1)')).toMatchObject({ error: null, result: '' });
         expect(parser!.parse('TEXT(1234.5, "0.00")')).toMatchObject({
             error: null,
             result: '1234.50',

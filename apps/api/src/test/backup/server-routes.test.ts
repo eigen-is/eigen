@@ -13,7 +13,8 @@ import { getDataRoot, USER_HOMES_DIR } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
-import { authedRequest, createTestUser, getTestContext, type TestContext, type TestUser } from '../setup';
+import type { TestContext, TestUser } from '../setup';
+import { authedRequest, createTestUser, getTestContext } from '../setup';
 import { holdCaptures, removeServerRecords, serverRecords, waitForJob, writeServerRecord } from './backup-test-helpers';
 
 // A Light job of the file's few homes, for real.

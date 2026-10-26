@@ -1,14 +1,13 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
+import type { VectorArrowElement, VectorRichTextElement, VectorShapeElement } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
+    readElementFromFields,
     serializeBinding,
     serializePoints,
     solidFill,
     VECTOR_STYLE_DEFAULTS,
-    type VectorArrowElement,
-    type VectorRichTextElement,
-    type VectorShapeElement,
 } from '@workspace/lib/vector';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ElementLayer, sameLayerProps } from '../../../components/vector/element-layer';
@@ -159,6 +158,53 @@ describe('the layer box', () => {
     });
 });
 
+describe('a move re-places the layer and keeps its body', () => {
+    // A drag hands the layer a fresh element per frame. A kind draws in its local frame, so its body
+    // never reads the position, turn or opacity: re-running its render per frame (a full chart costs
+    // hundreds of ms) would only redraw what the box already moved.
+    async function rendersFor(kind: 'rectangle' | 'arrow', frames: React.ReactNode[]): Promise<[number, string]> {
+        const render = spyOn(ELEMENT_KINDS[kind], 'render');
+        const container = document.createElement('div');
+        document.body.append(container);
+        const root = createRoot(container);
+        for (const frame of frames) await act(async () => root.render(frame));
+        const html = container.innerHTML;
+        await act(async () => root.unmount());
+        container.remove();
+        const calls = render.mock.calls.length;
+        render.mockRestore();
+        return [calls, html];
+    }
+
+    test("a move, a turn and a fade re-place the box without running the kind's render again", async () => {
+        const [calls, html] = await rendersFor('rectangle', [
+            <ElementLayer key="r" el={rect()} />,
+            <ElementLayer key="r" el={rect({ x: 30, y: 20, angle: 15, opacity: 50 })} />,
+        ]);
+        expect(calls).toBe(1);
+        expect(html).toContain('transform: translate(30px,20px) rotate(15deg)');
+        expect(html).toContain('opacity: 0.5');
+    });
+
+    test('a restyle runs the render again', async () => {
+        const [calls] = await rendersFor('rectangle', [
+            <ElementLayer key="r" el={rect()} />,
+            <ElementLayer key="r" el={rect({ fill: solidFill('#ff0000') })} />,
+        ]);
+        expect(calls).toBe(2);
+    });
+
+    test('a derived elbow arrow re-routes when it moves, because its route is local to its origin', async () => {
+        const byId = new Map([['r1', rect()]]);
+        const el = elbow();
+        const [calls] = await rendersFor('arrow', [
+            <ElementLayer key="a" el={el} byId={byId} />,
+            <ElementLayer key="a" el={{ ...el, x: el.x + 20 }} byId={byId} />,
+        ]);
+        expect(calls).toBe(2);
+    });
+});
+
 describe('the layer body', () => {
     test('an svg kind mounts the overflow-visible viewport layerInnerHtml writes', () => {
         const html = renderToStaticMarkup(<ElementLayer el={rect()} />);
@@ -181,6 +227,22 @@ describe('the layer body', () => {
         );
         expect(html.indexOf('<svg')).toBeGreaterThan(-1);
         expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('editing'));
+    });
+
+    // A url(#…) lands on the page's first def of that id, so the Slides rail's copy of a shape mid-resize on the
+    // canvas would clip the canvas's hatch to the rail's old outline.
+    test('a scoped copy of a hatched shape names its defs apart from the canvas', () => {
+        const el = rect({ fill: solidFill('#dddddd', 'hachure'), width: 60, height: 40 });
+        const html = renderToStaticMarkup(
+            <>
+                <ElementLayer el={el} />
+                <ElementLayer el={el} idScope="rail" />
+            </>,
+        );
+        const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(([, id]) => id);
+        expect(ids).toHaveLength(2);
+        expect(new Set(ids).size).toBe(2);
+        for (const id of ids) expect(html).toContain(`url(#${id})`);
     });
 });
 
@@ -208,6 +270,15 @@ describe('rich text is sanitized at the mount seam', () => {
         );
         expect(html).not.toContain('javascript:');
         expect(html).toContain('click');
+    });
+
+    test('a list a peer nested 3,000 deep mounts flattened to a paragraph, every x kept', () => {
+        const deep = `${'<ul><li>x'.repeat(3_000)}${'</li></ul>'.repeat(3_000)}`;
+        const el = readElementFromFields(new Map(Object.entries(richtext(deep))));
+        if (!el) throw new Error('the reader dropped the text box');
+        const html = renderToStaticMarkup(<ElementLayer el={el} />);
+        expect(html).not.toContain('<ul>');
+        expect(html).toContain(`<p>${'x'.repeat(3_000)}</p>`);
     });
 });
 

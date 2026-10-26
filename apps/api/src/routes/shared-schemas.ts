@@ -1,10 +1,12 @@
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
-import type { DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import type { DocumentImportOptions, DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import { CARD_TITLE_MAX_LENGTH, type ClientFileEventInput } from '@workspace/lib/types/file-history';
+import type { ClientFileEventInput } from '@workspace/lib/types/file-history';
+import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { MAX_EMAIL_LENGTH, NO_CONTROL_PATTERN } from '@workspace/lib/validation';
-import { type Static, t } from 'elysia';
+import type { Static } from 'elysia';
+import { t } from 'elysia';
 
 // Explicit tuple — t.Union(arr.map(t.Literal)) loses the tuple and breaks
 // Elysia's EigenDocType param narrowing. Kept here (not in packages/lib) so
@@ -36,6 +38,8 @@ export const attachmentReferenceSchema = t.Object({
 // Compile-time guard that the Elysia schema stays in sync with the shared TS type. Adding
 // a field to drive-reference.ts without mirroring it here (or vice-versa) fails the check.
 type TypesEqual<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
+// An intersection as the one object type a schema's Static is, which TypesEqual tells apart.
+type Flatten<T> = { [K in keyof T]: T[K] };
 const _attachmentReferenceSchemaMatchesType: TypesEqual<
     Static<typeof attachmentReferenceSchema>,
     AttachmentReference
@@ -73,6 +77,25 @@ type _ImportFromDriveSchemaCoversSource =
     Exclude<keyof DriveImportSource, keyof Static<typeof importFromDriveSchema>> extends never ? true : never;
 const _importFromDriveSchemaCheck: _ImportFromDriveSchemaCoversSource = true;
 void _importFromDriveSchemaCheck;
+
+// How File › Import… writes into the open document: the upload's query, the Drive pick's body beside its source.
+export const documentImportSchema = t.Object({
+    mode: t.Union([t.Literal('insert'), t.Literal('replace')]),
+    afterFrameId: t.Optional(t.String({ maxLength: 64 })),
+});
+const _documentImportSchemaMatchesType: TypesEqual<Static<typeof documentImportSchema>, DocumentImportOptions> = true;
+void _documentImportSchemaMatchesType;
+
+// The Drive pick's body: the file it reads, and how it comes in.
+export const documentImportFromDriveSchema = t.Object({
+    ...importFromDriveSchema.properties,
+    ...documentImportSchema.properties,
+});
+const _documentImportFromDriveSchemaMatchesType: TypesEqual<
+    Static<typeof documentImportFromDriveSchema>,
+    Flatten<DriveImportSource & DocumentImportOptions>
+> = true;
+void _documentImportFromDriveSchemaMatchesType;
 
 // Refused as input hygiene, and because a lifecycle rule's <Prefix> can't carry most of them: stripped, the rule
 // would cover another prefix.

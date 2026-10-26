@@ -3,25 +3,40 @@
 // instead of reaching roughjs, SVG or a layout pass.
 
 import { EIGEN_FONT_NAMES } from '../../constants/fonts';
+import { LIGHT_EDITOR_BLOCK_TAGS, LIGHT_EDITOR_TAGS, stripTagsServer, textToParagraphHtml } from '../../core/html';
 import { stripNonXmlChars } from '../../core/xml';
 import { isColorToken, parseFill, serializeFill } from '../fill';
+import { MAX_FONT_SIZE_PX, MIN_FONT_SIZE_PX } from '../frames';
+import { parsePathCommands, serializePath } from '../outline';
 import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_RICHTEXT_PROPS } from '../types';
 
 // Sanity bound on spatial fields. Without a cap one client's corrupt write (say 1e15 from a math bug)
 // freezes every other peer — rough fill cost scales with element area.
 export const MAX_COORD = 1_000_000;
 
-// fontSize feeds line-height math (an arrow label's height = lines × line height), so a hostile
-// value would blow the shared viewBox like an uncapped labelWidth; clamp to the canvas' own range.
-const MIN_FONT_SIZE = 4;
-const MAX_FONT_SIZE = 400;
-
 // Rich text is the first byte-capped string field: one pasted document must not make every peer's read,
 // render and export unbounded. 64 KiB per element, truncated on a UTF-8 boundary. This reader does NOT
 // sanitize the markup — the DOM allowlist needs a DOM, and this module runs in the API Worker too. The
 // mount seam does it instead: ElementLayer (every live/preview/present surface) and the paste planner
-// both run sanitizeToLightEditorHtml, so a torn tag here is a cosmetic loss, never an injection.
-const MAX_HTML_BYTES = 64 * 1024;
+// both run sanitizeToLightEditorHtml.
+export const MAX_HTML_BYTES = 64 * 1024;
+
+// Rich text is kept as stored only when it is editor-shaped (isEditorShaped); anything else is flattened
+// to plain paragraphs. jsdom walks every ancestor of each node it inserts, so the export sanitizer's parse
+// costs depth²: 3,000 nested list levels fit in MAX_HTML_BYTES and held it for 30 s. The LightEditor
+// indents without limit; 64 holds 29 list levels around every mark and a link, where Word and Google Docs
+// stop at 9.
+export const MAX_HTML_DEPTH = 64;
+
+const EDITOR_TAGS = new Set(LIGHT_EDITOR_TAGS);
+// The editor tags whose start tag makes the parser close an open <p>.
+const CLOSES_P = new Set<string>(LIGHT_EDITOR_BLOCK_TAGS);
+
+// A start tag with at most 8 plain attributes, an end tag, or text. No comment, doctype or bare `<` matches.
+// The editor writes 3 at most, on <a>; jsdom dedupes a tag's attributes in quadratic time, so 10k distinct
+// names on one <p> held it ~1 s.
+const HTML_TOKEN =
+    /<([a-z]+)(?:[\t\n\f\r ]+[a-zA-Z_:][-\w:.]*(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|'[^']*'|[^\t\n\f\r "'=<>`]+))?){0,8}[\t\n\f\r ]*\/?>|<\/([a-z]+)[\t\n\f\r ]*>|[^<]+/y;
 
 // An arrow's label is plain text, and both of its dimensions derive from it: the height is the line
 // count times the line height (so a 200k-line label would union a 5M-unit box into the shared viewBox)
@@ -30,10 +45,23 @@ const MAX_HTML_BYTES = 64 * 1024;
 export const MAX_ARROW_LABEL_BYTES = 4 * 1024;
 export const MAX_ARROW_LABEL_LINES = 64;
 
-export type YMapLike = { get(key: string): unknown };
+// A path's work (render, hit test, docking, export) scales with its commands. A valid path is ASCII, so its
+// length is its bytes; the canonical spelling is capped too, so what the reader stores reads back.
+export const MAX_PATH_BYTES = 16 * 1024;
+export const MAX_PATH_COMMANDS = 512;
+
+// A stored record as a Y.Map or a Map holds it; keys lists them for a kind that keeps fields it doesn't know.
+export type YMapLike = { get(key: string): unknown; keys(): Iterable<string> };
 
 export function isYMapLike(value: unknown): value is YMapLike {
-    return typeof value === 'object' && value !== null && 'get' in value && typeof value.get === 'function';
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'get' in value &&
+        typeof value.get === 'function' &&
+        'keys' in value &&
+        typeof value.keys === 'function'
+    );
 }
 
 export function num(v: unknown, fallback: number): number {
@@ -54,14 +82,16 @@ export function size(v: unknown): number {
     return Math.max(0, coord(v));
 }
 
+// fontSize feeds line-height math (an arrow label's height = lines × line height), so a hostile value would blow the
+// shared viewBox like an uncapped labelWidth; clamped to the range every deck reaches. A size in range reads to the bit.
 export function fontSize(v: unknown): number {
-    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, num(v, DEFAULT_FONT_SIZE)));
+    return clampNum(v, MIN_FONT_SIZE_PX, MAX_FONT_SIZE_PX, DEFAULT_FONT_SIZE);
 }
 
 // A font name reaches a CSS declaration list (rich text's style body), where a stray `;` would open a
 // declaration of the writer's choosing. Only an EIGEN_FONTS name passes; the picker writes nothing else.
-export function fontFamily(v: unknown): string {
-    return oneOf(v, EIGEN_FONT_NAMES, DEFAULT_FONT_FAMILY);
+export function fontFamily(v: unknown, fallback = DEFAULT_FONT_FAMILY): string {
+    return oneOf(v, EIGEN_FONT_NAMES, fallback);
 }
 
 // Rich-text typography bounds, shared by the document reader and the paste wire: a hostile value
@@ -76,16 +106,21 @@ export function lineHeightField(v: unknown): number {
 
 // roughjs inputs. A negative strokeWidth reaches SVG as an invalid stroke-width, and an out-of-band
 // roughness or seed turns the generator's output into NaN coordinates.
-export function strokeWidth(v: unknown): number {
-    return clampNum(v, 0, 100, DEFAULT_ELEMENT_PROPS.strokeWidth);
+export function strokeWidth(v: unknown, fallback = DEFAULT_ELEMENT_PROPS.strokeWidth): number {
+    return clampNum(v, 0, 100, fallback);
 }
 
-export function roughness(v: unknown): number {
-    return clampNum(v, 0, 10, DEFAULT_ELEMENT_PROPS.roughness);
+// Undefined unless the value is a finite number, which is then clamped like any stroke width.
+export function optionalStrokeWidth(v: unknown): number | undefined {
+    return typeof v === 'number' && Number.isFinite(v) ? strokeWidth(v) : undefined;
 }
 
-export function seed(v: unknown): number {
-    return clampNum(v, 1, 2 ** 31, DEFAULT_ELEMENT_PROPS.seed);
+export function roughness(v: unknown, fallback = DEFAULT_ELEMENT_PROPS.roughness): number {
+    return clampNum(v, 0, 10, fallback);
+}
+
+export function seed(v: unknown, fallback = DEFAULT_ELEMENT_PROPS.seed): number {
+    return clampNum(v, 1, 2 ** 31, fallback);
 }
 
 export function clampCoord(n: number): number {
@@ -104,8 +139,9 @@ export function cleanStr(v: unknown, fallback: string): string {
 }
 
 // Colors come from the ColorPicker: hex or the 'transparent' sentinel (fill.ts owns the vocabulary).
-// Anything else → the field default; this closes `url(...)` paint-server smuggling into export.
-export function color(v: unknown, fallback: string): string {
+// Anything else → the field default, or null for a chart's automatic color; this closes `url(...)`
+// paint-server smuggling into export.
+export function color<T extends string | null>(v: unknown, fallback: T): string | T {
     return isColorToken(v) ? v : fallback;
 }
 
@@ -126,10 +162,55 @@ export function fillField(v: unknown): string {
     return serializeFill(parseFill(str(v, '')));
 }
 
-// The cap lands on a code-point boundary, not a markup one: a torn tag is repaired by every consumer,
-// which parses the body as HTML before it renders or serializes it.
+// A body that isn't editor-shaped is flattened whole, one paragraph per line of its text, so no parser
+// builds more than the scan counted. Where the byte cap tears a tag at the end of either, it goes.
 export function htmlField(v: unknown): string {
-    return capBytes(cleanStr(v, ''), MAX_HTML_BYTES);
+    const html = capHtmlBytes(cleanStr(v, ''));
+    if (isEditorShaped(html)) return html;
+    return capHtmlBytes(textToParagraphHtml(stripTagsServer(html).replace(/\n+/g, '\n')));
+}
+
+// Editor-shaped: markup every HTML parser builds exactly as written, closing nothing before the body does,
+// so a parse holds MAX_HTML_DEPTH elements at most and no formatting element is rebuilt later. That is
+// only LightEditor tags in plain syntax, every end tag closing the innermost open element, no block or
+// <li> inside an open <p>, <li> only directly in a list, and no <a> inside an <a>. An implied close
+// leaves the formatting elements it pops on jsdom's active list, which rebuilds them for every later
+// paragraph: 64 KiB of such bodies under the depth cap held it for 17 s.
+function isEditorShaped(html: string): boolean {
+    const open: string[] = [];
+    HTML_TOKEN.lastIndex = 0;
+    while (HTML_TOKEN.lastIndex < html.length) {
+        const token = HTML_TOKEN.exec(html);
+        if (!token) return false;
+        const [, start, end] = token;
+        if (start) {
+            if (!EDITOR_TAGS.has(start)) return false;
+            if (CLOSES_P.has(start) && open.includes('p')) return false;
+            if (start === 'li' && open.at(-1) !== 'ul' && open.at(-1) !== 'ol') return false;
+            if (start === 'a' && open.includes('a')) return false;
+            if (start !== 'br' && open.push(start) > MAX_HTML_DEPTH) return false;
+        } else if (end && open.pop() !== end) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Only a truncated body loses its trailing `<…`: an untouched one keeps a bare `<` as text.
+function capHtmlBytes(html: string): string {
+    const capped = capBytes(html, MAX_HTML_BYTES);
+    if (capped === html) return html;
+    const lt = capped.lastIndexOf('<');
+    return lt > capped.lastIndexOf('>') ? capped.slice(0, lt) : capped;
+}
+
+// The canonical `path`, or null for a malformed or oversized one, which the kind drops.
+export function parseNormalizedPath(v: unknown): string | null {
+    if (typeof v !== 'string' || v.length > MAX_PATH_BYTES) return null;
+    const commands = parsePathCommands(v);
+    if (commands === null || commands.length === 0 || commands.length > MAX_PATH_COMMANDS) return null;
+    const path = serializePath(commands);
+    return path.length <= MAX_PATH_BYTES ? path : null;
 }
 
 // Newlines normalize here, not at the consumers, so the line cap and the label's height math count

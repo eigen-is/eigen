@@ -6,7 +6,7 @@ category: Basics
 tags: [self-hosting, install, requirements, server, memory, ports]
 related: [self-hosting/install, self-hosting/get-started]
 order: 20
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 Eigen runs in Docker on one server. This page lists what that server needs before you [install Eigen](/support/self-hosting/install).
@@ -36,7 +36,7 @@ These are the numbers for a small install, measured with one person signing in, 
 
 Exports use the most memory. One sheet exported to PDF took Eigen to about 600 MB, and five PDF exports at once to about 850 MB. Hosting mail adds about 50 MB. The rest of the minimum is for the operating system and Docker.
 
-More people and bigger documents need more memory. The recommended 4 GB leaves room for that.
+More people and bigger documents need more memory. The recommended 4 GB leaves room for that. Eigen converts one file at a time and gives it at most the server's memory, so a file that needs more is refused and the server keeps running. With 4 GB, a spreadsheet of a million cells imports from Excel, but exporting it to Excel can be refused. With 8 GB, it does both.
 
 ## A domain
 

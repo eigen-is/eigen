@@ -1,13 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
-import { elementLayer, layerBoxCss, layerInnerHtml, RICH_TEXT_CLASS, sceneLayers } from '../../vector/scene-layers';
 import {
-    DEFAULT_ARROW_PROPS,
-    DEFAULT_ELEMENT_PROPS,
-    type VectorArrowElement,
-    type VectorImageElement,
-} from '../../vector/types';
-import { richtext, scene, shape } from './element-factories';
+    elementLayer,
+    layerBoxCss,
+    layerContent,
+    layerInnerHtml,
+    layerPrintCss,
+    RICH_TEXT_CLASS,
+    sceneLayers,
+} from '../../vector/scene-layers';
+import type { VectorArrowElement, VectorElement, VectorImageElement } from '../../vector/types';
+import { DEFAULT_ARROW_PROPS, DEFAULT_ELEMENT_PROPS } from '../../vector/types';
+import { arrow, chart, ellipse, image, linear, pie, richtext, scene, shape } from './element-factories';
 
 describe('sceneLayers', () => {
     test('orders by fractional index and carries the element box and opacity', () => {
@@ -95,7 +99,7 @@ describe('sceneLayers', () => {
     });
 
     test('an elbow arrow renders through its scene-derived route, not its stored endpoints', () => {
-        const arrow: VectorArrowElement = {
+        const elbow: VectorArrowElement = {
             ...DEFAULT_ELEMENT_PROPS,
             roughness: 1,
             seed: 0,
@@ -117,12 +121,12 @@ describe('sceneLayers', () => {
             scene([
                 shape({ id: 'a', type: 'rectangle', index: 'a0' }),
                 shape({ id: 'b', type: 'rectangle', index: 'a1', x: 300, y: 200 }),
-                arrow,
+                elbow,
             ]),
         );
         const content = layers[2].content;
         // Rendered without the scene there is no route to derive, so the same arrow draws differently.
-        const unrouted = elementLayer(arrow)?.content;
+        const unrouted = elementLayer(elbow)?.content;
         expect(!('html' in content) && content.svg).not.toBe(unrouted && !('html' in unrouted) && unrouted.svg);
         expect(layers[2].box).toEqual({ x: 100, y: 30, width: 200, height: 160, angle: 0 });
     });
@@ -141,6 +145,27 @@ describe('elementLayer', () => {
         expect(layer?.opacity).toBe(60);
         // The fragment must NOT carry the placing transform — the box does.
         expect(layer && !('html' in layer.content) && layer.content.svg).not.toContain('translate(12 34)');
+    });
+
+    // The live canvas keeps an element's body across a move on the strength of this (ElementLayer).
+    test('every kind draws the same body wherever the element is placed, turned or faded', () => {
+        const kinds: VectorElement[] = [
+            shape({ id: 'r', type: 'rectangle' }),
+            shape({ id: 'd', type: 'diamond' }),
+            ellipse({ id: 'e' }),
+            pie({ id: 'p' }),
+            chart({ id: 'c' }),
+            image({ id: 'i', mediaName: 'a.png' }),
+            richtext({ id: 't', html: '<p>hi</p>' }),
+            linear({ id: 'f', type: 'freedraw' }),
+            linear({ id: 'l', type: 'line' }),
+            arrow({ id: 'a' }),
+        ];
+        const resolveMedia = (name: string) => `/media/${name}`;
+        for (const el of kinds) {
+            const moved = { ...el, x: 210, y: -35, angle: 40, opacity: 30 };
+            expect(layerContent(moved, { resolveMedia })).toEqual(layerContent(el, { resolveMedia }));
+        }
     });
 
     test('an element whose content renders nothing is not a layer', () => {
@@ -238,5 +263,30 @@ describe('layerBoxCss', () => {
         expect(
             layerBoxCss({ box: { x: 1.23456, y: 0, width: 9.87654, height: 1, angle: 7.777 }, opacity: 100 }),
         ).toEqual({ width: '9.88px', height: '1px', transform: 'translate(1.23px,0px) rotate(7.78deg)' });
+    });
+});
+
+// The PDF's box: WeasyPrint lays a page out ignoring transforms, so the origin is top and left there.
+describe('layerPrintCss', () => {
+    const box = { x: 12.5, y: -3.25, width: 40, height: 20, angle: 0 };
+
+    test('the origin rides in top and left, offset by the page origin, with no transform', () => {
+        expect(layerPrintCss({ box, opacity: 100 }, { x: -10, y: -10 })).toEqual({
+            top: '6.75px',
+            left: '22.5px',
+            width: '40px',
+            height: '20px',
+        });
+    });
+
+    test('the rotation alone is a transform, on the default box-centre origin', () => {
+        expect(layerPrintCss({ box: { ...box, angle: 30 }, opacity: 40 }, { x: 0, y: 0 })).toEqual({
+            top: '-3.25px',
+            left: '12.5px',
+            width: '40px',
+            height: '20px',
+            transform: 'rotate(30deg)',
+            opacity: '0.4',
+        });
     });
 });

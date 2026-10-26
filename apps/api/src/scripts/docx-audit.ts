@@ -4,55 +4,92 @@
 // Usage:
 //   bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]
 //   bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>
+//   bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]
 //
-// The importer module exports `docxToPmJson` with from-docx.ts's signature. It runs in a Worker, and the source is read
-// in another, so a hang is cut at the time cap and a crash is a result; every importer is measured by the same code.
-// The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
+// The importer module exports `docxToPmJson` with that function's signature. It runs in a Worker, and the source is
+// read in another, so a hang is cut at the time cap and a crash is a result. Every importer is measured by the same
+// code. The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
+//
+// roundtrip is the docx writer's gate, on the round-trip gate the Office audits share. Each file the reader imports is
+// written by the writer (`--writer`, writeDocx's signature) and imported again. The two eigendoc JSON documents, their
+// bands, page and Normal are compared node by node, a picture by its type and pixel size.
+
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
+import { DOCUMENT_FONT, readFontSize } from '@workspace/lib/constants/fonts';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
+    BAND_ROOTS,
+    bandHasContent,
+    isFigureFrameNode,
+    PROSE_TEXTBLOCKS,
+    pageTwips,
+    twipsToPt,
+} from '@workspace/lib/docs/eigendoc';
+import type { XmlElement } from '../lib/core/xml';
+import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
+import { cssColorToHex } from '../lib/document/colors';
+import { docSchema } from '../lib/document/doc-schema';
+import { readStoredEquation } from '../lib/document/equation';
+import { nodeLook, ownTextLook } from '../lib/document/looks';
+import { lossCounter } from '../lib/document/transform/protocol';
+import type { writeDocx } from '../lib/export/doc/docx/to-docx';
+import type { Fonts, Script } from '../lib/import/doc/docx-fonts';
+import { FONT_SLOTS, fontMark, readFontTable, readTheme } from '../lib/import/doc/docx-fonts';
+import type { docxToPmJson } from '../lib/import/doc/from-docx';
+import { descendants } from '../lib/import/doc/package';
+import { isBodySizedRun } from '../lib/import/doc/paragraphs';
+import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
+import {
     A_NS,
-    BORDER_SIDES,
     C_NS,
-    FLOATING_WRAPS,
-    headingLevel,
     isOn,
-    LINK_THEME_COLORS,
     M_NS,
     MC_NS,
     O_NS,
     PACKAGE_RELATIONSHIPS_NS,
-    PAGE_SECTION_TYPES,
     parseOoxml,
     R_NS,
-    STYLE_NAMES,
     V_NS,
     W_NS,
     W10_NS,
     W14_NS,
     WP_NS,
-} from '../lib/core/ooxml';
+} from '../lib/ooxml/ooxml';
+import { uriReference } from '../lib/ooxml/opc';
 import {
-    trimXmlSpace,
-    XML_NAMESPACE,
-    type XmlElement,
-    xmlAttr,
-    xmlChild,
-    xmlChildren,
-    xmlElements,
-    xmlText,
-} from '../lib/core/xml';
-import { openZip } from '../lib/core/zip';
-import { cssColorToHex } from '../lib/document/colors';
-import { nodeLook } from '../lib/document/looks';
-import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
-import type { docxToPmJson } from '../lib/import/doc/from-docx';
-import { descendants } from '../lib/import/doc/package';
-import { SMALL_PRINT } from '../lib/import/doc/runs';
-import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
+    BORDER_SIDES,
+    FLOATING_WRAPS,
+    headingLevel,
+    LINK_THEME_COLORS,
+    NOTE_SEPARATORS,
+    PAGE_SECTION_TYPES,
+    STYLE_NAMES,
+} from '../lib/ooxml/wordml';
+import { openZip } from '../lib/ooxml/zip';
+import type {
+    DifferenceGroup,
+    Listed,
+    RoundtripDifference,
+    RoundtripGate,
+    RoundtripMeta,
+    RoundtripOptions,
+} from './office-audit';
+import {
+    canonical,
+    chartFields,
+    chartsNotImported,
+    classify,
+    lossCounts,
+    message,
+    officeMedia,
+    roundtripChild,
+    roundtripLine,
+    runRoundtrip as runGate,
+    seconds,
+} from './office-audit';
 
 const FEATURES = [
     ['text', 'Visible text (words)'],
@@ -76,7 +113,7 @@ const FEATURES = [
     ['color', 'Text color (words)'],
     ['highlight', 'Highlight (words)'],
     ['font', 'Font family (words)'],
-    ['small', 'Small text (words)'],
+    ['size', 'Font size (words)'],
     ['caps', 'All caps (words)'],
     ['smallCaps', 'Small caps (words)'],
     ['code', 'Inline code (words)'],
@@ -109,6 +146,7 @@ const FEATURES = [
     ['alignRight', 'Right-aligned paragraphs'],
     ['alignJustify', 'Justified paragraphs'],
     ['footnotes', 'Footnote and endnote references'],
+    ['equations', 'Equations'],
 ] as const;
 
 export type Feature = (typeof FEATURES)[number][0];
@@ -210,7 +248,7 @@ const TITLE_NAMES = new Map<string, TitleType>([
 ]);
 const CODE_BLOCK_STYLES = new Set(CODE_PARAGRAPH_STYLES.map((name) => name.toLowerCase()));
 const CODE_STYLES = new Set(CODE_CHARACTER_STYLES.map((name) => name.toLowerCase()));
-const SKIPPED_NOTES = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
+const SKIPPED_NOTES = new Set<string>(NOTE_SEPARATORS);
 // The link look's colors, apart from the reader's so the audit never grades the reader by itself.
 const LINK_STYLE_COLORS = new Set(['2563EB', '1155CC', '0563C1', '0000FF', '000080']);
 
@@ -225,7 +263,7 @@ const MARKS = new Set<Feature>([
     'color',
     'highlight',
     'font',
-    'small',
+    'size',
     'caps',
     'smallCaps',
     'code',
@@ -445,7 +483,9 @@ function hyperlinkField(instr: string): Link | undefined {
 type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; fields: Field[] };
 
 // styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font or
-// capitals. weightRuns: what bold and size read, as a heading draws its own and leaves its style's other formatting.
+// capitals. weightRuns: what bold reads, as a heading draws its own and leaves its style's other formatting. sizeRuns:
+// the size a run's stands out from, a heading's or a title's style's, which draws its own, or else the body's, as in a
+// heading the reader reads as body text.
 // drawn: the color and italic the paragraph's node draws, a heading level's or a title's, which are no mark and from
 // which a run set apart is one: an upright run in a heading that draws italic is the italic mark it came from.
 type Inline = {
@@ -454,6 +494,7 @@ type Inline = {
     runs: XmlElement[];
     styleRuns: XmlElement[];
     weightRuns: XmlElement[];
+    sizeRuns: XmlElement[];
     drawn: { color?: string; italic?: true };
     marks: boolean;
     link?: Link;
@@ -775,13 +816,32 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         return !color || color === 'AUTO' ? '000000' : color;
     };
     const sizeOf = (sources: XmlElement[]) => Number(val(first(sources, 'sz')) ?? 20);
+    const sizeCsOf = (sources: XmlElement[]) => Number(val(first(sources, 'szCs')) ?? sizeOf(sources));
     // What a run in a plain paragraph looks like: the text a mark stands out from.
     const { runs: plain, indent } = paragraphLook(undefined);
-    const base = {
-        color: colorOf(plain),
-        size: sizeOf(plain),
-        sizeCs: Number(val(first(plain, 'szCs')) ?? sizeOf(plain)),
-        indent,
+    const base = { color: colorOf(plain), indent };
+    // The reader draws a heading or a title of only body-sized runs as body text.
+    const isBodySized = (p: XmlElement, headingRuns: XmlElement[]) => {
+        const faces = descendants(p, W_NS, 'r').flatMap((run) => {
+            const rPr = child(run, 'rPr');
+            const characterRuns = styles
+                .chain(val(child(rPr, 'rStyle')) ?? styles.character)
+                .flatMap((style) => child(style, 'rPr') ?? []);
+            const sources = [...(rPr ? [rPr] : []), ...characterRuns, ...headingRuns];
+            const direct = (local: string) => {
+                const size = val(child(rPr, local));
+                return size === undefined ? undefined : Number(size);
+            };
+            const text = xmlChildren(run, W_NS, 't').map(runText).join('');
+            return facesOf(text, fontsOf(sources), scriptOf(sources))
+                .filter((face) => face.text.trim())
+                .map(({ complex }) =>
+                    complex
+                        ? isBodySizedRun(direct('szCs'), sizeCsOf(headingRuns), sizeCsOf(plain))
+                        : isBodySizedRun(direct('sz'), sizeOf(headingRuns), sizeOf(plain)),
+                );
+        });
+        return faces.length > 0 && faces.every(Boolean);
     };
 
     const runLook = (rPr: XmlElement | undefined, context: Inline): RunLook => {
@@ -815,12 +875,10 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const shading = first(sources, 'shd');
         const fill = shading && xmlAttr(shading, W_NS, 'fill')?.toUpperCase();
         const faces = [...direct, ...characterRuns, ...context.styleRuns];
-        const sized = [...direct, ...characterRuns, ...context.weightRuns];
-        const sizeCs = val(first(sized, 'szCs'));
-        const shape = (bold: string, italic: string, small: boolean): [Feature, boolean][] => [
+        const shape = (bold: string, italic: string, sized: boolean): [Feature, boolean][] => [
             ['bold', toggle(bold, context.weightRuns)],
             ['italic', toggle(italic) !== !!context.drawn.italic],
-            ['small', small],
+            ['size', sized],
         ];
         const common: [Feature, boolean][] = [
             ['underline', underline !== undefined && underline !== 'none'],
@@ -840,11 +898,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         return {
             hidden: toggle('vanish'),
             code: chain.some((style) => CODE_STYLES.has(styleName(style))),
-            marks: set([...shape('b', 'i', sizeOf(sized) <= base.size * SMALL_PRINT), ...common]),
-            complexMarks: set([
-                ...shape('bCs', 'iCs', sizeCs !== undefined && Number(sizeCs) <= base.sizeCs * SMALL_PRINT),
-                ...common,
-            ]),
+            marks: set([...shape('b', 'i', sizeOf(faces) !== sizeOf(context.sizeRuns)), ...common]),
+            complexMarks: set([...shape('bCs', 'iCs', sizeCsOf(faces) !== sizeCsOf(context.sizeRuns)), ...common]),
             fonts: fontsOf(faces),
             script: scriptOf(sources),
         };
@@ -914,12 +969,25 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             blocks(box, { ...context.scope, chain: newChain(), fields: [] });
     };
 
+    // An equation is no text: a word boundary, as on the imported side. An m:oMathPara holds its equations directly.
+    const isMath = (node: XmlElement) => node.ns === M_NS && (node.local === 'oMath' || node.local === 'oMathPara');
+    const equations = (node: XmlElement, context: Inline) => {
+        const count = node.local === 'oMath' ? 1 : xmlChildren(node, M_NS, 'oMath').length;
+        if (visible(context.scope)) add(tally, 'equations', count);
+        space(context);
+    };
+
     const runContent = (container: XmlElement, look: RunLook, context: Inline) => {
         const { fields } = context.scope;
         for (const node of xmlElements(container)) {
             if (node.ns === MC_NS && node.local === 'AlternateContent') {
                 const choice = alternative(node);
                 if (choice) runContent(choice, look, context);
+                continue;
+            }
+            // CT_R holds no math, but the reader reads it there.
+            if (isMath(node)) {
+                equations(node, context);
                 continue;
             }
             if (node.ns !== W_NS) continue;
@@ -992,16 +1060,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 if (choice) inline(choice, context);
                 continue;
             }
-            if (node.ns === M_NS && node.local === 't') {
-                if (visible(context.scope)) text(xmlText(node), context, undefined);
-                continue;
-            }
-            // An equation's objects and runs are words of their own, as the reader reads math as text.
-            if (node.ns === M_NS && node.local === 'oMath') {
-                for (const part of xmlElements(node)) {
-                    inline(part, context);
-                    space(context);
-                }
+            if (isMath(node)) {
+                equations(node, context);
                 continue;
             }
             if (node.ns !== W_NS) {
@@ -1055,9 +1115,12 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             caption ||
             scope.note ||
             descendants(element, W14_NS, 'checkbox').length > 0;
-        const numbered = look.numId && look.numId !== '0' ? numberItem(look.numId, look.ilvl) : undefined;
+        const { numId } = look;
+        const listed = numId !== undefined && numId !== '0';
+        const numbered = listed ? numberItem(numId, look.ilvl) : undefined;
         // A heading can't stand in an Eigen list: Word shows its number as text, which survives as text or not at all.
         const label = look.heading !== undefined && numbered?.ordered ? numbered.label : undefined;
+        const sized = (look.heading !== undefined || !!look.title) && (listed || !isBodySized(element, look.runs));
         const current: Paragraph = {
             spans: [...(label ? [{ text: label, marks: [] }] : []), ...chain.carry],
             image: false,
@@ -1098,6 +1161,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             runs: structural && look.heading === undefined ? defaults : look.runs,
             styleRuns: look.runs,
             weightRuns: structural ? defaults : look.runs,
+            // A note draws at its style's size, as a heading at its own.
+            sizeRuns: sized || scope.note ? look.runs : plain,
             drawn: look.heading ? nodeLook('heading', look.heading) : nodeLook(look.title ?? 'paragraph'),
             marks: !look.code && !caption,
         });
@@ -1255,7 +1320,8 @@ const MARK_FEATURES = new Map<string | undefined, Feature>([
     ['subscript', 'subscript'],
     ['superscript', 'superscript'],
     ['highlight', 'highlight'],
-    ['small', 'small'],
+    // The editor draws Small at its size, which the writer writes.
+    ['small', 'size'],
     ['code', 'code'],
     ['link', 'link'],
 ]);
@@ -1265,14 +1331,21 @@ const NUMBER_LABEL = /^\s*(?:\d+(?:\.\d+)*[.)]?|\(?(?:[a-z]+|[A-Z]+)[.)])\s/;
 
 type Place = { depth: number; table: boolean; quote: boolean; align?: unknown };
 
-export function auditImported(json: JSONContent): Tally {
+// normalFont: the doc's Normal font, which a word without a font mark draws in.
+export function auditImported(json: JSONContent, normalFont = DOCUMENT_FONT): Tally {
     const tally = newTally();
     const textblock = (node: JSONContent, align: unknown) => {
         const spans: Span[] = [];
         const space = () => spans.push({ text: ' ', marks: [] });
         let figure = false;
-        let footnoteHref: unknown;
         for (const inline of node.content ?? []) {
+            // A note's paragraphs are paragraphs of their own; its number is no text.
+            if (inline.type === 'footnote') {
+                add(tally, 'footnotes');
+                space();
+                for (const paragraph of inline.content ?? []) textblock(paragraph, undefined);
+                continue;
+            }
             if (inline.type === 'figure') {
                 const attrs = inline.attrs ?? {};
                 space();
@@ -1288,24 +1361,17 @@ export function auditImported(json: JSONContent): Tally {
                 else figure = true;
                 continue;
             }
+            if (inline.type === 'equation') add(tally, 'equations');
             if (inline.type !== 'text') {
                 space();
                 continue;
             }
             const value = inline.text ?? '';
             const marks = inline.marks ?? [];
-            const href = marks.find((mark) => mark.type === 'link')?.attrs?.['href'];
-            // A footnote reference with no node of its own: a superscript link into the document. Its marker is no text.
-            const reference =
-                typeof href === 'string' && href.startsWith('#') && marks.some((mark) => mark.type === 'superscript');
-            if (reference && href !== footnoteHref) add(tally, 'footnotes');
-            footnoteHref = reference ? href : undefined;
-            if (reference) {
-                space();
-                continue;
-            }
             const features: Feature[] = [];
-            let font: string | undefined;
+            const family = marks.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'];
+            const font = fontMark(typeof family === 'string' ? family : normalFont);
+            if (font) features.push('font');
             for (const mark of marks) {
                 const attrs = mark.attrs ?? {};
                 const feature = MARK_FEATURES.get(mark.type);
@@ -1313,8 +1379,7 @@ export function auditImported(json: JSONContent): Tally {
                 if (mark.type !== 'textStyle') continue;
                 const color = attrs['color'];
                 if (typeof color === 'string' && color && cssColorToHex(color) !== '000000') features.push('color');
-                font = typeof attrs['fontFamily'] === 'string' ? fontMark(attrs['fontFamily']) : undefined;
-                if (font) features.push('font');
+                if (readFontSize(attrs['fontSize']) !== undefined) features.push('size');
                 if (attrs['caps'] === 'all') features.push('caps');
                 if (attrs['caps'] === 'small') features.push('smallCaps');
             }
@@ -1493,10 +1558,6 @@ function percent(matched: number, source: number): string {
     return source > 0 ? `${((matched / source) * 100).toFixed(1)}%` : '–';
 }
 
-function seconds(ms: number): string {
-    return `${(ms / 1000).toFixed(1)} s`;
-}
-
 function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
     const rows = aggregate(results);
     const text = rows.get('text');
@@ -1523,7 +1584,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        `Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark, a link to a bookmark alone counting as no link, its link style drawn but in a table of contents; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most ${SMALL_PRINT * 100}% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.`,
+        `Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark, a link to a bookmark alone counting as no link, its link style drawn but in a table of contents; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; font size words in another size than it, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.`,
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), the text of a SmartArt and the title of a chart, which live in parts of their own, headers, footers and comments.',
         '',
@@ -1656,13 +1717,11 @@ type WorkerRequest =
 type WorkerReply =
     | { kind: 'loaded' }
     | { kind: 'audited'; source: SourceTally; ms: number }
-    | { kind: 'imported'; json: JSONContent; images: number; ms: number }
+    | { kind: 'imported'; json: JSONContent; font: string; images: number; ms: number }
     | { kind: 'failed'; error: string; ms: number };
 
 // What a request comes to: the worker's reply, or the worker cut at the cap or gone.
 type Outcome = WorkerReply | { kind: 'timeout' } | { kind: 'died'; error: string };
-
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 function isSourceTally(value: unknown): value is SourceTally {
     return (
@@ -1811,7 +1870,7 @@ export async function runAudit(options: {
             ]);
             const source = audited.kind === 'audited' ? audited.source : undefined;
             const sourceError = source ? undefined : 'error' in audited ? audited.error : audited.kind;
-            const imported = outcome.kind === 'imported' ? auditImported(outcome.json) : newTally();
+            const imported = outcome.kind === 'imported' ? auditImported(outcome.json, outcome.font) : newTally();
             const result: FileResult = {
                 file,
                 bytes: size,
@@ -1856,6 +1915,440 @@ export async function runAudit(options: {
     return meta;
 }
 
+// ── Round trip: the import, our export and its import again ─────────────────────────────────────────────────────
+
+type Imported = ReturnType<typeof docxToPmJson>;
+
+// A picture as the doc shows it: its type and its size in pixels, none for one sharp can't read.
+type Picture = { contentType: string; width?: number; height?: number };
+
+// What the two imports hold, the first with its textblocks split as the writer splits them, each picture by its media
+// name, and the media the export was handed, by the first import's name.
+export type DocxRoundtripContext = {
+    a: Imported;
+    b: Imported;
+    pictures: { a: ReadonlyMap<string, Picture>; b: ReadonlyMap<string, Picture> };
+    prepared: ReadonlyMap<string, Picture>;
+    // The places of the captions the writer kept for a figure it had no picture for.
+    captions?: ReadonlySet<string>;
+};
+
+type Pictures = DocxRoundtripContext['pictures'];
+
+const entries = (value: unknown) =>
+    new Map<string, unknown>(value && typeof value === 'object' ? Object.entries(value) : []);
+
+// A node's types and text, a figure's caption with them: what pairs it with its copy.
+const nodeKey = (node: JSONContent): string =>
+    node.text ??
+    `${node.type}${node.type === 'figure' ? `[${node.attrs?.['caption'] ?? ''}]` : ''}(${(node.content ?? []).map(nodeKey).join(',')})`;
+
+// Past this many pairs a list of children pairs by position.
+const MAX_ALIGNED = 4_000_000;
+
+type Step = [number, number] | { x: JSONContent[]; y: JSONContent[]; at: number };
+
+// The children paired as the longest run of the same key in order; between two pairs, a stretch as long on both sides
+// pairs by position, and one that isn't is a single difference of blocks.
+function align(a: JSONContent[], b: JSONContent[]): Step[] {
+    const [keysA, keysB] = [a.map(nodeKey), b.map(nodeKey)];
+    let start = 0;
+    while (start < a.length && start < b.length && keysA[start] === keysB[start]) start++;
+    let end = 0;
+    while (end < a.length - start && end < b.length - start && keysA[a.length - 1 - end] === keysB[b.length - 1 - end])
+        end++;
+    const [n, m] = [a.length - start - end, b.length - start - end];
+    const pairs: [number, number][] = [];
+    for (let i = 0; i < start; i++) pairs.push([i, i]);
+    if (n * m <= MAX_ALIGNED) {
+        const longest = new Uint32Array((n + 1) * (m + 1));
+        for (let i = n - 1; i >= 0; i--)
+            for (let j = m - 1; j >= 0; j--)
+                longest[i * (m + 1) + j] =
+                    keysA[start + i] === keysB[start + j]
+                        ? longest[(i + 1) * (m + 1) + j + 1] + 1
+                        : Math.max(longest[(i + 1) * (m + 1) + j], longest[i * (m + 1) + j + 1]);
+        for (let i = 0, j = 0; i < n && j < m; ) {
+            if (keysA[start + i] === keysB[start + j]) pairs.push([start + i++, start + j++]);
+            else if (longest[(i + 1) * (m + 1) + j] >= longest[i * (m + 1) + j + 1]) i++;
+            else j++;
+        }
+    }
+    for (let k = end; k > 0; k--) pairs.push([a.length - k, b.length - k]);
+    const steps: Step[] = [];
+    let [i, j] = [0, 0];
+    for (const [pi, pj] of [...pairs, [a.length, b.length]]) {
+        const [x, y] = [a.slice(i, pi), b.slice(j, pj)];
+        if (x.length === y.length) for (let k = 0; k < x.length; k++) steps.push([i + k, j + k]);
+        else steps.push({ x, y, at: i });
+        if (pi < a.length) steps.push([pi, pj]);
+        [i, j] = [pi + 1, pj + 1];
+    }
+    return steps;
+}
+
+// Node by node, children aligned: a node's type, each of its attrs and marks, and its text; a figure's media by the
+// picture it names, as an import names its media afresh. A node of another type is a difference of the two nodes.
+function diffContent(a: JSONContent[], b: JSONContent[], at: string, pictures: Pictures): RoundtripDifference[] {
+    const differences: RoundtripDifference[] = [];
+    const note = (feature: string, place: string, x: unknown, y: unknown) => {
+        if (canonical(x) !== canonical(y)) differences.push({ feature, at: place, a: x, b: y });
+    };
+    const walk = (x: JSONContent, y: JSONContent, place: string) => {
+        if (x.type !== y.type) {
+            differences.push({ feature: 'node', at: place, a: x, b: y });
+            return;
+        }
+        const type = x.type ?? '';
+        const attrs = (node: JSONContent) => (node.type === 'chart' ? chartFields(node.attrs ?? {}) : node.attrs);
+        const [left, right] = [entries(attrs(x)), entries(attrs(y))];
+        for (const key of new Set([...left.keys(), ...right.keys()])) {
+            if (type === 'figure' && key === 'mediaName') {
+                const picture = (side: ReadonlyMap<string, Picture>, name: unknown) =>
+                    typeof name === 'string' ? (side.get(name) ?? null) : name;
+                note('figure media', place, picture(pictures.a, left.get(key)), picture(pictures.b, right.get(key)));
+            } else note(`${type} ${key}`, place, left.get(key), right.get(key));
+        }
+        if (x.text !== undefined || y.text !== undefined) note('text', place, x.text, y.text);
+        const marks = (node: JSONContent) => new Map((node.marks ?? []).map((mark) => [mark.type, mark.attrs ?? {}]));
+        const [marksA, marksB] = [marks(x), marks(y)];
+        for (const mark of new Set([...marksA.keys(), ...marksB.keys()]))
+            note(`mark ${mark}`, place, marksA.get(mark), marksB.get(mark));
+        children(x.content ?? [], y.content ?? [], place);
+    };
+    const children = (x: JSONContent[], y: JSONContent[], place: string) => {
+        for (const step of align(x, y)) {
+            if (Array.isArray(step)) walk(x[step[0]], y[step[1]], `${place}.${step[0]}`);
+            else differences.push({ feature: 'blocks', at: `${place}.${step.at}`, a: step.x, b: step.y });
+        }
+    };
+    children(a, b, at);
+    return differences;
+}
+
+// The doc's body and bands, its page and its Normal key by key.
+export function diffDocs(a: Imported, b: Imported, pictures: Pictures): RoundtripDifference[] {
+    const differences: RoundtripDifference[] = [];
+    const keyed = (prefix: string, x: object, y: object) => {
+        const [left, right] = [entries(x), entries(y)];
+        for (const key of new Set([...left.keys(), ...right.keys()])) {
+            const [valueA, valueB] = [left.get(key), right.get(key)];
+            if (canonical(valueA) !== canonical(valueB))
+                differences.push({ feature: `${prefix} ${key}`, at: '', a: valueA, b: valueB });
+        }
+    };
+    keyed('page', a.page, b.page);
+    keyed('normal', a.style, b.style);
+    differences.push(...diffContent(a.json.content ?? [], b.json.content ?? [], 'body', pictures));
+    for (const root of BAND_ROOTS) {
+        const [x, y] = [a.bands[root], b.bands[root]];
+        if (x && y) differences.push(...diffContent(x.content ?? [], y.content ?? [], root, pictures));
+        else if (x || y) differences.push({ feature: 'band', at: root, a: x?.type, b: y?.type });
+    }
+    return differences;
+}
+
+// The node at a difference's place in the first import, its root's children counted from there.
+function nodeAt(imported: Imported, at: string): JSONContent | undefined {
+    const [root, ...path] = at.split('.');
+    const band = BAND_ROOTS.find((name) => name === root);
+    const start = root === 'body' ? imported.json : band && imported.bands[band];
+    return path.reduce<JSONContent | undefined>((node, index) => node?.content?.[Number(index)], start);
+}
+
+const isBlockFigure = (node: JSONContent) =>
+    isFigureFrameNode(node.type) && node.attrs?.['layout'] !== 'wrap-left' && node.attrs?.['layout'] !== 'wrap-right';
+
+// Adjacent text of the same marks as one node, as the schema joins it.
+function joined(nodes: JSONContent[]): JSONContent[] {
+    const out: JSONContent[] = [];
+    for (const node of nodes) {
+        const last = out.at(-1);
+        if (last?.type === 'text' && node.type === 'text' && canonical(last.marks) === canonical(node.marks))
+            out[out.length - 1] = { ...last, text: `${last.text}${node.text}` };
+        else out.push(node);
+    }
+    return out;
+}
+
+// The first import as the writer lays it out (blocksOf and figureOf in export/doc/docx/), each change a difference of its own:
+// a textblock's block figures each stand in a paragraph of their own and a display equation in a piece of its own, the
+// pieces sharing the textblock's margins, the first the one above, the last the one below, no space at a split; a wrapped
+// figure floats before the piece that holds it, which the reader reads back at its start; a figure the export has no
+// picture for writes its caption alone, as a paragraph, or nothing. `captions` holds those paragraphs' places.
+export function asWritten(
+    imported: Imported,
+    prepared: ReadonlyMap<string, Picture>,
+): { imported: Imported; changes: RoundtripDifference[]; captions: Set<string> } {
+    const changes: RoundtripDifference[] = [];
+    const captions = new Set<string>();
+    const paragraphAttrs = docSchema().nodeFromJSON({ type: 'paragraph' }).toJSON().attrs;
+    const unwritten = (node: JSONContent) => node.type === 'figure' && !prepared.has(String(node.attrs?.['mediaName']));
+    // nested: inside a list, a quote or a cell, which owns the spacing of what it holds.
+    const blocks = (nodes: JSONContent[], at: string, nested: boolean): JSONContent[] => {
+        const out: JSONContent[] = [];
+        for (const [index, node] of nodes.entries()) {
+            const place = `${at}.${out.length}`;
+            if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) {
+                out.push(node.content ? { ...node, content: blocks(node.content, place, true) } : node);
+                continue;
+            }
+            const pieces: JSONContent[] = [];
+            // The paragraphs a block figure or a left-out picture's caption stands in, which take none of its margins.
+            const fresh = new Set<JSONContent>();
+            let inline: JSONContent[] = [];
+            const floating: JSONContent[] = [];
+            let split = false;
+            const flush = () => {
+                pieces.push({ ...node, content: joined([...floating.splice(0), ...inline]) });
+                inline = [];
+            };
+            for (const child of node.content ?? []) {
+                if (isFigureFrameNode(child.type) && unwritten(child)) {
+                    changes.push({ feature: 'picture left out', at: place, a: child, b: undefined });
+                    const caption = child.attrs?.['caption'];
+                    if (inline.length > 0) flush();
+                    if (typeof caption === 'string' && caption) {
+                        captions.add(`${at}.${out.length + pieces.length}`);
+                        const piece = {
+                            type: 'paragraph',
+                            attrs: paragraphAttrs,
+                            content: [{ type: 'text', text: caption }],
+                        };
+                        fresh.add(piece);
+                        pieces.push(piece);
+                    }
+                } else if (isFigureFrameNode(child.type) && !isBlockFigure(child)) {
+                    if (inline.some((held) => held.type !== 'text' || held.text?.trim()))
+                        changes.push({ feature: 'wrapped figure moved', at: place, a: child, b: undefined });
+                    floating.push(child);
+                } else if (isBlockFigure(child)) {
+                    if (inline.length > 0) flush();
+                    // The first piece takes the space above its textblock, which the reader keeps on a figure's paragraph
+                    // past the figure's own margin. A paragraph's own space is its spaceBefore, a heading's or a title's
+                    // its look's too. The reader keeps it only past the space the textblock above leaves below it.
+                    const own = node.attrs?.['spaceBefore'];
+                    const look = ownTextLook(
+                        node.type ?? '',
+                        Number(node.attrs?.['level'] ?? 1),
+                        imported.style,
+                        false,
+                    );
+                    const above =
+                        typeof own === 'number' ? own : node.type === 'paragraph' ? 0 : twipsToPt(look?.before ?? 0);
+                    // A band writes no space above its first block, and a paragraph draws the Normal's anyway.
+                    const floor = node.type === 'paragraph' ? imported.style.spaceBefore : 0;
+                    const body = at.startsWith('body');
+                    const below = spaceBelowAsWritten(nodes[index - 1], imported.style);
+                    const kept = body && !nested && pieces.length === 0 && above > Math.max(floor, below);
+                    const spaceBefore = kept ? above : null;
+                    const piece = { type: 'paragraph', attrs: { ...paragraphAttrs, spaceBefore }, content: [child] };
+                    fresh.add(piece);
+                    pieces.push(piece);
+                    split = true;
+                } else if (child.type === 'equation' && child.attrs?.['display'] === true) {
+                    if (inline.length > 0) flush();
+                    inline.push(child);
+                    flush();
+                    split = true;
+                } else inline.push(child);
+            }
+            if (inline.length > 0 || floating.length > 0 || !pieces.some((piece) => piece.type === node.type)) flush();
+            if (pieces.length === 1 && pieces[0].type === node.type) {
+                const [piece] = pieces;
+                const same = canonical(piece.content ?? []) === canonical(node.content ?? []);
+                out.push(same ? node : { ...piece, content: piece.content?.length ? piece.content : undefined });
+                continue;
+            }
+            if (split) changes.push({ feature: 'textblock split', at: place, a: node.type, b: pieces.length });
+            for (const [i, piece] of pieces.entries()) {
+                if (fresh.has(piece)) {
+                    out.push(piece);
+                    continue;
+                }
+                // No space at a split, so the pieces draw as one paragraph: a 0 where the node draws one, else none, and
+                // none at all when nested.
+                const attrs = { ...piece.attrs };
+                const level = typeof attrs['level'] === 'number' ? attrs['level'] : 1;
+                const look = nested ? undefined : ownTextLook(piece.type ?? '', level, imported.style, false);
+                if (i > 0) attrs['spaceBefore'] = look?.before ? 0 : null;
+                if (i < pieces.length - 1) attrs['spaceAfter'] = look?.after ? 0 : null;
+                out.push({ ...piece, attrs, content: piece.content?.length ? piece.content : undefined });
+            }
+        }
+        return out;
+    };
+    const bands = Object.fromEntries(
+        Object.entries(imported.bands).map(([root, band]) => [
+            root,
+            { ...band, content: blocks(band.content ?? [], root, false) },
+        ]),
+    );
+    return {
+        imported: {
+            ...imported,
+            json: { ...imported.json, content: blocks(imported.json.content ?? [], 'body', false) },
+            bands,
+        },
+        changes,
+        captions,
+    };
+}
+
+// The space a textblock leaves below it as the writer writes it, in pt: its own space after, else its style's. Any other
+// block counts none.
+function spaceBelowAsWritten(node: JSONContent | undefined, style: Imported['style']): number {
+    if (!node || !PROSE_TEXTBLOCKS.includes(node.type ?? '')) return 0;
+    const own = node.attrs?.['spaceAfter'];
+    if (typeof own === 'number') return own;
+    if (node.type === 'paragraph') return style.spaceAfter;
+    return twipsToPt(ownTextLook(node.type ?? '', Number(node.attrs?.['level'] ?? 1), style, false)?.after ?? 0);
+}
+
+// The differences the writer explains, each with why it is no loss or a loss the writer accepts. A difference none
+// matches is unlisted, and fails the gate.
+export const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = [
+    {
+        kind: 'figures and display equations split their textblock',
+        why: 'Word holds a picture in a paragraph and a display equation in a paragraph of their own, so the writer splits the textblock around each block figure and display equation, the pieces sharing its margins',
+        matches: ({ feature }) => feature === 'textblock split',
+    },
+    {
+        kind: 'wrapped figures float before their paragraph',
+        why: "A wrapped figure is written as a floating frame before the paragraph that holds it, as Word anchors one, so it comes back at that paragraph's start",
+        matches: ({ feature }) => feature === 'wrapped figure moved',
+    },
+    {
+        kind: 'unreadable pictures left out',
+        why: "A picture the export can't re-encode as PNG or JPEG (a WMF, an EMF, a damaged file) is left out of the docx, as of the HTML and PDF exports; its caption stays as a paragraph",
+        matches: ({ feature, at }, { captions }) =>
+            feature === 'picture left out' ||
+            [...(captions ?? [])].some((caption) => at === caption || at.startsWith(`${caption}.`)),
+    },
+    {
+        kind: 'pictures re-encoded',
+        why: 'The export re-encodes a raster as PNG (a lossless source) or JPEG, no larger than OFFICE_IMAGE_MAX_SIZE, so its type or size comes back as the export made it',
+        matches: ({ feature, at, b }, context) => {
+            const name = nodeAt(context.a, at)?.attrs?.['mediaName'];
+            return feature === 'figure media' && canonical(b) === canonical(context.prepared.get(String(name)));
+        },
+    },
+    {
+        kind: 'bands left empty',
+        why: 'A header or footer that held only a picture the export left out comes back empty, and an empty band is no band to the reader',
+        matches: ({ feature, at, b }, { a }) => {
+            const band = a.bands[BAND_ROOTS.find((root) => root === at) ?? 'header'];
+            return (
+                feature === 'band' &&
+                b === undefined &&
+                band !== undefined &&
+                !bandHasContent(docSchema().nodeFromJSON(band), readStoredEquation)
+            );
+        },
+    },
+    {
+        kind: 'page in whole twips',
+        why: "The page's size and margins are written in whole twips, Word's unit, so a size in mm comes back to the twip",
+        matches: ({ feature }, { a, b }) =>
+            feature.startsWith('page ') && canonical(pageTwips(a.page)) === canonical(pageTwips(b.page)),
+    },
+    {
+        kind: 'link targets as URI references',
+        why: "A link's target is written as a relationship's URI, so a character a URI can't hold comes back escaped",
+        matches: ({ feature, a, b }) => {
+            const [x, y] = [entries(a), entries(b)];
+            const href = x.get('href');
+            return (
+                feature === 'mark link' &&
+                typeof href === 'string' &&
+                y.get('href') === uriReference(href) &&
+                canonical({ ...Object.fromEntries(x), href: null }) ===
+                    canonical({ ...Object.fromEntries(y), href: null })
+            );
+        },
+    },
+];
+
+export function classifyDocx(context: DocxRoundtripContext): DifferenceGroup[] {
+    const { imported, changes, captions } = asWritten(context.a, context.prepared);
+    return classify([...changes, ...diffDocs(imported, context.b, context.pictures)], DOCX_LISTED, {
+        ...context,
+        a: imported,
+        captions,
+    });
+}
+
+// Each picture's type and size as sharp reads it.
+async function picturesOf(media: { name: string; contentType: string; data: ArrayBuffer | Uint8Array }[]) {
+    const { default: sharp } = await import('sharp');
+    const pictures = new Map<string, Picture>();
+    for (const { name, contentType, data } of media) {
+        const { width, height } = await sharp(new Uint8Array(data))
+            .metadata()
+            .catch(() => ({ width: undefined, height: undefined }));
+        pictures.set(name, { contentType, ...(width && height && { width, height }) });
+    }
+    return pictures;
+}
+
+const DOCUMENT = /\.do[ct][xm](?![a-z0-9])/i;
+const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/doc/docx/to-docx.ts');
+
+function isWriter(value: unknown): value is typeof writeDocx {
+    return typeof value === 'function';
+}
+
+const DOCX_GATE: RoundtripGate = {
+    format: 'docx',
+    script: import.meta.path,
+    pattern: DOCUMENT,
+    noun: 'documents',
+    writer: DEFAULT_WRITER,
+    listed: DOCX_LISTED,
+};
+
+// The round trip's child: the file imported, written by our writer with its pictures prepared as an export prepares
+// them, pasted pictures drawn as the export draws them, imported again, and the two imports compared.
+async function docxRoundtripChild(
+    file: string,
+    options: { writer: string; reports: string; dump?: string },
+): Promise<void> {
+    const { docxToPmJson: read } = await import('../lib/import/doc/from-docx');
+    const { pastedFigureMedia } = await import('../lib/export/doc/docx/drawings');
+    const module: unknown = await import(options.writer);
+    const write = typeof module === 'object' && module !== null && 'writeDocx' in module && module.writeDocx;
+    if (!isWriter(write)) throw new Error(`${options.writer} exports no writeDocx`);
+    await roundtripChild(options, async (step) => {
+        const data = Buffer.from(await Bun.file(file).arrayBuffer());
+        const a = await step('import', () => read(data));
+        const losses = lossCounter();
+        let media: Awaited<ReturnType<typeof officeMedia>> = [];
+        const bytes = await step('export', async () => {
+            const drawn = await pastedFigureMedia([a.json, ...Object.values(a.bands)]);
+            media = await officeMedia(a.media, drawn);
+            return write(a, { title: path.basename(file), media, lost: losses.lost });
+        });
+        const b = await step('reimport', () => read(Buffer.from(bytes)));
+        const groups = await step('compare', async () =>
+            classifyDocx({
+                a,
+                b,
+                pictures: { a: await picturesOf(a.media), b: await picturesOf(b.media) },
+                prepared: await picturesOf(media),
+            }),
+        );
+        return {
+            warnings: lossCounts(losses.warnings()),
+            groups,
+            charts: chartsNotImported(a.warnings, [a.json, a.bands]),
+        };
+    });
+}
+
+export function runRoundtrip(options: RoundtripOptions): Promise<RoundtripMeta> {
+    return runGate(DOCX_GATE, options);
+}
+
 declare var self: Worker;
 
 // The worker side: reads a source, or loads the importer once and then imports one file per message.
@@ -1882,11 +2375,13 @@ if (!Bun.isMainThread) {
                 return;
             }
             if (!importer) throw new Error('no importer loaded');
-            const { json, images } = await importer(Buffer.from(request.bytes));
+            // An importer from before the doc's Normal returns no style: its text draws in the document font.
+            const { json, media, style } = await importer(Buffer.from(request.bytes));
             postMessage({
                 kind: 'imported',
                 json,
-                images: images.length,
+                font: style?.font ?? DOCUMENT_FONT,
+                images: media.length,
                 ms: performance.now() - started,
             } satisfies WorkerReply);
         } catch (error) {
@@ -1908,9 +2403,27 @@ if (import.meta.main && Bun.isMainThread) {
             importer: { type: 'string' },
             name: { type: 'string' },
             timeout: { type: 'string' },
+            writer: { type: 'string' },
+            'max-rss': { type: 'string' },
+            reports: { type: 'string' },
+            dump: { type: 'string' },
         },
     });
-    if (positionals[0] === 'compare' && positionals.length === 3) {
+    const [command, ...rest] = positionals;
+    if (command === 'roundtrip-child' && rest.length === 1 && values.writer && values.reports) {
+        await docxRoundtripChild(rest[0], { writer: values.writer, reports: values.reports, dump: values.dump });
+    } else if (command === 'roundtrip' && rest.length > 0 && values.out) {
+        const meta = await runRoundtrip({
+            corpora: rest,
+            out: values.out,
+            writer: values.writer,
+            dump: values.dump,
+            timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
+            maxRssMb: values['max-rss'] ? Number(values['max-rss']) : undefined,
+        });
+        console.log(`${roundtripLine(meta)}: ${path.join(values.out, 'summary.md')}`);
+        if (!meta.pass) process.exit(1);
+    } else if (command === 'compare' && positionals.length === 3) {
         console.log(compareRuns(positionals[1], positionals[2]));
     } else if (positionals.length === 1 && values.out) {
         const meta = await runAudit({
@@ -1925,7 +2438,11 @@ if (import.meta.main && Bun.isMainThread) {
         );
     } else {
         console.error(
-            'Usage: bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]\n       bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>',
+            [
+                'Usage: bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]',
+                '       bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>',
+                '       bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]',
+            ].join('\n'),
         );
         process.exit(1);
     }

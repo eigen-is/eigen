@@ -11,76 +11,55 @@
 // a stroke, and every kind is drawn by roughjs. What a capability cannot express — rich text's
 // typography, the image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI.
 
-import type { Fill, FillPaint } from '@workspace/lib/types/background';
+import { isInlineSketchCapped, readChartSpec } from '@workspace/lib/charts';
+import type { Fill } from '@workspace/lib/types/background';
+import type {
+    ArrangeOp,
+    Box,
+    Corners,
+    NewVectorElement,
+    VectorArrowElement,
+    VectorElement,
+    VectorElementPatch,
+    VectorLinearElement,
+    ZOp,
+} from '@workspace/lib/vector';
 import {
-    type ArrangeOp,
-    type Box,
-    type Corners,
     capabilitiesOf,
     computeArrange,
     EDGES_OPTIONS,
-    type FillStyle,
     isLinearElement,
-    isTransparentFill,
     parseFill,
     resizeLinear,
-    STROKE_WIDTH_OPTIONS,
-    type StrokeStyle,
     serializeFill,
-    TRANSPARENT_FILL,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorLinearElement,
 } from '@workspace/lib/vector';
 import {
     AlignSection,
-    BackgroundFillBlock,
-    ColorRow,
     getMergedValue,
-    isMixed,
+    holdCapture,
     MergedSelect,
     MergedSlider,
-    type MergedValue,
-    numToStr,
+    PaintSections,
     PropertiesPanel,
     PropertyGestureContext,
     PropertyRow,
     PropertySection,
+    sealed,
     TransformSection,
-    type ZOp,
     ZOrderButtons,
 } from '@workspace/ui/components/properties-panel';
-import { type ReactNode, useCallback } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback } from 'react';
 import type * as Y from 'yjs';
-import { applyZOrder } from './hooks/selection-ops';
-import { holdCapture, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
+import { applyZOrder, convertElementToShapes } from './hooks/selection-ops';
 import { ELEMENT_KIND_UI } from './kinds';
 
-// Discrete presets, the Excalidraw constants: strokeWidth 1/2/4 (STROKE_WIDTH_OPTIONS,
-// shared from lib), roughness 0/1/2.
-const ROUGHNESS_OPTIONS: { value: string; label: string }[] = [
-    { value: '0', label: 'Architect' },
-    { value: '1', label: 'Artist' },
-    { value: '2', label: 'Cartoonist' },
-];
 // The box kinds' corner treatment — a different question from a shaft's curvature, hence its own row.
 const CORNERS_OPTIONS: { value: Corners; label: string }[] = [
     { value: 'straight', label: 'Straight' },
     { value: 'curved', label: 'Curved' },
     { value: 'round', label: 'Round' },
 ];
-const STROKE_STYLE_OPTIONS: { value: StrokeStyle; label: string }[] = [
-    { value: 'solid', label: 'Solid' },
-    { value: 'dashed', label: 'Dashed' },
-    { value: 'dotted', label: 'Dotted' },
-];
-const FILL_STYLE_OPTIONS: { value: FillStyle; label: string }[] = [
-    { value: 'solid', label: 'Solid' },
-    { value: 'hachure', label: 'Hachure' },
-    { value: 'cross-hatch', label: 'Cross-hatch' },
-    { value: 'zigzag', label: 'Zigzag' },
-];
-
 // A width/height change on a linear element must rescale its points through resizeLinear, not
 // overwrite the box; the box fills each unset field from the element so x/y/angle-only changes pass through.
 function resizeLinearTo(el: VectorLinearElement | VectorArrowElement, patch: Partial<Box>) {
@@ -95,10 +74,14 @@ function resizeLinearTo(el: VectorLinearElement | VectorArrowElement, patch: Par
 
 type CanvasPropertiesPanelProps = {
     // The elements the canvas shows — z-order reorders the selection relative to the rest
-    // (computeZOrder needs both), so in frame mode this is that frame's elements, not the whole scene.
+    // (zOrderKeys needs both), so in frame mode this is that frame's elements, not the whole scene.
     elements: VectorElement[];
     selectedElements: VectorElement[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
+    reorderElements: (ids: string[], selectedIds: string[], op: ZOp) => void;
+    // A kind section's Convert to shapes: the doc's replace, and the selection the new elements take.
+    replaceElement: (id: string, partials: NewVectorElement[]) => string[];
+    setSelectedIds: (ids: string[]) => void;
     undoManager: Y.UndoManager | null;
     // Panel title with nothing selected; defaults to the canvas.
     emptyTitle?: string;
@@ -110,17 +93,23 @@ type CanvasPropertiesPanelProps = {
     // ObjectTransform resizeMode share one ephemeral setting.
     aspectLocked: boolean;
     onAspectLockChange: (locked: boolean) => void;
+    // The deck's physical width in pt, so its text sizes read in pt; a drawing passes none and reads px.
+    slideWidth?: number;
 };
 
 export function CanvasPropertiesPanel({
     elements,
     selectedElements,
     updateElements,
+    reorderElements,
+    replaceElement,
+    setSelectedIds,
     undoManager,
     emptyTitle,
     emptySection,
     aspectLocked,
     onAspectLockChange,
+    slideWidth,
 }: CanvasPropertiesPanelProps) {
     const selectedIds = selectedElements.map((el) => el.id);
     const byId = new Map(selectedElements.map((el) => [el.id, el]));
@@ -175,6 +164,11 @@ export function CanvasPropertiesPanel({
         sealed(undoManager, () => updateElements(selectedElements.map((el) => ({ id: el.id, fields: patch(el) }))));
     };
 
+    const applyReplace = (partials: NewVectorElement[]) => {
+        if (selectedElements.length !== 1) return;
+        convertElementToShapes(selectedElements[0].id, partials, replaceElement, setSelectedIds, undoManager);
+    };
+
     // Numeric transform writes. A width/height change routes linear elements through resizeLinearTo so
     // their points scale with the box; x/y/angle-only changes pass straight through.
     const applyTransform = (fields: VectorElementPatch) => {
@@ -206,7 +200,7 @@ export function CanvasPropertiesPanel({
         );
     };
 
-    const handleZOrderApply = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
+    const handleZOrderApply = (op: ZOp) => applyZOrder(op, elements, selectedIds, reorderElements, undoManager);
 
     // Align / distribute / match-size over the shared arrange math. One transact, one undo step.
     // computeArrange no-ops below 2 (distribute below 3), so nothing to gate here.
@@ -236,16 +230,15 @@ export function CanvasPropertiesPanel({
     const tHeight = getMergedValue(selectedElements, (el) => Math.round(el.height));
     const tAngle = getMergedValue(selectedElements, (el) => Math.round(el.angle));
 
-    const strokeColor = getMergedValue(selectedElements, (el) => el.strokeColor);
-    const strokeWidth = getMergedValue(selectedElements, (el) => el.strokeWidth);
-    const strokeStyle = getMergedValue(selectedElements, (el) => el.strokeStyle);
     // The fill merges as the STORED string and is parsed once, so a gradient survives the merge intact.
-    const fillRaw: MergedValue<string> = getMergedValue(selectedElements, (el) => ('fill' in el ? el.fill : undefined));
-    // A transparent solid is "no fill", which is BackgroundFillBlock's `null` — one vocabulary.
-    const parsedFill = typeof fillRaw === 'string' ? parseFill(fillRaw) : null;
-    const fillValue = parsedFill && !isTransparentFill(parsedFill) ? parsedFill : null;
+    const fill = getMergedValue(selectedElements, (el) => ('fill' in el ? el.fill : undefined));
     const fillStyle = getMergedValue(selectedElements, (el) => ('fill' in el ? parseFill(el.fill).style : undefined));
-    const roughness = getMergedValue(selectedElements, (el) => el.roughness);
+    // A chart's own fields: its labels' color, and whether its data draws past the sketch.
+    const charts = soleKind === 'chart' ? selectedElements.filter((el) => el.type === 'chart') : [];
+    const sketchCapped = charts.some((el) => {
+        const { spec } = readChartSpec(el);
+        return spec !== null && isInlineSketchCapped(spec);
+    });
     const corners = getMergedValue(selectedElements, (el) => ('corners' in el ? el.corners : undefined));
     const roundness = getMergedValue(selectedElements, (el) => ('roundness' in el ? el.roundness : undefined));
     const opacity = getMergedValue(selectedElements, (el) => el.opacity);
@@ -282,96 +275,53 @@ export function CanvasPropertiesPanel({
                     <KindSection
                         elements={selectedElements}
                         scene={sceneById}
+                        slideWidth={slideWidth}
                         onChange={applyToAll}
                         onChangeEach={applyToEach}
+                        onReplace={applyReplace}
                     />
                 )}
 
-                {showFill && (
-                    /* BackgroundFillBlock IS the section: the paint (solid or two-stop linear gradient) plus,
-                   for the kinds roughjs hatches, the hatch style — both halves of the one stored fill. */
-                    <BackgroundFillBlock
-                        title="Fill"
-                        value={fillValue}
-                        mixed={isMixed(fillRaw)}
-                        onChange={(next) => {
-                            const paint: FillPaint = next === null || next.type === 'image' ? TRANSPARENT_FILL : next;
-                            applyFill((fill) => ({ ...paint, style: fill.style }));
-                        }}
-                        allowedTypes={['solid', 'gradient']}
+                {has && (
+                    <PaintSections
+                        fill={showFill ? fill : undefined}
+                        fillStyle={showFillStyle ? fillStyle : undefined}
+                        marksHatch={soleKind === 'chart'}
+                        strokeColor={getMergedValue(selectedElements, (el) => el.strokeColor)}
+                        strokeWidth={getMergedValue(selectedElements, (el) => el.strokeWidth)}
+                        strokeStyle={
+                            showStrokeStyle ? getMergedValue(selectedElements, (el) => el.strokeStyle) : undefined
+                        }
+                        strokeOptional={strokeOptional}
+                        roughness={getMergedValue(selectedElements, (el) => el.roughness)}
+                        color={charts.length ? getMergedValue(charts, (el) => el.color) : undefined}
+                        sketchCapped={sketchCapped}
+                        onFill={applyFill}
+                        onChange={applyToAll}
                     >
-                        {showFillStyle && (
-                            <PropertyRow label="Style">
-                                <MergedSelect
-                                    value={fillStyle}
-                                    onChange={(v) => applyFill((fill) => ({ ...fill, style: v }))}
-                                    options={FILL_STYLE_OPTIONS}
-                                />
-                            </PropertyRow>
+                        {showShape && (
+                            <PropertySection title="Shape">
+                                {showCorners && (
+                                    <PropertyRow label="Corners">
+                                        <MergedSelect
+                                            value={corners}
+                                            onChange={(v) => applyToAll({ corners: v })}
+                                            options={CORNERS_OPTIONS}
+                                        />
+                                    </PropertyRow>
+                                )}
+                                {showEdges && (
+                                    <PropertyRow label="Edges">
+                                        <MergedSelect
+                                            value={roundness}
+                                            onChange={(v) => applyToAll({ roundness: v })}
+                                            options={EDGES_OPTIONS}
+                                        />
+                                    </PropertyRow>
+                                )}
+                            </PropertySection>
                         )}
-                    </BackgroundFillBlock>
-                )}
-
-                {has && (
-                    <PropertySection title="Stroke">
-                        <ColorRow
-                            label="Color"
-                            value={strokeColor}
-                            onChange={(c) => applyToAll({ strokeColor: c })}
-                            allowNone={strokeOptional}
-                        />
-                        <PropertyRow label="Width">
-                            <MergedSelect
-                                value={numToStr(strokeWidth)}
-                                onChange={(v) => applyToAll({ strokeWidth: Number(v) })}
-                                options={STROKE_WIDTH_OPTIONS}
-                            />
-                        </PropertyRow>
-                        {showStrokeStyle && (
-                            <PropertyRow label="Style">
-                                <MergedSelect
-                                    value={strokeStyle}
-                                    onChange={(v) => applyToAll({ strokeStyle: v })}
-                                    options={STROKE_STYLE_OPTIONS}
-                                />
-                            </PropertyRow>
-                        )}
-                    </PropertySection>
-                )}
-
-                {showShape && (
-                    <PropertySection title="Shape">
-                        {showCorners && (
-                            <PropertyRow label="Corners">
-                                <MergedSelect
-                                    value={corners}
-                                    onChange={(v) => applyToAll({ corners: v })}
-                                    options={CORNERS_OPTIONS}
-                                />
-                            </PropertyRow>
-                        )}
-                        {showEdges && (
-                            <PropertyRow label="Edges">
-                                <MergedSelect
-                                    value={roundness}
-                                    onChange={(v) => applyToAll({ roundness: v })}
-                                    options={EDGES_OPTIONS}
-                                />
-                            </PropertyRow>
-                        )}
-                    </PropertySection>
-                )}
-
-                {has && (
-                    <PropertySection title="Sketch">
-                        <PropertyRow label="Style">
-                            <MergedSelect
-                                value={numToStr(roughness)}
-                                onChange={(v) => applyToAll({ roughness: Number(v) })}
-                                options={ROUGHNESS_OPTIONS}
-                            />
-                        </PropertyRow>
-                    </PropertySection>
+                    </PaintSections>
                 )}
 
                 {has && (

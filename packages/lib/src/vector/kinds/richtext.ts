@@ -1,7 +1,12 @@
+// The rich-text kind: a box of HTML text with its typography, drawn as a foreignObject over a rough backdrop. A box
+// grows to fit its text and never shrinks by itself, so the stored height is its minimum.
+
 import { getFontFamily } from '../../constants/fonts';
 import { stripTagsServer } from '../../core/html';
-import { hitTestBox, round } from '../geometry';
+import { hitTestBox } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
+import { round } from '../points';
+import type { VectorRichTextElement } from '../types';
 import {
     CORNERS,
     DEFAULT_CORNERS,
@@ -12,7 +17,6 @@ import {
     TEXT_ALIGNS,
     TEXT_DECORATIONS,
     VERTICAL_ALIGNS,
-    type VectorRichTextElement,
 } from '../types';
 import { defineKind } from './kind';
 import {

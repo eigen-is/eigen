@@ -1,4 +1,4 @@
-import { extractLabel, toLabel, unquoteSheetName } from './a1-notation';
+import { extractLabel, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
 import { iscelldata, operatorjson } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
@@ -62,12 +62,41 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
     let str = '';
     let result = '';
     let dquote = 0;
+    // A quoted sheet name is one token, its delimiters and doubled quotes included.
+    let squote = false;
+    // A structured reference's brackets hold names, and a `'` escapes the character after it, a bracket too.
+    let brackets = 0;
 
     while (i < chars.length) {
         const s = chars[i];
 
-        if (s === '(' && dquote === 0) {
-            result += str.length > 0 ? `${str}(` : '(';
+        if (brackets > 0 || (s === '[' && dquote === 0 && !squote)) {
+            if (s === "'" && i + 1 < chars.length) {
+                i += 1;
+                str += s + chars[i];
+            } else {
+                if (s === '[') brackets += 1;
+                else if (s === ']') brackets -= 1;
+                str += s;
+            }
+        } else if (squote || (s === "'" && dquote === 0)) {
+            if (s === "'") squote = !squote;
+            str += s;
+        } else if (s === ' ' && dquote === 0) {
+            // A run of spaces is read at once: kept, and between two refs the intersection operator, a bracketed one's
+            // too (Excel reads `LOG10 (A1)` so); around a range's colon it is the range's.
+            let end = i;
+            while (end + 1 < chars.length && chars[end + 1] === ' ') end += 1;
+            if (chars[end + 1] !== ':' && !str.endsWith(':')) {
+                result += walkFormulaRefs(str, onRef) + ' '.repeat(end - i + 1);
+                str = '';
+            }
+            i = end;
+        } else if (s === '(' && dquote === 0) {
+            // A range may end at a function returning a reference, `B2:INDEX(…)`: its first leg is a ref.
+            const legs = splitUnquoted(str, ':');
+            const name = legs.pop();
+            result += legs.length > 0 ? `${refOf(legs.join(':').trim(), onRef)}:${name}(` : `${str}(`;
             str = '';
         } else if (s === ')' && dquote === 0) {
             result += `${walkFormulaRefs(str, onRef)})`;
@@ -127,8 +156,7 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
         }
 
         if (i === chars.length - 1) {
-            const trimmed = str.trim();
-            result += iscelldata(trimmed) ? onRef(trimmed) : trimmed;
+            result += refOf(str.trim(), onRef);
         }
 
         i += 1;
@@ -137,10 +165,62 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
     return result;
 }
 
+// A leaf the walker found: a ref is handed to `onRef` as one or two legs behind one sheet prefix. A range naming its
+// sheet on both legs (`'S 1'!A1:'S 1'!B2`) moves as the one naming it once, and a chained range (`A1:A2:A3`) leg by
+// leg, so its result is #REF! when any leg's is.
+function refOf(token: string, onRef: (ref: string) => string): string {
+    // The second leg of a range a function starts, `INDEX(…):A5`.
+    if (token.startsWith(':')) return `:${refOf(token.slice(1), onRef)}`;
+    const legs = splitUnquoted(token, ':');
+    if (splitUnquoted(token, '!').length > 2) {
+        if (legs.length !== 2 || legs.some((leg) => splitUnquoted(leg, '!').length !== 2)) return token;
+        const second = legs[1].slice(0, legs[1].lastIndexOf('!') + 1);
+        const moved = refOf(`${legs[0]}:${legs[1].slice(second.length)}`, onRef);
+        const colon = moved.lastIndexOf(':');
+        return colon < 0 ? moved : `${moved.slice(0, colon + 1)}${second}${moved.slice(colon + 1)}`;
+    }
+    const sheetEnd = token.lastIndexOf('!') + 1;
+    const chained = token.slice(sheetEnd).split(':');
+    if (chained.length <= 2) return iscelldata(token) ? onRef(token) : token;
+    const prefix = token.slice(0, sheetEnd);
+    if (!chained.every((leg) => iscelldata(leg))) return token;
+    const moved = chained.map((leg) => onRef(prefix + leg));
+    if (moved.includes(error['r'])) return error['r'];
+    return [moved[0], ...moved.slice(1).map((leg) => leg.slice(prefix.length))].join(':');
+}
+
+// Splits on `separator` outside single quotes, which hold sheet names.
+function splitUnquoted(text: string, separator: string): string[] {
+    const parts: string[] = [];
+    let quoted = false;
+    let start = 0;
+    for (let index = 0; index < text.length; index += 1) {
+        if (text[index] === "'") quoted = !quoted;
+        else if (text[index] === separator && !quoted) {
+            parts.push(text.slice(start, index));
+            start = index + 1;
+        }
+    }
+    parts.push(text.slice(start));
+    return parts;
+}
+
 // Shifts every cell-data ref in a formula by (rowOffset, colOffset), both axes at once.
 // A leading `=` is stripped before processing; the returned text never carries one.
 export function functionCopy(txt: string, rowOffset: number, colOffset: number): string {
     return walkFormulaRefs(txt, (ref) => shiftRef(ref, rowOffset, colOffset));
+}
+
+// Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`: Import… renames an
+// imported tab whose name the workbook holds. A leading `=` is kept.
+export function renameSheetRefs(txt: string, renames: ReadonlyMap<string, string>): string {
+    if (renames.size === 0 || !txt.includes('!')) return txt;
+    const renamed = walkFormulaRefs(txt, (ref) => {
+        const sheetEnd = ref.lastIndexOf('!');
+        const name = sheetEnd > 0 ? renames.get(unquoteSheetName(ref.slice(0, sheetEnd))) : undefined;
+        return name === undefined ? ref : `${sheetRefName(name)}${ref.slice(sheetEnd)}`;
+    });
+    return txt.startsWith('=') ? `=${renamed}` : renamed;
 }
 
 // Shifts formula-text refs in response to an insert ('add') or delete ('del') row/col

@@ -18,13 +18,9 @@ import * as mountHelpers from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
-import {
-    createHomeFaultMount,
-    type FaultStorage,
-    provisionDoc,
-    registerFaultMount,
-    unregisterFaultMount,
-} from '../fault-storage-helpers';
+import type { FaultStorage } from '../fault-storage-helpers';
+import { createHomeFaultMount, provisionDoc, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
+import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
@@ -34,7 +30,6 @@ import {
     getTestContext,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
-    type TestUser,
 } from '../setup';
 import { MARKER_DB_CONFIG, MARKER_SCHEMA, readMarkers, snapshotInto } from './backup-test-helpers';
 
@@ -162,7 +157,7 @@ beforeAll(async () => {
     await s3Mount.createFile(s3Root, 'stored.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
     const storedBytes = new TextEncoder().encode('in the bucket');
     const pending = await s3Mount.createFile(s3Root, 'pending.txt', 'text/plain', storedBytes.byteLength, storedBytes);
-    await s3Mount.drainPendingUploads({ flushNow: true });
+    await s3Mount.uploadQueue?.drain({ flushNow: true });
     pendingObjectKey = await s3Mount.getStorageKey(pending);
     // What an outage leaves: newer bytes in staging/ with a pending row, their PUT parked.
     s3Fault.parkWrites = true;
@@ -485,7 +480,7 @@ describe('Backup of a disabled mount enabled while it is captured', () => {
         });
         await ownerHome.drive.updateMount(createMountConfig(MOUNT_ID, off.mounts![MOUNT_ID]), false);
 
-        let overwrite: Promise<number> | undefined;
+        let overwrite: Promise<void> | undefined;
         let overwroteDuringCopy = false;
         const withPathLock = Mount.prototype.withPathLock;
         const lock = spyOn(Mount.prototype, 'withPathLock').mockImplementation(async function <T>(

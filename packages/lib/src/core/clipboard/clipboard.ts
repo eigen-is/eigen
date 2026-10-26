@@ -1,5 +1,14 @@
+// Eigen's own clipboard payload: the items one app copies, such as an image, a text box or a chart, with their
+// geometry on typed fields, carried in the HTML and SVG beside what other apps paste. The apps' copy and paste hooks
+// build and read every item through these helpers, and a paste drops any item that doesn't match its own shape.
+
 import { toast } from 'sonner';
+import { exceedsChartSpecBytes, exceedsChartSpecDepth, isChartSpecKey } from '../../charts/limits';
+import { readChartLook } from '../../charts/look';
+import { chartSpecTexts, readChartSpec } from '../../charts/spec';
+import type { ChartSpecTexts } from '../../types/chart';
 import type {
+    EigenClipboardChartItem,
     EigenClipboardData,
     EigenClipboardImageItem,
     EigenClipboardItem,
@@ -71,11 +80,54 @@ export function buildTextClipboardItem(args: {
     };
 }
 
+// A key that names a part, under its text.
+const isPartText = (entry: [string, unknown]): entry is [string, string] =>
+    isChartSpecKey(entry[0]) && typeof entry[1] === 'string';
+
+// The one test of a chart item's parts, the builder's and the reader's: a text under each key and every key a part's,
+// within the spec's byte and depth limits as the item carries them, and inline data that reads. What a host stores can
+// be larger, so a paste counts that again (pastedChartFields).
+function isInlineChartParts(parts: unknown): parts is ChartSpecTexts {
+    if (!isRecord(parts)) return false;
+    const texts = Object.entries(parts);
+    if (!texts.every(isPartText)) return false;
+    // readChartSpec counts the bytes, so only a chart within them is walked for its depth.
+    if (readChartSpec(parts).spec?.data.source !== 'inline') return false;
+    return !texts.some(([, text]) => exceedsChartSpecDepth(text));
+}
+
+// A chart item, or null for parts no consumer could draw (range data, unreadable, over a limit). The parts ride as
+// their holder stores them, never re-serialized, so one that doesn't parse and a newer build's arrive as they left.
+// The parts and the look are read off their holder (a canvas element, a doc's chart node, a sheet chart's inline
+// copy), and a missing look field copies flat.
+export function buildChartClipboardItem(args: {
+    chart: Readonly<Record<string, unknown>>;
+    box: Pick<ClipboardBox, 'width' | 'height'>;
+    look: Record<string, unknown>;
+}): EigenClipboardChartItem | null {
+    const parts = chartSpecTexts(args.chart);
+    if (!isInlineChartParts(parts)) return null;
+    const look = readChartLook(args.look);
+    return { type: 'chart', parts, width: args.box.width, height: args.box.height, look };
+}
+
+// The fields a paste stores for a chart item's parts, as its host makes them, or null past the byte limit: Sheets
+// repeats a series id in each entry's key, and a canvas adds every part the item lacks, so an item within the limit can
+// land past it, as a chart every peer reads as the placeholder.
+export function pastedChartFields<Fields extends Readonly<Record<string, unknown>>>(
+    parts: ChartSpecTexts,
+    make: (parts: ChartSpecTexts) => Fields,
+): Fields | null {
+    const fields = make(parts);
+    return exceedsChartSpecBytes(fields) ? null : fields;
+}
+
 // Read the typed geometry off any item. Consumers size/rotate from this — there is no `meta` sniff
 // to fall back to (geometry is only ever on the typed fields).
 export function readClipboardBox(item: EigenClipboardItem): ClipboardBox {
-    // The elements item's box is the selection's bounds — a whole set, so it carries no rotation.
-    return { width: item.width, height: item.height, angle: item.type === 'elements' ? undefined : item.angle };
+    // The elements item's box is the selection's bounds — a whole set, so it carries no rotation; a chart has none.
+    const angle = item.type === 'text' || item.type === 'image' ? item.angle : undefined;
+    return { width: item.width, height: item.height, angle };
 }
 
 // A text item with a real payload, not an empty carrier. The canvas writes one per rich-text box, empty
@@ -107,9 +159,17 @@ function isValidItem(item: unknown): item is EigenClipboardItem {
             // The records themselves are re-validated per element by the document reader
             // (readElementsClipboardItem → readElementFromFields), which clamps hostile values.
             return Array.isArray(item.elements) && typeof item.sourceFrameId === 'string';
+        case 'chart':
+            return isInlineChartParts(item.parts);
         default:
             return false;
     }
+}
+
+// A chart's look through the chart look validators, so every consumer stores what a canvas reader would keep.
+function withChartLook(item: EigenClipboardItem): EigenClipboardItem {
+    if (item.type !== 'chart') return item;
+    return { ...item, look: readChartLook(isRecord(item.look) ? item.look : {}) };
 }
 
 function parseEigenJson(raw: string): EigenClipboardData | null {
@@ -122,7 +182,7 @@ function parseEigenJson(raw: string): EigenClipboardData | null {
     if (!isRecord(parsed) || parsed.version !== 1 || !Array.isArray(parsed.items)) return null;
     return {
         version: 1,
-        items: parsed.items.filter(isValidItem),
+        items: parsed.items.filter(isValidItem).map(withChartLook),
         svg: typeof parsed.svg === 'string' ? parsed.svg : undefined,
     };
 }
@@ -202,31 +262,38 @@ export async function inlineClipboardSvgMedia(
     svg: string,
     resolve: (name: string) => Promise<Blob | null>,
 ): Promise<string | null> {
-    const refs = listEigenMediaRefs(svg);
-    if (refs.length === 0) return svg;
+    const { dataUris, failed } = await resolveSvgMedia(svg, resolve);
+    let total = 0;
+    for (const dataUri of dataUris.values()) {
+        total += dataUri.length;
+        if (total > INLINE_SVG_SOFT_CAP_BYTES) return null;
+    }
+    return stripEigenMediaRefs(replaceEigenMediaHrefs(svg, dataUris), failed);
+}
 
+// The same inline with no cap, for a downloaded image: a file, not a clipboard entry.
+export async function inlineSvgMedia(svg: string, resolve: (name: string) => Promise<Blob | null>): Promise<string> {
+    const { dataUris, failed } = await resolveSvgMedia(svg, resolve);
+    return stripEigenMediaRefs(replaceEigenMediaHrefs(svg, dataUris), failed);
+}
+
+async function resolveSvgMedia(
+    svg: string,
+    resolve: (name: string) => Promise<Blob | null>,
+): Promise<{ dataUris: Map<string, string>; failed: Set<string> }> {
     const resolved = await Promise.all(
-        refs.map(async (name) => {
+        listEigenMediaRefs(svg).map(async (name) => {
             const blob = await resolve(name).catch(() => null);
             return { name, dataUri: blob ? await blobToDataUri(blob) : null };
         }),
     );
-
     const dataUris = new Map<string, string>();
     const failed = new Set<string>();
-    let total = 0;
     for (const { name, dataUri } of resolved) {
-        if (!dataUri) {
-            failed.add(name);
-            continue;
-        }
-        total += dataUri.length;
-        if (total > INLINE_SVG_SOFT_CAP_BYTES) return null;
-        dataUris.set(name, dataUri);
+        if (dataUri) dataUris.set(name, dataUri);
+        else failed.add(name);
     }
-
-    // Swap each resolved ref's exact `href="…"` for its data URI, then strip the failures.
-    return stripEigenMediaRefs(replaceEigenMediaHrefs(svg, dataUris), failed);
+    return { dataUris, failed };
 }
 
 // The SVG a paste consumer should materialize, together with the typed items that back its

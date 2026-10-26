@@ -7,7 +7,8 @@ import {
 } from '@workspace/ui/components/input-group';
 import { cn } from '@workspace/ui/lib/utils';
 import { Search, X } from 'lucide-react';
-import { type ChangeEvent, type RefObject, useEffect, useRef, useState } from 'react';
+import type { ChangeEvent, RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export type SearchBarProps = {
     placeholder?: string;

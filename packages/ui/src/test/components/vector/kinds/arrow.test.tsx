@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { DEFAULT_ELEMENT_PROPS, type VectorElement } from '@workspace/lib/vector';
+import type { VectorElement } from '@workspace/lib/vector';
+import { DEFAULT_ELEMENT_PROPS } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { installHappyDom } from '../../../happy-dom';
 
@@ -19,7 +20,7 @@ g.document.fonts = { load: () => fontLoaded, check: () => false };
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { holdCapture, sealed } = await import('../../../../components/vector/hooks/use-canvas-doc');
+const { holdCapture, sealed } = await import('../../../../components/properties-panel/property-gesture');
 const { PropertyGestureContext } = await import('../../../../components/properties-panel');
 const { ArrowPanelSection } = await import('../../../../components/vector/kinds/arrow');
 
@@ -69,6 +70,7 @@ test('a label size typed against a cold font face is one undo step', async () =>
                     elements: [arrow],
                     scene: new Map<string, VectorElement>([[arrow.id, arrow]]),
                     onChange: () => {},
+                    onReplace: () => {},
                     onChangeEach: (patch: (el: VectorElement) => Record<string, unknown>) =>
                         sealed(undoManager, () => {
                             for (const [field, v] of Object.entries(patch(arrow))) {

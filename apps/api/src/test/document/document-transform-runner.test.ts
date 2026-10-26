@@ -1,17 +1,31 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import { availableParallelism } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { ApiError } from '../../lib/core/errors';
-import type { DocumentTransformRequest, DocumentTransformResponse } from '../../lib/document/transform/protocol';
+import type {
+    DocumentTransformRequest,
+    DocumentTransformResponse,
+    ExportMedia,
+} from '../../lib/document/transform/protocol';
+import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { DocumentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import { exportBytes, importSnapshot, previewBody } from '../fixtures/transform-results';
 
-// Runner behavior suite, driven through the scriptable test worker so no document
+// Runner behavior suite, driven through the scriptable test child so no document
 // code runs. The real preview operation is covered in document-transform.test.ts.
 
-const TEST_WORKER_URL = new URL('../fixtures/transform-test-worker.ts', import.meta.url).href;
+const TEST_CHILD = fileURLToPath(new URL('../fixtures/transform-test-child.ts', import.meta.url));
 
-type TestDirective = { behavior?: string; ms?: number };
+type TestDirective = {
+    behavior?: string;
+    ms?: number;
+    beforeAck?: boolean;
+    signal?: NodeJS.Signals;
+    heap?: 'objects' | 'strings' | 'buffers';
+    mediaNames?: unknown[];
+};
 
-// The scriptable worker reads its script off `test`, the one field a production request
+// The scriptable child reads its script off `test`, the one field a production request
 // never carries. Fixtures are the production type plus that directive, so a new required
 // field on a request arm breaks them at compile time instead of at run time.
 type TestRequest = DocumentTransformRequest & { test: TestDirective };
@@ -32,28 +46,18 @@ function makeExportRequest(directive: TestDirective = {}): TestRequest {
         documentType: 'eigensheets',
         format: 'html',
         title: 'runner-test',
-        media: [],
         source: { snapshot: null, updates: [] },
         test: directive,
     };
 }
 
-// Doc/slides exports carry prepared media buffers, which ride the same transfer list.
-function makeMediaExportRequest(directive: TestDirective, media: ArrayBuffer[]): TestRequest {
-    return {
-        kind: 'export',
-        documentType: 'eigendoc',
-        format: 'html',
-        title: 'runner-test',
-        media: media.map((data, i) => ({ name: `media-${i}.png`, contentType: 'image/png', data })),
-        publicOrigin: undefined,
-        source: { snapshot: null, updates: [] },
-        test: directive,
-    };
+// The media a test's prepareMedia hands back, one PNG per buffer.
+function pngMedia(buffers: ArrayBuffer[]): ExportMedia[] {
+    return buffers.map((data, i) => ({ name: `media-${i}.png`, contentType: 'image/png', data }));
 }
 
 function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = new ArrayBuffer(0)): TestRequest {
-    return { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data, test: directive };
+    return { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', maxMediaBytes: 0, data, test: directive };
 }
 
 // The only result arm with a nested payload of its own: the extracted docx images.
@@ -63,6 +67,7 @@ function makeDocImportRequest(directive: TestDirective = {}): TestRequest {
         sourceFormat: 'docx',
         targetType: 'eigendoc',
         publicOrigin: undefined,
+        maxMediaBytes: 0,
         data: new ArrayBuffer(0),
         test: directive,
     };
@@ -74,17 +79,18 @@ const PREVIEW_OPTIONS = { ...TRANSFORM_LIMITS.preview, priority: 'foreground' } 
 const EXPORT_OPTIONS = { ...TRANSFORM_LIMITS.export, priority: 'foreground' } as const;
 const BACKGROUND_OPTIONS = { ...PREVIEW_OPTIONS, priority: 'background' } as const;
 
-// The admission bounds are private production constants — no caller configures them,
-// so an admission test dials them in place instead.
+// The admission bounds and the memory limit are private production constants — no caller
+// configures them, so a test dials them in place instead.
 type RunnerBounds = {
     maxQueued: number;
     maxQueuedBackground: number;
     maxPredictedWaitMs: number;
     closeGraceMs: number;
+    memoryLimitKiB: number;
 };
 
 function makeRunner(bounds: Partial<RunnerBounds> = {}) {
-    const runner = new DocumentTransformRunner({ workerUrl: TEST_WORKER_URL });
+    const runner = new DocumentTransformRunner({ entry: TEST_CHILD });
     Object.assign(runner as unknown as RunnerBounds, bounds);
     return runner;
 }
@@ -93,8 +99,12 @@ function timings(response: DocumentTransformResponse): { startedAt: number; ende
     return JSON.parse(previewBody(response));
 }
 
+function errorCode(response: DocumentTransformResponse): string | undefined {
+    return response.ok ? undefined : response.error.code;
+}
+
 describe('DocumentTransformRunner', () => {
-    test('runs at most one worker at a time, FIFO within a priority', async () => {
+    test('runs at most one child at a time, FIFO within a priority', async () => {
         const runner = makeRunner();
         const results = await Promise.all([
             runner.run(makeRequest({ behavior: 'sleep', ms: 80 }), PREVIEW_OPTIONS),
@@ -140,7 +150,7 @@ describe('DocumentTransformRunner', () => {
     });
 
     // DOCUMENT-TRANSFORMS.md § The runner logs one line per job, overload included: an overload
-    // has to leave a trace, and a job's record needs its format and Worker startup time (total minus the Worker's
+    // has to leave a trace, and a job's record needs its format and startup time (total minus the child's
     // own transform time) to tell a slow document from a slow spawn.
     test('logs every refused admission with the queue state', async () => {
         const runner = makeRunner({ maxQueued: 1 });
@@ -160,7 +170,7 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('logs the format, worker startup time and warning payloads with the job', async () => {
+    test("logs the format, startup time, the child's peak and warning payloads with the job", async () => {
         const runner = makeRunner();
         const logSpy = spyOn(console, 'log').mockImplementation(() => {});
         const response = await runner.run(makeExportRequest({ behavior: 'export-warn' }), EXPORT_OPTIONS);
@@ -168,11 +178,12 @@ describe('DocumentTransformRunner', () => {
         logSpy.mockRestore();
 
         expect(response.ok).toBe(true);
-        // The process-wide runner's background search extraction can log inside this window too.
-        const line = logged.find((l) => l.includes('[transform] job=') && l.includes('kind=export')) ?? '';
+        // The process-wide runner logs other files' jobs inside this window too; this job's warning marks its line.
+        const line =
+            logged.find((l) => l.includes('kind=export') && l.includes('warnings=corrupt-blobs-skipped:3')) ?? '';
         expect(line).toContain('format=html');
         expect(line).toMatch(/startupMs=\d+/);
-        expect(line).toContain('warnings=corrupt-blobs-skipped:3');
+        expect(line).toContain('peakRssBytes=1234');
         await runner.close();
     });
 
@@ -240,7 +251,7 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('timeout terminates the worker, resolves a structured error, and releases the slot', async () => {
+    test('timeout kills the child, resolves a structured error, and releases the slot', async () => {
         const runner = makeRunner();
         const start = Date.now();
         const timedOut = await runner.run(makeRequest({ behavior: 'sleep', ms: 2000 }), {
@@ -257,23 +268,24 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    // The media prep spends from the deadline (run-transform.ts), and a spent one leaves no time for a Worker.
-    test.each([0, -50])('a deadline of %d ms times out without spawning a worker', async (deadlineMs) => {
+    // A caller's prep spends from the deadline (run-transform.ts), and a spent one leaves no time for a child.
+    test.each([0, -50])('a deadline of %d ms times out without spawning a child', async (deadlineMs) => {
         const runner = makeRunner();
-        const media = [new Uint8Array([1, 2, 3]).buffer];
-        const response = await runner.run(makeMediaExportRequest({ behavior: 'export-echo-media' }, media), {
+        const spawn = spyOn(Bun, 'spawn');
+        const response = await runner.run(makeExportRequest({ behavior: 'export-ok' }), {
             ...EXPORT_OPTIONS,
             deadlineMs,
         });
+        expect(spawn).not.toHaveBeenCalled();
+        spawn.mockRestore();
         expect(response).toEqual({ ok: false, error: { code: 'timeout', message: 'Document transform timed out' } });
-        expect(media[0].byteLength).toBe(3); // never posted, so never detached
 
         const next = await runner.run(makeRequest(), PREVIEW_OPTIONS);
         expect(next.ok).toBe(true);
         await runner.close();
     });
 
-    test('a crashing worker resolves a structured error and releases the slot', async () => {
+    test('a crashing child resolves a structured error and releases the slot', async () => {
         const runner = makeRunner();
         const crashed = await runner.run(makeRequest({ behavior: 'crash' }), PREVIEW_OPTIONS);
         expect(crashed.ok).toBe(false);
@@ -284,15 +296,15 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('a worker that cannot be started resolves a structured error and releases the slot', async () => {
+    test('a job that cannot be sent resolves a structured error and releases the slot', async () => {
         const runner = makeRunner();
-        // A detached buffer makes postMessage's transfer throw synchronously, the same
-        // shape as a Worker spawn failure under resource exhaustion.
+        // A detached buffer makes the send throw synchronously, the same shape as a
+        // spawn failure under resource exhaustion.
         const detached = new Uint8Array([1, 2, 3]).buffer;
         structuredClone(detached, { transfer: [detached] });
 
         const start = Date.now();
-        const failed = await runner.run(makeMediaExportRequest({ behavior: 'export-ok' }, [detached]), EXPORT_OPTIONS);
+        const failed = await runner.run(makeRequest({}, [detached]), PREVIEW_OPTIONS);
         expect(Date.now() - start).toBeLessThan(1000); // not held until the kill deadline
         expect(failed.ok).toBe(false);
         if (!failed.ok) expect(failed.error.code).toBe('crashed');
@@ -302,15 +314,66 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('a worker that exits without replying resolves a structured error', async () => {
+    test('a child that exits without replying resolves a structured error', async () => {
         const runner = makeRunner();
         const exited = await runner.run(makeRequest({ behavior: 'exit' }), PREVIEW_OPTIONS);
-        expect(exited.ok).toBe(false);
-        if (!exited.ok) expect(exited.error.code).toBe('crashed');
+        expect(errorCode(exited)).toBe('crashed');
         await runner.close();
     });
 
-    test('a malformed worker response resolves a structured error', async () => {
+    test('a child that cannot load its entry crashed, it did not run out of memory', async () => {
+        const runner = new DocumentTransformRunner({ entry: `${TEST_CHILD}.missing` });
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        const failed = await runner.run(makeRequest(), PREVIEW_OPTIONS);
+        errorSpy.mockRestore();
+        expect(errorCode(failed)).toBe('crashed');
+        await runner.close();
+    });
+
+    // A death after the child took the job is the job's: JSC aborts, faults or traps when a heap allocation fails, and
+    // a SIGKILL the runner did not send is the kernel's OOM killer. SIGBUS is in the Linux-only block: macOS reports it as SIGUSR1.
+    test.each(['SIGABRT', 'SIGSEGV', 'SIGTRAP', 'SIGKILL'] as const)(
+        'a child killed by %s after taking the job ran out of memory, and the slot is released',
+        async (signal) => {
+            const runner = makeRunner();
+            const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+            const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+            const died = await runner.run(makeRequest({ behavior: 'signal', signal }), PREVIEW_OPTIONS);
+            const logged = logSpy.mock.calls.map((args) => String(args[0]));
+            logSpy.mockRestore();
+            errorSpy.mockRestore();
+            expect(errorCode(died)).toBe('out-of-memory');
+            expect(
+                logged.some((line) => line.includes('outcome=out-of-memory') && line.includes(`signal=${signal}`)),
+            ).toBe(true);
+
+            const next = await runner.run(makeRequest(), PREVIEW_OPTIONS);
+            expect(next.ok).toBe(true);
+            await runner.close();
+        },
+    );
+
+    // Before the acknowledgement the death is the child's own start-up; SIGINT and SIGTERM come from a person or a
+    // process manager, never from memory.
+    test.each([
+        ['SIGABRT before taking the job', { behavior: 'signal', signal: 'SIGABRT', beforeAck: true }],
+        ['SIGINT', { behavior: 'signal', signal: 'SIGINT' }],
+        ['SIGTERM', { behavior: 'signal', signal: 'SIGTERM' }],
+    ] as const)('a child killed by %s crashed', async (_name, directive) => {
+        const runner = makeRunner();
+        const died = await runner.run(makeRequest(directive), PREVIEW_OPTIONS);
+        expect(errorCode(died)).toBe('crashed');
+        await runner.close();
+    });
+
+    test('an out-of-memory the child caught comes back as out-of-memory', async () => {
+        const runner = makeRunner();
+        const caught = await runner.run(makeRequest({ behavior: 'oom-reply' }), PREVIEW_OPTIONS);
+        expect(caught).toEqual({ ok: false, error: { code: 'out-of-memory', message: 'Out of memory' } });
+        await runner.close();
+    });
+
+    test('a malformed child response resolves a structured error', async () => {
         const runner = makeRunner();
         const malformed = await runner.run(makeRequest({ behavior: 'malformed' }), PREVIEW_OPTIONS);
         expect(malformed.ok).toBe(false);
@@ -372,33 +435,128 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('input buffers transfer (detach) to the worker and arrive intact', async () => {
+    test('input buffers are copied to the child and arrive intact', async () => {
         const runner = makeRunner();
         const buffer = new Uint8Array([1, 2, 3, 4, 5]).buffer;
         const response = await runner.run(makeRequest({ behavior: 'echo-buffers' }, [buffer]), PREVIEW_OPTIONS);
-        expect(buffer.byteLength).toBe(0); // detached from the sender
+        expect(buffer.byteLength).toBe(5); // the sender keeps its own
         expect(JSON.parse(previewBody(response)).receivedBytes).toEqual([5]);
         await runner.close();
     });
 
-    test('an export result buffer arrives intact through the response transfer list', async () => {
+    // IPC serializes a view's whole backing buffer, so only a view is copied out; an exact buffer goes as it is.
+    test('toTransferableBuffer copies a view and passes an exact buffer', () => {
+        const whole = new Uint8Array([1, 2, 3]);
+        expect(toTransferableBuffer(whole)).toBe(whole.buffer);
+        const view = new Uint8Array(new ArrayBuffer(1024), 8, 3);
+        view.set([4, 5, 6]);
+        const copied = toTransferableBuffer(view);
+        expect(copied.byteLength).toBe(3);
+        expect([...new Uint8Array(copied)]).toEqual([4, 5, 6]);
+    });
+
+    test('an export result buffer arrives intact', async () => {
         const runner = makeRunner();
         const response = await runner.run(makeExportRequest({ behavior: 'export-ok' }), EXPORT_OPTIONS);
         expect([...new Uint8Array(exportBytes(response))]).toEqual([9, 8, 7, 6]);
         await runner.close();
     });
 
-    test('export media buffers transfer (detach) to the worker and arrive intact', async () => {
+    test('the media an export child names are prepared and copied to it, and arrive intact', async () => {
         const runner = makeRunner();
-        const media = [new Uint8Array([1, 2, 3]).buffer, new Uint8Array([4, 5, 6, 7]).buffer];
+        const buffers = [new Uint8Array([1, 2, 3]).buffer, new Uint8Array([4, 5, 6, 7]).buffer];
+        const asked: string[][] = [];
         const response = await runner.run(
-            makeMediaExportRequest({ behavior: 'export-echo-media' }, media),
-            EXPORT_OPTIONS,
+            makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['media-0.png', 'media-1.png'] }),
+            {
+                ...EXPORT_OPTIONS,
+                prepareMedia: async (names) => {
+                    asked.push(names);
+                    return pngMedia(buffers);
+                },
+            },
         );
-        expect(media.map((buffer) => buffer.byteLength)).toEqual([0, 0]); // detached from the sender
-        expect(JSON.parse(Buffer.from(exportBytes(response)).toString('utf-8'))).toEqual([3, 4]);
+        expect(asked).toEqual([['media-0.png', 'media-1.png']]);
+        expect(buffers.map((buffer) => buffer.byteLength)).toEqual([3, 4]); // the sender keeps its own
+        expect(JSON.parse(Buffer.from(exportBytes(response)).toString('utf-8'))).toEqual([
+            ['media-0.png', 3],
+            ['media-1.png', 4],
+        ]);
         await runner.close();
     });
+
+    // A 413 past the media cap keeps its status, as a document error does.
+    test("a media prep that refuses fails the job with the prep's status and releases the slot", async () => {
+        const runner = makeRunner();
+        const response = await runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['a'] }), {
+            ...EXPORT_OPTIONS,
+            prepareMedia: async () => {
+                throw new ApiError(413, 'too large');
+            },
+        });
+        expect(response).toEqual({
+            ok: false,
+            error: { code: 'transform-failed', status: 413, message: 'too large' },
+        });
+        expect((await runner.run(makeRequest(), PREVIEW_OPTIONS)).ok).toBe(true);
+        await runner.close();
+    });
+
+    test.each([
+        ['a job that offers none', undefined, ['a']],
+        ['names that are not strings', async () => [], [1]],
+    ])('a child that asks for media on %s is an invalid response', async (_, prepareMedia, mediaNames) => {
+        const runner = makeRunner();
+        const response = await runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames }), {
+            ...EXPORT_OPTIONS,
+            prepareMedia,
+        });
+        expect(errorCode(response)).toBe('invalid-response');
+        await runner.close();
+    });
+
+    // The media is the document's, asked for once: a second ask is a child that is not following the protocol.
+    test('a child that asks for media a second time is an invalid response, and the prep ran once', async () => {
+        const runner = makeRunner();
+        let preps = 0;
+        const response = await runner.run(makeExportRequest({ behavior: 'export-ask-twice', mediaNames: ['a'] }), {
+            ...EXPORT_OPTIONS,
+            prepareMedia: async () => {
+                preps++;
+                return [];
+            },
+        });
+        expect(errorCode(response)).toBe('invalid-response');
+        expect(preps).toBe(1);
+        await runner.close();
+    });
+
+    // The prep runs inside the job, so the request's abort and the deadline both end it.
+    test.each(['canceled', 'timeout'] as const)(
+        'a job %s during its media prep kills the child and aborts the prep',
+        async (outcome) => {
+            const runner = makeRunner();
+            const controller = new AbortController();
+            let prepSignal: AbortSignal | undefined;
+            const start = Date.now();
+            const pending = runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['a'] }), {
+                ...EXPORT_OPTIONS,
+                ...(outcome === 'timeout' && { deadlineMs: 1_000 }),
+                signal: controller.signal,
+                prepareMedia: (_, signal) => {
+                    prepSignal = signal;
+                    if (outcome === 'canceled') controller.abort();
+                    return new Promise(() => {});
+                },
+            });
+            const response = await pending;
+            expect(Date.now() - start).toBeLessThan(5_000);
+            expect(errorCode(response)).toBe(outcome);
+            expect(prepSignal?.aborted).toBe(true);
+            expect((await runner.run(makeRequest(), PREVIEW_OPTIONS)).ok).toBe(true);
+            await runner.close();
+        },
+    );
 
     test('an export response without export bytes resolves as invalid-response', async () => {
         const runner = makeRunner();
@@ -408,11 +566,11 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('import bytes transfer to the worker and the snapshot returns intact', async () => {
+    test('import bytes are copied to the child and the snapshot returns intact', async () => {
         const runner = makeRunner();
         const data = new Uint8Array([1, 2, 3, 4, 5, 6]).buffer;
         const response = await runner.run(makeImportRequest({ behavior: 'import-ok' }, data), EXPORT_OPTIONS);
-        expect(data.byteLength).toBe(0); // detached from the sender
+        expect(data.byteLength).toBe(6); // the sender keeps its own
         expect(JSON.parse(importSnapshot(response)).received).toBe(6);
         await runner.close();
     });
@@ -425,7 +583,7 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('aborting a queued job removes it before any worker runs it', async () => {
+    test('aborting a queued job removes it before any child runs it', async () => {
         const runner = makeRunner();
         const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), PREVIEW_OPTIONS);
         const controller = new AbortController();
@@ -438,7 +596,7 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('aborting an active job terminates its worker and releases the slot', async () => {
+    test('aborting an active job kills its child and releases the slot', async () => {
         const runner = makeRunner();
         const controller = new AbortController();
         const start = Date.now();
@@ -458,7 +616,7 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('close() rejects queued work, stops admission, and terminates active workers after grace', async () => {
+    test('close() rejects queued work, stops admission, and kills active children after grace', async () => {
         const runner = makeRunner({ closeGraceMs: 50 });
         const active = runner.run(makeRequest({ behavior: 'sleep', ms: 2000 }), PREVIEW_OPTIONS);
         const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
@@ -471,5 +629,54 @@ describe('DocumentTransformRunner', () => {
         if (!queuedResult.ok) expect(queuedResult.error.code).toBe('shutdown');
 
         expect(() => runner.run(makeRequest(), PREVIEW_OPTIONS)).toThrow(ApiError);
+    });
+});
+
+// The limit is Linux's alone: macOS refuses setrlimit for the data segment. Each heap fails its own way, by arch too
+// (strings fault on arm64 and trap on x86-64), and every way is the job's out-of-memory while the parent serves the next
+// job. Below about 768 MiB Bun can't start on x86-64.
+describe.skipIf(process.platform !== 'linux')('DocumentTransformRunner memory limit', () => {
+    test.each(['objects', 'strings', 'buffers'] as const)(
+        'a child allocating %s past its limit ran out of memory, and the parent lives on',
+        async (heap) => {
+            const runner = makeRunner({ memoryLimitKiB: 1024 * 1024 });
+            const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+            const response = await runner.run(makeRequest({ behavior: 'allocate', heap }), PREVIEW_OPTIONS);
+            errorSpy.mockRestore();
+            expect(errorCode(response)).toBe('out-of-memory');
+
+            const next = await runner.run(makeRequest(), PREVIEW_OPTIONS);
+            expect(next.ok).toBe(true);
+            await runner.close();
+        },
+        30_000,
+    );
+
+    test('a child killed by SIGBUS after taking the job ran out of memory', async () => {
+        const runner = makeRunner();
+        const died = await runner.run(makeRequest({ behavior: 'signal', signal: 'SIGBUS' }), PREVIEW_OPTIONS);
+        expect(errorCode(died)).toBe('out-of-memory');
+        await runner.close();
+    });
+
+    // A soft CPU limit ends a spinning orphan with SIGXCPU, a crash; a hard one would SIGKILL it, which reads as out of
+    // memory. GC and JIT threads spend CPU on every core, so the limit counts them all. A host that pipes cores to a
+    // handler ignores the core limit, so the filter is what keeps a dying child's address space out of the dump.
+    test('the child runs under the wrapper: its data limit, a soft CPU limit, no core, the OOM killer first, the JIT knob', async () => {
+        const runner = makeRunner({ memoryLimitKiB: 1024 * 1024 });
+        const response = await runner.run(makeRequest({ behavior: 'limits' }), PREVIEW_OPTIONS);
+        const { oomScoreAdj, coredumpFilter, limits, jit } = JSON.parse(previewBody(response));
+        const limit = (name: string) =>
+            String(limits)
+                .match(new RegExp(`^${name}\\s+(\\S+)\\s+(\\S+)`, 'm'))
+                ?.slice(1);
+        const cpuSeconds = Math.ceil(PREVIEW_OPTIONS.deadlineMs / 1000) * availableParallelism() + 60;
+        expect(oomScoreAdj).toBe('1000');
+        expect(limit('Max data size')).toEqual([String(1024 ** 3), String(1024 ** 3)]);
+        expect(limit('Max cpu time')).toEqual([String(cpuSeconds), 'unlimited']);
+        expect(limit('Max core file size')?.[0]).toBe('0');
+        expect(coredumpFilter).toBe('00000000');
+        expect(jit).toBe('67108864');
+        await runner.close();
     });
 });

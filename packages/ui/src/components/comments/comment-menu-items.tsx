@@ -3,7 +3,8 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Check, MessageSquare, MessageSquarePlus, Palette, Pencil, RotateCcw, Trash2 } from 'lucide-react';
-import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../dropdown-menu';
+import { MenuSections } from '../context-menu/menu-sections';
+import { ChoiceMenuSub, DropdownMenuItem } from '../dropdown-menu';
 import { AssigneeMenuItems } from './assignee-menu-items';
 
 export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | undefined };
@@ -23,6 +24,9 @@ type CommentMenuItemsProps = {
     members?: EffectiveMember[];
     currentUserEmail?: string;
     onAssign?: (chatName: string, email: string | null, title?: string) => void;
+    // Alone, as a card's own menu, the rows take MenuSections' groups. In a host's menu about something else (a
+    // cell, an image) the host draws 'rows' in its collaborate group and 'delete' in its destructive group.
+    part?: 'rows' | 'delete';
 };
 
 export function CommentMenuItems({
@@ -38,10 +42,11 @@ export function CommentMenuItems({
     members,
     currentUserEmail,
     onAssign,
+    part,
 }: CommentMenuItemsProps) {
     const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
     if (!item) {
-        if (!onAddComment) return null;
+        if (!onAddComment || part === 'delete') return null;
         return (
             <DropdownMenuItem onClick={onAddComment}>
                 <MessageSquarePlus className="h-4 w-4" /> Add {noun}
@@ -53,36 +58,40 @@ export function CommentMenuItems({
     // its first message or assignment seeds it server-side.
     const chatName = card.chatName;
     const status = entry?.status ?? 'open';
-    return (
+    const view = onOpen && (
+        <DropdownMenuItem onClick={() => onOpen(card.id)}>
+            <MessageSquare className="h-4 w-4" /> View {noun}
+        </DropdownMenuItem>
+    );
+    const organize = (
         <>
-            {onOpen && (
-                <DropdownMenuItem onClick={() => onOpen(card.id)}>
-                    <MessageSquare className="h-4 w-4" /> View {noun}
-                </DropdownMenuItem>
-            )}
             {onEdit && (
                 <DropdownMenuItem onClick={() => onEdit(card.id)}>
                     <Pencil className="h-4 w-4" /> Edit {noun}
                 </DropdownMenuItem>
             )}
             {onChangeColor && (
-                <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="gap-2">
-                        <Palette className="h-4 w-4" /> {Noun} color
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                        {EIGEN_STICKIES_COLORS[0].map((c) => (
-                            <DropdownMenuItem key={c.value} onClick={() => onChangeColor(card.id, c.value)}>
+                <ChoiceMenuSub
+                    trigger={
+                        <>
+                            <Palette className="h-4 w-4" /> {Noun} color
+                        </>
+                    }
+                    value={card.color}
+                    options={EIGEN_STICKIES_COLORS[0].map((c) => ({
+                        value: c.value,
+                        label: (
+                            <>
                                 <span
                                     className="h-4 w-4 shrink-0 rounded-full border border-border/50"
                                     style={{ backgroundColor: c.value }}
                                 />
-                                <span className="flex-1">{c.label}</span>
-                                {card.color === c.value && <Check className="h-4 w-4 shrink-0" />}
-                            </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                                {c.label}
+                            </>
+                        ),
+                    }))}
+                    onChange={(color) => onChangeColor(card.id, color)}
+                />
             )}
             {onAssign && members && currentUserEmail && chatName && (
                 <AssigneeMenuItems
@@ -102,11 +111,21 @@ export function CommentMenuItems({
                     <RotateCcw className="h-4 w-4" /> Reopen {noun}
                 </DropdownMenuItem>
             )}
-            {onDelete && (
-                <DropdownMenuItem variant="destructive" onClick={() => onDelete(card.id)}>
-                    <Trash2 className="h-4 w-4" /> Delete {noun}
-                </DropdownMenuItem>
-            )}
         </>
     );
+    const remove = onDelete && (
+        <DropdownMenuItem variant="destructive" onClick={() => onDelete(card.id)}>
+            <Trash2 className="h-4 w-4" /> Delete {noun}
+        </DropdownMenuItem>
+    );
+    if (part === 'rows') {
+        return (
+            <>
+                {view}
+                {organize}
+            </>
+        );
+    }
+    if (part === 'delete') return remove ?? null;
+    return <MenuSections open={view} organize={organize} destructive={remove} />;
 }

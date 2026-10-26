@@ -1,4 +1,5 @@
-import { type CommonOptions, celldataToData, dataToCelldata, getSheetWithLatestCelldata } from './common';
+import type { CommonOptions } from './common';
+import { celldataToData, dataToCelldata, getSheetWithLatestCelldata } from './common';
 
 export * from './cell';
 export * from './merge';

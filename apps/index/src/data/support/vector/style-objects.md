@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, styling, fill, stroke, colors, text]
 related: [vector/draw-shapes-and-text, vector/connect-with-arrows, vector/arrange-and-align]
 order: 50
-updated: 2026-09-11
+updated: 2026-10-23
 ---
 
 Select an object in a drawing and the panel on the right fills with its style controls. The sections change to match what you picked: a shape has a fill, an arrow does not, text has its own typography rows. This page lists every section, in the order it appears, and what each control does.
@@ -31,7 +31,7 @@ Shown only for text objects. It styles the text itself. The box behind the text 
 | Control | What it does |
 |---|---|
 | **Font** | The typeface |
-| **Size** | Text size, from 8 to 200 |
+| **Size** | Text size in whole pixels, from 8 to 200 |
 | **Color** | Text color |
 | **Style** | **Bold**, **Italic**, **Underline**, and **Strikethrough** toggles |
 | **Align** | Horizontal alignment: left, center, right, or justify |
@@ -43,7 +43,7 @@ Shown with the **Text** section, for text objects.
 
 | Control | What it does |
 |---|---|
-| **Letter** | Letter spacing |
+| **Letter** | Letter spacing in pixels |
 | **Line** | Line height |
 | **Padding** | The gap between the text and the edge of its box |
 
@@ -71,7 +71,7 @@ The object's outline. Shown for any selection, because every object is drawn wit
 | Control | What it does |
 |---|---|
 | **Color** | Outline color. On shapes, text, and images you can set it to **None**. A line or arrow is its stroke, so it always keeps a color. |
-| **Width** | **Thin**, **Medium**, or **Bold** |
+| **Width** | Line thickness in pixels. Type any number, such as 1.5 |
 | **Style** | **Solid**, **Dashed**, or **Dotted**. Not shown for freehand drawings. |
 
 ## Shape
@@ -108,7 +108,8 @@ Sections show only where they mean something for the object you picked.
 | Section | Shown for |
 |---|---|
 | **Transform**, **Stroke**, **Sketch**, **Appearance** | Every object |
-| **Fill** | Shapes and text, plus a closed line or drawing |
+| **Fill** | Shapes, text, and charts, plus a closed line or drawing |
+| **Labels** | Charts |
 | **Text**, **Spacing** | Text |
 | **Image** | Images |
 | **Shape** (**Corners**) | Rectangles, diamonds, text, and images |

@@ -6,7 +6,7 @@ category: Editing
 tags: [slides, selection, align, arrange, layers]
 related: [slides/create-and-edit, slides/draw-shapes-and-arrows, slides/style-objects]
 order: 55
-updated: 2026-09-29
+updated: 2026-10-23
 ---
 
 Once a slide has a few objects on it, the work becomes tidying: picking several at once, moving them by exact amounts, stacking them in the right order, and lining them up. This article covers all of that. For placing and resizing a single object, see [Create and edit a presentation](/support/slides/create-and-edit).
@@ -35,7 +35,7 @@ Select one or more objects, then press **Cmd+D** (Mac) or **Ctrl+D** (Windows). 
 
 ## Change the stacking order
 
-Every object sits in a stack, and the ones higher up cover the ones below. With an object selected, the properties panel on the right shows an **Arrange** section with four buttons. The same commands are on the right-click menu:
+Every object sits in a stack, and the ones higher up cover the ones below. With an object selected, the properties panel on the right shows an **Arrange** section with four buttons. The same commands are under **Order** in the right-click menu:
 
 - **Bring to front** (**Cmd+Shift+]**): move to the very top.
 - **Bring forward** (**Cmd+]**): move up one step.
@@ -60,14 +60,18 @@ The second row spaces and sizes them:
 
 Right-click an object to open its menu. The commands appear in this order:
 
-- **Bring to front**, **Bring forward**, **Send backward**, **Send to back**.
-- **Copy**, **Cut**, **Paste**.
-- **Duplicate**, **Delete**.
-- **Download original image**, on an image only. It saves the image file at its full size and in its own format.
+- **Cut**, **Copy**, **Paste**.
+- **Duplicate**.
+- **Order**, which opens **Bring to front**, **Bring forward**, **Send backward**, and **Send to back**.
+- **Convert to shapes**, when the selection is one chart. It replaces the chart with ordinary shapes and text boxes that look the same, and leaves them all selected. You can't turn them back into a chart, but undo (**⌘Z**, or **Ctrl+Z** on Windows) right after brings the chart back.
+- **Download original image**, on an image. It saves the image file at its full size and in its own format.
+- **Download image**, on anything but a single image. It saves the selection as an SVG picture with a transparent background, named after the presentation. A chart on its own gets a white background and its title as its name.
+- **Add comment**, if you can comment on the presentation.
+- **Delete**, on its own at the bottom.
 
-If you can comment on the presentation, an **Add comment** row appears at the bottom.
+Right-click an empty spot on the slide to get **Paste** and the slide's own commands: **New slide above**, **New slide below**, **Duplicate slide**, and **Delete slide**.
 
-If you can only view the presentation, right-clicking an image gives you **Download original image** and nothing else.
+If you can only view the presentation, right-clicking an object gives you its download and nothing else: **Download original image** on an image, **Download image** on anything else.
 
 <div class="eigen-callout">
 

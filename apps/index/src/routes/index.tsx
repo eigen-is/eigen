@@ -61,7 +61,7 @@ export function HomeComponent() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
             <EigenCyclingLogo className="text-5xl mb-8" />
-            <div className="text-lg text-center mb-8 max-w-md">
+            <div className="text-lg text-center mb-8 max-w-xl">
                 <p className="mb-4">A self-hosted alternative to Google Workspace.</p>
                 <div className="text-sm text-muted-foreground text-balance">
                     {demoMode ? (
@@ -71,8 +71,9 @@ export function HomeComponent() {
                         </p>
                     ) : (
                         <>
-                            <p>Mail, drive, docs, sheets, slides, drawings, calendar and chat.</p>
-                            <p>Syncs with your own apps over IMAP, CalDAV, CardDAV and WebDAV.</p>
+                            <p>Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat.</p>
+                            <p>Syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV and WebDAV.</p>
+                            <p>Opens and saves Word, Excel and PowerPoint files.</p>
                         </>
                     )}
                 </div>

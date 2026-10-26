@@ -25,6 +25,17 @@ type SheetWithChain = Sheet & { calcChain?: { r: number; c: number; id: string }
 // ── recalcSheets ────────────────────────────────────────────────────────────
 
 describe('engine/recalc — recalcSheets', () => {
+    // A rich-text cell keeps its text in its runs alone, as the editor writes one and the xlsx import too.
+    test('a formula reads a rich-text cell as its runs, before and after an edit of them', () => {
+        const rich = (...runs: string[]): Cell => ({
+            ct: { fa: 'General', t: 'inlineStr', s: runs.map((v) => ({ v, bl: 1 })) },
+        });
+        const before = recalcSheets([sheet('s1', 'Sheet1', [[rich('Hello ', 'world'), formula('=A1&"!"')]])]);
+        expect(before[0].data![0][1]?.v).toBe('Hello world!');
+        const after = recalcSheets([sheet('s1', 'Sheet1', [[rich('Bye'), formula('=A1&"!"')]])]);
+        expect(after[0].data![0][1]?.v).toBe('Bye!');
+    });
+
     test('chained dependencies evaluate in order', () => {
         // A1=1 (literal), B1==A1+1, C1==B1+1 → 2, 3
         const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=A1+1'), formula('=B1+1')]])];
@@ -104,11 +115,11 @@ describe('engine/recalc — recalcSheets', () => {
     });
 
     test('engine error does not clobber a non-error cached value', () => {
-        // Functions this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) return
+        // Functions this build lacks (LET, FILTER, …) return
         // #NAME?. At import, Excel's correct cached value must survive — same
         // freeze-is-safe rationale as volatiles.
         const sheets = [
-            sheet('s1', 'Sheet1', [[formula('=TEXTJOIN(",",1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } })]]),
+            sheet('s1', 'Sheet1', [[formula('=FILTER(1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } })]]),
         ];
         const out = recalcSheets(sheets);
         expect(out[0].data![0][0]?.v).toBe(7);
@@ -121,11 +132,7 @@ describe('engine/recalc — recalcSheets', () => {
         // proving the #NAME? never entered the eval cache (execFunctionGlobalData).
         const sheets = [
             sheet('s1', 'Sheet1', [
-                [
-                    null,
-                    formula('=TEXTJOIN(",",1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } }),
-                    formula('=B1+1'),
-                ],
+                [null, formula('=FILTER(1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } }), formula('=B1+1')],
             ]),
         ];
         const out = recalcSheets(sheets);
@@ -154,10 +161,24 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![1][1]?.v).toBe('No input yet');
     });
 
+    test('an imported XLOOKUP recalculates after its input changed', () => {
+        // Excel's cached 2 predates the edit of B2 to 5.
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [str('a'), num(1), num(10), formula('=XLOOKUP("b",A1:A2,B1:B2)', num(2))],
+                [str('b'), num(5), num(50), formula('=XLOOKUP("b",A1:A2,B1:C2)', num(2))],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][3]?.v).toBe(5);
+        // A row-wide return is a spill anchor, which holds the row's first value.
+        expect(out[0].data![1][3]?.v).toBe(5);
+    });
+
     test('engine error with no cached value still writes the #NAME? sentinel', () => {
         // Pin the generator-case behavior: an unsupported function that was never
         // computed (no cached v) lands the error sentinel — better than a silent blank.
-        const sheets = [sheet('s1', 'Sheet1', [[formula('=TEXTJOIN(",",1,2)')]])];
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=FILTER(1,2)')]])];
         const out = recalcSheets(sheets);
         expect(out[0].data![0][0]?.v).toBe('#NAME?');
         expect(out[0].data![0][0]?.ct?.t).toBe('e');
@@ -250,6 +271,45 @@ describe('engine/recalc — recalcSheets', () => {
         const sheets = [sheet('s1', 'Sheet1', [[num(10), formula('=NoSheet!A1'), formula('=A1*3')]])];
         const out = recalcSheets(sheets);
         expect(out[0].data![0][2]?.v).toBe(30);
+    });
+
+    test('past its dependency budget a recalc throws before it computes', () => {
+        // On a sheet 128 rows deep, A1:A128 meets 2 blocks of 64 × 16, D1:D2 one.
+        const rows = Array.from({ length: 128 }, (): (Cell | null)[] => [null, null, null, null]);
+        rows[0] = [num(1), formula('=SUM(A1:A128)', num(7)), formula('=SUM(D1:D2)'), null];
+        const sheets = [sheet('s1', 'Sheet1', rows)];
+        expect(() => recalcSheets(sheets, { maxDependencyBlocks: 2 })).toThrow(RangeError);
+        expect(recalcSheets(sheets, { maxDependencyBlocks: 3 })[0].data![0][1]?.v).toBe(1);
+    });
+
+    test('past its budget of cells read a recalc throws, before it reads them', () => {
+        // SUM(A1:A3) reads 3 cells, SUM(A1:A2) 2.
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=SUM(A1:A3)')],
+                [num(2), formula('=SUM(A1:A2)')],
+                [num(3), null],
+            ]),
+        ];
+        expect(() => recalcSheets(sheets, { maxCellsRead: 4 })).toThrow(RangeError);
+        // A formula failing on the budget keeps its cached value, which must not let the pass carry on.
+        const cached = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=SUM(A1:A2)', num(9))],
+                [num(2), null],
+            ]),
+        ];
+        expect(() => recalcSheets(cached, { maxCellsRead: 1 })).toThrow(RangeError);
+        const out = recalcSheets(sheets, { maxCellsRead: 5 });
+        expect([out[0].data![0][1]?.v, out[0].data![1][1]?.v]).toEqual([6, 3]);
+    });
+
+    test('a range past the sheets is charged and indexed for the cells they hold', () => {
+        // A1 reads C1 through the whole grid's range, so C1 computes first; the range costs the one block the sheet spans.
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula('=SUM(B1:XFD1048576)'), num(5), formula('=B1+1')]], { row: 1, column: 3 }),
+        ];
+        expect(recalcSheets(sheets, { maxDependencyBlocks: 1 })[0].data![0][0]?.v).toBe(11);
     });
 
     test('output carries a populated calcChain for formula cells', () => {

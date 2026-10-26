@@ -2,7 +2,8 @@ import { join } from 'node:path';
 import { and, eq, sql } from 'drizzle-orm';
 import { Calendar } from '../lib/calendar/calendar';
 import * as schema from '../lib/calendar/schema';
-import { makeTestHome, type TestHome } from './home-test-helpers';
+import type { TestHome } from './home-test-helpers';
+import { makeTestHome } from './home-test-helpers';
 
 // One scratch root per test run, wiped by each test file's beforeAll.
 export const CALENDAR_TEST_ROOT = join(import.meta.dir, `../../../../data-test/test-calendar-${Date.now()}`);

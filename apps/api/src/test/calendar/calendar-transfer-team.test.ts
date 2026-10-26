@@ -6,7 +6,8 @@ import { ICS_MIME } from '@workspace/lib/types/drive';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { getServerConfig } from '../../lib/config/server-config';
 import { vcal } from '../ics-test-helpers';
-import { assertJson, authedRequest, getTestContext, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { assertJson, authedRequest, getTestContext } from '../setup';
 
 // A team calendar is an import and export target on the access team members already have for it: the rule
 // `createEvent` takes, which is a write share on the team home's own calendar and nothing new.

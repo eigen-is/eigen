@@ -1,13 +1,9 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import {
-    DEFAULT_ELEMENT_PROPS,
-    ELEMENT_KINDS,
-    richTextFitHeight,
-    VECTOR_STYLE_DEFAULTS,
-    type VectorRichTextElement,
-} from '@workspace/lib/vector';
+import type { VectorRichTextElement } from '@workspace/lib/vector';
+import { DEFAULT_ELEMENT_PROPS, ELEMENT_KINDS, richTextFitHeight, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import { Window } from 'happy-dom';
-import { type FitHeight, textBodyHeight, useRichTextAutoFit } from '../../../components/vector/text-fit';
+import type { FitHeight } from '../../../components/vector/text-fit';
+import { textBodyHeight, useRichTextAutoFit } from '../../../components/vector/text-fit';
 
 // A DOM at module scope, the element-layer suite's recipe — the measure reads layout properties off
 // real nodes, and `instanceof HTMLElement` needs the constructor to be the global one.
@@ -24,11 +20,11 @@ g.IS_REACT_ACT_ENVIRONMENT = true;
 // the offsets a browser would have laid out are on the node.
 let remeasure: (() => void) | null = null;
 class FakeResizeObserver {
-    constructor(callback: () => void) {
+    public constructor(callback: () => void) {
         remeasure = callback;
     }
-    observe() {}
-    disconnect() {}
+    public observe() {}
+    public disconnect() {}
 }
 g.ResizeObserver = FakeResizeObserver;
 

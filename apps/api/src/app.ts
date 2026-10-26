@@ -1,3 +1,7 @@
+// The one Elysia app behind the API: every router, mounted together with what all of them share, such
+// as CORS, rate limits, the error handler and the WebSocket options. The server listens with it, tests
+// send requests to it directly, and its type is what the Eden clients are built from.
+
 import cors from '@elysiajs/cors';
 import { serverTiming } from '@elysiajs/server-timing';
 import swagger from '@elysiajs/swagger';
@@ -57,11 +61,11 @@ export const app = new Elysia({
     // options) only — `websocket` config set on a `.use()`d plugin (e.g.
     // collabRouter) is silently ignored. perMessageDeflate only negotiates the
     // extension; Bun deflates just the frames sent with compress=true
-    // (collabDocument's sendFrame). A dedicated compressor, not `true`'s shared one: the shared one
-    // ends a small message's deflate stream with BFINAL, after which Safari drops the connection.
-    // 32KB is per socket and deflates a large sheet as well as the 256KB `dedicated`.
+    // (CollabDocument's sendFrame). `true` is the shared compressor, as a
+    // dedicated one holds ~282 KB of zlib state per socket; no frame may end
+    // the deflate stream (BFINAL), as Safari then drops the connection.
     websocket: {
-        perMessageDeflate: { compress: '32KB', decompress: 'shared' },
+        perMessageDeflate: true,
         // Bun's 16MB default is measured on the decoded frame — below the ~48MB
         // worst-case sheets snapshot sync, which would close the socket with code 1009.
         maxPayloadLength: 128 * 1024 * 1024,

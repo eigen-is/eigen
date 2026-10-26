@@ -1,6 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
-import { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
+import type { CommentContextMenuItem } from './comment-menu-items';
+import { CommentMenuItems } from './comment-menu-items';
 
 // Binds the shared comment rows to the lifecycle bundle so every host — the stickies/docs/vector
 // context menu, slides' object menu, sheets' cell menu — offers the same actions from one wiring,
@@ -14,6 +15,7 @@ type CommentLifecycleMenuItemsProps = {
     noun?: string;
     onAddComment?: () => void;
     onDelete?: (cardId: string) => void;
+    part?: 'rows' | 'delete';
 };
 
 export function CommentLifecycleMenuItems({
@@ -23,6 +25,7 @@ export function CommentLifecycleMenuItems({
     noun,
     onAddComment,
     onDelete,
+    part,
 }: CommentLifecycleMenuItemsProps) {
     const { setOpenCardId, openCardForEdit, updateCard, resolveComment, assignComment, members } = lifecycle;
     const { user } = useAuth();
@@ -31,6 +34,7 @@ export function CommentLifecycleMenuItems({
         <CommentMenuItems
             item={item}
             noun={noun}
+            part={part}
             onAddComment={canWrite ? onAddComment : undefined}
             onOpen={setOpenCardId}
             onEdit={canWrite ? openCardForEdit : undefined}

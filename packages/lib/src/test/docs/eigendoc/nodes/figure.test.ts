@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createDocument, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
+import type { JSONContent } from '@tiptap/core';
+import { createDocument, generateHTML, getSchema } from '@tiptap/core';
 import { getDocExtensions, readFigureAttrs } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 
@@ -26,6 +27,11 @@ describe('figure HTML', () => {
 
     test('an uncommented figure writes no comment id', () => {
         expect(generateHTML(figureDoc({ mediaName: 'a.png' }), extensions)).not.toContain('data-comment-id');
+    });
+
+    // A peer writes any value, and a copy serializes the node.
+    test('a caption that is not a string renders none, never throwing', () => {
+        expect(generateHTML(figureDoc({ mediaName: 'a.png', caption: 3 }), extensions)).not.toContain('figcaption');
     });
 });
 
@@ -56,6 +62,19 @@ describe('figure parse', () => {
                 '<figure data-layout="wrap-right" data-alignment="left"><img src="a.png"><figcaption>Old</figcaption></figure>',
             ),
         ).toMatchObject([{ src: 'a.png', caption: 'Old', layout: 'wrap-right', alignment: 'left' }]);
+    });
+
+    // A paste or a peer's HTML carries any string; the node keeps only a value the renderers know.
+    test('a layout or an alignment it does not know parses as the default', () => {
+        expect(
+            figuresIn(
+                '<p><span class="figure" data-layout="behind" data-alignment="middle"><img src="a.png"></span></p>' +
+                    '<figure data-layout="front"><img src="b.png"></figure>',
+            ),
+        ).toMatchObject([
+            { layout: 'block', alignment: 'center' },
+            { layout: 'block', alignment: 'center' },
+        ]);
     });
 });
 

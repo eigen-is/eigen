@@ -19,7 +19,6 @@ import type {
     TextAlign,
     VerticalAlign,
 } from '@workspace/lib/vector';
-import type { CanvasSide } from './canvas-build';
 
 export type LeadRole =
     | 'director'
@@ -545,6 +544,8 @@ export const VCARD_FILES: SeededVCardFile[] = [
 // --- Site plan (a vector drawing the seeder builds straight into the container's Y.Doc from this
 // spec — no fixture bytes; see vector-build.ts). Scene units are pixels, y down; every shape's
 // label is centered inside it. Shape keys are stable so arrows can bind to them by name. ---
+
+export type CanvasSide = 'top' | 'right' | 'bottom' | 'left';
 
 // An arrow end: docked on a named shape's side (a real binding) or a free scene point.
 // `along` (0..1) docks off-center on a rectangle side; default is the side midpoint.

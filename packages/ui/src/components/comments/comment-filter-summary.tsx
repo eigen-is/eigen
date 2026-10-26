@@ -1,4 +1,5 @@
-import { COMMENT_STATUS_LABELS, type useCommentFilter } from '@workspace/lib/comments';
+import type { useCommentFilter } from '@workspace/lib/comments';
+import { COMMENT_STATUS_LABELS } from '@workspace/lib/comments';
 import { useResolvedUser } from '@workspace/lib/public';
 
 type FilterSummaryProps = {

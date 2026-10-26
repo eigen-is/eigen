@@ -1,6 +1,7 @@
 import { useListDropTarget } from '../../../hooks/use-list-drop-target';
 import { cn } from '../../../lib/utils';
-import { SidebarItem, type SidebarItemProps } from './sidebar-item';
+import type { SidebarItemProps } from './sidebar-item';
+import { SidebarItem } from './sidebar-item';
 
 type DroppableSidebarItemProps = SidebarItemProps & {
     acceptTypes: string[];

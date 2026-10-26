@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, fstatSync, mkdirSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import type { FileHandle } from 'node:fs/promises';
 import * as fsPromises from 'node:fs/promises';
-import { type FileHandle, open } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { getHome } from '../../lib/home';

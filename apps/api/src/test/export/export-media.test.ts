@@ -1,11 +1,15 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import sharp, { type Sharp } from 'sharp';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import type { Sharp } from 'sharp';
+import sharp from 'sharp';
+import type { DatabaseConfig, SchemaType } from '../../lib/core';
+import { ManagedDatabase } from '../../lib/core';
 import type { ExportMedia } from '../../lib/document/transform/protocol';
 import { collectExportMedia } from '../../lib/export/media';
 import { Mount } from '../../lib/mount/mount';
+import { MAX_DECOMPRESSED_BYTES } from '../../lib/ooxml/zip';
+import * as previewCache from '../../lib/preview/preview-cache';
 import { SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
 import * as thumbnails from '../../lib/shared/thumbnails';
 import { createTestMountConfig } from '../mount-test-helpers';
@@ -151,10 +155,14 @@ describe('collectExportMedia', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
-    async function collect(format: 'docx' | 'html' | 'pdf-html', signal?: AbortSignal): Promise<ExportMedia[]> {
+    // Every file, as a document naming them all asks for.
+    async function collect(
+        format: 'docx' | 'pptx' | 'xlsx' | 'html' | 'pdf-html',
+        signal = new AbortController().signal,
+    ): Promise<ExportMedia[]> {
         const container = await mount.getPath(containerId);
         if (!container) throw new Error('no container');
-        return collectExportMedia(mount, container, format, signal);
+        return collectExportMedia(mount, container, format, [...sources.keys()], signal);
     }
 
     // A docx re-encodes every image from its source on the thumbnail semaphore every upload and preview shares.
@@ -178,7 +186,34 @@ describe('collectExportMedia', () => {
         expect(peak).toBe(1);
     }, 60_000);
 
-    test('a docx queues no more media once its export aborts', async () => {
+    // An SVG's siblings inline into it, so what it sends can outgrow its file: the prepared bytes are the cap too. A
+    // zeroed buffer of its own is sent as it is, so the test commits no memory for it.
+    test('SVGs whose prepared bytes pass MAX_DECOMPRESSED_BYTES in all are a 413', async () => {
+        const inlined = Buffer.alloc(MAX_DECOMPRESSED_BYTES / 2 + 1);
+        const preview = spyOn(previewCache, 'getScreenPreview').mockResolvedValue({
+            type: 'image',
+            contentType: 'image/svg+xml',
+            data: inlined,
+        });
+        const container = await mount.getPath(containerId);
+        if (!container) throw new Error('no container');
+        let failure: unknown;
+        try {
+            failure = await collectExportMedia(
+                mount,
+                container,
+                'html',
+                ['drawing.svg', 'html.svg', 'chart.png'],
+                new AbortController().signal,
+            ).catch((err: unknown) => err);
+            expect(preview).toHaveBeenCalledTimes(2);
+        } finally {
+            preview.mockRestore();
+        }
+        expect(failure).toMatchObject({ status: 413 });
+    });
+
+    test('a docx queues no more media once its job ends', async () => {
         const controller = new AbortController();
         const spy = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
             controller.abort();
@@ -208,6 +243,14 @@ describe('collectExportMedia', () => {
         expect(kinds('lossy.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
         expect(kinds('tagged.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
         expect(kinds('photo.avif')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
+    }, 60_000);
+
+    test('a pptx and an xlsx take what a docx takes: each image from its source, with the Worker size', async () => {
+        const summary = (media: ExportMedia[]) =>
+            media.map(({ name, contentType, width, height }) => [name, contentType, width, height]);
+        const docx = summary(await collect('docx'));
+        expect(summary(await collect('pptx'))).toEqual(docx);
+        expect(summary(await collect('xlsx'))).toEqual(docx);
     }, 60_000);
 
     test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with ICC, EXIF or alpha', () => {

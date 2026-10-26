@@ -1,5 +1,6 @@
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../engine/defaults';
-import { type Context, FormulaCache, type SheetConfig } from '../../../state/index';
+import type { Context, SheetConfig } from '../../../state/index';
+import { FormulaCache } from '../../../state/index';
 
 export function selectionFactory(row: number[], column: number[], row_focus: number, column_focus: number) {
     return [

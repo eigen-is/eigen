@@ -6,7 +6,8 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
-import { Check, type LucideIcon, RotateCcw } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Check, RotateCcw } from 'lucide-react';
 import { DEFAULT_COLORS } from './color-picker';
 
 type ColorPickerMenuItemProps = {
@@ -47,7 +48,7 @@ export function ColorPickerMenuItem({
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-                {Icon && <Icon className="size-4 mr-2" />}
+                {Icon && <Icon className="size-4" />}
                 <span>{label}</span>
                 <span className="ml-auto h-3 w-6 rounded border" style={{ backgroundColor: value || 'transparent' }} />
             </DropdownMenuSubTrigger>

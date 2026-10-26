@@ -1,38 +1,59 @@
+// The Workbook's imperative API, what a host app calls through the Workbook's ref: a peer's ops, undo and redo, the
+// floating images and charts, search and replace. Its writes run as recipes on the workbook's context, as the
+// editor's own edits do.
+
+import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
-import { applyPatches, produce } from 'immer';
+import type { Box, ZOp } from '@workspace/lib/vector';
+import type { Patch } from 'immer';
+import { applyPatches, current, produce } from 'immer';
+import { v4 as uuidv4 } from 'uuid';
 import type { SetContextOptions } from '../../context';
+import type { ChartRangeRefusal } from '../../engine/chart-range';
+import { setUpChartRange } from '../../engine/chart-range';
 import { RowColError } from '../../engine/rowcol';
 import type { Cell } from '../../engine/types';
+import type {
+    ChartInsertBox,
+    Context,
+    FloatingRef,
+    GlobalCache,
+    Op,
+    Presence,
+    Range,
+    SearchHighlight,
+    SearchResult,
+    Settings,
+} from '../../state';
 import {
     addSheet,
     api,
-    type Context,
     collectMatches,
+    createContextResolver,
     createFilterOptions,
+    deleteFloatingObject,
     deleteRowCol,
     deleteSheet,
     getFlowdata,
     getSheetIndex,
-    type Image,
+    insertChart,
     insertImage,
     insertRowCol,
     leaveCurrentSheet,
-    type Op,
     opToPatch,
-    type Presence,
-    type Range,
     registerSheetFormulas,
-    removeActiveImage,
     removeImageByMediaName,
+    reorderFloatingObject,
     replaceAllMatches,
     replaceImageMediaName,
+    replaceMediaNameInHistory,
     replaceSearchMatch,
     revealSearchMatch,
-    type SearchHighlight,
-    type SearchResult,
-    type Settings,
+    setChartDataRange,
+    setChartLook,
+    setChartSpec,
     setSearchHighlights,
-    updateImage,
+    updateFloatingBox,
 } from '../../state';
 
 export function generateAPIs(
@@ -41,55 +62,77 @@ export function generateAPIs(
     handleUndo: () => void,
     handleRedo: () => void,
     settings: Required<Settings>,
+    history: Pick<GlobalCache, 'undoList' | 'redoList'>,
 ) {
     return {
         applyOp: (ops: Op[]) => {
             setContext(
                 (ctx_) => {
-                    const [patches, specialOps] = opToPatch(ctx_, ops);
-                    for (const specialOp of specialOps) {
-                        if (specialOp.op === 'insertRowCol') {
-                            try {
-                                // force: this is an authoritative remote op — mirror the data shift
-                                // even for read-only viewers, or the grid diverges from the metadata
-                                // patches applied below (api.ts).
-                                insertRowCol(ctx_, specialOp.value, false, true);
-                            } catch (e) {
-                                if (!(e instanceof RowColError)) throw e;
-                                console.warn('[sheet] insertRowCol op skipped:', e.code);
-                            }
-                        } else if (specialOp.op === 'deleteRowCol') {
-                            try {
-                                deleteRowCol(ctx_, specialOp.value, true);
-                            } catch (e) {
-                                if (!(e instanceof RowColError)) throw e;
-                                console.warn('[sheet] deleteRowCol op skipped:', e.code);
-                            }
-                        } else if (specialOp.op === 'addSheet') {
-                            // The name comes from sheetData: opToPatch prefixes every patch path with 'sheets'.
-                            if (specialOp.value.id) {
-                                addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value, true);
-                            }
-                            const { id } = specialOp.value;
-                            const fileIndex = getSheetIndex(ctx_, id);
-                            if (fileIndex == null) continue;
-                            registerSheetFormulas(ctx_, id, api.initSheetData(ctx_, fileIndex, specialOp.value));
-                        } else if (specialOp.op === 'deleteSheet') {
-                            deleteSheet(ctx_, specialOp.value.id, true);
-                            patches.length = 0;
-                        }
-                    }
-                    if (ops[0]?.path?.[0] === 'filterRange') ctx_.filterRange = ops[0].value;
-                    else if (ops[0]?.path?.[0] === 'hide' && ops[0].id === ctx_.currentSheetId) {
-                        leaveCurrentSheet(ctx_, ops[0].id);
-                    }
-                    createFilterOptions(ctx_, ctx_.filterRange, ops[0]?.id);
-                    if (patches.length === 0) return;
+                    // A batch applies whole or not at all, as replaySheetsOps applies it: a patch that fails takes the
+                    // row, column and sheet ops before it back too, or this client disagrees with a joiner.
+                    let patches: Patch[] = [];
+                    let applied: Context;
                     try {
-                        applyPatches(ctx_, patches);
+                        applied = produce(current(ctx_), (draft: Context) => {
+                            let specialOps: Op[];
+                            [patches, specialOps] = opToPatch(draft, ops);
+                            for (const specialOp of specialOps) {
+                                if (specialOp.op === 'insertRowCol') {
+                                    try {
+                                        // force: this is an authoritative remote op — mirror the data shift
+                                        // even for read-only viewers, or the grid diverges from the metadata
+                                        // patches applied below (api.ts).
+                                        insertRowCol(draft, specialOp.value, false, true);
+                                    } catch (e) {
+                                        if (!(e instanceof RowColError)) throw e;
+                                        console.warn('[sheet] insertRowCol op skipped:', e.code);
+                                    }
+                                } else if (specialOp.op === 'deleteRowCol') {
+                                    try {
+                                        deleteRowCol(draft, specialOp.value, true);
+                                    } catch (e) {
+                                        if (!(e instanceof RowColError)) throw e;
+                                        console.warn('[sheet] deleteRowCol op skipped:', e.code);
+                                    }
+                                } else if (specialOp.op === 'addSheet') {
+                                    // The name comes from sheetData: opToPatch prefixes every patch path with 'sheets'.
+                                    if (specialOp.value.id) {
+                                        addSheet(
+                                            draft,
+                                            settings,
+                                            specialOp.value.id,
+                                            false,
+                                            undefined,
+                                            specialOp.value,
+                                            true,
+                                        );
+                                    }
+                                    const { id } = specialOp.value;
+                                    const fileIndex = getSheetIndex(draft, id);
+                                    if (fileIndex == null) continue;
+                                    registerSheetFormulas(
+                                        draft,
+                                        id,
+                                        api.initSheetData(draft, fileIndex, specialOp.value),
+                                    );
+                                } else if (specialOp.op === 'deleteSheet') {
+                                    deleteSheet(draft, specialOp.value.id, true);
+                                    patches.length = 0;
+                                }
+                            }
+                            if (ops[0]?.path?.[0] === 'filterRange') draft.filterRange = ops[0].value;
+                            else if (ops[0]?.path?.[0] === 'hide' && ops[0].id === draft.currentSheetId) {
+                                leaveCurrentSheet(draft, ops[0].id);
+                            }
+                            createFilterOptions(draft, draft.filterRange, ops[0]?.id);
+                            if (patches.length > 0) applyPatches(draft, patches);
+                        });
                     } catch (e) {
-                        console.error(e);
+                        console.warn('[sheet] op batch failed to apply, skipping batch:', e);
+                        return;
                     }
+                    Object.assign(ctx_, applied);
+                    if (patches.length === 0) return;
                     ctx_.formulaCache.updateFormulaCache(ctx_, { patches, inversePatches: [] }, 'redo');
                 },
                 { noHistory: true },
@@ -144,18 +187,57 @@ export function generateAPIs(
 
         // Pending→real swap after an upload/paste settles — a technical fixup, never the user's own
         // undo step (noUndo emits the op to peers but records no local undo entry).
-        replaceImageMediaName: (oldName: string, newName: string) =>
-            setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName), { noUndo: true }),
+        replaceImageMediaName: (oldName: string, newName: string) => {
+            setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName), { noUndo: true });
+            replaceMediaNameInHistory(history, oldName, newName);
+        },
 
         removeImageByMediaName: (name: string) =>
             setContext((draftCtx) => removeImageByMediaName(draftCtx, name), { noUndo: true }),
 
-        // ObjectTransform resize/rotate commit + properties-panel numeric edits — one op + undo step
-        // each (default setContext).
-        updateImage: (id: string, fields: Partial<Pick<Image, 'x' | 'y' | 'width' | 'height' | 'angle'>>) =>
-            setContext((draftCtx) => updateImage(draftCtx, id, fields)),
+        // A move, the ObjectTransform resize/rotate commit and a properties-panel numeric edit: one op and
+        // undo step each.
+        updateFloatingBox: (ref: FloatingRef, fields: Partial<Box>) =>
+            setContext((draftCtx) => updateFloatingBox(draftCtx, ref, fields)),
 
-        removeActiveImage: () => setContext((draftCtx) => removeActiveImage(draftCtx)),
+        reorderFloatingObject: (ref: FloatingRef, op: ZOp) =>
+            setContext((draftCtx) => reorderFloatingObject(draftCtx, ref, op)),
+
+        deleteFloatingObject: (ref: FloatingRef) => setContext((draftCtx) => deleteFloatingObject(draftCtx, ref)),
+
+        // One op + undo step each, on the current sheet. The id is made here so the caller can
+        // select the new chart; the recipe runs later, so a dry run on this state tells a viewer or
+        // a missing sheet apart, which inserts nothing and returns null.
+        insertChart: (box: ChartInsertBox, spec: ChartSpec): string | null => {
+            const id = uuidv4();
+            const recipe = (draftCtx: Context) => insertChart(draftCtx, id, box, spec);
+            if (produce(context, recipe) === context) return null;
+            setContext(recipe);
+            return id;
+        },
+
+        setChartSpec: (id: string, change: ChartSpecChange) =>
+            setContext((draftCtx) => setChartSpec(draftCtx, id, change)),
+
+        setChartLook: (id: string, look: Partial<ChartLook>) =>
+            setContext((draftCtx) => setChartLook(draftCtx, id, look)),
+
+        // Sets the range up, or says why it holds no chart and writes nothing.
+        setChartDataRange: (id: string, ref: CellRangeRef): ChartRangeRefusal | undefined => {
+            const setup = setUpChartRange(ref, createContextResolver(context));
+            if (typeof setup === 'string') return setup;
+            setContext((draftCtx) => setChartDataRange(draftCtx, id, ref));
+        },
+
+        // Opens one undo step for a panel edit and returns its release (PropertyGestureContext).
+        beginGesture: () => {
+            const gesture = {};
+            const cache = context.getRefs().globalCache;
+            cache.undoGesture = gesture;
+            return () => {
+                if (cache.undoGesture === gesture) cache.undoGesture = undefined;
+            };
+        },
 
         undo: handleUndo,
         redo: handleRedo,

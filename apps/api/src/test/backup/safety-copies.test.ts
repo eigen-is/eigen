@@ -40,6 +40,7 @@ import {
     settlesWithin,
     unregisterFaultMount,
 } from '../fault-storage-helpers';
+import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
@@ -50,7 +51,6 @@ import {
     openMountMetadata,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
-    type TestUser,
 } from '../setup';
 
 const MOUNT_ID = 'safety-s3';
@@ -158,7 +158,7 @@ describe('Backup safety copies of an s3 home', () => {
         // carries no bytes for it, and a restore still has to take its key away from it.
         ghostId = await mount.touchFile(root.id, 'ghost.txt', 'text/plain');
         await settleContainer(mount, doc.id);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         pngKey = await mount.getStorageKey(pngId);
         versionKey = await mount.getStorageKey(versionId);
@@ -210,7 +210,7 @@ describe('Backup safety copies of an s3 home', () => {
         const { mount: restored } = createHomeFaultMount(home, MOUNT_ID, BACKING);
         await restored.init();
         try {
-            await restored.drainPendingUploads({ flushNow: true });
+            await restored.uploadQueue?.drain({ flushNow: true });
             const freshKey = await restored.getStorageKey(pngId);
             expect(freshKey).not.toBe(pngKey);
             expect(await bytesInBucket(restored, freshKey)).toEqual(TEST_PNG_BYTES);

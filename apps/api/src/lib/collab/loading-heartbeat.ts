@@ -1,14 +1,12 @@
+// Keeps a collab socket from going silent while its document loads. y-websocket closes a socket that
+// stays silent for 30 s and connects again, and a cold open of a large document can take longer. Each
+// retry would pay the whole load again, so the route sends an empty awareness frame right away and
+// every 10 s until the sync starts. A client applies it as a no-op.
+
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as encoding from 'lib0/encoding';
-import { MESSAGE_AWARENESS } from './collabDocument';
+import { MESSAGE_AWARENESS } from './collab-document';
 
-// y-websocket hard-closes a connection that stays silent for 30s (a hardcoded
-// client constant) and reconnects on a ~2.5s backoff. A cold open of a large doc
-// (home init + S3 download + main-thread materialization) can stay silent longer
-// than that, and every retry re-pays the full load — a self-sustaining spiral that
-// degrades the whole server. So the WS route speaks first:
-// an empty awareness frame immediately and on an interval, until sync-step-1
-// takes over. Clients apply it as a no-op; it only resets their silence timer.
 const LOADING_HEARTBEAT_MS = 10_000;
 
 function encodeEmptyAwarenessMessage(): Uint8Array {

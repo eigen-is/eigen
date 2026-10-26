@@ -1,8 +1,10 @@
 // Browser-only HTML helpers — these depend on the DOM (`document`), so backend-shared
 // code (anything importable by apps/api) must never import this module. The BE-safe HTML
 // helpers (escapeHtml, stripTagsServer) live in ./html.
-import { TEXT_ALIGNS, type TextAlign } from '../vector/types';
-import { LIGHT_EDITOR_BLOCK_TAGS, LIGHT_EDITOR_HREF, type LIGHT_EDITOR_MARK_TAGS } from './html';
+import type { TextAlign } from '../vector/types';
+import { TEXT_ALIGNS } from '../vector/types';
+import type { LIGHT_EDITOR_MARK_TAGS } from './html';
+import { LIGHT_EDITOR_BLOCK_TAGS, LIGHT_EDITOR_HREF, RAW_TEXT_DROP_TAGS } from './html';
 
 export function htmlToPlainText(html: string): string {
     // DOMParser, never a live-element innerHTML: callers feed untrusted clipboard HTML, and a
@@ -29,7 +31,9 @@ const MARK_TAG_CANON: Record<string, (typeof LIGHT_EDITOR_MARK_TAGS)[number]> = 
 };
 const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
 // Elements whose CONTENT must be discarded entirely (never unwrapped — their text is code/markup).
-const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'HEAD', 'TITLE']);
+const DROP_TAGS = new Set(
+    [...RAW_TEXT_DROP_TAGS, 'object', 'embed', 'template', 'head'].map((tag) => tag.toUpperCase()),
+);
 
 // An unsafe href unwraps the anchor to its text.
 function safeHref(href: string | null): string | null {

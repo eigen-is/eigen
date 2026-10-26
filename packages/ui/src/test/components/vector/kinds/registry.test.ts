@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import type { VectorElementType } from '@workspace/lib/vector';
 import {
     CREATION_TOOL_TYPES,
     ELEMENT_KINDS,
     isVectorElementType,
     SLIDES_STYLE_DEFAULTS,
     VECTOR_STYLE_DEFAULTS,
-    type VectorElementType,
 } from '@workspace/lib/vector';
 import { VECTOR_TOOLS } from '../../../../components/vector/hooks/use-tool';
 import { ELEMENT_KIND_UI } from '../../../../components/vector/kinds';
@@ -43,12 +43,12 @@ describe('ELEMENT_KIND_UI', () => {
         }
     });
 
-    test('only the arrow, rich text and the image carry their own panel rows', () => {
+    test('only the arrow, rich text, the image and the chart carry their own panel rows', () => {
         // The generic rows (fill, stroke, corners, opacity) gate on capabilities and are the panel's; a
         // PanelSection exists only for what they cannot express — the arrow's type/heads/label font,
-        // rich text's typography, the image's fit.
+        // rich text's typography, the image's fit, the chart's spec.
         for (const type of vectorElementTypes()) {
-            const own = type === 'arrow' || type === 'richtext' || type === 'image';
+            const own = type === 'arrow' || type === 'richtext' || type === 'image' || type === 'chart';
             expect([type, Boolean(ELEMENT_KIND_UI[type].PanelSection)]).toEqual([type, own]);
         }
     });
@@ -89,6 +89,14 @@ describe('ELEMENT_KIND_UI', () => {
     test('only rich text has an in-place editor', () => {
         for (const type of vectorElementTypes()) {
             expect(Boolean(ELEMENT_KIND_UI[type].InPlaceEditor)).toBe(type === 'richtext');
+        }
+    });
+
+    test('only the chart opens a dialog on a double-click, and no kind has both', () => {
+        for (const type of vectorElementTypes()) {
+            const { EditDialog, InPlaceEditor } = ELEMENT_KIND_UI[type];
+            expect([type, Boolean(EditDialog)]).toEqual([type, type === 'chart']);
+            expect([type, Boolean(EditDialog && InPlaceEditor)]).toEqual([type, false]);
         }
     });
 });

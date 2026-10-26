@@ -1,21 +1,14 @@
-import { type CommandProps, Node } from '@tiptap/core';
-import type { Transaction } from '@tiptap/pm/state';
-
-const FIGURE_LAYOUTS = ['block', 'wrap-left', 'wrap-right'] as const;
-export type FigureLayout = (typeof FIGURE_LAYOUTS)[number];
-const FIGURE_ALIGNMENTS = ['left', 'center', 'right'] as const;
-export type FigureAlignment = (typeof FIGURE_ALIGNMENTS)[number];
+import type { CommandProps } from '@tiptap/core';
+import { Node } from '@tiptap/core';
+import type { FigureFrameAttrs } from './figure-frame';
+import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null).
-export type FigureAttrs = {
+export type FigureAttrs = FigureFrameAttrs & {
     mediaName?: string | null;
     src?: string | null;
     alt?: string | null;
-    caption?: string | null;
     width?: number | null;
-    alignment?: FigureAlignment | null;
-    layout?: FigureLayout | null;
-    commentCardId?: string | null;
 };
 
 declare module '@tiptap/core' {
@@ -38,21 +31,12 @@ export function readFigureAttrs(attrs: Record<string, unknown>): FigureAttrs {
         mediaName: text('mediaName'),
         src: text('src'),
         alt: text('alt'),
-        caption: text('caption'),
         width: typeof width === 'number' ? width : null,
-        alignment: FIGURE_ALIGNMENTS.find((a) => a === attrs['alignment']) ?? null,
-        layout: FIGURE_LAYOUTS.find((l) => l === attrs['layout']) ?? null,
-        commentCardId: text('commentCardId'),
+        ...readFigureFrameAttrs(attrs),
     };
 }
 
-// An AttrStep maps no position, so a node selection on the figure survives, and with it the editor's Image panel.
-// TipTap's updateAttributes writes with setNodeMarkup, which replaces the leaf and maps that selection to a text one.
-export function setFigureAttributes(tr: Transaction, pos: number, attributes: FigureAttrs) {
-    for (const [key, value] of Object.entries(attributes)) tr.setNodeAttribute(pos, key, value);
-}
-
-// Attributes of a `<figure>` or a `span.figure`; no img, no figure. Layout, alignment and width parse on their own.
+// Attributes of a `<figure>` or a `span.figure`; no img, no figure. The frame's attributes and width parse on their own.
 function figureAttrsOf(dom: HTMLElement): FigureAttrs | false {
     const img = dom.querySelector('img');
     if (!img) return false;
@@ -60,8 +44,6 @@ function figureAttrsOf(dom: HTMLElement): FigureAttrs | false {
         src: img.getAttribute('src'),
         alt: img.getAttribute('alt'),
         mediaName: img.getAttribute('data-media-name'),
-        caption: dom.querySelector('figcaption, .figcaption')?.textContent || null,
-        commentCardId: dom.getAttribute('data-comment-id'),
     };
 }
 
@@ -77,14 +59,13 @@ export const FigureNode = Node.create({
     draggable: true,
 
     addAttributes() {
+        const { caption, commentCardId, alignment, layout } = figureFrameAttributes();
         return {
             mediaName: { default: null },
             src: { default: null },
             alt: { default: null },
-            caption: { default: null },
-            // The image's comment card. An attribute, not the comment mark text carries: the Yjs
-            // binding persists a mark only on text.
-            commentCardId: { default: null },
+            caption,
+            commentCardId,
             width: {
                 default: null,
                 parseHTML: (element: HTMLElement) => {
@@ -96,21 +77,8 @@ export const FigureNode = Node.create({
                     return null;
                 },
             },
-            alignment: {
-                default: 'center',
-                parseHTML: (element: HTMLElement) => element.getAttribute('data-alignment'),
-            },
-            layout: {
-                default: 'block' as FigureLayout,
-                parseHTML: (element: HTMLElement) => {
-                    const attr = element.getAttribute('data-layout');
-                    if (attr) return attr;
-                    const float = element.style?.float;
-                    if (float === 'left') return 'wrap-left';
-                    if (float === 'right') return 'wrap-right';
-                    return 'block';
-                },
-            },
+            alignment,
+            layout,
         };
     },
 
@@ -145,20 +113,7 @@ export const FigureNode = Node.create({
         ];
     },
 
-    // Spans, as the export writes it: a <figure> in a <p> closes it in every HTML parser, so a pasted copy
-    // would split its paragraph around the image.
-    renderHTML({ HTMLAttributes }) {
-        const figureAttrs: Record<string, unknown> = { class: 'figure' };
-        if (HTMLAttributes['alignment'] && HTMLAttributes['alignment'] !== 'center') {
-            figureAttrs['data-alignment'] = HTMLAttributes['alignment'];
-        }
-        if (HTMLAttributes['layout'] && HTMLAttributes['layout'] !== 'block') {
-            figureAttrs['data-layout'] = HTMLAttributes['layout'];
-        }
-        // Spelled like the comment mark's, so a cut image keeps its card the way cut text does.
-        if (HTMLAttributes['commentCardId']) {
-            figureAttrs['data-comment-id'] = HTMLAttributes['commentCardId'];
-        }
+    renderHTML({ node, HTMLAttributes }) {
         const imgAttrs: Record<string, unknown> = {
             src: HTMLAttributes['src'],
             alt: HTMLAttributes['alt'],
@@ -169,16 +124,7 @@ export const FigureNode = Node.create({
         if (HTMLAttributes['width']) {
             imgAttrs['width'] = HTMLAttributes['width'];
         }
-
-        if (HTMLAttributes['caption']) {
-            return [
-                'span',
-                figureAttrs,
-                ['img', imgAttrs],
-                ['span', { class: 'figcaption' }, HTMLAttributes['caption']],
-            ];
-        }
-        return ['span', figureAttrs, ['img', imgAttrs]];
+        return figureFrameHTML({ class: 'figure' }, readFigureFrameAttrs(node.attrs), ['img', imgAttrs]);
     },
 
     addCommands() {
@@ -191,18 +137,7 @@ export const FigureNode = Node.create({
                         attrs: options,
                     });
                 },
-            // Every figure the selection holds, or the one it selects.
-            updateFigure:
-                (attributes) =>
-                ({ tr, dispatch }: CommandProps) => {
-                    const { from, to } = tr.selection;
-                    const positions: number[] = [];
-                    tr.doc.nodesBetween(from, to, (node, pos) => {
-                        if (node.type.name === this.name && pos >= from) positions.push(pos);
-                    });
-                    if (dispatch) for (const pos of positions) setFigureAttributes(tr, pos, attributes);
-                    return positions.length > 0;
-                },
+            updateFigure: (attributes) => updateFigureNodes(this.name, attributes),
         };
     },
 });

@@ -1,16 +1,9 @@
 import { cloneDeep, isNil } from 'es-toolkit/compat';
 import type { Context } from '../context';
-import {
-    cancelPaintModel,
-    onCellsMove,
-    onCellsMoveEnd,
-    onFormulaRangeDragEnd,
-    onImageMove,
-    onImageMoveEnd,
-    rangeDrag,
-} from '../modules';
+import { cancelPaintModel, onCellsMove, onCellsMoveEnd, onFormulaRangeDragEnd, rangeDrag } from '../modules';
 import { mergeMoveMain } from '../modules/cell';
-import { type CellGlyph, cellGlyphAt } from '../modules/cell-glyph';
+import type { CellGlyph } from '../modules/cell-glyph';
+import { cellGlyphAt } from '../modules/cell-glyph';
 import { onDropCellSelect, onDropCellSelectEnd } from '../modules/drop-cell';
 import { getFilterButtonAtPosition } from '../modules/filter';
 import { handleFormulaInput } from '../modules/formula-editor';
@@ -377,7 +370,6 @@ export function handleOverlayMouseMove(
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
 ) {
-    if (onImageMove(ctx, globalCache, e)) return;
     onCellsMove(ctx, globalCache, e, scrollEl, container);
 
     if (!ctx.selectionActive && !ctx.scrolling) {
@@ -409,7 +401,6 @@ export function handleOverlayMouseUp(
     fxInput: HTMLDivElement | null,
 ) {
     const rect = container.getBoundingClientRect();
-    onImageMoveEnd(ctx, globalCache);
     onFormulaRangeDragEnd(ctx);
     onCellsMoveEnd(ctx, globalCache, e, scrollEl, container);
     if (
@@ -469,7 +460,6 @@ export function handleOverlayMouseUp(
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (delta !== 0 && idx != null) {
             const row = ctx.rowsResizeStart[1];
-            // Read the stored height directly; visibledatarow carries the +1px row separator.
             const rowlen = ctx.sheets[idx].config?.rowlen;
             const size = Math.max((rowlen?.[row] || ctx.defaultrowlen) + delta, 10);
 

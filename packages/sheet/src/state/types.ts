@@ -1,12 +1,13 @@
 import type {
     ConditionalFormatRule,
     DataVerificationRule,
-    SheetImage as Image,
     Sheet as LibSheet,
     SheetConfig as LibSheetConfig,
     MergeCell,
     Op,
+    SheetChart,
 } from '@workspace/lib/sheets';
+import type { ChartSpecTexts } from '@workspace/lib/types/chart';
 import type { Patch as ImmerPatch } from 'immer';
 import type {
     AncestorFormulaCell,
@@ -23,10 +24,10 @@ import type { PatchOptions } from './utils';
 // Types surfaced here so state-side consumers don't have to know the canonical
 // home. Sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
 // Range) live in @workspace/lib/sheets and re-export through ../engine/types;
-// Op / ConditionalFormatRule / DataVerificationRule / Image (lib's SheetImage)
-// live in lib directly (the BE document reader replays ops without the engine, the
-// HTML export reads CF rules and paints floating images, and data-validation rules
-// are touched by the editor + canvas painter — none is engine-conceptual).
+// Op / ConditionalFormatRule / DataVerificationRule live in lib directly (the BE
+// document reader replays ops without the engine, the HTML export reads CF rules,
+// and data-validation rules are touched by the editor + canvas painter — none is
+// engine-conceptual).
 // AncestorFormulaCell and CalcChainEntry are engine-only (formula dep graph +
 // calc-chain node).
 export type {
@@ -37,7 +38,6 @@ export type {
     CellWithRowAndCol,
     ConditionalFormatRule,
     DataVerificationRule,
-    Image,
     MergeCell,
     Op,
     Range,
@@ -171,18 +171,15 @@ export type AlternateFormatEntry = {
 // Editor-runtime Sheet: lib's canonical fields plus state-only extras (selection
 // state, calc chain, filter criteria, dynamic-array spill ranges, …) that never
 // reach the wire shape. `config` is widened to state's SheetConfig. Frozen panes,
-// the autofilter range, data-validation rules, hyperlinks and floating images live
-// on the lib Sheet — they persist, and preview and export render them.
+// the autofilter range, data-validation rules, hyperlinks, floating images, the
+// hidden flag, the tab colour and the default track sizes live on the lib Sheet —
+// they persist, and the server reads and writes them.
 export type Sheet = Omit<LibSheet, 'config'> & {
     config?: SheetConfig;
-    color?: string;
     addRows?: number;
     status?: number;
-    hide?: number;
     selections?: Selection[];
     calcChain?: CalcChainEntry[];
-    defaultRowHeight?: number;
-    defaultColWidth?: number;
     // Pivot-table config — currently unreferenced in active code (only commented-
     // out callers in toolbar.ts / merge.ts); kept on the type for upstream
     // workbook-import compatibility.
@@ -281,6 +278,7 @@ export type History = {
     patches: ImmerPatch[];
     inversePatches: ImmerPatch[];
     options?: PatchOptions;
+    gesture?: object;
 };
 
 // Pre-computed offsets the freeze line uses to redraw above/below the frozen
@@ -308,6 +306,11 @@ export type GlobalCache = {
     recentBackgroundColor?: string;
     undoList: History[];
     redoList: History[];
+    // An open panel edit (a typed title): its writes merge into one undo entry.
+    undoGesture?: object;
+    // The chart this workbook last copied: the inline parts it put on the clipboard and the chart itself, with its
+    // ranges, which a paste of those same parts here keeps, as the wire carries only what every other app can read.
+    copiedChart?: { inline: ChartSpecTexts; chart: SheetChart };
     freezen?: Record<string, Freezen>;
 
     // Scroll state stored outside React/immer to avoid triggering full
@@ -317,10 +320,6 @@ export type GlobalCache = {
     scrollTop: number;
     scrollListeners: Set<() => void>;
     notifyScrollListeners: () => void;
-    image?: {
-        imgInitialPosition: Rect | undefined;
-        cursorMoveStartPosition: { x: number; y: number } | undefined;
-    };
     linkCard?: {
         mouseEnter?: boolean;
     };

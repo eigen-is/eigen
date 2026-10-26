@@ -1,5 +1,6 @@
 import type { EmailSummary } from '@workspace/lib/types/mail';
-import { type UseListSelectionReturn, useListSelection } from '@workspace/ui/hooks/use-list-selection';
+import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
+import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type UseMailListOptions = {

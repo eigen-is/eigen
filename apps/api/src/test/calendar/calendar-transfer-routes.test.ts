@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
-import { type DrivePath, EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
@@ -16,6 +17,7 @@ import { getHome } from '../../lib/home';
 import { parseResource } from '../../lib/ical';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
+import type { TestUser } from '../setup';
 import {
     app,
     assertJson,
@@ -29,7 +31,6 @@ import {
     findOrFail,
     firstMountId,
     getTestContext,
-    type TestUser,
 } from '../setup';
 import { importFromDriveRequest, importRaw } from '../transfer-test-helpers';
 

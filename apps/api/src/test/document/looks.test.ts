@@ -1,28 +1,47 @@
 import { describe, expect, test } from 'bun:test';
-import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
-import { ITALIC_HEADING_LEVELS } from '@workspace/lib/docs/eigendoc';
-import { codeBlockStyle, headingStyleName, STYLE_NAMES, W_NS } from '../../lib/core/ooxml';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
-import { openZip } from '../../lib/core/zip';
+import {
+    DOCUMENT_FONT,
+    DOCUMENT_FONT_SIZE,
+    DOCUMENT_LINE_RATIO,
+    SMALL_FONT_SIZE,
+} from '@workspace/lib/constants/fonts';
+import {
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    DOCUMENT_PARAGRAPH_FORMAT,
+    ITALIC_HEADING_LEVELS,
+    normalStyleProperties,
+} from '@workspace/lib/docs/eigendoc';
+import type { XmlElement } from '../../lib/core/xml';
+import { parseXml, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
 import {
     BODY,
     CAPTION_LOOK,
     CODE_BLOCK_LOOK,
     CODE_LOOK,
+    cssPt,
     HEADER_CELL_LOOK,
     HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
     nodeLook,
     QUOTE_LOOK,
+    SMALL_LOOK,
     TASK_DONE_LOOK,
     TITLE_LOOKS,
 } from '../../lib/document/looks';
-import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { PROSE_CSS, proseValue } from '../../lib/document/prose-css';
+import { writeDocx } from '../../lib/export/doc/docx/to-docx';
+import { W_NS } from '../../lib/ooxml/ooxml';
+import { codeBlockStyle, headingStyleName, STYLE_NAMES } from '../../lib/ooxml/wordml';
+import { openZip } from '../../lib/ooxml/zip';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 
 const zip = openZip(
-    await eigendocToDocx(buildAllFeaturesDocJson(), buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined),
+    writeDocx(
+        { json: buildAllFeaturesDocJson(), bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+        { title: 'Report.eigendoc', media: buildAllFeaturesDocMedia(), lost: () => {} },
+    ),
 );
 
 function part(path: string): XmlElement {
@@ -140,6 +159,53 @@ describe('the writer draws the editor look from the vocabulary', () => {
 describe('the writer draws its body in the document font', () => {
     test('the prose body is the font a doc draws without a mark', () => {
         expect(BODY.font).toBe(DOCUMENT_FONT);
+    });
+
+    // The toolbar shows them where no size is set, and a paste drops the body's.
+    test('the prose body and Small are the sizes a doc draws without a size mark', () => {
+        expect(BODY.sizePt).toBe(DOCUMENT_FONT_SIZE);
+        expect(SMALL_LOOK.sizePt).toBe(SMALL_FONT_SIZE);
+    });
+});
+
+// A paragraph's CSS line-height is its line spacing times the document font's line (fonts.test.ts pins it to the TTF).
+describe("the writer draws a paragraph in Eigen's declared look", () => {
+    test('eigen-prose.css draws an unset paragraph at line spacing 1.4 and 11 pt after', () => {
+        const { lineSpacing, spaceAfter } = DOCUMENT_PARAGRAPH_FORMAT;
+        expect(Number(proseValue('.eigen-prose p', 'line-height'))).toBe(
+            Math.round(lineSpacing * DOCUMENT_LINE_RATIO * 10_000) / 10_000,
+        );
+        expect(cssPt(proseValue('.eigen-prose p', 'margin-bottom'), BODY.sizePt)).toBe(spaceAfter);
+    });
+
+    test("the default Normal is eigen-prose.css's body, and every property a doc's own sets is one the sheet reads", () => {
+        expect(DEFAULT_NORMAL_STYLE).toEqual({
+            font: BODY.font,
+            size: BODY.sizePt,
+            lineSpacing: DOCUMENT_PARAGRAPH_FORMAT.lineSpacing,
+            spaceBefore: cssPt(proseValue('.eigen-prose p', 'padding-top'), BODY.sizePt),
+            spaceAfter: DOCUMENT_PARAGRAPH_FORMAT.spaceAfter,
+            color: `#${BODY.color.toLowerCase()}`,
+        });
+        const own = normalStyleProperties({
+            font: 'Source Serif 4',
+            size: 12,
+            lineSpacing: 1,
+            spaceBefore: 6,
+            spaceAfter: 0,
+            color: '#000000',
+        });
+        expect(Object.keys(own)).toHaveLength(Object.keys(DEFAULT_NORMAL_STYLE).length);
+        for (const property of Object.keys(own)) expect(PROSE_CSS).toContain(`var(${property},`);
+    });
+
+    test("Word's Normal is that look: an auto line of 1.4 and 11 pt after", () => {
+        const spacing = prop('Normal', 'pPr', 'spacing');
+        expect([w(spacing, 'line'), w(spacing, 'lineRule'), w(spacing, 'after')]).toEqual([
+            String(Math.round(240 * DOCUMENT_PARAGRAPH_FORMAT.lineSpacing)),
+            'auto',
+            String(DOCUMENT_PARAGRAPH_FORMAT.spaceAfter * 20),
+        ]);
     });
 });
 

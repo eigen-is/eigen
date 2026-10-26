@@ -1,12 +1,12 @@
 # No default: .bun-version is the one pin, read by the launcher, CI and the host alike.
 ARG BUN_VERSION
 
-# Only the manifests, so the install layer below stays cached until a dependency changes. Without the release version
-# too, which the lockfile does not hold and every release bumps.
+# Only the manifests and patches/, so the install layer below stays cached until a dependency changes. Without the
+# release version too, which the lockfile does not hold and every release bumps.
 FROM oven/bun:${BUN_VERSION}-slim AS manifests
 WORKDIR /src
 COPY . .
-RUN mkdir /out && cp --parents package.json bun.lock .bun-version apps/*/package.json packages/*/package.json /out/ \
+RUN mkdir /out && cp -r --parents package.json bun.lock .bun-version patches apps/*/package.json packages/*/package.json /out/ \
     && sed -i '/^  "version": /d' /out/package.json
 
 FROM oven/bun:${BUN_VERSION}-slim
@@ -37,6 +37,19 @@ RUN python3 -m venv /opt/weasyprint \
     && rm /tmp/weasyprint-requirements.txt
 
 ENV SHARP_IGNORE_GLOBAL_LIBVIPS=0
+
+# librsvg draws an SVG's text in the system's fonts, and the image has only DejaVu and URW's, which are wider than
+# Eigen's. An SVG's PNG fallback in an Office file, such as a canvas selection pasted into a doc, and an SVG's thumbnail
+# draw Eigen-font text, so the image carries each Eigen font's regular and its bold, the 600 a bold label takes.
+COPY packages/ui/src/assets/fonts/inter/Inter-Regular.ttf \
+    packages/ui/src/assets/fonts/inter/Inter-Bold-renamed.ttf \
+    packages/ui/src/assets/fonts/source-serif/SourceSerif4-Regular.ttf \
+    packages/ui/src/assets/fonts/source-serif/SourceSerif4-Bold.ttf \
+    packages/ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf \
+    packages/ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Bold-renamed.ttf \
+    packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.ttf \
+    /usr/share/fonts/truetype/eigen/
+RUN fc-cache /usr/share/fonts/truetype/eigen
 
 COPY --from=manifests /out/ ./
 

@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { ApiError, PATHS } from '../core';
 import { generateImagePreview } from '../shared/thumbnails';
 import type { ParsedCardPhoto } from '../vcard/types';
+import type { EmbedFormat } from './card-store';
 import {
     AVATAR_FILENAME,
     avatarCacheName,
     avatarNameOf,
     avatarUrl,
-    type EmbedFormat,
     stagedEmbedCandidates,
     stagedEmbedName,
 } from './card-store';

@@ -49,19 +49,19 @@ export function EditMenu({
             {canEdit && (
                 <>
                     <DropdownMenuItem onClick={onUndo} disabled={!canUndo}>
-                        <Undo className="h-4 w-4 mr-2" /> Undo
+                        <Undo className="h-4 w-4" /> Undo
                         <DropdownMenuShortcut>{formatForDisplay('Mod+Z')}</DropdownMenuShortcut>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={onRedo} disabled={!canRedo}>
-                        <Redo className="h-4 w-4 mr-2" /> Redo
+                        <Redo className="h-4 w-4" /> Redo
                         <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+Z')}</DropdownMenuShortcut>
                     </DropdownMenuItem>
                     {children}
                 </>
             )}
-            {canEdit && selectionItems && <DropdownMenuSeparator />}
+            <DropdownMenuSeparator />
             {selectionItems}
-            {(canEdit || selectionItems) && docSearchBar && <DropdownMenuSeparator />}
+            <DropdownMenuSeparator />
             {docSearchBar && (
                 <DropdownMenuItem
                     onClick={() => {
@@ -69,7 +69,7 @@ export function EditMenu({
                         docSearchBar.open();
                     }}
                 >
-                    <Search className="h-4 w-4 mr-2" /> Find
+                    <Search className="h-4 w-4" /> Find
                     <DropdownMenuShortcut>{formatForDisplay('Mod+F')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
@@ -80,8 +80,8 @@ export function EditMenu({
                         docSearchBar.openReplace();
                     }}
                 >
-                    <TextSearch className="h-4 w-4 mr-2" /> Find and replace
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+Alt+F')}</DropdownMenuShortcut>
+                    <TextSearch className="h-4 w-4" /> Find and replace
+                    <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+H')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
         </ToolbarMenu>

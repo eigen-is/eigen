@@ -1,5 +1,5 @@
 export * from './components';
-export { columnIndexToLabel, parseA1Range, rowIndexToLabel, toA1 } from './engine/a1-notation';
+export { parseA1Range, rowIndexToLabel, toA1 } from './engine/a1-notation';
 export { createArrayResolver } from './engine/cell-resolver';
 export type {
     CellFormatStyle,

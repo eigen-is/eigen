@@ -4,7 +4,7 @@
 
 Search answers "which mail or file holds this term". Two places ask it. The ⌘K command palette shows mail and file hits as you type ([COMMAND-PALETTE.md](COMMAND-PALETTE.md)), and the mail app's search box shows mail hits. Both read the user's own Home: their mail, the files in their Drive mounts and, for the palette, their teams' drives, which the home relay reads in each team's Home ([SCALABILITY.md](SCALABILITY.md)).
 
-A body index needs plain text. So docs, sheets, slides and drawings are read through the document content layer ([DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md)) in a background Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). The client caches results for a short time and drops them on the SSE events that can change a hit ([SSE.md](SSE.md)).
+A body index needs plain text. So docs, sheets, slides and drawings are read through the document content layer ([DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md)) in a background transform process ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). The client caches results for a short time and drops them on the SSE events that can change a hit ([SSE.md](SSE.md)).
 
 ## Each index lives in the database it indexes
 
@@ -52,12 +52,12 @@ A `bm25()` score is comparable only within one index. So `Drive.search` (`apps/a
 
 `extractText` (`apps/api/src/lib/search/extract-text.ts`) picks its branch by container type, and uses the mime only for a real container, because an upload's `mimeType` is whatever the caller sent.
 
-- Docs, sheets, slides and drawings extract in the document-transform Worker at background priority, under its 30 s deadline ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). `extract-render.ts` runs the `*FromDoc` readers of the [document content layer](DOCUMENT-CONTENT-LAYER.md), so search's idea of a document's text can't drift from what export and preview show, and a heavy extract never blocks the event loop. A sheet indexes its stored display values, with no recalc.
+- Docs, sheets, slides and drawings extract in the document-transform process at background priority, under its 30 s deadline ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). One too large for the transform's memory, or too slow for its deadline, indexes as an empty body, so it isn't extracted again on every drain. `extract-render.ts` runs the `*FromDoc` readers of the [document content layer](DOCUMENT-CONTENT-LAYER.md), so search's idea of a document's text can't drift from what export and preview show, and a heavy extract never blocks the event loop. A sheet indexes its stored display values, with no recalc. A doc indexes its footnotes' text where each note stands, as Google's search finds it, and a figure's or a chart's caption and a chart's titles, series and categories, which the doc's find bar does not match ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md#each-surface-searches-its-own-model)).
 - Slides and drawings share one collector, `collectCanvasText`. It walks each element kind's `searchText` in `sceneReadingOrder`, the order the find bar's `searchScene` uses, so the index and the find bar agree on what a canvas says.
 - Stickies and chat are light reads on the main thread: card and column text, and the newest chat messages. A chat indexes what a bystander reads: an emote as its sentence, and no whispers ([CHAT.md](CHAT.md#emotes-are-stored-as-keys-and-phrased-per-viewer)).
 - A plain-text or code file qualifies through `isSearchableTextFile`. Its first 100 KB come through `mount.readBytes` with a limit, so a huge file is never read whole. An `.ics` indexes its raw text too.
 
-Each body is capped at `CONTENT_INDEX_MAX_BYTES` (`search/limits.ts`, about 100 KB), so one huge file can't dominate the index. The Worker collectors cut to that UTF-8 byte budget at a code-point boundary. A plain text file's bytes are decoded without the character the cut splits. The preview renderers and the export pipeline are not reused: the first emits capped HTML, the second embeds media and can densify a sparse sheet.
+Each body is capped at `CONTENT_INDEX_MAX_BYTES` (`search/limits.ts`, about 100 KB), so one huge file can't dominate the index. The transform's collectors cut to that UTF-8 byte budget at a code-point boundary. A plain text file's bytes are decoded without the character the cut splits. The preview renderers and the export pipeline are not reused: the first emits capped HTML, the second embeds media and can densify a sparse sheet.
 
 ## A .vcf indexes its cards, an .eml nothing
 
@@ -101,6 +101,6 @@ Each container's `comments.db` carries `comments_fts`, served by the collab comm
 ## See also
 
 - [ROADMAP.md](ROADMAP.md): calendar search, full chat history, items shared into the home
-- [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md): the Worker, its deadlines and the background quota
+- [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md): the transform process, its deadlines and the background quota
 - [PREVIEWS.md](PREVIEWS.md): the vCard job the `.vcf` extract reuses
 - [HELP-CENTER.md](HELP-CENTER.md): the palette's help search, which runs on the client

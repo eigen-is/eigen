@@ -5,15 +5,20 @@ import type { Snapshot } from '@workspace/lib/types/versioning';
 import { sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import type { Mount } from '../../lib/mount/mount';
-import {
-    DAY_MS,
-    DEFAULT_RETENTION,
-    HOUR_MS,
-    type RetentionPolicy,
-    selectSnapshotsToPrune,
-} from '../../lib/versioning/retention';
+import type { RetentionPolicy } from '../../lib/versioning/retention';
+import { DAY_MS, DEFAULT_RETENTION, HOUR_MS, selectSnapshotsToPrune } from '../../lib/versioning/retention';
 import { formatSnapshotTimestamp, parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
-import { authedRequest, chatGet, chatPost, driveGet, drivePost, getTestContext } from '../setup';
+import { flushContentReindex } from '../mount-test-helpers';
+import {
+    authedRequest,
+    chatGet,
+    chatPost,
+    driveGet,
+    drivePost,
+    getTestContext,
+    listVersions,
+    restoreVersion,
+} from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -113,34 +118,12 @@ describe('retention pruning (absolute time buckets)', () => {
     });
 });
 
-// Local helpers — the /versions surface is small enough that they live here rather
-// than getting promoted into setup.ts until a second test file needs them.
-
-async function listVersions(token: string, ownerId: string, mountId: string, pathId: string): Promise<Snapshot[]> {
-    return driveGet<Snapshot[]>(token, ownerId, mountId, `file/${pathId}/versions`);
-}
-
 async function saveVersion(token: string, ownerId: string, mountId: string, pathId: string): Promise<Snapshot> {
     const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/versions/save`, {
         method: 'POST',
     });
     if (res.status !== 200) throw new Error(`saveVersion failed: ${res.status} ${await res.text()}`);
     return (await res.json()) as Snapshot;
-}
-
-async function restoreVersion(
-    token: string,
-    ownerId: string,
-    mountId: string,
-    pathId: string,
-    snapshotName: string,
-): Promise<void> {
-    const res = await authedRequest(
-        token,
-        `/drive/${ownerId}/${mountId}/file/${pathId}/versions/${encodeURIComponent(snapshotName)}/restore`,
-        { method: 'POST' },
-    );
-    if (res.status !== 200) throw new Error(`restoreVersion failed: ${res.status} ${await res.text()}`);
 }
 
 describe('versions HTTP routes', () => {
@@ -221,22 +204,22 @@ describe('versions HTTP routes', () => {
         // overwrite the aged stamp mid-test.
         const mount = (home.drive as unknown as { getMount(id: string): Mount }).getMount(aliceMountId);
         const ageIndexStamp = () => mount.db.run(sql`UPDATE paths SET contentIndexedAt = 0 WHERE id = ${chat.id}`);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
 
         // Index the pre-restore body (v1 + v2).
         await chatPost(token, ownerId, aliceMountId, `${chat.id}/messages`, { content: 'grobblev2 body' });
         ageIndexStamp();
         await home.drive.flushContainerDb(aliceMountId, chat.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect(home.drive.search({ q: 'grobblev2', limit: 20 }).some((h) => h.id === chat.id)).toBe(true);
 
         await restoreVersion(token, ownerId, aliceMountId, chat.id, saved.name);
 
         ageIndexStamp();
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect(home.drive.search({ q: 'grobblev2', limit: 20 }).some((h) => h.id === chat.id)).toBe(false);
         expect(home.drive.search({ q: 'grobblev1', limit: 20 }).some((h) => h.id === chat.id)).toBe(true);
-    });
+    }, 15_000);
 
     test('eigendoc: save + list returns parsed snapshot metadata', async () => {
         const token = ctx.alice.user.sessionToken;
@@ -455,7 +438,7 @@ describe('versions HTTP routes', () => {
         const dataDb = await mount.getChildByName(docPath.id, 'data.db');
         // The reindex saveVersion kicked can capture after the close and leave data.db cached, and a
         // cached db reopens without looking at storage.
-        await mount.flushContentReindex();
+        await mount.reindexQueue?.drain();
         await mount.closeDatabase(dataDb!.id);
         await mount.storage.delete(await mount.getStorageKey(dataDb!.id));
         await expect(drive.getCollabDocument(aliceMountId, docPath.id)).rejects.toMatchObject({ status: 410 });

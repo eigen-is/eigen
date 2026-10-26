@@ -1,17 +1,27 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { formatEventWhen, viewerTimeZone } from '@workspace/lib/calendar';
-import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
+import type { TextPreviewMode } from '@workspace/lib/constants';
+import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH, getTextPreviewMode } from '@workspace/lib/constants';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { formatDateTime } from '@workspace/lib/date';
-import { DEFAULT_PAGE_SETUP, pageBoxStyle, pagePx } from '@workspace/lib/docs/eigendoc';
+import type { PageSetup } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    DOC_PROSE_CLASS,
+    normalStyleProperties,
+    pageBoxStyle,
+    pagePx,
+} from '@workspace/lib/docs/eigendoc';
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
 import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
-import { type DrivePath, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '../../lib/utils';
 import { UserAvatar } from '../user/user-avatar';
@@ -207,11 +217,13 @@ function VCardRow({ contact }: { contact: Contact }) {
 
 type IntrinsicPage = { widthPx: number; padding?: string };
 
-// Text modes render onto the docs page, its margins included, so a text thumbnail is a miniature of the printed page.
-const DOC_PAGE: IntrinsicPage = {
-    widthPx: pagePx(DEFAULT_PAGE_SETUP).width,
-    padding: pageBoxStyle(DEFAULT_PAGE_SETUP).padding,
-};
+function docPage(setup: PageSetup): IntrinsicPage {
+    return { widthPx: pagePx(setup).width, padding: pageBoxStyle(setup).padding };
+}
+
+// Text modes render onto the docs page, its margins included, so a text thumbnail is a miniature of the printed page:
+// a doc on the page it stores, the rest on the default one.
+const DOC_PAGE = docPage(DEFAULT_PAGE_SETUP);
 const CANVAS_PAGE: IntrinsicPage = { widthPx: CANVAS_PREVIEW_WIDTH };
 
 // The page a mode composes on, so the hero scales by containerW / its width: a deck and a drawing both
@@ -230,7 +242,7 @@ const INTRINSIC_PAGE: Record<TextPreviewMode, IntrinsicPage | null> = {
 // <pre> rule paints a dark code-block background that is wrong for a whole-file code thumbnail.
 // A deck and a drawing need none: a compositor page carries its own box and its own paint.
 const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
-    eigendoc: 'eigen-prose tiptap',
+    eigendoc: `eigen-prose tiptap ${DOC_PROSE_CLASS}`,
     eigenslides: '',
     eigensheets: 'eigensheets-preview',
     eigenvector: '',
@@ -248,17 +260,19 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     const [setContent, contentBox] = useElementSize(contentRef);
     const [scale, setScale] = useState(1);
 
-    const page = data ? INTRINSIC_PAGE[data.mode] : null;
+    const docSetup = data?.mode === 'eigendoc' ? data.page : undefined;
+    const page = docSetup ? docPage(docSetup) : data && INTRINSIC_PAGE[data.mode];
+    const pageWidthPx = page?.widthPx;
 
     useEffect(() => {
         if (containerW === 0) return;
-        if (page) {
-            setScale(containerW / page.widthPx);
+        if (pageWidthPx) {
+            setScale(containerW / pageWidthPx);
             return;
         }
         const contentW = contentRef.current?.scrollWidth ?? 0;
         if (contentW > 0) setScale(containerW / contentW);
-    }, [containerW, contentBox, data?.body, page]);
+    }, [containerW, contentBox, data?.body, pageWidthPx]);
 
     if (!data?.body) return null;
 
@@ -270,6 +284,7 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
                 // A doc thumbnail is its page, light like the editor's; the prose inside escapes the dark rules.
                 data.mode === 'eigendoc' && 'eigen-paper',
             )}
+            style={{ '--preview-h': `${CANVAS_PREVIEW_HEIGHT}px` } as CSSProperties}
         >
             <div
                 ref={setContent}
@@ -278,6 +293,8 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
                     transform: `scale(${scale})`,
                     transformOrigin: 'top left',
                     ...(page ? { width: `${page.widthPx}px`, padding: page.padding } : null),
+                    // A doc's Normal, which its text draws in.
+                    ...(data.style && normalStyleProperties(data.style)),
                 }}
                 dangerouslySetInnerHTML={{ __html: data.body }}
             />

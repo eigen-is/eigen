@@ -3,7 +3,8 @@
 // no gaps; Alt un-marks re-touched elements. Marks are a local preview set — the canvas
 // deletes them in ONE call on pointer up. No Yjs write happens here.
 
-import { arrowRoute, hitTestElement, type Point, type VectorElement } from '@workspace/lib/vector';
+import type { Point, VectorElement } from '@workspace/lib/vector';
+import { arrowRoute, hitTestElement } from '@workspace/lib/vector';
 
 // Cap the samples per move so a huge pointer jump (or a swipe at extreme zoom) can't fan a single
 // segment out into thousands of hit tests × every element; ≈4px spacing still holds for normal moves.

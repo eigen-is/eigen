@@ -1,5 +1,6 @@
 import type { FormulaArg, FormulaOutput } from '../../types';
 import { ERROR_NAME, toFormulaError } from '../error';
+import type { FunctionArg } from '../omitted';
 import add from './operator/add';
 import ampersand from './operator/ampersand';
 import divide from './operator/divide';
@@ -15,30 +16,34 @@ import notEqual from './operator/not-equal';
 import power from './operator/power';
 
 type OperatorCallable = (...args: FormulaArg[]) => FormulaOutput;
+// A function's arguments may hold an empty slot; an operator's operands never do.
+type FunctionCallable = (...args: FunctionArg[]) => FormulaOutput;
 
 const availableOperators: Record<string, OperatorCallable> = Object.create(null);
+const availableFunctions: Record<string, FunctionCallable> = Object.create(null);
 
-// Evaluate values by operator id. A thrown Error is converted to a returned
-// Error so the grammar can keep reducing — the outer expression may discard it
-// (e.g. an untaken IF branch). The top-level parse() unwraps the Error result
-// into a `{error}` field for callers.
-export default function evaluateByOperator(operator: string, params: FormulaArg[] = []): FormulaOutput {
-    const upperOperator = operator.toUpperCase();
-
-    if (!availableOperators[upperOperator]) {
-        throw Error(ERROR_NAME);
-    }
-
+// A thrown Error is converted to a returned Error so the grammar can keep reducing —
+// the outer expression may discard it (e.g. an untaken IF branch). The top-level
+// parse() unwraps the Error result into a `{error}` field for callers.
+function inBand(call: () => FormulaOutput): FormulaOutput {
     try {
-        return availableOperators[upperOperator](...params);
+        return call();
     } catch (e) {
         if (e instanceof Error) return toFormulaError(e);
         throw e;
     }
 }
 
-function registerOperation(symbol: string, func: OperatorCallable): void {
-    availableOperators[symbol.toUpperCase()] = func;
+export default function evaluateByOperator(operator: string, params: FormulaArg[] = []): FormulaOutput {
+    const callable = availableOperators[operator];
+    if (!callable) throw Error(ERROR_NAME);
+    return inBand(() => callable(...params));
+}
+
+export function callFunction(name: string, params: FunctionArg[] = []): FormulaOutput {
+    const callable = availableFunctions[name.toUpperCase()];
+    if (!callable) throw Error(ERROR_NAME);
+    return inBand(() => callable(...params));
 }
 
 // Arithmetic and comparison operators coerce their operands, which would silently
@@ -60,11 +65,11 @@ const symbolOperators: (OperatorCallable & { SYMBOL: string })[] = [
     minus,
 ];
 for (const operator of symbolOperators) {
-    registerOperation(operator.SYMBOL, (...params) => params.find((p) => p instanceof Error) ?? operator(...params));
+    availableOperators[operator.SYMBOL] = (...params) => params.find((p) => p instanceof Error) ?? operator(...params);
 }
 
-// The formula functions share one operator: each formulajs name gets the callable that
-// closes over it (`formulaFunction.SYMBOL` is SUPPORTED_FORMULAS).
+// Each formulajs name, and each function the engine adds (`formulaFunction.SYMBOL`),
+// gets the callable that closes over it.
 for (const name of formulaFunction.SYMBOL) {
-    registerOperation(name, formulaFunction(name.toUpperCase()));
+    availableFunctions[name.toUpperCase()] = formulaFunction(name.toUpperCase());
 }

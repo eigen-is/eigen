@@ -1,6 +1,22 @@
 import { describe, expect, test } from 'bun:test';
 import type { VectorElement, VectorScene } from '@workspace/lib/vector';
-import { drawingPage, emptyPage, framePages, renderCanvasPage, renderFittedPage } from '../../lib/export/canvas/render';
+import {
+    DEFAULT_SCENE_META,
+    ELEMENT_KINDS,
+    SLIDES_STYLE_DEFAULTS,
+    serializeBackgroundFill,
+    solidFill,
+} from '@workspace/lib/vector';
+import {
+    drawingPage,
+    emptyPage,
+    framePages,
+    renderCanvasPage,
+    renderFittedPage,
+    renderPrintPage,
+    sceneMediaNames,
+} from '../../lib/export/canvas/render';
+import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { buildGoldenDeckScene, buildGoldenVectorScene, GOLDEN_MEDIA_NAME } from '../fixtures/golden-documents';
 
 // Box fields only: a Partial of the whole union would widen `type` on the spread below and stop the
@@ -32,7 +48,7 @@ describe('drawingPage', () => {
     });
 
     test('an empty drawing has no page', () => {
-        expect(drawingPage({ elements: [], frames: [], meta: { background: 'transparent' } }, noMedia)).toBeNull();
+        expect(drawingPage({ elements: [], frames: [], meta: DEFAULT_SCENE_META }, noMedia)).toBeNull();
     });
 
     test('a transparent scene background is no background at all', () => {
@@ -127,6 +143,28 @@ describe('renderCanvasPage', () => {
         expect(html).toContain('<path ');
     });
 
+    test('a path layer is the kind fragment, holes and all, and the export sanitizer keeps it', () => {
+        const golden = buildGoldenVectorScene();
+        const path: VectorElement = {
+            ...golden.elements[0],
+            ...ELEMENT_KINDS.path.defaults(SLIDES_STYLE_DEFAULTS),
+            id: 'v-path',
+            type: 'path',
+            width: 200,
+            height: 100,
+            roughness: 0,
+            path: 'M 0 0 L 1 0 L 1 1 L 0 1 Z M 0.25 0.25 L 0.25 0.75 L 0.75 0.75 L 0.75 0.25 Z',
+            closed: true,
+            fill: solidFill('#ff0000'),
+        };
+        const page = drawingPage({ ...golden, elements: [path] }, noMedia);
+        if (!page) throw new Error('expected a page');
+        const html = sanitizeExportHtml(renderCanvasPage(page, 1));
+        // one fill for both rings, so the inner one cuts the hole
+        expect(html.match(/fill="#ff0000"/g)).toHaveLength(1);
+        expect(html).toMatch(/<path d="M0 0 [^"]*M50 25 [^"]*" fill="#ff0000"/);
+    });
+
     test('a painted rich text layer is its backdrop viewport plus the styled div', () => {
         const page = drawingPage(sceneOf('v-text'), noMedia);
         if (!page) throw new Error('expected a page');
@@ -178,6 +216,27 @@ describe('renderFittedPage', () => {
     });
 });
 
+// WeasyPrint lays a page out ignoring transforms and cuts a line laid out past the @page height, so a
+// printed layer is laid out where it prints, with no transform above it (canvas-pdf.test.ts).
+describe('renderPrintPage', () => {
+    test('a layer is laid out at its box minus the page origin, straight in the 1:1 page box', () => {
+        const page = drawingPage(sceneOf('v-rect', { x: -4000, y: -3000 }), noMedia);
+        if (!page) throw new Error('expected a page');
+        const html = renderPrintPage(page);
+        expect(html).toContain(
+            '<div class="canvas-page" style="position:relative;overflow:hidden;width:120px;height:80px">' +
+                '<div style="position:absolute;top:10px;left:10px;width:100px;height:60px">',
+        );
+        expect(html).not.toContain('transform');
+    });
+
+    test('a rotation is the only transform, about the box centre', () => {
+        const page = drawingPage(sceneOf('v-rect', { x: 12, y: 34, angle: 30, opacity: 50 }), noMedia);
+        if (!page) throw new Error('expected a page');
+        expect(renderPrintPage(page)).toContain('transform:rotate(30deg);opacity:0.5');
+    });
+});
+
 describe('framePages', () => {
     test('one page per frame, in deck order, sized to the frame', () => {
         const pages = framePages(buildGoldenDeckScene(), noMedia);
@@ -221,7 +280,29 @@ describe('framePages', () => {
     });
 
     test('a deck with no frames has no pages', () => {
-        const empty = { elements: [], frames: [], meta: { background: 'transparent' } };
+        const empty = { elements: [], frames: [], meta: DEFAULT_SCENE_META };
         expect(framePages(empty, noMedia)).toEqual([]);
+    });
+});
+
+// An export prepares only the media these name, so a frame's picture, kept as stored JSON, must be among them.
+describe('sceneMediaNames', () => {
+    test("names the images and every frame's background picture, and nothing a solid background holds", () => {
+        const golden = buildGoldenDeckScene();
+        const [first, ...rest] = golden.frames;
+        const scene: VectorScene = {
+            ...golden,
+            frames: [
+                {
+                    ...first,
+                    background: serializeBackgroundFill({ type: 'image', mediaName: 'cover.png', fit: 'cover' }),
+                },
+                ...rest.map((frame) => ({
+                    ...frame,
+                    background: serializeBackgroundFill({ type: 'solid', color: '#fff' }),
+                })),
+            ],
+        };
+        expect([...sceneMediaNames(scene)].sort()).toEqual(['cover.png', GOLDEN_MEDIA_NAME].sort());
     });
 });

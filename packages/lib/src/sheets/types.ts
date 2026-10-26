@@ -4,6 +4,8 @@
 // in lib avoids a workspace cycle and lets the backend import them without pulling
 // in React.
 
+import type { ChartLook, SheetChartSpecParts } from '../types/chart';
+
 export type CellStyle = {
     bl?: number;
     it?: number;
@@ -101,7 +103,7 @@ export type BorderType =
     | 'border-vertical'
     | 'border-none';
 
-// The xlsx/OOXML border-style vocabulary (exceljs `Border['style']`), the `name`
+// The xlsx/OOXML border-style vocabulary (the `ST_BorderStyle` names), the `name`
 // side of each `BORDER_STYLES` ordinal.
 export type BorderStyleName =
     | 'thin'
@@ -120,20 +122,27 @@ export type BorderStyleName =
 
 export type MergeCell = { r: number; c: number; rs: number; cs: number };
 
-// A floating image on a sheet: absolutely positioned over the grid in unzoomed grid
-// pixels (0,0 is A1's top-left), rotated about its own center. `mediaName` names the
-// file in the document's `media/` folder — the editor and the server renderers both
-// resolve it at render time (docs/MEDIA-REFERENCES.md). `angle` is absent on images
-// stored before rotation existed and reads as 0 at every render/commit site.
-export type SheetImage = {
+// An image or a chart floating over a sheet: unzoomed grid pixels from A1's top-left, rotated about its center by
+// `angle` degrees clockwise, absent reading as 0. `index` orders images and charts together for painting, a
+// fractional key with ties broken by id (floatingItems).
+export type SheetFloatingObject = {
     id: string;
-    mediaName: string;
+    index: string;
     x: number;
     y: number;
     width: number;
     height: number;
     angle?: number;
 };
+
+// `mediaName` names the file in the document's `media/` folder, which the editor and the server renderers resolve at
+// render time (docs/MEDIA-REFERENCES.md).
+export type SheetImage = SheetFloatingObject & { mediaName: string };
+
+// The spec is stored a field per part, a keyed part a record of an entry's JSON per key, read only through readChartSpec
+// (@workspace/lib/charts); its range refs name sheets by id. The look is a canvas chart's own fields, each written apart
+// and read through readChartLook, flat where unset.
+export type SheetChart = SheetFloatingObject & Partial<ChartLook> & SheetChartSpecParts;
 
 // Per-cell data-validation rule, produced by the editor's state layer
 // (state/modules/data-verification.ts) and consumed by the canvas painter
@@ -234,6 +243,13 @@ export type Sheet = {
     name: string;
     id?: string;
     order?: number;
+    // 1 hides the tab (View > Hidden sheets shows it again); the editor opens on a sheet it shows.
+    hide?: number;
+    // The tab's colour, a CSS colour.
+    color?: string;
+    // The CSS pixels of a column or row with no stored size, read through sheetDefaultColWidth/RowHeight.
+    defaultColWidth?: number;
+    defaultRowHeight?: number;
     config?: SheetConfig;
     celldata?: CellWithRowAndCol[];
     data?: CellMatrix;
@@ -263,10 +279,10 @@ export type Sheet = {
     // goToLink navigation. The linked cell carries the `hl` backref. linkType
     // ∈ webpage | sheet | cellrange (state/modules/hyperlink.ts).
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
-    // Floating images, in paint order. Empty on every sheet that has none — the
-    // decoder materializes the list the way normalizeSheetConfig materializes a
-    // config collection, so an op replacing it resolves against any base.
-    images?: SheetImage[];
+    // Floating images and charts by id. Materialized like the config collections, because each object is
+    // written as its own key and a first write to a missing map would ship the whole map.
+    images?: Record<string, SheetImage>;
+    charts?: Record<string, SheetChart>;
 };
 
 // The editor-runtime Sheet: the wire shape plus the calc chain the reader gate keys off.

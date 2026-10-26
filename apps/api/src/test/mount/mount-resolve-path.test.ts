@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import type { DatabaseConfig, SchemaType } from '../../lib/core';
+import { ManagedDatabase } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { createTestMountConfig } from '../mount-test-helpers';
 

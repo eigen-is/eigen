@@ -2,7 +2,8 @@ import type { MergeCell, SheetConfig } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { every, isEqual, isNil, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import type { Op, Sheet } from '../types';
 import { getSheetIndex } from '.';
 
@@ -135,42 +136,51 @@ function additionalCellOps(
 // the build instead of silently no longer matching.
 const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['selections']);
 
-// The row/col reducers replace the whole target sheet object, so immer hands us a
-// single sheet-sized replace patch instead of granular ones. Shipping that patch
-// copies the entire sheet (its `data` matrix above all) into every collab update —
-// multi-MB on large sheets and the dominant cost of inserting a row — so patchToOp
-// drops it. The paired insertRowCol/deleteRowCol special op lets every consumer
-// (client applyOp and the BE replay both run the engine) re-derive the `data`
-// shift instead of receiving it. The engine only rebuilds `data` and the few
-// config fields it owns, so we still have to ship the rest of the sheet's
-// metadata authoritatively: the reducer also shifts calcChain, filter, hyperlink,
-// dataVerification, borderInfo/rowReadOnly (inside config) and more, and a
-// delete-undo restores config that isn't derivable at all.
+// The row/col reducers write each sheet back field by field (writeBackSheets in rowcol.ts), so immer hands us a
+// replace per changed field, `data` above all. Shipping those copies the sheet's whole matrix into every collab
+// update — multi-MB on large sheets and the dominant cost of inserting a row — so patchToOp drops them
+// (writesOneFloatingObject). The paired insertRowCol/deleteRowCol special op lets every consumer (client applyOp and
+// the BE replay both run the engine) re-derive the `data` shift instead of receiving it. The engine only rebuilds
+// `data` and the few config fields it owns, so we still have to ship the rest of the edited sheet's metadata
+// authoritatively: the reducer also shifts calcChain, filter, hyperlink, dataVerification,
+// borderInfo/rowReadOnly (inside config) and more, and a delete-undo restores config that isn't derivable at all.
 //
 // Rather than enumerate the shifted fields here — a list that silently drifts from
 // the reducer the moment a field is added — we emit every top-level field except
 // the ones that must not be sent: `data` (re-derived by the engine), `selections`
-// (per-client cursor, also dropped by filterPatch), and `calcChain` (a derived
+// (per-client cursor, also dropped by filterPatch), `calcChain` (a derived
 // cache that scales with formula count — receivers shift their own copy in the
 // reducer, the BE replay never reads it, and a fresh mount re-seeds it from
-// `cell.f`). Everything else is small, and shipping an unchanged field as an
+// `cell.f`), and `images` and `charts`, which ship per object: a whole map would
+// overwrite a peer's insert, delete or move. A row op moves no image, and each chart
+// it moves, on any sheet, has immer's own patch of its spec, last writer wins, since a
+// receiver's shift can differ from the author's write-back: an undone delete never
+// grows a ref back. Everything else is small, and shipping an unchanged field as an
 // authoritative replace is a no-op.
 //
-// The one case where `calcChain` IS shipped: undoing a delete. The delete dropped
-// the removed rows' entries from every peer's calcChain, and the restoring insert
-// can't re-derive them — without the authoritative copy, formulas in restored
-// rows would stop recalculating on peers.
-function sheetMetadataOps(ctx: Context, id: string, includeCalcChain: boolean): Op[] {
+// Undoing a delete also ships `calcChain`, which the restoring insert can't re-derive: the
+// delete dropped the removed rows' entries from every peer's calcChain, and without the
+// authoritative copy formulas in restored rows would stop recalculating on peers.
+const PER_OBJECT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['images', 'charts']);
+
+function sheetMetadataOps(ctx: Context, id: string, restoringDelete: boolean): Op[] {
     const index = getSheetIndex(ctx, id);
     if (typeof index !== 'number') return [];
     const sheet = ctx.sheets[index];
     const metaOps: Op[] = [];
     for (const field of Object.keys(sheet) as (keyof Sheet)[]) {
-        if (field === 'data' || PER_CLIENT_SHEET_FIELDS.has(field)) continue;
-        if (field === 'calcChain' && !includeCalcChain) continue;
+        if (field === 'data' || PER_CLIENT_SHEET_FIELDS.has(field) || PER_OBJECT_SHEET_FIELDS.has(field)) continue;
+        if (field === 'calcChain' && !restoringDelete) continue;
         metaOps.push({ op: 'replace', id, path: [field], value: sheet[field] });
     }
     return metaOps;
+}
+
+// Of immer's own writes a row or column batch keeps only those into one image or chart, an explicit set: every other
+// sheet field ships whole through sheetMetadataOps or is re-derived by the engine, so a write deeper into one, which a
+// peer's concurrent removal of that field would leave unresolved, can never cost a peer or the replay the batch.
+function writesOneFloatingObject(op: Op): boolean {
+    return op.path.length > 1 && PER_OBJECT_SHEET_FIELDS.has(op.path[0]);
 }
 
 // Only `sheets[*]` belongs on the wire — the rest of the Context is per-client UI state
@@ -209,8 +219,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
         }
     });
     if (options?.insertRowColOp) {
-        // Drop the whole-sheet replace ops (path []) — see sheetMetadataOps.
-        ops = ops.filter((p) => p.path.length > 0 && p.path[0] !== 'data');
+        ops = ops.filter(writesOneFloatingObject);
         ops.push({
             op: 'insertRowCol',
             id: options.insertRowColOp.id,
@@ -258,8 +267,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
         }
         ops = [...ops, ...addtionalMergeOps(ops, options.insertRowColOp.id)];
     } else if (options?.deleteRowColOp) {
-        // Drop the whole-sheet replace ops (path []) — see sheetMetadataOps.
-        ops = ops.filter((p) => p.path.length > 0 && p.path[0] !== 'data');
+        ops = ops.filter(writesOneFloatingObject);
         ops.push({
             op: 'deleteRowCol',
             id: options.deleteRowColOp.id,
@@ -362,17 +370,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
 
 export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {
     const [pure, specialOps] = opToPatchOnSheets(ctx.sheets, ops);
-    const patches: Patch[] = pure.map((p) => ({ ...p, path: ['sheets', ...p.path] }));
-    for (const op of ops) {
-        if (op.id && op.path[0] === 'images' && op.id === ctx.currentSheetId) {
-            patches.push({
-                op: op.op as 'add' | 'remove' | 'replace',
-                value: op.value,
-                path: ['insertedImgs'],
-            });
-        }
-    }
-    return [patches, specialOps];
+    return [pure.map((p) => ({ ...p, path: ['sheets', ...p.path] })), specialOps];
 }
 
 export function inverseRowColOptions(options?: PatchOptions): PatchOptions | undefined {

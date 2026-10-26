@@ -1,17 +1,23 @@
+// The docx reader's run and paragraph property readers, and the Styles chain that resolves a style's properties through
+// its basedOn parents, docDefaults and the table's conditional looks. Readers such as the paragraph and run readers
+// read their properties through it.
+
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlElements } from '../../core/xml';
+import { lowlight } from '../../document/lowlight';
+import { isOn, W_NS } from '../../ooxml/ooxml';
 import {
     BORDER_SIDES,
     codeBlockLanguage,
     headingLevel,
-    isOn,
     LINK_THEME_COLORS,
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
-    W_NS,
-} from '../../core/ooxml';
-import { type XmlElement, xmlElements } from '../../core/xml';
-import { lowlight } from '../../document/lowlight';
-import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
-import { halfPointsOf, int, is, onOff, twipsOf, w, wChild } from './package';
+} from '../../ooxml/wordml';
+import { hexColor } from './colors';
+import type { Fonts, Script, Theme } from './docx-fonts';
+import { FONT_SLOTS } from './docx-fonts';
+import { halfPointsOf, onOff, roundedInt, twipsOf, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
 export type DocxRunProps = {
@@ -52,6 +58,7 @@ export type ParaProps = {
     numId?: string;
     ilvl?: number;
     indLeft?: number;
+    indRight?: number;
     // The first line's offset from the left indent: firstLine to the right, hanging (negative) to the left.
     indFirst?: number;
     pageBreakBefore?: boolean;
@@ -59,6 +66,11 @@ export type ParaProps = {
     borders?: Borders;
     shading?: string;
     exactLine?: number;
+    // In twips; an auto line in 240ths of a line.
+    line?: number;
+    lineRule?: string;
+    before?: number;
+    after?: number;
     markSize?: number;
     markHidden?: boolean;
     // A tracked deletion of the paragraph mark: accepted, the paragraph joins the next.
@@ -89,55 +101,14 @@ const HIGHLIGHT_COLORS = new Map([
     ['white', 'FFFFFF'],
 ]);
 
-// Six hex digits, after a '#' some converters write, or nothing: `auto`, a theme name or a typo is an explicit none.
-function hexColor(value: string | undefined): string | undefined {
-    if (value === undefined) return undefined;
-    return /^#?[0-9a-f]{6}$/i.test(value) ? value.slice(-6).toUpperCase() : '';
-}
-
-// A color as a mark holds it, from Word's hex.
-export function markColor(hex: string): string {
-    return `#${hex.toLowerCase()}`;
-}
-
 export function shadingOf(shd: XmlElement | undefined): string | undefined {
     if (!shd) return undefined;
-    const fill = hexColor(w(shd, 'fill')) ?? '';
-    // Solid paints the pattern color; an auto one, black under auto text Word turns white, stays the fill, as Eigen can't.
-    return (w(shd, 'val') === 'solid' && hexColor(w(shd, 'color'))) || fill;
-}
-
-// White is no fill: Word and Google Docs spell an unshaded cell or paragraph that way too.
-export function isFill(fill: string | undefined): boolean {
-    return !!fill && fill !== 'FFFFFF';
-}
-
-// A light grey, as the editor's code fill and its re-saves are: each channel at least D0 and within 18 of the others.
-export function isLightNeutral(fill: string | undefined): boolean {
-    if (!fill || !isFill(fill)) return false;
-    const channels = [0, 2, 4].map((at) => Number.parseInt(fill.slice(at, at + 2), 16));
-    return Math.min(...channels) >= 0xd0 && Math.max(...channels) - Math.min(...channels) <= 0x18;
-}
-
-// Contrast below 1.5 against white. On a fill the schema drops, Word draws such text legibly; on Eigen's paper it would
-// vanish, so it takes the body color.
-export function isLight(hex: string): boolean {
-    return 1.05 / (luminance(hex) + 0.05) < 1.5;
-}
-
-// White contrasts with it more than black: Word draws auto text on it white.
-export function isDark(hex: string): boolean {
-    const shade = luminance(hex) + 0.05;
-    return 1.05 / shade > shade / 0.05;
-}
-
-// WCAG's relative luminance.
-function luminance(hex: string): number {
-    const [red = 0, green = 0, blue = 0] = [0, 2, 4].map((at) => {
-        const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
-        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    // nil is no shading, whatever fill it names: none, which wins over a table's or a style's.
+    const val = w(shd, 'val');
+    if (val === 'nil') return '';
+    // Solid paints the pattern color. An auto one is black, with Word's auto text white on it; the fill stands in for
+    // it, so auto text stays legible in the body color.
+    return (val === 'solid' && hexColor(w(shd, 'color'))) || (hexColor(w(shd, 'fill')) ?? '');
 }
 
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): DocxRunProps {
@@ -245,7 +216,7 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
             case 'numPr': {
                 const numId = w(wChild(child, 'numId'), 'val');
                 if (numId !== undefined) props.numId = numId;
-                const ilvl = int(w(wChild(child, 'ilvl'), 'val'));
+                const ilvl = roundedInt(w(wChild(child, 'ilvl'), 'val'));
                 if (ilvl !== undefined) props.ilvl = ilvl;
                 break;
             }
@@ -253,6 +224,8 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 // Each attribute inherits on its own: a w:ind of only a hanging keeps the style's left.
                 const left = twipsOf(w(child, 'left') ?? w(child, 'start'));
                 if (left !== undefined) props.indLeft = left;
+                const right = twipsOf(w(child, 'right') ?? w(child, 'end'));
+                if (right !== undefined) props.indRight = right;
                 const hanging = twipsOf(w(child, 'hanging'));
                 const first = hanging === undefined ? twipsOf(w(child, 'firstLine')) : -hanging;
                 if (first !== undefined) props.indFirst = first;
@@ -262,7 +235,7 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 props.pageBreakBefore = onOff(child);
                 break;
             case 'outlineLvl':
-                props.outlineLvl = int(w(child, 'val'));
+                props.outlineLvl = roundedInt(w(child, 'val'));
                 break;
             case 'pBdr': {
                 const borders: Borders = {};
@@ -271,7 +244,7 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                     if (border) borders[side] = !['nil', 'none'].includes(w(border, 'val') ?? 'none');
                 }
                 const left = wChild(child, 'left');
-                if (left) borders.bar = int(w(left, 'sz'));
+                if (left) borders.bar = roundedInt(w(left, 'sz'));
                 props.borders = borders;
                 break;
             }
@@ -280,7 +253,16 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 break;
             case 'spacing': {
                 const line = twipsOf(w(child, 'line'));
-                if (w(child, 'lineRule') === 'exact' && line !== undefined) props.exactLine = line;
+                const lineRule = w(child, 'lineRule') ?? 'auto';
+                if (line !== undefined) {
+                    props.line = line;
+                    props.lineRule = lineRule;
+                }
+                if (lineRule === 'exact' && line !== undefined) props.exactLine = line;
+                const before = twipsOf(w(child, 'before'));
+                if (before !== undefined) props.before = before;
+                const after = twipsOf(w(child, 'after'));
+                if (after !== undefined) props.after = after;
                 break;
             }
             case 'rPr':
@@ -421,21 +403,21 @@ export class Styles {
     private readonly byId = new Map<string, Style>();
     // By id as given: a style with no w:styleId is '', no style undefined.
     private readonly resolved = new Map<string | undefined, Resolved>();
-    readonly defaultParagraph: string | undefined;
-    readonly docRun: DocxRunProps;
-    readonly docPara: ParaProps;
+    public readonly defaultParagraph: string | undefined;
+    public readonly docRun: DocxRunProps;
+    public readonly docPara: ParaProps;
 
-    constructor(root: XmlElement | undefined, theme: Theme) {
+    public constructor(root: XmlElement | undefined, theme: Theme) {
         let defaultParagraph: string | undefined;
         const defaults = wChild(root, 'docDefaults');
         this.docRun = readRunProps(wChild(wChild(defaults, 'rPrDefault'), 'rPr'), theme);
         this.docPara = readParaProps(wChild(wChild(defaults, 'pPrDefault'), 'pPr'));
         for (const element of root ? xmlElements(root) : []) {
-            if (!is(element, W_NS, 'style')) continue;
+            if (!hasXmlName(element, W_NS, 'style')) continue;
             const id = w(element, 'styleId') ?? '';
             const type = w(element, 'type') ?? 'paragraph';
             const firstRow = xmlElements(element).find(
-                (child) => is(child, W_NS, 'tblStylePr') && w(child, 'type') === 'firstRow',
+                (child) => hasXmlName(child, W_NS, 'tblStylePr') && w(child, 'type') === 'firstRow',
             );
             const name = w(wChild(element, 'name'), 'val') ?? id;
             this.byId.set(id, {
@@ -454,10 +436,11 @@ export class Styles {
             });
             if (type === 'paragraph' && isOn(w(element, 'default'))) defaultParagraph ??= id;
         }
-        this.defaultParagraph = defaultParagraph ?? (this.byId.has('Normal') ? 'Normal' : undefined);
+        this.defaultParagraph =
+            defaultParagraph ?? (this.byId.get('Normal')?.type === 'paragraph' ? 'Normal' : undefined);
     }
 
-    get(id: string | undefined): Style | undefined {
+    public get(id: string | undefined): Style | undefined {
         return id === undefined ? undefined : this.byId.get(id);
     }
 
@@ -489,23 +472,23 @@ export class Styles {
         return resolved;
     }
 
-    run(id: string | undefined): DocxRunProps {
+    public run(id: string | undefined): DocxRunProps {
         return this.resolve(id).run;
     }
 
-    para(id: string | undefined): ParaProps {
+    public para(id: string | undefined): ParaProps {
         return this.resolve(id).para;
     }
 
-    role(id: string | undefined): Role | undefined {
+    public role(id: string | undefined): Role | undefined {
         return this.resolve(id).role;
     }
 
-    isCodeCharacter(id: string | undefined): boolean {
+    public isCodeCharacter(id: string | undefined): boolean {
         return this.resolve(id).code;
     }
 
-    table(id: string | undefined): TableLook {
+    public table(id: string | undefined): TableLook {
         return this.resolve(id).table;
     }
 }

@@ -10,6 +10,8 @@ Setup creates the organization with a system call (`auth.api.createOrganization`
 
 Every new non-guest user joins as `member` in `databaseHooks.user.create.after`, which also runs share reconciliation ([ACL.md § Reconciliation](ACL.md#reconciliation)). Every sign-in re-attempts the join when the membership row is missing (`authEnsureDefaultOrgMembership` from `databaseHooks.session.create.after`). The sign-up join only logs a failure, so sign-in is its repair path: without it, an account whose join failed stays outside the org and invisible in Admin → Users. Guests never join ([GUEST-ACCESS.md](GUEST-ACCESS.md)).
 
+A user has no username field. The "username" an invite or the admin's new-user form asks for becomes the local part of the user's email address.
+
 ## Every new user joins the default team
 
 `createOrganization` also makes a team named after the org, the default team, and setup pins its id as `defaultTeamId` in the server config. It is the team every new user joins, because the ACL has no entry for the whole org ([ACL.md](ACL.md)). Renaming the org renames it by that id ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#renaming-the-organization-renames-its-default-team)).

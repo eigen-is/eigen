@@ -32,6 +32,8 @@
       "style": {
         "noNonNullAssertion": "off",
         "noDescendingSpecificity": "off",
+        "useImportType": { "level": "error", "options": { "style": "separatedType" } },
+        "useConsistentMemberAccessibility": { "level": "error", "options": { "accessibility": "explicit" } },
         // The package exports maps are the module resolver; extension-suffixed workspace
         // specifiers don't resolve through them. See CODE-STANDARDS.md § Imports.
         "noRestrictedImports": {
@@ -59,13 +61,18 @@
         "noExplicitAny": "error"
       },
       "a11y": {
-        "recommended": false
+        "preset": "none"
       }
     }
   },
   // Architectural seams that tsc can't catch: a React import pulled into the
   // backend-shared layers explodes at module-eval, not at typecheck. See AGENTS.md.
   "overrides": [
+    {
+      // The sheet's contenteditable editors read innerText on purpose: it keeps the line breaks the editor draws, textContent drops them.
+      "includes": ["packages/sheet/src/**"],
+      "linter": { "rules": { "performance": { "useDomNodeTextContent": "off" } } }
+    },
     {
       // Vite loads these with Node's native TS loader, which needs full specifiers.
       "includes": ["**/vite.config.ts", "vite.shared.config.ts"],
@@ -130,6 +137,36 @@
           }
         }
       }
+    },
+    {
+      // math is a leaf below lib that the browser, Bun, Workers and Node run unchanged: it imports no package; its tsconfig holds no runtime API.
+      "includes": ["packages/math/**", "!packages/math/src/test/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**", "!./**", "!../**"],
+                    "message": "@workspace/math is a leaf: no dependencies (see ARCHITECTURE.md § Dependency direction)."
+                  },
+                  // Overrides replace the root rule options wholesale — restate the suffix ban.
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "javascript": {
@@ -149,6 +186,21 @@
     },
     "formatter": {
       "enabled": true
+    }
+  },
+  "markdown": {
+    "parser": {
+      // Help-center articles and blog posts open with YAML front matter.
+      "frontmatter": true
+    },
+    "formatter": {
+      // Off: it pads wide tables to one width and re-nests lists and blockquotes, which changes what they render.
+      "enabled": false
+    }
+  },
+  "yaml": {
+    "formatter": {
+      "indentWidth": 2
     }
   }
 }

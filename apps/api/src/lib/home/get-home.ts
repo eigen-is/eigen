@@ -1,40 +1,52 @@
+// getHome is the way in to every owner's data. It builds the owner's Home on first use, keeps it in a
+// cache, and hands every later caller that same Home until it closes. Because every request passes
+// through here, this file also remembers when a home was last asked for, and keeps a home shut while
+// a restore replaces its folder.
+
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { type AsyncSingleton, createAsyncSingleton } from '../../utils/singleton';
+import type { AsyncSingleton } from '../../utils/singleton';
+import { createAsyncSingleton } from '../../utils/singleton';
 import { ApiError } from '../core';
-import { getOrgExists } from '../org/org';
-import { getTeam } from '../team/team';
-import { getUserById } from '../user/user';
+import { getOrgExists } from '../org';
+import { getTeam } from '../team';
+import { getUserById } from '../user';
 import { GuestHome } from './guest-home';
 import type { Home } from './home';
 import { getSyntheticOrgUser, OrgHome } from './org-home';
 import { getSyntheticTeamUser, TeamHome } from './team-home';
 import { UserHome } from './user-home';
 
-const homeFactories: Map<string, AsyncSingleton<Home>> = new Map();
+const homeFactories = new Map<string, AsyncSingleton<Home>>();
+
+// When a request or a keepalive last reached each home.
+const lastRequestAt = new WeakMap<Home, number>();
+
+// Homes whose folder a restore is replacing. openHome refuses them until the restore is done, so
+// nothing opens the folder while it is being moved aside.
+const restoringHomes = new Set<string>();
 
 export function atHome(ownerId: string): boolean {
     return homeFactories.has(ownerId);
 }
 
-// Loaded and staying: a home tearing down is gone to whoever asks next.
-export function isHomeOpen(ownerId: string): boolean {
+// The home if it is loaded and not closing. Never opens one.
+export function loadedHome(ownerId: string): Home | undefined {
     const home = homeFactories.get(ownerId)?.peek();
-    return !!home && !home.destructing;
+    return home && !home.closing ? home : undefined;
 }
 
-// Resets the idle timer on an already-loaded home. peek() never triggers the factory,
-// so a keepalive tick pins a live home without resurrecting an evicted one.
+// A keepalive of an open connection: keeps a loaded home open, but never opens a closed one.
 export function touchHomeIfLoaded(ownerId: string): void {
-    const home = homeFactories.get(ownerId)?.peek();
+    const home = loadedHome(ownerId);
     if (!home) return;
-    home.requestedAt = Date.now();
+    lastRequestAt.set(home, Date.now());
     home.touch();
 }
 
-// Homes whose folder is being replaced by a restore. Every surface that resolves a home per request
-// — HTTP, SSE, collab WS, CalDAV, CardDAV, WebDAV — is refused for the duration by the check in
-// getHome, so nothing lazily re-creates the folder being moved aside. Set by lib/backup/restore.ts.
-const restoringHomes = new Set<string>();
+// Tells work that opened a home for itself whether anybody else has used it since.
+export function requestedSince(home: Home, time: number): boolean {
+    return (lastRequestAt.get(home) ?? 0) >= time;
+}
 
 // The mark is the lock: a second restore of one home would move a folder aside that the first one is
 // still writing, and whichever finished first would unlock the home for both.
@@ -48,96 +60,88 @@ export function clearHomeRestoring(ownerId: string): void {
 }
 
 export async function getHome(ownerId: string): Promise<Home> {
-    const home = await getHomeForBackup(ownerId);
-    home.requestedAt = Date.now();
+    const home = await openHome(ownerId);
+    lastRequestAt.set(home, Date.now());
     return home;
 }
 
-// getHome without recording a request: a backup reaching a home is nobody opening it (pullHomeSnapshot).
-export async function getHomeForBackup(ownerId: string): Promise<Home> {
-    if (restoringHomes.has(ownerId)) {
-        throw new ApiError(503, 'Restore in progress');
-    }
-    // Retry to resolve races with a concurrently-destructing home or a competing installer. This
-    // settles in one or two iterations in practice; the bound is only a runaway safety net.
+// getHome without counting as a request, for background work such as a backup.
+export async function openHome(ownerId: string): Promise<Home> {
+    // Settles in one or two rounds; the limit only stops a runaway loop.
     for (let attempt = 0; attempt < 100; attempt++) {
-        const existing = homeFactories.get(ownerId);
-        if (existing) {
-            const home = await existing();
-            if (!home.destructing) {
-                return home.touch();
-            }
-            // The cached home is tearing down. Await its teardown to completion (the same shutdown()
-            // path evictHome uses) BEFORE dropping it, so the replacement can't open the same DB files
-            // while close() is still checkpointing and closing them. shutdown() is
-            // idempotent with the in-flight destruct(), so this just awaits the outgoing teardown.
-            await home.shutdown();
-            // Evict only if it is still the current entry — a concurrent caller may already have
-            // installed a replacement we must not clobber.
-            if (homeFactories.get(ownerId) === existing) {
-                homeFactories.delete(ownerId);
-            }
-            continue;
-        }
+        // Checked every round: a restore may start while this call waits for a closing home.
+        if (restoringHomes.has(ownerId)) throw new ApiError(503, 'Restore in progress');
 
-        const factory: AsyncSingleton<Home> = createAsyncSingleton(async () => {
-            // Identity-checked cleanup: evict only while we are still the installed factory, so a
-            // superseded/orphaned home's teardown cannot evict a live successor for the same owner.
-            const cleanUp = () => {
-                if (homeFactories.get(ownerId) === factory) {
-                    homeFactories.delete(ownerId);
-                }
-            };
-            const parsed = parseOwnerId(ownerId);
-            if (parsed.type === 'invalid') {
-                throw new ApiError(400, 'Invalid ownerId format');
-            }
-            let home: Home;
-            switch (parsed.type) {
-                case 'user': {
-                    const user = await getUserById(parsed.id);
-                    if (!user) {
-                        console.error(`[getHome] User not found for id=${parsed.id}, ownerId=${ownerId}`);
-                        throw new ApiError(404, 'User not found');
-                    }
-                    home = user.role === 'guest' ? new GuestHome(user, cleanUp) : new UserHome(user, cleanUp);
-                    break;
-                }
-                case 'team': {
-                    const teamData = await getTeam(parsed.id);
-                    if (!teamData) {
-                        throw new ApiError(404, 'Team not found');
-                    }
-                    home = new TeamHome(getSyntheticTeamUser(ownerId, teamData.name), cleanUp);
-                    break;
-                }
-                case 'external':
-                    throw new ApiError(400, 'Cannot get home for external owner');
-                case 'org': {
-                    if (!(await getOrgExists(parsed.id))) {
-                        throw new ApiError(404, 'Organization not found');
-                    }
-                    home = new OrgHome(getSyntheticOrgUser(ownerId), cleanUp);
-                    break;
-                }
-            }
-            await home.init();
-            return home.touch();
-        });
-
-        // Install only if no factory exists; if a concurrent caller won the install race, discard
-        // ours and re-loop to use theirs — honoring createAsyncSingleton's "build once" contract.
-        if (homeFactories.has(ownerId)) {
-            continue;
+        const factory = homeFactories.get(ownerId) ?? installFactory(ownerId);
+        let home: Home;
+        try {
+            home = await factory();
+        } catch (err) {
+            // Forget a home that failed to build, so the next call tries again.
+            if (homeFactories.get(ownerId) === factory) homeFactories.delete(ownerId);
+            throw err;
         }
-        homeFactories.set(ownerId, factory);
-        return (await factory()).touch();
+        // Checked again: a restore may have started while the home was being built.
+        if (restoringHomes.has(ownerId)) throw new ApiError(503, 'Restore in progress');
+        if (!home.closing) return home.touch();
+
+        // Wait until it has closed and dropped out of the cache, so the next round can't open the
+        // same database files while they are still being closed.
+        await home.close();
     }
-    throw new Error(`getHome: could not obtain a stable home for ${ownerId}`);
+    throw new Error(`openHome: could not obtain a stable home for ${ownerId}`);
 }
 
-// Typed own-home accessors: resolve the caller's own home and assert its concrete
-// subtype, so routes can drop the `(await getHome(id)) as TeamHome` casts.
+function installFactory(ownerId: string): AsyncSingleton<Home> {
+    const factory: AsyncSingleton<Home> = createAsyncSingleton(async () => {
+        // Only drops the cache entry while it is still this home's: an old home that closes late
+        // must not drop its successor.
+        const onClosed = () => {
+            if (homeFactories.get(ownerId) === factory) homeFactories.delete(ownerId);
+        };
+        const home = await createHome(ownerId, onClosed);
+        try {
+            await home.init();
+        } catch (err) {
+            // Home.init closes itself when one of its parts fails; this also covers what a kind of
+            // home does before that.
+            await home.close();
+            throw err;
+        }
+        return home;
+    });
+    homeFactories.set(ownerId, factory);
+    return factory;
+}
+
+async function createHome(ownerId: string, onClosed: () => void): Promise<Home> {
+    const parsed = parseOwnerId(ownerId);
+    switch (parsed.type) {
+        case 'user': {
+            const user = await getUserById(parsed.id);
+            if (!user) {
+                console.error(`[getHome] User not found for id=${parsed.id}, ownerId=${ownerId}`);
+                throw new ApiError(404, 'User not found');
+            }
+            return user.role === 'guest' ? new GuestHome(user, onClosed) : new UserHome(user, onClosed);
+        }
+        case 'team': {
+            const team = await getTeam(parsed.id);
+            if (!team) throw new ApiError(404, 'Team not found');
+            return new TeamHome(getSyntheticTeamUser(ownerId, team.name), onClosed);
+        }
+        case 'org': {
+            if (!(await getOrgExists(parsed.id))) throw new ApiError(404, 'Organization not found');
+            return new OrgHome(getSyntheticOrgUser(ownerId), onClosed);
+        }
+        case 'external':
+            throw new ApiError(400, 'Cannot get home for external owner');
+        case 'invalid':
+            throw new ApiError(400, 'Invalid ownerId format');
+    }
+}
+
+// getHome, checked to be the kind of home the caller expects.
 export async function getTeamHome(teamOwnerId: string): Promise<TeamHome> {
     const home = await getHome(teamOwnerId);
     if (!(home instanceof TeamHome)) {
@@ -155,28 +159,15 @@ export async function getUserHome(userId: string): Promise<UserHome> {
 }
 
 export async function evictHome(ownerId: string): Promise<void> {
-    const factory = homeFactories.get(ownerId);
-    if (!factory) return;
-    try {
-        const home = await factory();
-        await home.shutdown();
-    } catch {
-        /* Home may not be initialized */
-    }
-    // Evict only if it is still the current entry — a concurrent getHome may already have
-    // installed a replacement we must not clobber.
-    if (homeFactories.get(ownerId) === factory) {
-        homeFactories.delete(ownerId);
-    }
+    // A home that failed to build has nothing to close, and openHome forgets it.
+    const home = await homeFactories
+        .get(ownerId)?.()
+        .catch(() => undefined);
+    await home?.close();
 }
 
 export async function shutdownAllHomes(): Promise<void> {
-    const entries = [...homeFactories.entries()];
-    homeFactories.clear();
-    await Promise.allSettled(
-        entries.map(async ([, factory]) => {
-            const home = await factory();
-            await home.shutdown();
-        }),
-    );
+    // Closes every home that is open now. A request that arrives meanwhile waits for its home to close
+    // before it opens a new one, so the two never share database files.
+    await Promise.allSettled([...homeFactories.values()].map(async (factory) => (await factory()).close()));
 }

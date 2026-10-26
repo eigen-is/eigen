@@ -1,6 +1,9 @@
+import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { cloneDeep } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
+import { mapChartRefs } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
+import { copySheetName } from '../../engine/sheet-name';
 import type { CellMatrix } from '../../engine/types';
 import { api, createContextResolver, execfunction, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';
@@ -53,65 +56,33 @@ export function showSheet(ctx: Context, sheetId: string) {
     ctx.sheets[index].hide = undefined;
 }
 
-function generateCopySheetName(ctx: Context, sheetId: string) {
-    const copyWord = '(Copy';
-    const SheetIndex = getSheetIndex(ctx, sheetId);
-    if (SheetIndex == null) return sheetId;
-    let sheetName = ctx.sheets[SheetIndex].name;
-    const copy_i = sheetName.indexOf(copyWord);
-    let index: number = 0;
-
-    if (copy_i !== -1) {
-        sheetName = sheetName.toString().substring(0, copy_i);
-    }
-
-    const nameCopy = sheetName + copyWord;
-    const sheetNames = [];
-
-    for (let i = 0; i < ctx.sheets.length; i += 1) {
-        const fileName = ctx.sheets[i].name;
-        sheetNames.push(fileName);
-        const st_i = fileName.indexOf(nameCopy);
-
-        if (st_i === 0) {
-            index = index || 2;
-            const ed_i = fileName.indexOf(')', st_i + nameCopy.length);
-            // Excel-style copy suffix: "Sheet1 (2)". Extract and bump.
-            const num = Number.parseInt(fileName.substring(st_i + nameCopy.length, ed_i), 10);
-            if (Number.isFinite(num) && num >= index) {
-                index = num + 1;
-            }
-        }
-    }
-
-    let sheetCopyName: string;
-
-    do {
-        const postfix = `${copyWord + (index || '')})`;
-        const lengthLimit = 31 - postfix.length;
-        sheetCopyName = sheetName;
-        if (sheetCopyName.length > lengthLimit) {
-            sheetCopyName = `${sheetCopyName.slice(0, lengthLimit - 1)}…`;
-        }
-        sheetCopyName += postfix;
-        index = (index || 1) + 1;
-    } while (sheetNames.indexOf(sheetCopyName) !== -1);
-
-    return sheetCopyName;
-}
-
 export function copySheet(ctx: Context, sheetId: string) {
     if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
     const order = ctx.sheets[index].order! + 1;
-    const sheetName = generateCopySheetName(ctx, sheetId);
+    const sheetName = copySheetName(
+        ctx.sheets[index].name,
+        ctx.sheets.map((sheet) => sheet.name),
+    );
     const sheetData = cloneDeep(ctx.sheets[index]);
-    delete sheetData.id;
+    const copyId = uuidv4();
+    sheetData.id = copyId;
     delete sheetData.status;
     sheetData.celldata = dataToCelldata(sheetData.data);
     delete sheetData.data;
-    api.addSheet(ctx, undefined, uuidv4(), ctx.sheets[index].isPivotTable, sheetName, sheetData);
+    // A copy's images and charts take fresh ids, and its charts read the copy where they read the sheet copied, as
+    // in Excel and Google.
+    const toCopy = (ref: CellRangeRef) => (ref.sheetId === sheetId ? { ...ref, sheetId: copyId } : ref);
+    const withFreshId = <T extends { id: string }>(object: T): [string, T] => {
+        const id = uuidv4();
+        return [id, { ...object, id }];
+    };
+    sheetData.images = Object.fromEntries(Object.values(sheetData.images ?? {}).map(withFreshId));
+    sheetData.charts = Object.fromEntries(
+        Object.values(sheetData.charts ?? {}).map((chart) => withFreshId(mapChartRefs(chart, toCopy))),
+    );
+    api.addSheet(ctx, undefined, copyId, ctx.sheets[index].isPivotTable, sheetName, sheetData);
     const sheetOrderList: Record<string, number> = {};
     sheetOrderList[ctx.sheets[ctx.sheets.length - 1].id as string] = order;
     api.setSheetOrder(ctx, sheetOrderList);

@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
+import { DEFAULT_SCENE_META } from '@workspace/lib/vector';
+import { MATHML_NAMESPACE, readLatex, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
+import { sampleChartParts } from '../fixtures/chart-parts';
 import {
     buildGoldenDeckScene,
     buildGoldenDocJson,
@@ -54,6 +57,25 @@ describe('extractCollabText', () => {
     });
 
     // Caps draw capitals over the letters; search finds what was typed.
+    // As Google's search finds a note's words: each note's text after its reference's, set apart from it.
+    test("eigendoc: a footnote's paragraphs index as text where the note stands", async () => {
+        const doc = new Y.Doc();
+        const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
+        const text = (value: string) => ({ type: 'text', text: value });
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [
+                paragraph(
+                    text('Claim'),
+                    { type: 'footnote', content: [paragraph(text('See Smith')), paragraph(text('p. 4'))] },
+                    text(' holds.'),
+                ),
+            ],
+        });
+        expect((await extractCollabText('eigendoc', doc)).text).toBe('Claim See Smith p. 4  holds.');
+        doc.destroy();
+    });
+
     test('eigendoc: text in caps indexes as typed', async () => {
         const doc = new Y.Doc();
         const caps = (text: string, value: string) => ({
@@ -66,6 +88,58 @@ describe('extractCollabText', () => {
             content: [{ type: 'paragraph', content: [caps('Typed Words', 'all'), caps(' Small Caps', 'small')] }],
         });
         expect((await extractCollabText('eigendoc', doc)).text).toBe('Typed Words  Small Caps');
+        doc.destroy();
+    });
+
+    // A figure's caption and a chart's text are attributes, which no text node holds.
+    test("eigendoc: a figure's caption, and a chart's caption, titles, series and categories, index as text", async () => {
+        const doc = new Y.Doc();
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Before' },
+                        { type: 'figure', attrs: { mediaName: 'a.png', caption: 'Team photo', alt: 'Unindexed' } },
+                        {
+                            type: 'chart',
+                            attrs: { ...sampleChartParts('pie'), caption: 'Scores by team' },
+                        },
+                        {
+                            type: 'chart',
+                            attrs: { ...sampleChartParts('pie'), specData: 'not a chart' },
+                        },
+                    ],
+                },
+            ],
+        });
+        expect((await extractCollabText('eigendoc', doc)).text).toBe(
+            "Before Team photo Scores by team Where a star's light goes Wavelength (nm) Share of light, 300–1000 nm (%) Sun 300–400 400–500 500–600 600–700 700–800 800–900 900–1000",
+        );
+        doc.destroy();
+    });
+
+    // Its linear form, typed or not, is what search finds.
+    test("eigendoc: an equation indexes its linear form, and one the server can't parse nothing", async () => {
+        const doc = new Y.Doc();
+        const area = readLatex('\\pi r^2');
+        const equation = (mathml: string) => ({ type: 'equation', attrs: { mathml } });
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Area' },
+                        equation(writeMathml(area, '\\pi r^2')),
+                        equation(writeMathml(area)),
+                        equation(`<math xmlns="${MATHML_NAMESPACE}"><mi>x</mi>`),
+                    ],
+                },
+            ],
+        });
+        expect((await extractCollabText('eigendoc', doc)).text).toBe('Area πr^2 πr^2');
         doc.destroy();
     });
 
@@ -140,7 +214,7 @@ describe('extractCollabText', () => {
 
     test('eigenvector: an empty drawing extracts to the empty string', async () => {
         const doc = new Y.Doc();
-        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: 'transparent' } });
+        seedVectorDoc(doc, { elements: [], frames: [], meta: DEFAULT_SCENE_META });
 
         const { text, warnings } = await extractCollabText('eigenvector', doc);
         expect(text).toBe('');
@@ -178,6 +252,19 @@ describe('extractCollabText', () => {
     // The cap is a byte budget: the extracted body is cloned to the main thread and
     // inserted into FTS, so it must hold for one huge leaf and for text where a
     // character is not a byte.
+    test("eigensheets: a rich-text cell indexes its runs' text", async () => {
+        const doc = new Y.Doc();
+        const rich = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Findable', bl: 1 }, { v: ' runs' }] } };
+        seedSheetsDoc(
+            doc,
+            [{ id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata: [{ r: 0, c: 0, v: rich }] }],
+            [],
+        );
+        const { text } = await extractCollabText('eigensheets', doc);
+        expect(text).toContain('Findable runs');
+        doc.destroy();
+    });
+
     test('the cap bounds the extracted body', async () => {
         const doc = new Y.Doc();
         const cell = 'z'.repeat(1000);

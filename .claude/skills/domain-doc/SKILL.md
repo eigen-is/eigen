@@ -39,6 +39,7 @@ What, then why, then where. One idea per section.
 - Every section carries a why. A section with no reason in it is a catalogue. Cut it or point at the directory.
 - Tables hold parallel facts (values and their effect, a crash point and its repair). Bullets for short lists. Prose for reasons. A code block only for a type or route shape that is the contract, ten lines at most.
 - Name a symbol when the reader will grep for it. Otherwise use plain words. Point at a directory, not at every file in it.
+- Never write a line number (`file.ts:123`, "line 40"). Lines move with every edit and the reference goes stale silently. Name the file and the function, constant or type instead.
 - A term the code doesn't use is defined in the sentence that introduces it, or replaced. A term another doc defines is linked at first use.
 
 ## Length follows the domain
@@ -108,8 +109,8 @@ EOF
 - The sections never talk about the doc: no "here", "above", "below" or "see this doc". They state facts and link to other docs, or to a section by heading. Only the introduction may say what the sections cover. A rewrite owns the whole file, so every hit in it is fixed.
 - Present tense. Short sentences in simple English. No slop em-dashes (dramatic pause, stacked asides, a dash doing a colon's or full stop's job), no "Note that", "robust", "seamlessly".
 - No hard line breaks inside a paragraph.
-- Every path you name exists, and both link checks print nothing. A symbol named with a path is grepped in that file. A symbol named without one must have its definition in exactly one file of a repo grep, or it gets its path.
-- A new doc gets its line in the AGENTS.md index and its row in `docs/ARCHITECTURE.md`.
+- No line numbers anywhere in the doc. Every path you name exists, and both link checks print nothing. A symbol named with a path is grepped in that file. A symbol named without one must have its definition in exactly one file of a repo grep, or it gets its path.
+- A new doc gets its line in the `docs/README.md` index and its row in `docs/ARCHITECTURE.md`.
 
 ## Common mistakes
 

@@ -1,7 +1,8 @@
 // Responsiveness benchmark for document transforms. Seeds a heavy document of each
 // collab type — eigensheets, eigendoc, eigenslides — then measures a cold preview, a
 // cache-hit preview and a download export while probing the event loop, the /health
-// route, and RSS.
+// route, the API's RSS and the transform child's peak. Then it times what the API
+// spends copying a 50 MB and a 200 MB request to the child and a reply back.
 //
 // Run from apps/api:
 //   bun src/test/transform-benchmark.ts [--rows 1500] [--cols 40]
@@ -13,8 +14,10 @@
 // machine-relative. Targets (reference dev machine, proposal § Responsiveness
 // benchmark): health p95 < 150 ms, event-loop p99 < 100 ms, no delay > 250 ms.
 
+import { fileURLToPath } from 'node:url';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type * as Y from 'yjs';
+import type { DocumentTransformRequest } from '../lib/document/transform/protocol';
 
 // './setup' must evaluate before any lib module so EIGEN_DATA_ROOT points at the
 // test dir — the same job --preload does for the test suite. Dynamic imports keep
@@ -22,6 +25,7 @@ import type * as Y from 'yjs';
 const { authedRequest, driveGet, drivePost, getTestContext } = await import('./setup');
 const { getHome } = await import('../lib/home/get-home');
 const { importIntoDocument } = await import('../lib/import/import-document');
+const { DocumentTransformRunner, TRANSFORM_LIMITS } = await import('../lib/document/transform/runner');
 const { buildHeavyOps, buildHeavySheets, seedSheetsDoc } = await import('./fixtures/heavy-sheets');
 const { buildHeavyDeckScene, buildHeavyDocJson, seedDeckDoc, seedEigendoc } = await import(
     './fixtures/golden-documents'
@@ -61,11 +65,19 @@ function fmt(s: Stats): string {
 // Runs `work` while sampling event-loop tick lag (5 ms setTimeout chain), /health
 // round-trip latency (in-process app.handle), and RSS. Both probes ride the same
 // event loop as the API server, so a blocked loop shows up as lag/latency spikes.
+// The job's heap is the child's, so its peak comes from the runner's job lines.
 async function measure(label: string, work: () => Promise<unknown>) {
     const loopLags: number[] = [];
     const healthMs: number[] = [];
     let rssPeak = process.memoryUsage.rss();
     let running = true;
+    const childPeaks: number[] = [];
+    const log = console.log;
+    console.log = (...args: unknown[]) => {
+        const peak = String(args[0]).match(/^\[transform\] job=.* peakRssBytes=(\d+)/)?.[1];
+        if (peak) childPeaks.push(Number(peak));
+        log(...args);
+    };
 
     const loopProbe = (async () => {
         while (running) {
@@ -90,13 +102,23 @@ async function measure(label: string, work: () => Promise<unknown>) {
     const e2eMs = performance.now() - start;
     running = false;
     await Promise.all([loopProbe, healthProbe]);
+    console.log = log;
     rssPeak = Math.max(rssPeak, process.memoryUsage.rss());
 
+    const health = stats(healthMs);
+    const loop = stats(loopLags);
+    const gates = [
+        health.p95 < 150 ? 'ok' : 'FAIL health p95',
+        loop.p99 < 100 ? 'ok' : 'FAIL loop p99',
+        loop.max <= 250 ? 'ok' : 'FAIL loop max',
+    ];
     console.log(`\n=== ${label} ===`);
     console.log(`e2e        ${e2eMs.toFixed(0)}ms`);
-    console.log(`health     ${fmt(stats(healthMs))}`);
-    console.log(`loop lag   ${fmt(stats(loopLags))}`);
-    console.log(`rss peak   ${(rssPeak / 1024 / 1024).toFixed(0)}MB`);
+    console.log(`health     ${fmt(health)}`);
+    console.log(`loop lag   ${fmt(loop)}`);
+    console.log(`rss peak   ${(rssPeak / 1024 / 1024).toFixed(0)}MB (API)`);
+    console.log(`child peak ${childPeaks.map((peak) => `${(peak / 1024 / 1024).toFixed(0)}MB`).join(' ') || '-'}`);
+    console.log(`gates      ${gates.join(' ')}`);
     return { e2eMs, result };
 }
 
@@ -124,7 +146,7 @@ async function exportDownload(pathId: string, format: 'xlsx' | 'html'): Promise<
 }
 
 async function importXlsx(pathId: string, data: ArrayBuffer): Promise<void> {
-    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/import`, {
+    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/import?mode=replace`, {
         method: 'POST',
         body: data,
     });
@@ -197,8 +219,38 @@ for (const { label, fileName, type, seed, format } of scenarios) {
     if (format === 'xlsx') await importScenario(label, exported);
 }
 
+// The boundary copies: IPC serializes a request on the API's event loop and deserializes
+// the reply there too. The scriptable test child echoes the request's size or replies with
+// as many bytes as asked, so only the copy is measured, at the largest uploads and results.
+const ipcRunner = new DocumentTransformRunner({
+    entry: fileURLToPath(new URL('./fixtures/transform-test-child.ts', import.meta.url)),
+});
+const ipcOptions = { ...TRANSFORM_LIMITS.import, priority: 'foreground' } as const;
+for (const mb of [50, 200]) {
+    const bytes = mb * 1024 * 1024;
+    const request: DocumentTransformRequest & { test: object } = {
+        kind: 'import',
+        sourceFormat: 'xlsx',
+        targetType: 'eigensheets',
+        maxMediaBytes: 0,
+        data: new ArrayBuffer(bytes),
+        test: { behavior: 'import-ok' },
+    };
+    await measure(`ipc: ${mb} MB request`, () => ipcRunner.run(request, ipcOptions));
+    const reply: DocumentTransformRequest & { test: object } = {
+        kind: 'export',
+        documentType: 'eigensheets',
+        format: 'xlsx',
+        title: 'bench',
+        source: { snapshot: null, updates: [] },
+        test: { behavior: 'export-bytes', bytes },
+    };
+    await measure(`ipc: ${mb} MB reply`, () => ipcRunner.run(reply, ipcOptions));
+}
+await ipcRunner.close();
+
 // Memory pass (proposal § Memory benchmark): repeat the heavy preview through
-// one-shot Workers and verify post-job RSS stabilizes instead of growing linearly.
+// one-shot children and verify the API's RSS stays flat instead of growing linearly.
 if (args.includes('--memory')) {
     const { generateDocumentPreview } = await import('../lib/preview/preview-document');
     const doc = await createDocument('bench-memory', 'sheets');
@@ -207,7 +259,7 @@ if (args.includes('--memory')) {
     const { mount, path } = await home.drive.resolveFile(mountId, doc.id);
 
     const memoryRuns = argNum('memory-runs', 8);
-    console.log(`\n=== memory: ${memoryRuns} repeated Worker previews (600x45) ===`);
+    console.log(`\n=== memory: ${memoryRuns} repeated previews (600x45) ===`);
     for (let i = 0; i < memoryRuns; i++) {
         const start = performance.now();
         await generateDocumentPreview('eigensheets', mount, path);
@@ -225,7 +277,7 @@ if (xlsxPath && fs.existsSync(xlsxPath)) {
     const { path } = await home.drive.resolveFile(mountId, doc.id);
     const buffer = Buffer.from(fs.readFileSync(xlsxPath));
     await measure(`real xlsx: import (${buffer.byteLength} bytes)`, () =>
-        importIntoDocument(home.drive, path, buffer, home.user),
+        importIntoDocument(home.drive, path, buffer, { mode: 'replace' }, home.user),
     );
     console.log(`imported ${xlsxPath}`);
     await runScenario('real xlsx', doc.id, 'xlsx');

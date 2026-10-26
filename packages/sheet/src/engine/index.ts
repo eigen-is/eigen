@@ -6,14 +6,17 @@
 // package-root export instead.
 
 export {
-    columnIndexToLabel,
+    MAX_SHEET_NAME_LENGTH,
     parseA1Range,
     quoteSheetName,
+    rangeToA1,
     rowIndexToLabel,
+    SHEET_NAME_FORBIDDEN,
     toA1,
     unquoteSheetName,
 } from './a1-notation';
 export { createArrayResolver } from './cell-resolver';
+export { mapChartRefs, renderSheetChartSvg, resolveRangeChartData } from './chart-data';
 export type {
     CellFormatStyle,
     ComputeMap,
@@ -24,14 +27,27 @@ export type {
 export { createCfFormulaEvaluator, evaluateConditionalFormat, withCfRanges } from './conditional-format';
 // CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
 // are surfaced through `./types` re-exports below.
-export { createDefaultSheets } from './defaults';
-export { booleanDisplay, cellWrapsText, numberDisplay, update } from './format';
+export { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
+export {
+    booleanDisplay,
+    cellDisplay,
+    cellValue,
+    cellWrapsText,
+    generalAlign,
+    is_date,
+    isValidNumberFormat,
+    numberDisplay,
+    richText,
+    update,
+} from './format';
 export { FormulaEngine } from './formula-engine';
+export { functionCopy, renameSheetRefs } from './formula-shift';
 export { iscelldata } from './formula-utils';
-export { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from './parser/helper/cell';
+export { DOTTED_FUNCTIONS } from './parser/evaluate-by-operator/operator/formula-function';
 export { recalcSheets, sheetsNeedRecalc } from './recalc';
 export { replaySheetsOps, withMaterializedData } from './replay-ops';
 export { normalizeSheetConfig } from './sheet-config';
+export { copySheetName } from './sheet-name';
 export type {
     CalcChainEntry,
     CellResolver,
@@ -39,3 +55,4 @@ export type {
     FormulaEngineState,
     SheetInfo,
 } from './types';
+export { valueIsError } from './validation';

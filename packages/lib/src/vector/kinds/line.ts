@@ -1,10 +1,15 @@
+// The line kind: a polyline of stored points, straight or rounded, that a closed line can fill. It is drawn by
+// roughjs, with the stroke style and roughness every shape takes.
+
 import { RoughGenerator } from 'roughjs/bin/generator';
-import { hitTestLinear, isClosedLinear, linearLocalToScene, parsePoints, serializePoints } from '../geometry';
+import { hitTestLinear, isClosedLinear, linearLocalToScene } from '../geometry';
 import { polylineOutline } from '../outline';
-import { DEFAULT_LINE_ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS, type VectorLinearElement } from '../types';
+import { parsePoints, serializePoints } from '../points';
+import type { VectorLinearElement } from '../types';
+import { DEFAULT_LINE_ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS } from '../types';
 import { defineKind } from './kind';
 import { clampCoord, fillField, oneOf, str } from './read-fields';
-import { drawableToSvg, fillDefs, linearRoughOptions } from './render-utils';
+import { drawableToSvg, fillDefs, linearRoughOptions, loopPath } from './render-utils';
 
 export const lineKind = defineKind<VectorLinearElement>({
     type: 'line',
@@ -61,6 +66,7 @@ export const lineKind = defineKind<VectorLinearElement>({
                   : gen.linearPath(coords, options);
         // A gradient's defs ride along only when the path actually loops and fills.
         const defs = options.fill === undefined ? '' : fillDefs(el);
-        return { svg: `${defs}<g stroke-linecap="round">${drawableToSvg(drawable)}</g>` };
+        const clip = { id: el.id, d: loopPath(points, el.roundness === 'round') };
+        return { svg: `${defs}<g stroke-linecap="round">${drawableToSvg(drawable, clip)}</g>` };
     },
 });

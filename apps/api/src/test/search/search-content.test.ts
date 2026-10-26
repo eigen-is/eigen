@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import { ApiError } from '../../lib/core/errors';
 import { documentTransformRunner } from '../../lib/document/transform/runner';
+import { flushContentReindex } from '../mount-test-helpers';
 import {
     assertJson,
     authedRequest,
@@ -61,12 +62,12 @@ describe('Drive content-index', () => {
         // Fire onSync → marks the container contentDirty.
         await home.drive.flushContainerDb(mountId, sheetsPath.id);
         // Drain the dirty bit off the request path.
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
 
         expect(home.drive.search({ q: 'zarquon', limit: 20 }).some((h) => h.id === sheetsPath.id)).toBe(true);
 
         // Second immediate reindex is a no-op (within the 2-min cap) — content stays indexed.
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect(home.drive.search({ q: 'zarquon', limit: 20 }).some((h) => h.id === sheetsPath.id)).toBe(true);
     });
 
@@ -77,7 +78,7 @@ describe('Drive content-index', () => {
         p.insert(0, [new Y.XmlText('flibberdoc content here')]);
         collab.doc.getXmlFragment('default').insert(0, [p]);
         await home.drive.flushContainerDb(mountId, docPath.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile('flibberdoc')).file.some((h) => h.id === docPath.id)).toBe(true);
     });
 
@@ -90,12 +91,12 @@ describe('Drive content-index', () => {
         p.insert(0, [new Y.XmlText('flibbercopy content here')]);
         collab.doc.getXmlFragment('default').insert(0, [p]);
         await home.drive.flushContainerDb(mountId, src.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
 
         // The search term lives only in the body (neither name contains it), so a hit on the
         // copy proves the copied container's body was indexed.
         const copied = await home.drive.copyPath(mountId, src.id, rootId, 'rt-copydst');
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile('flibbercopy')).file.some((h) => h.id === copied.id)).toBe(true);
     });
 
@@ -119,7 +120,7 @@ describe('Drive content-index', () => {
             collab.doc.getMap('elements').set('el1', el);
         });
         await home.drive.flushContainerDb(mountId, slidesPath.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile('flibberslide')).file.some((h) => h.id === slidesPath.id)).toBe(true);
     });
 
@@ -140,7 +141,7 @@ describe('Drive content-index', () => {
             columns.set('c1', col);
         });
         await home.drive.flushContainerDb(mountId, stk.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile('flibbercard')).file.some((h) => h.id === stk.id)).toBe(true);
         expect((await searchFile('flibberdesc')).file.some((h) => h.id === stk.id)).toBe(true);
     });
@@ -157,7 +158,7 @@ describe('Drive content-index', () => {
             collab.doc.getMap('columns').set('c1', 7);
         });
         await home.drive.flushContainerDb(mountId, stk.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile('wobblecard')).file.some((h) => h.id === stk.id)).toBe(true);
     });
 
@@ -179,7 +180,7 @@ describe('Drive content-index', () => {
         });
         // flush triggers onSync → markContainerContentDirty on the chat container.
         await home.drive.flushContainerDb(mountId, chat.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile('flibberchat')).file.some((h) => h.id === chat.id)).toBe(true);
     });
 
@@ -196,7 +197,7 @@ describe('Drive content-index', () => {
         await post(`/mindblown ${ctx.bob.user.email}`);
         await post(`/whisper ${ctx.bob.user.email} hushedquokka`);
         await home.drive.flushContainerDb(mountId, chat.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
 
         expect((await searchFile('temples')).file.some((h) => h.id === chat.id)).toBe(true);
         expect((await searchFile('mindblown')).file.some((h) => h.id === chat.id)).toBe(false);
@@ -204,13 +205,13 @@ describe('Drive content-index', () => {
     });
 
     // Plaintext files get contentDirty = 1 at upload time (write-path mark), so no
-    // flushContainerDb is needed — flushContentReindex() alone drains the dirty bit.
+    // flushContainerDb is needed — flushContentReindex alone drains the dirty bit.
     test('PLAINTEXT file body is searchable (no flush — write-path mark)', async () => {
         const file = new File([new TextEncoder().encode('flibbertext inside a plaintext file')], 'notes.txt', {
             type: 'text/plain',
         });
         const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile('flibbertext')).file.some((h) => h.id === uploaded.id)).toBe(true);
     });
 
@@ -222,7 +223,7 @@ describe('Drive content-index', () => {
         const upA = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, a);
         const b = new File([new Uint8Array([1])], 'zonktoken-named.txt', { type: 'text/plain' });
         const upB = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, b);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         const ids = (await searchFile('zonktoken')).file.map((h) => h.id);
         expect(ids).toContain(upA.id);
         expect(ids).toContain(upB.id);
@@ -235,7 +236,7 @@ describe('Drive content-index', () => {
             type: 'text/plain',
         });
         const up = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile('zappotoken')).file.some((h) => h.id === up.id)).toBe(true);
         // driveDelete trashes the path; search filters on trashedAt IS NULL so it disappears.
         await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${up.id}`);
@@ -248,7 +249,7 @@ describe('Drive content-index', () => {
         const big = `${'x'.repeat(150_000)} ${needle}`;
         const file = new File([new TextEncoder().encode(big)], 'big.txt', { type: 'text/plain' });
         const up = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile(needle)).file.some((h) => h.id === up.id)).toBe(false);
     });
 
@@ -260,7 +261,7 @@ describe('Drive content-index', () => {
         p.insert(0, [new Y.XmlText('internalcheck token')]);
         collab.doc.getXmlFragment('default').insert(0, [p]);
         await home.drive.flushContainerDb(mountId, docPath.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         const hits = (await searchFile('internalcheck')).file;
         // The container itself is found by its indexed body content.
         expect(hits.some((h) => h.id === docPath.id)).toBe(true);
@@ -291,7 +292,7 @@ describe('Drive content-index', () => {
 
         writeCell('staleflibber');
         await home.drive.flushContainerDb(mountId, sheetsPath.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile('staleflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
 
         // New body, and the row aged back into the drain window — the 2-min cap would defer it.
@@ -305,7 +306,7 @@ describe('Drive content-index', () => {
         });
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
-            await home.drive.flushContentReindex();
+            await flushContentReindex(home.drive);
         } finally {
             errorSpy.mockRestore();
             runSpy.mockRestore();
@@ -318,6 +319,52 @@ describe('Drive content-index', () => {
         expect((await searchFile('staleflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
         expect((await searchFile('freshflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(false);
     });
+
+    // A document too big or too slow for the transform process would run out of memory, or time out, again on every
+    // drain: it indexes as nothing, as a vCard the decoder refuses does, and leaves the row clean.
+    test.each([
+        ['out-of-memory', 'Document transform ran out of memory'],
+        ['timeout', 'Document transform timed out'],
+    ] as const)(
+        'an extract that failed with %s indexes the sheet as empty and clears its dirty bit',
+        async (code, message) => {
+            const sheetsPath = await home.drive.create(mountId, rootId, `reindex-${code}`, 'sheets');
+            const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+            const sheets = [
+                {
+                    id: 'sheet-1',
+                    name: 'Sheet1',
+                    order: 0,
+                    config: {},
+                    celldata: [{ r: 0, c: 0, v: { m: 'oomflibber', v: 'oomflibber' } }],
+                },
+            ];
+            collab.doc.transact(() => {
+                collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
+            });
+            await home.drive.flushContainerDb(mountId, sheetsPath.id);
+            await flushContentReindex(home.drive);
+            expect((await searchFile('oomflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
+
+            const { mount } = await home.drive.resolveFile(mountId, sheetsPath.id);
+            mount.db.run(sql`UPDATE paths SET contentDirty = 1, contentIndexedAt = 0 WHERE id = ${sheetsPath.id}`);
+            const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(async () => ({
+                ok: false as const,
+                error: { code, message },
+            }));
+            try {
+                await flushContentReindex(home.drive);
+            } finally {
+                runSpy.mockRestore();
+            }
+
+            const [row] = mount.db.all(sql`SELECT contentDirty FROM paths WHERE id = ${sheetsPath.id}`) as {
+                contentDirty: number;
+            }[];
+            expect(row.contentDirty).toBe(0);
+            expect((await searchFile('oomflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(false);
+        },
+    );
 
     // The drain captures the document at job start, but queue wait plus the Worker can
     // take minutes. An edit that syncs inside that window must survive the older body's
@@ -343,7 +390,7 @@ describe('Drive content-index', () => {
 
         writeCell('raceoldflibber');
         await home.drive.flushContainerDb(mountId, sheetsPath.id);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
 
         const { mount } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const dueNow = () => mount.db.run(sql`UPDATE paths SET contentIndexedAt = 0 WHERE id = ${sheetsPath.id}`);
@@ -366,7 +413,7 @@ describe('Drive content-index', () => {
             return { ok: true, result: { text: 'racemidflibber' }, warnings: [] };
         });
         try {
-            await home.drive.flushContentReindex();
+            await flushContentReindex(home.drive);
         } finally {
             runSpy.mockRestore();
         }
@@ -377,7 +424,7 @@ describe('Drive content-index', () => {
 
         // The cap window deferred the retry; once due, the newer body indexes and clears.
         dueNow();
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
         expect((await searchFile('racenewflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
         expect(contentDirty()).toBe(0);
     });
@@ -391,7 +438,7 @@ describe('Drive content-index', () => {
             type: 'text/plain',
         });
         const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
-        await home.drive.flushContentReindex();
+        await flushContentReindex(home.drive);
 
         const { mount } = await home.drive.resolveFile(mountId, uploaded.id);
         mount.db.run(sql`UPDATE paths SET contentDirty = 1, contentIndexedAt = 0 WHERE id = ${uploaded.id}`);

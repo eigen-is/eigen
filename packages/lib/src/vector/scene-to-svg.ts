@@ -1,17 +1,16 @@
-// Pure scene → SVG string. No DOM, no measurement: roughjs's RoughGenerator yields path
-// ops as plain data (DOM-free), we serialize them ourselves instead of using RoughSVG,
-// and text trusts client-measured width/height so the server never measures. Shared verbatim by the
-// clipboard's SVG flavor and the API transform Worker's svg export — the two places a scene leaves
-// the app as one standalone file. Every per-kind body lives in the registry (kinds/); this module
-// places what a kind draws.
+// Turns a scene into one standalone SVG string, with no DOM and no measurement. Shapes are drawn as
+// plain roughjs path data and text uses the width and height the client measured. The clipboard's SVG
+// flavor and the downloaded image both use it. Each kind draws its own body; this file orders the
+// elements and places what they draw.
 
 import { escapeXml } from '../core/xml';
 import { arrowRoute, sceneBounds } from './elbow-route';
 import { isTransparentColor } from './fill';
 import { orderByFractionalIndex } from './fractional-index';
-import { type Box, round } from './geometry';
 import { ELEMENT_KINDS } from './kinds';
-import { RICH_TEXT_CLASS, SVG_NS } from './scene-layers';
+import { elementGroupOpen, SVG_NS } from './kinds/render-utils';
+import { round } from './points';
+import { RICH_TEXT_CLASS } from './scene-layers';
 import type { VectorElement, VectorScene } from './types';
 
 // The margin left around a drawing, so a standalone SVG and a compositor page frame it alike.
@@ -22,7 +21,7 @@ export const DEFAULT_PADDING = 10;
 // A foreignObject clips to its own rect, so text a hair wider than the box the client measured would
 // lose its wrapped line; overflow="visible" keeps it drawn. The reset rides INSIDE the wrapper because
 // a standalone SVG (download, <img> embed) has none of the app's CSS, where the UA's 1em <p> margins
-// would shift the text out of its box — the rest of canvas-text.css is the app's/export document's.
+// would shift the text out of its box — the rest of canvas-text.css is the app's and the export document's.
 const HTML_WRAPPER_RESET = `<style>.${RICH_TEXT_CLASS} p{margin:0}</style>`;
 
 // Resolve an image element's media reference to an <image> href (data: URI or URL). The
@@ -31,6 +30,9 @@ export type MediaResolver = (mediaName: string) => string | null;
 
 type SceneToSvgOptions = {
     resolveMedia?: MediaResolver;
+    // A rich-text box's text as SVG <text>, by element id: the browser's own layout of it (rich-text-svg.ts), which
+    // any SVG reader draws. A box without an entry draws its html in a <foreignObject>, which only a browser does.
+    richText?: ReadonlyMap<string, string>;
 };
 
 export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): string {
@@ -74,23 +76,13 @@ export function elementToSvg(
     // here — and none survives anywhere outside kinds/.
     const out = ELEMENT_KINDS[el.type].render(el, { resolveMedia: opts.resolveMedia, route: arrowRoute(el, byId) });
     // The backdrop is already in the element's local frame, so it rides in the same <g>, before the text.
+    const text = opts.richText?.get(el.id);
     const body =
         'html' in out
-            ? `${out.svg}<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${RICH_TEXT_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`
+            ? text !== undefined
+                ? `${out.svg}${text}`
+                : `${out.svg}<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${RICH_TEXT_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`
             : out.svg;
     if (body === '') return '';
-    return `${groupOpen(el)}${body}</g>`;
-}
-
-// translate to the element's position, then rotate about its center (angle in degrees —
-// SVG rotate() takes degrees directly, no conversion).
-function elementTransform(box: Box): string {
-    const translate = `translate(${round(box.x)} ${round(box.y)})`;
-    if (box.angle === 0) return translate;
-    return `${translate} rotate(${round(box.angle)} ${round(box.width / 2)} ${round(box.height / 2)})`;
-}
-
-function groupOpen(el: VectorElement): string {
-    const opacity = el.opacity !== 100 ? ` opacity="${round(el.opacity / 100)}"` : '';
-    return `<g transform="${elementTransform(el)}"${opacity}>`;
+    return `${elementGroupOpen(el)}${body}</g>`;
 }

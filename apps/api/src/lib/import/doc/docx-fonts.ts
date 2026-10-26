@@ -1,10 +1,14 @@
+// Which bundled font, if any, a Word font draws in: Eigen's by name, a foreign one by its category, an unknown one
+// none. It reads the theme's fonts, the font table and a run's faces by script, for readers such as the run and
+// paragraph readers.
+
 import { bundledFont, bundledFontOfCategory, DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { codePoint as dingbat } from 'dingbat-to-unicode';
-import { A_NS, FONT_FAMILY, W_NS } from '../../core/ooxml';
-import { type XmlElement, xmlChild, xmlElements } from '../../core/xml';
-import { descendants, is, w, wChild } from './package';
-
-// Which bundled font, if any, a Word font draws in: Eigen's by name, a foreign one by its category, an unknown one none.
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
+import { A_NS, W_NS } from '../../ooxml/ooxml';
+import { FONT_FAMILY } from '../../ooxml/wordml';
+import { descendants, w, wChild } from './package';
 
 const MONOSPACE_FONT = bundledFontOfCategory('monospace');
 
@@ -17,14 +21,14 @@ export type Languages = { bidi?: string; eastAsia?: string };
 // which the document's default language answers when the run names none; *EastAsia the a:ea face the same way.
 export function readTheme(root: XmlElement | undefined, defaults: Languages): Theme {
     const [scheme] = root ? descendants(root, A_NS, 'fontScheme') : [];
-    const typeface = (font: XmlElement | undefined) => font?.attributes['typeface'] || undefined;
+    const typeface = (font: XmlElement | undefined) => (font && xmlAttr(font, '', 'typeface')) || undefined;
     const faces = (local: string) => {
         const collection = scheme && xmlChild(scheme, A_NS, local);
         if (!collection) return undefined;
         const byScript = new Map(
             xmlElements(collection)
-                .filter((font) => is(font, A_NS, 'font'))
-                .map((font) => [font.attributes['script'] ?? '', typeface(font)]),
+                .filter((font) => hasXmlName(font, A_NS, 'font'))
+                .map((font) => [xmlAttr(font, '', 'script') ?? '', typeface(font)]),
         );
         const scripted = (face: 'cs' | 'ea') => (language: string | undefined) =>
             typeface(xmlChild(collection, A_NS, face)) ?? byScript.get(scriptOf(language) ?? '');
@@ -45,6 +49,16 @@ export function readTheme(root: XmlElement | undefined, defaults: Languages): Th
             return scripted.get(key);
         },
     };
+}
+
+// The ISO 15924 code the theme's a:font names, from a BCP 47 tag; a malformed tag from the file has none.
+function scriptOf(language: string | undefined): string | undefined {
+    if (!language) return undefined;
+    try {
+        return new Intl.Locale(language).maximize().script;
+    } catch {
+        return undefined;
+    }
 }
 
 // A run's faces by what they draw: ASCII, the rest of Latin, Greek and Cyrillic (high ANSI), East Asian scripts and
@@ -114,16 +128,6 @@ export function byFace(
     return pieces;
 }
 
-// The ISO 15924 code the theme's a:font names, from a BCP 47 tag; a malformed tag from the file has none.
-function scriptOf(language: string | undefined): string | undefined {
-    if (!language) return undefined;
-    try {
-        return new Intl.Locale(language).maximize().script;
-    } catch {
-        return undefined;
-    }
-}
-
 // A name the map doesn't know, onto the bundled font of its fontTable.xml category, lowercase as the map's.
 export type FontTable = Map<string, string>;
 
@@ -137,7 +141,7 @@ export function readFontTable(root: XmlElement | undefined): FontTable {
     const table: FontTable = new Map();
     for (const font of root ? xmlElements(root) : []) {
         const name = w(font, 'name');
-        if (!is(font, W_NS, 'font') || !name) continue;
+        if (!hasXmlName(font, W_NS, 'font') || !name) continue;
         const pitch = w(wChild(font, 'pitch'), 'val');
         const family = w(wChild(font, 'family'), 'val') ?? '';
         const category =
@@ -156,10 +160,16 @@ export function isMonospaceFont(name: string | undefined, fontTable: FontTable):
     return bundledFontOf(name, fontTable) === MONOSPACE_FONT;
 }
 
-// The document font draws without a mark, so a foreign sans body is no mark and a serif or mono one is one per run.
-export function fontMark(name: string | undefined, fontTable?: FontTable): string | undefined {
-    const font = bundledFontOf(name, fontTable);
-    return font === DOCUMENT_FONT ? undefined : font;
+// The font a run draws in where it is not the doc's Normal font, which draws without a mark: in an Inter doc a foreign
+// sans run is no mark and a serif or mono one is one, in a Times doc a serif one is none. A font Eigen has no stand-in
+// for draws in the document font.
+export function fontMark(
+    name: string | undefined,
+    fontTable?: FontTable,
+    normalFont: string = DOCUMENT_FONT,
+): string | undefined {
+    const font = bundledFontOf(name, fontTable) ?? DOCUMENT_FONT;
+    return font === normalFont ? undefined : font;
 }
 
 // A symbol font's character as Unicode; Word's private-use spelling, U+F0xx, is the font's own xx.

@@ -32,11 +32,11 @@ type Gate = { parked: Promise<void>; release: () => void };
 // LocalStorage whose next write or rename after arm parks until the test releases it. `order`
 // records the storage calls that completed since the last arm.
 class GatedLocalStorage extends LocalStorage {
-    order: string[] = [];
+    public order: string[] = [];
     private writeGate: { parked: () => void; released: Promise<void> } | null = null;
     private renameGate: { parked: () => void; released: Promise<void> } | null = null;
 
-    armWrite(): Gate {
+    public armWrite(): Gate {
         const parked = Promise.withResolvers<void>();
         const released = Promise.withResolvers<void>();
         this.writeGate = { parked: parked.resolve, released: released.promise };
@@ -44,7 +44,7 @@ class GatedLocalStorage extends LocalStorage {
         return { parked: parked.promise, release: released.resolve };
     }
 
-    armRename(): Gate {
+    public armRename(): Gate {
         const parked = Promise.withResolvers<void>();
         const released = Promise.withResolvers<void>();
         this.renameGate = { parked: parked.resolve, released: released.promise };
@@ -52,7 +52,7 @@ class GatedLocalStorage extends LocalStorage {
         return { parked: parked.promise, release: released.resolve };
     }
 
-    override async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    public override async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         const gate = this.writeGate;
         if (gate) {
             this.writeGate = null;
@@ -64,7 +64,7 @@ class GatedLocalStorage extends LocalStorage {
         return written;
     }
 
-    override async rename(oldKey: string, newKey: string): Promise<void> {
+    public override async rename(oldKey: string, newKey: string): Promise<void> {
         const gate = this.renameGate;
         if (gate) {
             this.renameGate = null;
@@ -75,13 +75,13 @@ class GatedLocalStorage extends LocalStorage {
         this.order.push('rename');
     }
 
-    override async delete(key: string): Promise<boolean> {
+    public override async delete(key: string): Promise<boolean> {
         const deleted = await super.delete(key);
         this.order.push('delete');
         return deleted;
     }
 
-    override async deleteDir(key: string): Promise<boolean> {
+    public override async deleteDir(key: string): Promise<boolean> {
         const deleted = await super.deleteDir(key);
         this.order.push('deleteDir');
         return deleted;
@@ -94,16 +94,16 @@ class GatedLocalStorage extends LocalStorage {
 class ProbeMount extends Mount {
     private treeWait: PromiseWithResolvers<void> | null = null;
 
-    armTreeWait(): Promise<void> {
+    public armTreeWait(): Promise<void> {
         this.treeWait = Promise.withResolvers<void>();
         return this.treeWait.promise;
     }
 
-    override async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
+    public override async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
         return this.probe((body) => super.withTreeShared(body), fn);
     }
 
-    override async withTreeExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    public override async withTreeExclusive<T>(fn: () => Promise<T>): Promise<T> {
         return this.probe((body) => super.withTreeExclusive(body), fn);
     }
 
@@ -319,7 +319,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
 
 // A restore's, a move's and a delete's pre-lock checks go stale while they queue; each re-answers under the lock.
 describe('a restore, move or delete whose pre-lock check goes stale', () => {
-    test('a restore racing a same-name create answers 409 and clobbers nothing', async () => {
+    test('a restore racing a same-name create lands under a free name and clobbers nothing', async () => {
         const { mount, storage, folderId, fileId } = await fileInFolder('restore-vs-create');
         await mount.trashPath(fileId);
         const trashedKey = await mount.getStorageKey(fileId);
@@ -331,11 +331,47 @@ describe('a restore, move or delete whose pre-lock check goes stale', () => {
         await waiting;
         gate.release();
         const createdId = await create;
+        const restored = await restore;
 
-        await expect(restore).rejects.toMatchObject({ status: 409 });
+        expect(restored).toMatchObject({ id: fileId, name: 'notes (2).txt', parentId: folderId, trashedAt: null });
         expect(await storage.read(await mount.getStorageKey(createdId)).text()).toBe('NEW');
-        expect(await mount.getStorageKey(fileId)).toBe(trashedKey);
-        expect(await storage.exists(trashedKey)).toBe(true);
+        expect(await mount.getStorageKey(fileId)).toBe('before/notes (2).txt');
+        expect(await storage.read('before/notes (2).txt').text()).toBe('v0');
+        expect(await storage.exists(trashedKey)).toBe(false);
+    });
+
+    // The create passes its name check while the rename waits, then queues behind it.
+    test.each([
+        ['an upload', 'file'],
+        ['an upload from a temp file', 'temp'],
+        ['a folder create', 'folder'],
+    ] as const)('%s queued behind a rename to its name answers 409 and keeps the renamed bytes', async (_, kind) => {
+        const { mount, storage, folderId, fileId } = await fileInFolder(`create-behind-rename-${kind}`);
+        const tempId = randomUUID();
+        const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Buffer.from('UPLOAD'));
+        try {
+            const hold = Promise.withResolvers<void>();
+            const held = mount.withTreeExclusive(() => hold.promise);
+            const renameQueued = mount.armTreeWait();
+            const rename = mount.updatePath(fileId, { name: 'new.txt' });
+            await renameQueued;
+            const createQueued = mount.armTreeWait();
+            const create =
+                kind === 'folder'
+                    ? mount.createFolder(folderId, 'new.txt')
+                    : kind === 'temp'
+                      ? mount.createFileFromTemp(folderId, 'new.txt', 'text/plain', size, hash, tempId)
+                      : mount.createFile(folderId, 'new.txt', 'text/plain', size, Buffer.from('UPLOAD'));
+            await createQueued;
+            hold.resolve();
+            await Promise.all([held, rename]);
+
+            await expect(create).rejects.toMatchObject({ status: 409 });
+            expect(await mount.getStorageKey(fileId)).toBe('before/new.txt');
+            expect(await storage.read('before/new.txt').text()).toBe('v0');
+        } finally {
+            await mount.cleanupTemp(tempId);
+        }
     });
 
     test('two moves that would form a cycle: the second answers 400 and the tree stays acyclic', async () => {

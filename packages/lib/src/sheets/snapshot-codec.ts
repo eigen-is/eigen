@@ -6,7 +6,9 @@
 // The dictionary lives at the serialization seam only: the in-memory Sheet[] the
 // decoder rebuilds is exactly today's shape.
 
+import { isRecord } from '../core/guards';
 import { cloneSides, parseCellKey } from './borders';
+import { chartsWithinEntryCap } from './floating';
 import type {
     CalcChainEntry,
     Cell,
@@ -14,6 +16,7 @@ import type {
     CellMatrix,
     CellWithRowAndCol,
     Sheet,
+    SheetChart,
     SheetConfig,
     SheetImage,
     SheetWithCalcChain,
@@ -35,13 +38,14 @@ type EncodedContent = string | number | boolean | Record<string, unknown>;
 // [row, col, borderIndex] — one per `config.borderInfo` key.
 type EncodedBorder = [number, number, number];
 
-type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | 'images'> & {
+type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | 'images' | 'charts'> & {
     config?: Omit<SheetConfig, 'borderInfo'>;
     cells?: EncodedCell[];
     borderCells?: EncodedBorder[];
-    // Floating images ride verbatim — a handful of small records per sheet, nothing
-    // to intern. The key is omitted when the sheet has none; decode materializes it.
-    images?: SheetImage[];
+    // Floating images and charts ride verbatim, a handful of small records per sheet with nothing
+    // to intern. A map is omitted when empty; decode materializes it.
+    images?: Record<string, SheetImage>;
+    charts?: Record<string, SheetChart>;
 };
 
 type SnapshotV2 = {
@@ -70,10 +74,12 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
             calcChain: _calcChain,
             config,
             images,
+            charts,
             ...rest
         } = sheet as RuntimeSheet;
         const out: EncodedSheet = { ...rest };
-        if (images && images.length > 0) out.images = images;
+        if (images && Object.keys(images).length > 0) out.images = images;
+        if (charts && Object.keys(charts).length > 0) out.charts = charts;
 
         // The dense matrix never goes on the wire, but it is the authoritative copy
         // when present: editor state edits write `data` and leave `celldata` stale,
@@ -120,11 +126,16 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
     // garbage-in would materialize a half-empty workbook instead of surfacing the problem.
     if (f !== FORMAT) throw unknownFormat(f);
     return sheets.map((encoded) => {
-        const { cells, borderCells, config, images, ...rest } = encoded;
-        // The list is materialized on every sheet, the way normalizeSheetConfig materializes
-        // a config collection: the editor replaces `images` wholesale, and a patch resolves
-        // against a base that already carries the key.
-        const sheet: RuntimeSheet = { ...rest, images: images ?? [] };
+        const { cells, borderCells, config, images, charts, ...rest } = encoded;
+        // Both maps are materialized on every sheet, the way normalizeSheetConfig materializes a
+        // config collection: the editor writes each object under its own key, and a patch resolves
+        // against a base that already carries the map. A value that is no map is dropped, and so is a chart past the
+        // entry cap.
+        const sheet: RuntimeSheet = {
+            ...rest,
+            images: isRecord(images) ? images : {},
+            charts: isRecord(charts) ? chartsWithinEntryCap(charts) : {},
+        };
 
         if (cells) {
             const celldata: CellWithRowAndCol[] = [];

@@ -1,5 +1,5 @@
-// Quick look and the Drive thumbnail draw an eigendoc on the docs page, so both size their page box from the
-// one page setup the editor uses: the same width, and the page's margins as its padding.
+// Quick look and the Drive thumbnail draw an eigendoc on the page it stores, as the editor does: the same width, and
+// the page's margins as its padding. A preview without a page, and every other text mode, keeps the default page.
 import { expect, mock, test } from 'bun:test';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import { DRIVE_MIME_DOC, DRIVE_TYPE_DOC } from '@workspace/lib/types/drive';
@@ -13,7 +13,8 @@ const resizeCallbacks: (() => void)[] = [];
 installHappyDom({ onResizeObserver: (callback) => resizeCallbacks.push(callback) });
 
 const session = { user: { id: 'owner-1' } };
-mock.module('@workspace/lib/auth', () => ({ useAuth: () => session, useIsGuest: () => false }));
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
 
 let textPreview: TextPreviewResult = { mode: 'eigendoc', body: '<p>Quarterly report</p>' };
 const realDrive = await import('@workspace/lib/drive');
@@ -36,10 +37,20 @@ const path = drivePath({
 
 const preview = { openPreview: () => {}, updatePreview: () => {}, closePreview: () => {}, isPreviewOpen: true };
 
-function expectPageBox(el: HTMLElement | null | undefined, width: string) {
+function expectPageBox(el: HTMLElement | null | undefined, width: string, padding = '20mm') {
     expect(el?.style.width).toBe(width);
-    expect(el?.style.padding).toBe('20mm');
+    expect(el?.style.padding).toBe(padding);
 }
+
+// Letter landscape with 1 cm margins.
+const LETTER = {
+    width: 279.4,
+    height: 215.9,
+    margin: { top: 10, right: 10, bottom: 10, left: 10 },
+    headerDistance: 8,
+    footerDistance: 10,
+    differentFirstPage: false,
+};
 
 function renderQuickLook() {
     const subject = subjectFromPath(path);
@@ -93,6 +104,58 @@ test('the Drive thumbnail draws an eigendoc on the docs page', async () => {
     const { container, unmount } = await renderInDocument(createElement(DrivePreview, { path }));
     expectPageBox(container.querySelector<HTMLElement>('.eigen-prose'), '793.700787px');
     await unmount();
+});
+
+test("quick look and the Drive thumbnail draw an eigendoc on the doc's own page", async () => {
+    textPreview = { mode: 'eigendoc', body: '<p>Quarterly report</p>', page: LETTER };
+    try {
+        const quickLook = await renderQuickLook();
+        expectPageBox(quickLook.container.querySelector<HTMLElement>('.eigen-prose')?.parentElement, '279.4mm', '10mm');
+        await quickLook.unmount();
+        const hero = await renderInDocument(createElement(DrivePreview, { path }));
+        // 279.4 mm at 96 dpi.
+        expectPageBox(hero.container.querySelector<HTMLElement>('.eigen-prose'), '1056px', '10mm');
+        await hero.unmount();
+    } finally {
+        textPreview = { mode: 'eigendoc', body: '<p>Quarterly report</p>' };
+    }
+});
+
+test("quick look and the Drive thumbnail draw an eigendoc's text in its Normal", async () => {
+    const style = {
+        font: 'Source Serif 4',
+        size: 12,
+        lineSpacing: 1.4,
+        spaceBefore: 0,
+        spaceAfter: 11,
+        color: '#1a1a2e',
+    };
+    textPreview = { mode: 'eigendoc', body: '<p>Quarterly report</p>', style };
+    try {
+        const quickLook = await renderQuickLook();
+        const paper = quickLook.container.querySelector<HTMLElement>('.eigen-prose')?.parentElement;
+        expect(paper?.style.getPropertyValue('--doc-font-size')).toBe('12pt');
+        expect(paper?.style.getPropertyValue('--doc-font-family')).toBe("'Source Serif 4', serif");
+        await quickLook.unmount();
+        const hero = await renderInDocument(createElement(DrivePreview, { path }));
+        expect(
+            hero.container.querySelector<HTMLElement>('.eigen-prose')?.style.getPropertyValue('--doc-font-size'),
+        ).toBe('12pt');
+        await hero.unmount();
+    } finally {
+        textPreview = { mode: 'eigendoc', body: '<p>Quarterly report</p>' };
+    }
+});
+
+test('the Drive thumbnail keeps the default page for markdown, whatever page the result carries', async () => {
+    textPreview = { mode: 'markdown', body: '<p>Quarterly report</p>', page: LETTER };
+    try {
+        const { container, unmount } = await renderInDocument(createElement(DrivePreview, { path }));
+        expectPageBox(container.querySelector<HTMLElement>('.eigen-prose'), '793.700787px');
+        await unmount();
+    } finally {
+        textPreview = { mode: 'eigendoc', body: '<p>Quarterly report</p>' };
+    }
 });
 
 test('the Drive thumbnail scales the docs page to the hero', async () => {

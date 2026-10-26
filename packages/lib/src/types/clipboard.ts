@@ -23,6 +23,8 @@
 // The `elements` item is the exception, and says why on itself — a canvas selection carries the stored
 // coordinates so a canvas→canvas paste can place it relative to where it was copied from.
 
+import type { ChartLook, ChartSpecTexts } from './chart';
+
 // Best-effort cross-app text styling. Canonical names shared with vector and the properties panel;
 // `fontFamily` is the EIGEN_FONTS name (per the fontFamily value canon), not a CSS stack. Every field
 // optional — a consumer applies the ones it understands and ignores the rest.
@@ -31,6 +33,10 @@
 // can place: vector's foreign-paste writes all ten onto the rich-text box it creates, and docs maps
 // the six it has nodes/marks for (family, color, alignment, bold, italic, underline/strike). Nothing
 // goes on this wire that no consumer reads.
+//
+// `fontSize` is pt, as is every font size in the HTML beside the payload: one unit each app converts with its own
+// scale. Docs and Sheets store pt; a canvas converts its px through canvasPxToPt / canvasPtToPx (vector/frames.ts).
+// A canvas→canvas copy keeps its px to the bit in the `elements` item instead.
 export type EigenClipboardTypography = {
     fontFamily?: string;
     fontSize?: number;
@@ -95,7 +101,23 @@ export type EigenClipboardElementsItem = {
     height: number;
 };
 
-export type EigenClipboardItem = EigenClipboardTextItem | EigenClipboardImageItem | EigenClipboardElementsItem;
+// A live chart: its parts as the text its host stores, a newer build's among them, always holding its numbers inline,
+// since no host but the sheet it came from can read a range. A sheet copy resolves its ranges into them at copy time;
+// the reader drops parts past the spec's limits or without inline data that reads, so no consumer stores a
+// placeholder. The look travels with it, read through the chart look validators, so a copy keeps its look in every app.
+export type EigenClipboardChartItem = {
+    type: 'chart';
+    parts: ChartSpecTexts;
+    width: number;
+    height: number;
+    look: ChartLook;
+};
+
+export type EigenClipboardItem =
+    | EigenClipboardTextItem
+    | EigenClipboardImageItem
+    | EigenClipboardElementsItem
+    | EigenClipboardChartItem;
 
 export type EigenClipboardData = {
     version: 1;

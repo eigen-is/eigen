@@ -1,17 +1,12 @@
-// Incremental editors for a PINNED elbow arrow (Excalidraw's fixedSegments model, ports of
-// packages/element/src/elbowArrow.ts + linearElementEditor.ts). Once an elbow arrow has ≥1 pin its
-// `points` hold the full routed polyline and the A* router never runs on it again (see arrowRoute's
-// two-mode fork). Every mutation is pure point surgery on that stored polyline: a segment move slides the
-// dragged segment and stretches its neighbors in place (zero new interior corners); renormalization on
-// commit merges collinear runs, drops sub-pixel debris and reindexes pins; unpin re-routes only the freed
-// gap. All functions are pure over the parsed arrow — the UI/geometry seams call them and write the patch.
-//
-// Everything works in the arrow's LOCAL frame; elbow arrows pin angle 0, so scene = local + (x,y). Pins
-// key by `index` into `points` (points[index-1]→points[index]); start/end are rebuilt from the polyline on
-// every normalize, so the stored copies never drift.
+// Editors for a pinned elbow arrow, one that has fixed segments. Its `points` hold the full routed
+// polyline, so each edit is point surgery on it: `moveSegment` slides a dragged segment, `renormalize`
+// merges collinear runs and reindexes pins, and unpinning re-routes only the freed gap.
+// Callers, such as geometry and the canvas tools, write the returned patch.
 
-import { type Point, parsePoints, serializePoints } from './geometry';
-import { type FixedSegment, parseFixedSegments, serializeFixedSegments, type VectorArrowElement } from './types';
+import type { Point } from './geometry';
+import { parsePoints, serializePoints } from './points';
+import type { FixedSegment, VectorArrowElement } from './types';
+import { parseFixedSegments, serializeFixedSegments } from './types';
 
 // The geometry patch every editor returns — the fields a pinned-arrow write persists together.
 export type PinPatch = {

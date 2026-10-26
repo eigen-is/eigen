@@ -1,4 +1,5 @@
-import { type XmlElement, xmlChild, xmlChildren, xmlTrimmedText } from '../core/xml';
+import type { XmlElement } from '../core/xml';
+import { xmlChild, xmlChildren, xmlTrimmedText } from '../core/xml';
 import { DAV_NAMESPACES } from './xml';
 
 const DAV = DAV_NAMESPACES.D;

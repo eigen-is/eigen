@@ -40,7 +40,7 @@ export function EmailListToolbar({ searchQuery, onSearchChange, inputRef, onShow
                 <KebabTrigger />
                 <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={onShowShortcuts}>
-                        <Keyboard className="mr-2" /> Keyboard shortcuts
+                        <Keyboard /> Keyboard shortcuts
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>

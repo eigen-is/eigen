@@ -1,5 +1,5 @@
 // One frame as a read-only page: its own background and its own elements, laid out at the frame's
-// 1920x1080 scale and shrunk as a whole to whatever box the host gives it. The rail thumbnail and
+// own scale (1920 wide) and shrunk as a whole to whatever box the host gives it. The rail thumbnail and
 // present mode both render this, so a slide cannot look different in the two places — and both draw
 // through ElementLayer, the same component the live canvas uses, so neither can drift from the editor.
 // Scaling the page rather than re-unitising its contents is the server compositor's model too
@@ -7,17 +7,11 @@
 
 import { getBackgroundStyle } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
-import {
-    elementsInFrame,
-    type MediaResolver,
-    orderByFractionalIndex,
-    parseBackgroundFill,
-    type VectorElement,
-    type VectorFrame,
-} from '@workspace/lib/vector';
+import type { MediaResolver, VectorElement, VectorFrame } from '@workspace/lib/vector';
+import { elementsInFrame, orderByFractionalIndex, parseBackgroundFill } from '@workspace/lib/vector';
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
-import { memo, useMemo, useRef } from 'react';
+import { memo, useId, useMemo, useRef } from 'react';
 import { ElementLayer } from './element-layer';
 import { CANVAS_PAPER_CLASS } from './paper';
 
@@ -41,6 +35,8 @@ export function FrameView({ frame, elements, resolveMedia, interactive, classNam
     const lastScale = useRef(0);
     if (width > 0) lastScale.current = width / frame.width;
     const scale = lastScale.current;
+    // The rail and present mode draw the canvas's elements again on its page.
+    const idScope = useId();
 
     const own = useMemo(() => orderByFractionalIndex(elementsInFrame(elements, frame.id)), [elements, frame.id]);
     const byId = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);
@@ -67,7 +63,9 @@ export function FrameView({ frame, elements, resolveMedia, interactive, classNam
                 style={{ width: frame.width, height: frame.height, transform: `scale(${scale})` }}
             >
                 {scale > 0 &&
-                    own.map((el) => <ElementLayer key={el.id} el={el} resolveMedia={resolveMedia} byId={byId} />)}
+                    own.map((el) => (
+                        <ElementLayer key={el.id} el={el} resolveMedia={resolveMedia} byId={byId} idScope={idScope} />
+                    ))}
             </div>
         </div>
     );

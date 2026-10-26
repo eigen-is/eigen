@@ -4,8 +4,10 @@
 // keyboard sets it).
 
 import type { LetterKey, NumberKey } from '@tanstack/react-hotkeys';
-import { CREATION_TOOL_TYPES, type VectorElementType } from '@workspace/lib/vector';
-import { Eraser, type LucideIcon, MousePointer2 } from 'lucide-react';
+import type { VectorElementType } from '@workspace/lib/vector';
+import { CREATION_TOOL_TYPES } from '@workspace/lib/vector';
+import type { LucideIcon } from 'lucide-react';
+import { Eraser, MousePointer2 } from 'lucide-react';
 import { useState } from 'react';
 import { ELEMENT_KIND_UI } from '../kinds';
 

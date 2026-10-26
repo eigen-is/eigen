@@ -10,20 +10,21 @@ export function handleCut(ctx: Context) {
 // Pending copy data — set by the copy handler, consumed by the native copy event listener
 let _pendingCopyHtml: string | null = null;
 let _pendingPlainText: string | null = null;
+let _pendingCellText: string | null = null;
 
-export function setPendingCopy(html: string) {
+export function setPendingCopy(html: string, plainText: string, cellText: string) {
     _pendingCopyHtml = html;
-    const el = document.createElement('div');
-    el.innerHTML = html;
-    _pendingPlainText = el.innerText || el.textContent || '';
-    sessionStorage.setItem('localClipboard', _pendingPlainText);
+    _pendingPlainText = plainText;
+    _pendingCellText = cellText;
+    sessionStorage.setItem('localClipboard', plainText);
 }
 
-export function consumePendingCopy(): { html: string; plainText: string } | null {
+export function consumePendingCopy(): { html: string; plainText: string; cellText: string } | null {
     if (!_pendingCopyHtml) return null;
-    const result = { html: _pendingCopyHtml, plainText: _pendingPlainText || '' };
+    const result = { html: _pendingCopyHtml, plainText: _pendingPlainText || '', cellText: _pendingCellText || '' };
     _pendingCopyHtml = null;
     _pendingPlainText = null;
+    _pendingCellText = null;
     return result;
 }
 
@@ -35,6 +36,12 @@ export function consumePendingCopy(): { html: string; plainText: string } | null
 export function flushPendingCopy() {
     if (_pendingCopyHtml == null) return;
     document.execCommand('copy');
+}
+
+// A selected image or chart writes itself in the Workbook's copy and cut listener, which a menu row reaches through
+// the event execCommand fires, so a menu copies and cuts the way ⌘C and ⌘X do.
+export function copyActiveObject(cut: boolean) {
+    document.execCommand(cut ? 'cut' : 'copy');
 }
 
 export async function readClipboardText(): Promise<string> {

@@ -4,6 +4,8 @@
 
 import { partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
+import { isRecord } from '../core/guards';
+import { floatingWriteFilter } from './floating';
 import type { Op, Sheet } from './types';
 
 export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
@@ -12,6 +14,7 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         (op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace',
     );
     const patches: Patch[] = [];
+    const applies = floatingWriteFilter(sheets);
     for (const op of normalOps) {
         // Without a sheet id we cannot derive a Sheet[]-rooted path. These ops
         // appear when the sheet reducer reassigns ctx.sheets
@@ -21,13 +24,12 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         // so dropping the synthetic patch here is safe; applying it would
         // throw immer error 14 ('only supports array indices') on the array.
         if (!op.id) continue;
+        // An images array, which no per-object write resolves on, is dropped.
+        if (op.path.length === 1 && op.path[0] === 'images' && !isRecord(op.value)) continue;
         const i = sheets.findIndex((s) => s.id === op.id);
         if (i === -1) continue;
-        patches.push({
-            op: op.op as 'add' | 'remove' | 'replace',
-            value: op.value,
-            path: [i, ...op.path],
-        });
+        const patch: Patch = { op: op.op as 'add' | 'remove' | 'replace', value: op.value, path: [i, ...op.path] };
+        if (applies(patch)) patches.push(patch);
     }
     return [patches, specialOps];
 }

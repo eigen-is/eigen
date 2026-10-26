@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
+import { getHome } from '../../lib/home/get-home';
+import { authedRequest, createTestUserOnStorage, driveGet, drivePost, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const MOUNT = 'default';
@@ -57,5 +58,23 @@ describe('Drive.create stem validation', () => {
         expect(res.status).toBe(200);
         const created = (await res.json()) as DrivePath;
         expect(created.name).toBe('café.eigendoc');
+    });
+});
+
+// On `local` the disk folds more than lower case does, such as ß onto ss. An upload's unique name must
+// skip a suffix whose fold is taken, or the mount refuses the name it picked.
+describe('an upload beside a name the disk folds alike', () => {
+    test('gets the next free suffix instead of a 409', async () => {
+        const user = await createTestUserOnStorage('local-fullnames', 'Fold Upload');
+        const home = await getHome(user.id);
+        const [mount] = home.drive.getMounts();
+        const root = await home.drive.getRootFolder(mount.id);
+        if (!root) throw new Error('no root');
+        const upload = (name: string) =>
+            home.drive.createFileFromData(mount.id, root.id, name, 'text/plain', Buffer.from(name));
+        await upload('Straße.txt');
+        await upload('STRASSE (2).txt');
+
+        expect((await upload('Straße.txt')).name).toBe('Straße (3).txt');
     });
 });

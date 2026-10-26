@@ -1,21 +1,12 @@
-// Elbow ("snake") arrow routing. The orthogonal polyline is DERIVED on every read/render — the model stores
-// only an `elbow` flag, the two endpoints (arrow.points), and the bindings. Nothing about the route is
-// persisted, so the server renderer (scene-to-svg) produces exactly what the canvas draws.
-//
-// Ported to be point-identical to Excalidraw's no-fixed-segments path (packages/element/src/elbowArrow.ts,
-// dispatch case 2): resolve each endpoint and its outward heading (elbow-heading.ts), grow a dynamic obstacle
-// AABB per bound end that reaches toward the other shape, push a "dongle" onto each box edge, build a
-// non-uniform grid from the box + common-bounds edges, and A* dongle→dongle with a bend-count heuristic and a
-// binary heap. Post-passes drop sub-pixel segments and keep only true corners. Their null-route crash path
-// becomes our guaranteed-draw L fallback (the arrow must always render). `fixedSegments` and the drag-time
-// live-dock (getElbowArrowData's isDragging branch) are out of scope.
-//
-// Everything runs in SCENE coordinates (elbow arrows pin angle 0, so the derived local frame is a pure
-// translation) and is converted to the arrow's local frame once at the end.
+// Routes an elbow arrow. The orthogonal polyline is derived on every read and render from the two
+// endpoints and the bindings, so the server renderer draws what the canvas draws. The router grows an
+// obstacle around each bound shape, builds a grid from their edges and runs A* over it, and falls back
+// to a plain L when no route is found. `arrowRoute` is the entry point, called for example by geometry
+// and scene-to-svg.
 
+import type { B4, Heading } from './elbow-heading';
 import {
     aabbForElement,
-    type B4,
     compareHeading,
     distanceToElement,
     flipHeading,
@@ -24,21 +15,13 @@ import {
     HEADING_LEFT,
     HEADING_RIGHT,
     HEADING_UP,
-    type Heading,
     headingIsHorizontal,
     vectorToHeading,
 } from './elbow-heading';
 import type { PinRoutingContext } from './elbow-pins';
-import {
-    type Bounds,
-    boundShape,
-    elementBounds,
-    linearLocalToScene,
-    linearSceneToLocal,
-    type Point,
-    parsePoints,
-    unionBounds,
-} from './geometry';
+import type { Bounds, Point } from './geometry';
+import { boundShape, elementBounds, linearLocalToScene, linearSceneToLocal, unionBounds } from './geometry';
+import { parsePoints } from './points';
 import type { VectorArrowElement, VectorBindableElement, VectorElement } from './types';
 
 // Excalidraw's BASE_PADDING / BASE_BINDING_GAP_ELBOW / DEDUP_TRESHOLD.
@@ -660,12 +643,12 @@ class BinaryHeap {
         this.content[idx] = node;
     }
 
-    push(node: Node): void {
+    public push(node: Node): void {
         this.content.push(node);
         this.sinkDown(this.content.length - 1);
     }
 
-    pop(): Node | null {
+    public pop(): Node | null {
         if (this.content.length === 0) return null;
         const result = this.content[0];
         const end = this.content.pop();
@@ -676,11 +659,11 @@ class BinaryHeap {
         return result;
     }
 
-    size(): number {
+    public size(): number {
         return this.content.length;
     }
 
-    rescore(node: Node): void {
+    public rescore(node: Node): void {
         this.sinkDown(this.content.indexOf(node));
     }
 }

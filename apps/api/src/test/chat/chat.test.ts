@@ -1,5 +1,5 @@
 import { Database as BunDatabase } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ChatMessage, DrivePath } from '@workspace/lib/types';
@@ -10,9 +10,33 @@ import { CHAT_ROOM_DB_CONFIG } from '../../lib/chat/db-config';
 import { messages } from '../../lib/chat/schema';
 import { ManagedDatabase } from '../../lib/core';
 import { getHome } from '../../lib/home';
-import { authedRequest, chatGet, chatPost, driveGet, drivePost, findOrFail, getTestContext } from '../setup';
+import * as userModule from '../../lib/user';
+import {
+    authedRequest,
+    chatGet,
+    chatPost,
+    driveGet,
+    drivePost,
+    eventually,
+    findOrFail,
+    getTestContext,
+} from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
+
+// The chat notifications are delivered after the post answers, so wait until the list has what the test needs.
+async function notificationsWhen(
+    token: string,
+    userId: string,
+    ready: (rows: Notification[]) => boolean,
+    what: string,
+): Promise<Notification[]> {
+    return eventually(async () => {
+        const res = await authedRequest(token, `/notifications/${userId}`);
+        const rows = (await res.json()) as Notification[];
+        return ready(rows) ? rows : undefined;
+    }, what);
+}
 
 function chatPostRaw(
     token: string,
@@ -1345,8 +1369,12 @@ describe('Chat', () => {
                 { content: 'Hello from Bob' },
             );
 
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/notifications/${ctx.alice.user.id}`);
-            const notifications = (await res.json()) as Notification[];
+            const notifications = await notificationsWhen(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                (rows) => rows.some((n) => n.type === 'chat-message' && n.title.includes('Notification Chat')),
+                'the chat-message notification',
+            );
             const chatNotification = notifications.find(
                 (n) => n.type === 'chat-message' && n.title.includes('Notification Chat'),
             );
@@ -1383,8 +1411,12 @@ describe('Chat', () => {
             );
 
             // Bob should get a notification
-            const bobRes = await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`);
-            const bobNotifications = (await bobRes.json()) as Notification[];
+            const bobNotifications = await notificationsWhen(
+                ctx.bob.user.sessionToken,
+                ctx.bob.user.id,
+                (rows) => rows.some((n) => !n.read && n.body === 'Whisper for Bob'),
+                'the whisper notification',
+            );
             const bobWhisperNotif = bobNotifications.find((n) => !n.read && n.body === 'Whisper for Bob');
             expect(bobWhisperNotif).toBeDefined();
             expect(bobWhisperNotif!.type).toBe('chat-message');
@@ -1413,14 +1445,52 @@ describe('Chat', () => {
                 { content: `Hey @${ctx.bob.user.email} check this out` },
             );
 
-            const res = await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`);
-            const notifications = (await res.json()) as Notification[];
+            const notifications = await notificationsWhen(
+                ctx.bob.user.sessionToken,
+                ctx.bob.user.id,
+                (rows) => rows.some((n) => !n.read && n.type === 'mention-chat'),
+                'the mention notification',
+            );
             const unread = notifications.filter((n) => !n.read);
             const mention = unread.find((n) => n.type === 'mention-chat');
             const chatMessage = unread.find((n) => n.type === 'chat-message');
             expect(mention).toBeDefined();
             expect(chatMessage).toBeUndefined();
             expect(mention!.title).toBe('Alice Test mentioned you in "Notification Chat"');
+        });
+
+        // The message is stored before its notifications go out. A lookup that fails then costs only
+        // that one notification, never the answer of a message that is posted already.
+        test('a failed lookup of a mentioned user still answers the post', async () => {
+            const getUserByEmail = userModule.getUserByEmail;
+            const lookup = spyOn(userModule, 'getUserByEmail').mockImplementation(async (email) => {
+                if (email.toLowerCase() === ctx.bob.user.email.toLowerCase()) throw new Error('auth db down');
+                return getUserByEmail(email);
+            });
+            const errors = spyOn(console, 'error').mockImplementation(() => {});
+            let res: Response;
+            try {
+                res = await chatPostRaw(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    aliceMountId,
+                    `${chatId}/messages`,
+                    {
+                        content: `Lookup fails for @${ctx.bob.user.email}`,
+                    },
+                );
+            } finally {
+                lookup.mockRestore();
+                errors.mockRestore();
+            }
+            expect(res.status).toBe(200);
+            const listed = await chatGet<ChatMessage[]>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+            );
+            expect(listed.some((m) => m.content === `Lookup fails for @${ctx.bob.user.email}`)).toBe(true);
         });
 
         test('embedded chat uses comment-reply notification type', async () => {
@@ -1481,8 +1551,12 @@ describe('Chat', () => {
                 { content: 'Reply comment' },
             );
 
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/notifications/${ctx.alice.user.id}`);
-            const notifications = (await res.json()) as Notification[];
+            const notifications = await notificationsWhen(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                (rows) => rows.some((n) => !n.read && n.type === 'comment-reply'),
+                'the comment-reply notification',
+            );
             const commentNotif = notifications.find((n) => !n.read && n.type === 'comment-reply');
             expect(commentNotif).toBeDefined();
             expect(commentNotif!.title).toBe('Bob Test commented on "Comment Notify Doc"');

@@ -1,20 +1,20 @@
 import {
+    ChoiceMenuItems,
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
-import { Check, ChevronsLeft, ChevronsRight, LayoutGrid, Plus } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, LayoutGrid, Plus } from 'lucide-react';
 import type React from 'react';
 import { Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import {
     addSheet,
     calcSelectionInfo,
-    cancelActiveImgItem,
     cancelNormalSelected,
     changeSheet,
+    deselectFloatingObject,
     updateCell,
 } from '../../state';
 import { SheetItem } from './SheetItem';
@@ -126,35 +126,34 @@ export const SheetTab: React.FC = () => {
                     </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="start" collisionPadding={8}>
-                    {context.sheets
-                        .filter((s) => s.hide !== 1)
-                        .sort((s1, s2) => Number(s1.order) - Number(s2.order))
-                        .map((singleSheet) => (
-                            <DropdownMenuItem
-                                key={singleSheet.id}
-                                onClick={() => {
-                                    setContext((draftCtx) => {
-                                        changeSheet(draftCtx, singleSheet.id!);
-                                        cancelActiveImgItem(draftCtx, refs.globalCache);
-                                        cancelNormalSelected(draftCtx);
-                                    });
-                                }}
-                            >
-                                <span className="inline-flex w-5 items-center">
-                                    {singleSheet.id === context.currentSheetId && (
-                                        <Check width={14} height={14} aria-hidden="true" />
-                                    )}
-                                </span>
-                                {!!singleSheet.color && (
-                                    <span
-                                        className="mr-1 size-2.5 shrink-0 rounded-full"
-                                        style={{ backgroundColor: singleSheet.color }}
-                                        aria-hidden="true"
-                                    />
-                                )}
-                                {singleSheet.name}
-                            </DropdownMenuItem>
-                        ))}
+                    <ChoiceMenuItems
+                        value={context.currentSheetId}
+                        options={context.sheets
+                            .filter((s): s is typeof s & { id: string } => s.hide !== 1 && s.id != null)
+                            .sort((s1, s2) => Number(s1.order) - Number(s2.order))
+                            .map((singleSheet) => ({
+                                value: singleSheet.id,
+                                label: (
+                                    <>
+                                        {!!singleSheet.color && (
+                                            <span
+                                                className="size-2.5 shrink-0 rounded-full"
+                                                style={{ backgroundColor: singleSheet.color }}
+                                                aria-hidden="true"
+                                            />
+                                        )}
+                                        {singleSheet.name}
+                                    </>
+                                ),
+                            }))}
+                        onChange={(id) =>
+                            setContext((draftCtx) => {
+                                changeSheet(draftCtx, id);
+                                deselectFloatingObject(draftCtx);
+                                cancelNormalSelected(draftCtx);
+                            })
+                        }
+                    />
                 </DropdownMenuContent>
             </DropdownMenu>
 
@@ -166,9 +165,9 @@ export const SheetTab: React.FC = () => {
                     <div ref={tabContainerRef} className="flex min-w-0 flex-1 overflow-hidden">
                         {[...context.sheets]
                             .sort((a, b) => Number(a.order) - Number(b.order))
-                            .map((sheet) => (
-                                <SheetItem key={sheet.id} sheet={sheet} />
-                            ))}
+                            .map(
+                                (sheet) => sheet.id != null && <SheetItem key={sheet.id} id={sheet.id} sheet={sheet} />,
+                            )}
                     </div>
                     {isShowBoundary && isShowScrollBtn && (
                         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-2 bg-gradient-to-l from-muted to-transparent" />

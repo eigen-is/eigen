@@ -4,7 +4,8 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { davRequest } from '../dav-test-helpers';
-import { assertJson, authedRequest, createTestUser, findOrFail, getTestContext, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { assertJson, authedRequest, createTestUser, findOrFail, getTestContext } from '../setup';
 
 const LONG_TEXT = 'x'.repeat(713);
 

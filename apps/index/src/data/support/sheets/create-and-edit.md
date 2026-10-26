@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, spreadsheet, create, edit, cells, data]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 20
-updated: 2026-09-13
+updated: 2026-10-23
 ---
 
 You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the toolbar menus and keyboard shortcuts.
@@ -59,6 +59,8 @@ Use the standard keyboard shortcuts:
 
 You can also use **Edit → Copy**, **Edit → Cut**, and **Edit → Paste** from the menu bar.
 
+Copied cells paste into other apps as rows and columns, for example into a text editor or a chart's **Edit data** grid.
+
 ## Undo and redo
 
 - **Ctrl+Z** (Mac: **⌘Z**) undoes your last change.
@@ -91,7 +93,7 @@ Each spreadsheet can contain multiple sheets. To manage them:
 
 - Click the **+** button at the left of the tab bar to add a sheet.
 - Double-click a tab to rename it.
-- Click the **⌄** arrow on a tab to open a menu with options to **Rename**, **Delete**, **Copy**, **Hide**, **Move left**, **Move right**, and **Change color**.
+- Click the **⌄** arrow on a tab to open a menu with options to **Rename**, **Duplicate**, **Change color**, **Hide**, **Move left**, **Move right**, and **Delete**.
 - Drag a tab to a different position to reorder sheets.
 
 ## Save your work

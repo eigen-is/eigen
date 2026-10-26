@@ -7,10 +7,12 @@ import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, SERVER_DIR, SERVER_RUNTIME_FI
 import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
-import { type ArchiveMember, copyArchiveMember, extractArtifact, readUnpackedHome } from './archive';
+import type { ArchiveMember } from './archive';
+import { copyArchiveMember, extractArtifact, readUnpackedHome } from './archive';
 import { archivePath, flatStorageKey, readMountPathRows } from './archive-layout';
 import { describeError } from './errors';
-import { checkRestoredDatabases, materializeMount, movePath, type VersionedDatabase } from './materialize-mount';
+import type { VersionedDatabase } from './materialize-mount';
+import { checkRestoredDatabases, materializeMount, movePath } from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
     ARCHIVE_MANIFEST_FILE,

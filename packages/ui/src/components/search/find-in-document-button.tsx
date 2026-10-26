@@ -1,6 +1,7 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { Search } from 'lucide-react';
-import { type RefObject, useRef } from 'react';
+import type { RefObject } from 'react';
+import { useRef } from 'react';
 import { DropdownMenuItem } from '../dropdown-menu';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { useOptionalDocSearchBar } from './doc-search-provider';
@@ -32,7 +33,7 @@ export function FindInDocumentMenuItem({ focusFindBarRef }: { focusFindBarRef: R
                 docSearchBar.open();
             }}
         >
-            <Search className="mr-2" />
+            <Search />
             Find in document
         </DropdownMenuItem>
     );

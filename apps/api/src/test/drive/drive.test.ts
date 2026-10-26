@@ -1,12 +1,10 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import type { DrivePath, MountInfo, OrgTeam } from '@workspace/lib/types';
 import {
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_SHEETS,
     DRIVE_TYPE_SLIDES,
     DRIVE_TYPE_STICKIES,
-    type DrivePath,
-    type MountInfo,
-    type OrgTeam,
     teamOwnerId,
 } from '@workspace/lib/types';
 import { COMMENT_INDEX_DB_CONFIG } from '../../lib/chat/comment-db-config';
@@ -18,6 +16,7 @@ import { getUserById } from '../../lib/user';
 import {
     assertJson,
     authedRequest,
+    createTestGuest,
     driveDelete,
     driveGet,
     driveGetList,
@@ -3367,6 +3366,37 @@ describe('Drive', () => {
             expect(mail.text).toContain('Take a look');
             // Plain-text fallback carries the path-derived URL.
             expect(mail.text).toMatch(/\/doc\//);
+            spy.mockRestore();
+        });
+
+        // A guest may not mail people through the server, as a guest may not share.
+        test('refuses a guest editor', async () => {
+            const mailer = await import('../../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            spy.mockClear();
+            const guest = await createTestGuest('Mail Guest');
+            const doc = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/create/doc`,
+                { fileName: 'guest-mail-test' },
+            );
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}/acl`, {
+                add: [{ id: guest.email, read: true, write: true }],
+            });
+
+            const res = await authedRequest(
+                guest.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/email-collaborators`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: 'hello from a guest', sendCopyToSelf: true }),
+                },
+            );
+            expect(res.status).toBe(403);
+            expect(spy.mock.calls.some((c) => c[0].text?.includes('hello from a guest'))).toBe(false);
             spy.mockRestore();
         });
     });

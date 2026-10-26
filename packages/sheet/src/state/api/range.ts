@@ -1,11 +1,13 @@
 import { cloneDeep, isPlainObject } from 'es-toolkit/compat';
 import type { Cell } from '../../engine/types';
-import { getdatabyselection, getFlowdata, getRangetxt, type Selection } from '..';
+import type { Selection } from '..';
+import { getdatabyselection, getFlowdata, getRangetxt } from '..';
 import type { Context } from '../context';
-import { normalizeSelection, rangeValueToHtml } from '../modules';
+import { normalizeSelection, rangeValueToClipboard } from '../modules';
 import type { Range, SingleRange } from '../types';
 import { setCellFormat, setCellValue } from './cell';
-import { type CommonOptions, getSheet } from './common';
+import type { CommonOptions } from './common';
+import { getSheet } from './common';
 import { invalidParams } from './errors';
 
 export function getSelection(ctx: Context) {
@@ -66,7 +68,7 @@ export function getCellsByRange(ctx: Context, range: Selection, options: CommonO
 
 export function getHtmlByRange(ctx: Context, range: Range, options: CommonOptions = {}) {
     const sheet = getSheet(ctx, options);
-    return rangeValueToHtml(ctx, sheet.id!, range);
+    return rangeValueToClipboard(ctx, sheet.id!, range)?.html ?? null;
 }
 
 export function setSelection(ctx: Context, range: Range, options: CommonOptions) {

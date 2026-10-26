@@ -1,17 +1,21 @@
+// Reads the Yjs state stored in a data.db: the newest snapshot and the updates after it. A live
+// document loads through it when it opens, and readers such as the document transforms capture it to
+// work off the main thread. readYjsStateFromFile reads a data.db nobody serves, such as a saved version.
+
 import { Database as BunDatabase } from 'bun:sqlite';
 import { asc, desc, gt } from 'drizzle-orm';
-import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as Y from 'yjs';
-import { ApiError } from '../core/errors';
+import { ApiError, isOutOfMemory } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
 import { decompressBlob } from './blob-codec';
 import * as schema from './schema';
 
 type DocDb = BunSQLiteDatabase<typeof schema>;
 
-// Compressed persisted Yjs state, captured as standalone buffers so it can be
-// transferred to a document-transform Worker (or materialized right here on the
-// main thread). Blob ids ride along for diagnostics only.
+// The stored Yjs state, still compressed, copied into buffers of its own. So it can go to the document
+// transform process, or be loaded right here on the main thread. The blob ids are only for the logs.
 export type YjsStatePayload = {
     snapshot: { id: number; lastUpdateId: number; data: ArrayBuffer } | null;
     updates: { id: number; data: ArrayBuffer }[];
@@ -21,17 +25,14 @@ function copyBlob(stored: Uint8Array): ArrayBuffer {
     return new Uint8Array(stored).buffer;
 }
 
-// Selects the newest snapshot plus every update with id > snapshot.lastUpdateId
-// (all updates when no snapshot exists). The transaction holds only SELECTs and
-// buffer copies — decompression and Y.applyUpdate happen in materializeYjsState,
-// off the write path and possibly off-thread.
+// Reads the newest snapshot and every update after it, or every update when there is no snapshot. The
+// transaction only selects and copies buffers. The decompression and Y.applyUpdate run later in
+// materializeYjsState, outside the write path and maybe on another thread.
 //
-// Pruning invariant this capture relies on: DbProvider.createSnapshot inserts the
-// snapshot row and deletes every update with id <= lastUpdateId in the SAME
-// transaction (collabDocument.ts). So when a snapshot blob later turns out to be
-// corrupt, "the captured updates" and "all updates" are the same set, and
-// materializeYjsState replays exactly what the pre-split loader replayed via its
-// re-select-everything fallback. Pinned by the corrupt-snapshot equivalence test.
+// DbProvider.createSnapshot inserts the snapshot and deletes every update it covers in one transaction.
+// So the updates after the newest snapshot are all the updates there are. When the snapshot turns out
+// to be corrupt, replaying the captured updates therefore replays every update. The corrupt-snapshot
+// test pins it.
 function readPayload(db: DocDb): YjsStatePayload {
     let payload: YjsStatePayload = { snapshot: null, updates: [] };
     db.transaction((tx) => {
@@ -78,7 +79,8 @@ export function materializeYjsState(
     if (payload.snapshot) {
         try {
             Y.applyUpdate(doc, decompressBlob(new Uint8Array(payload.snapshot.data)));
-        } catch {
+        } catch (error) {
+            if (isOutOfMemory(error)) throw error;
             blobsSkipped++;
             console.error(`[yjs-loader] Skipping corrupted snapshot${label ? ` for ${label}` : ''}`);
         }
@@ -89,7 +91,8 @@ export function materializeYjsState(
             const data = decompressBlob(new Uint8Array(update.data));
             Y.applyUpdate(doc, data);
             bytesApplied += data.byteLength;
-        } catch {
+        } catch (error) {
+            if (isOutOfMemory(error)) throw error;
             blobsSkipped++;
             console.error(`[yjs-loader] Skipping corrupted update ${update.id}${label ? ` for ${label}` : ''}`);
         }
@@ -106,17 +109,15 @@ export function loadYjsState(
     return materializeYjsState(readYjsStatePayload(managedDb), doc, label);
 }
 
-// Reads a data.db file nobody is serving — a versions/<timestamp>.db snapshot, or a container's
-// data.db inside a backup archive — and returns its Yjs state as a single update. Opens the SQLite
-// file directly so we don't trigger ManagedDatabase's open-time migrations on an immutable copy.
-// Unlike a live load, a corrupt blob here fails loud: silently skipping would
-// let a restore "succeed" into a half-empty doc (PROPOSAL_DATA_INTEGRITY seam F).
+// Reads a data.db that nobody serves, such as a saved version or a document's data.db in a backup
+// archive, and returns its Yjs state as one update. It opens the SQLite file directly, so the open runs
+// no migrations on a copy that must not change. Unlike a live load, a corrupt blob here throws. Skipping
+// it would let a restore succeed into a half-empty document.
 //
-// The handle is never written to, and it opens read-write by default: bun:sqlite
-// is flaky opening a freshly-copied data.db read-only (SQLITE_CANTOPEN), which is
-// exactly what a version restore hands it. `readonly` is for the backup verify,
-// which reads databases it must not touch at all — an open alone can leave a
-// journal beside a file whose bytes it just hashed.
+// Nothing writes to the handle, but it opens read-write by default. bun:sqlite sometimes fails to open
+// a freshly copied data.db read-only (SQLITE_CANTOPEN), and a version restore hands it just that.
+// `readonly` is for the backup verify, which must not touch the databases at all. An open alone can
+// leave a journal beside a file whose bytes the verify just hashed.
 export function readYjsStateFromFile(localPath: string, options?: { label?: string; readonly?: boolean }): Uint8Array {
     // `{ readonly: false }` is not the same as no options: bun:sqlite then builds flags with neither
     // READONLY nor READWRITE and refuses the open.

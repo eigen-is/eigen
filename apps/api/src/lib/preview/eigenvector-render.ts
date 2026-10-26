@@ -1,20 +1,19 @@
+// A drawing's preview body: the drawing as one compositor page, the same HTML the PDF export prints. It runs in the
+// transform process, so it reaches neither the Mount nor the transform seam, and its media resolves through the URL
+// map the main thread prepared.
+
 import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
 import { readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
-import { type CanvasPage, drawingPage, emptyPage, renderFittedPage, sceneBackground } from '../export/canvas/render';
+import type { CanvasPage } from '../export/canvas/render';
+import { drawingPage, emptyPage, renderFittedPage, sceneBackground } from '../export/canvas/render';
 import { sanitizeExportHtml, sanitizeSceneHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 import { capPreviewElements } from './preview-scene';
 
 const EMPTY_PREVIEW_HEIGHT = 120;
 
-// Materialized doc → the drawing as one compositor page, the same HTML the PDF export prints.
-// Runs inside the transform Worker (worker.ts owns execution; the main-thread orchestration lives
-// in preview-document.ts). This module must not reach the Mount or the transform seam — the Worker
-// imports it, and the compositor's roughjs/perfect-freehand deps stay DOM-free. Media resolves
-// through the URL map the main thread prepared (the Worker has no Mount).
-//
 // The body renders as live DOM in the drive hero and the preview pane, so it is filtered twice. The
 // reader is the trust boundary for every scalar field (XML-invalid characters stripped, colors
 // reduced to hex or 'transparent', coordinates clamped) but NOT for a rich-text box's `html`, which

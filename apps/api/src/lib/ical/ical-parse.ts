@@ -1,7 +1,7 @@
 // `parseIcs` reads untrusted bytes and its result type cannot name a single `X-EIGEN-*` fact, so a forged organizer link, color or row id has nowhere to land; only `projectResource` reads Eigen's own lines.
 import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
-import type { Attendee, EventData, Reminder } from '@workspace/lib/types/calendar';
-import { IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
+import type { Attendee, EventData, ImipMethod, Reminder } from '@workspace/lib/types/calendar';
+import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
 import { localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';

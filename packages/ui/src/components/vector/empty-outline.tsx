@@ -1,4 +1,5 @@
-import { type Box, paintsNothing, type VectorElement } from '@workspace/lib/vector';
+import type { Box, VectorElement } from '@workspace/lib/vector';
+import { paintsNothing } from '@workspace/lib/vector';
 import { memo } from 'react';
 import { elementBox } from './tools/boxes';
 

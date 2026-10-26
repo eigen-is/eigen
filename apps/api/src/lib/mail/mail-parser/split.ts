@@ -1,5 +1,6 @@
 import { EML_MIME } from '@workspace/lib/types/drive';
-import { type PartHeaders, parseHeaders } from './headers';
+import type { PartHeaders } from './headers';
+import { parseHeaders } from './headers';
 
 // Both caps reject the parse with a plain Error; the fuzz suite pins "reject, never hang".
 const MAX_HEAD_SIZE = 1024 * 1024;

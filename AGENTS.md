@@ -1,78 +1,31 @@
 # AGENTS.md: Eigen Project Context
 
-Eigen is a self-hosted alternative to Google Workspace. Monorepo with integrated apps sharing a single API server, UI library, and business logic layer.
-
-Layout, stack, and scripts are derivable: read `package.json` (scripts + workspaces) and `ls apps packages`. Two things that aren't written down anywhere else: the API serves every app from port 8000, and `packages/sheet` is a fork of fortune-sheet/luckysheet.
+Eigen is a self-hosted alternative to Google Workspace: a monorepo of apps that share one API server, one UI library and one business-logic layer. `package.json` (scripts, workspaces) and `ls apps packages` give the layout. One API process is the backend of every app: in dev it listens on `localhost:8000` and each app runs its own vite server ([CONTRIBUTING.md](docs/CONTRIBUTING.md)). `packages/sheet` is our fork of fortune-sheet/luckysheet ([SHEETS.md](docs/SHEETS.md)).
 
 ## Critical Rules
 
-- **No AI co-author trailers in commits**: never add `Co-authored-by: Claude/Copilot/...` lines to commit messages, even if your tooling defaults to it
-- **Read [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) before writing code**: typing (don't break the Elysia → Eden → hook → component type chain: no `as any`, no `as Type`), style, imports and the **self-review checklist**, which must pass before you declare any task complete
-- **Read existing code before writing new code**: read 2-3 existing files in the same directory. Match their style, structure, naming, and patterns exactly. New code must look like it was always there
-- **Search [SHARED-PRIMITIVES.md](docs/SHARED-PRIMITIVES.md) before building a shared hook, component, type, or util**: the generated index of everything `packages/ui` + `packages/lib` export. Import what exists; if it's missing, export it from the package barrel so it gets catalogued (`bun run primitives` regenerates it)
-- **Read the domain doc before planning or coding**: the index below names it (`docs/COMMENTS.md` before comment features). Don't assume you know the conventions. Verify them
-- **Run `bun run check` after code changes**. What it runs: [TESTING.md § CI](docs/TESTING.md#ci). Docs, copy and string-only edits skip it. When multiple agents run in parallel, only the main agent runs check: concurrent runs cause deadlocks
-- **Code goes in the right layer**: hooks/mutations in `packages/lib/src/core/[domain]/hooks/`, shared types in `packages/lib/src/types/`, shared UI in `packages/ui/`, app-specific code in `apps/`. Rule of thumb: if two or more apps need it, it belongs in `packages/`. Never put `useQuery`, `useMutation`, error toasts, or `try/catch` + `toast.error()` in app components: all error handling lives in hooks using `onMutationError`. See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
-- **Third copy → shared wrapper**, scaffolds too (route guards, editor shells, loading/empty/error treatments): before pasting one into a third app, extract one guarded wrapper into `packages/ui` ([why](docs/ARCHITECTURE.md#third-copy--shared-wrapper))
-- **Package dependency direction is one-way: `sheet → lib` and `ui → lib`, never the reverse; `lib` imports neither** (a biome rule enforces it). Why, and where shared sheet types live: [ARCHITECTURE.md § Dependency direction](docs/ARCHITECTURE.md#dependency-direction)
-- **The backend imports lib through React-free subpaths, never `core/` domain barrels**. The BE-safe list and how to carve out a new subpath: [ARCHITECTURE.md § Backend imports of lib](docs/ARCHITECTURE.md#backend-imports-of-lib)
-- **Think about every `await`**: a bare async call returns a truthy Promise (`if (!asyncFn())` is always false). Fire-and-forget must have `.catch()`. Skip `await` when blocking would hurt response time and failure is acceptable
-- **Sanitize user-provided paths**: validate against `..`, `/`, and control characters before filesystem or header use. Never interpolate raw user input into HTTP headers
-- **One source of truth per fact**: a set, map, schema, or constant that answers a question lives in exactly one module. Import it; never re-list its members inline; derive subsets from the canonical one ([why](docs/ARCHITECTURE.md#one-source-of-truth-per-fact))
-- **A primitive isn't "shared" until its barrel exports it**: values through `@workspace/ui` / `@workspace/lib/<domain>`, types through `@workspace/lib/types/<domain>`; a deep import past a barrel means it should have been exported ([why](docs/ARCHITECTURE.md#a-primitive-is-shared-only-when-its-barrel-exports-it))
-- **A new API route or a new database migration needs the owner's explicit yes, asked as its own question right before you build it**: a migration is a new schema version in a `db-config.ts`, or a column `ensureAuthSchemaColumns` adds to `users3.db`. Name the route or the migration, why no existing route or schema serves, and the simpler alternative. An approved plan or ruling that implies one is not that yes; a subagent stops and reports instead of adding one
-- **Fix broken windows**: fix pre-existing issues if the fix is straightforward. Over-engineered code is a broken window too: removing lines is always welcome when the result is cleaner and easier to understand
-- **Keep docs up to date**: gotchas land in `docs/<DOMAIN>.md`, written and trimmed via the [domain-doc skill](.claude/skills/domain-doc/SKILL.md); this file only if cross-domain; a new backend or frontend concept gets its row in the [ARCHITECTURE.md](docs/ARCHITECTURE.md) tables. A user-visible change corrects the help center (`apps/index/src/data/support/`) in the same cycle, minimally, via the [support-article skill](.claude/skills/support-article/SKILL.md) and [SUPPORT-STYLE-GUIDE.md](docs/SUPPORT-STYLE-GUIDE.md)
-- **No hard line-wrapping in Markdown prose**: when writing `.md` content (docs, blog posts, proposals), keep each paragraph on one line; never insert manual line breaks to satisfy a maximum line length. Editors soft-wrap, and rendered HTML is unaffected either way
+- **No AI co-author trailers in commits**: never add a `Co-authored-by: Claude/Copilot/…` line to a commit message, even when your tooling defaults to it.
+- **A new API route or database migration needs the owner's explicit yes**, asked as its own question right before you build it. A migration is a new schema version in a `db-config.ts`, or a column `ensureAuthSchemaColumns` adds to `users3.db`. Name it, why no existing route or schema serves, and the simpler alternative. An approved plan or ruling that implies one is not that yes; a subagent stops and reports instead.
+- **So does a new package**: an npm package in any `package.json` (`bun add` and devDependencies included), a `bun patch`, or a system package or binary in a Dockerfile or CI image. Name it, its size and what it pulls in, why no existing dependency or a few lines of our own serve, and the simpler alternative. The same plan and subagent rules apply.
+- **No simple, clean fix? Ask first**, with the options in two sentences, before you build a new seam, a layer crossing, a second mechanism or a choice between two non-obvious designs. In an incident, ship the minimal fix, then name the robust option and its size.
+- **Read before you write**: [CODE-STANDARDS.md](docs/CODE-STANDARDS.md), 2–3 sibling files, and the domain doc ([docs/README.md](docs/README.md) indexes them; [ARCHITECTURE.md](docs/ARCHITECTURE.md) says where each concept lives). New code looks like it was always there. Keep the Elysia → Eden → hook → component type chain: no `as any`, no `as Type`.
+- **Search [SHARED-PRIMITIVES.md](docs/SHARED-PRIMITIVES.md) first** for a shared hook, component, type or util. A primitive is shared only once its barrel exports it (`bun run primitives` regenerates the index).
+- **Right layer**: hooks and mutations in `packages/lib/src/core/[domain]/hooks/`, shared types in `packages/lib/src/types/`, shared UI in `packages/ui/`, app-only code in `apps/`. Two apps need it: `packages/`; a third copy of a scaffold: one wrapper in `packages/ui`. App components hold no `useQuery`, `useMutation`, toasts or `try/catch` + `toast.error()`: hooks handle errors with `onMutationError` ([NOTIFICATIONS.md](docs/NOTIFICATIONS.md)).
+- **Package direction is one-way**: `sheet → lib`, `ui → lib`, `lib` imports neither, `math` is a leaf. The backend imports lib only through React-free subpaths, never a `core/` domain barrel. One fact lives in one module. Why, and the lists: [ARCHITECTURE.md § Package boundaries](docs/ARCHITECTURE.md#package-boundaries).
+- **Drive has four layers**, Route → SharedDrive → Drive → Mount: a feature changes all four, and every route-callable `Drive` method gets a `SharedDrive` wrapper with its permission check. **Never call `getHome()` for another user's data**: cross-home calls go through `home-relay.ts`. **Pages are `ColumnLayout` + `Column`** with the `toolbar` prop. `bun run check` gates three more: `DRIVE_MIME_*` constants, never typed MIME strings; `:ownerId` as every authenticated route's second segment (exempt list: `OWNER_ID_EXEMPT`); a `pointer-coarse:` variant on hover-revealed affordances. All pitfalls: [ARCHITECTURE.md § Pitfalls](docs/ARCHITECTURE.md#pitfalls).
 
-## Working Method (multi-step changes)
+## Working with the owner
 
-Orchestrating multi-step work or dispatching subagents: the [orchestrate skill](.claude/skills/orchestrate/SKILL.md). Every reviewer is held to [REVIEW-STANDARD.md](docs/REVIEW-STANDARD.md).
+- A question ("what is happening?") gets findings, not edits.
+- Before multi-file work, ask "branch, or the current branch?" and keep the answer for the task; a trivial fix goes on the current branch. Never push or tag without an explicit go.
+- Another session may share the tree. Stage by path: never `git commit -a`, `git add -A` or `git stash`. Unstage files you didn't change (`git reset -- <path>`) and re-stage them after your commit. While files you never touched are dirty, run no global check.
+- No AI attribution in PRs, issues or upstream posts either. Draft for the owner's review, post with `--body-file` (`gh` posts as eigen-is), then grep the posted body for `claude|co-author|generated`.
+- If the owner is away and a question's recommended answer is clearly the logical one, proceed after 15 minutes. Log the ruling with its cost if wrong and how to undo it, and name it in your summary. Product, UX, stored-format, irreversible and outward-facing choices still wait, and so does every yes the Critical Rules ask for.
 
-## Where Things Are Documented
+## Done means
 
-File locations and patterns per concept (backend + frontend tables, package boundaries, pitfalls): [ARCHITECTURE.md](docs/ARCHITECTURE.md). Per domain:
-
-- Drive, storage, mounts, versioning, copy/move: [STORAGE.md](docs/STORAGE.md); soft delete and trash: [SOFT-DELETE.md](docs/SOFT-DELETE.md); file history and watch: [FILE-HISTORY.md](docs/FILE-HISTORY.md)
-- Databases: [DATABASE.md](docs/DATABASE.md)
-- Sharing and permissions: [ACL.md](docs/ACL.md); guests: [GUEST-ACCESS.md](docs/GUEST-ACCESS.md); organizations and teams: [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)
-- Collab documents (Yjs, offline, restore): [COLLAB.md](docs/COLLAB.md)
-- Canvas engine (vector + slides): [CANVAS.md](docs/CANVAS.md), [SLIDES.md](docs/SLIDES.md); clipboard: [CLIPBOARD.md](docs/CLIPBOARD.md)
-- Docs app, the eigendoc schema and figures: [DOCS.md](docs/DOCS.md)
-- Sheets: [SHEETS.md](docs/SHEETS.md); stickies: [STICKIES.md](docs/STICKIES.md); how the server reads and writes document content: [DOCUMENT-CONTENT-LAYER.md](docs/DOCUMENT-CONTENT-LAYER.md); editing a text file in Drive: [INLINE-EDITING.md](docs/INLINE-EDITING.md); the files a document embeds: [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)
-- Comments: [COMMENTS.md](docs/COMMENTS.md)
-- Mail: [MAIL.md](docs/MAIL.md), [IMAP.md](docs/IMAP.md)
-- Chat: [CHAT.md](docs/CHAT.md)
-- Calendar, iCalendar, invitations and iMIP: [CALENDAR.md](docs/CALENDAR.md); CalDAV: [CALDAV.md](docs/CALDAV.md)
-- Contacts: [CONTACTS.md](docs/CONTACTS.md); CardDAV: [CARDDAV.md](docs/CARDDAV.md)
-- WebDAV: [WEBDAV.md](docs/WEBDAV.md)
-- Search: [SEARCH.md](docs/SEARCH.md); in-document find bar: [IN_DOCUMENT_SEARCH.md](docs/IN_DOCUMENT_SEARCH.md)
-- SSE: [SSE.md](docs/SSE.md); toasts: [NOTIFICATIONS.md](docs/NOTIFICATIONS.md); notification center: [NOTIFICATION-CENTER.md](docs/NOTIFICATION-CENTER.md); activity rows: [ACTIVITY-ROWS.md](docs/ACTIVITY-ROWS.md)
-- Previews, quick look and file actions: [PREVIEWS.md](docs/PREVIEWS.md); export and import: [EXPORT.md](docs/EXPORT.md); off-thread transforms: [DOCUMENT-TRANSFORMS.md](docs/DOCUMENT-TRANSFORMS.md)
-- Uploads and S3 sync: [SYNC.md](docs/SYNC.md), [STREAMING_UPLOADS.md](docs/STREAMING_UPLOADS.md)
-- Backup and restore: [BACKUP.md](docs/BACKUP.md)
-- Self-hosting and `./eigen`: [SELF-HOSTING.md](docs/SELF-HOSTING.md); the operator's steps live in the help center's `self-hosting/` section
-- Server config, settings, quotas: [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md), [QUOTA.md](docs/QUOTA.md); demo instance: [DEMO_MODE.md](docs/DEMO_MODE.md)
-- Cross-home relay and sharding: [SCALABILITY.md](docs/SCALABILITY.md)
-- Layout, lists, Drive's file UI, keyboard, z-index, hover icons: [LAYOUT.md](docs/LAYOUT.md); mobile: [MOBILE.md](docs/MOBILE.md); typography: [TYPOGRAPHY.md](docs/TYPOGRAPHY.md); command palette: [COMMAND-PALETTE.md](docs/COMMAND-PALETTE.md)
-- Testing and browser verification: [TESTING.md](docs/TESTING.md), the [verify-in-browser skill](.claude/skills/verify-in-browser/SKILL.md)
-- Help center: [HELP-CENTER.md](docs/HELP-CENTER.md), [SUPPORT-STYLE-GUIDE.md](docs/SUPPORT-STYLE-GUIDE.md)
-- Code standards and their worked examples: [CODE-STANDARDS.md](docs/CODE-STANDARDS.md), [CODE-EXAMPLES.md](docs/CODE-EXAMPLES.md); setting up and contributing: [CONTRIBUTING.md](docs/CONTRIBUTING.md)
-- Backlog: [ROADMAP.md](docs/ROADMAP.md); after 1.0: [ROADMAP-POST-1.md](docs/ROADMAP-POST-1.md); sheets: [SHEETS-TODO.md](docs/SHEETS-TODO.md)
-
-## Pitfalls
-
-Full list: [ARCHITECTURE.md § Pitfalls](docs/ARCHITECTURE.md#pitfalls). The ones you hit on day one (three gated by `scripts/check-standards.ts`):
-
-- **Drive has four layers**: Route → SharedDrive (ACL wrapper) → Drive → Mount; a feature changes all four, and every route-callable `Drive` method gets a `SharedDrive` wrapper with the right permission check ([ARCHITECTURE.md § Drive Architecture](docs/ARCHITECTURE.md#drive-architecture))
-- **Eigen MIME type strings come from the `DRIVE_MIME_*` constants** in `packages/lib/src/types/drive.ts`, never typed by hand (gated); the file types they name: [ARCHITECTURE.md § Eigen file types](docs/ARCHITECTURE.md#eigen-file-types)
-- **Every authenticated route carries `:ownerId` as its second path segment** (gated): the Home that owns the resource, access-checked in the route; home-independent surfaces are exempt (`OWNER_ID_EXEMPT` in `scripts/check-standards.ts`)
-- **Never call `getHome()` for another user's data**: cross-home interactions go through `home-relay.ts` (`sendToHome()` for push, `pull*()` for reads); `getHome()` is fine for the request's own home. See [SCALABILITY.md](docs/SCALABILITY.md)
-- **Hover-revealed affordances need the matching `pointer-coarse:` variant** so they rest visible on touch (gated): [LAYOUT.md § Hover-revealed affordances rest visible on touch](docs/LAYOUT.md#hover-revealed-affordances-rest-visible-on-touch)
-- **Every page uses `ColumnLayout` + `Column` with the `toolbar` prop**: don't put the toolbar inside the page content ([LAYOUT.md § Every page is a ColumnLayout of Columns with the toolbar as a prop](docs/LAYOUT.md#every-page-is-a-columnlayout-of-columns-with-the-toolbar-as-a-prop))
-
-## Testing
-
-**Every workspace keeps its tests in `<workspace>/src/test/`; nothing named `*.test.ts` lives anywhere else.** A test covering one module mirrors that module's path; a feature test gets a feature folder. `bun scripts/check-test-layout.ts` enforces it as part of `bun run check`. Layout rationale, harness and helpers: [TESTING.md](docs/TESTING.md).
-
-A single test file needs the preload and must run from `apps/api`: `cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/<domain>/<file>.test.ts`.
+- **`bun run check` passes** ([TESTING.md § CI](docs/TESTING.md#ci)); docs, copy and string-only edits skip it, and with agents in parallel only the main agent runs it. Tests live in `<workspace>/src/test/` and nowhere else (`bun scripts/check-test-layout.ts` gates it). One API test file: `cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/<domain>/<file>.test.ts`.
+- **Every file you change meets CODE-STANDARDS.md**, header comment included, and passes its self-review checklist. Fix the broken windows you pass; removing lines is welcome. A bug you find and don't fix gets a [ROADMAP.md](docs/ROADMAP.md) row in the same commit.
+- **Docs in the same cycle**: gotchas into `docs/<DOMAIN>.md` (domain-doc skill), a new concept into ARCHITECTURE.md's tables, a user-visible change into the help center (support-article skill) and `CHANGELOG.md` (changelog skill). A standing rule goes into the doc or skill it governs, never into memory alone; a one-off instruction for the current run goes into its `STATE.md`.
+- **Markdown**: one line per paragraph, no hard wraps, and no line numbers: name the file and the symbol.
+- Multi-step work and subagents: the [orchestrate skill](.claude/skills/orchestrate/SKILL.md). Reviewers: [REVIEW-STANDARD.md](docs/REVIEW-STANDARD.md).

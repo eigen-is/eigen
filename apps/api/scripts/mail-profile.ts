@@ -1,5 +1,5 @@
 // Phase attribution for mail cold sync: fs read vs MIME parse vs sqlite insert.
-// Companion to mail-bench.ts — see docs/MAIL.md § The list pages by keyset and patches its own mutations.
+// It answers where a slow cold sync spends its time; the mail benchmark measures the totals.
 //
 // Run from the repo root (so @workspace/* resolves):
 //   N=10000 bun apps/api/scripts/mail-profile.ts
@@ -11,7 +11,8 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { Email } from '@workspace/lib/types/mail';
 import { LocalFilesystem } from '../src/lib/core/local-filesystem';
-import { type DatabaseConfig, openLocalDatabase, type SchemaType } from '../src/lib/core/managed-database';
+import type { DatabaseConfig, SchemaType } from '../src/lib/core/managed-database';
+import { openLocalDatabase } from '../src/lib/core/managed-database';
 import type { Home } from '../src/lib/home/home';
 import { parseEml } from '../src/lib/mail/mail-parse';
 import MailDB from '../src/lib/mail/maildb';
@@ -64,7 +65,7 @@ const tParse = performance.now() - tp0;
 // sqlite insert phase only
 const fakeHome = {
     homeDir: ROOT,
-    destructing: false,
+    closing: false,
     getLocalDatabase<S extends SchemaType>(config: DatabaseConfig<S>, relativePath: string) {
         return openLocalDatabase(config, path.join(ROOT, relativePath));
     },

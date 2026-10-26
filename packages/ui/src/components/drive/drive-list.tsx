@@ -2,8 +2,10 @@ import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
+import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
+    ChoiceMenuItems,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -13,7 +15,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { KebabTrigger, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group';
-import { ArrowDown, ArrowUp, Check, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
@@ -24,13 +26,33 @@ import { EmptyState } from '../layout/app/empty-state';
 import { ErrorState } from '../layout/app/error-state';
 import { useLayout } from '../layout/app/layout-context';
 import { LoadingState } from '../layout/app/loading-state';
-import { type CreateCallbacks, getCreateMenuItems } from './create-menu';
+import type { CreateCallbacks } from './create-menu';
+import { getCreateMenuItems } from './create-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveGrid } from './drive-grid';
 import { useMountLabel } from './drive-mount-list';
 import { DriveTable, nextDriveSort } from './drive-table';
 
 const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
+
+const VIEW_MODES: { value: DriveViewMode; label: React.ReactNode }[] = [
+    {
+        value: 'list',
+        label: (
+            <>
+                <List /> List
+            </>
+        ),
+    },
+    {
+        value: 'grid',
+        label: (
+            <>
+                <LayoutGrid /> Grid
+            </>
+        ),
+    },
+];
 
 // The three sort options, shared by the grid-mode sort dropdown and the mobile kebab. List mode
 // sorts via the table's column headers instead. Re-selecting the active field flips direction;
@@ -40,19 +62,24 @@ function SortMenuItems() {
     const chooseSort = (key: DriveSortKey) => setSort(key, nextDriveSort(key, sortKey, sortDir));
 
     return (
-        <>
-            {(Object.keys(SORT_LABELS) as DriveSortKey[]).map((key) => (
-                <DropdownMenuItem key={key} onClick={() => chooseSort(key)}>
-                    {SORT_LABELS[key]}
-                    {key === sortKey &&
-                        (sortDir === 'asc' ? (
-                            <ArrowUp className="h-4 w-4 ml-auto" />
-                        ) : (
-                            <ArrowDown className="h-4 w-4 ml-auto" />
-                        ))}
-                </DropdownMenuItem>
-            ))}
-        </>
+        <ChoiceMenuItems
+            value={sortKey}
+            options={DRIVE_SORT_KEYS.map((key) => ({
+                value: key,
+                label: (
+                    <>
+                        {SORT_LABELS[key]}
+                        {key === sortKey &&
+                            (sortDir === 'asc' ? (
+                                <ArrowUp className="h-4 w-4 ml-auto" />
+                            ) : (
+                                <ArrowDown className="h-4 w-4 ml-auto" />
+                            ))}
+                    </>
+                ),
+            }))}
+            onChange={chooseSort}
+        />
     );
 }
 
@@ -71,16 +98,7 @@ export function DriveViewControls() {
                     <DropdownMenuLabel>Sort by</DropdownMenuLabel>
                     <SortMenuItems />
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setMode('list')}>
-                        <List className="mr-2" />
-                        List
-                        {mode === 'list' && <Check className="h-4 w-4 ml-auto" />}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setMode('grid')}>
-                        <LayoutGrid className="mr-2" />
-                        Grid
-                        {mode === 'grid' && <Check className="h-4 w-4 ml-auto" />}
-                    </DropdownMenuItem>
+                    <ChoiceMenuItems value={mode} options={VIEW_MODES} onChange={setMode} />
                 </DropdownMenuContent>
             </DropdownMenu>
         );
@@ -167,7 +185,7 @@ export function DriveListToolbar({
                 <DropdownMenuContent align="end">
                     {createItems.map(({ kind, icon: Icon, label, onSelect }) => (
                         <DropdownMenuItem key={kind} onClick={onSelect}>
-                            <Icon className="h-4 w-4 mr-2" />
+                            <Icon className="h-4 w-4" />
                             {label}
                         </DropdownMenuItem>
                     ))}
@@ -386,7 +404,7 @@ export function DriveList({
                             createMenu.close();
                         }}
                     >
-                        <Icon className="h-4 w-4 mr-2" />
+                        <Icon className="h-4 w-4" />
                         {label}
                     </DropdownMenuItem>
                 ))}

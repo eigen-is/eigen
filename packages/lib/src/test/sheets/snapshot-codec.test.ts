@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { newSheetChartSpecParts, sampleChartSpec } from '../../charts';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, isCurrentSheetsSnapshot } from '../../sheets/snapshot-codec';
 import type { Cell, CellWithRowAndCol, Sheet } from '../../sheets/types';
 
@@ -102,11 +103,13 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect((JSON.parse(encoded) as Envelope).computed).toBe(true);
     });
 
-    test('round-trips every cell, border and sheet branch (only calcChain and images are added)', () => {
+    test('round-trips every cell, border and sheet branch (only calcChain, images and charts are added)', () => {
         const decoded = decodeSheetsSnapshot(
             encodeSheetsSnapshot(WORKBOOK, { computed: true }),
         ) as SheetWithCalcChain[];
-        expect(decoded.map(({ calcChain: _chain, images: _images, ...sheet }) => sheet)).toEqual(WORKBOOK);
+        expect(decoded.map(({ calcChain: _chain, images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
+            WORKBOOK,
+        );
         expect(decoded[0].calcChain).toEqual([
             { r: 1, c: 0, id: 'sheet-1' },
             { r: 7, c: 0, id: 'sheet-1' },
@@ -133,7 +136,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         const encoded = encodeSheetsSnapshot(BULK, { computed: true });
         expect(encoded.split('#a1b2c3')).toHaveLength(2);
         const decoded = decodeSheetsSnapshot(encoded) as SheetWithCalcChain[];
-        expect(decoded.map(({ calcChain: _chain, images: _images, ...sheet }) => sheet)).toEqual(BULK);
+        expect(decoded.map(({ calcChain: _chain, images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(BULK);
     });
 
     test('dictionary encoding shrinks a style-heavy workbook at least 5x', () => {
@@ -154,9 +157,10 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
             order: 0,
             celldata: [],
             calcChain: [],
-            images: [],
+            images: {},
+            charts: {},
         });
-        expect(decoded[1]).toEqual({ id: 'sheet-2', name: 'Sheet2', order: 1, images: [] });
+        expect(decoded[1]).toEqual({ id: 'sheet-2', name: 'Sheet2', order: 1, images: {}, charts: {} });
     });
 
     test('an empty config survives the round-trip so config ops still resolve', () => {
@@ -164,7 +168,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         // `config.merge.0_0` op unreplayable.
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
         expect(decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: false }))).toEqual(
-            sheets.map((sheet) => ({ ...sheet, images: [] })),
+            sheets.map((sheet) => ({ ...sheet, images: {}, charts: {} })),
         );
     });
 
@@ -215,25 +219,71 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         // turn a present-but-empty map into an absent key (or the reverse).
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: { borderInfo: {} } }];
         const encoded = encodeSheetsSnapshot(sheets, { computed: false });
-        expect(decodeSheetsSnapshot(encoded)).toEqual(sheets.map((sheet) => ({ ...sheet, images: [] })));
+        expect(decodeSheetsSnapshot(encoded)).toEqual(sheets.map((sheet) => ({ ...sheet, images: {}, charts: {} })));
     });
 
-    test('floating images round-trip on the wire', () => {
-        const images = [
-            { id: 'img_1', mediaName: 'chart.png', x: 120, y: 40, width: 200, height: 150 },
-            { id: 'img_2', mediaName: 'logo.svg', x: 0, y: 0, width: 64, height: 64, angle: 30 },
-        ];
+    test('floating images round-trip on the wire as a map keyed by id', () => {
+        const images = {
+            img1: { id: 'img1', index: 'a0', mediaName: 'chart.png', x: 120, y: 40, width: 200, height: 150 },
+            img2: { id: 'img2', index: 'a1', mediaName: 'logo.svg', x: 0, y: 0, width: 64, height: 64, angle: 30 },
+        };
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], images }];
         const encoded = encodeSheetsSnapshot(sheets, { computed: true });
         expect((JSON.parse(encoded) as Envelope).sheets[0]!['images']).toEqual(images);
         expect(decodeSheetsSnapshot(encoded)[0].images).toEqual(images);
     });
 
-    test('a snapshot without images decodes to an empty list', () => {
-        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [] }];
+    test('a snapshot without images decodes to an empty map, and an empty map is not stored', () => {
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], images: {} }];
         const encoded = encodeSheetsSnapshot(sheets, { computed: true });
         expect(encoded).not.toContain('"images":');
-        expect(decodeSheetsSnapshot(encoded)[0].images).toEqual([]);
+        expect(decodeSheetsSnapshot(encoded)[0].images).toEqual({});
+    });
+
+    // Sheets keep no backward compatibility: a workbook saved before images became a map opens without them.
+    test("an older snapshot's images array decodes as no images", () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['images'] = [{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10 }];
+        expect(decodeSheetsSnapshot(JSON.stringify(envelope))[0].images).toEqual({});
+    });
+
+    test('floating charts round-trip on the wire', () => {
+        const charts = {
+            c1: {
+                id: 'c1',
+                index: 'a0',
+                x: 120,
+                y: 40,
+                width: 480,
+                height: 300,
+                ...newSheetChartSpecParts(sampleChartSpec('column')),
+            },
+        };
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], charts }];
+        const encoded = encodeSheetsSnapshot(sheets, { computed: true });
+        expect((JSON.parse(encoded) as Envelope).sheets[0]!['charts']).toEqual(charts);
+        expect(decodeSheetsSnapshot(encoded)[0].charts).toEqual(charts);
+    });
+
+    test('a snapshot without charts decodes to an empty map, and an empty map is not stored', () => {
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], charts: {} }];
+        const encoded = encodeSheetsSnapshot(sheets, { computed: true });
+        expect(encoded).not.toContain('"charts":');
+        expect(decodeSheetsSnapshot(encoded)[0].charts).toEqual({});
+    });
+
+    test('a charts value that is no map decodes as no charts', () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['charts'] = 'forged';
+        envelope.sheets[1]!['charts'] = ['forged'];
+        const decoded = decodeSheetsSnapshot(JSON.stringify(envelope));
+        expect(decoded.map((sheet) => sheet.charts)).toEqual([{}, {}]);
+    });
+
+    test("a sheet's default column width and row height round-trip", () => {
+        const sheets: Sheet[] = [{ id: 's', name: 'S', defaultColWidth: 64, defaultRowHeight: 17 }];
+        const [decoded] = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
+        expect(decoded).toMatchObject({ defaultColWidth: 64, defaultRowHeight: 17 });
     });
 
     test('an empty cell object survives as {} rather than collapsing to null', () => {

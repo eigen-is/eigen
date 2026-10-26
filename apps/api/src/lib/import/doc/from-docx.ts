@@ -1,131 +1,170 @@
+// Reads a docx file into an Eigen doc, straight from the WordprocessingML with no HTML between, with its bands, page,
+// Normal style, pictures and the warnings for what it left out. It runs in the transform process, which a docx import
+// or convert hands the file to.
+
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
-import { ApiError } from '../../core/errors';
-import { XmlError } from '../../core/xml';
-import { ZipError } from '../../core/zip';
+import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import { BAND_EXCLUDED_NODES, BAND_ROOTS, bandHasContent, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
+import { ApiError, isOutOfMemory } from '../../core/errors';
 import { docSchema } from '../../document/doc-schema';
+import { readStoredEquation } from '../../document/equation';
 import type { TransformWarning } from '../../document/transform/protocol';
-import { UNSHOWN_IMAGE_TYPES } from './drawings';
-import { DOCUMENT_TOO_LARGE, NOT_A_DOCX, readPackage } from './package';
-import { createReader, readDocument } from './paragraphs';
+import { lossCounter } from '../../document/transform/protocol';
+import { CHARS_PER_UNIT } from '../../ooxml/budget';
+import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
+import type { ImportedMedia } from '../image-types';
+import { importMedia, UNSHOWN_IMAGE_TYPES } from '../image-types';
+import { IMPORT_MESSAGES, importError } from '../messages';
+import { MAX_DOCX_WEIGHT, readDocxPackage } from './package';
+import { createReader, readBand, readDocument } from './paragraphs';
 
-// docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform Worker.
+// Links into this instance come back root-relative through the public origin.
+export type DocxOptions = { publicOrigin: string | undefined; maxMediaBytes: number };
 
-export type DocxImage = {
-    name: string;
-    data: Buffer;
-    contentType: string;
-};
-
-// Each node and mark the reader emits is a Yjs item: 1.3 to 2.4 KB of peak memory through the transform per unit of
-// weight, 3.8 KB for a cell's 63 column widths. At this budget the heaviest file met peaks near 1 GB, and the corpus's
-// heaviest weighs 57,688.
-export const MAX_DOCX_WEIGHT = 150_000;
+// The update holds every character, a string attribute's too (a link's href is spelled out for every text node it
+// marks), and a client opens it in one WebSocket message of at most 128 MB: three bytes a character at most. The
+// corpus's most is 511,898.
+export const MAX_DOCX_TEXT = 16_000_000;
 
 // A TableMap slot, a column of a row however spanned or padded, costs about 16 bytes, a unit 1.3 KB and more.
 const SLOTS_PER_UNIT = 64;
 
-// A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
-const CHARS_PER_UNIT = 512;
-
-// The doc as JSON, for the audit and the tests; the import encodes the doc itself, with no copy between.
-export function docxToPmJson(
-    buffer: Buffer,
-    options: { publicOrigin?: string } = {},
-): { json: JSONContent; images: DocxImage[]; warnings: TransformWarning[] } {
-    const { doc, images, warnings } = readDocx(buffer, options);
-    return { json: doc.toJSON(), images, warnings };
-}
-
 export function readDocx(
     buffer: Buffer,
-    options: { publicOrigin?: string } = {},
-): { doc: Node; images: DocxImage[]; warnings: TransformWarning[] } {
+    options: DocxOptions,
+): {
+    doc: Node;
+    bands: Partial<Record<BandRoot, Node>>;
+    page: PageSetup;
+    style: NormalStyle;
+    media: ImportedMedia[];
+    warnings: TransformWarning[];
+} {
     try {
-        const pkg = readPackage(buffer);
-        const reader = createReader(pkg, options.publicOrigin);
+        const losses = lossCounter();
+        const pkg = readDocxPackage(buffer, losses.lost);
+        const files = importMedia('docx', pkg.readMedia, options.maxMediaBytes);
+        const reader = createReader(pkg, files, losses.lost, options.publicOrigin);
         const content = readDocument(reader);
-        if (weightOf(content) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
-        const refused = new Set(content.filter((block) => !fits(block)));
-        const blocks = content.flatMap((block) => (refused.has(block) ? asParagraphs(block) : [block]));
-        const doc = docSchema().nodeFromJSON({
-            type: 'doc',
-            content: blocks.length > 0 ? blocks : [{ type: 'paragraph' }],
+        // A band's schema holds none of BAND_EXCLUDED_NODES: each keeps its text.
+        const withoutExcluded = (node: JSONContent): JSONContent[] => {
+            if (!BAND_EXCLUDED_NODES.has(node.type ?? '')) {
+                return [node.content ? { ...node, content: node.content.flatMap(withoutExcluded) } : node];
+            }
+            losses.lost('blocks-flattened');
+            return asParagraphs(node);
+        };
+        // A part several references name is read once, and each copy weighed.
+        const read = new Map<string, JSONContent[]>();
+        const bandContent = BAND_ROOTS.flatMap((root): [BandRoot, JSONContent[]][] => {
+            const part = pkg.bands[root];
+            if (!part) return [];
+            const blocks = read.get(part.path) ?? readBand(reader, part).flatMap(withoutExcluded);
+            read.set(part.path, blocks);
+            return [[root, blocks]];
         });
-        doc.check();
-        // Only the media a kept figure names: a flattened block's figures went with it.
+        const { weight, text } = sizeOf([...content, ...bandContent.flatMap(([, blocks]) => blocks)]);
+        if (weight > MAX_DOCX_WEIGHT || text > MAX_DOCX_TEXT) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
+        // A block the schema refuses keeps its text and equations as paragraphs, so a reader slip never fails the import.
+        const checked = (blocks: JSONContent[]) => {
+            const kept = blocks.flatMap((block) => {
+                if (fits(block)) return [block];
+                losses.lost('blocks-flattened');
+                return asParagraphs(block);
+            });
+            const node = docSchema().nodeFromJSON({
+                type: 'doc',
+                content: kept.length > 0 ? kept : [{ type: 'paragraph' }],
+            });
+            node.check();
+            return node;
+        };
+        const doc = checked(content);
+        const bands: Partial<Record<BandRoot, Node>> = {};
+        for (const [root, blocks] of bandContent) {
+            const band = checked(blocks);
+            if (bandHasContent(band, readStoredEquation)) bands[root] = band;
+        }
+        // Only the media a kept figure names, since a flattened block's figures went with it. Each figure of an unshown
+        // type shows its alt text in a broken image.
+        const unshown = new Set(
+            files.media.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).map((image) => image.name),
+        );
         const named = new Set<string>();
-        doc.descendants((node) => {
-            if (node.type.name === 'figure') named.add(node.attrs['mediaName']);
-        });
-        const kept = reader.images.filter((image) => named.has(image.name));
-        const images = kept.flatMap(({ name, path, contentType }): DocxImage[] => {
-            const data = pkg.readMedia(path);
-            // A view of the bytes read, not a copy of them: a file may hold 200 MB of media.
-            return data
-                ? [{ name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) }]
-                : [];
-        });
-        const warnings: TransformWarning[] = [];
-        if (refused.size > 0) warnings.push({ code: 'blocks-flattened', count: refused.size });
-        const damaged = kept.length - images.length;
-        const unshown = damaged + images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
-        if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
-        if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
-        return { doc, images, warnings };
+        for (const node of [doc, ...Object.values(bands)])
+            node.descendants((child) => {
+                if (child.type.name !== 'figure') return;
+                named.add(child.attrs['mediaName']);
+                if (unshown.has(child.attrs['mediaName'])) losses.lost('images-unshown');
+            });
+        const media = files.media.filter((image) => named.has(image.name));
+        return { doc, bands, page: reader.page, style: reader.normal, media, warnings: losses.warnings() };
     } catch (error) {
-        throw importError(error);
+        throw importError(error, 'docx');
     }
 }
 
-// The zip's and the XML's messages speak of archives and markup; the user uploaded a document.
-export function importError(error: unknown): ApiError {
-    if (error instanceof ZipError)
-        return new ApiError(error.status, error.status === 413 ? DOCUMENT_TOO_LARGE : NOT_A_DOCX, { cause: error });
-    if (error instanceof XmlError) return new ApiError(400, NOT_A_DOCX, { cause: error });
-    if (error instanceof ApiError) return error;
-    // A stack or an allocation the document outgrew; ProseMirror's other RangeErrors are the reader's slips.
-    if (error instanceof RangeError && /call stack|out of memory/i.test(error.message))
-        return new ApiError(413, DOCUMENT_TOO_LARGE, { cause: error });
-    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the Worker.
-    console.warn('[import] docx import failed:', error instanceof Error ? (error.stack ?? error.message) : error);
-    return new ApiError(400, NOT_A_DOCX, { cause: error });
+// The doc as JSON, for the audit and the tests, its pictures bounded by the zip cap alone; the import encodes the doc
+// itself, with no copy between.
+export function docxToPmJson(
+    buffer: Buffer,
+    { publicOrigin }: { publicOrigin?: string } = {},
+): {
+    json: JSONContent;
+    bands: Partial<Record<BandRoot, JSONContent>>;
+    page: PageSetup;
+    style: NormalStyle;
+    media: ImportedMedia[];
+    warnings: TransformWarning[];
+} {
+    const { doc, bands, page, style, media, warnings } = readDocx(buffer, {
+        publicOrigin,
+        maxMediaBytes: MAX_DECOMPRESSED_BYTES,
+    });
+    const json = Object.fromEntries(Object.entries(bands).map(([root, band]) => [root, band.toJSON()]));
+    return { json: doc.toJSON(), bands: json, page, style, media, warnings };
 }
 
-// Every node and mark, and every table's area.
-function weightOf(nodes: JSONContent[]): number {
+// The weight is every node and mark, and every table's area; the text every character, string attributes' included.
+function sizeOf(nodes: JSONContent[]): { weight: number; text: number } {
     let weight = 0;
     let slots = 0;
+    let text = 0;
     const strings = (attrs: Record<string, unknown> | undefined) => {
         for (const value of Object.values(attrs ?? {}))
-            if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
+            if (typeof value === 'string') {
+                weight += Math.floor(value.length / CHARS_PER_UNIT);
+                text += value.length;
+            }
     };
     const stack = [...nodes];
     for (let node = stack.pop(); node; node = stack.pop()) {
         weight += 1 + (node.marks?.length ?? 0);
+        text += node.text?.length ?? 0;
         slots += (node.attrs?.['colspan'] ?? 0) * (node.attrs?.['rowspan'] ?? 1);
         strings(node.attrs);
         for (const mark of node.marks ?? []) strings(mark.attrs);
         for (const child of node.content ?? []) stack.push(child);
     }
-    return weight + Math.floor(slots / SLOTS_PER_UNIT);
+    return { weight: weight + Math.floor(slots / SLOTS_PER_UNIT), text };
 }
 
 function fits(block: JSONContent): boolean {
     try {
         docSchema().nodeFromJSON(block).check();
         return true;
-    } catch {
+    } catch (error) {
+        if (isOutOfMemory(error)) throw error;
         return false;
     }
 }
 
-// A block the schema refuses keeps its text as paragraphs, so a reader slip never fails the import.
 function asParagraphs(block: JSONContent): JSONContent[] {
     const lines: JSONContent[] = [];
     const walk = (node: JSONContent, line: JSONContent[]) => {
         if (node.type === 'text' && node.text) line.push({ type: 'text', text: node.text });
+        else if (node.type === 'equation') line.push(node);
         else if (PROSE_TEXTBLOCKS.includes(node.type ?? '') || node.type === 'codeBlock') {
             const own: JSONContent[] = [];
             for (const child of node.content ?? []) walk(child, own);

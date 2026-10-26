@@ -1,9 +1,13 @@
+// Tells the homes of the people a path is shared with that its sharing changed. It resolves who the
+// ACL names, queues the pushes into their homes in order per path, and sends the share emails. Drive
+// calls it after an ACL change, a rename, a restore or a trash.
+
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
 import { composeShareEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
-import { sendToUserHomes } from '../home/home-relay';
+import { countHomeDeliveries, drainHomeDeliveries, sendToUserHomes } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getUserByEmail } from '../user/';
@@ -116,13 +120,25 @@ function queueACLFanOut(
     });
 }
 
-// Awaits every queued delivery (including ones queued while draining). Used by tests for
-// read-your-fanout determinism and by graceful shutdown — must run BEFORE shutdownAllHomes,
-// since delivery reopens recipient homes.
+// Waits for every queued fan-out, also the ones queued while it waits. Tests use it to read what a
+// fan-out wrote, and graceful shutdown runs it before the homes close, because a delivery reopens
+// the recipient's home.
 export async function drainACLFanOuts(): Promise<void> {
     while (pendingFanOuts.size > 0) {
         await Promise.allSettled([...pendingFanOuts.values()]);
     }
+}
+
+// Graceful shutdown waits for the queued ACL fan-outs and every other delivery, up to the bound. A
+// delivery can hang on a home that never opens, such as during a bucket outage. It must not hang the
+// shutdown, or use up the time the mounts need to upload. What is left when the bound is over is lost,
+// as in a crash.
+export async function drainDeliveriesWithin(boundMs: number): Promise<void> {
+    const drained = Promise.all([drainACLFanOuts(), drainHomeDeliveries()]).then(() => true);
+    if (await Promise.race([drained, Bun.sleep(boundMs).then(() => false)])) return;
+    console.warn(
+        `[shutdown] gave up after ${boundMs} ms with ${pendingFanOuts.size} paths with ACL fan-outs and ${countHomeDeliveries()} home deliveries left`,
+    );
 }
 
 export async function propagateSharedPathChange(

@@ -2,7 +2,7 @@
 
 This page lists the npm packages and `node:*` uses a Bun built-in could still replace, the ones it cannot, and the Bun 1.4 features worth using. Each replacement removes a dependency Eigen has to audit and update. Eigen already uses Bun natively for most runtime work: `S3Client`, `bun:sqlite` (through `drizzle-orm/bun-sqlite`), `Bun.password`, `Bun.CryptoHasher`, `Bun.Glob`, `Bun.semver`, `Bun.spawn`, `Bun.zstd*Sync` and `bun:test`.
 
-**Status:** nothing here is built. It was written on 2026-09-25 against Bun 1.4.2, and [ROADMAP.md](../ROADMAP.md) keeps its row.
+**Status:** `Bun.XML` has replaced `fast-xml-parser` and `he`: every XML read goes through `parseXml` (`apps/api/src/lib/core/xml.ts`, the XML reads row of [ARCHITECTURE.md § Backend](../ARCHITECTURE.md#backend)). The rest of this page is not built, and [ROADMAP.md](../ROADMAP.md) keeps its row.
 
 ## What 1.4 added
 
@@ -23,7 +23,6 @@ The 1.4 release post also says Bun is now written in Rust and that 1.4 is the fi
 
 | Bun API | Replaces | Where | Effort | Notes |
 |---|---|---|---|---|
-| `Bun.XML` (1.4.0) | `fast-xml-parser`, `he` | done | | Every DAV body goes through `parseXml` (`apps/api/src/lib/core/xml.ts`), which resolves namespaces over Bun's tree shape and refuses a DOCTYPE. The xlsx import reads its parts the same way, and Bun decodes the character references `he` did. Both packages are gone. |
 | `Bun.markdown` (1.3.8) | `markdown-it` | `apps/api/src/lib/preview/text-preview.ts` | S | Its HTML output is not sanitized; route it through the existing DOMPurify path. The `apps/index` build (`scripts/lib/render-markdown.ts`) also uses `markdown-it-anchor` for heading ids, so that side needs its own heading-id pass or stays on markdown-it. |
 | `Bun.cron` (1.3.11) | the `setInterval` wrapper | `apps/api/src/lib/scheduler/scheduler.ts` | S | Only when a job needs a wall-clock schedule ("03:00 UTC daily"); the file's header already says so. Jobs never overlap, and there is a `tz` option. |
 | `Bun.YAML` | `gray-matter` | `apps/index/scripts/lib/frontmatter.ts` | S | Build tooling only: split the frontmatter block and parse it with `Bun.YAML`. |
@@ -32,14 +31,14 @@ The 1.4 release post also says Bun is now written in Rust and that 1.4 is the fi
 
 - **`Bun.Image` in place of `sharp` + `heic-convert`** (`apps/api/src/lib/shared/thumbnail-worker.ts`). HEIC, AVIF and TIFF decode only on macOS and Windows, and production runs Linux, so `heic-convert` stays regardless. The API landed in 1.3.14 and is young. Dropping sharp's native dependency is attractive; it needs a spike first that runs our thumbnail fixtures through `Bun.Image` inside the `oven/bun` image.
 - **`Bun.Archive` for backups.** [BACKUP.md](../BACKUP.md) rules it out: it buffers the whole archive in memory and mangles non-ASCII names, so `apps/api/src/lib/backup/archive.ts` keeps its streaming tar over `node:zlib` zstd. Those findings were measured on 1.3.14. The buffering is a design choice, so re-checking the name bug on 1.4.2 would not change the decision.
-- **`HTMLRewriter` in place of `jsdom`.** It only does streaming rewrites; the vector export (`apps/api/src/lib/export/vector/transform.ts`) and the docx import (`apps/api/src/lib/import/doc/from-docx.ts`) need a DOM.
+- **`HTMLRewriter` in place of `jsdom`.** It only does streaming rewrites; the export sanitizer (`apps/api/src/lib/export/sanitize.ts`, behind the doc, sheet, canvas and vector exports) and the PPTX text writer (`apps/api/src/lib/export/slides/pptx/text.ts`) need a DOM. The docx import does not use jsdom.
 - **`Bun.WebView` in place of Playwright** for [the verify-in-browser skill](../../.claude/skills/verify-in-browser/SKILL.md). On Linux it drives an installed Chrome anyway, and Playwright's multi-context API is what the E2E collab suite needs.
 
 ## No Bun equivalent
 
 - `nodemailer`: Bun has no SMTP or mail API.
-- `jszip`: `Bun.Archive` handles tar, not zip. The docx import and export and the xlsx import and export use our own zip reader and writer (`apps/api/src/lib/core/zip.ts`); JSZip stays inside ExcelJS, and the API's tests read with it as a second, independent zip.
-- `exiftool-vendored`, `iconv-lite`, `libmime`, `libqp`, `html-to-text`, `isomorphic-dompurify`, `exceljs`, `ical.js`, `rrule`: domain libraries.
+- `jszip`: `Bun.Archive` handles tar, not zip. The docx import and export and the xlsx import and export use our own zip reader and writer (`apps/api/src/lib/ooxml/zip.ts`); the API's tests read with JSZip as a second, independent zip.
+- `exiftool-vendored`, `iconv-lite`, `libmime`, `libqp`, `html-to-text`, `isomorphic-dompurify`, `ical.js`, `rrule`: domain libraries.
 - Browser-side packages (`nanoid`, `uuid`, `dayjs`, `numeral`, `es-toolkit`) cannot use Bun runtime APIs. The shared `escapeHtml` in `packages/lib/src/core/html.ts` runs on both sides, so it cannot switch to `Bun.escapeHTML`.
 
 ## Tooling

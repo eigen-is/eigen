@@ -1,7 +1,7 @@
 import type { Context } from 'elysia';
 
 export class ApiError extends Error {
-    constructor(
+    public constructor(
         public status: number,
         message: string,
         options?: ErrorOptions,
@@ -27,9 +27,16 @@ export function payloadTooLarge(): ApiError {
     return new ApiError(413, 'Upload too large');
 }
 
+// JSC's words, with or without a detail, for an allocation it refused with a throw rather than an abort. The catches
+// that would turn it into a bad file, a dropped part or a skipped blob let it through, so the transform process answers
+// it. DOCUMENT-TRANSFORMS.md § Out of memory is the job's, not the server's, names them and why the rest may swallow it.
+export function isOutOfMemory(error: unknown): error is RangeError {
+    return error instanceof RangeError && error.message.startsWith('Out of memory');
+}
+
 // An overwrite whose base updatedAt the file no longer carries; the inline editor answers it as a conflict.
 export class StaleWriteError extends ApiError {
-    constructor(readonly currentUpdatedAt: Date) {
+    public constructor(public readonly currentUpdatedAt: Date) {
         super(409, 'File changed since it was loaded');
     }
 }

@@ -4,7 +4,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/component
 import { CHECKERBOARD_STYLE, cn } from '@workspace/ui/lib/utils';
 import { Ban } from 'lucide-react';
 import { useState } from 'react';
-import { isMixed, type MergedValue } from './merged-value';
+import type { MergedValue } from './merged-value';
+import { isMixed } from './merged-value';
 import { PropertyRow } from './properties-panel';
 
 type ColorButtonProps = {
@@ -14,18 +15,23 @@ type ColorButtonProps = {
     // thing keeping its element visible (an arrow's stroke) must not offer it.
     allowNone?: boolean;
     noneLabel?: string;
+    // A color whose default follows a palette (a chart series'): value is the color it draws in, the trigger
+    // says Automatic while it is the default, and an Automatic row puts a picked one back.
+    automatic?: { active: boolean; onReset: () => void };
 };
 
 // The one color control every panel row uses: a select-shaped trigger (swatch + hex, or None / —)
 // opening the shared picker, with the None swatch inside the same popover.
-function ColorButton({ value, onChange, allowNone, noneLabel = 'None' }: ColorButtonProps) {
+function ColorButton({ value, onChange, allowNone, noneLabel = 'None', automatic }: ColorButtonProps) {
     const [open, setOpen] = useState(false);
     const mixed = isMixed(value);
     // Unset and transparent are the same answer to "what paint?" — both read as the None swatch.
     const none = !mixed && (!value || isTransparentColor(value));
     const displayColor = mixed || none ? undefined : value;
+    // The picker's reset row picks ''.
     const pick = (color: string) => {
-        onChange(color);
+        if (color === '' && automatic) automatic.onReset();
+        else onChange(color);
         setOpen(false);
     };
 
@@ -40,7 +46,9 @@ function ColorButton({ value, onChange, allowNone, noneLabel = 'None' }: ColorBu
                         className="h-4 w-4 shrink-0 rounded-sm border border-border"
                         style={displayColor ? { backgroundColor: displayColor } : none ? CHECKERBOARD_STYLE : undefined}
                     />
-                    <span className="truncate text-muted-foreground">{mixed ? '—' : none ? noneLabel : value}</span>
+                    <span className="truncate text-muted-foreground">
+                        {mixed ? '—' : none ? noneLabel : automatic?.active ? 'Automatic' : value}
+                    </span>
                 </button>
             </PopoverTrigger>
             <PopoverContent side="left" align="start" className="w-auto">
@@ -59,9 +67,15 @@ function ColorButton({ value, onChange, allowNone, noneLabel = 'None' }: ColorBu
                             <span>{noneLabel}</span>
                         </button>
                     )}
-                    {/* No Reset row: a picked color is replaced by picking another, and where paint is
-                        optional the None swatch is the way back. */}
-                    <ColorPicker value={displayColor ?? ''} onChange={pick} showReset={false} />
+                    {/* Reset only to an automatic color: elsewhere a picked color is replaced by picking
+                        another, and where paint is optional the None swatch is the way back. An automatic
+                        color marks no swatch, so a click on the palette color it draws in is a visible pick. */}
+                    <ColorPicker
+                        value={automatic?.active ? '' : (displayColor ?? '')}
+                        onChange={pick}
+                        showReset={automatic !== undefined && !automatic.active}
+                        resetLabel="Automatic"
+                    />
                 </div>
             </PopoverContent>
         </Popover>

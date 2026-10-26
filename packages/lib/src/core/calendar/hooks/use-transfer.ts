@@ -1,4 +1,5 @@
-import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { calendarApi, getCalendarExportUrl, getCalendarImportUrl } from '@workspace/lib/api';
 import { parseOwnerId } from '@workspace/lib/types';
 import { ICS_MIME } from '@workspace/lib/types/drive';

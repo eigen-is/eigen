@@ -1,13 +1,28 @@
-import { BookUser, CalendarPlus, Download, Eye, FileText, FolderDown, MailPlus, Sheet } from 'lucide-react';
+import {
+    BookUser,
+    CalendarPlus,
+    Download,
+    Eye,
+    FileText,
+    FolderDown,
+    MailPlus,
+    Presentation,
+    Sheet,
+} from 'lucide-react';
 import { ICS_MAX_BYTES } from '../constants/calendar';
 import { VCARD_MAX_BYTES } from '../constants/contact';
 import { EML_MAX_BYTES } from '../constants/mail';
-import { isEmlFile, isFolderType, isIcsFile, isVCardFile } from '../types/drive';
-import type { FileAction, FileActionId, FileSubject } from '../types/file-subject';
+import type { ConvertTarget } from '../types/drive';
+import { isConvertSource, isEmlFile, isFolderType, isIcsFile, isVCardFile } from '../types/drive';
+import type { FileAction, FileActionId, FileSubject, SubjectInfo } from '../types/file-subject';
 import { subjectInfo } from './file-subject';
 
-// A convert writes the new document beside its source, so a read-only Drive subject offers nothing.
-const canConvert = (subject: FileSubject): boolean => !subject.readOnly;
+// Extension only, as the convert route refuses on the name (import-document.ts). A convert writes the new document
+// beside its source, so a read-only Drive subject offers nothing.
+const convertsTo =
+    (target: ConvertTarget) =>
+    (info: SubjectInfo, subject: FileSubject): boolean =>
+        !!info.downloadUrl && isConvertSource(info.name, target) && !subject.readOnly;
 
 // What can be done with a file, answered once for every surface; a predicate never asks which menu is drawing.
 export const FILE_ACTIONS: readonly FileAction[] = [
@@ -15,13 +30,15 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         id: 'quick-look',
         label: 'Quick preview',
         icon: Eye,
+        group: 'open',
         applies: (_info, subject) => !subject.drive || !isFolderType(subject.drive.type),
     },
-    { id: 'download', label: 'Download', icon: Download, applies: (info) => !!info.downloadUrl },
+    { id: 'download', label: 'Download', icon: Download, group: 'output', applies: (info) => !!info.downloadUrl },
     {
         id: 'save-to-drive',
         label: 'Save to Drive…',
         icon: FolderDown,
+        group: 'output',
         // A file already at a Drive location has Drive's own Copy to… instead.
         applies: (info, subject) => !!info.downloadUrl && (!subject.drive || !!subject.attachment),
     },
@@ -29,21 +46,28 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         id: 'convert-to-sheet',
         label: 'Convert to Sheet',
         icon: Sheet,
-        // Extension only: the convert route refuses on the name (import-document.ts).
-        applies: (info, subject) =>
-            !!info.downloadUrl && info.name.toLowerCase().endsWith('.xlsx') && canConvert(subject),
+        group: 'convert',
+        applies: convertsTo('eigensheets'),
     },
     {
         id: 'convert-to-document',
         label: 'Convert to Document',
         icon: FileText,
-        applies: (info, subject) =>
-            !!info.downloadUrl && info.name.toLowerCase().endsWith('.docx') && canConvert(subject),
+        group: 'convert',
+        applies: convertsTo('eigendoc'),
+    },
+    {
+        id: 'convert-to-slides',
+        label: 'Convert to Slides',
+        icon: Presentation,
+        group: 'convert',
+        applies: convertsTo('eigenslides'),
     },
     {
         id: 'import-contacts',
         label: 'Import to Contacts',
         icon: BookUser,
+        group: 'output',
         // Over the ceiling the import 413s, so offer nothing.
         applies: (info) => !!info.downloadUrl && isVCardFile(info.mimeType, info.name) && info.size <= VCARD_MAX_BYTES,
         guestDenied: true,
@@ -52,6 +76,7 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         id: 'import-mail',
         label: 'Import to Mail',
         icon: MailPlus,
+        group: 'output',
         applies: (info) => !!info.downloadUrl && isEmlFile(info.mimeType, info.name) && info.size <= EML_MAX_BYTES,
         guestDenied: true,
         mailOnly: true,
@@ -60,6 +85,7 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         id: 'import-calendar',
         label: 'Import to Calendar',
         icon: CalendarPlus,
+        group: 'output',
         applies: (info) => !!info.downloadUrl && isIcsFile(info.mimeType, info.name) && info.size <= ICS_MAX_BYTES,
         guestDenied: true,
     },

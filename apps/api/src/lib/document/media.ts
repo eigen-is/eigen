@@ -1,10 +1,10 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
-import type { TransformMedia } from './transform/protocol';
+import type { ExportMedia, TransformMedia } from './transform/protocol';
 
 // Media helpers for eigen documents, shared by the main-thread transform wrappers
 // and the Worker-side converters. This module must stay light: the modules the
-// transform Worker imports (preview/export renderers) import it, so a static edge
+// transform process imports (preview/export renderers) import it, so a static edge
 // from here into the preview cache would drag the whole screen-preview pipeline —
 // and the sheet engine behind it — into every document Worker.
 
@@ -12,6 +12,22 @@ export async function listDocumentMedia(mount: Mount, drivePath: DrivePath): Pro
     const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
     const children = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
     return new Map(children.map((file) => [file.name, file]));
+}
+
+// The media names a document read for an export holds: every document kind names a file in `media/` by a `mediaName`
+// field (docs/MEDIA-REFERENCES.md), wherever it sits in the tree.
+export function mediaNamesIn(tree: unknown): Set<string> {
+    const names = new Set<string>();
+    const stack = [tree];
+    while (stack.length > 0) {
+        const value = stack.pop();
+        if (!value || typeof value !== 'object') continue;
+        for (const [key, child] of Object.entries(value)) {
+            if (key === 'mediaName' && typeof child === 'string' && child) names.add(child);
+            else stack.push(child);
+        }
+    }
+    return names;
 }
 
 // Public-facing API URL for preview HTML embedded in exported documents. The frontend
@@ -41,18 +57,6 @@ export async function buildPreviewUrlMap(mount: Mount, drivePath: DrivePath): Pr
     );
 }
 
-// Splice a block right after the root `<svg …>` open tag (both svg font injectors use this).
-// Anchoring on the tag — not the document's first `>` — keeps an XML prolog, DOCTYPE, or comment
-// ahead of the root intact (an uploaded .svg may carry one; splicing before the root breaks it).
-// No open tag → the svg is returned untouched.
-export function spliceAfterSvgOpenTag(svg: string, block: string): string {
-    const start = svg.search(/<svg[\s>]/);
-    if (start === -1) return svg;
-    const end = svg.indexOf('>', start);
-    if (end === -1) return svg;
-    return svg.slice(0, end + 1) + block + svg.slice(end + 1);
-}
-
 // The Worker side of export media: the transferred buffers become the data: URIs the
 // export renderers embed.
 export function toDataUriMap(media: TransformMedia[]): Map<string, string> {
@@ -62,4 +66,11 @@ export function toDataUriMap(media: TransformMedia[]): Map<string, string> {
             `data:${item.contentType};base64,${Buffer.from(item.data).toString('base64')}`,
         ]),
     );
+}
+
+// SVG media arrives as the file's own bytes. The sanitizer loads only for one, so an xlsx export never evaluates jsdom.
+export async function sanitizeMedia(media: ExportMedia[]): Promise<ExportMedia[]> {
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { sanitizeExportMedia } = await import('../export/sanitize');
+    return sanitizeExportMedia(media);
 }

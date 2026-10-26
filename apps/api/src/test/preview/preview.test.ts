@@ -1,15 +1,25 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
 import { DRIVE_MIME_SLIDES, EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import type { DatabaseConfig, SchemaType } from '../../lib/core';
+import { ManagedDatabase } from '../../lib/core';
+import { documentTransformRunner } from '../../lib/document/transform/runner';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
 import { isExiftoolCandidate } from '../../lib/preview/exiftool-preview';
-import { EML_FORMAT, getTextPreview, ICS_FORMAT, TEXT_FORMAT, VCARD_FORMAT } from '../../lib/preview/preview-cache';
+import {
+    EML_FORMAT,
+    getTextPreview,
+    getVCardPreview,
+    ICS_FORMAT,
+    TEXT_FORMAT,
+    VCARD_FORMAT,
+} from '../../lib/preview/preview-cache';
 import { isVideoCandidate } from '../../lib/preview/video-preview';
 import { generateImagePreview, saveThumbnail } from '../../lib/shared/thumbnails';
 import {
@@ -522,6 +532,116 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         expect(served?.value.body).toContain('plain text pretending to be a deck');
         // And it is labelled as what it is: the deck mode would draw this body inside a slide frame.
         expect(served?.value.mode).toBe('plaintext');
+    });
+});
+
+// A job that ran out of time or memory will again for the same version, and each rerun holds the only transform slot
+// for its deadline: the version is remembered as failed and answers the 404 it answered the first time, until it changes.
+describe('a failed preview', () => {
+    const VCARD = 'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n';
+
+    async function vcardMount(name: string) {
+        const { mkdirSync } = await import('node:fs');
+        const tmpDir = mkdtempSync(`/tmp/eigen-${name}-`);
+        mkdirSync(tmpDir, { recursive: true });
+        const mount = new Mount(
+            'test-owner-id',
+            tmpDir,
+            createTestMountConfig(name, 'local-key'),
+            createGetLocalDatabase(tmpDir),
+        );
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+        const bytes = Buffer.from(VCARD);
+        const fileId = await mount.createFile(rootId, 'team.vcf', 'text/vcard', bytes.length, bytes);
+        return { mount, path: await mount.getActivePath(fileId) };
+    }
+
+    function failRuns(code: 'timeout' | 'out-of-memory' | 'crashed') {
+        return spyOn(documentTransformRunner, 'run').mockImplementation(async () => ({
+            ok: false as const,
+            error: { code, message: 'Document transform failed' },
+        }));
+    }
+
+    test.each(['timeout', 'out-of-memory'] as const)(
+        'one that hit %s is not run again until the file changes',
+        async (code) => {
+            const { mount, path } = await vcardMount(`failed-preview-${code}`);
+            const run = failRuns(code);
+            const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+            try {
+                const v1 = { ...path, updatedAt: new Date(1000) };
+                expect(await getVCardPreview(mount, v1)).toBeNull();
+                expect(await getVCardPreview(mount, v1)).toBeNull();
+                expect(run).toHaveBeenCalledTimes(1);
+
+                expect(await getVCardPreview(mount, { ...path, updatedAt: new Date(2000) })).toBeNull();
+                expect(run).toHaveBeenCalledTimes(2);
+            } finally {
+                errorSpy.mockRestore();
+                run.mockRestore();
+            }
+        },
+    );
+
+    // Host pressure passes and a crash gets fixed, so a failure is remembered for an hour, not for as long as the file.
+    test('a failure older than an hour runs again', async () => {
+        const { mount, path } = await vcardMount('failed-preview-expired');
+        const run = failRuns('timeout');
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            expect(await getVCardPreview(mount, path)).toBeNull();
+            const marker = readdirSync(mount.previewsDir).find((name) => name.endsWith('.failed'));
+            if (!marker) throw new Error('no marker');
+            const hourAgo = new Date(Date.now() - 61 * 60 * 1000);
+            utimesSync(join(mount.previewsDir, marker), hourAgo, hourAgo);
+            expect(await getVCardPreview(mount, path)).toBeNull();
+            expect(run).toHaveBeenCalledTimes(2);
+        } finally {
+            errorSpy.mockRestore();
+            run.mockRestore();
+        }
+    });
+
+    // A crash is a broken install or a failed spawn, not this version of the file.
+    test('one that crashed runs again on the next view', async () => {
+        const { mount, path } = await vcardMount('failed-preview-crashed');
+        const run = failRuns('crashed');
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            expect(await getVCardPreview(mount, path)).toBeNull();
+            expect(await getVCardPreview(mount, path)).toBeNull();
+            expect(run).toHaveBeenCalledTimes(2);
+        } finally {
+            errorSpy.mockRestore();
+            run.mockRestore();
+        }
+    });
+
+    test('a regeneration that timed out keeps serving the older body without running again', async () => {
+        const { mount, path } = await vcardMount('failed-preview-stale');
+        const v1 = await getVCardPreview(mount, { ...path, updatedAt: new Date(1000) });
+        expect(v1?.value.cards[0].contact.firstName).toBe('Jane');
+
+        const run = failRuns('timeout');
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const v2 = { ...path, updatedAt: new Date(2000) };
+            expect((await getVCardPreview(mount, v2))?.stale).toBe(true);
+            for (let i = 0; i < 40 && !readdirSync(mount.previewsDir).some((n) => n.endsWith('.failed')); i++) {
+                await Bun.sleep(25);
+            }
+            const again = await getVCardPreview(mount, v2);
+            expect(again?.stale).toBe(true);
+            expect(again?.value.cards[0].contact.firstName).toBe('Jane');
+            // A regeneration that request started would have reached the runner by now.
+            await Bun.sleep(100);
+            expect(run).toHaveBeenCalledTimes(1);
+        } finally {
+            errorSpy.mockRestore();
+            run.mockRestore();
+        }
     });
 });
 

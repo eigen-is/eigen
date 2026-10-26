@@ -1,3 +1,6 @@
+// Builds the drive events that tell open browser tabs a file or folder changed, so they refresh.
+// A change to a file's history goes to everyone the file is shared with, not only its owner.
+
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -15,10 +18,9 @@ export function buildDriveEvent(
     };
 }
 
-// Owner home + effective-member fan-out, mirroring chat's broadcastCommentIndexUpdated: unlike
-// Drive.emit (owner-only home.broadcast), this reaches shared members' homes so their open
-// Activity panels invalidate too. sendToHome self-gates 'broadcast' on atHome() — unloaded homes
-// cost nothing. Fire-and-forget by callers: recording must never fail or slow on the broadcast.
+// Reaches the owner and everyone the file is shared with, so their open Activity panels refresh too.
+// Only homes that are open receive it, so a closed home costs nothing. Callers don't wait for it:
+// recording a change must never fail or slow down because of the broadcast.
 export async function broadcastFileHistoryUpdated(
     ownerId: string,
     path: SSEventDrive['path'],

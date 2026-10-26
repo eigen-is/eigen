@@ -15,7 +15,14 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectSeparator,
+    SelectTrigger,
+    SelectValue,
+} from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
 import { ClipboardCopy, Link, Lock, Mail, Unlock, Users } from 'lucide-react';
@@ -222,7 +229,10 @@ export function DriveAccessListEdit({
                                     <SelectContent>
                                         <SelectItem value="editor">Editor</SelectItem>
                                         <SelectItem value="viewer">Viewer</SelectItem>
-                                        <SelectItem value="remove">Remove</SelectItem>
+                                        <SelectSeparator />
+                                        <SelectItem value="remove" variant="destructive">
+                                            Remove
+                                        </SelectItem>
                                     </SelectContent>
                                 </Select>
                             )}
@@ -321,7 +331,7 @@ export function DriveAccessListEdit({
                                     onClick={() => handleAddTeam(team.id)}
                                     disabled={directList.some((i: DirectAccessItem) => i.id === teamOwnerId(team.id))}
                                 >
-                                    <Users className="h-4 w-4 mr-2" />
+                                    <Users className="h-4 w-4" />
                                     {team.name}
                                 </DropdownMenuItem>
                             ))}

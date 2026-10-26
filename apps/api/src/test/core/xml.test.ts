@@ -1,11 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { XML } from 'bun';
+import type { XmlElement } from '../../lib/core';
 import {
     ApiError,
     parseXml,
     serializeXmlChildren,
     trimXmlSpace,
-    type XmlElement,
     XmlError,
     xmlAttr,
     xmlChild,
@@ -211,6 +211,19 @@ describe('parseXml errors', () => {
     test('nesting deeper than Bun allows is an XmlError', () => {
         const depth = bunMaxDepth() + 1;
         expectXmlError(`${'<a>'.repeat(depth)}${'</a>'.repeat(depth)}`);
+    });
+
+    // The input was fine; the memory ran out, which the transform process answers itself.
+    test('an out-of-memory is thrown as it is, not as malformed XML', () => {
+        const outOfMemory = new RangeError('Out of memory');
+        const parse = spyOn(XML, 'parse').mockImplementationOnce(() => {
+            throw outOfMemory;
+        });
+        try {
+            expect(() => parseXml('<a/>')).toThrow(outOfMemory);
+        } finally {
+            parse.mockRestore();
+        }
     });
 });
 

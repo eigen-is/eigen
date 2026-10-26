@@ -3,12 +3,6 @@ import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import type { Sheet } from '../types';
 
-export const defaultStyle = {
-    fillStyle: '#000000',
-    textBaseline: 'middle',
-    strokeStyle: 'rgba(0, 0, 0, 0.1)',
-} as const;
-
 // Overflow map: per-row map of cell-column → the source-cell that overflows
 // into this column (text wraps across adjacent empty cells).
 export type CellOverflowItem = { r: number; stc: number; edc: number };

@@ -122,15 +122,10 @@ seed() {
     DOC_ID=$(api POST "$drive/folder/$ROOT_ID/create/doc" '{"fileName":"Release doc"}' | first_id)
     collab_tab caddy wss://localhost "$DOC_ID" '' 'typed before the update' >/dev/null
     SHEET_ID=$(api POST "$drive/folder/$ROOT_ID/create/sheets" '{"fileName":"Release sheet"}' | first_id)
-    # A workbook of one cell, imported as an operator imports an xlsx into a sheet.
-    docker run --rm --entrypoint bun -e CELL="$SHEET_CELL" "$(api_image)" -e '
-        const ExcelJS = require("exceljs");
-        const workbook = new ExcelJS.Workbook();
-        workbook.addWorksheet("Sheet1").getCell("A1").value = process.env.CELL;
-        workbook.xlsx.writeBuffer().then((buffer) => process.stdout.write(Buffer.from(buffer)));
-    ' >"$SCRATCH/seed.xlsx"
-    curl -sk -b "$JAR" -o /dev/null -X POST -H 'Content-Type: application/octet-stream' -H 'Origin: https://localhost' \
-        --data-binary "@$SCRATCH/seed.xlsx" "$BASE$drive/file/$SHEET_ID/import" || true
+    # The seed workbook, imported as an operator imports an xlsx into a sheet.
+    curl -fsSk -b "$JAR" -o /dev/null -X POST -H 'Content-Type: application/octet-stream' -H 'Origin: https://localhost' \
+        --data-binary "@$SCRATCH/seed.xlsx" "$BASE$drive/file/$SHEET_ID/import?mode=replace" ||
+        fail "the seed workbook did not import into Release sheet"
     CAL_ID=$(api GET "/calendar/$ADMIN_ID/calendars" |
         grep -o '"id":"[^"]*","name":"[^"]*","color":"[^"]*","isDefault":true' | cut -d'"' -f4 || true)
     EVENT_ID=$(api POST "/calendar/$ADMIN_ID/calendars/$CAL_ID/events" \
@@ -267,6 +262,13 @@ build_release() {
         --build-arg "EIGEN_REGISTRY=$REGISTRY" -t "$REGISTRY/api:$1" "$SCRATCH/src-$1"
 }
 for version in "$PREVIOUS" "$NEW" "$BREAKING"; do build_release "$version"; done
+# The seed workbook, a cell of $SHEET_CELL, from this tree's xlsx writer in $NEW's image: the published release's image
+# has a writer of its own, or none at that path, and the host may have no Bun.
+docker run --rm --entrypoint bun -e CELL="$SHEET_CELL" "$REGISTRY/api:$NEW" -e '
+    const { writeXlsx } = require("./src/lib/export/sheets/xlsx/to-xlsx");
+    const sheets = [{ name: "Sheet1", celldata: [{ r: 0, c: 0, v: { v: process.env.CELL } }] }];
+    process.stdout.write(writeXlsx(sheets, { title: "", media: [], lost: () => {} }));
+' >"$SCRATCH/seed.xlsx" || abort "this tree's xlsx writer made no seed workbook"
 # One commit for all five, or the launcher refuses them as images of different builds.
 build -f "$SCRATCH/src-$NEW/docker/frontend/Dockerfile" --build-arg EIGEN_COMMIT=harness \
     -t "$REGISTRY/frontend:$NEW" "$SCRATCH/src-$NEW"

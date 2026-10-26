@@ -1,7 +1,9 @@
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { cloneDeep, omit, set } from 'es-toolkit/compat';
+import { cellValue, dropRuns } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { mergeBorder } from './cell';
 import { getcellrange } from './formula-exec';
@@ -57,8 +59,14 @@ export function saveHyperlink(
         });
         cell.fc = 'rgb(0, 0, 255)';
         cell.un = 1;
-        cell.v = linkText || linkAddress;
-        cell.m = linkText || linkAddress;
+        // The link's text written plain replaces the cell's value and a rich cell's runs; the text the card showed,
+        // left as it was, keeps the cell as it was, a number or runs included.
+        const text = linkText || linkAddress;
+        if (`${cellValue(cell) ?? ''}` !== text) {
+            dropRuns(cell);
+            cell.v = text;
+            cell.m = text;
+        }
         cell.hl = { r, c, id: ctx.currentSheetId };
         flowdata[r][c] = cell;
         ctx.linkCard = undefined;
@@ -75,7 +83,8 @@ export function removeHyperlink(ctx: Context, r: number, c: number) {
         set(ctx.sheets[sheetIndex], 'hyperlink', hyperlink);
         const cell = flowdata[r][c];
         if (cell != null) {
-            flowdata[r][c] = { v: cell.v, m: cell.m };
+            const { fc: _fc, un: _un, hl: _hl, ...rest } = cell;
+            flowdata[r][c] = rest;
         }
     }
     ctx.linkCard = undefined;
@@ -106,7 +115,7 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
             r,
             c,
             rc: `${r}_${c}`,
-            originText: cell?.v == null ? '' : `${cell.v}`,
+            originText: `${cellValue(cell) ?? ''}`,
             originType: link?.linkType || 'webpage',
             originAddress: link?.linkAddress || '',
             position: {

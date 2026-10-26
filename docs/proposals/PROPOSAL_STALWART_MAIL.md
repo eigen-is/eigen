@@ -131,8 +131,8 @@ Key facts that constrain any swap:
   itself. Whatever new implementation we add needs to fire the same events through the same
   `home.broadcast` channel so FE invalidation in
   `../../packages/lib/src/core/mail/sse-handlers.ts` keeps working.
-- **iMIP processing is wired to delivery.** `mailboxDeliver` in
-  `apps/api/src/lib/mail/mail.ts:37-58` re-parses the message after delivery to feed
+- **iMIP processing is wired to delivery.** `Mail.mailboxDeliver` in
+  `apps/api/src/lib/mail/mail-domain.ts` re-parses the message after delivery to feed
   `processInboundImip(home, parsed)`. That coupling has to move when delivery moves out of the
   API process.
 - **Outbound is nodemailer.** `../../apps/api/src/lib/core/mailer.ts` uses nodemailer with either
@@ -232,8 +232,8 @@ export interface MailBackend {
 }
 ```
 
-The `Maildir` class already implements every one of these methods — that's the existing surface
-of `apps/api/src/lib/mail/maildir.ts:68-808`. Lift the interface from the class, no behavior
+The `MaildirStore` class already implements every one of these methods — that's the existing surface
+of `MaildirStore` in `apps/api/src/lib/mail/maildir-store.ts`. Lift the interface from the class, no behavior
 change.
 
 Selection happens once, in `UserHome.init()`:
@@ -374,7 +374,7 @@ scope here.
 A2. Cross out A3 unless we're independently building OIDC.
 
 The protocol-auth path
-(`apps/api/src/lib/auth/protocol-auth.ts:32-50`) keeps its current shape; Dovecot's
+(`verifyProtocolAuth` in `apps/api/src/lib/auth/protocol-auth.ts`) keeps its current shape; Dovecot's
 `checkpassword` script goes away in Stalwart mode.
 
 ## Inbound mail

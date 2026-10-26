@@ -1,3 +1,7 @@
+// A team home holds what a team shares, such as its drives and its calendar. Nobody signs in as a
+// team: members reach it through their own access, and a notification to the team goes to them.
+// The team's admins add and change its drives here.
+
 import { randomUUID } from 'node:crypto';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -5,12 +9,13 @@ import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings'
 import { Calendar } from '../calendar/calendar';
 import { getTeamDataPath } from '../config/paths';
 import { getServerSettings, mapStorageType } from '../config/server-settings';
-import { ApiError, JsonStore, LocalFilesystem, PATHS } from '../core';
+import { ApiError, JsonStore, PATHS } from '../core';
 import { Drive } from '../drive';
 import { createMountConfig } from '../mount';
-import { checkS3Connection } from '../storage/s3-storage';
+import { checkS3Connection } from '../storage';
 import { getTeamMembers } from '../team';
-import { makeSyntheticUser, type User } from '../user';
+import type { User } from '../user';
+import { makeSyntheticUser } from '../user';
 import { Home } from './home';
 
 export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
@@ -22,35 +27,31 @@ export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
 }
 
 export class TeamHome extends Home {
-    public teamId: string;
-    public declare settings: JsonStore<TeamSettings>;
+    public readonly teamId: string;
+    declare public settings: JsonStore<TeamSettings>;
 
-    // Team homes have no SSE keep-alive pin (only an open collab socket's keepalive pins one), so they get a longer idle window.
+    // No event stream keeps a team home open, only an open document of the team does, so it gets a longer idle.
     protected override idleMs = Number(process.env['TEAM_HOME_IDLE_MS']) || 1000 * 60 * 30;
 
-    constructor(syntheticUser: User, cleanUp?: () => void) {
-        super(syntheticUser, cleanUp);
-
-        const parsed = parseOwnerId(syntheticUser.id);
-        this.teamId = parsed.id;
-        this.homeDir = getTeamDataPath(parsed.id);
-        this.fs = new LocalFilesystem(this.homeDir);
-
+    public constructor(syntheticUser: User, onClosed?: () => void) {
+        const teamId = parseOwnerId(syntheticUser.id).id;
+        super(syntheticUser, getTeamDataPath(teamId), onClosed);
+        this.teamId = teamId;
         this.settings = new JsonStore<TeamSettings>(this.fs, PATHS.SETTINGS, { calendar: { enabled: false } });
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
     }
 
-    override get calendar(): Calendar {
+    public override get calendar(): Calendar {
         this.touch();
         if (this.settings.get().calendar?.enabled === false) {
             throw new ApiError(404, 'Team calendar is disabled');
         }
-        return this._calendar;
+        return this._calendar!;
     }
 
     // A team home has no notification center, so a notification relayed to it goes to these members instead.
-    async membersToNotify(actorEmail?: string | null): Promise<User[]> {
+    public async membersToNotify(actorEmail?: string | null): Promise<User[]> {
         if (this.settings.get().notifyMembers === false) return [];
         const members = await getTeamMembers(this.teamId);
         return members
@@ -58,7 +59,7 @@ export class TeamHome extends Home {
             .filter((member) => member.email.toLowerCase() !== actorEmail?.toLowerCase());
     }
 
-    async addMount(input: {
+    public async addMount(input: {
         name: string;
         storageType?: MountSettings['storageType'];
         maxSizeMB?: number;
@@ -89,24 +90,27 @@ export class TeamHome extends Home {
         return { id: mountId, ...mountSettings };
     }
 
-    async updateMount(
+    public async updateMount(
         mountId: string,
         update: Partial<Pick<MountSettings, 'enabled' | 'maxSizeMB' | 'name' | 's3Config'>>,
     ): Promise<MountSettings> {
         const existing = this.settings.get().mounts?.[mountId];
         if (!existing) throw new ApiError(404, 'Mount not found');
 
-        // Same gate as addMount — a typo'd s3Config would tear down the working live backend and
-        // pile every write into the upload queue's retry loop against a dead destination.
+        // The same check as addMount. A mistyped s3Config would replace the working storage with a
+        // dead one, and every write would then pile up in the upload queue.
         if (existing.storageType === 's3' && update.s3Config) {
             const s3Result = await checkS3Connection(update.s3Config);
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
         }
 
-        const updated = { ...existing, ...update };
-        await this.settings.set({ mounts: { [mountId]: updated } });
-        // Persisting alone leaves the already-built Drive on a stale config until the Home is evicted;
-        // push the change onto the live mount so quota/name/enabled apply immediately.
+        // Only the changed fields are saved. The store merges them into what it holds at that moment,
+        // so a change saved by someone else during the check stays.
+        const saved = await this.settings.set({ mounts: { [mountId]: update } });
+        const updated = saved.mounts?.[mountId];
+        if (!updated) throw new ApiError(404, 'Mount not found');
+        // The Drive built its mounts from the settings it read at start, so the change goes to the
+        // live mount too. Otherwise a new quota, name or on/off would wait until the home reloads.
         await this.drive.updateMount(createMountConfig(mountId, updated), updated.enabled);
         return updated;
     }

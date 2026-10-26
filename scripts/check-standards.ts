@@ -233,6 +233,75 @@ const HIDDEN_BASE = /(?<![\w-])(?:invisible|hidden|opacity-0)(?![\w-])/;
 const HOVER_REVEAL =
     /(?<!pointer-fine:)\bgroup-hover:(visible|flex|grid|block|inline-flex|inline-block|opacity-\d+)(?![\w-])/g;
 
+// docs/LAYOUT.md § A row that deletes is red and last: a row that deletes, trashes or removes is the destructive
+// variant, red with its icon, never a plain row or one tinted by a class. A row is destructive when it draws a trash
+// icon or its label (JSX text or a string literal, read where stripNoise blanked it) says Delete, Remove or to trash. A
+// toggle's label, a ternary with one branch saying Remove and the other not ('Remove' : 'Add', say), names an
+// undo, not a deletion.
+const MENU_ROW = /<(DropdownMenuItem|SelectItem)\b/g;
+const TRASH_ICON = /<Trash2?\b/;
+const DESTRUCTIVE_LABEL = /\b(?:Delete|Remove)\b|\bto trash\b/;
+const DESTRUCTIVE_VARIANT = /\bvariant=(?:["']destructive["']|\{[^}]*destructive)/;
+const TERNARY_LABELS = /\?\s*(['"`])([^'"`\n]*)\1\s*:\s*(['"`])([^'"`\n]*)\3/g;
+
+// Where the opening tag that starts at `start` ends: the first `>` outside braces and quotes.
+function openingTagEnd(text: string, start: number): number {
+    let depth = 0;
+    let quote = '';
+    for (let i = start; i < text.length; i++) {
+        const char = text[i];
+        if (quote) {
+            if (char === quote) quote = '';
+        } else if (char === '"' || char === "'" || char === '`') quote = char;
+        else if (char === '{') depth++;
+        else if (char === '}') depth--;
+        else if (char === '>' && depth === 0) return i;
+    }
+    return text.length;
+}
+
+function plainDestructiveRows({ text, code }: SourceFile): number {
+    let hits = 0;
+    for (const match of text.matchAll(MENU_ROW)) {
+        const tagEnd = openingTagEnd(text, match.index);
+        const openingTag = text.slice(match.index, tagEnd + 1);
+        if (DESTRUCTIVE_VARIANT.test(openingTag)) continue;
+        if (/\btext-destructive\b/.test(openingTag)) {
+            hits++;
+            continue;
+        }
+        if (openingTag.endsWith('/>')) continue;
+        const close = text.indexOf(`</${match[1]}>`, tagEnd);
+        const end = close === -1 ? text.length : close;
+        const content = text
+            .slice(0, end)
+            .replaceAll(TERNARY_LABELS, (ternary, _q, yes: string, _q2, no: string) =>
+                DESTRUCTIVE_LABEL.test(yes) === DESTRUCTIVE_LABEL.test(no) ? ternary : ' '.repeat(ternary.length),
+            );
+        let literal = '';
+        for (let i = tagEnd + 1; i < end; i++) literal += code[i] === content[i] ? ' ' : content[i];
+        if (TRASH_ICON.test(code.slice(tagEnd + 1, end)) || DESTRUCTIVE_LABEL.test(literal)) hits++;
+    }
+    return hits;
+}
+
+// docs/LAYOUT.md § A choice is a submenu with a check: a menu row shows a current option or an on state with the check
+// ChoiceMenuItems and DropdownMenuCheckboxItem draw, never a Check it draws itself when a condition holds. The color
+// picker's swatch grid marks its color inside the swatch, as Google's palette does.
+const DRAWN_CHECK = /(?:&&|\?)\s*\(?\s*<Check(?:Icon)?\b/;
+const SWATCH_GRID = 'packages/ui/src/components/media/color-picker-menu-item.tsx';
+
+function handDrawnMenuChecks({ path, code }: SourceFile): number {
+    if (path === SWATCH_GRID) return 0;
+    let hits = 0;
+    for (const match of code.matchAll(/<DropdownMenuItem\b/g)) {
+        const tagEnd = openingTagEnd(code, match.index);
+        const close = code.indexOf('</DropdownMenuItem>', tagEnd);
+        if (DRAWN_CHECK.test(code.slice(tagEnd + 1, close === -1 ? code.length : close))) hits++;
+    }
+    return hits;
+}
+
 type SourceFile = {
     path: string;
     // Raw file text — use it for anything that lives in a comment, a string, or a class name.
@@ -351,6 +420,18 @@ const METRICS: Metric[] = [
             }
             return hits;
         },
+    },
+    {
+        id: 'plain-destructive-rows',
+        label: 'Delete or remove menu rows without the destructive variant',
+        hardZero: true,
+        count: (file) => (file.path.endsWith('.tsx') ? plainDestructiveRows(file) : 0),
+    },
+    {
+        id: 'hand-drawn-menu-checks',
+        label: 'Menu rows drawing their own check',
+        hardZero: true,
+        count: (file) => (file.path.endsWith('.tsx') ? handDrawnMenuChecks(file) : 0),
     },
     {
         id: 'hover-without-touch',

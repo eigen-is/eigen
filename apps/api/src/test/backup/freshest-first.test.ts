@@ -12,12 +12,12 @@ import type { Mount } from '../../lib/mount/mount';
 import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { FakeS3Server } from '../fake-s3-server';
+import type { FaultStorage } from '../fault-storage-helpers';
 import {
     countBackingRows,
     createHomeFaultMount,
     createS3MountConfig,
     FaultMount,
-    type FaultStorage,
     provisionDoc,
     registerFaultMount,
     SETTLE_BOUND_MS,
@@ -167,7 +167,7 @@ beforeAll(async () => {
     );
     await fullMount.trashPath(trashedFileId);
 
-    await fullMount.drainPendingUploads({ flushNow: true });
+    await fullMount.uploadQueue?.drain({ flushNow: true });
 });
 
 // Injections are per-test: a parked write left behind would strand the NEXT test's upload.
@@ -175,7 +175,7 @@ afterEach(async () => {
     staleFault.parkWrites = false;
     staleFault.releaseHungWrites();
     await staleFault.landAllRemaining();
-    await staleMount.drainPendingUploads({ flushNow: true });
+    await staleMount.uploadQueue?.drain({ flushNow: true });
 });
 
 afterAll(async () => {
@@ -192,7 +192,7 @@ describe('Backup freshest-first on an s3 mount', () => {
         const managed = await staleMount.createDatabase(MARKER_DB_CONFIG, dataDbId);
         managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'stored' }).run();
         await managed.flush();
-        await staleMount.drainPendingUploads({ flushNow: true });
+        await staleMount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(staleMount, dataDbId, backingRoot)).toBe(1);
 
         // The outage: the second commit is staged and enqueued, and its PUT never lands. Closing
@@ -229,7 +229,7 @@ describe('Backup freshest-first on an s3 mount', () => {
         const managed = await staleMount.createDatabase(MARKER_DB_CONFIG, dataDbId);
         managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'acked' }).run();
         await managed.flush();
-        await staleMount.drainPendingUploads({ flushNow: true });
+        await staleMount.uploadQueue?.drain({ flushNow: true });
 
         // Three rungs, each one commit apart: the stored object has 'acked', the parked staged copy
         // adds 'staged', and 'live' only ever exists in the open handle. Nothing flushes it, so a

@@ -43,7 +43,7 @@ export class ContentReindexQueue {
     // Deadline on close()'s drain await (see REINDEX_CLOSE_TIMEOUT_MS). A field so tests can shrink it.
     private closeTimeoutMs = REINDEX_CLOSE_TIMEOUT_MS;
 
-    constructor(deps: { mount: Mount; extract: ContentExtractor; label: string }) {
+    public constructor(deps: { mount: Mount; extract: ContentExtractor; label: string }) {
         this.mount = deps.mount;
         this.extract = deps.extract;
         this.label = deps.label;
@@ -53,7 +53,7 @@ export class ContentReindexQueue {
     // CREATED by this write (no extract can be in flight for a fresh id, so ordering
     // against the insert doesn't matter). Rows that already exist must split the two
     // calls around their DB write instead — see bumpGeneration.
-    markDirty(pathId: string): void {
+    public markDirty(pathId: string): void {
         this.bumpGeneration(pathId);
         this.kick();
     }
@@ -63,18 +63,18 @@ export class ContentReindexQueue {
     // generation mismatch and keeps the bit — bumped after, it would compare equal and
     // clear the newer write. kick() stays after the write, because kicked early a
     // drain can run before the bit lands, find nothing, and nothing re-drives it.
-    bumpGeneration(pathId: string): void {
+    public bumpGeneration(pathId: string): void {
         this.generations.set(pathId, (this.generations.get(pathId) ?? 0) + 1);
     }
 
     // A dirty bit was just set (or persisted ones await on open) — drain soon. Coalesces.
-    kick(): void {
+    public kick(): void {
         if (this.closing) return;
         this.drain().catch((err) => console.error(`[content-reindex] drain failed for ${this.label}:`, err));
     }
 
     // Drain due dirty rows now and await completion. One loop at a time; concurrent calls coalesce.
-    drain(): Promise<void> {
+    public drain(): Promise<void> {
         if (this.draining) return this.draining;
         this.draining = this.runDrainLoop().finally(() => {
             this.draining = null;
@@ -88,7 +88,7 @@ export class ContentReindexQueue {
     // after the sweep leaks. Only the current extract is drained: leftover dirty rows replay on
     // the next mount open (the bit is the durable queue). The await is bounded by
     // REINDEX_CLOSE_TIMEOUT_MS: past it teardown proceeds and a hung extract leaks.
-    async close(): Promise<void> {
+    public async close(): Promise<void> {
         this.closing = true;
         if (this.retryTimer) {
             clearTimeout(this.retryTimer);

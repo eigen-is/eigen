@@ -1,11 +1,5 @@
-import {
-    type InfiniteData,
-    type QueryClient,
-    useInfiniteQuery,
-    useMutation,
-    useQuery,
-    useQueryClient,
-} from '@tanstack/react-query';
+import type { InfiniteData, QueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMailComposeUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';

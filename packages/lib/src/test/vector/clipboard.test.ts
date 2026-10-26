@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import * as Y from 'yjs';
 import type { EigenClipboardElementsItem } from '../../types/clipboard';
 import {
     buildElementsClipboardItem,
@@ -9,8 +10,10 @@ import {
 } from '../../vector/clipboard';
 import { solidFill } from '../../vector/fill';
 import { DUPLICATE_OFFSET } from '../../vector/geometry';
+import { VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { DEFAULT_RICHTEXT_PROPS } from '../../vector/types';
-import { arrow, ellipse, image, linear, richtext, shape } from './element-factories';
+import { writeElementInDoc } from '../../vector/write-vector';
+import { arrow, chart, ellipse, image, linear, richtext, shape } from './element-factories';
 
 describe('the elements clipboard item', () => {
     test('round-trips every kind through the reader', () => {
@@ -26,6 +29,20 @@ describe('the elements clipboard item', () => {
         ];
         const item = buildElementsClipboardItem(elements, '');
         expect(readElementsClipboardItem([item as EigenClipboardElementsItem])?.elements).toEqual(elements);
+    });
+
+    test('a chart carries a part a newer build added and a part that does not parse, through the paste write too', () => {
+        const el = Object.assign(chart({ id: 'c', specTitle: '{"text":' }), { specFuture: '{"later":true}' });
+        const item = buildElementsClipboardItem([el], '');
+        const [read] = readElementsClipboardItem([item as EigenClipboardElementsItem])?.elements ?? [];
+        expect(read).toEqual(el);
+        const doc = new Y.Doc();
+        const id = writeElementInDoc(doc, read, 'a0', VECTOR_STYLE_DEFAULTS);
+        const stored = doc.getMap('elements').get(id);
+        expect(stored instanceof Y.Map && [stored.get('specFuture'), stored.get('specTitle')]).toEqual([
+            '{"later":true}',
+            '{"text":',
+        ]);
     });
 
     test('rich text carries its own colour, html and padding', () => {

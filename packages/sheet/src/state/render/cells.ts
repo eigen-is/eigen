@@ -8,10 +8,11 @@ import { INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
 import { cellIndicatorRect } from '../modules/cell-glyph';
 import { checkCF } from '../modules/condition-format';
+import type { CellGlyphRect } from '../modules/data-verification';
 import {
-    type CellGlyphRect,
     CHECKBOX_LABEL_GAP,
     cellTextBox,
+    checkboxAlign,
     checkboxRect,
     dropdownChevronRect,
     isCheckboxChecked,
@@ -21,13 +22,13 @@ import {
 import { getCellTextInfo } from '../modules/text';
 import type { Rect } from '../types';
 import { cellOverflowRender, cellTextRender } from './cell-text';
+import { canvasColors } from './colors';
 import { drawDataBar } from './data-bar';
 import { BORDER_FIX, HALF_PIXEL } from './geometry';
 import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
-import { defaultStyle } from './types';
 
-// Data-verification tick box. Hardcoded light like every other canvas color —
+// Data-verification tick box. Hardcoded light like the cell backgrounds —
 // the workbook surface is pinned light via `.eigen-paper` (RENDERING.md
 // § Theming) — and gray rather than black, the way Google draws the box.
 const CHECKBOX_STROKE = '#5f6368';
@@ -110,7 +111,7 @@ function strokeGridLine(renderCtx: CanvasRenderingContext2D, x1: number, y1: num
     renderCtx.moveTo(x1, y1);
     renderCtx.lineTo(x2, y2);
     renderCtx.lineWidth = 1;
-    renderCtx.strokeStyle = defaultStyle.strokeStyle;
+    renderCtx.strokeStyle = canvasColors(renderCtx.canvas).gridLine;
     renderCtx.stroke();
     renderCtx.closePath();
 }
@@ -192,9 +193,12 @@ export function nullCellRender(
         // An empty cell inside a tick-box range still shows an unchecked box, so the
         // range reads as one uniform column.
         if (rule.type === 'checkbox') {
-            const horizonAlign = Number(normalizedAttr(flowdata, r, c, 'ht'));
             const verticalAlign = Number(normalizedAttr(flowdata, r, c, 'vt'));
-            drawTickBox(renderCtx, checkboxRect(box, horizonAlign, verticalAlign), false);
+            drawTickBox(
+                renderCtx,
+                checkboxRect(box, checkboxAlign(flowdata?.[r]?.[c], rule, null), verticalAlign),
+                false,
+            );
         } else if (rule.type === 'dropdown') {
             renderDropdownChevron(pass, r, c, box);
         }
@@ -284,7 +288,6 @@ export function cellRender(
     const space_width = 2;
     const space_height = 2;
 
-    const horizonAlign = Number(normalizedAttr(flowdata, r, c, 'ht'));
     const verticalAlign = Number(normalizedAttr(flowdata, r, c, 'vt'));
 
     const checksCF = checkCF(r, c, cfCompute);
@@ -356,7 +359,8 @@ export function cellRender(
     let drawRightGridLine = true;
     const overflowInfo = overflowColIn(cellOverflowMap, r, c, colEnd);
 
-    if (cell?.tb === '1' && overflowInfo.colIn) {
+    // Only a spilling source has a value inside its own span.
+    if (overflowInfo.colIn) {
         // Last column of overflow range: render overflow cell content
         if (
             overflowInfo.colLast &&
@@ -377,7 +381,7 @@ export function cellRender(
         renderCtx.rect(box.left, box.top, box.width, box.height);
         renderCtx.clip();
 
-        const rect = checkboxRect(box, horizonAlign, verticalAlign);
+        const rect = checkboxRect(box, checkboxAlign(cell, rule, value), verticalAlign);
         drawTickBox(renderCtx, rect, isCheckboxChecked(rule, value));
 
         if (showsCheckboxLabel(rule, value)) {

@@ -1,13 +1,14 @@
 import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { VECTOR_STYLE_DEFAULTS, type VectorElement } from '@workspace/lib/vector';
+import type { VectorElement } from '@workspace/lib/vector';
+import { VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import { useLayout } from '@workspace/ui';
 import { ColorRow, PropertySection, useAspectLock } from '@workspace/ui/components/properties-panel';
+import type { CanvasHandle } from '@workspace/ui/components/vector';
 import {
     CanvasDocumentShell,
     CanvasEditor,
-    type CanvasHandle,
     CanvasPropertiesPanel,
     CanvasToolbar,
     useCanvasCommentHost,
@@ -139,6 +140,7 @@ export function VectorEditor({
                         toolLocked={toolLocked}
                         setToolLocked={setToolLocked}
                         onInsertImage={insertImage}
+                        canvasRef={canvasRef}
                         onAccessDialogOpen={onAccessDialogOpen}
                         createLabel="New vector"
                         createIcon={Diamond}
@@ -155,6 +157,9 @@ export function VectorEditor({
                         elements={doc.elements}
                         selectedElements={selectedElements}
                         updateElements={doc.updateElements}
+                        reorderElements={doc.reorderElements}
+                        replaceElement={doc.replaceElement}
+                        setSelectedIds={setSelectedIds}
                         undoManager={doc.undoManager}
                         aspectLocked={aspectLocked}
                         onAspectLockChange={setAspectLocked}
@@ -183,6 +188,7 @@ export function VectorEditor({
                         canEdit={canEdit}
                         ownerId={ownerId}
                         mountId={path.mountId}
+                        fileName={path.name}
                         tool={tool}
                         setTool={setTool}
                         toolLocked={toolLocked}

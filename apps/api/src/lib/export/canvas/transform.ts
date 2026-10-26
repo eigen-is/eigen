@@ -1,86 +1,85 @@
-import { FRAME_WIDTH, type MediaResolver, readVectorFromDoc, round } from '@workspace/lib/vector';
-// CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
+// The standalone document for pages of compositor layers, such as a deck's HTML and PDF and a drawing's PDF, so they
+// share one @page rule, one font block and one reset. Also a deck's HTML and PDF export, one page per frame. Runs in
+// the transform process, so it reaches no Mount and no preview cache.
+
+import { ptToPx } from '@workspace/lib/docs/eigendoc';
+import type { MediaResolver } from '@workspace/lib/vector';
+import { readVectorFromDoc, round, slidePxToPt } from '@workspace/lib/vector';
 import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
-import {
-    type DocumentExportFormat,
-    type HtmlExportMode,
-    htmlExportMode,
-    type TransformMedia,
-    type TransformWarning,
-    toTransferableText,
+import type {
+    DocumentExportFormat,
+    ExportMediaLoader,
+    ExportWorkerResult,
+    TransformWarning,
 } from '../../document/transform/protocol';
+import { htmlExportMode, toTransferableText } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
-import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';
+import type { CanvasPage } from './render';
+import { framePages, renderFittedPage, renderPrintPage, sceneMediaNames } from './render';
 
-// Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
-// PDF all leave through here, so there is one @page rule, one font block and one reset instead of a
-// copy per document type. Runs inside the transform Worker (worker.ts owns execution; the main-thread
-// orchestration lives in export-document.ts): no Mount, no preview cache.
-//
-// 16:9 landscape page: 254mm x 142.875mm ~ 960 x 540 px at 96dpi. A frame is 1920x1080, so a deck
-// prints at scale 0.5 — a @page of 1920px would be a 20-inch sheet.
-const DECK_PAGE_WIDTH = 960;
-const DECK_SCALE = DECK_PAGE_WIDTH / FRAME_WIDTH;
+// A screen document scales its pages; a PDF document has no scale to take, because it lays each page out
+// at 1:1 and htmlToPdf's zoom scales it onto the sheet.
+type CanvasDocumentOptions = { title: string; pages: CanvasPage[]; resolveMedia?: MediaResolver } & (
+    | { mode: 'screen'; scale: number }
+    | { mode: 'pdf' }
+);
 
-export function canvasHtmlDocument(opts: {
-    title: string;
-    pages: CanvasPage[];
-    scale: number;
-    mode: HtmlExportMode;
-    resolveMedia?: MediaResolver;
-}): string {
-    const { title, pages, scale, mode, resolveMedia } = opts;
-    // The screen document wraps each fixed-size page in the shared fit box, so a downloaded deck reads
-    // on a phone; the layers inside stay in scene pixels because that is what packages/lib authors.
-    // The PDF document has no viewport to be responsive to — WeasyPrint gives each page a sheet — so
-    // its pages stay unscaled and unwrapped.
+export function canvasHtmlDocument(opts: CanvasDocumentOptions): string {
+    const { title, pages, resolveMedia } = opts;
+    // The screen document wraps each page in the shared fit box, so a downloaded deck reads on a phone. The layers
+    // inside stay in scene pixels. The PDF has no viewport, as WeasyPrint gives each page a sheet, so its pages stay
+    // unwrapped, laid out where they print.
+    const scale = opts.mode === 'pdf' ? 1 : opts.scale;
     const rendered = pages.map((page) =>
-        mode === 'pdf' ? renderCanvasPage(page, scale, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
+        opts.mode === 'pdf' ? renderPrintPage(page, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
     );
-    // Every page in a document is the same size (frames are constant; a drawing has one page), and it
-    // is rounded exactly as renderCanvasPage rounds the page box — a sheet a fraction narrower than
-    // its content is an extra blank page in WeasyPrint. Callers guarantee at least one page.
+    // Every page in a document is the same size (a deck has one slide size; a drawing has one page), and it
+    // is rounded exactly as the page box is — a sheet a fraction narrower than its content is an extra
+    // blank page in WeasyPrint. Callers guarantee at least one page.
     const width = round(pages[0].width * scale);
     const height = round(pages[0].height * scale);
     // A rich-text box's raw HTML was filtered at the scene; the builder sanitizes the assembled body. No ADD_TAGS: the
     // compositor emits ordinary HTML, never a foreignObject.
     const body = rendered.join('');
-    const css = mode === 'pdf' ? pdfCss(width, height) : screenCss(width);
+    const css = opts.mode === 'pdf' ? pdfCss(width, height) : screenCss(width);
     return exportHtmlDocument({
         title,
         css: `${SHARED_CSS}${css}${canvasTextCSSRaw}`,
-        body: mode === 'pdf' ? body : `<div class="deck">${body}</div>`,
+        body: opts.mode === 'pdf' ? body : `<div class="deck">${body}</div>`,
         viewport: true,
     });
 }
 
-// Materialized doc + prepared media → export bytes for a deck: one page per frame.
-export function renderEigenslidesExport(
+// Materialized doc + prepared media → a deck's HTML or PDF document: one page per frame.
+export async function renderEigenslidesHtml(
     doc: Y.Doc,
     format: DocumentExportFormat,
     title: string,
-    media: TransformMedia[],
-): { data: ArrayBuffer; warnings: TransformWarning[] } {
-    const dataUriMap = toDataUriMap(media);
-    const resolveMedia: MediaResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
+    loadMedia: ExportMediaLoader,
+): Promise<ExportWorkerResult & { warnings: TransformWarning[] }> {
     // Rich text is filtered per element before the compositor lays it out, so a <style> block in a
     // text box cannot reach the document — which carries the generated @font-face rules of its own.
-    const pages = framePages(sanitizeSceneHtml(readVectorFromDoc(doc)), resolveMedia);
+    const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
+    const dataUriMap = toDataUriMap(await loadMedia(sceneMediaNames(scene)));
+    const resolveMedia: MediaResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
+    const pages = framePages(scene, resolveMedia);
     // Nothing to print, and nothing to size a page from.
     if (pages.length === 0) throw new ApiError(400, 'The deck is empty');
-    const html = canvasHtmlDocument({
-        title,
-        pages,
-        scale: DECK_SCALE,
-        mode: htmlExportMode(format),
-        resolveMedia,
-    });
+    // A deck page is the deck's own width: a new deck's 960 pt is 1280 px at 96 dpi, so its 1920 px frame shows and
+    // prints at 2/3. The screen document scales its pages by it. The PDF document lays them out at 1:1, and the scale
+    // is the zoom htmlToPdf hands WeasyPrint.
+    const scale = ptToPx(slidePxToPt(1, scene.meta.slideWidth));
+    if (htmlExportMode(format) === 'pdf') {
+        const html = canvasHtmlDocument({ title, pages, mode: 'pdf', resolveMedia });
+        return { data: toTransferableText(html), zoom: scale, warnings: [] };
+    }
+    const html = canvasHtmlDocument({ title, pages, mode: 'screen', scale, resolveMedia });
     return { data: toTransferableText(html), warnings: [] };
 }
 
@@ -92,34 +91,29 @@ img { display: block; max-width: 100%; }
 svg { display: block; }
 `;
 
-// A page column, centered, with print rules — the deck's HTML download. The `.page-fit` rules mirror
-// packages/ui/src/styles/globals.css: a standalone document cannot import the app stylesheet, and
-// renderFittedPage's custom properties are what keep the two from drifting into different boxes.
-// `100cqw / <n>px` is a length over a length, i.e. the plain number `scale()` wants — CSS Values 4,
-// so the named viewport ladder is declared FIRST and a browser that cannot parse the division simply
-// keeps it.
+// The viewport widths of the fit box's fallback ladder, for a browser that cannot divide `100cqw` by a length.
 const FALLBACK_BREAKPOINTS = [960, 768, 640, 480, 360];
 
 // The narrowest viewport the ladder serves. The bottom step has no lower breakpoint — it applies all
 // the way down — so this is the width it must fit, or a phone crops the page it was meant to save.
 const NARROWEST_VIEWPORT = 320;
 
-// Body padding is 2rem a side, so a page gets the viewport minus 64px. A step must be sized for the
-// NARROW end of its range — `max-width: 960px` still applies at 769px, so scaling it from 960 would
-// clip — and rounded DOWN, so a page under-scales slightly rather than overflowing.
-function floor3(value: number): number {
-    return Math.floor(value * 1000) / 1000;
-}
-
+// The body's padding is 2rem a side, so a page gets the viewport less 64px. A step is sized for the narrow end of its
+// range, as `max-width: 960px` still applies at 769px, and rounded down, so a page scales a little small rather than
+// overflowing.
 function fallbackLadder(width: number): string {
     return FALLBACK_BREAKPOINTS.map((breakpoint, i) => {
         const narrowest = (FALLBACK_BREAKPOINTS[i + 1] ?? NARROWEST_VIEWPORT - 1) + 1;
+        const scale = Math.floor((Math.min(narrowest - 64, width) / width) * 1000) / 1000;
         return `@media (max-width: ${breakpoint}px) {
-    .page-fit > .canvas-page { transform: scale(${floor3(Math.min(narrowest - 64, width) / width)}); }
+    .page-fit > .canvas-page { transform: scale(${scale}); }
 }`;
     }).join('\n');
 }
 
+// A page column, centered, with print rules: the deck's HTML download. The `.page-fit` rules mirror the app's, which a
+// standalone document cannot import, and renderFittedPage's custom properties keep the two boxes alike. The ladder
+// comes first, so a browser that cannot read the `100cqw / <n>px` division after it keeps the ladder's scale.
 function screenCss(width: number): string {
     return `
 body {

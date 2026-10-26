@@ -1,16 +1,13 @@
+import { cellsToTsv } from '@workspace/lib/clipboard';
 import { escapeHtml } from '@workspace/lib/html';
-import {
-    borderSidesToCss,
-    type CellBorderSides,
-    type ConditionalFormatRule,
-    type DataVerificationRule,
-    mergedBorderSides,
-} from '@workspace/lib/sheets';
+import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import { borderSidesToCss, mergedBorderSides } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
-import { numberDisplay } from '../../engine/format';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import { cellDisplay, numberDisplay, numberText } from '../../engine/format';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
@@ -302,12 +299,12 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
             mth = minh + (th - 1) * copyh;
             mtc = minc + (tc - 1) * copyc;
 
-            maxrowCache = minh + th * copyh > rowMaxLength ? rowMaxLength : minh + th * copyh;
+            maxrowCache = Math.min(minh + th * copyh, rowMaxLength);
             if (maxrowCache > maxh + 1) {
                 maxrowCache = maxh + 1;
             }
 
-            maxcellCahe = minc + tc * copyc > cellMaxLength ? cellMaxLength : minc + tc * copyc;
+            maxcellCahe = Math.min(minc + tc * copyc, cellMaxLength);
             if (maxcellCahe > maxc + 1) {
                 maxcellCahe = maxc + 1;
             }
@@ -1197,12 +1194,18 @@ export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
 // General cuts a number to 11 characters; the clipboard carries Excel's 15 significant digits instead.
 export function copiedNumberText(cell: Cell): string | undefined {
     if (typeof cell.v !== 'number' || (cell.ct?.fa ?? 'General') !== 'General') return undefined;
-    return String(Number(cell.v.toPrecision(15)));
+    return numberText(cell.v);
 }
 
-export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) {
+// The range as the clipboard carries it: an HTML table with the cells' styles, the display text as TSV, and
+// the same text unquoted for the Eigen text item, which a consumer reads as text rather than as TSV.
+export function rangeValueToClipboard(
+    ctx: Context,
+    sheetId: string,
+    ranges?: Range,
+): { html: string; text: string; cellText: string } | null {
     const idx = getSheetIndex(ctx, sheetId);
-    if (idx == null) return '';
+    if (idx == null) return null;
     const sheet = ctx.sheets[idx];
 
     const rowIndexArr: number[] = [];
@@ -1243,6 +1246,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
     const borderInfoCompute = mergedBorderSides(sheet.config?.borderInfo, sheet.config?.merge, rect);
 
     let cpdata = '';
+    const text: string[][] = [];
     const d = sheet.data;
     if (!d) return null;
 
@@ -1255,6 +1259,8 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         const r = rowIndexArr[i];
 
         cpdata += '<tr>';
+        const textRow: string[] = [];
+        text.push(textRow);
 
         for (let j = 0; j < colIndexArr.length; j += 1) {
             const c = colIndexArr[j];
@@ -1307,7 +1313,10 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                 style += escapeHtml(styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute)));
 
                 if (cell.mc) {
-                    if (!('rs' in cell.mc)) continue;
+                    if (!('rs' in cell.mc)) {
+                        textRow.push('');
+                        continue;
+                    }
                     span = `rowspan="${cell.mc.rs}" colspan="${cell.mc.cs}"`;
                 }
                 const cellBorder = borderInfoCompute[`${r}_${c}`];
@@ -1323,6 +1332,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                     c_value = '';
                 }
 
+                textRow.push(String(c_value));
                 column += escapeHtml(String(c_value));
             } else {
                 let style = '';
@@ -1351,7 +1361,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                 }
 
                 column = replaceHtml(column, { style, span: '' });
-                column += '';
+                textRow.push('');
             }
 
             column += '</td>';
@@ -1361,7 +1371,11 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         cpdata += '</tr>';
     }
 
-    return `<table data-type="${COPY_ACTION_TABLE_MARKER}">${colgroup}${cpdata}</table>`;
+    return {
+        html: `<table data-type="${COPY_ACTION_TABLE_MARKER}">${colgroup}${cpdata}</table>`,
+        text: cellsToTsv(text),
+        cellText: text.map((row) => row.join('\t')).join('\n'),
+    };
 }
 
 export function copy(ctx: Context) {
@@ -1419,11 +1433,11 @@ export function copy(ctx: Context) {
         HasMC,
     };
 
-    const cpdata = rangeValueToHtml(ctx, ctx.currentSheetId, ctx.selections);
+    const cpdata = rangeValueToClipboard(ctx, ctx.currentSheetId, ctx.selections);
 
     if (cpdata) {
         ctx.iscopyself = true;
-        setPendingCopy(cpdata);
+        setPendingCopy(cpdata.html, cpdata.text, cpdata.cellText);
     }
 }
 
@@ -1558,11 +1572,11 @@ export function calcSelectionInfo(ctx: Context) {
                 if (r >= data.length || c >= data[0].length) break;
                 const cell = data![r][c];
                 const ct = cell?.ct?.t as string;
-                const value = cell?.m as string;
+                const value = cellDisplay(cell);
                 // Numeric cells keep the raw number in v; m is the formatted display
                 // string (currency symbols, separators) that parseFloat cannot read.
                 // A nil v (empty cell formatted as numeric) must not become Number(null) = 0
-                const valueNumber = ct === 'n' ? Number(cell?.v ?? Number.NaN) : parseFloat(value);
+                const valueNumber = ct === 'n' ? Number(cell?.v ?? Number.NaN) : parseFloat(String(value));
                 if ((ct === 'n' || ct === 'g') && !Number.isNaN(valueNumber)) {
                     count += 1;
                     sum += valueNumber;

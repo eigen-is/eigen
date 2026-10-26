@@ -107,13 +107,13 @@ A failed upload backs off with full jitter, capped (`uploadBackoffMs`), and the 
 ## Idle teardown leaves the queue, shutdown drains it
 
 - **Idle teardown** closes the queue. Its rows and staged copies replay on the next open.
-- **Process shutdown**: `server.ts` sets a deadline (`SHUTDOWN_DRAIN_BUDGET_MS`, 20 s), awaits `drainACLFanOuts()`, since an in-flight fan-out reopens recipient homes, and then runs `shutdownAllHomes`. Each mount flushes its queue after its final close-time enqueues and stops waiting at the deadline, even with a PUT or a semaphore slot stalled. Then it closes the queue: no PUT starts after that, and one still in flight leaves its row. Anything undrained replays on boot.
+- **Process shutdown**: `server.ts` first waits for the queued ACL fan-outs and every other delivery into another home, since a delivery reopens its recipient's home (`drainDeliveriesWithin`). That wait gives up after `SHUTDOWN_DELIVERY_BOUND_MS` (10 s) and logs what is left, so a delivery stuck on a stalled bucket can't hang the shutdown. Then it sets a deadline (`SHUTDOWN_DRAIN_BUDGET_MS`, 20 s) and runs `shutdownAllHomes`. Each mount flushes its queue after its final close-time enqueues and stops waiting at the deadline, even with a PUT or a semaphore slot stalled. Then it closes the queue: no PUT starts after that, and one still in flight leaves its row. Anything undrained replays on boot.
 
-The budget covers the whole process. It starts after the transform runner closes and running backup jobs settle, but before the ACL fan-outs drain, so a slow fan-out leaves less of it for the mounts. A Home with several mounts drains them one after another.
+The budget covers the whole process. It starts after the transform runner closes, running backup jobs settle and the deliveries drain, so a slow delivery never leaves less of it for the mounts. A Home with several mounts drains them one after another.
 
 ## The API container gets 90 s to stop
 
-`docker-compose.yml` gives `eigen-api` a `stop_grace_period` of 90 s: a running backup job gets 30 s first ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)), then the 20 s drain, and both finish before SIGKILL. A long restore, which is waited out in full, can still end in SIGKILL, and its rows replay on boot.
+`docker-compose.yml` gives `eigen-api` a `stop_grace_period` of 90 s: a running backup job gets 30 s first ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)), then the deliveries up to 10 s, then the 20 s drain. That is 60 s at most, so all three end before SIGKILL. A long restore, which is waited out in full, can still end in SIGKILL, and its rows replay on boot.
 
 ## The bucket needs versioning and a noncurrent-version expiry rule
 

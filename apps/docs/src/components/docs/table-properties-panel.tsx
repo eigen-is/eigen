@@ -1,7 +1,9 @@
-import { type Editor, useEditorState } from '@tiptap/react';
+import type { Editor } from '@tiptap/react';
+import { useEditorState } from '@tiptap/react';
+import { readCellBackground } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
-import { PropertiesPanel, PropertySection } from '@workspace/ui/components/properties-panel';
-import { selectCellCommands } from './hooks/use-toolbar-state';
+import { ColorRow, PropertiesPanel, PropertySection } from '@workspace/ui/components/properties-panel';
+import { cellBackground, selectCellCommands } from './hooks/use-toolbar-state';
 import { TABLE_ACTION_ICONS } from './table-action-icons';
 
 type TablePropertiesPanelProps = {
@@ -10,9 +12,12 @@ type TablePropertiesPanelProps = {
 
 export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
     // The panel stays mounted through its exit, so a caret that has left the table reads no cell command.
-    const { canMergeCells, canSplitCell } = useEditorState({
+    const { canMergeCells, canSplitCell, fill } = useEditorState({
         editor,
-        selector: ({ editor: e }) => selectCellCommands(e, e.isActive('table')),
+        selector: ({ editor: e }) => {
+            const inTable = e.isActive('table');
+            return { ...selectCellCommands(e, inTable), fill: inTable ? cellBackground(e.state) : '' };
+        },
     });
     return (
         <PropertiesPanel title="Table">
@@ -111,6 +116,15 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                 >
                     <TABLE_ACTION_ICONS.toggleHeaderRow className="h-3.5 w-3.5 mr-1" /> Toggle header row
                 </Button>
+                {/* None writes the transparent token, which reads as no fill. */}
+                <ColorRow
+                    label="Fill"
+                    value={fill}
+                    allowNone
+                    onChange={(color) =>
+                        editor.chain().focus().setCellAttribute('backgroundColor', readCellBackground(color)).run()
+                    }
+                />
             </PropertySection>
 
             <div className="app-gutter">

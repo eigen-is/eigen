@@ -1,16 +1,16 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { eq, type SQL, sql } from 'drizzle-orm';
+import type { MountConfig } from '@workspace/lib/types/mount';
+import type { SQL } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { ApiError, type DatabaseConfig, eventLoopTurn, storageGone } from '../../lib/core';
+import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../../lib/core';
+import { ApiError, eventLoopTurn, storageGone } from '../../lib/core';
 import { getUniqueFileName } from '../../lib/drive/naming';
-import {
-    CONTENT_REINDEX_CAP_SECONDS,
-    type ContentExtractor,
-    ContentReindexQueue,
-} from '../../lib/mount/content-reindex-queue';
+import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
+import { CONTENT_REINDEX_CAP_SECONDS, ContentReindexQueue } from '../../lib/mount/content-reindex-queue';
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';
@@ -504,6 +504,65 @@ describe('Mount (local path-based storage)', () => {
         expect(existsSync(join(mount.dataDir, 'Destination', 'move.txt'))).toBe(true);
     });
 
+    test('a rename the disk refuses leaves the row on the old name, so a trash moves the right bytes', async () => {
+        const folderId = await mount.createFolder(rootId, 'RenameRefused');
+        const fileId = await mount.createFile(folderId, 'A.txt', 'text/plain', 5, Buffer.from('alpha'));
+        const spy = spyOn(mount.storage, 'rename').mockImplementation(async () => {
+            throw new Error('EIO');
+        });
+        try {
+            await expect(mount.updatePath(fileId, { name: 'B.txt' })).rejects.toThrow('EIO');
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect((await mount.getPath(fileId))!.name).toBe('A.txt');
+        expect(await (await mount.readFile(fileId))!.text()).toBe('alpha');
+        await mount.trashPath(fileId);
+        expect(readFileSync(join(mount.dataDir, '.trash', buildStorageKey(fileId, 'A.txt')), 'utf8')).toBe('alpha');
+    });
+
+    // The cached folder size is NULLed after the write commits: a failure there is logged, not a 500 for a write that happened.
+    test.each(['move', 'trash', 'restore'] as const)(
+        'a %s whose size invalidation fails still answers, its bytes with the row',
+        async (op) => {
+            const fromId = await mount.createFolder(rootId, `SizeFailFrom-${op}`);
+            const toId = await mount.createFolder(rootId, `SizeFailTo-${op}`);
+            const fileId = await mount.createFile(fromId, 'sized.txt', 'text/plain', 5, Buffer.from('sized'));
+            if (op === 'restore') await mount.trashPath(fileId);
+
+            mount.db.run(
+                sql.raw(
+                    `CREATE TRIGGER fail_size BEFORE UPDATE OF size ON paths WHEN NEW.size IS NULL BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`,
+                ),
+            );
+            const logged = spyOn(console, 'error').mockImplementation(() => {});
+            try {
+                if (op === 'move') await mount.updatePath(fileId, { parentId: toId });
+                if (op === 'trash') await mount.trashPath(fileId);
+                if (op === 'restore') await mount.restorePath(fileId);
+            } finally {
+                logged.mockRestore();
+                mount.db.run(sql.raw('DROP TRIGGER fail_size'));
+            }
+
+            const row = (await mount.getPath(fileId))!;
+            expect(row.parentId).toBe(op === 'move' ? toId : op === 'trash' ? rootId : fromId);
+            expect(row.trashedAt !== null).toBe(op === 'trash');
+            expect(await (await mount.readFile(fileId))!.text()).toBe('sized');
+        },
+    );
+
+    test('a move into its own subfolder answers 400 and moves nothing', async () => {
+        const folderId = await mount.createFolder(rootId, 'MoveIntoSelf');
+        const childId = await mount.createFolder(folderId, 'Child');
+
+        await expect(mount.updatePath(folderId, { parentId: childId })).rejects.toMatchObject({ status: 400 });
+
+        expect((await mount.getPath(folderId))!.parentId).toBe(rootId);
+        expect(existsSync(join(mount.dataDir, 'MoveIntoSelf', 'Child'))).toBe(true);
+    });
+
     test('delete folder removes physical directory', async () => {
         const folderId = await mount.createFolder(rootId, 'DeletePhysical');
         await mount.createFile(folderId, 'file.txt', 'text/plain', 3, Buffer.from('abc'));
@@ -569,6 +628,28 @@ describe('Mount (local path-based storage)', () => {
         const found = await mount.getChildByName(folderId, 'übung.txt');
         expect(found).not.toBeNull();
         expect(found!.id).toBe(fileId);
+    });
+
+    // A corrupt tree, built in the table: the move resolves the target's key before any other check.
+    test('a move, a breadcrumb and a copy check into a parent loop answer 500', async () => {
+        const looped = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createTestMountConfig('test-local-loop', 'local'),
+            createGetLocalDatabase(TEST_DIR),
+        );
+        await looped.init();
+        const loopRootId = (await looped.getRootFolder())!.id;
+        const pId = await looped.createFolder(loopRootId, 'LoopP');
+        const qId = await looped.createFolder(loopRootId, 'LoopQ');
+        const fileId = await looped.createFile(loopRootId, 'outside.txt', 'text/plain', 1, Buffer.from('o'));
+        await looped.db.update(paths).set({ parentId: qId }).where(eq(paths.id, pId));
+        await looped.db.update(paths).set({ parentId: pId }).where(eq(paths.id, qId));
+
+        await expect(looped.updatePath(fileId, { parentId: pId })).rejects.toMatchObject({ status: 500 });
+        expect((await looped.getPath(fileId))!.parentId).toBe(loopRootId);
+        await expect(looped.getBreadcrumb(pId)).rejects.toMatchObject({ status: 500 });
+        await expect(looped.isSelfOrDescendant(fileId, pId)).rejects.toMatchObject({ status: 500 });
     });
 });
 
@@ -657,8 +738,8 @@ describe('Name validation', () => {
     });
 
     test('rejects .trash compatibility-character aliases', async () => {
-        // U+017F LATIN SMALL LETTER LONG S: '.traſh' IS the '.trash' dir under APFS case folding,
-        // but survives NFC + toLowerCase. NFKC maps ſ→s.
+        // U+017F LATIN SMALL LETTER LONG S: '.traſh' is the '.trash' dir under APFS case folding,
+        // though toLowerCase keeps it apart. foldName folds it onto s.
         await expect(mount.createFolder(rootId, '.traſh')).rejects.toThrow('reserved name');
     });
 
@@ -1126,7 +1207,158 @@ describe('trashPath (local path-based storage)', () => {
         const restored = await mount.restorePath(fileId);
         expect(await (await mount.readFile(restored.id))!.text()).toBe('must-survive');
     });
+
+    // A row write lost after the rename left a live row whose bytes sat in .trash/, and the next trash hit ENOTEMPTY.
+    test('a trash whose row write fails puts the bytes back', async () => {
+        const data = Buffer.from('stays-live');
+        const fileId = await mount.createFile(rootId, 'row-fails.txt', 'text/plain', data.length, data);
+
+        await withFailingTrashedAtWrite(mount, async () => {
+            await expect(mount.trashPath(fileId)).rejects.toThrow();
+        });
+
+        expect((await mount.getPath(fileId))!.trashedAt).toBeNull();
+        expect(existsSync(join(mount.dataDir, 'row-fails.txt'))).toBe(true);
+        expect(existsSync(join(mount.dataDir, '.trash', buildStorageKey(fileId, 'row-fails.txt')))).toBe(false);
+    });
+
+    test('a trash over a stale folder at its trash key succeeds and keeps that folder aside', async () => {
+        const folderId = await mount.createFolder(rootId, 'Stale.eigensheets');
+        await mount.createFile(folderId, 'data.db', 'application/octet-stream', 5, Buffer.from('newer'));
+        const trashKey = buildStorageKey(folderId, 'Stale.eigensheets');
+        const stale = join(mount.dataDir, '.trash', trashKey);
+        mkdirSync(stale);
+        writeFileSync(join(stale, 'data.db'), 'older');
+
+        await mount.trashPath(folderId);
+
+        expect(readFileSync(join(stale, 'data.db'), 'utf8')).toBe('newer');
+        const aside = readdirSync(join(mount.dataDir, '.trash')).filter((name) => name.startsWith(`${trashKey}.`));
+        expect(aside).toHaveLength(1);
+        expect(readFileSync(join(mount.dataDir, '.trash', aside[0], 'data.db'), 'utf8')).toBe('older');
+
+        const restored = await mount.restorePath(folderId);
+        expect(readFileSync(join(mount.dataDir, restored.name, 'data.db'), 'utf8')).toBe('newer');
+    });
+
+    test('a trash over a stale file at its trash key keeps that file aside', async () => {
+        const fileId = await mount.createFile(rootId, 'stale.txt', 'text/plain', 5, Buffer.from('newer'));
+        const trashKey = buildStorageKey(fileId, 'stale.txt');
+        writeFileSync(join(mount.dataDir, '.trash', trashKey), 'older');
+
+        await mount.trashPath(fileId);
+
+        expect(await (await mount.readFile(fileId))!.text()).toBe('newer');
+        const aside = readdirSync(join(mount.dataDir, '.trash')).filter((name) => name.startsWith(`${trashKey}.`));
+        expect(aside).toHaveLength(1);
+        expect(readFileSync(join(mount.dataDir, '.trash', aside[0]), 'utf8')).toBe('older');
+    });
+
+    test('a second trash of a trashed item is refused and keeps its original folder', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashTwice');
+        const fileId = await mount.createFile(folderId, 'twice.txt', 'text/plain', 5, Buffer.from('twice'));
+
+        await mount.trashPath(fileId);
+        await expect(mount.trashPath(fileId)).rejects.toMatchObject({ status: 404 });
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(folderId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('twice');
+    });
+
+    // A crash between the rename and the row write: the only copy is at the trash key, under a live row.
+    test('a trash after a crash between its rename and its row write finishes that trash', async () => {
+        const fileId = await mount.createFile(rootId, 'crashed.txt', 'text/plain', 7, Buffer.from('crashed'));
+        const trashKey = buildStorageKey(fileId, 'crashed.txt');
+        renameSync(join(mount.dataDir, 'crashed.txt'), join(mount.dataDir, '.trash', trashKey));
+
+        await mount.trashPath(fileId);
+
+        expect(readdirSync(join(mount.dataDir, '.trash')).filter((name) => name.startsWith(`${trashKey}.`))).toEqual(
+            [],
+        );
+        const restored = await mount.restorePath(fileId);
+        expect(await (await mount.readFile(restored.id))!.text()).toBe('crashed');
+    });
+
+    test('a trash after a failed row write whose move-back failed too finishes that trash', async () => {
+        const folderId = await mount.createFolder(rootId, 'MoveBackFails');
+        const fileId = await mount.createFile(folderId, 'stuck.txt', 'text/plain', 5, Buffer.from('stuck'));
+        const rename = mount.storage.rename!.bind(mount.storage);
+        const spy = spyOn(mount.storage, 'rename').mockImplementation(async (from, to) => {
+            if (from.startsWith('.trash/')) throw new Error('EIO');
+            await rename(from, to);
+        });
+        try {
+            await withFailingTrashedAtWrite(mount, async () => {
+                await expect(mount.trashPath(fileId)).rejects.toThrow();
+            });
+        } finally {
+            spy.mockRestore();
+        }
+        expect(existsSync(join(mount.dataDir, 'MoveBackFails', 'stuck.txt'))).toBe(false);
+
+        await mount.trashPath(fileId);
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(folderId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('stuck');
+    });
+
+    test('a move that lands while a trash waits for the lock is the folder the trash records', async () => {
+        const fromId = await mount.createFolder(rootId, 'MoveFrom');
+        const toId = await mount.createFolder(rootId, 'MoveTo');
+        const fileId = await mount.createFile(fromId, 'moving.txt', 'text/plain', 6, Buffer.from('moving'));
+
+        let release!: () => void;
+        const held = mount.withPathLock(fileId, () => new Promise<void>((resolve) => (release = resolve)));
+        const move = mount.updatePath(fileId, { parentId: toId });
+        await Bun.sleep(20);
+        const trash = mount.trashPath(fileId);
+        await Bun.sleep(20);
+        release();
+        await Promise.all([held, move, trash]);
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(toId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('moving');
+    });
+
+    test('a move that waited while a trash committed is refused and leaves the bytes in trash', async () => {
+        const fromId = await mount.createFolder(rootId, 'TrashFirstFrom');
+        const toId = await mount.createFolder(rootId, 'TrashFirstTo');
+        const fileId = await mount.createFile(fromId, 'first.txt', 'text/plain', 5, Buffer.from('first'));
+
+        let release!: () => void;
+        const held = mount.withPathLock(fileId, () => new Promise<void>((resolve) => (release = resolve)));
+        const trash = mount.trashPath(fileId);
+        await Bun.sleep(20);
+        const move = mount.updatePath(fileId, { parentId: toId });
+        await Bun.sleep(20);
+        release();
+        await Promise.all([held, trash]);
+        await expect(move).rejects.toMatchObject({ status: 404 });
+
+        expect((await mount.getPath(fileId))!.parentId).toBe(rootId);
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(fromId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('first');
+    });
 });
+
+// A trigger stands in for a metadata.db that fails mid-write (corruption, a full disk): any write to trashedAt aborts.
+async function withFailingTrashedAtWrite(mount: Mount, fn: () => Promise<void>): Promise<void> {
+    mount.db.run(
+        sql.raw(
+            `CREATE TRIGGER fail_trashed_at BEFORE UPDATE OF trashedAt ON paths BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`,
+        ),
+    );
+    try {
+        await fn();
+    } finally {
+        mount.db.run(sql.raw('DROP TRIGGER fail_trashed_at'));
+    }
+}
 
 describe('restorePath (local-key storage)', () => {
     let mount: Mount;
@@ -1219,6 +1451,20 @@ describe('restorePath (local-key storage)', () => {
         await mount.trashPath(fileId);
         // Then trash the parent
         await mount.trashPath(folderId);
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(rootId);
+        expect(restored.trashedAt).toBeNull();
+    });
+
+    // A live folder inside a trashed one is legacy data, or a create that raced the trash off `local`.
+    test('restore when an ancestor of the original parent is trashed restores to root', async () => {
+        const outerId = await mount.createFolder(rootId, 'RestoreTrashedAncestor');
+        const innerId = await mount.createFolder(outerId, 'Inner');
+        const fileId = await mount.createFile(innerId, 'deep-orphan.txt', 'text/plain', 1, Buffer.from('d'));
+        await mount.trashPath(fileId);
+        await mount.trashPath(outerId);
+        await mount.db.update(paths).set({ trashedAt: null }).where(eq(paths.id, innerId));
 
         const restored = await mount.restorePath(fileId);
         expect(restored.parentId).toBe(rootId);
@@ -1331,6 +1577,19 @@ describe('restorePath (local path-based storage)', () => {
         expect(existsSync(join(mount.dataDir, restored.name))).toBe(true);
     });
 
+    test('restore when an ancestor of the original parent is trashed restores to root', async () => {
+        const outerId = await mount.createFolder(rootId, 'RestoreLocalTrashedAncestor');
+        const innerId = await mount.createFolder(outerId, 'Inner');
+        const fileId = await mount.createFile(innerId, 'deep-orphan-local.txt', 'text/plain', 1, Buffer.from('d'));
+        await mount.trashPath(fileId);
+        await mount.trashPath(outerId);
+        await mount.db.update(paths).set({ trashedAt: null }).where(eq(paths.id, innerId));
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(rootId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('d');
+    });
+
     // Rows named .trash created before the reserved-name guard can exist on live installs;
     // restoring one must conflict-rename, never land on the real trash dir.
     test('restore of a legacy trashed row named .trash lands with a renamed name', async () => {
@@ -1345,6 +1604,92 @@ describe('restorePath (local path-based storage)', () => {
         expect(existsSync(join(mount.dataDir, restored.name, 'inside.txt'))).toBe(true);
         // The real trash dir is still a directory at data/.trash
         expect(existsSync(join(mount.dataDir, '.trash'))).toBe(true);
+    });
+
+    test('a restore whose row write fails leaves the item in trash, bytes and all', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreRowFails');
+        const fileId = await mount.createFile(folderId, 'back.txt', 'text/plain', 4, Buffer.from('back'));
+        await mount.trashPath(fileId);
+
+        await withFailingTrashedAtWrite(mount, async () => {
+            await expect(mount.restorePath(fileId)).rejects.toThrow();
+        });
+
+        expect((await mount.getPath(fileId))!.trashedAt).not.toBeNull();
+        expect(existsSync(join(mount.dataDir, 'RestoreRowFails', 'back.txt'))).toBe(false);
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(folderId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('back');
+    });
+
+    test('a restore onto a leftover folder no row owns keeps the leftover aside in .trash/', async () => {
+        const parentId = await mount.createFolder(rootId, 'LeftoverParent');
+        const folderId = await mount.createFolder(parentId, 'Leftover');
+        await mount.createFile(folderId, 'inside.txt', 'text/plain', 7, Buffer.from('trashed'));
+        await mount.trashPath(folderId);
+        const leftover = join(mount.dataDir, 'LeftoverParent', 'Leftover');
+        mkdirSync(leftover);
+        writeFileSync(join(leftover, 'inside.txt'), 'leftover');
+
+        const restored = await mount.restorePath(folderId);
+
+        expect(restored.name).toBe('Leftover');
+        expect(readFileSync(join(leftover, 'inside.txt'), 'utf8')).toBe('trashed');
+        const trashKey = buildStorageKey(folderId, 'Leftover');
+        const aside = readdirSync(join(mount.dataDir, '.trash')).filter((name) =>
+            name.startsWith(`${trashKey}.stale-`),
+        );
+        expect(aside).toHaveLength(1);
+        expect(readFileSync(join(mount.dataDir, '.trash', aside[0], 'inside.txt'), 'utf8')).toBe('leftover');
+    });
+
+    // A restore's rename landed and its row write did not, or a failed trash could not move the bytes back.
+    test('a restore whose bytes already sit at the target writes the row', async () => {
+        const parentId = await mount.createFolder(rootId, 'AlreadyBack');
+        const fileId = await mount.createFile(parentId, 'back.txt', 'text/plain', 7, Buffer.from('already'));
+        await mount.trashPath(fileId);
+        renameSync(
+            join(mount.dataDir, '.trash', buildStorageKey(fileId, 'back.txt')),
+            join(mount.dataDir, 'AlreadyBack', 'back.txt'),
+        );
+
+        const restored = await mount.restorePath(fileId);
+
+        expect(restored.parentId).toBe(parentId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('already');
+    });
+
+    test('a restore refuses a target whose bytes a live row holds', async () => {
+        const parentId = await mount.createFolder(rootId, 'HeldTarget');
+        const trashedId = await mount.createFile(parentId, 'held.txt', 'text/plain', 7, Buffer.from('trashed'));
+        await mount.trashPath(trashedId);
+        const liveId = await mount.createFile(parentId, 'other.txt', 'text/plain', 4, Buffer.from('live'));
+        // A live row whose bytes sit at another name, as a case-insensitive disk aliases two names.
+        renameSync(join(mount.dataDir, 'HeldTarget', 'other.txt'), join(mount.dataDir, 'HeldTarget', 'held.txt'));
+        await mount.db.update(paths).set({ file: 'held.txt' }).where(eq(paths.id, liveId));
+
+        await expect(mount.restorePath(trashedId)).rejects.toMatchObject({ status: 409 });
+
+        expect(await (await mount.readFile(liveId))!.text()).toBe('live');
+        expect((await mount.getPath(trashedId))!.trashedAt).not.toBeNull();
+        expect(await (await mount.readFile(trashedId))!.text()).toBe('trashed');
+    });
+
+    test('a restore that waited while its original folder was trashed goes to the root', async () => {
+        const parentId = await mount.createFolder(rootId, 'TrashedWhileWaiting');
+        const fileId = await mount.createFile(parentId, 'waiting.txt', 'text/plain', 7, Buffer.from('waiting'));
+        await mount.trashPath(fileId);
+
+        let release!: () => void;
+        const held = mount.withPathLock(fileId, () => new Promise<void>((resolve) => (release = resolve)));
+        const restore = mount.restorePath(fileId);
+        await Bun.sleep(20);
+        await mount.trashPath(parentId);
+        release();
+        await held;
+
+        expect((await restore).parentId).toBe(rootId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('waiting');
     });
 });
 
@@ -1462,13 +1807,313 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         expect(await mount4.getPath(newId)).not.toBeNull();
     });
 
-    test('permanentlyDeleteFromTrash on non-trashed item throws 400', async () => {
+    // A mount can still hold a trash root whose original folder sits inside its own subtree, or two trash
+    // roots whose original folders sit inside each other. The delete must not wait on a lock it holds.
+    test('permanent delete ends when trashedFrom points back into the subtree', async () => {
+        const moveRow = (id: string, parentId: string) =>
+            mount.db.update(paths).set({ parentId }).where(eq(paths.id, id));
+        const outerId = await mount.createFolder(rootId, 'CycleOuter');
+        const innerId = await mount.createFolder(outerId, 'CycleInner');
+        await mount.trashPath(innerId);
+        await moveRow(outerId, innerId);
+
+        const pId = await mount.createFolder(rootId, 'CycleP');
+        const xId = await mount.createFolder(pId, 'CycleX');
+        const qId = await mount.createFolder(rootId, 'CycleQ');
+        const yId = await mount.createFolder(qId, 'CycleY');
+        await mount.trashPath(xId);
+        await mount.trashPath(yId);
+        await moveRow(pId, yId);
+        await moveRow(qId, xId);
+
+        const deleted = (id: string) =>
+            Promise.race([
+                mount.permanentlyDeleteFromTrash(id).then((deleted) => (deleted ? 'deleted' : 'kept')),
+                Bun.sleep(1000).then(() => 'timed out'),
+            ]);
+        expect(await deleted(innerId)).toBe('deleted');
+        expect(await deleted(xId)).toBe('deleted');
+        for (const id of [outerId, innerId, pId, xId, qId, yId]) {
+            expect(await mount.getPath(id)).toBeNull();
+        }
+    });
+
+    // Each delete would hold its own root and wait on the other's, as emptyTrash beside the purge at open can.
+    test('two permanent deletes of trash roots that point into each other both end', async () => {
+        const moveRow = (id: string, parentId: string) =>
+            mount.db.update(paths).set({ parentId }).where(eq(paths.id, id));
+        const pId = await mount.createFolder(rootId, 'MutualP');
+        const xId = await mount.createFolder(pId, 'MutualX');
+        const qId = await mount.createFolder(rootId, 'MutualQ');
+        const yId = await mount.createFolder(qId, 'MutualY');
+        await mount.trashPath(xId);
+        await mount.trashPath(yId);
+        await moveRow(pId, yId);
+        await moveRow(qId, xId);
+
+        const deleted = (id: string) =>
+            Promise.race([
+                mount.permanentlyDeleteFromTrash(id).then((deleted) => (deleted ? 'deleted' : 'kept')),
+                Bun.sleep(1000).then(() => 'timed out'),
+            ]);
+        expect(await Promise.all([deleted(xId), deleted(yId)])).toEqual(['deleted', 'kept']);
+        for (const id of [pId, xId, qId, yId]) {
+            expect(await mount.getPath(id)).toBeNull();
+        }
+    });
+
+    test('permanentlyDeleteFromTrash keeps an item that is not in trash', async () => {
         const fileId = await mount.createFile(rootId, 'not-trashed2.txt', 'text/plain', 3, Buffer.from('nop'));
-        await expect(mount.permanentlyDeleteFromTrash(fileId)).rejects.toThrow('Item is not in trash');
+        expect(await mount.permanentlyDeleteFromTrash(fileId)).toBe(false);
+        expect(await mount.getPath(fileId)).not.toBeNull();
     });
 
     test('permanentlyDeleteFromTrash on non-existent item is a no-op', async () => {
-        await expect(mount.permanentlyDeleteFromTrash('nonexistent-id-xyz')).resolves.toBeUndefined();
+        expect(await mount.permanentlyDeleteFromTrash('nonexistent-id-xyz')).toBe(false);
+    });
+
+    // The delete has read the row as trashed and sits in deletePath when the restore arrives. The
+    // restore must then wait, and find the item gone.
+    test('a restore that races a permanent delete never reports a deleted item as restored', async () => {
+        const fileId = await mount.createFile(rootId, 'raced-restore.txt', 'text/plain', 2, Buffer.from('hi'));
+        await mount.trashPath(fileId);
+
+        let restored: Promise<string | number> | undefined;
+        const deletePath = mount.deletePath.bind(mount);
+        const spy = spyOn(mount, 'deletePath').mockImplementation(async (id) => {
+            restored = mount.restorePath(fileId).then(
+                () => 'restored',
+                (e: ApiError) => e.status,
+            );
+            await Bun.sleep(5);
+            return deletePath(id);
+        });
+        try {
+            await mount.permanentlyDeleteFromTrash(fileId);
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(await restored).toBe(404);
+        expect(await mount.getPath(fileId)).toBeNull();
+    });
+
+    // The same race on a separately trashed child, which the folder's delete takes with it.
+    test('a child restored while its trashed folder is deleted is reported gone', async () => {
+        const folderId = await mount.createFolder(rootId, 'RacedChildParent');
+        const childId = await mount.createFile(folderId, 'raced-child.txt', 'text/plain', 1, Buffer.from('c'));
+        await mount.trashPath(childId);
+        await mount.trashPath(folderId);
+
+        let restored: Promise<string | number> | undefined;
+        const deletePath = mount.deletePath.bind(mount);
+        const spy = spyOn(mount, 'deletePath').mockImplementation(async (id) => {
+            if (id === childId) {
+                restored = mount.restorePath(childId).then(
+                    () => 'restored',
+                    (e: ApiError) => e.status,
+                );
+                await Bun.sleep(5);
+            }
+            return deletePath(id);
+        });
+        try {
+            await mount.permanentlyDeleteFromTrash(folderId);
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(await restored).toBe(404);
+        expect(await mount.getPath(childId)).toBeNull();
+        expect(await mount.getPath(folderId)).toBeNull();
+    });
+});
+
+describe('the trash purge at mount open', () => {
+    // Each Mount gets its own handle on metadata.db, so the test can close it the way a Home does.
+    function openMount(config: MountConfig, handles: ManagedDatabase<SchemaType>[]): Mount {
+        const getDb = createGetLocalDatabase(TEST_DIR);
+        return new Mount(OWNER_ID, TEST_DIR, config, async (dbConfig, relativePath) => {
+            const handle = await getDb(dbConfig, relativePath);
+            handles.push(handle);
+            return handle;
+        });
+    }
+
+    test('a mount close waits for the purge, which stops between items', async () => {
+        const config = createTestMountConfig('test-purge-on-close', 'local-key');
+        const handles: ManagedDatabase<SchemaType>[] = [];
+        const first = openMount(config, handles);
+        await first.init();
+        const rootId = (await first.getRootFolder())!.id;
+        for (let i = 0; i < 20; i++) {
+            const id = await first.createFile(
+                rootId,
+                `expired-${i}.bin`,
+                'application/octet-stream',
+                3,
+                Buffer.from('abc'),
+            );
+            await first.trashPath(id);
+        }
+        first.db.run(sql`UPDATE paths SET trashedAt = 1 WHERE trashedAt IS NOT NULL`);
+        await first.closeAllDatabases();
+        await handles[0].close();
+
+        const errors = spyOn(console, 'error');
+        try {
+            const second = openMount(config, handles);
+            await second.init();
+            const deletes = spyOn(second, 'deletePath');
+            await second.closeAllDatabases();
+            const deletesAtClose = deletes.mock.calls.length;
+            await handles[1].close();
+            await Bun.sleep(50);
+
+            expect(deletes.mock.calls.length).toBe(deletesAtClose);
+            expect(errors).not.toHaveBeenCalled();
+        } finally {
+            errors.mockRestore();
+        }
+
+        // Whatever the purge left keeps its row, so the next open finishes it.
+        const third = openMount(config, handles);
+        await third.init({ passive: true });
+        const left = (await third.listTrash()).length;
+        expect(left).toBeGreaterThan(0);
+        expect(left).toBe(readdirSync(third.dataDir).length);
+        await handles[2].close();
+    });
+});
+
+describe('a write under a folder deleted meanwhile (local-key storage)', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createTestMountConfig('test-create-deleted-parent', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        rootId = (await mount.getRootFolder())!.id;
+    });
+
+    // An id key takes no tree lock, so the folder's trash and permanent delete run while the bytes are in flight.
+    test('a file answers 404 and leaves no object behind', async () => {
+        const folderId = await mount.createFolder(rootId, 'GoneWhileWriting');
+        let entered!: () => void;
+        const inWrite = new Promise<void>((r) => {
+            entered = r;
+        });
+        let release!: () => void;
+        const gate = new Promise<void>((r) => {
+            release = r;
+        });
+        const write = mount.storage.write.bind(mount.storage);
+        const spy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
+            entered();
+            await gate;
+            return write(key, data);
+        });
+        try {
+            const created = mount.createFile(folderId, 'late.bin', 'application/octet-stream', 5, Buffer.from('hello'));
+            const outcome = created.then(
+                () => null,
+                (e: unknown) => e,
+            );
+            await inWrite;
+            await mount.trashPath(folderId);
+            await mount.permanentlyDeleteFromTrash(folderId);
+            release();
+
+            const err = await outcome;
+            expect(err).toBeInstanceOf(ApiError);
+            expect((err as ApiError).status).toBe(404);
+        } finally {
+            spy.mockRestore();
+        }
+        // This mount stores no other object.
+        expect(existsSync(mount.dataDir) ? readdirSync(mount.dataDir) : []).toEqual([]);
+    });
+
+    test('a folder answers 404', async () => {
+        const err = await mount.createFolder('no-such-folder', 'Child').catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(404);
+    });
+
+    // Drive checked the folder before the move. It was trashed and deleted after that check.
+    test('a move answers 404', async () => {
+        const folderId = await mount.createFolder(rootId, 'GoneBeforeMove');
+        const fileId = await mount.createFile(rootId, 'moved.txt', 'text/plain', 1, Buffer.from('m'));
+        await mount.trashPath(folderId);
+        await mount.permanentlyDeleteFromTrash(folderId);
+
+        const err = await mount.updatePath(fileId, { parentId: folderId }).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(404);
+        expect((await mount.getPath(fileId))?.parentId).toBe(rootId);
+    });
+
+    // The restore picked the original folder, and the folder is deleted before the restore writes the row.
+    test('a restore answers 404', async () => {
+        const folderId = await mount.createFolder(rootId, 'GoneBeforeRestore');
+        const fileId = await mount.createFile(folderId, 'restored.txt', 'text/plain', 1, Buffer.from('r'));
+        await mount.trashPath(fileId);
+
+        const getChildByName = mount.getChildByName.bind(mount);
+        const spy = spyOn(mount, 'getChildByName').mockImplementation(async (parentId, name) => {
+            if (parentId === folderId) await mount.deletePath(folderId);
+            return getChildByName(parentId, name);
+        });
+        let err: unknown;
+        try {
+            err = await mount.restorePath(fileId).catch((e: unknown) => e);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(404);
+        expect((await mount.getPath(fileId))?.trashedAt).not.toBeNull();
+    });
+
+    // Drive checked the folder before the move. It went to trash after that check, so its later
+    // permanent delete would take the moved file with it.
+    test('a move into a folder trashed meanwhile answers 404', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedBeforeMove');
+        const subId = await mount.createFolder(folderId, 'Sub');
+        const fileId = await mount.createFile(rootId, 'kept-out.txt', 'text/plain', 1, Buffer.from('k'));
+        await mount.trashPath(folderId);
+
+        for (const target of [folderId, subId]) {
+            const err = await mount.updatePath(fileId, { parentId: target }).catch((e: unknown) => e);
+            expect(err).toBeInstanceOf(ApiError);
+            expect((err as ApiError).status).toBe(404);
+        }
+        await mount.permanentlyDeleteFromTrash(folderId);
+        expect((await mount.getPath(fileId))?.parentId).toBe(rootId);
+    });
+
+    // The restore picked the original folder, and the folder goes to trash before the restore writes the row.
+    test('a restore into a folder trashed meanwhile answers 404', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedBeforeRestore');
+        const fileId = await mount.createFile(folderId, 'restored-later.txt', 'text/plain', 1, Buffer.from('r'));
+        await mount.trashPath(fileId);
+
+        const getChildByName = mount.getChildByName.bind(mount);
+        const spy = spyOn(mount, 'getChildByName').mockImplementation(async (parentId, name) => {
+            if (parentId === folderId) await mount.trashPath(folderId);
+            return getChildByName(parentId, name);
+        });
+        let err: unknown;
+        try {
+            err = await mount.restorePath(fileId).catch((e: unknown) => e);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(404);
+
+        expect((await mount.restorePath(fileId)).parentId).toBe(rootId);
     });
 });
 
@@ -1644,6 +2289,48 @@ describe('Folder sizes', () => {
 
         expect((await m.getPath(aId))!.size).toBe(0);
         expect((await m.getPath(bId))!.size).toBe(7);
+    });
+
+    // The second move starts first and waits in its first getPath, after any read of the old parent
+    // it does before writing. The first move then lands and Y's size is cached.
+    test('two racing moves of one file leave every folder size right', async () => {
+        const x = await mount.createFolder(rootId, 'RaceMoveX');
+        const y = await mount.createFolder(rootId, 'RaceMoveY');
+        const z = await mount.createFolder(rootId, 'RaceMoveZ');
+        const fileId = await mount.createFile(x, 'raced.bin', 'application/octet-stream', 10, Buffer.alloc(10));
+
+        let entered!: () => void;
+        const waiting = new Promise<void>((r) => {
+            entered = r;
+        });
+        let release!: () => void;
+        const gate = new Promise<void>((r) => {
+            release = r;
+        });
+        const getPath = mount.getPath.bind(mount);
+        let gated = true;
+        const spy = spyOn(mount, 'getPath').mockImplementation(async (id) => {
+            if (gated && id === fileId) {
+                gated = false;
+                entered();
+                await gate;
+            }
+            return getPath(id);
+        });
+        try {
+            const second = mount.updatePath(fileId, { parentId: z });
+            await waiting;
+            await mount.updatePath(fileId, { parentId: y });
+            expect((await mount.getPath(y))!.size).toBe(10);
+            release();
+            await second;
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect((await mount.getPath(x))!.size).toBe(0);
+        expect((await mount.getPath(y))!.size).toBe(0);
+        expect((await mount.getPath(z))!.size).toBe(10);
     });
 
     test('managed-db growth updates container size on sync', async () => {
@@ -1928,7 +2615,7 @@ describe('trash/restore content reindex', () => {
         // First index: a synced write marks the container dirty; the drain extracts body v1.
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await mount.flushContentReindex();
+        await mount.reindexQueue?.drain();
         expect(mount.searchPaths({ q: 'grendelone', limit: 20 }).some((h) => h.id === containerId)).toBe(true);
 
         // Dirty it again (the trash-time close syncs it, re-marking the container; the 2-min cap

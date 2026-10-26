@@ -7,14 +7,14 @@ import {
     specialMailboxFromFlags,
 } from '@workspace/lib/constants/mailboxes';
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
+import { MenuSections } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { AlertTriangle, Archive, Download, Forward, Printer, Reply, ReplyAll, Trash2 } from 'lucide-react';
+import { AlertTriangle, Archive, Download, FolderInput, Forward, Printer, Reply, ReplyAll, Trash2 } from 'lucide-react';
 
 type EmailContextMenuProps = {
     messageIds: string[];
@@ -50,128 +50,94 @@ export function EmailContextMenu({
     const { user } = useAuth();
     const firstId = messageIds[0] || '';
 
+    const run = (fn: () => void) => () => {
+        fn();
+        onClose();
+    };
+
     return (
-        <>
-            {isSingleSelect && onPrint && (
+        <MenuSections
+            open={
+                isSingleSelect && (
+                    <>
+                        <DropdownMenuItem onClick={run(() => onReply?.(firstId))}>
+                            <Reply />
+                            Reply
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={run(() => onReplyAll?.(firstId))}>
+                            <ReplyAll />
+                            Reply All
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={run(() => onForward?.(firstId))}>
+                            <Forward />
+                            Forward
+                        </DropdownMenuItem>
+                    </>
+                )
+            }
+            organize={
                 <>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onPrint(firstId);
-                            onClose();
-                        }}
-                    >
-                        <Printer className="mr-2" />
-                        Print
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
+                    {currentMailboxId !== MAILBOX_ARCHIVE && (
+                        <DropdownMenuItem onClick={run(() => onArchive?.(messageIds))}>
+                            <Archive />
+                            {isSingleSelect ? 'Archive' : `Archive ${messageIds.length} emails`}
+                        </DropdownMenuItem>
+                    )}
+                    {currentMailboxId !== MAILBOX_JUNK && (
+                        <DropdownMenuItem onClick={run(() => onReportSpam?.(messageIds))}>
+                            <AlertTriangle />
+                            Report Spam
+                        </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                            <FolderInput />
+                            Move to folder
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-48">
+                            {mailboxes
+                                .filter((mailbox) => mailbox.path !== currentMailboxId)
+                                .map((mailbox) => {
+                                    const special = specialMailboxFromFlags(mailbox.flags);
+                                    return (
+                                        <DropdownMenuItem
+                                            key={mailbox.path}
+                                            onClick={run(() => onMoveToFolder?.(messageIds, mailbox.path))}
+                                        >
+                                            {special ? special.label : mailboxDisplayName(mailbox.path)}
+                                        </DropdownMenuItem>
+                                    );
+                                })}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                 </>
-            )}
-
-            {isSingleSelect && (
-                <>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onReply?.(firstId);
-                            onClose();
-                        }}
-                    >
-                        <Reply className="mr-2" />
-                        Reply
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onReplyAll?.(firstId);
-                            onClose();
-                        }}
-                    >
-                        <ReplyAll className="mr-2" />
-                        Reply All
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onForward?.(firstId);
-                            onClose();
-                        }}
-                    >
-                        <Forward className="mr-2" />
-                        Forward
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                </>
-            )}
-
-            {currentMailboxId !== MAILBOX_ARCHIVE && (
-                <DropdownMenuItem
-                    onClick={() => {
-                        onArchive?.(messageIds);
-                        onClose();
-                    }}
-                >
-                    <Archive className="mr-2" />
-                    {isSingleSelect ? 'Archive' : `Archive ${messageIds.length} emails`}
+            }
+            output={
+                isSingleSelect && (
+                    <>
+                        <DropdownMenuItem
+                            onClick={run(() => {
+                                if (user) window.open(getMailMessageDownloadUrl(user.id, firstId), '_blank');
+                            })}
+                        >
+                            <Download />
+                            Download
+                        </DropdownMenuItem>
+                        {onPrint && (
+                            <DropdownMenuItem onClick={run(() => onPrint(firstId))}>
+                                <Printer />
+                                Print
+                            </DropdownMenuItem>
+                        )}
+                    </>
+                )
+            }
+            destructive={
+                <DropdownMenuItem variant="destructive" onClick={run(() => onDelete?.(messageIds))}>
+                    <Trash2 />
+                    {isSingleSelect ? 'Delete' : `Delete ${messageIds.length} emails`}
                 </DropdownMenuItem>
-            )}
-            {currentMailboxId !== MAILBOX_JUNK && (
-                <DropdownMenuItem
-                    onClick={() => {
-                        onReportSpam?.(messageIds);
-                        onClose();
-                    }}
-                >
-                    <AlertTriangle className="mr-2" />
-                    Report Spam
-                </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-                onClick={() => {
-                    onDelete?.(messageIds);
-                    onClose();
-                }}
-            >
-                <Trash2 className="mr-2" />
-                {isSingleSelect ? 'Delete' : `Delete ${messageIds.length} emails`}
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            {isSingleSelect && (
-                <>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            if (!user) return;
-                            const url = getMailMessageDownloadUrl(user.id, firstId);
-                            window.open(url, '_blank');
-                            onClose();
-                        }}
-                    >
-                        <Download className="mr-2" />
-                        Download
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                </>
-            )}
-
-            <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Move to folder</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-48">
-                    {mailboxes
-                        .filter((mailbox) => mailbox.path !== currentMailboxId)
-                        .map((mailbox) => {
-                            const special = specialMailboxFromFlags(mailbox.flags);
-                            return (
-                                <DropdownMenuItem
-                                    key={mailbox.path}
-                                    onClick={() => {
-                                        onMoveToFolder?.(messageIds, mailbox.path);
-                                        onClose();
-                                    }}
-                                >
-                                    {special ? special.label : mailboxDisplayName(mailbox.path)}
-                                </DropdownMenuItem>
-                            );
-                        })}
-                </DropdownMenuSubContent>
-            </DropdownMenuSub>
-        </>
+            }
+        />
     );
 }

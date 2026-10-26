@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { FRAME_HEIGHT, FRAME_WIDTH, type VectorFrame } from '@workspace/lib/vector';
+import type { VectorFrame } from '@workspace/lib/vector';
+import { SLIDE_SIZES } from '@workspace/lib/vector';
 import { targetFrameIds } from '../../../components/slides/apply-to';
 
 function frames(...ids: string[]): VectorFrame[] {
@@ -7,8 +8,7 @@ function frames(...ids: string[]): VectorFrame[] {
         id,
         index: `a${i}`,
         name: '',
-        width: FRAME_WIDTH,
-        height: FRAME_HEIGHT,
+        ...SLIDE_SIZES['16:9'],
         background: '',
     }));
 }

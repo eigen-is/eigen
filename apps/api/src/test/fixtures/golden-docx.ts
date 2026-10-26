@@ -1,7 +1,9 @@
 import type { JSONContent } from '@tiptap/core';
-import { writeZip } from '../../lib/core/zip';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import { C_NS } from '../../lib/ooxml/ooxml';
+import { CHART_CONTENT_TYPE } from '../../lib/ooxml/ooxml-chart';
+import { writeZip } from '../../lib/ooxml/zip';
 
 // Deterministic .docx fixture for the docx import work. Hand-built OOXML rather
 // than a checked-in binary, so every part the importer reads is visible here:
@@ -11,9 +13,11 @@ import { docxToPmJson } from '../../lib/import/doc/from-docx';
 export const GOLDEN_DOCX_HEADING = 'Quarterly Report';
 export const GOLDEN_DOCX_LINK = 'https://example.com/report';
 export const GOLDEN_DOCX_LIST = ['North', 'South', 'East'];
-// The reader names extracted images by encounter order; the importer stores them
-// under this name in the document's media/ folder.
-export const GOLDEN_DOCX_IMAGE_NAME = 'image-1.png';
+// The reader names extracted images by a prefix per import and encounter order; the importer stores them under that
+// name in the document's media/ folder.
+export const GOLDEN_DOCX_IMAGE_NAME = /^docx-[0-9a-f-]{36}-image-1\.png$/;
+// A media name, or a JSON text holding some, as a fixed prefix would give it: the prefix dropped.
+export const unprefixed = (text: string): string => text.replaceAll(/docx-[0-9a-f-]{36}-/g, '');
 // One inline picture of media/pixel.png, as a run.
 export const GOLDEN_DOCX_IMAGE_RUN = `<w:r><w:drawing><wp:inline><wp:extent cx="381000" cy="381000"/><wp:docPr id="1" name="Picture 1" descr="A pixel"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="pixel.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="381000" cy="381000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
 
@@ -129,6 +133,95 @@ function zipDocx(document: string, parts: DocxParts): ArrayBuffer {
         ...(footnotes && { 'word/footnotes.xml': footnotesXml(footnotes) }),
     };
     return toTransferableBuffer(writeZip(Object.entries(entries).map(([name, data]) => ({ name, data, store: true }))));
+}
+
+// The namespaces a header or footer part declares, as Word's do.
+export const BAND_NAMESPACES = [
+    'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"',
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"',
+    'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"',
+    'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"',
+    'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"',
+].join(' ');
+
+const RELATIONSHIP = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const WORDPROCESSING = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
+
+// A header or footer part, word/<id>.xml, the final section names by its id; rels are its own relationships.
+export type DocxBand = { id: string; kind: 'header' | 'footer'; type?: string; xml: string; rels?: string };
+
+// The golden package with a body, a final section naming each band, its sectPr content, settings.xml's, styles and
+// parts.
+export async function buildDocxWithBands(
+    bands: DocxBand[],
+    options: {
+        sectPr?: string;
+        settings?: string;
+        body?: string;
+        styles?: string;
+        media?: DocxParts['media'];
+        contentTypes?: string;
+    } = {},
+): Promise<ArrayBuffer> {
+    const encode = (text: string) => new TextEncoder().encode(text);
+    const references = bands
+        .map(({ id, kind, type }) => `<w:${kind}Reference${type ? ` w:type="${type}"` : ''} r:id="${id}"/>`)
+        .join('');
+    const media: Record<string, Uint8Array> = { 'word/media/pixel.png': new Uint8Array(), ...options.media };
+    for (const { id, kind, xml, rels } of bands) {
+        const tag = kind === 'header' ? 'w:hdr' : 'w:ftr';
+        media[`word/${id}.xml`] = encode(`<${tag} ${BAND_NAMESPACES}>${xml}</${tag}>`);
+        if (rels)
+            media[`word/_rels/${id}.xml.rels`] = encode(
+                `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`,
+            );
+    }
+    if (options.settings)
+        media['word/settings.xml'] = encode(`<w:settings ${BAND_NAMESPACES}>${options.settings}</w:settings>`);
+    const body = options.body ?? '<w:p><w:r><w:t>Body</w:t></w:r></w:p>';
+    return buildDocxWithBody(`${body}<w:sectPr>${references}${options.sectPr ?? ''}</w:sectPr>`, {
+        styles: options.styles,
+        rels: [
+            ...bands.map(
+                ({ id, kind }) => `<Relationship Id="${id}" Type="${RELATIONSHIP}/${kind}" Target="${id}.xml"/>`,
+            ),
+            ...(options.settings
+                ? [`<Relationship Id="rIdSettings" Type="${RELATIONSHIP}/settings" Target="settings.xml"/>`]
+                : []),
+        ].join(''),
+        contentTypes:
+            bands
+                .map(
+                    ({ id, kind }) =>
+                        `<Override PartName="/word/${id}.xml" ContentType="${WORDPROCESSING}.${kind}+xml"/>`,
+                )
+                .join('') + (options.contentTypes ?? ''),
+        media,
+    });
+}
+
+// A w:drawing naming a chart part: inline at Word's default 12.7 × 7.62 cm, or anchored with the anchor's own children.
+export function chartRun(id: string, { extent = 'cx="4572000" cy="2743200"', anchor = '' } = {}): string {
+    const tag = anchor ? 'wp:anchor' : 'wp:inline';
+    return `<w:r><w:drawing><${tag}>${anchor}<wp:extent ${extent}/><wp:docPr id="3" name="Chart 3"/><a:graphic><a:graphicData uri="${C_NS}"><c:chart xmlns:c="${C_NS}" r:id="${id}"/></a:graphicData></a:graphic></${tag}></w:drawing></w:r>`;
+}
+
+// Chart parts where Word puts them, word/charts/chart1.xml on, named by rId20 on, as chart parts.
+export function chartParts(parts: string[]): DocxParts {
+    return {
+        rels: parts
+            .map(
+                (_, i) =>
+                    `<Relationship Id="rId${20 + i}" Type="${RELATIONSHIP}/chart" Target="charts/chart${i + 1}.xml"/>`,
+            )
+            .join(''),
+        contentTypes: parts
+            .map((_, i) => `<Override PartName="/word/charts/chart${i + 1}.xml" ContentType="${CHART_CONTENT_TYPE}"/>`)
+            .join(''),
+        media: Object.fromEntries(
+            parts.map((xml, i) => [`word/charts/chart${i + 1}.xml`, new TextEncoder().encode(xml)]),
+        ),
+    };
 }
 
 // A body imported as an upload is, its parts beside the golden package's.

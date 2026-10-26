@@ -1,32 +1,39 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
-import { textColumnWidth } from './text-column';
 
 const DEFAULT_CELL_WIDTH = 100;
 
-export const TableWidthClamp = Extension.create({
+type TableWidthClampOptions = {
+    textColumnWidth: () => number;
+};
+
+export const TableWidthClamp = Extension.create<TableWidthClampOptions>({
     name: 'tableWidthClamp',
+
+    addOptions() {
+        return { textColumnWidth: () => Infinity };
+    },
 
     addProseMirrorPlugins() {
         const editor = this.editor;
+        const { textColumnWidth } = this.options;
 
         return [
             new Plugin({
                 appendTransaction(transactions, _oldState, newState) {
-                    if (!transactions.some((tr) => tr.docChanged)) return null;
+                    // The server drops a viewer's writes, so a clamp in a viewer's tab would only part it from the doc.
+                    if (!editor.isEditable || !transactions.some((tr) => tr.docChanged)) return null;
 
                     const tr = newState.tr;
                     let modified = false;
-                    // A layout read, so made once a table is found.
-                    let maxWidth: number | null | undefined;
+                    let maxWidth: number | undefined;
 
                     newState.doc.descendants((node, pos) => {
                         if (node.type.name !== 'table') return;
                         const firstRow = node.firstChild;
                         if (!firstRow) return;
-                        if (maxWidth === undefined) maxWidth = textColumnWidth(editor.view.dom);
-                        if (maxWidth === null) return false;
+                        maxWidth ??= textColumnWidth();
 
                         // Sum column widths from the first row
                         let totalWidth = 0;

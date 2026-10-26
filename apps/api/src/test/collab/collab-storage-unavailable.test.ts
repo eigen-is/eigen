@@ -9,13 +9,14 @@ import {
 } from '@workspace/lib/constants/collab';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import * as decoding from 'lib0/decoding';
-import { MESSAGE_SYNC } from '../../lib/collab/collabDocument';
-import type Drive from '../../lib/drive/drive';
+import { MESSAGE_SYNC } from '../../lib/collab/collab-document';
+import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
 import type { User } from '../../lib/user';
 import type { FakeS3Server } from '../fake-s3-server';
-import { createFakeS3Mount, type FakeS3Mount, removeFakeS3Mount, settleContainer } from '../fault-storage-helpers';
+import type { FakeS3Mount } from '../fault-storage-helpers';
+import { createFakeS3Mount, removeFakeS3Mount, settleContainer } from '../fault-storage-helpers';
 import { authedRequest, getTestContext } from '../setup';
 
 // Any server-side (5xx) failure closes the collab WS with 1013 'storage-unavailable', unreachable storage
@@ -85,7 +86,7 @@ async function saveVersion(docId: string): Promise<Snapshot> {
     expect(res.status).toBe(200);
     const saved = (await res.json()) as Snapshot;
     // The version's upload is queued; the restore reads the stored object.
-    await mount.drainPendingUploads({ flushNow: true });
+    await mount.uploadQueue?.drain({ flushNow: true });
     return saved;
 }
 
@@ -259,7 +260,7 @@ describe('Collab WS open whose download fails', () => {
         const client = openCollabClient(docId);
         expect((await client.closed).code).toBe(COLLAB_STORAGE_UNAVAILABLE_CLOSE);
         expect(client.frames).not.toContain(MESSAGE_SYNC);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await storedBytes(dataKey)).toBe(before);
 
         fakeS3.faults.delete(dataKey);

@@ -1,6 +1,7 @@
-import { useMediaQuery } from '@workspace/lib/media';
+import { nextFontSize } from '@workspace/lib/constants/fonts';
+import { cellFontName, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
-import { ColorPickerButton } from '@workspace/ui/components/media';
+import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic } from 'lucide-react';
 import { useContext } from 'react';
@@ -13,39 +14,38 @@ import {
     handleTextBackground,
     handleTextColor,
     handleTextSize,
-    resolveFontName,
 } from '../../state';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
-import { FontSizeStepper } from './font-size-stepper';
-
-// Width seam below which this toolbar hides — MenuBar keys its grid on the same seam.
-export const formatToolbarQuery = '(min-width: 1360px)';
 
 // Quick-format controls mirrored from the docs toolbar, driving the exact same
 // handlers as the Format menu — an extra surface, not a replacement. The menu bar's
-// 1fr·auto·1fr grid centers this on the bar; the min-width gate hides it (with
-// read-only) below the width where the side blocks still leave room to sit centered.
+// 1fr·auto·1fr grid centers this on the bar; the bar's 1360px container query hides it
+// (as read-only does) below the width where the side blocks still leave room to sit centered.
 export function FormatToolbar() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
-    const hasSpace = useMediaQuery(formatToolbarQuery);
     // Reflect the anchor cell so the swatches + active alignment track the selection,
     // the way the docs toolbar follows the caret.
     const cell = useAnchorCell();
 
-    if (!hasSpace || !context.allowEdit) return null;
+    if (!context.allowEdit) return null;
 
     // `ht` is stored as '1'/'0'/'2' by the align handler but as a number on
     // defaults/imports — coerce before comparing.
     const textColor = cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
     const align = cell?.ht == null ? undefined : Number(cell.ht); // 0 = center, 1 = left, 2 = right
-    const fontName = resolveFontName(cell?.ff);
+    const fontName = cellFontName(cell?.ff) ?? SHEET_DEFAULT_FONT.name;
     const fontSize = Number(cell?.fs) || settings.defaultFontSize;
     const bold = Number(cell?.bl) === 1;
     const italic = Number(cell?.it) === 1;
+    const setFontSize = (size: number) => {
+        setContext((ctx) => {
+            handleTextSize(ctx, refs.cellInput.current!, size);
+        });
+    };
 
     return (
-        <div className="flex items-center gap-0.5">
+        <div className="hidden @[1360px]:flex items-center gap-0.5">
             <FontPicker
                 value={fontName}
                 onChange={(name) => {
@@ -59,11 +59,8 @@ export function FormatToolbar() {
 
             <FontSizeStepper
                 value={fontSize}
-                onChange={(size) => {
-                    setContext((ctx) => {
-                        handleTextSize(ctx, refs.cellInput.current!, size);
-                    });
-                }}
+                onChange={setFontSize}
+                onStep={(by) => setFontSize(nextFontSize(fontSize, by))}
             />
 
             <ToolbarSeparator />

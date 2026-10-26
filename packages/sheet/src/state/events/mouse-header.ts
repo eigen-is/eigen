@@ -1,9 +1,10 @@
 import { cloneDeep, isEmpty, isNil, last } from 'es-toolkit/compat';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import {
-    cancelActiveImgItem,
     createFormulaRangeSelect,
     createRangeHightlight,
+    deselectFloatingObject,
     functionHTMLGenerate,
     israngeseleciton,
     rangeHightlightselected,
@@ -27,8 +28,7 @@ export function handleRowHeaderMouseDown(
     if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
         return;
     }
-    // Cancel active image item
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     const rect = container.getBoundingClientRect();
     const mouseY = e.pageY - rect.top - window.scrollY;
@@ -332,8 +332,7 @@ export function handleColumnHeaderMouseDown(
     if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
         return;
     }
-    // Cancel active image item
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     const rect = container.getBoundingClientRect();
     const mouseX = e.pageX - rect.left - window.scrollX;

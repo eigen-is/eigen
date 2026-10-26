@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createArrayResolver, type SheetData } from '../../engine/cell-resolver';
+import type { SheetData } from '../../engine/cell-resolver';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { FormulaEngine, isFormula } from '../../engine/formula-engine';
 import { functionCopy } from '../../engine/formula-shift';
 
@@ -108,6 +109,11 @@ describe('engine/formula-engine — FormulaEngine.evaluate', () => {
         const result = engine.evaluate('=A2*2', 'sheet1', resolver);
         expect(result.value).toBe(10);
         expect(result.type).toBe('number');
+    });
+
+    test('an array result keeps its top-left value, as a spill anchor does =B1:C2', () => {
+        expect(engine.evaluate('=B1:C2', 'sheet1', resolver)).toEqual({ value: 20, display: '20', type: 'number' });
+        expect(engine.evaluate('=TRANSPOSE(B1:B2)', 'sheet1', resolver).value).toBe(20);
     });
 });
 

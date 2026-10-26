@@ -1,21 +1,20 @@
 // The scene as an ordered list of placed boxes: one definition of "where does this element go and what
 // does it draw", so the live canvas (one absolutely positioned div per element), the server compositor
-// (the same boxes as HTML) and the standalone SVG serializer agree by construction. The canvas draws one
-// elementLayer per element (ElementLayer); sceneLayers is the same pass over a whole scene, for a host
-// that lays a whole page out at once.
+// (the same boxes as HTML) and the standalone SVG serializer agree by construction. The canvas draws each
+// element through elementLayer's two halves (ElementLayer); sceneLayers is the same pass over a whole
+// scene, for a host that lays a whole page out at once.
 
 import { escapeXml } from '../core/xml';
 import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';
 import { elementsInFrame } from './frames';
-import { type Point, round } from './geometry';
-import { ELEMENT_KINDS, type RenderOutput } from './kinds';
+import type { Point } from './geometry';
+import type { RenderOutput } from './kinds';
+import { ELEMENT_KINDS } from './kinds';
+import { SVG_NS } from './kinds/render-utils';
+import { round } from './points';
 import type { MediaResolver } from './scene-to-svg';
 import type { VectorElement, VectorScene } from './types';
-
-// The SVG namespace, one spelling for every surface that writes it: the viewports this module emits,
-// the documents scene-to-svg serializes and the live <svg> nodes the canvas mounts.
-export const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export type Layer = {
     id: string;
@@ -39,15 +38,32 @@ type ElementLayerOptions = {
     resolveMedia?: MediaResolver;
     // An elbow arrow's derived route; without it the arrow falls back to its stored endpoints.
     route?: Point[];
+    // Prefixes the ids of the element's defs, for a surface that draws a copy of what another on the page draws.
+    idScope?: string;
 };
 
-// One element as a placed layer, or null when the kind draws nothing at all (an image with no media
-// name and no border is the only such element today). The live canvas
-// renders per element with local preview overrides, so it calls this directly; sceneLayers is the same
-// function over a whole scene.
+// One element as a placed layer, or null when the kind draws nothing at all. The live canvas renders per
+// element with local preview overrides, so it builds its layers from the two halves below; sceneLayers
+// is this over a whole scene.
 export function elementLayer(el: VectorElement, opts: ElementLayerOptions = {}): Layer | null {
-    const content = ELEMENT_KINDS[el.type].render(el, { resolveMedia: opts.resolveMedia, route: opts.route });
-    if (!('html' in content) && content.svg === '') return null;
+    const content = layerContent(el, opts);
+    return content && placeLayer(el, content);
+}
+
+// The fields only placeLayer reads: no kind's render does, so a host may keep a body across a change to them.
+export const PLACEMENT_FIELDS: readonly string[] = ['x', 'y', 'angle', 'opacity'];
+
+// What the element draws, in its own frame. Null when the kind draws nothing at all (an image with no
+// media name and no border is the only such element today).
+export function layerContent(el: VectorElement, opts: ElementLayerOptions = {}): RenderOutput | null {
+    // A kind names its defs after its element's id, and a url(#…) lands on the page's first def of that id: the Slides
+    // rail's copy of a shape mid-resize on the canvas would clip the canvas's hatch to the old outline.
+    const named = opts.idScope ? { ...el, id: `${opts.idScope}${el.id}` } : el;
+    const content = ELEMENT_KINDS[el.type].render(named, { resolveMedia: opts.resolveMedia, route: opts.route });
+    return !('html' in content) && content.svg === '' ? null : content;
+}
+
+export function placeLayer(el: VectorElement, content: RenderOutput): Layer {
     return {
         id: el.id,
         // An elbow arrow's derived route can spill outside its stored box; the box stays the element's,
@@ -68,18 +84,46 @@ type LayerBoxCss = { width: string; height: string; transform: string; opacity?:
 // center and translate is origin-independent, so `translate(x,y) rotate(a)` is the single-<svg>
 // renderer's `translate(x y) rotate(a w/2 h/2)` exactly.
 export function layerBoxCss({ box, opacity }: Pick<Layer, 'box' | 'opacity'>): LayerBoxCss {
-    const rotate = box.angle === 0 ? '' : ` rotate(${round(box.angle)}deg)`;
+    const rotate = box.angle === 0 ? '' : ` ${rotateCss(box.angle)}`;
     return {
         width: `${round(box.width)}px`,
         height: `${round(box.height)}px`,
         transform: `translate(${round(box.x)}px,${round(box.y)}px)${rotate}`,
-        ...(opacity === 100 ? null : { opacity: `${round(opacity / 100)}` }),
+        ...opacityCss(opacity),
     };
+}
+
+type LayerPrintCss = { top: string; left: string; width: string; height: string; transform?: string; opacity?: string };
+
+// The same box laid out where it prints, for a page whose top-left is `origin` in scene units. WeasyPrint
+// lays a page out ignoring transforms and cuts every line whose layout box passes the @page height, so the
+// origin rides in top and left and only the rotation stays a transform. A rotation about the default box
+// center places the box exactly where layerBoxCss's translate-then-rotate does.
+export function layerPrintCss(
+    { box, opacity }: Pick<Layer, 'box' | 'opacity'>,
+    origin: { x: number; y: number },
+): LayerPrintCss {
+    return {
+        top: `${round(box.y - origin.y)}px`,
+        left: `${round(box.x - origin.x)}px`,
+        width: `${round(box.width)}px`,
+        height: `${round(box.height)}px`,
+        ...(box.angle === 0 ? null : { transform: rotateCss(box.angle) }),
+        ...opacityCss(opacity),
+    };
+}
+
+function rotateCss(angle: number): string {
+    return `rotate(${round(angle)}deg)`;
+}
+
+function opacityCss(opacity: number): { opacity: string } | null {
+    return opacity === 100 ? null : { opacity: `${round(opacity / 100)}` };
 }
 
 // The class every rich-text body wraps in. It carries the descendant rules an inline style cannot
 // reach — list markers, blockquote rule, link underline (packages/ui/src/styles/canvas-text.css,
-// which the app imports and the standalone export document embeds).
+// which the app imports and the export document embeds).
 export const RICH_TEXT_CLASS = 'eigen-canvas-text';
 
 // The layer's body as one HTML string — everything a DOM host mounts inside the layer box, so the live

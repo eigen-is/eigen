@@ -1,4 +1,6 @@
 import type { useCommentLifecycle } from '@workspace/lib/comments';
+import type { SheetChart, SheetFloatingItem } from '@workspace/lib/sheets';
+import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_DEFAULT_FONT_SIZE, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -6,7 +8,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { v4 as uuidv4 } from 'uuid';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
-import type { Image, Selection, Sheet, SheetConfig } from './types';
+import type { Selection, Sheet, SheetConfig } from './types';
 
 // Cell value as accepted by setCellValue / surfaced through update hooks. Covers
 // raw scalar input from the formula bar / paste path plus the `Cell` object form
@@ -19,6 +21,18 @@ export type CommentInfo = {
     card: CommentCard;
     entry: CommentEntry | undefined;
     indicatorColor: string | null;
+};
+
+// The selected chart, on the current sheet; every sheet's name, for its data range; the categories and series
+// names its range resolves to, which name a pie's slices and the series rows; and whether its resolved data has
+// more points than the sketch draws.
+export type ChartPanelState = {
+    chart: SheetChart;
+    sheetId: string;
+    sheets: { id: string; name: string }[];
+    categories: string[];
+    seriesNames: string[];
+    sketchCapped: boolean;
 };
 
 export type Hooks = {
@@ -136,10 +150,13 @@ export type Hooks = {
     // inserting it as one floating image. `imageItems` is the re-upload
     // manifest; a pasted svg with no image items rides onPasteImageFile instead.
     onPasteSvgFile?: (svg: string, imageItems: EigenClipboardImageItem[]) => void;
-    // Fired whenever the active floating image changes (selected, deselected, or its geometry
-    // committed), so the app can mount/refresh its image properties panel. `null` when nothing is
-    // active.
-    onActiveImageChange?: (image: Image | null) => void;
+    // Fired whenever the selected image or chart changes (selected, deselected, or its record written),
+    // so the app can mount and refresh its properties panel. `null` when nothing is selected. The item
+    // is one reference per record, so the app's setState bails while nothing changed.
+    onActiveObjectChange?: (item: SheetFloatingItem | null) => void;
+    // Fired when a chart is selected or deselected and while it is selected, as the chart or the sheet names
+    // change, so the app can show the chart's sections in its panel.
+    onChartPanelChange?: (panel: ChartPanelState | null) => void;
 };
 
 export type Settings = {
@@ -157,16 +174,14 @@ export type Settings = {
     rowHeaderWidth?: number;
     columnHeaderHeight?: number;
     defaultFontSize?: number;
-    sheetTabContextMenu?: string[];
     filterContextMenu?: string[];
     generateSheetId?: () => string;
     hooks?: Hooks;
     currency?: string;
     fontList?: unknown[];
-    // Ephemeral aspect-lock state for the active image's ObjectTransform. The app owns it
-    // (via `useAspectLock`) so the same ON/OFF drives both the canvas handles and the panel checkbox;
-    // never stored on an element.
-    imageAspectLocked?: boolean;
+    // Keep aspect ratio for the selected image's or chart's corner grips. The app owns it (via
+    // `useAspectLock`) so the same ON/OFF drives both the grips and the panel checkbox; never stored.
+    aspectLocked?: boolean;
 };
 
 export const defaultSettings: Required<Settings> = {
@@ -181,19 +196,9 @@ export const defaultSettings: Required<Settings> = {
     devicePixelRatio: 0, // device pixel ratio; higher value gives sharper rendering, 0 means auto
     allowEdit: true, // whether to allow editing in the frontend
     forceCalculation: false, // force formula recalculation; may cause performance issues with many formulas, use with caution
-    rowHeaderWidth: 46,
-    columnHeaderHeight: 20,
-    defaultFontSize: 10,
-    sheetTabContextMenu: [
-        'delete',
-        'copy',
-        'rename',
-        'color',
-        'hide',
-        '|',
-        'move',
-        // "focus",
-    ], // custom sheet tab right-click menu
+    rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
+    columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
+    defaultFontSize: SHEET_DEFAULT_FONT_SIZE,
     filterContextMenu: [
         'sort-by-asc',
         'sort-by-desc',
@@ -208,5 +213,5 @@ export const defaultSettings: Required<Settings> = {
     hooks: {},
     currency: '€',
     fontList: [],
-    imageAspectLocked: false,
+    aspectLocked: false,
 };

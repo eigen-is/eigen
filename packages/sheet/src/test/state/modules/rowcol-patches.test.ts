@@ -12,7 +12,10 @@
 // the moment someone reintroduces `ctx.sheets = ...`.
 
 import { describe, expect, test } from 'bun:test';
-import { enablePatches, type Patch, produceWithPatches } from 'immer';
+import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import type { CellRangeRef } from '@workspace/lib/types/chart';
+import type { Patch } from 'immer';
+import { enablePatches, produce, produceWithPatches } from 'immer';
 import type { Context } from '../../../state/context';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { contextFactory } from '../factories/context';
@@ -59,5 +62,47 @@ describe('row/col reducers emit per-sheet patches, not wholesale sheets replace'
         }
         expect(sheetIndices.has(0)).toBe(true);
         expect(sheetIndices.has(1)).toBe(false);
+    });
+});
+
+// A chart a row op moves gets back its changed parts only, a keyed part an entry at a time, so neither its patches nor
+// its undo's carry a record a peer may have written another entry of.
+describe('a row op writes a moved chart per part and per entry', () => {
+    const sample = sampleChartSpec('pie');
+    const values = { sheetId: 'id_1', row: [2, 5], column: [1, 1] } satisfies CellRangeRef;
+    const withChart = produce(contextFactory() as Context, (ctx: Context) => {
+        ctx.sheets[0].charts = {
+            c1: {
+                id: 'c1',
+                index: 'a0',
+                x: 0,
+                y: 0,
+                width: 400,
+                height: 300,
+                ...newSheetChartSpecParts({
+                    ...sample,
+                    points: { 's-1': { 1: { color: '#111111' }, 3: { color: '#333333' } } },
+                    data: { source: 'range', categories: null, series: [{ id: 's-1', name: 'Points', values }] },
+                }),
+            },
+        };
+    });
+    const paths = (patches: Patch[]) =>
+        patches.filter((p) => p.path[2] === 'charts').map((p) => [p.op, p.path.slice(3).join('/')]);
+
+    test('an insert ships specData whole and the moved point as its entries, and so does its undo', () => {
+        const [, patches, inverse] = produceWithPatches(withChart, (ctx: Context) => {
+            insertRowCol(ctx, { type: 'row', index: 4, count: 1, direction: 'lefttop', id: 'id_1' }, false);
+        });
+        expect(paths(patches).sort()).toEqual([
+            ['add', 'c1/specPoints/s-1/4'],
+            ['remove', 'c1/specPoints/s-1/3'],
+            ['replace', 'c1/specData'],
+        ]);
+        expect(paths(inverse).sort()).toEqual([
+            ['add', 'c1/specPoints/s-1/3'],
+            ['remove', 'c1/specPoints/s-1/4'],
+            ['replace', 'c1/specData'],
+        ]);
     });
 });

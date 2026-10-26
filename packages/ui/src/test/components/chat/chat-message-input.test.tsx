@@ -7,7 +7,8 @@ import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-mock.module('@workspace/lib/auth', () => ({ useAuth: () => ({ user: null }), useIsGuest: () => false }));
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
 
 const { act, createElement } = await import('react');
 const { Dialog, DialogContent, DialogDescription, DialogTitle } = await import('../../../components/dialog');

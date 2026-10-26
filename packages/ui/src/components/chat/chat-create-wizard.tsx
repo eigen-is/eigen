@@ -3,8 +3,10 @@ import { AppError } from '@workspace/lib/api-error';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useChatSections, useCreateChatRoom, useFindChatByMembers } from '@workspace/lib/chat';
 import { useMyTeams } from '@workspace/lib/home';
-import { CHATS_FOLDER_NAME, type ChatMatch } from '@workspace/lib/types/chat';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { ChatMatch } from '@workspace/lib/types/chat';
+import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { useDebouncedValue } from '@workspace/lib/use-debounced-value';
@@ -26,10 +28,12 @@ import {
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { ChevronDown, MessageSquare, User, Users, X } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
-import { DriveLocationField, type DriveLocationValue } from '../drive/drive-location-field';
+import type { DriveLocationValue } from '../drive/drive-location-field';
+import { DriveLocationField } from '../drive/drive-location-field';
 import { InfoBlock } from '../info-block';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { UserItem } from '../user/user-item';
@@ -415,7 +419,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                     <DropdownMenuContent align="start">
                                         {selectedTeam && (
                                             <DropdownMenuItem onClick={() => setSelectedTeamId(null)}>
-                                                <User className="h-4 w-4 mr-2" />
+                                                <User className="h-4 w-4" />
                                                 Personal chat
                                             </DropdownMenuItem>
                                         )}
@@ -425,7 +429,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                                 onClick={() => setSelectedTeamId(team.id)}
                                                 disabled={team.id === selectedTeamId}
                                             >
-                                                <Users className="h-4 w-4 mr-2" />
+                                                <Users className="h-4 w-4" />
                                                 {team.name}
                                             </DropdownMenuItem>
                                         ))}

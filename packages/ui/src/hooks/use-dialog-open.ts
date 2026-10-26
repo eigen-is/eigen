@@ -1,4 +1,5 @@
-import { type RefObject, useSyncExternalStore } from 'react';
+import type { RefObject } from 'react';
+import { useSyncExternalStore } from 'react';
 
 // Is a modal open? Every one carries role="dialog" (Radix dialogs, alert dialogs and popovers; the
 // hand-rolled overlays under `useFocusTrap`), so the DOM is the one source. The gate every

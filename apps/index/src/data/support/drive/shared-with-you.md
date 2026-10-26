@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, sharing, permissions, collaboration]
 related: [drive/share-a-file, drive/get-started]
 order: 90
-updated: 2026-09-13
+updated: 2026-10-23
 ---
 
 Drive keeps two views that bring shared files together in one place: **Shared with me** shows everything other people have given you access to, and **Shared by me** shows everything you have shared with others.
@@ -43,7 +43,7 @@ When you open a folder that was shared with you for viewing only, Drive shows th
 
 ## Remove something from Shared with me
 
-To take a file out of your list, right-click it and choose **Move to trash**. When the file was shared with you directly, this gives up your own access rather than trashing it. The file stays untouched in the owner's drive, and they can share it with you again later.
+To take a file that was shared with you directly out of your list, right-click it and choose **Remove shared item**. This gives up your own access rather than trashing it. The file stays untouched in the owner's drive, and they can share it with you again later.
 
 A file you reached by opening a folder someone shared works differently. Trashing it there moves the owner's file to the Trash, the same as any other file you are allowed to change.
 

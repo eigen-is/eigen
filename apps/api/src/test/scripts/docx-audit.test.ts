@@ -3,20 +3,25 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeZip } from '../../lib/core/zip';
-import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import type { JSONContent } from '@tiptap/core';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { writeDocx } from '../../lib/export/doc/docx/to-docx';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import { writeZip } from '../../lib/ooxml/zip';
+import type { Feature, Tally } from '../../scripts/docx-audit';
 import {
     auditImported,
     auditSource,
+    classifyDocx,
     compareRuns,
     compareTallies,
-    type Feature,
     runAudit,
-    type Tally,
+    runRoundtrip,
 } from '../../scripts/docx-audit';
+import { sampleChartParts } from '../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
-import { buildDocxWithBody } from '../fixtures/golden-docx';
+import { buildDocxWithBody, GOLDEN_DOCX_IMAGE_RUN } from '../fixtures/golden-docx';
+import { PIXEL_PNG } from '../fixtures/pptx';
 
 // The audit measures a docx importer against what Word shows, so what it counts is pinned here: Word's semantics on
 // the source side, the eigendoc JSON on the other, and one measure for every importer.
@@ -65,10 +70,26 @@ describe('source side', () => {
         expect(tally.words).toEqual(['a', 'b']);
     });
 
-    test("an equation's objects and runs are words of their own, as the reader reads them", async () => {
-        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup><m:r><m:t>+1</m:t></m:r></m:oMath>`;
-        const tally = await source(`<w:p>${run('So ')}${math}</w:p>`);
-        expect(tally.words).toEqual(['So', 'x2', '+1']);
+    test('an equation counts as one and is no text, each of an m:oMathPara, a deleted one or one in a field code none', async () => {
+        const math =
+            '<m:oMath><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:oMath>';
+        const p = (inner: string) =>
+            `<w:p xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">${inner}</w:p>`;
+        const sentence = p(`${run('So')}${math}${run('holds')}`);
+        const field = `<w:r><w:fldChar w:fldCharType="begin"/></w:r>${math}<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+        const body = `${sentence}${p(`<w:del w:id="1" w:author="a">${math}</w:del>${field}`)}${p(`<m:oMathPara>${math}${math}</m:oMathPara>`)}`;
+        const tally = await source(body);
+        expect([tally.words, count(tally, 'equations')]).toEqual([['So', 'holds'], 3]);
+        const imported = auditImported(docxToPmJson(Buffer.from(await buildDocxWithBody(body))).json);
+        expect([imported.words, count(imported, 'equations')]).toEqual([['So', 'holds'], 3]);
+    });
+
+    // CT_R holds no math, but the reader reads it there, so the audit counts it too.
+    test('an equation directly in a run counts, each of an m:oMathPara there too', async () => {
+        const math = '<m:oMath><m:r><m:t>x</m:t></m:r></m:oMath>';
+        const body = `<w:p xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><w:r>${math}<m:oMathPara>${math}${math}</m:oMathPara></w:r></w:p>`;
+        const imported = auditImported(docxToPmJson(Buffer.from(await buildDocxWithBody(body))).json);
+        expect([count(await source(body), 'equations'), count(imported, 'equations')]).toEqual([3, 3]);
     });
 
     test("a w:t's surrounding whitespace counts only where xml:space preserves it, as Word draws it", async () => {
@@ -167,19 +188,42 @@ describe('source side', () => {
         ]);
     });
 
-    test('small text is noticeably smaller than the body, not a point smaller', async () => {
+    test('a font size is a size other than the body', async () => {
         // No size in the styles: Word's 10 pt body.
         const tally = await source(
-            `<w:p>${run('body', '<w:sz w:val="18"/>')}${run(' small', '<w:sz w:val="16"/>')}</w:p>`,
+            `<w:p>${run('body', '<w:sz w:val="20"/>')}${run(' small', '<w:sz w:val="16"/>')}${run(' big', '<w:sz w:val="28"/>')}</w:p>`,
         );
-        expect(tally.marks.get('small')).toEqual(['small']);
+        expect(tally.marks.get('size')).toEqual(['small', 'big']);
+    });
+
+    // As the import reads it: a heading draws its own size, so only a run set apart from its style's has one.
+    test("a heading's style size is no font size, a run's own is", async () => {
+        const tally = await source(
+            `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>${run('Plan')}${run(' big', '<w:sz w:val="48"/>')}</w:p>`,
+            '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:sz w:val="32"/></w:rPr></w:style>',
+        );
+        expect(tally.marks.get('size')).toEqual(['big']);
+    });
+
+    // As the editor reads it: a size the schema drops draws at the node's own.
+    test('an imported font size is one readFontSize reads', () => {
+        const sized = (text: string, fontSize: unknown) => ({
+            type: 'text',
+            text,
+            marks: [{ type: 'textStyle', attrs: { fontSize } }],
+        });
+        const imported = auditImported({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [sized('big ', 14), sized('odd', '14pt')] }],
+        });
+        expect(imported.marks.get('size')).toEqual(['big']);
     });
 
     test("a footnote's marker is no text on either side", async () => {
         const tally = await source(
             `<w:p>${run('Ouch')}<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r>${run('.')}</w:p>`,
         );
-        // As the reader writes it.
+        // As the reader writes it: the node, holding the note's paragraphs.
         const imported = auditImported({
             type: 'doc',
             content: [
@@ -187,11 +231,7 @@ describe('source side', () => {
                     type: 'paragraph',
                     content: [
                         { type: 'text', text: 'Ouch' },
-                        {
-                            type: 'text',
-                            text: '[1]',
-                            marks: [{ type: 'superscript' }, { type: 'link', attrs: { href: '#footnote-1' } }],
-                        },
+                        { type: 'footnote', content: [{ type: 'paragraph' }] },
                         { type: 'text', text: '.' },
                     ],
                 },
@@ -359,10 +399,10 @@ describe('source side', () => {
         expect([tally.words, count(tally, 'heading1')]).toEqual([['Strict', 'title', 'Two', 'words'], 1]);
     });
 
-    test('the source is read with core/zip, not JSZip', () => {
+    test('the source is read with ooxml/zip, not JSZip', () => {
         const script = fs.readFileSync(new URL('../../scripts/docx-audit.ts', import.meta.url), 'utf8');
         expect(script).not.toContain("from 'jszip'");
-        expect(script).toContain("from '../lib/core/zip'");
+        expect(script).toContain("from '../lib/ooxml/zip'");
     });
 
     test('a start override restarts its list once', async () => {
@@ -409,6 +449,20 @@ describe('both sides', () => {
         expect([features['bold']?.kept, features['italic']?.kept]).toEqual([1, 1]);
     });
 
+    // The reader reads a heading of only runs set by hand at most at the body's size as body text.
+    test('a heading the reader reads as body text sizes its runs against the body on both sides', async () => {
+        const docx = await buildDocxWithBody(
+            `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>${run('Question', '<w:sz w:val="20"/>')}${run(' fine', '<w:sz w:val="16"/>')}</w:p>`,
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:sz w:val="32"/></w:rPr></w:style>',
+            },
+        );
+        const source = auditSource(docx);
+        expect(source.marks.get('size')).toEqual(['fine']);
+        const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        expect([features['size']?.kept, features['size']?.invented]).toEqual([1, 0]);
+    });
+
     // A link style in a color of its own is Word's look; one in the link look is the link's.
     test('a link style in a color of its own counts as color and underline on both sides, the link look on neither', async () => {
         const style = (id: string, color: string) =>
@@ -438,8 +492,8 @@ describe('both sides', () => {
 <w:style w:type="paragraph" w:styleId="Chapter"><w:name w:val="heading 1"/>${heading}</w:style>`,
             },
         );
-        const { json } = docxToPmJson(Buffer.from(docx));
-        return { source: auditSource(docx), imported: auditImported(json) };
+        const { json, style } = docxToPmJson(Buffer.from(docx));
+        return { source: auditSource(docx), imported: auditImported(json, style.font) };
     }
 
     const NO_FONT = { source: 0, imported: 0, matched: 0, invented: 0, kept: null };
@@ -538,7 +592,8 @@ describe('both sides', () => {
 <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/></w:rPr></w:style>`,
         });
         const tally = auditSource(docx);
-        const { features } = compareTallies(tally, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        const { json, style } = docxToPmJson(Buffer.from(docx));
+        const { features } = compareTallies(tally, auditImported(json, style.font));
         expect([count(tally, 'font'), features['font']?.kept]).toEqual([4, 1]);
     });
 
@@ -557,16 +612,24 @@ describe('both sides', () => {
     });
 
     // The writer's mapping read back: what the doc holds, the audit finds in its docx. A Word drawing always has a
-    // size, so the photo the doc leaves at its own width has one there.
+    // size, so the photo the doc leaves at its own width has one there; the display equation is a paragraph of its own,
+    // so the text after it is one more; and a page number is its field's cached 1.
     test("the writer's docx holds what its doc holds", async () => {
         const json = buildAllFeaturesDocJson();
-        const docx = await eigendocToDocx(json, buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined);
+        const docx = writeDocx(
+            { json, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+            { title: 'Report.eigendoc', media: buildAllFeaturesDocMedia(), lost: () => {} },
+        );
         const written = auditSource(docx);
-        const held = auditImported(json);
+        const cached = (node: JSONContent): JSONContent =>
+            node.type === 'pageNumber' ? { type: 'text', text: '1' } : { ...node, content: node.content?.map(cached) };
+        const held = auditImported(cached(json));
         expect(Object.fromEntries(written.counts)).toEqual({
             ...Object.fromEntries(held.counts),
             imageWidths: count(held, 'images'),
+            paragraphs: count(held, 'paragraphs') + 1,
         });
+        expect(count(written, 'equations')).toBe(2);
         expect(written.words.toSorted()).toEqual(held.words.toSorted());
         expect(written.numbers.toSorted()).toEqual(held.numbers.toSorted());
         const marked = (tally: Tally) =>
@@ -720,7 +783,7 @@ describe('runs', () => {
     test('a reply that is no eigendoc is a crash', async () => {
         const dir = await corpus('malformed', { 'a.docx': await buildDocxWithBody(paragraph('first')) });
         const stub = path.join(fs.mkdtempSync(path.join(scratch, 'importer-')), 'malformed.ts');
-        await Bun.write(stub, 'export async function docxToPmJson() { return { json: null, images: [] }; }');
+        await Bun.write(stub, 'export async function docxToPmJson() { return { json: null, media: [] }; }');
         const out = path.join(scratch, 'out-malformed');
         const meta = await runAudit({ corpus: dir, out, importer: stub, name: 'malformed', timeoutMs: 5000 });
         const result = JSON.parse(fs.readFileSync(path.join(out, 'files/a.docx.json'), 'utf8'));
@@ -746,7 +809,7 @@ describe('runs', () => {
     test('a run is named after its importer module, the reader by default', async () => {
         const dir = await corpus('named', { 'a.docx': await buildDocxWithBody(paragraph('named')) });
         const stub = path.join(fs.mkdtempSync(path.join(scratch, 'importer-')), 'foreign.ts');
-        await Bun.write(stub, 'export async function docxToPmJson() { return { json: { type: "doc" }, images: [] }; }');
+        await Bun.write(stub, 'export async function docxToPmJson() { return { json: { type: "doc" }, media: [] }; }');
         const script = fileURLToPath(new URL('../../scripts/docx-audit.ts', import.meta.url));
         const names = await Promise.all(
             [[], ['--importer', stub]].map(async (args, index) => {
@@ -758,4 +821,216 @@ describe('runs', () => {
         );
         expect(names).toEqual(['from-docx', 'foreign']);
     }, 60_000);
+});
+
+describe('round trip', () => {
+    const WRITER = fileURLToPath(new URL('../../lib/export/doc/docx/to-docx.ts', import.meta.url));
+    const script = fileURLToPath(new URL('../../scripts/docx-audit.ts', import.meta.url));
+    const text = (value: string, ...marks: { type: string; attrs?: Record<string, unknown> }[]): JSONContent => ({
+        type: 'text',
+        text: value,
+        ...(marks.length > 0 && { marks }),
+    });
+    const figure = { type: 'figure', attrs: { mediaName: 'pixel.png', width: 40, alignment: 'center' } };
+    // A heading, marks and a link, a list, a table and a picture, which our writer gives a paragraph of its own.
+    const DOC: JSONContent = {
+        type: 'doc',
+        content: [
+            { type: 'heading', attrs: { level: 1 }, content: [text('A heading')] },
+            {
+                type: 'paragraph',
+                content: [
+                    text('Plain, '),
+                    text('bold', { type: 'bold' }),
+                    text(' and a link', { type: 'link', attrs: { href: 'https://eigen.is/' } }),
+                ],
+            },
+            {
+                type: 'bulletList',
+                content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [text('An item')] }] }],
+            },
+            {
+                type: 'table',
+                content: [
+                    {
+                        type: 'tableRow',
+                        content: ['One', 'Two'].map((cell) => ({
+                            type: 'tableCell',
+                            content: [{ type: 'paragraph', content: [text(cell)] }],
+                        })),
+                    },
+                ],
+            },
+            { type: 'paragraph', content: [text('Before the picture'), figure, text('after it')] },
+        ],
+    };
+    const docx = async () =>
+        new Uint8Array(
+            writeDocx(
+                { json: DOC, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+                {
+                    title: 'Round trip',
+                    media: [
+                        {
+                            name: 'pixel.png',
+                            contentType: 'image/png',
+                            data: PIXEL_PNG.slice().buffer,
+                            width: 1,
+                            height: 1,
+                        },
+                    ],
+                    lost: () => {},
+                },
+            ),
+        );
+    const corpus = async (name: string, files: Record<string, Uint8Array | string>) => {
+        const dir = path.join(scratch, name);
+        for (const [file, bytes] of Object.entries(files)) await Bun.write(path.join(dir, file), bytes);
+        return dir;
+    };
+    // Its own directory: Bun's resolver keeps a listing of a directory it loaded a module from.
+    const writer = async (name: string, source: string) => {
+        const module = path.join(fs.mkdtempSync(path.join(scratch, 'writer-')), `${name}.ts`);
+        await Bun.write(module, source);
+        return module;
+    };
+
+    test('our writer brings its own doc back; a refused file is skipped', async () => {
+        const dir = await corpus('roundtrip', { 'doc.docx': await docx(), 'bad.docx': 'no zip' });
+        const out = path.join(scratch, 'out-roundtrip');
+        const meta = await runRoundtrip({ corpora: [dir], out, timeoutMs: 30_000 });
+        expect(meta.outcomes).toEqual({ ok: 1, skipped: 1, crash: 0, timeout: 0, memory: 0 });
+        expect([meta.pass, meta.unlisted, meta.listed]).toEqual([
+            true,
+            { differences: 0, files: 0 },
+            { differences: 0, files: 0 },
+        ]);
+    }, 60_000);
+
+    // Readers collapse the space above a paragraph with the one above it leaves below, so the figure's paragraph keeps
+    // none of a space the paragraph above already gives.
+    test("a figure's paragraph comes back without a space above that the paragraph above gives", async () => {
+        const body = `<w:p><w:pPr><w:spacing w:after="120"/></w:pPr><w:r><w:t>Above</w:t></w:r></w:p>
+<w:p><w:pPr><w:spacing w:before="120"/></w:pPr>${GOLDEN_DOCX_IMAGE_RUN}<w:r><w:t>Note</w:t></w:r></w:p>`;
+        const file = new Uint8Array(await buildDocxWithBody(body, { media: { 'word/media/pixel.png': PIXEL_PNG } }));
+        const dir = await corpus('collapsed', { 'doc.docx': file });
+        const meta = await runRoundtrip({
+            corpora: [dir],
+            out: path.join(scratch, 'out-collapsed'),
+            timeoutMs: 30_000,
+        });
+        expect([meta.outcomes.ok, meta.unlisted]).toEqual([1, { differences: 0, files: 0 }]);
+    }, 60_000);
+
+    test('a writer that changes a run, moves a heading a level and drops a picture fails the gate, each by kind', async () => {
+        const dir = await corpus('mutated', { 'doc.docx': await docx() });
+        const planted = await writer(
+            'planted',
+            `import { writeDocx as write } from ${JSON.stringify(WRITER)};
+            export function writeDocx(doc, options) {
+                const copy = structuredClone(doc.json);
+                const [heading, paragraph] = copy.content;
+                heading.attrs.level = 2;
+                paragraph.content[0].text = 'Changed, ';
+                for (const block of copy.content)
+                    block.content = block.content?.filter((node) => node.type !== 'figure');
+                return write({ ...doc, json: copy }, options);
+            }`,
+        );
+        const out = path.join(scratch, 'out-mutated');
+        const run = Bun.spawnSync([process.execPath, script, 'roundtrip', dir, '--out', out, '--writer', planted]);
+        expect(run.exitCode).toBe(1);
+        expect(run.stdout.toString()).toContain('\nRound trip FAIL: 1 files, 1 imported and written back, 0 skipped');
+        const summary = fs.readFileSync(path.join(out, 'summary.md'), 'utf8');
+        for (const row of [
+            '| heading level | **unlisted** | 1 | 1 |',
+            '| text | **unlisted** | 1 | 1 |',
+            '| blocks | **unlisted** | 1 | 1 |',
+        ])
+            expect(summary).toContain(row);
+        expect(summary).toContain('| mutated/doc.docx | text | **unlisted** | 1 | body.1.0: "Plain, " → "Changed, " |');
+    }, 60_000);
+
+    test('a writer that throws is a crash, at its stage', async () => {
+        const dir = await corpus('throws', { 'doc.docx': await docx() });
+        const planted = await writer('throws', 'export function writeDocx() { throw new Error("writer broke"); }');
+        const out = path.join(scratch, 'out-throws');
+        const meta = await runRoundtrip({ corpora: [dir], out, writer: planted, timeoutMs: 30_000 });
+        expect([meta.pass, meta.outcomes.crash]).toEqual([false, 1]);
+        const result = JSON.parse(fs.readFileSync(path.join(out, 'files/throws/doc.docx.json'), 'utf8'));
+        expect([result.outcome, result.stage, result.error.split('\n')[0]]).toEqual([
+            'crash',
+            'export',
+            'Error: writer broke',
+        ]);
+    }, 60_000);
+
+    test('a chart compares as one spec, its series ids by place; one that comes back as anything else is unlisted', () => {
+        const imported = (...content: JSONContent[]) => ({
+            json: { type: 'doc', content: [{ type: 'paragraph', content }] },
+            bands: {},
+            page: DEFAULT_PAGE_SETUP,
+            style: DEFAULT_NORMAL_STYLE,
+            media: [],
+            warnings: [],
+        });
+        const parts = sampleChartParts('column');
+        const chart = { type: 'chart', attrs: { ...parts, width: 200, height: 100 } };
+        // As a reader names them by c:idx.
+        const ids = Object.entries(parts).map(([key, part]) => [key, part.replaceAll('"s-', '"x-')]);
+        const renamed = { ...chart, attrs: { ...chart.attrs, ...Object.fromEntries(ids) } };
+        expect(renamed.attrs.specData).toContain('"x-1"');
+        const groups = (back: JSONContent) =>
+            classifyDocx({
+                a: imported(chart),
+                b: imported(back),
+                pictures: { a: new Map(), b: new Map() },
+                prepared: new Map(),
+            }).map(({ kind, listed }) => [kind, listed]);
+        expect(groups(renamed)).toEqual([]);
+        expect(groups({ type: 'figure', attrs: { mediaName: 'chart.svg' } })).toEqual([['node', false]]);
+        expect(groups(text('Chart'))).toEqual([['node', false]]);
+    });
+
+    // The writer writes no space at a split, so the pieces draw as one paragraph; a node that draws a space there reads
+    // that 0 back.
+    test('a paragraph, a heading and a cell paragraph a picture splits are listed, the space at the split included', async () => {
+        const image =
+            '<w:r><w:drawing><wp:inline><wp:extent cx="381000" cy="381000"/><wp:docPr id="1" name="Picture 1"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:blipFill><a:blip r:embed="rId4"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+        const split = (pPr: string) =>
+            `<w:p><w:pPr>${pPr}</w:pPr><w:r><w:t>Before</w:t></w:r>${image}<w:r><w:t>after</w:t></w:r></w:p>`;
+        const a = docxToPmJson(
+            Buffer.from(
+                await buildDocxWithBody(
+                    split('') +
+                        split('<w:pStyle w:val="Heading1"/>') +
+                        `<w:tbl><w:tr><w:tc>${split('')}</w:tc></w:tr></w:tbl>`,
+                    {
+                        styles: '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="200"/></w:pPr></w:style>',
+                        media: { 'word/media/pixel.png': PIXEL_PNG },
+                    },
+                ),
+            ),
+        );
+        const media = a.media.map(({ name, data }) => ({
+            name,
+            contentType: 'image/png',
+            data: data.slice().buffer,
+            width: 1,
+            height: 1,
+        }));
+        const b = docxToPmJson(Buffer.from(writeDocx(a, { title: 'Split', media, lost: () => {} })));
+        const picture = { contentType: 'image/png', width: 1, height: 1 };
+        const pictures = (images: { name: string }[]) => new Map(images.map(({ name }) => [name, picture]));
+        const groups = classifyDocx({
+            a,
+            b,
+            pictures: { a: pictures(a.media), b: pictures(b.media) },
+            prepared: pictures(a.media),
+        });
+        expect(groups.filter(({ listed }) => !listed).map(({ kind }) => kind)).toEqual([]);
+        expect(groups.find(({ kind }) => kind === 'figures and display equations split their textblock')?.count).toBe(
+            3,
+        );
+    });
 });

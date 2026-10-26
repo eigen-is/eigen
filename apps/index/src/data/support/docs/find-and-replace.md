@@ -7,7 +7,7 @@ tags: [docs, search, find, replace, editing]
 related: [docs/create-and-edit, docs/comments, getting-started/search-and-command-palette]
 crossSections: [sheets]
 order: 25
-updated: 2026-09-13
+updated: 2026-10-18
 ---
 
 Every Eigen editor has a find bar for searching the document you already have open. It works the same way in Docs, Sheets, Slides, Stickies boards, drawings, and the text and code editors built into Drive, and in some of them it replaces what it finds as well.
@@ -22,7 +22,7 @@ There are three ways in:
 
 The bar appears in the top right of the editor. Type your term and the matches light up as you type.
 
-To open it with the replace row already showing, press **⌥⌘F** on a Mac (**Ctrl+Alt+F** or **Ctrl+H** on Windows and Linux), or choose **Find and replace** from the **Edit** menu.
+To open it with the replace row already showing, press **⇧⌘H** on a Mac (**Ctrl+Shift+H** or **Ctrl+H** on Windows and Linux), or choose **Find and replace** from the **Edit** menu.
 
 ## Step through the matches
 
@@ -32,7 +32,7 @@ The count inside the **Find** box tells you where you are. **1 of 12** means you
 - Or click the down and up arrows beside the box (**Next match** and **Previous match**).
 - **⌘G** and **⌘⇧G** (**Ctrl+G** and **Ctrl+Shift+G**) step forwards and backwards too. They work even when the bar is closed, using your last term.
 
-Every match stays highlighted, and the editor scrolls the current one to the middle of the screen so the bar can't cover it. The search covers the whole document, not the part you're looking at: in Sheets it runs across every tab, and in Slides across every slide, so stepping on can move you somewhere else in the file.
+Every match stays highlighted, and the editor scrolls the current one to the middle of the screen so the bar can't cover it. The search covers the whole document, not the part you're looking at: in Sheets it runs across every tab, and in Slides across every slide, so stepping on can move you somewhere else in the file. In Docs, the find bar looks inside footnotes and opens the one the current match is in, but it doesn't look inside equations.
 
 ## Narrow what counts as a match
 

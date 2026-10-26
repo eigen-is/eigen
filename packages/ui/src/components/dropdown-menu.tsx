@@ -1,7 +1,7 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { useIsMobile } from '@workspace/lib/media';
 import { cn } from '@workspace/ui/lib/utils';
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CircleIcon } from 'lucide-react';
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, MinusIcon } from 'lucide-react';
 import type * as React from 'react';
 import {
     Children,
@@ -39,7 +39,7 @@ const PageContext = createContext<{ id: string | null }>({ id: null });
 const SubContext = createContext<{ id: string; label: React.ReactNode } | null>(null);
 
 const subTriggerClassName =
-    "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+    "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground flex cursor-default items-center gap-4 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 
 // A row is hidden unless the active page matches the page it sits on.
 function useRowHidden(): boolean {
@@ -166,7 +166,7 @@ function DropdownMenuItem({
             data-inset={inset}
             data-variant={variant}
             className={cn(
-                "focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:!text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+                "focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:!text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-4 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
                 props.onClick || props.asChild ? 'cursor-pointer' : 'cursor-default',
                 className,
                 hidden && 'hidden',
@@ -187,7 +187,7 @@ function DropdownMenuCheckboxItem({
         <DropdownMenuPrimitive.CheckboxItem
             data-slot="dropdown-menu-checkbox-item"
             className={cn(
-                "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+                "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-4 rounded-sm py-1.5 pr-2 pl-8 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
                 className,
                 hidden && 'hidden',
             )}
@@ -196,7 +196,7 @@ function DropdownMenuCheckboxItem({
         >
             <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
                 <DropdownMenuPrimitive.ItemIndicator>
-                    <CheckIcon className="size-4" />
+                    {checked === 'indeterminate' ? <MinusIcon className="size-4" /> : <CheckIcon className="size-4" />}
                 </DropdownMenuPrimitive.ItemIndicator>
             </span>
             {children}
@@ -228,7 +228,7 @@ function DropdownMenuRadioItem({
         <DropdownMenuPrimitive.RadioItem
             data-slot="dropdown-menu-radio-item"
             className={cn(
-                "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+                "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-4 rounded-sm py-1.5 pr-2 pl-8 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
                 className,
                 hidden && 'hidden',
             )}
@@ -236,7 +236,7 @@ function DropdownMenuRadioItem({
         >
             <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
                 <DropdownMenuPrimitive.ItemIndicator>
-                    <CircleIcon className="size-2 fill-current" />
+                    <CheckIcon className="size-4" />
                 </DropdownMenuPrimitive.ItemIndicator>
             </span>
             {children}
@@ -264,10 +264,16 @@ function DropdownMenuLabel({
 
 function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
     const hidden = useRowHidden();
+    // Hides itself when it opens the menu, follows another separator or has no row after it, so a group whose rows
+    // all render nothing leaves no line behind.
     return (
         <DropdownMenuPrimitive.Separator
             data-slot="dropdown-menu-separator"
-            className={cn('bg-border -mx-1 my-1 h-px', className, hidden && 'hidden')}
+            className={cn(
+                'bg-border -mx-1 my-1 h-px first:hidden [[data-slot=dropdown-menu-separator]+&]:hidden [&:not(:has(~:not([data-slot=dropdown-menu-separator])))]:hidden',
+                className,
+                hidden && 'hidden',
+            )}
             {...props}
         />
     );
@@ -416,7 +422,64 @@ function DropdownMenuSubContent({
     );
 }
 
+// One option of a choice: the value it sets and its row, which an icon, swatch or avatar may lead.
+type ChoiceOption<T> = { value: T; label: React.ReactNode };
+
+type ChoiceMenuItemsProps<T extends string | number | boolean | null> = {
+    // The current value; undefined, as for a mixed selection, checks no row.
+    value: T | undefined;
+    options: readonly ChoiceOption<T>[];
+    onChange: (value: T) => void;
+};
+
+// docs/LAYOUT.md § A choice is a submenu with a check: one row per option, the current one checked.
+function ChoiceMenuItems<T extends string | number | boolean | null>({
+    value,
+    options,
+    onChange,
+}: ChoiceMenuItemsProps<T>) {
+    return (
+        <DropdownMenuRadioGroup value={value === undefined ? '' : String(value)}>
+            {options.map((option) => (
+                <DropdownMenuRadioItem
+                    key={String(option.value)}
+                    value={String(option.value)}
+                    onSelect={() => onChange(option.value)}
+                >
+                    {option.label}
+                </DropdownMenuRadioItem>
+            ))}
+        </DropdownMenuRadioGroup>
+    );
+}
+
+type ChoiceMenuSubProps<T extends string | number | boolean | null> = ChoiceMenuItemsProps<T> & {
+    // The submenu's row: the property's icon and name.
+    trigger: React.ReactNode;
+    disabled?: boolean;
+    contentClassName?: string;
+};
+
+// A choice in a menu of actions: a submenu named for the property, its options in ChoiceMenuItems.
+function ChoiceMenuSub<T extends string | number | boolean | null>({
+    trigger,
+    disabled,
+    contentClassName,
+    ...choice
+}: ChoiceMenuSubProps<T>) {
+    return (
+        <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={disabled}>{trigger}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className={contentClassName}>
+                <ChoiceMenuItems {...choice} />
+            </DropdownMenuSubContent>
+        </DropdownMenuSub>
+    );
+}
+
 export {
+    ChoiceMenuItems,
+    ChoiceMenuSub,
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
@@ -424,8 +487,6 @@ export {
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuPortal,
-    DropdownMenuRadioGroup,
-    DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuSub,

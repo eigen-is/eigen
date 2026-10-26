@@ -118,7 +118,7 @@ There is no read-only window. Capturing a container's `data.db` takes that conta
 
 On a `local` mount the capture also holds the shared tree lock while it resolves a file's key and opens it, and that lock serves requests in arrival order. A rename, move, trash or folder delete on that drive waits for that open, not for the copy, so a file of several gigabytes holds up no other write. A `local-key` or `s3` mount has no tree lock.
 
-A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-relay.ts`), and `lib/backup/` never imports `getHome`. While a capture runs it touches the home once a minute, so a capture that outlasts the idle window keeps its databases open. A home the backup had to boot gets a 30 s idle (`BACKUP_RELEASE_MS`) once it is captured, so a nightly Full does not keep every home resident. It is never evicted: a user may have opened it meanwhile, and a home a request reached after the capture started keeps its normal idle.
+A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-relay.ts`), and `lib/backup/` never imports `getHome`. It opens the home with `openHome`, which does not count as a request, and holds it while the capture runs, so a capture that outlasts the idle window keeps its databases open. A home the backup had to boot gets a 30 s idle (`BACKUP_RELEASE_MS`) once it is captured, so a nightly Full does not keep every home resident. It is never evicted: a user may have opened it meanwhile, and a home a request reached after the capture started (`requestedSince`) keeps its normal idle.
 
 ## Verify runs in three stages
 
@@ -369,4 +369,4 @@ The backup runs in the API, whose container mounts `data/`, `backups/` and `.env
 - [COLLAB.md](COLLAB.md#home-replacement-closes-every-socket): the socket half of a per-home restore
 - [SYNC.md](SYNC.md): the upload queue a restored `s3` mount drains through
 - [SELF-HOSTING.md](SELF-HOSTING.md) and the help center's [Back up and restore the whole server](https://eigen.is/support/self-hosting/back-up-and-restore): the operator's side
-- [PROPOSAL_BACKUP_RESTORE.md](proposals/PROPOSAL_BACKUP_RESTORE.md): the design, and phase ④ (migration)
+- [PROPOSAL_BACKUP_RESTORE.md](proposals/PROPOSAL_BACKUP_RESTORE.md): moving a mount between storage backends while it serves

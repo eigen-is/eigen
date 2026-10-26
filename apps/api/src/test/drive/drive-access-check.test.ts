@@ -93,6 +93,38 @@ describe('Drive access check', () => {
         });
     });
 
+    // A trashed path is its owner's alone, so the owner's sharing dialog counts nobody else as having
+    // access, whatever its ACL and visibility say for the restore.
+    describe('a path in the trash', () => {
+        const reader = 'ac-trashed-reader@test.eigen.is';
+
+        test('counts no sharee and no public link as access', async () => {
+            const parentId = await createFolder('trashed-parent');
+            await setAcl(parentId, { add: [{ id: reader, read: true, write: false }], visibility: 'public-read' });
+            const childId = await createFolder('trashed-child', parentId);
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${MOUNT}/path/${parentId}`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(200);
+
+            for (const pathId of [parentId, childId]) {
+                const body = await assertJson<DriveAccessCheckResult>(
+                    await accessCheck(ctx.alice.user.sessionToken, ctx.alice.user.id, pathId, [reader]),
+                );
+                expect(body.recipients.find((r) => r.email === reader)?.hasReadAccess).toBe(false);
+                const members = await assertJson<{ email: string }[]>(
+                    await authedRequest(
+                        ctx.alice.user.sessionToken,
+                        `/drive/${ctx.alice.user.id}/${MOUNT}/path/${pathId}/effective-members`,
+                    ),
+                );
+                expect(members.map((m) => m.email)).toEqual([ctx.alice.user.email]);
+            }
+        });
+    });
+
     // 2. Public visibility: an ancestor or the path itself being public grants read; private denies.
     describe('public visibility', () => {
         const outsider = 'ac-visibility-outsider@test.eigen.is';

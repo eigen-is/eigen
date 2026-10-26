@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { DOCUMENT_FONT, fontLineHeight } from '@workspace/lib/constants/fonts';
+import {
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    PARAGRAPH_FORMAT_KEYS,
+    pagePx,
+    readPageSetup,
+} from '@workspace/lib/docs/eigendoc';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../../lib/document/looks';
-import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
+import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A paragraph's rules: blank lines, breaks, alignment, comments.
 
@@ -9,6 +17,8 @@ const run = (text: string, rPr = '') =>
     `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t xml:space="preserve">${text}</w:t></w:r>`;
 const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
 const EMPTY = '<w:p/>';
+// A prose textblock as the schema writes it: every format attribute, unset.
+const UNFORMATTED = Object.fromEntries(PARAGRAPH_FORMAT_KEYS.map((key) => [key, null]));
 const PAGE_BREAK = '<w:r><w:br w:type="page"/></w:r>';
 const section = (type?: string) => `<w:sectPr>${type ? `<w:type w:val="${type}"/>` : ''}</w:sectPr>`;
 
@@ -68,7 +78,7 @@ describe('empty paragraphs', () => {
             '<w:pStyle w:val="Heading1"/>',
         );
         const { json } = await importDocxBody(`${paragraph(run('One'))}${heading}${paragraph(run('Two'))}`);
-        expect(json.content?.[1]).toEqual({ type: 'paragraph', attrs: { textAlign: null } });
+        expect(json.content?.[1]).toEqual({ type: 'paragraph', attrs: { textAlign: null, ...UNFORMATTED } });
     });
 
     test('a paragraph of spaces counts as empty before a break', async () => {
@@ -77,6 +87,94 @@ describe('empty paragraphs', () => {
                 `${paragraph(run('One'))}${paragraph(run('   '))}${paragraph(PAGE_BREAK)}${paragraph(run('Two'))}`,
             ),
         ).toEqual(['One', 'pageBreak', 'Two']);
+    });
+});
+
+describe('the page', () => {
+    const mm = (twips: number) => (twips * 25.4) / 1440;
+    const page = (w: number, h: number, margin: number, extra = '') =>
+        `<w:sectPr>${extra}<w:pgSz w:w="${w}" w:h="${h}"/><w:pgMar w:top="${margin}" w:right="${margin}" w:bottom="${margin}" w:left="${margin}" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr>`;
+    const LETTER_LANDSCAPE = page(15840, 12240, 567);
+
+    test("the body's final section is the doc's page, in mm", async () => {
+        const { page: read, warnings } = await importDocxBody(`${paragraph(run('One'))}${LETTER_LANDSCAPE}`);
+        expect(read).toEqual({
+            width: 279.4,
+            height: 215.9,
+            margin: { top: mm(567), right: mm(567), bottom: mm(567), left: mm(567) },
+            // Word's 709 twips, within the 567 twip margins.
+            headerDistance: mm(567),
+            footerDistance: mm(567),
+            differentFirstPage: false,
+        });
+        expect(warnings).toEqual([]);
+    });
+
+    test('an earlier section with another page leaves the final one and warns', async () => {
+        const earlier = paragraph(run('One'), page(11906, 16838, 1440));
+        const same = paragraph(run('Two'), LETTER_LANDSCAPE);
+        const { page: read, warnings } = await importDocxBody(
+            `${earlier}${same}${paragraph(run('Three'))}${LETTER_LANDSCAPE}`,
+        );
+        expect(read.width).toBe(279.4);
+        expect(warnings).toEqual([{ code: 'section-pages-dropped', count: 1 }]);
+    });
+
+    // A tracked change keeps a section's old properties inside its own, which Word no longer draws.
+    test("a tracked section change's old page is no section", async () => {
+        const tracked = (section: string) =>
+            section.replace(
+                '</w:sectPr>',
+                `<w:sectPrChange w:id="1" w:author="A">${page(11906, 16838, 1440)}</w:sectPrChange></w:sectPr>`,
+            );
+        const { warnings } = await importDocxBody(
+            `${paragraph(run('One'), tracked(LETTER_LANDSCAPE))}${paragraph(run('Two'))}${tracked(LETTER_LANDSCAPE)}`,
+        );
+        expect(warnings).toEqual([]);
+    });
+
+    test("a size a section leaves out is the default A4, a margin Word's 1 in", async () => {
+        const WORD_MARGIN = { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 };
+        const WORD_PAGE = { ...DEFAULT_PAGE_SETUP, margin: WORD_MARGIN };
+        expect((await importDocxBody(paragraph(run('One')))).page).toEqual(WORD_PAGE);
+        expect((await importDocxBody(`${paragraph(run('One'))}<w:sectPr/>`)).page).toEqual(WORD_PAGE);
+        const { page: read } = await importDocxBody(
+            `${paragraph(run('One'))}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>`,
+        );
+        expect(read).toEqual({ ...WORD_PAGE, width: 215.9, height: 279.4 });
+    });
+
+    test('a hostile size and negative margins clamp as a stored page does', async () => {
+        const hostile = `<w:sectPr><w:pgSz w:w="99999999" w:h="10"/><w:pgMar w:top="-1440" w:right="-99999" w:bottom="0" w:left="1440"/></w:sectPr>`;
+        const { page: read } = await importDocxBody(`${paragraph(run('One'))}${hostile}`);
+        expect(read).toEqual(
+            readPageSetup({
+                width: mm(99999999),
+                height: mm(10),
+                marginTop: mm(-1440),
+                marginRight: mm(-99999),
+                marginBottom: 0,
+                marginLeft: mm(1440),
+            }),
+        );
+        expect(read.width).toBe(558.8);
+        expect(read.height).toBe(50);
+        expect(read.margin.top).toBeGreaterThan(0);
+        expect(read.width - read.margin.left - read.margin.right).toBeCloseTo(25, 6);
+    });
+
+    // 1,000 px of picture: the column on A4 with Word's 1 in margins is 601 px, on a page with 5 cm margins 415.
+    test("an image imports no wider than the page's text column", async () => {
+        const wide = paragraph(GOLDEN_DOCX_IMAGE_RUN.replaceAll('381000', '9525000'));
+        const widths = async (body: string) =>
+            nodesOfType((await importDocxBody(body)).json, 'figure').map((node) => node.attrs?.['width']);
+        const narrow = page(11906, 16838, 2835);
+        const px = pagePx(
+            readPageSetup({ width: mm(11906), height: mm(16838), marginLeft: mm(2835), marginRight: mm(2835) }),
+        );
+        expect(await widths(wide)).toEqual([601]);
+        expect(await widths(`${wide}${narrow}`)).toEqual([Math.floor(px.width - px.margin.left - px.margin.right)]);
+        expect(await widths(`${wide}${narrow}`)).toEqual([415]);
     });
 });
 
@@ -161,25 +259,244 @@ describe('a checkbox opening a task', () => {
     });
 });
 
-// Word sets a note's text off its number with a space or a tab; Eigen's list numbers the note.
+// Word's notes are footnote nodes at their references, holding the note's paragraphs; endnotes too (S9).
 describe('notes', () => {
-    test("a note's text starts at its first character", async () => {
-        const note = (id: number, inner: string) =>
-            `<w:footnote w:id="${id}">${paragraph(`<w:r><w:footnoteRef/></w:r>${inner}`)}</w:footnote>`;
-        const { json } = await importDocxBody(
-            paragraph(
-                `${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r><w:r><w:footnoteReference w:id="2"/></w:r>`,
-            ),
-            { footnotes: `${note(1, run(' Note text'))}${note(2, `<w:r><w:tab/></w:r>${run(' Other')}`)}` },
-        );
-        const notes = json.content?.at(-1);
-        expect(
-            (notes?.content ?? []).map((item) =>
-                nodesOfType(item, 'text')
-                    .map((node) => node.text)
+    const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    const reference = (id: number, kind = 'footnote', attrs = '') =>
+        `<w:r><w:${kind}Reference${attrs} w:id="${id}"/></w:r>`;
+    // As Word writes a note: its number, then a space, then the text.
+    const note = (id: number, inner: string, kind = 'footnote') =>
+        `<w:${kind} w:id="${id}">${paragraph(`<w:r><w:${kind}Ref/></w:r>${inner}`)}</w:${kind}>`;
+    const separators =
+        '<w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>';
+    // Each footnote node as its paragraphs' text.
+    const notesOf = (json: JSONContent) =>
+        nodesOfType(json, 'footnote').map((footnote) =>
+            (footnote.content ?? []).map((child) =>
+                nodesOfType(child, 'text')
+                    .map((text) => text.text)
                     .join(''),
             ),
-        ).toEqual(['Note text ↑', 'Other ↑']);
+        );
+    const encode = (text: string) => new TextEncoder().encode(text);
+
+    test("a reference is a footnote node holding its note's paragraphs, Word's number and the space after it gone", async () => {
+        const { json } = await importDocxBody(paragraph(`${run('Text')}${reference(1)}${run('.')}`), {
+            footnotes: `${separators}<w:footnote w:id="1">${paragraph(`<w:r><w:footnoteRef/></w:r>${run(' See ')}${run('Smith', '<w:b/>')}`)}${paragraph(run('Two'))}</w:footnote>`,
+        });
+        expect(json.content).toEqual([
+            {
+                type: 'paragraph',
+                attrs: { textAlign: null, ...UNFORMATTED },
+                content: [
+                    { type: 'text', text: 'Text' },
+                    {
+                        type: 'footnote',
+                        content: [
+                            {
+                                type: 'paragraph',
+                                attrs: { textAlign: null, ...UNFORMATTED },
+                                content: [
+                                    { type: 'text', text: 'See ' },
+                                    { type: 'text', text: 'Smith', marks: [{ type: 'bold' }] },
+                                ],
+                            },
+                            {
+                                type: 'paragraph',
+                                attrs: { textAlign: null, ...UNFORMATTED },
+                                content: [{ type: 'text', text: 'Two' }],
+                            },
+                        ],
+                    },
+                    { type: 'text', text: '.' },
+                ],
+            },
+        ]);
+    });
+
+    test("a note's text starts at its first character after a space or a tab", async () => {
+        const { json } = await importDocxBody(paragraph(`${run('Text')}${reference(1)}${reference(2)}`), {
+            footnotes: `${note(1, run(' Note text'))}${note(2, `<w:r><w:tab/></w:r>${run(' Other')}`)}`,
+        });
+        expect(notesOf(json)).toEqual([['Note text'], ['Other']]);
+    });
+
+    // S9: Google Docs has no endnotes; Word's come in where they're referenced, numbered with the footnotes.
+    test('an endnote is a footnote, in document order among the footnotes', async () => {
+        const endnotes = `<w:endnotes xmlns:w="${W_NS}">${note(1, run(' End'), 'endnote')}</w:endnotes>`;
+        const { json } = await importDocxBody(
+            paragraph(`${run('A')}${reference(1)}${run('B')}${reference(1, 'endnote')}${run('C')}${reference(2)}`),
+            {
+                footnotes: `${note(1, run(' First'))}${note(2, run(' Last'))}`,
+                rels: `<Relationship Id="rIdEnd" Type="${REL}/endnotes" Target="endnotes.xml"/>`,
+                media: { 'word/endnotes.xml': encode(endnotes) },
+            },
+        );
+        expect(notesOf(json)).toEqual([['First'], ['End'], ['Last']]);
+    });
+
+    // A Word custom mark: the reference shows the run's own text in place of a number. A note numbers 1, 2, 3.
+    test("a custom mark's text goes, and the note keeps its number", async () => {
+        const { json } = await importDocxBody(
+            paragraph(`${run('Claim')}<w:r><w:footnoteReference w:customMarkFollows="1" w:id="1"/><w:t>*</w:t></w:r>`),
+            { footnotes: note(1, run(' Starred')) },
+        );
+        expect(
+            (json.content?.[0]?.content ?? []).map((node) => (node.type === 'text' ? node.text : node.type)),
+        ).toEqual(['Claim', 'footnote']);
+        expect(notesOf(json)).toEqual([['Starred']]);
+    });
+
+    // The mark is the run's text up to a tab; with no note made, the text stays.
+    test('a custom mark ends at a tab, and stays text when the note is missing', async () => {
+        const marked = (id: number, text: string) =>
+            `<w:r><w:footnoteReference w:customMarkFollows="1" w:id="${id}"/><w:t>*</w:t><w:tab/><w:t>after</w:t></w:r>${run(text)}`;
+        const { json } = await importDocxBody(paragraph(`${marked(1, ' one')}${marked(7, ' two')}`), {
+            footnotes: note(1, run(' Starred')),
+        });
+        expect(
+            (json.content?.[0]?.content ?? []).map((node) => (node.type === 'text' ? node.text : node.type)),
+        ).toEqual(['footnote', '\tafter one*\tafter two']);
+    });
+
+    test('a note inside a note is its text there, each paragraph after a space', async () => {
+        const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}`), {
+            footnotes: `${note(1, `${run(' Outer')}${reference(2)}`)}${note(2, run(' Inner'))}`,
+        });
+        expect(notesOf(json)).toEqual([['Outer Inner']]);
+        expect(nodesOfType(nodesOfType(json, 'footnote')[0] ?? {}, 'footnote')).toHaveLength(1);
+    });
+
+    // A note first read inside another drops its own notes, which nest too deep there; its own reference reads it whole.
+    test('a note read inside another reads whole at its own reference', async () => {
+        const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}${run(' and')}${reference(2)}`), {
+            footnotes: `${note(1, `${run(' One')}${reference(2)}`)}${note(2, `${run(' Two')}${reference(3)}`)}${note(3, run(' Three'))}`,
+        });
+        expect(notesOf(json)).toEqual([['One Two'], ['Two Three']]);
+    });
+
+    // A note read inside another holds its text alone, whichever reference reads it first, and a cycle puts no note's
+    // own text inside it.
+    test("a note's text is the same in either order, and a cycle holds each note's text once", async () => {
+        const chain = `${note(1, `${run(' One')}${reference(2)}`)}${note(2, `${run(' Two')}${reference(3)}`)}${note(3, run(' Three'))}`;
+        const cycle = `${note(1, `${run(' One')}${reference(2)}`)}${note(2, `${run(' Two')}${reference(1)}`)}`;
+        const notesFor = async (order: number[], footnotes: string) =>
+            notesOf(
+                (
+                    await importDocxBody(paragraph(`${run('Body')}${order.map((id) => reference(id)).join('')}`), {
+                        footnotes,
+                    })
+                ).json,
+            );
+        expect(await notesFor([3, 2, 1], chain)).toEqual([['Three'], ['Two Three'], ['One Two']]);
+        expect(await notesFor([1, 2], cycle)).toEqual([['One Two'], ['Two One']]);
+        expect(await notesFor([2, 1], cycle)).toEqual([['Two One'], ['One Two']]);
+    });
+
+    // A note holds paragraphs only, so a list in it is its paragraphs; its count is its own, not the body's.
+    test("a note's numbered list starts its own count", async () => {
+        const numbered = '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr>';
+        const { json } = await importDocxBody(
+            `${paragraph(run('One'), numbered)}${paragraph(`${run('Two')}${reference(1)}`, numbered)}${paragraph(run('Three'), numbered)}`,
+            { footnotes: `<w:footnote w:id="1">${paragraph(run('Item'), numbered)}</w:footnote>` },
+        );
+        expect(nodesOfType(json, 'listItem')).toHaveLength(3);
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1]);
+    });
+
+    test('a separator, a missing note and a note with no reference are no notes', async () => {
+        const { json } = await importDocxBody(
+            paragraph(`${run('Body')}${reference(-1)}${reference(0)}${reference(7)}`),
+            {
+                footnotes: `${separators}${note(3, run(' Orphan'))}`,
+            },
+        );
+        expect(nodesOfType(json, 'footnote')).toEqual([]);
+        expect(nodesOfType(json, 'text').map((text) => text.text)).toEqual(['Body']);
+    });
+
+    // A note holds paragraphs: a heading's text, a list's and a table's paragraphs are its own.
+    test("a note's heading, list and table come in as its paragraphs, their marks kept", async () => {
+        const inner = [
+            paragraph(run('Heading', '<w:i/>'), '<w:pStyle w:val="Heading1"/>'),
+            paragraph(run('Item'), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr>'),
+            `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>${paragraph(run('Cell'))}</w:tc></w:tr></w:tbl>`,
+        ].join('');
+        const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}`), {
+            footnotes: `<w:footnote w:id="1">${inner}</w:footnote>`,
+        });
+        expect(notesOf(json)).toEqual([['Heading', 'Item', 'Cell']]);
+        const [footnote] = nodesOfType(json, 'footnote');
+        expect((footnote?.content ?? []).map((child) => child.type)).toEqual(['paragraph', 'paragraph', 'paragraph']);
+        expect(marksOfType(footnote ?? {}, 'italic').map(({ text }) => text)).toEqual(['Heading']);
+    });
+
+    // Word's and the writer's FootnoteText: 10 pt, single spaced, no space after, which the note draws as its own.
+    test("a note's paragraph in its style's look has no size mark and no format of its own", async () => {
+        const styles =
+            '<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style>';
+        const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}`), {
+            styles,
+            footnotes: `<w:footnote w:id="1">${paragraph(`${run('Plain')}${run('Big', '<w:sz w:val="28"/>')}`, '<w:pStyle w:val="FootnoteText"/>')}</w:footnote>`,
+        });
+        const [footnote] = nodesOfType(json, 'footnote');
+        expect(footnote?.content?.[0]?.attrs).toEqual({ textAlign: null, ...UNFORMATTED });
+        expect(marksOfType(footnote ?? {}, 'textStyle')).toEqual([
+            { text: 'Big', attrs: { color: null, fontFamily: null, fontSize: 14, caps: null } },
+        ]);
+    });
+
+    test("a note's link resolves through the notes part's own relationships", async () => {
+        const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}`), {
+            footnotes: note(1, `<w:hyperlink r:id="rIdNote" xmlns:r="${REL}">${run('site')}</w:hyperlink>`),
+            media: {
+                'word/_rels/footnotes.xml.rels': encode(
+                    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdNote" Type="${REL}/hyperlink" Target="https://acme.example" TargetMode="External"/></Relationships>`,
+                ),
+            },
+        });
+        expect(marksOfType(json, 'link').map(({ text, attrs }) => [text, attrs['href']])).toEqual([
+            ['site', 'https://acme.example'],
+        ]);
+    });
+});
+
+describe('markup compatibility', () => {
+    const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+    const alternate = (choices: [string, string][], fallback?: string) =>
+        `<mc:AlternateContent xmlns:mc="${MC}">${choices.map(([requires, inner]) => `<mc:Choice Requires="${requires}">${inner}</mc:Choice>`).join('')}${fallback === undefined ? '' : `<mc:Fallback>${fallback}</mc:Fallback>`}</mc:AlternateContent>`;
+
+    test('a Choice whose prefixes the reader understands is read, its Fallback not', async () => {
+        expect(await blocks(paragraph(alternate([['w14', run('choice')]], run('fallback'))))).toEqual(['choice']);
+    });
+
+    test('a Choice that needs an unknown prefix falls to the next Choice, then to the Fallback', async () => {
+        expect(await blocks(paragraph(alternate([['foo', run('foo')]], run('fallback'))))).toEqual(['fallback']);
+        const choices: [string, string][] = [
+            ['foo', run('foo')],
+            ['wps', run('shape')],
+        ];
+        expect(await blocks(paragraph(alternate(choices, run('fallback'))))).toEqual(['shape']);
+    });
+
+    test('a Choice needing several prefixes is read only when it understands every one', async () => {
+        expect(await blocks(paragraph(alternate([['wps  w14', run('both')]], run('fallback'))))).toEqual(['both']);
+        expect(await blocks(paragraph(alternate([['w14 foo', run('one')]], run('fallback'))))).toEqual(['fallback']);
+    });
+
+    test('without a Fallback, an unread Choice reads as nothing', async () => {
+        expect(await blocks(paragraph(`${run('before ')}${alternate([['foo', run('foo')]])}${run('after')}`))).toEqual([
+            'before after',
+        ]);
+    });
+
+    test('inside a run and between blocks it reads the same', async () => {
+        const inRun = `<w:r>${alternate([['foo', '<w:t>foo</w:t>']], '<w:t>run</w:t>')}</w:r>`;
+        expect(await blocks(paragraph(inRun))).toEqual(['run']);
+        expect(await blocks(alternate([['w14', paragraph(run('block'))]], paragraph(run('fallback'))))).toEqual([
+            'block',
+        ]);
     });
 });
 
@@ -202,13 +519,23 @@ describe('tracked changes and hidden text', () => {
             { numbering },
         );
         expect(json.content).toEqual([
-            { type: 'paragraph', attrs: { textAlign: 'center' }, content: [{ type: 'text', text: 'Joined centred' }] },
+            {
+                type: 'paragraph',
+                attrs: { textAlign: 'center', ...UNFORMATTED },
+                content: [{ type: 'text', text: 'Joined centred' }],
+            },
             {
                 type: 'orderedList',
                 attrs: { start: 1, type: null },
                 content: ['One and more', 'Two'].map((text) => ({
                     type: 'listItem',
-                    content: [{ type: 'paragraph', attrs: { textAlign: null }, content: [{ type: 'text', text }] }],
+                    content: [
+                        {
+                            type: 'paragraph',
+                            attrs: { textAlign: null, ...UNFORMATTED },
+                            content: [{ type: 'text', text }],
+                        },
+                    ],
                 })),
             },
         ]);
@@ -224,7 +551,7 @@ describe('tracked changes and hidden text', () => {
         expect(json.content).toEqual([
             {
                 type: 'heading',
-                attrs: { level: 1, textAlign: null },
+                attrs: { level: 1, textAlign: null, ...UNFORMATTED },
                 content: [{ type: 'text', text: '1. Joined Title' }],
             },
         ]);
@@ -294,7 +621,7 @@ describe('indented code', () => {
     const pre = (text: string) => paragraph(run(text), '<w:pStyle w:val="HTMLPreformatted"/><w:ind w:left="720"/>');
     const text = (value: string) => ({
         type: 'paragraph',
-        attrs: { textAlign: null },
+        attrs: { textAlign: null, ...UNFORMATTED },
         content: [{ type: 'text', text: value }],
     });
     const code = { type: 'codeBlock', attrs: { language: null }, content: [{ type: 'text', text: 'x = 1' }] };
@@ -564,7 +891,7 @@ describe("a node's look", () => {
         );
         expect(nodesOfType(json, 'blockquote')).toHaveLength(1);
         expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs)).toEqual([
-            { color: null, fontFamily: null, caps: 'all' },
+            { color: null, fontFamily: null, fontSize: null, caps: 'all' },
         ]);
     });
 
@@ -649,5 +976,200 @@ describe("a node's look", () => {
         const [heading] = nodesOfType(json, 'heading');
         expect(heading?.attrs?.['level']).toBe(6);
         expect(nodesOfType(heading ?? {}, 'text').map((node) => [node.text, node.marks ?? []])).toEqual([['More', []]]);
+    });
+});
+
+// D13: a paragraph keeps what it sets apart from the docx's own Normal; what it shares with it is the doc's look.
+describe('paragraph format', () => {
+    // Word 2007's and Google Docs' Normal: 1.15 lines, 10 pt after.
+    const STYLES = [
+        '<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:after="200" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>',
+        '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>',
+        '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="200" w:after="0"/></w:pPr><w:rPr><w:sz w:val="32"/></w:rPr></w:style>',
+        '<w:style w:type="paragraph" w:styleId="BodyText"><w:name w:val="Body Text"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:line="360" w:lineRule="auto"/></w:pPr></w:style>',
+    ].join('');
+    const NUMBERING =
+        '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num>';
+    const bullet = paragraph(run('Item'), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="5"/></w:numPr>');
+    const formatOf = (node: JSONContent | undefined) =>
+        Object.fromEntries(
+            PARAGRAPH_FORMAT_KEYS.flatMap((key) => (node?.attrs?.[key] == null ? [] : [[key, node.attrs[key]]])),
+        );
+    const formats = async (body: string) => {
+        const { json } = await importDocxBody(body, { styles: STYLES, numbering: NUMBERING });
+        return [...nodesOfType(json, 'paragraph'), ...nodesOfType(json, 'heading')].map(formatOf);
+    };
+
+    test('a paragraph that follows Normal, or sets what Normal does as Google Docs writes it, gets none', async () => {
+        expect(
+            await formats(
+                `${paragraph(run('a'))}${paragraph(run('b'), '<w:spacing w:before="0" w:after="200" w:line="276" w:lineRule="auto"/>')}`,
+            ),
+        ).toEqual([{}, {}]);
+    });
+
+    test('what differs from Normal is kept: an auto line as its multiple, spacing in pt', async () => {
+        expect(
+            await formats(
+                [
+                    paragraph(run('a'), '<w:spacing w:line="360" w:lineRule="auto"/>'),
+                    paragraph(run('b'), '<w:spacing w:before="240" w:after="0"/>'),
+                    paragraph(run('c'), '<w:pStyle w:val="BodyText"/>'),
+                ].join(''),
+            ),
+        ).toEqual([{ lineSpacing: 1.5 }, { spaceBefore: 12, spaceAfter: 0 }, { lineSpacing: 1.5 }]);
+    });
+
+    // An exact or at-least line is a height in points, no multiple: it would read differently at each size.
+    test.each(['exact', 'atLeast'])('a %s line gives no line spacing', async (rule) => {
+        expect(await formats(paragraph(run('a'), `<w:spacing w:line="480" w:lineRule="${rule}"/>`))).toEqual([{}]);
+    });
+
+    test("a heading's own spacing is its look; only what the paragraph sets apart from its style is kept", async () => {
+        const heading = (pPr: string) => paragraph(run('H'), `<w:pStyle w:val="Heading2"/>${pPr}`);
+        expect(await formats(`${heading('')}${heading('<w:spacing w:before="0"/>')}`)).toEqual([
+            {},
+            { spaceBefore: 0 },
+        ]);
+    });
+
+    // Word draws the space before above the paragraph's first line and the space after below its last.
+    test('a paragraph a page break splits keeps its space before on the first half and its space after on the last', async () => {
+        expect(
+            await formats(
+                paragraph(
+                    `${run('Top')}${PAGE_BREAK}${run('Middle')}${PAGE_BREAK}${run('Bottom')}`,
+                    '<w:spacing w:before="240" w:after="0" w:line="360" w:lineRule="auto"/>',
+                ),
+            ),
+        ).toEqual([{ lineSpacing: 1.5, spaceBefore: 12 }, { lineSpacing: 1.5 }, { lineSpacing: 1.5, spaceAfter: 0 }]);
+    });
+
+    test('an indent outside any list or quote is kept: left, right, first line and hanging', async () => {
+        expect(
+            await formats(
+                [
+                    paragraph(run('a'), '<w:ind w:left="720" w:right="360"/>'),
+                    paragraph(run('b'), '<w:ind w:firstLine="360"/>'),
+                    paragraph(run('c'), '<w:ind w:left="720" w:hanging="720"/>'),
+                ].join(''),
+            ),
+        ).toEqual([
+            { indentLeft: 36, indentRight: 18 },
+            { indentFirstLine: 18 },
+            { indentLeft: 36, indentFirstLine: -36 },
+        ]);
+    });
+
+    // List and quote nesting stays structural: only the indent past the container's text is the paragraph's.
+    test("in a list item an indent counts from the item's text, and the item's own paragraph gets none", async () => {
+        const { json } = await importDocxBody(
+            `${bullet}${paragraph(run('At the text'), '<w:ind w:left="720"/>')}${paragraph(run('Past it'), '<w:ind w:left="1440"/>')}`,
+            { styles: STYLES, numbering: NUMBERING },
+        );
+        const [item] = nodesOfType(json, 'listItem');
+        expect((item?.content ?? []).map(formatOf)).toEqual([{}, {}, { indentLeft: 36 }]);
+    });
+
+    test("a quote's paragraph keeps no indent of its own", async () => {
+        const bar = `<w:pBdr><w:left w:val="single" w:sz="${QUOTE_LOOK.border.sz}" w:space="${QUOTE_LOOK.border.space}" w:color="${QUOTE_LOOK.border.color}"/></w:pBdr><w:ind w:left="${QUOTE_LOOK.indent}"/>`;
+        const { json } = await importDocxBody(paragraph(run('Quoted'), bar), { styles: STYLES });
+        expect(nodesOfType(json, 'blockquote')).toHaveLength(1);
+        expect(nodesOfType(json, 'paragraph').map(formatOf)).toEqual([{}]);
+    });
+
+    test('a hostile value is bounded as a stored one is', async () => {
+        expect(
+            await formats(
+                paragraph(
+                    run('a'),
+                    '<w:spacing w:before="99999999" w:line="99999" w:lineRule="auto"/><w:ind w:right="99999999"/>',
+                ),
+            ),
+        ).toEqual([{ lineSpacing: 5, spaceBefore: 400, indentRight: 1584 }]);
+    });
+});
+
+describe('the Normal', () => {
+    // Word 2007's Normal in a Times body at 12 pt, grey: what Word draws a paragraph that sets nothing in.
+    const TIMES = [
+        '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr></w:rPrDefault>',
+        '<w:pPrDefault><w:pPr><w:spacing w:after="200" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>',
+        '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:before="60"/></w:pPr><w:rPr><w:color w:val="333333"/><w:sz w:val="24"/></w:rPr></w:style>',
+    ].join('');
+    // Its line as the multiple CSS draws Word's pitch at, in Source Serif 4's line, as a paragraph's.
+    const TIMES_LINE =
+        Math.round(((1.15 * fontLineHeight('Source Serif 4')) / fontLineHeight(DOCUMENT_FONT)) * 100) / 100;
+
+    test("docDefaults and the Normal style are the doc's Normal: the font through the font map, size, line, spacing, colour", async () => {
+        const { style } = await importDocxBody(paragraph(run('Body')), { styles: TIMES });
+        expect(style).toEqual({
+            font: 'Source Serif 4',
+            size: 12,
+            lineSpacing: TIMES_LINE,
+            spaceBefore: 3,
+            spaceAfter: 10,
+            color: '#333333',
+        });
+    });
+
+    test('a 12 pt body imports with no size, font or colour mark and no paragraph format', async () => {
+        const { json } = await importDocxBody(
+            `${paragraph(run('One'))}${paragraph(run('Two', '<w:sz w:val="24"/><w:color w:val="333333"/>'), '<w:spacing w:before="60" w:after="200" w:line="276" w:lineRule="auto"/>')}`,
+            { styles: TIMES },
+        );
+        expect(marksOfType(json, 'textStyle')).toEqual([]);
+        for (const node of nodesOfType(json, 'paragraph')) expect(node.attrs).toMatchObject(UNFORMATTED);
+    });
+
+    // An at-least Normal reads as single, so a single line set on a paragraph is the Normal's.
+    test('under an at-least Normal, a paragraph set to single lines has no line spacing of its own', async () => {
+        const atLeast =
+            '<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:line="300" w:lineRule="atLeast"/></w:pPr></w:pPrDefault></w:docDefaults>';
+        const { json, style } = await importDocxBody(
+            `${paragraph(run('Single'), '<w:spacing w:line="240" w:lineRule="auto"/>')}${paragraph(run('Double'), '<w:spacing w:line="480" w:lineRule="auto"/>')}`,
+            { styles: atLeast },
+        );
+        expect(style.lineSpacing).toBe(1);
+        expect(nodesOfType(json, 'paragraph').map((node) => node.attrs?.['lineSpacing'])).toEqual([null, 2]);
+    });
+
+    // A size past the range lands in it, as a run's does, so every size compared with the body's is in it too.
+    test("the body's size is bounded as a run's is", async () => {
+        const sized = (size: number) =>
+            `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="${size}"/></w:rPr></w:rPrDefault></w:docDefaults>`;
+        const tiny = await importDocxBody(paragraph(run('a', '<w:sz w:val="2"/>')), { styles: sized(0) });
+        expect(tiny.style.size).toBe(1);
+        expect(marksOfType(tiny.json, 'textStyle')).toEqual([]);
+        const huge = await importDocxBody(paragraph(run('b', '<w:sz w:val="800"/>')), { styles: sized(100_000) });
+        expect(huge.style.size).toBe(400);
+        expect(marksOfType(huge.json, 'textStyle')).toEqual([]);
+    });
+
+    test("a run in another bundled font is marked, the document font's included, and one Eigen can't draw draws in Inter", async () => {
+        const font = (name: string) => `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`;
+        const { json } = await importDocxBody(
+            paragraph(
+                `${run('Times')}${run('Arial', font('Arial'))}${run('Courier', font('Courier New'))}${run('Unknown', font('Zapfino Pro'))}`,
+            ),
+            { styles: TIMES },
+        );
+        expect(marksOfType(json, 'textStyle').map(({ text, attrs }) => [text, attrs['fontFamily']])).toEqual([
+            ['Arial', 'Inter'],
+            ['Courier', 'JetBrains Mono'],
+            ['Unknown', 'Inter'],
+        ]);
+    });
+
+    test("a docx without docDefaults or a Normal style is Word's: 10 pt, single, nothing around, Eigen's font and colour", async () => {
+        const { style } = await importDocxBody(paragraph(run('Body')), { styles: '' });
+        expect(style).toEqual({ ...DEFAULT_NORMAL_STYLE, size: 10, lineSpacing: 1, spaceAfter: 0 });
+    });
+
+    test('a hostile Normal is bounded as a stored one is', async () => {
+        const { style } = await importDocxBody(paragraph(run('Body')), {
+            styles: '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="9999"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="99999999" w:line="99999" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>',
+        });
+        expect(style).toMatchObject({ size: 400, lineSpacing: 5, spaceAfter: 400 });
     });
 });

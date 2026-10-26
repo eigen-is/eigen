@@ -1,8 +1,10 @@
 import type { CommandProps } from '@tiptap/core';
 import { Table } from '@tiptap/extension-table';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { Plugin, type Transaction } from '@tiptap/pm/state';
+import type { Transaction } from '@tiptap/pm/state';
+import { Plugin } from '@tiptap/pm/state';
 import {
+    cellAround,
     columnResizingPluginKey,
     isInTable,
     selectedRect,
@@ -115,6 +117,17 @@ function tableOf(view: EditorView, tableDom: HTMLTableElement): { table: PMNode;
     const $start = view.state.doc.resolve(view.posAtDOM(tableDom, 0));
     const pos = $start.before();
     return view.nodeDOM(pos)?.firstChild === tableDom ? { table: $start.parent, pos } : null;
+}
+
+// Where in a cell a right-click landed, at the pointer: the start of the element it hit would fall outside a selection
+// within that paragraph. Null outside a table.
+export function cellPosAt(view: EditorView, event: MouseEvent): number | null {
+    if (!(event.target instanceof Node) || !view.dom.contains(event.target)) return null;
+    const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+    if (pos !== undefined && cellAround(view.state.doc.resolve(pos))) return pos;
+    // Cell padding or a border resolves between the cells: the cell under the pointer still has its menu.
+    const cell = event.target instanceof Element ? event.target.closest('td, th') : null;
+    return cell && view.dom.contains(cell) ? view.posAtDOM(cell, 0) : null;
 }
 
 // Takes over columnResizing's drag from mousedown to mouseup and keeps the rest of it: the hover that finds the border,

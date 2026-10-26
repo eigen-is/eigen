@@ -1,9 +1,11 @@
+import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
 import fontWeightsCSSRaw from '@workspace/ui/styles/font-weights.css' with { type: 'text' };
 import { FONT_STACK_MONO, FONT_STACK_SANS } from './font-stacks';
 
 // eigen-prose.css, flattened once: the HTML and PDF exports embed it, and the docx writer reads
-// its sizes, spacing and colors through proseValue, so the editor's look lives in one file.
+// its sizes, spacing and colors through proseValue, so the editor's look lives in one file. A canvas text box's
+// look is canvas-text.css, which the pptx writer reads the same way through canvasTextValue.
 
 // The app's weight scale, rounded: WeasyPrint drops any font-weight that is not a multiple of 100.
 const FONT_WEIGHTS = new Map(
@@ -15,6 +17,9 @@ const FONT_WEIGHTS = new Map(
 
 // A comma outside parentheses, so `:is(h1, h2)` stays one item.
 const SELECTOR_LIST_COMMA = /,(?![^(]*\))/;
+
+// A custom property the page sets only for a doc's own Normal: the value read is Eigen's own, its fallback.
+const CUSTOM_PROPERTY = /var\(--[\w-]+,\s*([^()]*)\)/g;
 
 export const PROSE_CSS = flattenEigenProseCSS(eigenProseCSSRaw);
 
@@ -29,6 +34,14 @@ export function proseValue(selector: string, property: string): string {
 // For a property a rule may leave to inheritance or to another rule.
 export function proseValueIfSet(selector: string, property: string): string | undefined {
     return PROSE_RULES.get(selector)?.get(property);
+}
+
+const CANVAS_TEXT_RULES = parseRules(canvasTextCSSRaw.replace(/\/\*[\s\S]*?\*\//g, ''));
+
+export function canvasTextValue(selector: string, property: string): string {
+    const value = CANVAS_TEXT_RULES.get(selector)?.get(property);
+    if (value === undefined) throw new Error(`canvas-text.css sets no ${property} on ${selector}`);
+    return value;
 }
 
 // ── CSS flattening ──────────────────────────────────────────────────────────
@@ -115,7 +128,13 @@ function parseRules(css: string): Map<string, Map<string, string>> {
             for (const declaration of body.split(';')) {
                 const colon = declaration.indexOf(':');
                 if (colon > 0)
-                    declarations.set(declaration.slice(0, colon).trim(), declaration.slice(colon + 1).trim());
+                    declarations.set(
+                        declaration.slice(0, colon).trim(),
+                        declaration
+                            .slice(colon + 1)
+                            .replace(CUSTOM_PROPERTY, '$1')
+                            .trim(),
+                    );
             }
             rules.set(selector, declarations);
         }

@@ -1,14 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq, gt } from 'drizzle-orm';
-import {
-    ApiError,
-    type DeleteResourceResult,
-    matchesIfMatch,
-    matchesIfNoneMatch,
-    normalizeResourceUri,
-    type PutResourceResult,
-    type ResourcePreconditions,
-} from '../core';
+import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
+import { ApiError, matchesIfMatch, matchesIfNoneMatch, normalizeResourceUri } from '../core';
 import { pushUserProfile } from '../home/home-relay';
 import { mergeVCard, parseVCard, transcodeTo30 } from '../vcard';
 import type { ParsedCard } from '../vcard/types';

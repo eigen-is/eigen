@@ -25,7 +25,7 @@ Every request carries HTTP Basic, checked by `verifyProtocolAuth` ([IMAP.md § D
 
 ## Every handler resolves through SharedDrive
 
-Each handler starts with `getSharedDrive(ownerId, user)`, so WebDAV enforces the same grants as the REST API ([ACL.md](ACL.md)). The drive methods it needs (`resolvePath`, `copyPath`, `readRange`, `updatePathDetails`, `lockManager`) live on `Drive` with a matching `SharedDrive` wrapper.
+Each handler starts with `getSharedDrive(ownerId, user)`, so WebDAV enforces the same grants as the REST API ([ACL.md](ACL.md)). The drive methods it needs (`resolvePath`, `copyPath`, `readRange`, `updatePathDetails`, `lockManager`) live on `Drive` with a matching `SharedDrive` wrapper. A path the caller can't read resolves to nothing, as a name that doesn't exist does, so a stranger gets the same 404 for both and can't probe a drive for names. A write into a folder they can't read is the 409 of a missing parent.
 
 `resolvePath` checks read access only. So LOCK checks `canWrite` before it issues a token: a lock announces writes to come, and a reader must not pin one.
 

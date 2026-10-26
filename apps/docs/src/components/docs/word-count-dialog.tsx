@@ -2,12 +2,15 @@ import type { Editor } from '@tiptap/react';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { useState } from 'react';
-import { countWords, type TextCounts } from './word-count';
+import type { TextCounts } from './word-count';
+import { countWords } from './word-count';
 
 type WordCountDialogProps = {
+    // The editor counted.
     editor: Editor;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onCloseAutoFocus: (event: Event) => void;
 };
 
 const ROWS: { key: keyof TextCounts; label: string }[] = [
@@ -17,17 +20,14 @@ const ROWS: { key: keyof TextCounts; label: string }[] = [
 ];
 
 // Google Docs' Tools › Word count, without its page count: the editor draws no pages to count.
-export function WordCountDialog({ editor, open, onOpenChange }: WordCountDialogProps) {
+export function WordCountDialog({ editor, open, onOpenChange, onCloseAutoFocus }: WordCountDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 size="sm"
                 showCloseButton={false}
                 aria-describedby={undefined}
-                onCloseAutoFocus={(e) => {
-                    e.preventDefault();
-                    editor.commands.focus();
-                }}
+                onCloseAutoFocus={onCloseAutoFocus}
             >
                 <DialogHeader>
                     <DialogTitle>Word count</DialogTitle>

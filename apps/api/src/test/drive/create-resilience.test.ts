@@ -4,15 +4,15 @@ import { join } from 'node:path';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { ApiError } from '../../lib/core';
-import type Drive from '../../lib/drive/drive';
+import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
 import { createMountConfig } from '../../lib/mount';
 import type { Mount } from '../../lib/mount/mount';
 import type { User } from '../../lib/user';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
+import type { FaultStorage } from '../fault-storage-helpers';
 import {
     createFaultMount,
-    type FaultStorage,
     registerFaultMount,
     settleContainer,
     unregisterFaultMount,
@@ -125,13 +125,19 @@ describe('Drive.create is atomic under degraded storage', () => {
         const localMount = findOrFail(drive.getMounts(), (m) => m.id === 'local-gone');
         const localRoot = (await localMount.getRootFolder())!;
         const doc = await drive.create('local-gone', localRoot.id, 'Vanishing', 'doc', user);
-        const dataDb = (await localMount.getChildByName(doc.id, 'data.db'))!;
-        await settleContainer(localMount, doc.id);
+        // The mount stays in the shared home, so the broken document goes, or a later backup of every
+        // home in this process reports it.
+        try {
+            const dataDb = (await localMount.getChildByName(doc.id, 'data.db'))!;
+            await settleContainer(localMount, doc.id);
 
-        rmSync(localMount.storage.getPath!(await localMount.getStorageKey(dataDb.id)));
-        const missing = await localMount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
-        expect(missing).toBeInstanceOf(ApiError);
-        expect(missing).toMatchObject({ status: 410 });
+            rmSync(localMount.storage.getPath!(await localMount.getStorageKey(dataDb.id)));
+            const missing = await localMount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
+            expect(missing).toBeInstanceOf(ApiError);
+            expect(missing).toMatchObject({ status: 410 });
+        } finally {
+            await localMount.deletePath(doc.id);
+        }
     });
 });
 

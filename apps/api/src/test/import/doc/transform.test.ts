@@ -1,6 +1,8 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { join } from 'node:path';
-import { Editor, type JSONContent } from '@tiptap/core';
+import type { JSONContent } from '@tiptap/core';
+import { Editor } from '@tiptap/core';
+import { Node } from '@tiptap/pm/model';
 import { EditorState } from '@tiptap/pm/state';
 import { fixTables, TableMap } from '@tiptap/pm/tables';
 import { yXmlFragmentToProseMirrorRootNode } from '@tiptap/y-tiptap';
@@ -8,7 +10,10 @@ import * as Y from 'yjs';
 import { ApiError } from '../../../lib/core/errors';
 import { docExtensions, docSchema } from '../../../lib/document/doc-schema';
 import { asOpened, importDocxToEigendocUpdate, MAX_TABLE_REPAIRS } from '../../../lib/import/doc/transform';
-import { buildDocxWithBody, nodesOfType } from '../../fixtures/golden-docx';
+import { MAX_DECOMPRESSED_BYTES } from '../../../lib/ooxml/zip';
+import { buildDocxWithBands, buildDocxWithBody, nodesOfType } from '../../fixtures/golden-docx';
+
+const JOB = { publicOrigin: undefined, maxMediaBytes: MAX_DECOMPRESSED_BYTES };
 
 // An imported doc is stored as the editor leaves it on open: a first open that pads a table or appends a paragraph
 // writes Yjs updates nobody typed, and two people opening it together write them twice.
@@ -17,7 +22,7 @@ const editor = new Editor({ extensions: docExtensions(), content: { type: 'doc',
 
 function stored(data: ArrayBuffer): JSONContent {
     const ydoc = new Y.Doc();
-    Y.applyUpdate(ydoc, new Uint8Array(importDocxToEigendocUpdate(data, undefined).update));
+    Y.applyUpdate(ydoc, new Uint8Array(importDocxToEigendocUpdate(data, JOB).update));
     return yXmlFragmentToProseMirrorRootNode(ydoc.getXmlFragment('default'), editor.schema).toJSON();
 }
 
@@ -36,6 +41,19 @@ const table = (rows: string[]) => `<w:tbl>${grid}${rows.map((cells) => `<w:tr>${
 const bullet = (text: string) => paragraph(run(text), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>');
 
 describe('an imported doc is stored as the editor leaves it on open', () => {
+    // A band's editor runs the same plugins, and the commit clears every band's root before it applies the update.
+    test('a header rides in the update in its own root, ending as its editor leaves it', async () => {
+        const data = await buildDocxWithBands([
+            { id: 'h1', kind: 'header', xml: table([cell('A') + cell('B') + cell('C')]) },
+        ]);
+        const ydoc = new Y.Doc();
+        Y.applyUpdate(ydoc, new Uint8Array(importDocxToEigendocUpdate(data, JOB).update));
+        const header = yXmlFragmentToProseMirrorRootNode(ydoc.getXmlFragment('header'), editor.schema).toJSON();
+        expect((header.content ?? []).map((node: JSONContent) => node.type)).toEqual(['table', 'paragraph']);
+        expect(opened(header)).toEqual(header);
+        expect(ydoc.getXmlFragment('footer').length).toBe(0);
+    });
+
     test('a row Word draws short of the grid ends in a cell over the columns it misses, with their widths', async () => {
         const json = stored(
             await buildDocxWithBody(
@@ -99,7 +117,7 @@ describe('the repairs on open are bounded', () => {
     });
 
     test('a table past it is 413', () => {
-        expect(() => asOpened(ragged(side + 2))).toThrow('Document too large');
+        expect(() => asOpened(ragged(side + 2))).toThrow('This document is too large to import');
     });
 
     const stacked = (rows: [number, number][]) =>
@@ -136,7 +154,7 @@ describe('the repairs on open are bounded', () => {
                     [2, 1],
                 ]),
             ),
-        ).toThrow('Document too large');
+        ).toThrow('This document is too large to import');
     });
 });
 
@@ -144,8 +162,13 @@ describe('the repairs on open are bounded', () => {
 describe('a slip converting the doc is refused as the reader refuses one', () => {
     test.each([
         ['a TypeError', new TypeError('slip'), 400, 'Not a valid docx file', 1],
-        ['a stack overflow', new RangeError('Maximum call stack size exceeded.'), 413, 'Document too large', 0],
-        ['an allocation past memory', new RangeError('Out of memory'), 413, 'Document too large', 0],
+        [
+            'a stack overflow',
+            new RangeError('Maximum call stack size exceeded.'),
+            413,
+            'This document is too large to import',
+            0,
+        ],
         ['a schema RangeError', new RangeError('Invalid content for node table'), 400, 'Not a valid docx file', 1],
     ])('%s is a %d', async (_name, thrown, status, message, logged) => {
         const docx = await buildDocxWithBody(table([cell('A') + cell('B') + cell('C')]));
@@ -155,7 +178,7 @@ describe('a slip converting the doc is refused as the reader refuses one', () =>
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {
             const error = await Promise.resolve()
-                .then(() => importDocxToEigendocUpdate(docx, undefined))
+                .then(() => importDocxToEigendocUpdate(docx, JOB))
                 .catch((reason: unknown) => reason);
             expect(error).toBeInstanceOf(ApiError);
             expect(error).toMatchObject({ status, message });
@@ -163,6 +186,40 @@ describe('a slip converting the doc is refused as the reader refuses one', () =>
         } finally {
             slip.mockRestore();
             warn.mockRestore();
+        }
+    });
+
+    // The transform process answers an out-of-memory for every format, so the reader lets it through as it is.
+    test('an allocation past memory passes through', async () => {
+        const docx = await buildDocxWithBody(table([cell('A') + cell('B') + cell('C')]));
+        const outOfMemory = new RangeError('Out of memory');
+        const slip = spyOn(TableMap, 'get').mockImplementationOnce(() => {
+            throw outOfMemory;
+        });
+        try {
+            const error = await Promise.resolve()
+                .then(() => importDocxToEigendocUpdate(docx, JOB))
+                .catch((reason: unknown) => reason);
+            expect(error).toBe(outOfMemory);
+        } finally {
+            slip.mockRestore();
+        }
+    });
+
+    // A block the schema refuses is flattened to its text; one the memory refused is not a slip of the reader.
+    test('an allocation past memory checking a block passes through, not a flattened block', async () => {
+        const docx = await buildDocxWithBody(table([cell('A') + cell('B') + cell('C')]));
+        const outOfMemory = new RangeError('Out of memory');
+        const check = spyOn(Node.prototype, 'check').mockImplementationOnce(() => {
+            throw outOfMemory;
+        });
+        try {
+            const error = await Promise.resolve()
+                .then(() => importDocxToEigendocUpdate(docx, JOB))
+                .catch((reason: unknown) => reason);
+            expect(error).toBe(outOfMemory);
+        } finally {
+            check.mockRestore();
         }
     });
 });

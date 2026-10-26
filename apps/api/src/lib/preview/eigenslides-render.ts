@@ -1,12 +1,16 @@
+// A deck's preview body: its first slides as compositor pages, the same HTML the PDF export prints. It runs in the
+// transform process, so it reaches neither the Mount nor the transform seam, and its media resolves through the URL
+// map the main thread prepared.
+
 import { CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
+import type { MediaResolver } from '@workspace/lib/vector';
 import {
     DEFAULT_FRAME_BACKGROUND,
-    FRAME_HEIGHT,
     FRAME_WIDTH,
-    type MediaResolver,
     orderByFractionalIndex,
     parseBackgroundFill,
     readVectorFromDoc,
+    SLIDE_SIZES,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
@@ -15,16 +19,10 @@ import { sanitizeExportHtml, sanitizeSceneHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 import { capPreviewElements } from './preview-scene';
 
-// Materialized doc → the deck's first slides as compositor pages, the same HTML the PDF export
-// prints. Runs inside the transform Worker (worker.ts owns execution; the main-thread orchestration
-// lives in preview-document.ts). This module must not reach the Mount or the transform seam. Media
-// resolves through the URL map the main thread prepared (the Worker has no Mount).
-//
-// Filtered on the two levels eigenvector-render.ts documents: each rich-text body through the shared
-// ref restriction first, then the assembled page as a whole, with the media URLs allow-listed so the
-// compositor's own hrefs survive.
 const PREVIEW_MAX_SLIDES = 8;
 
+// Filtered twice, as a drawing's preview is: each rich-text body through the shared ref restriction first, then the
+// assembled page as a whole, with the media URLs allow-listed so the compositor's own hrefs survive.
 export function renderEigenslidesPreviewBody(
     doc: Y.Doc,
     mediaUrls: Map<string, string>,
@@ -45,10 +43,11 @@ export function renderEigenslidesPreviewBody(
     const scene = sanitizeSceneHtml({ ...full, frames, elements: capped.elements });
     const pages = framePages(scene, resolveMedia);
     const scale = CANVAS_PREVIEW_WIDTH / FRAME_WIDTH;
-    // A deck with no frames still previews as one blank slide: getOrCacheText caches only a non-empty
-    // body, so an empty one would re-run the whole document transform on every request, forever.
+    // A deck with no frames still previews as one blank slide of its size: getOrCacheText caches only a
+    // non-empty body, so an empty one would re-run the whole document transform on every request, forever.
     if (pages.length === 0) {
-        const blank = emptyPage(parseBackgroundFill(DEFAULT_FRAME_BACKGROUND), FRAME_WIDTH, FRAME_HEIGHT);
+        const { width, height } = SLIDE_SIZES[full.meta.slideSize];
+        const blank = emptyPage(parseBackgroundFill(DEFAULT_FRAME_BACKGROUND), width, height);
         return { body: renderFittedPage(blank, scale), warnings };
     }
 

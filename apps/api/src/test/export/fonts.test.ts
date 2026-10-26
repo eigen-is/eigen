@@ -2,8 +2,9 @@ import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
-import { DOCX_FONT_FILES, getFontCSS, sfntTables } from '../../lib/export/fonts';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS, FONT_FACES } from '@workspace/lib/constants/fonts';
+import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/doc/docx/fonts';
+import { allFontFaceCss, getFontFaceCSSForFamilies } from '../../lib/export/fonts';
 
 const UI_STYLES_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/styles');
 
@@ -21,13 +22,22 @@ function faces(css: string, bytesOf: (src: string) => Buffer): string[] {
 }
 
 // An export inlines the faces the apps load from fonts.css; a face added or changed on one side only
-// renders an export in a fallback font.
+// renders an export in a fallback font. The math face is no font a user picks, so no export embeds it with the rest.
 test('the export fonts are the faces the apps load', () => {
     const appCSS = fs.readFileSync(path.join(UI_STYLES_DIR, 'fonts.css'), 'utf8');
-    const appFaces = faces(appCSS, (src) => fs.readFileSync(path.join(UI_STYLES_DIR, src)));
-    const exportFaces = faces(getFontCSS(), (src) => Buffer.from(src.slice(src.indexOf(',') + 1), 'base64'));
+    const appFaces = faces(appCSS, (src) => fs.readFileSync(path.join(UI_STYLES_DIR, src))).filter(
+        (face) => !face.startsWith('"STIX Two Math"'),
+    );
+    const exportFaces = faces(allFontFaceCss(), (src) => Buffer.from(src.slice(src.indexOf(',') + 1), 'base64'));
     expect(appFaces).toHaveLength(6);
     expect(exportFaces).toEqual(appFaces);
+});
+
+// The faces are the registry's, which the browser's image writer embeds too, in its order.
+test('the export embeds the registry faces, and only those of the families asked for', () => {
+    const families = (css: string) => [...css.matchAll(/font-family: "([^"]+)"/g)].map((m) => m[1]);
+    expect(families(allFontFaceCss())).toEqual(FONT_FACES.map((face) => face.family));
+    expect(families(getFontFaceCSSForFamilies(['Inter', 'Unknown']))).toEqual(['Inter', 'Inter']);
 });
 
 function nameRecords(name: Buffer): string[] {
@@ -120,3 +130,18 @@ test('every docx font file may be embedded for editing', () => {
     const usage = (face: (typeof docxFaces)[number]) => (face.tables.get('OS/2')?.readUInt16BE(8) ?? 0x0002) & 0x000f;
     expect(docxFaces.filter((face) => ![0, 8].includes(usage(face))).map((face) => face.file)).toEqual([]);
 });
+
+// Each family's single line is a number of lib's, as the editor, the canvas and the docx all read it; it is Word's,
+// (usWinAscent + usWinDescent) / unitsPerEm of the Regular the docx embeds.
+test.each(EIGEN_FONTS.map((font) => [font.name, font.lineHeight] as const))(
+    "%s's single line is its TTF's",
+    (name, lineHeight) => {
+        const regular = DOCX_FONT_FILES.get(name)?.Regular;
+        if (!regular) throw new Error(`no TTF for ${name}`);
+        const tables = sfntTables(fs.readFileSync(regular));
+        const os2 = tables.get('OS/2');
+        const head = tables.get('head');
+        if (!os2 || !head) throw new Error(`no OS/2 or head table for ${name}`);
+        expect((os2.readUInt16BE(74) + os2.readUInt16BE(76)) / head.readUInt16BE(18)).toBeCloseTo(lineHeight, 3);
+    },
+);

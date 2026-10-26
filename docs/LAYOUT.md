@@ -1,8 +1,8 @@
 # Layout
 
-> **TLDR:** Every app is `EigenApp` (the provider stack) around `AppShell` (topbar, sidebar, content), and every page is a `ColumnLayout` of `Column`s with the toolbar passed as a prop. The shell lives in `packages/ui/src/components/layout/`, Drive's file UI in `packages/ui/src/components/drive/`. Four things are not obvious from the code: on a phone only the `mobileColumn` renders and the sidebar is a column, not an overlay; z-index is one project-wide scale and app code sets none; buttons navigate in the same tab while links inside content open a new tab; and every document-level keymap stands down while a dialog is open.
+> **TLDR:** Every app is `EigenApp` (the provider stack) around `AppShell` (topbar, sidebar, content), and every page is a `ColumnLayout` of `Column`s with the toolbar passed as a prop. The shell lives in `packages/ui/src/components/layout/`, Drive's file UI in `packages/ui/src/components/drive/`. Five things are not obvious from the code: on a phone only the `mobileColumn` renders and the sidebar is a column, not an overlay; every context and ⋮ menu draws its rows in one order, with a destructive row last and red; z-index is one project-wide scale and app code sets none; buttons navigate in the same tab while links inside content open a new tab; and every document-level keymap stands down while a dialog is open.
 
-This doc governs the frame every app draws its pages in and the conventions that make the apps feel like one product: the shell, the columns, the gutter, Drive's file UI, lists, drag, the keyboard, layering and where a click opens. Read it before you add a page, a list, a menu or a shortcut. The pieces live in `packages/ui`, with their logic in `packages/lib`, so an app composes the shared pieces instead of laying out its own, and a fix to the shell reaches every app at once. Phones and touch screens add their own rules on top ([MOBILE.md](MOBILE.md)).
+This doc governs the frame every app draws its pages in and the conventions that make the apps feel like one product: the shell, the columns, the gutter, Drive's file UI, lists, drag, the keyboard, layering, where a click opens, and the Radix traps. Read it before you add a page, a list, a menu or a shortcut. The pieces live in `packages/ui`, with their logic in `packages/lib`, so an app composes the shared pieces instead of laying out its own, and a fix to the shell reaches every app at once. Phones and touch screens add their own rules on top ([MOBILE.md](MOBILE.md)).
 
 ## Every app is `EigenApp` around `AppShell`
 
@@ -62,9 +62,56 @@ The engine, parsers, providers and commands live in `packages/lib/src/core/comma
 
 ## One item menu serves the row and the detail column
 
-`DriveItemMenuItems` (`drive-item-menu.tsx`) is the menu both the row's context menu and the detail column's kebab draw. Between its Open rows and its own item actions it draws the shared file actions through `FileActionMenuItems`, minus `save-to-drive`, because Drive's own Copy to… already says that. Each host passes the sorted listing as siblings, so Quick preview pages through the folder the way the Space key does ([PREVIEWS.md](PREVIEWS.md#the-host-mounts-the-runners-dialogs)).
+`DriveItemMenuItems` (`drive-item-menu.tsx`) is the menu both the row's context menu and the detail column's kebab draw. It draws the shared file actions through `FileActionMenuItems` one group at a time, each beside its own rows in the menu order ([Menus draw their rows in one order](#menus-draw-their-rows-in-one-order)), minus `save-to-drive`, because Drive's own Copy to… already says that. Each host passes the sorted listing as siblings, so Quick preview pages through the folder the way the Space key does ([PREVIEWS.md](PREVIEWS.md#the-host-mounts-the-runners-dialogs)).
 
 `DriveBrowser` (`drive-browser.tsx`) is a lighter layer over the same table, with a breadcrumb and a mount list but no dialogs and no detail column. The file picker and the location field use it.
+
+## Menus draw their rows in one order
+
+Every right-click menu and every ⋮ menu composes `MenuSections` (`packages/ui/src/components/context-menu/menu-sections.tsx`). A host hands each row to a named group, and the component draws the groups in a fixed order with a separator between two that are there. The order is the one source, so a user finds Copy, Download or Delete in the same place in every app, and a new menu cannot drift from it.
+
+| Group | Rows |
+|---|---|
+| `open` | Open, Open in new tab, Quick preview, View comment, Reply, Forward |
+| `clipboard` | Cut, Copy, Paste, in that order, from `ClipboardMenuItems` with their shortcuts |
+| `create` | New slide, Insert, Duplicate, Edit, Rename |
+| `organize` | Move to, Copy to, Archive, labels, color, assign, resolve, hide, sort, filter, Clear contents |
+| `arrange` | A canvas object's or a sheet image's or chart's `OrderMenuSub` (Google Slides' Order ▸), a sheet tab's Move left and right |
+| `convert` | Convert to shapes, Convert to Sheet, Document or Slides |
+| `output` | Download, Export, Print, Save to Drive, Import to…; an object's Download original image and Download image |
+| `collaborate` | Add comment, Share ▸, Watch |
+| `destructive` | Delete, Move to trash, Remove…, Delete row or column |
+
+Shared rows know their group. A `FileAction` in `packages/lib/src/core/file-actions.ts` names one (`open`, `convert` or `output`), and `FileActionMenuItems` draws all three in their places, or one when the host passes `group`, as Drive does to put Quick preview by Open. The comment rows take the groups themselves on a card's own menu; in a menu about something else (a cell, an image) the host draws `part="rows"` in its collaborate group and `part="delete"` in its destructive group, so the comment's Delete sits with the cell's.
+
+`DropdownMenuSeparator` hides itself when it opens the menu, follows another separator or has no row after it. A row component may render nothing (`DownloadOriginalImageMenuItem` with no path, `DownloadImageMenuItem` with nothing to draw, the comment rows for a viewer), and the separator before it then goes too, so no host writes separator logic of its own. Tests read a menu as a user sees it through `menuRows` and `collapseSeparators` in `packages/ui/src/test/menu-rows.ts`, since happy-dom draws no CSS.
+
+Menubar menus (File, Edit, Format) keep Google's order, which a user knows from Docs, except that their delete rows go last and red, as Format › Table's Delete row, column and table do.
+
+## A row that deletes is red and last
+
+**A row that deletes, trashes or removes is `variant="destructive"`**, red with its icon, and sits alone in the last group. Move to trash is red even though Trash restores it, and a Sheets row's or a table's Delete row goes there too, apart from its Insert. Google draws none of these red and puts Delete in the middle of a menu; Eigen follows iOS and Material instead, so the one row that loses work is the one a user finds last and sees coloured. Log out is last but plain, since it loses nothing, and Clear contents is an object action.
+
+A share dialog's role Remove is a `SelectItem` with the same `variant`, behind a `SelectSeparator`.
+
+A properties panel has no Delete button. An object's Delete is its menu's last row, the Delete key and Edit › Delete, in Vector, Slides and Sheets alike, so the panel holds only what edits the object and a misclick there loses nothing.
+
+`scripts/check-standards.ts` gates it as a hard zero: a `DropdownMenuItem` or `SelectItem` that draws a `Trash2` icon, or whose label says Delete, Remove or to trash, fails without the variant, and so does one tinted by `text-destructive`, which leaves the icon grey. A toggle's label (`'Remove' : 'Add'` space before) is an undo and passes.
+
+## Pink is Eigen's accent color
+
+Pink `#f6339a`, the accent row of the pink column in `packages/lib/src/constants/colors.ts`, is Eigen's accent color. It comes first in `EIGEN_ACCENT_COLORS_SHUFFLED`, the order calendars, labels, chart series and presence hand the accents out in, so what Eigen picks for a user starts in its own color: a new account's first calendar and a chart's first series. A new deck's title slide opens on it too. Rose and fuchsia sit close to it, so they come late in that order ([CHARTS.md](CHARTS.md) has the reasoning).
+
+## A choice is a submenu with a check
+
+**A row that shows a current option or an on state draws a check on its left, and nothing else does.** Google's menus work this way (View › Mode, Format › Line & paragraph spacing, View › Show ruler), so a user reads every Eigen menu the same way, and a screen reader hears each row as checked or not.
+
+- A choice, one of several, goes through `ChoiceMenuItems` in `dropdown-menu.tsx`: one row per option, the current one checked, each a `menuitemradio`. A mixed selection passes no value and checks no row.
+- In a menu of actions the choice is `ChoiceMenuSub`, a submenu named for the property: an equation's Style ▸, the avatar's Theme ▸, a comment's Assign to ▸. A menu whose trigger already names the choice (the Align dropdown, All sheets, Drive's sort, a phone's View options) lists the options directly.
+- An on/off setting is one `DropdownMenuCheckboxItem`, a `menuitemcheckbox` checked when on. A set of them with several on (the comment filter's Color, Assign label) keeps the menu open with `onSelect` preventing the default, and a label only some of the selection has is `checked="indeterminate"`, drawn as a dash.
+- An action that flips its item's state keeps Google's label swap instead of a check: Add or Remove space before paragraph, Create or Remove filter, Watch or Stop watching. Commands that set a value without showing it, such as Format › Align and indent or Format › Text › Bold, stay plain rows, as in Google.
+
+`DropdownMenuRadioGroup` and `DropdownMenuRadioItem` are not exported, so a choice cannot draw Radix's dot. `scripts/check-standards.ts` gates the rest as a hard zero: a `DropdownMenuItem` that draws a `Check` when a condition holds fails. The color picker's swatch grid is exempt, since it marks its color inside the swatch, as Google's palette does. A searchable member list (`MemberCommandList`) is a combobox, not menu rows, and keeps its trailing check.
 
 ## The document apps reach Drive through one config
 
@@ -97,6 +144,10 @@ A row's state is a class in `packages/ui/src/styles/globals.css`, painted in the
 
 `ContextMenuAnchor` portals its zero-size trigger into `document.body`. The trigger sits at viewport coordinates, and a transformed ancestor (a dialog's centering translate) would otherwise become its containing block and open the menu somewhere else.
 
+One context menu serves the whole list, so a list never draws a `DropdownMenu` per row. A row's button opens it with `openAt(item, rect.right, rect.bottom)` from the button's own bounding rect, because a click made with the keyboard's Enter has clientX and clientY 0,0.
+
+A menu row's 16 px between icon and label lives in the item primitives in `dropdown-menu.tsx` (`gap-4`), which the Sheets right-click menu uses too. Put the bare icon in the row; never add `mr-*` or a `gap-*` override to a menu icon.
+
 ## Reordering uses dnd-kit, moving between lists uses native drag
 
 Reordering in place (a stickies column, the slides rail) uses `@dnd-kit`. Dragging between lists, onto a sidebar drop target, or to and from the OS uses native HTML5 drag: `useListDrag` and `useListDropTarget`, plus `useFileDropTarget` and `useFilePasteTarget` for OS files. dnd-kit never sees an OS file drop, and only the native path carries the drag type across lists.
@@ -115,7 +166,7 @@ Icon buttons with a tooltip are `TooltipButton`. When hover icons would change t
 
 ## Document keymaps stand down while a dialog is open
 
-Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDisplay()` for tooltip labels. Manual listeners stay for stateful navigation (`use-keyboard-list-navigation.ts`) and for editors that own their keys (Tiptap, the canvas keymap in [CANVAS.md](CANVAS.md)). Mod+K is a raw window listener rather than a `useHotkey`, so the palette opens from inside a text field too.
+Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDisplay()` for tooltip labels. Manual listeners stay for stateful navigation (`use-keyboard-list-navigation.ts`) and for editors that own their keys (Tiptap, the canvas keymap in [CANVAS.md](CANVAS.md)). Mod+K is a raw window listener rather than a `useHotkey`, so the palette opens from inside a text field too. A `'*'` chord needs a capture-phase listener, and `'Shift+8'` never matches.
 
 **A document-level keymap folds `useDialogOpen()` into its `enabled`.** The library's own guard covers text fields only, so a key pressed on a dialog button otherwise acts on the document behind it: Delete on a confirm button deleting the canvas selection, `#` in Mail's location picker trashing the message. The hook watches the DOM for an open `role="dialog"` or `role="alertdialog"`, so it keeps no registry. An overlay that is a dialog itself (the file preview, Mail's cheat sheet) registers its keys ungated.
 
@@ -153,6 +204,18 @@ Two cases leave the same-tab side:
 
 - The user asked for a new tab: Drive's Open in new tab row and the `drive.open-in-new-tab` command. Prefer a real `<a href>` for a navigation affordance where the markup allows it (`DriveItemNameLink`, the quick-look overlay's Open, Drive's recent-activity rows through `ActivityRow`'s `href`), because Cmd-click and middle-click then open a new tab and the user keeps the choice. Two things block an anchor: a URL that needs an async resolve (the notification bell), and a button in the row's `trailing` slot, since a `<button>` inside an `<a>` is invalid HTML.
 - The destination is outside the app: downloads, the marketing site, exported HTML, and mail. Mail is deliberate twice over. A share email is read in other clients as often as in Eigen Mail, and deciding "open in this tab" from a stranger's URL is exactly where an Eigen-looking phishing host would replace the reader's inbox.
+
+## Radix and the DOM have defaults that break a component silently
+
+Each of these looks like a bug in our own code, so the cause and the fix are written down:
+
+- `TooltipTrigger asChild` overwrites its child's `data-state`, so a Toggle's `data-[state=on]:*` never matches inside a tooltip. Style the pressed state with `aria-pressed:*`, as the find bar's option toggles do (`find-replace-bar.tsx`).
+- A non-modal Popover inside a Radix Dialog can't scroll: the dialog's scroll lock eats the wheel while hover still works. Pass `modal`.
+- A Popover inside a Radix menu closes on focus-outside. Use `DropdownMenuSub`.
+- A Radix menu takes focus back to its trigger on close. To focus something else, `preventDefault` in `onCloseAutoFocus`, then focus the target.
+- Radix `onOpenChange` never fires on unmount, so state it set stays behind.
+- A flex item that loses `overflow-hidden` loses its escape from its minimum size too: add `min-h-0`.
+- An input focused in `pointerdown` is blurred again by the mousedown that follows. `preventDefault` the pointerdown.
 
 ## See also
 

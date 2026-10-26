@@ -2,8 +2,10 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { eigenMediaHref } from '@workspace/lib/vector';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import type { DatabaseConfig, SchemaType } from '../../lib/core';
+import { ManagedDatabase } from '../../lib/core';
 import { getFontFaceCSSForFamilies } from '../../lib/export/fonts';
 import { collectExportMedia } from '../../lib/export/media';
 import { sanitizeExportMedia } from '../../lib/export/sanitize';
@@ -302,12 +304,16 @@ describe('export media path (prepareMedia, then sanitizeExportMedia in the trans
         } catch {}
     });
 
+    // The figure a document names, as its export asks for it.
+    const collectFigure = (container: DrivePath, name: string) =>
+        collectExportMedia(mount, container, 'html', [name], new AbortController().signal);
+
     test('a name-ref svg figure reaches export html as a data: URI', async () => {
         // collectExportMedia runs the real getScreenPreview (inlines) → sanitizeExportMedia (keeps data:
         // hrefs, strips the rest). The exported svg figure must therefore carry the png as a data: URI,
         // not an eigen-media ref WeasyPrint would try to fetch.
         const container = (await mount.getPath(containerId))!;
-        const media = sanitizeExportMedia(await collectExportMedia(mount, container, 'html'));
+        const media = sanitizeExportMedia(await collectFigure(container, 'figure.svg'));
         const svg = media.find((item) => item.name === 'figure.svg');
         expect(svg).toBeDefined();
         const html = Buffer.from(svg!.data).toString('utf8');
@@ -318,7 +324,7 @@ describe('export media path (prepareMedia, then sanitizeExportMedia in the trans
     test('a text svg figure reaches export html with its @font-face surviving sanitize', async () => {
         // getScreenPreview injects the face; sanitizeExportHtml keeps the <style> and its data: url().
         const container = (await mount.getPath(containerId))!;
-        const media = sanitizeExportMedia(await collectExportMedia(mount, container, 'html'));
+        const media = sanitizeExportMedia(await collectFigure(container, 'text.svg'));
         const html = Buffer.from(media.find((item) => item.name === 'text.svg')!.data).toString('utf8');
         expect(html).toContain('@font-face');
         expect(html).toContain('data:font/woff2;base64,');
@@ -328,7 +334,7 @@ describe('export media path (prepareMedia, then sanitizeExportMedia in the trans
         // The figure already carries faces (as the vector export produces); the @font-face sniff makes
         // getScreenPreview skip re-injecting, so exactly one block survives.
         const container = (await mount.getPath(containerId))!;
-        const media = sanitizeExportMedia(await collectExportMedia(mount, container, 'html'));
+        const media = sanitizeExportMedia(await collectFigure(container, 'fonted.svg'));
         const html = Buffer.from(media.find((item) => item.name === 'fonted.svg')!.data).toString('utf8');
         expect(occurrences(html, '@font-face')).toBe(1);
     });

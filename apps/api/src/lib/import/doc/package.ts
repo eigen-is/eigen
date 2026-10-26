@@ -1,25 +1,33 @@
+// The docx package as the reader reads it: the document part, the parts it names (styles, numbering, theme, notes, the
+// final section's headers and footers), the caps a crafted file is held to, and the WordprocessingML attribute
+// helpers every reader file shares.
+
+import type { BandRoot } from '@workspace/lib/docs/eigendoc';
+import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
-import { CONTENT_TYPES_NS, isOn, MC_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, W_NS } from '../../core/ooxml';
-import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
-import { openZip, ZipError, type ZipReader } from '../../core/zip';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
+import type { Lost } from '../../document/transform/protocol';
+import type { Budget } from '../../ooxml/budget';
+import { budget, CHARS_PER_UNIT } from '../../ooxml/budget';
+import { alternativeFor, isAlternateContent, isOnElement, measure, R_NS, W_NS } from '../../ooxml/ooxml';
+import type { OoxmlPackage, Part } from '../../ooxml/opc';
+import { openPackage, optional, relOfType } from '../../ooxml/opc';
+import type { ZipReader } from '../../ooxml/zip';
+import { IMPORT_MESSAGES } from '../messages';
 
-// The parts the reader parses, together. A tree costs 20–40× its XML, and the largest document.xml met is 12.6 MB.
-export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
-
-// A tree costs per element too, so the parts' elements have a cap of their own, past a long report's. Counted as '<' in
-// the bytes.
-export const MAX_DOCX_XML_TAGS = 750_000;
-
-// A piece past a run's first is a node no tag counts, held before the output is weighed; the corpus's most is 1,055.
+// A piece past a run's first is a node no tag counts, about 600 bytes held before the output is weighed; the corpus's
+// most is 1,055.
 export const MAX_DOCX_PIECES = 75_000;
 
-export const DOCUMENT_TOO_LARGE = 'Document too large';
-export const NOT_A_DOCX = 'Not a valid docx file';
-const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
+// Each node and mark the reader emits is a Yjs item: 1.3 to 2.4 KB of peak memory through the transform per unit of
+// weight, 3.8 KB for a cell's 63 column widths. At this budget the heaviest file met peaks near 1 GB, and the corpus's
+// heaviest weighs 57,688.
+export const MAX_DOCX_WEIGHT = 150_000;
 
-type DocxRelationship = { type: string; target: string; external: boolean };
-
-export type Part = { path: string; root: XmlElement; rels: Map<string, DocxRelationship> };
+// readChart builds every point a cache declares before the spec's cap refuses them, a few tags each up to 68,000 slots,
+// so a file of many small chart parts is bounded by their cost (chartCost) together. The corpus's most is 1,740.
+export const MAX_DOCX_CHART_WORK = 1_000_000;
 
 export type DocxPackage = {
     zip: ZipReader;
@@ -30,64 +38,71 @@ export type DocxPackage = {
     fontTable?: XmlElement;
     footnotes?: Part;
     endnotes?: Part;
-    contentTypes: { defaults: Map<string, string>; overrides: Map<string, string> };
-    // A part a drawing names, read when met and charged as the others are; a damaged one, or one past a cap, is no part.
-    readPart(path: string): XmlElement | undefined;
-    // An image's bytes; a damaged entry is none, and costs only its picture.
-    readMedia(path: string): Uint8Array | undefined;
-    // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own.
-    chargePiece(): void;
+    // The final section's headers and footers, a first-page one only with w:titlePg, which makes page 1 different.
+    bands: Partial<Record<BandRoot, Part>>;
+    titlePg: boolean;
+    contentTypeOf: OoxmlPackage['contentTypeOf'];
+    // A part a drawing names, read when met; a damaged one is no part.
+    part(path: string): XmlElement | undefined;
+    readMedia: OoxmlPackage['readMedia'];
+    // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own, as has
+    // each node of a note's copy past its first.
+    pieces: Budget;
+    // An equation's MathML is charged as it is written: a space in m:t writes 26 characters, so a few KB zipped would
+    // build hundreds of MB before the output is weighed.
+    mathml: Budget;
+    // A chart's read cost (chartCost), spent only when the allowance left covers it: one it can't is left out. Its spec
+    // string still weighs in the output budget, so enough charts can refuse the document.
+    charts: Budget;
 };
 
-// An encrypted docx is an OLE compound file holding the package as a stream of this name.
-const OLE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
-const ENCRYPTED_PACKAGE = Buffer.from('EncryptedPackage', 'utf16le');
-
-// The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
-export function readPackage(bytes: Uint8Array): DocxPackage {
-    // Any other OLE file, a .doc say, is no zip, which openZip refuses.
-    if (OLE_SIGNATURE.every((byte, index) => bytes[index] === byte) && Buffer.from(bytes).includes(ENCRYPTED_PACKAGE))
-        throw new ApiError(400, PASSWORD_PROTECTED);
-    const zip = openZip(bytes);
-    const budget: Budget = {
-        left: MAX_DOCX_XML_BYTES,
-        tags: MAX_DOCX_XML_TAGS,
-        pieces: MAX_DOCX_PIECES,
-        charged: new Set(),
-        parsed: new Map(),
-        failed: new Map(),
-    };
-    const contentTypes = readContentTypes(readXml(zip, '[Content_Types].xml', budget));
-    const documentPath = relOfType(readRels(zip, '', budget), 'officeDocument') ?? 'word/document.xml';
-    const documentRels = readRels(zip, documentPath, budget);
+// Counts in `lost` the bands the file names that no doc holds: an even page's, which Word draws only with
+// evenAndOddHeaders, and one in a part that is missing or damaged.
+export function readDocxPackage(bytes: Uint8Array, lost: Lost): DocxPackage {
+    const pkg = openPackage(bytes, IMPORT_MESSAGES.docx);
+    const { tooLarge } = IMPORT_MESSAGES.docx;
+    const documentPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'word/document.xml';
+    const documentRels = pkg.relationships(documentPath);
     // By relationship, else where Word puts the part.
     const located = (type: string) => relOfType(documentRels, type) ?? `word/${type}.xml`;
-    const notes = ['footnotes', 'endnotes'].map(located);
-    // Every content part is charged before the first of them inflates.
-    const parts = [documentPath, ...['styles', 'numbering', 'theme', 'fontTable'].map(located), ...notes];
-    charge(zip, [...parts, ...notes.map(relsPathOf)], budget);
-    const document = readXml(zip, documentPath, budget);
-    if (!document) throw new ApiError(400, NOT_A_DOCX);
-    // A damaged optional part, its XML or its entry, costs its looks, not the document; a cap still refuses it, but a
-    // graphic's part is read once every content part is, so a cap it meets costs only the graphic.
-    const optional = <T>(read: () => T, graphic = false): T | undefined => {
-        try {
-            return read();
-        } catch (error) {
-            if (error instanceof XmlError || (error instanceof ZipError && error.status === 400)) return undefined;
-            if (graphic && error instanceof ApiError && error.status === 413) return undefined;
-            throw error;
-        }
-    };
-    const xml = (type: string) => optional(() => readXml(zip, located(type), budget));
+    const document = pkg.part(documentPath);
+    if (!document) throw new ApiError(400, IMPORT_MESSAGES.docx.invalid);
+    const xml = (type: string) => optional(() => pkg.part(located(type)));
     const part = (type: string) =>
         optional((): Part | undefined => {
             const path = located(type);
-            const root = readXml(zip, path, budget);
-            return root && { path, root, rels: readRels(zip, path, budget) };
+            const root = pkg.part(path);
+            return root && { path, root, rels: pkg.relationships(path) };
         });
+    // Word takes a reference a section leaves out from the section before it, so the last one of each type is the final
+    // section's. A first-page band shows only where the final section has w:titlePg, an even one only with the setting.
+    const references = new Map<string, string>();
+    for (const section of descendants(document, W_NS, 'sectPr'))
+        for (const reference of xmlElements(section)) {
+            const id = xmlAttr(reference, R_NS, 'id');
+            const kind = BAND_REFERENCES.get(reference.local);
+            if (reference.ns === W_NS && kind && id) references.set(`${kind}:${w(reference, 'type') ?? 'default'}`, id);
+        }
+    const titlePg = onOff(wChild(wChild(wChild(document, 'body'), 'sectPr'), 'titlePg')) === true;
+    const bands: Partial<Record<BandRoot, Part>> = {};
+    for (const root of BAND_ROOTS) {
+        const edge = bandEdge(root);
+        const first = root === FIRST_PAGE_BAND[edge];
+        const id = references.get(`${edge}:${first ? 'first' : 'default'}`);
+        const rel = id ? documentRels.get(id) : undefined;
+        if (!rel || rel.external || !rel.type.endsWith(`/${edge}`) || (first && !titlePg)) continue;
+        const band = optional((): Part | undefined => {
+            const tree = pkg.part(rel.target);
+            return tree && { path: rel.target, root: tree, rels: pkg.relationships(rel.target) };
+        });
+        if (band) bands[root] = band;
+        else lost('band-content-dropped');
+    }
+    const even = ['header:even', 'footer:even'].filter((key) => references.has(key));
+    if (even.length > 0 && onOff(wChild(xml('settings'), 'evenAndOddHeaders')) === true)
+        for (const _ of even) lost('even-bands-dropped');
     return {
-        zip,
+        zip: pkg.zip,
         document: { path: documentPath, root: document, rels: documentRels },
         styles: xml('styles'),
         numbering: xml('numbering'),
@@ -95,115 +110,24 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         fontTable: xml('fontTable'),
         footnotes: part('footnotes'),
         endnotes: part('endnotes'),
-        contentTypes,
-        readPart: (path) => optional(() => readXml(zip, path, budget), true),
-        readMedia: (path) => optional(() => zip.read(path)),
-        chargePiece: () => {
-            budget.pieces--;
-            if (budget.pieces < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
-        },
+        bands,
+        titlePg,
+        contentTypeOf: pkg.contentTypeOf,
+        part: (path) => optional(() => pkg.part(path)),
+        readMedia: pkg.readMedia,
+        pieces: budget(MAX_DOCX_PIECES, tooLarge),
+        mathml: budget(MAX_DOCX_WEIGHT * CHARS_PER_UNIT, tooLarge),
+        charts: budget(MAX_DOCX_CHART_WORK, tooLarge),
     };
 }
 
-// A part several relationships name is charged and parsed once, and they share its tree or its error.
-type Budget = {
-    left: number;
-    tags: number;
-    pieces: number;
-    charged: Set<string>;
-    parsed: Map<string, XmlElement | undefined>;
-    failed: Map<string, unknown>;
-};
+const BAND_REFERENCES = new Map([
+    ['headerReference', 'header'],
+    ['footerReference', 'footer'],
+]);
 
-// Declared sizes are the cap: a read inflates no further than its entry declares (core/zip), so nothing parsed passes it.
-function charge(zip: ZipReader, paths: string[], budget: Budget): void {
-    const fresh = [...new Set(paths)].filter((path) => !budget.charged.has(path));
-    const declared = fresh.reduce((sum, path) => sum + (zip.entry(path)?.size ?? 0), 0);
-    if (declared > budget.left) throw new ApiError(413, DOCUMENT_TOO_LARGE);
-    budget.left -= declared;
-    for (const path of fresh) budget.charged.add(path);
-}
-
-function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | undefined {
-    if (budget.parsed.has(path)) return budget.parsed.get(path);
-    if (budget.failed.has(path)) throw budget.failed.get(path);
-    charge(zip, [path], budget);
-    try {
-        const bytes = zip.read(path);
-        if (!bytes) return undefined;
-        let tags = 0;
-        for (let at = bytes.indexOf(LESS_THAN); at >= 0; at = bytes.indexOf(LESS_THAN, at + 1)) tags++;
-        // A part refused leaves the budget to the parts after it.
-        if (tags > budget.tags) throw new ApiError(413, DOCUMENT_TOO_LARGE);
-        budget.tags -= tags;
-        const root = parseOoxml(bytes) ?? undefined;
-        budget.parsed.set(path, root);
-        return root;
-    } catch (error) {
-        budget.failed.set(path, error);
-        throw error;
-    }
-}
-
-const LESS_THAN = 0x3c;
-
-function readContentTypes(root: XmlElement | undefined): DocxPackage['contentTypes'] {
-    const defaults = new Map<string, string>();
-    const overrides = new Map<string, string>();
-    for (const entry of root ? xmlElements(root) : []) {
-        const contentType = (entry.attributes['ContentType'] ?? '').toLowerCase();
-        if (is(entry, CONTENT_TYPES_NS, 'Default'))
-            defaults.set((entry.attributes['Extension'] ?? '').toLowerCase(), contentType);
-        if (is(entry, CONTENT_TYPES_NS, 'Override'))
-            overrides.set((entry.attributes['PartName'] ?? '').replace(/^\//, ''), contentType);
-    }
-    return { defaults, overrides };
-}
-
-export function contentTypeOf(pkg: DocxPackage, path: string): string | undefined {
-    const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
-    return pkg.contentTypes.overrides.get(path) ?? pkg.contentTypes.defaults.get(extension);
-}
-
-function relsPathOf(partPath: string): string {
-    const slash = partPath.lastIndexOf('/');
-    return `${partPath.slice(0, slash + 1)}_rels/${partPath.slice(slash + 1)}.rels`;
-}
-
-function readRels(zip: ZipReader, partPath: string, budget: Budget): Map<string, DocxRelationship> {
-    const root = readXml(zip, relsPathOf(partPath), budget);
-    const rels = new Map<string, DocxRelationship>();
-    for (const rel of root ? xmlElements(root) : []) {
-        const id = rel.attributes['Id'];
-        if (!is(rel, PACKAGE_RELATIONSHIPS_NS, 'Relationship') || !id) continue;
-        const target = rel.attributes['Target'] ?? '';
-        const external = rel.attributes['TargetMode'] === 'External';
-        rels.set(id, {
-            type: rel.attributes['Type'] ?? '',
-            target: external ? target : resolvePath(partPath, target),
-            external,
-        });
-    }
-    return rels;
-}
-
-function relOfType(rels: Map<string, DocxRelationship>, type: string): string | undefined {
-    for (const rel of rels.values()) if (rel.type.endsWith(`/${type}`) && !rel.external) return rel.target;
-    return undefined;
-}
-
-function resolvePath(base: string, target: string): string {
-    if (target.startsWith('/')) return target.slice(1);
-    const parts = base.split('/').slice(0, -1);
-    for (const segment of target.split('/')) {
-        if (segment === '..') parts.pop();
-        else if (segment !== '.' && segment !== '') parts.push(segment);
-    }
-    return parts.join('/');
-}
-
-// mc:Choice prefixes whose content this reader understands; any other Choice falls back.
-const UNDERSTOOD_PREFIXES = new Set([
+// Requires names prefixes, not namespaces: Word's spellings of the namespaces this reader reads.
+const WORD_PREFIXES = new Set([
     'w',
     'w14',
     'w15',
@@ -224,20 +148,7 @@ const UNDERSTOOD_PREFIXES = new Set([
     'r',
 ]);
 
-export function isAlternateContent(element: XmlElement): boolean {
-    return is(element, MC_NS, 'AlternateContent');
-}
-
-export function alternative(element: XmlElement): XmlElement[] {
-    for (const choice of xmlElements(element)) {
-        if (is(choice, MC_NS, 'Choice')) {
-            const requires = (choice.attributes['Requires'] ?? '').split(/\s+/).filter(Boolean);
-            if (requires.every((prefix) => UNDERSTOOD_PREFIXES.has(prefix))) return xmlElements(choice);
-        }
-        if (is(choice, MC_NS, 'Fallback')) return xmlElements(choice);
-    }
-    return [];
-}
+export const wordAlternative = alternativeFor(WORD_PREFIXES);
 
 // ── WordprocessingML attributes ─────────────────────────────────────────────────────────────────────────────────
 
@@ -249,55 +160,34 @@ export function wChild(element: XmlElement | undefined, local: string): XmlEleme
     return element && xmlChild(element, W_NS, local);
 }
 
-export function is(element: XmlElement, ns: string, local: string): boolean {
-    return element.ns === ns && element.local === local;
-}
-
-// A bare element is on.
 export function onOff(element: XmlElement | undefined): boolean | undefined {
-    if (!element) return undefined;
-    return isOn(w(element, 'val')) ?? true;
+    return isOnElement(element, W_NS);
 }
 
-export function int(value: string | undefined): number | undefined {
+// A number attribute rounded to a whole one. Word writes integers, but a generator may write a fraction.
+export function roundedInt(value: string | undefined): number | undefined {
     if (value === undefined) return undefined;
     const number = Number.parseFloat(value);
     return Number.isFinite(number) ? Math.round(number) : undefined;
 }
 
-// ST_UniversalMeasure, which Strict OOXML writes where transitional writes a number: points per unit.
-export const POINTS_PER_UNIT = new Map([
-    ['pt', 1],
-    ['pc', 12],
-    ['pi', 12],
-    ['in', 72],
-    ['cm', 72 / 2.54],
-    ['mm', 72 / 25.4],
-]);
-
-// A length in twips or half-points: a bare number is in that unit, a universal measure is converted.
-function measure(value: string | undefined, perPoint: number): number | undefined {
-    const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]+)$/) ?? [];
-    const points = POINTS_PER_UNIT.get(unit);
-    return points === undefined ? int(value) : Math.round(Number(number) * points * perPoint);
-}
-
 export function twipsOf(value: string | undefined): number | undefined {
-    return measure(value, 20);
+    return measure(value, TWIPS_PER_POINT);
 }
 
 export function halfPointsOf(value: string | undefined): number | undefined {
     return measure(value, 2);
 }
 
-// Document order; a match's own content and a text box's are not searched.
+// Document order; a match's own content and a text box's are not searched, and of an mc:AlternateContent only the
+// branch Word reads.
 export function descendants(root: XmlElement, ns: string, local: string): XmlElement[] {
     const found: XmlElement[] = [];
     const stack = xmlElements(root).reverse();
     for (let element = stack.pop(); element; element = stack.pop()) {
-        if (is(element, ns, local)) found.push(element);
-        else if (!is(element, W_NS, 'txbxContent')) {
-            const children = xmlElements(element);
+        if (hasXmlName(element, ns, local)) found.push(element);
+        else if (!hasXmlName(element, W_NS, 'txbxContent')) {
+            const children = isAlternateContent(element) ? wordAlternative(element) : xmlElements(element);
             for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
         }
     }

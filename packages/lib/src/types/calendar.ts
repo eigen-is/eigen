@@ -22,9 +22,12 @@ export type EventData = {
     color?: string;
 };
 
+export const CALENDAR_SHARE_PERMISSIONS = ['free-busy', 'read', 'write'] as const;
+export type CalendarSharePermission = (typeof CALENDAR_SHARE_PERMISSIONS)[number];
+
 export type CalendarShare = {
     targetId: string;
-    permission: 'free-busy' | 'read' | 'write';
+    permission: CalendarSharePermission;
 };
 
 export type CalendarItem = {
@@ -134,7 +137,7 @@ export type SharedCalendar = {
     calendarId: string;
     calendarName: string;
     calendarColor: string;
-    permission: 'free-busy' | 'read' | 'write';
+    permission: CalendarSharePermission;
     color: string | null;
     visible: boolean;
     createdAt: Date;

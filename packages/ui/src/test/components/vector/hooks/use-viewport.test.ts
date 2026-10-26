@@ -44,6 +44,8 @@ function mount(options: Options, size: { width: number; height: number }) {
             return latest;
         },
         resize,
+        rerender: (next: Options) =>
+            act(() => root.render(createElement(Harness, { options: next, onRender: (v) => (latest = v) }))),
         wheel: ({ deltaX = 0, deltaY = 0, ctrlKey = false, clientX = 0, clientY = 0 }: WheelInput) => {
             const event = new WheelEvent('wheel', { deltaX, deltaY, cancelable: true });
             // happy-dom's WheelEvent drops the modifier and pointer fields of its init dict; the handler
@@ -93,6 +95,18 @@ describe('useViewport in frame mode', () => {
         // A ⌘F reveal settles back to the fit: the whole page is already on screen.
         act(() => h.state.centerOn(1800, 1000));
         expect(h.state.viewportRef.current).toEqual(fitted);
+        h.unmount();
+    });
+
+    // A size change, from this tab or a peer's, arrives as the same frame with a new extent. Kept at the
+    // old fit, a 16:9 → 4:3 switch in a short window would cut off the slide's new bottom quarter.
+    test('re-fits when the frame changes size, though the frame stays the same', () => {
+        const fourThree = { width: 1920, height: 1440 };
+        const h = mount(options, { width: 1600, height: 1000 });
+        h.rerender({ ...options, frame: fourThree });
+        expect(h.state.viewportRef.current).toEqual(fitFrameViewport({ width: 1600, height: 1000 }, fourThree));
+        h.rerender(options);
+        expect(h.state.viewportRef.current).toEqual(fitFrameViewport({ width: 1600, height: 1000 }, FRAME));
         h.unmount();
     });
 

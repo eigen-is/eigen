@@ -6,19 +6,20 @@ category: Editing
 tags: [docs, formatting, text]
 related: [docs/format-text]
 order: 60
-updated: 2026-10-11
+updated: 2026-10-23
 ---
 
 When text has accumulated bold, italic, color, font changes, or other styles you no longer want, you can strip them all in one step rather than toggling each one off individually.
 
 ## What gets removed
 
-Clearing formatting removes two kinds of style at once:
+Clearing formatting removes three kinds of style at once:
 
-- **Inline marks**: bold, italic, underline, strikethrough, inline code, superscript, subscript, small, all caps, small caps, text color, and highlight.
+- **Inline marks**: bold, italic, underline, strikethrough, inline code, superscript, subscript, font size, all caps, small caps, text color, and highlight.
 - **Block styles**: titles, subtitles, headings, blockquotes, code blocks, and lists. These are converted to normal paragraphs.
+- **Paragraph formatting**: alignment, line spacing, the space before and after a paragraph, and indents. The paragraphs take the document's own.
 
-Links are also removed as part of the inline marks. If you want to keep a link, remove it separately first using the **Remove link** button.
+Links and comments stay. To remove a link as well, select it and click the **Remove link** button.
 
 ## Clear formatting with the toolbar button
 
@@ -34,6 +35,10 @@ The **Format** menu works on any screen, also when the toolbar doesn't show the 
 1. Select the text you want to clean up.
 2. Click the **Format** menu in the toolbar.
 3. Click **Clear formatting** at the bottom of the menu.
+
+## Clear formatting from the keyboard
+
+Press Cmd+\\ (Mac) or Ctrl+\\ (Windows and Linux). It works in the body, and in a header or footer you are editing.
 
 ## What is not removed
 

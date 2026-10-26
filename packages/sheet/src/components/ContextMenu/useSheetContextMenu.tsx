@@ -1,11 +1,14 @@
 import { CommentLifecycleMenuItems } from '@workspace/ui/components/comments';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
-import { DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut } from '@workspace/ui/components/dropdown-menu';
+import {
+    ClipboardMenuItems,
+    ContextMenuAnchor,
+    MenuSections,
+    useContextMenu,
+} from '@workspace/ui/components/context-menu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import {
     ArrowDownAZ,
     ArrowDownZA,
-    Clipboard,
-    Copy,
     Eye,
     EyeOff,
     Filter,
@@ -14,14 +17,14 @@ import {
     MoveHorizontal,
     MoveVertical,
     Plus,
-    Scissors,
     SquareCheck,
     Trash2,
     X,
 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext } from 'react';
-import { type SetContextOptions, WorkbookContext } from '../../context';
+import type { SetContextOptions } from '../../context';
+import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -44,38 +47,23 @@ import {
 } from '../../state';
 import { ResizeDialog } from '../ResizeDialog';
 
-// The app hardcodes the Mac modifier glyph elsewhere (command-palette shows ⌘K);
-// platform-aware shortcut rendering is an app-wide concern, tracked separately.
-const MOD = '⌘';
-
 const MSG_MULTI = 'Cannot perform this operation on multiple selection areas, please select a single area';
 
 type RowColType = 'row' | 'column';
 
-function CutItem() {
-    const { setContext } = useContext(WorkbookContext);
+// The shared Cut, Copy, Paste rows on the grid's own clipboard handlers.
+function ClipboardItems() {
+    const { context, setContext } = useContext(WorkbookContext);
+    const { showAlert } = useAlert();
     return (
-        <DropdownMenuItem
-            onClick={() =>
+        <ClipboardMenuItems
+            onCut={() =>
                 setContext((d) => {
                     handleCut(d);
                     flushPendingCopy();
                 })
             }
-        >
-            <Scissors className="size-4" />
-            Cut
-            <DropdownMenuShortcut>{MOD}X</DropdownMenuShortcut>
-        </DropdownMenuItem>
-    );
-}
-
-function CopyItem() {
-    const { context, setContext } = useContext(WorkbookContext);
-    const { showAlert } = useAlert();
-    return (
-        <DropdownMenuItem
-            onClick={() => {
+            onCopy={() => {
                 if ((context.selections?.length ?? 0) > 1) {
                     showAlert(MSG_MULTI, 'ok');
                     return;
@@ -85,29 +73,13 @@ function CopyItem() {
                     flushPendingCopy();
                 });
             }}
-        >
-            <Copy className="size-4" />
-            Copy
-            <DropdownMenuShortcut>{MOD}C</DropdownMenuShortcut>
-        </DropdownMenuItem>
-    );
-}
-
-function PasteItem() {
-    const { setContext } = useContext(WorkbookContext);
-    return (
-        <DropdownMenuItem
-            onClick={async () => {
+            onPaste={async () => {
                 const text = await readClipboardText();
                 setContext((d) => {
                     handlePasteByClick(d, text);
                 });
             }}
-        >
-            <Clipboard className="size-4" />
-            Paste
-            <DropdownMenuShortcut>{MOD}V</DropdownMenuShortcut>
-        </DropdownMenuItem>
+        />
     );
 }
 
@@ -170,7 +142,7 @@ function DeleteItem({ type, label }: { type: RowColType; label: string }) {
         );
     };
     return (
-        <DropdownMenuItem onClick={remove}>
+        <DropdownMenuItem variant="destructive" onClick={remove}>
             <Trash2 className="size-4" />
             {label}
         </DropdownMenuItem>
@@ -320,7 +292,7 @@ function TickBoxItem() {
     );
 }
 
-function CommentItems() {
+function CommentItems({ part }: { part: 'rows' | 'delete' }) {
     const { context, settings } = useContext(WorkbookContext);
     const { getCommentInfo, onAddComment, onDeleteComment, commentLifecycle } = settings.hooks;
     const last = context.selections?.[context.selections.length - 1];
@@ -339,75 +311,94 @@ function CommentItems() {
             canWrite={settings.allowEdit}
             onAddComment={onAddComment && (() => onAddComment(row, col))}
             onDelete={onDeleteComment && (() => onDeleteComment(row, col))}
+            part={part}
         />
     );
 }
 
 function CellMenu() {
     return (
-        <>
-            <CutItem />
-            <CopyItem />
-            <PasteItem />
-            <DropdownMenuSeparator />
-            <InsertItem type="row" direction="lefttop" label="Insert 1 row above" />
-            <InsertItem type="column" direction="lefttop" label="Insert 1 column to the left" />
-            <DeleteItem type="row" label="Delete row" />
-            <DeleteItem type="column" label="Delete column" />
-            <DropdownMenuSeparator />
-            <ClearItem label="Clear contents" />
-            <CreateFilterItem />
-            <SortItem ascending label="Sort range A → Z" />
-            <SortItem ascending={false} label="Sort range Z → A" />
-            <DropdownMenuSeparator />
-            <LinkItem />
-            <ImageItem />
-            <TickBoxItem />
-            <CommentItems />
-        </>
+        <MenuSections
+            clipboard={<ClipboardItems />}
+            create={
+                <>
+                    <InsertItem type="row" direction="lefttop" label="Insert 1 row above" />
+                    <InsertItem type="column" direction="lefttop" label="Insert 1 column to the left" />
+                    <DropdownMenuSeparator />
+                    <LinkItem />
+                    <ImageItem />
+                    <TickBoxItem />
+                </>
+            }
+            organize={
+                <>
+                    <ClearItem label="Clear contents" />
+                    <CreateFilterItem />
+                    <SortItem ascending label="Sort range A → Z" />
+                    <SortItem ascending={false} label="Sort range Z → A" />
+                </>
+            }
+            collaborate={<CommentItems part="rows" />}
+            destructive={
+                <>
+                    <DeleteItem type="row" label="Delete row" />
+                    <DeleteItem type="column" label="Delete column" />
+                    <CommentItems part="delete" />
+                </>
+            }
+        />
     );
 }
 
 function RowMenu() {
     return (
-        <>
-            <CutItem />
-            <CopyItem />
-            <PasteItem />
-            <DropdownMenuSeparator />
-            <InsertItem type="row" direction="lefttop" label="Insert 1 row above" />
-            <InsertItem type="row" direction="rightbottom" label="Insert 1 row below" />
-            <DeleteItem type="row" label="Delete row" />
-            <ClearItem label="Clear row" />
-            <HideItem type="row" label="Hide row" />
-            <ShowHiddenItem type="row" label="Show hidden rows" />
-            <ResizeItem type="row" label="Resize the row" />
-            <DropdownMenuSeparator />
-            <CreateFilterItem />
-        </>
+        <MenuSections
+            clipboard={<ClipboardItems />}
+            create={
+                <>
+                    <InsertItem type="row" direction="lefttop" label="Insert 1 row above" />
+                    <InsertItem type="row" direction="rightbottom" label="Insert 1 row below" />
+                </>
+            }
+            organize={
+                <>
+                    <ClearItem label="Clear row" />
+                    <HideItem type="row" label="Hide row" />
+                    <ShowHiddenItem type="row" label="Show hidden rows" />
+                    <ResizeItem type="row" label="Resize the row" />
+                    <DropdownMenuSeparator />
+                    <CreateFilterItem />
+                </>
+            }
+            destructive={<DeleteItem type="row" label="Delete row" />}
+        />
     );
 }
 
 function ColumnMenu() {
     return (
-        <>
-            <CutItem />
-            <CopyItem />
-            <PasteItem />
-            <DropdownMenuSeparator />
-            <InsertItem type="column" direction="lefttop" label="Insert 1 column to the left" />
-            <InsertItem type="column" direction="rightbottom" label="Insert 1 column to the right" />
-            <DeleteItem type="column" label="Delete column" />
-            <ClearItem label="Clear column" />
-            <HideItem type="column" label="Hide column" />
-            <ShowHiddenItem type="column" label="Show hidden columns" />
-            <ResizeItem type="column" label="Resize the column" />
-            <DropdownMenuSeparator />
-            <CreateFilterItem />
-            <DropdownMenuSeparator />
-            <SortItem ascending label="Sort column A → Z" />
-            <SortItem ascending={false} label="Sort column Z → A" />
-        </>
+        <MenuSections
+            clipboard={<ClipboardItems />}
+            create={
+                <>
+                    <InsertItem type="column" direction="lefttop" label="Insert 1 column to the left" />
+                    <InsertItem type="column" direction="rightbottom" label="Insert 1 column to the right" />
+                </>
+            }
+            organize={
+                <>
+                    <ClearItem label="Clear column" />
+                    <HideItem type="column" label="Hide column" />
+                    <ShowHiddenItem type="column" label="Show hidden columns" />
+                    <ResizeItem type="column" label="Resize the column" />
+                    <DropdownMenuSeparator />
+                    <CreateFilterItem />
+                    <SortItem ascending label="Sort column A → Z" />
+                    <SortItem ascending={false} label="Sort column Z → A" />
+                </>
+            }
+            destructive={<DeleteItem type="column" label="Delete column" />}
+        />
     );
 }
 

@@ -10,12 +10,16 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
+import type { SheetFloatingItem } from '@workspace/lib/sheets';
+import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
-import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
-import { type Image as SheetImage, Workbook, type WorkbookInstance } from '@workspace/sheet';
+import type { ImageSize } from '@workspace/lib/vector';
+import { fitImageSize } from '@workspace/lib/vector';
+import type { ChartPanelState, WorkbookInstance } from '@workspace/sheet';
+import { ChartPanelSections, Workbook } from '@workspace/sheet';
 import {
     CollabDocumentGate,
     DocumentShareCluster,
@@ -29,17 +33,18 @@ import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/c
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { readImageSizeFromUrl } from '@workspace/ui/components/media';
-import { type TransformFields, useAspectLock } from '@workspace/ui/components/properties-panel';
+import type { TransformFields } from '@workspace/ui/components/properties-panel';
+import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
+import { FloatingObjectPanel } from './floating-object-panel';
+import { useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
 import { useSheetSearchController } from './hooks/use-search-controller';
 import { useSheet } from './hooks/use-sheet';
-import { ImagePropertiesPanel } from './image-properties-panel';
 import { ToolbarLeftItems } from './toolbar';
 
 type SheetEditorProps = {
@@ -81,11 +86,15 @@ function SheetEditorInner({
     // has no zoom, so container px map 1:1 to the sheet-pixel units insertImage stores.
     const paneRef = useRef<HTMLDivElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
-    // The active floating image (surfaced from the workbook via onActiveImageChange) drives the
-    // right-side properties panel. Its aspect-lock — images default CHECKED — feeds BOTH the
-    // panel checkbox and the canvas ObjectTransform, so it lives here, one level above both.
-    const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
-    const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage ? [activeImage.id] : [], true);
+    // The selected image or chart (surfaced from the workbook via onActiveObjectChange) drives the
+    // right-side properties panel. Its Keep aspect ratio, checked by default for an image and not for a
+    // chart, feeds BOTH the panel checkbox and the grips, so it lives here, one level above both.
+    const [activeObject, setActiveObject] = useState<SheetFloatingItem | null>(null);
+    const [aspectLocked, setAspectLocked] = useAspectLock(
+        activeObject ? [activeObject.object.id] : [],
+        activeObject?.kind === 'image',
+    );
+    const [chartPanel, setChartPanel] = useState<ChartPanelState | null>(null);
 
     const {
         initialData,
@@ -149,7 +158,7 @@ function SheetEditorInner({
     const addCommentRef = useRef<(r: number, c: number) => void>(null);
     addCommentRef.current = useCallback((r: number, c: number) => {
         setAddTargetCell({ r, c });
-        setAddInitialTitle(`Cell ${columnToLetter(c)}${r + 1}`);
+        setAddInitialTitle(`Cell ${columnIndexToLabel(c)}${r + 1}`);
         setAddOpen(true);
     }, []);
 
@@ -237,7 +246,7 @@ function SheetEditorInner({
             if (!workbook) return [];
             const names: string[] = [];
             for (const sheet of workbook.getAllSheets()) {
-                for (const img of sheet.images ?? []) {
+                for (const img of Object.values(sheet.images ?? {})) {
                     if (isPendingMediaName(img.mediaName)) names.push(img.mediaName);
                 }
             }
@@ -294,12 +303,19 @@ function SheetEditorInner({
         [addTargetCell, addInitialTitle, createCard, assignComment],
     );
 
-    // One op per edit; the workbook re-surfaces the committed image via onActiveImageChange.
-    const handleImageTransform = useCallback(
+    // One op per edit; the workbook re-surfaces the written record via onActiveObjectChange.
+    const handleObjectTransform = useCallback(
         (fields: TransformFields) => {
-            if (activeImage) workbookRef.current?.updateImage(activeImage.id, fields);
+            if (activeObject) {
+                workbookRef.current?.updateFloatingBox({ kind: activeObject.kind, id: activeObject.object.id }, fields);
+            }
         },
-        [activeImage],
+        [activeObject],
+    );
+    const beginObjectGesture = useCallback(() => workbookRef.current?.beginGesture() ?? (() => {}), []);
+    const objectHistory = useMemo(
+        () => ({ undo: () => workbookRef.current?.undo(), redo: () => workbookRef.current?.redo() }),
+        [],
     );
 
     const leftItems = useMemo(
@@ -354,7 +370,7 @@ function SheetEditorInner({
             )}
             <div className="flex h-full w-full flex-col overflow-hidden">
                 {/* Persistent read-only signal — a decode failure leaves a blank sheet otherwise
-                    indistinguishable from data loss (a dismissible toast was not enough). */}
+                    indistinguishable from data loss. */}
                 {loadFailed && (
                     <div className="flex shrink-0 items-center justify-center gap-2 border-b bg-destructive/10 app-gutter-x py-1.5 text-xs text-destructive">
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -393,14 +409,15 @@ function SheetEditorInner({
                                         allowEdit={canWrite && !loadFailed}
                                         toolbarLeftItems={leftItems}
                                         toolbarRightItems={rightItems}
-                                        imageAspectLocked={imageAspectLocked}
+                                        aspectLocked={aspectLocked}
                                         hooks={{
                                             afterSelectionChange: (sheetId, selection) => {
                                                 const r = selection.row_focus ?? selection.row?.[0];
                                                 const c = selection.column_focus ?? selection.column?.[0];
                                                 if (r != null && c != null) publishSelection(sheetId, r, c);
                                             },
-                                            onActiveImageChange: setActiveImage,
+                                            onActiveObjectChange: setActiveObject,
+                                            onChartPanelChange: setChartPanel,
                                             ...(canWrite && mediaFolderId
                                                 ? {
                                                       onInsertImage: () => setImagePickerOpen(true),
@@ -456,7 +473,7 @@ function SheetEditorInner({
                             </div>
                         </DocSearchProvider>
                     </div>
-                    {panel && (
+                    {panel && auth.user && (
                         <PanelColumn
                             activePanel={panel}
                             onClose={closePanels}
@@ -464,23 +481,39 @@ function SheetEditorInner({
                             cards={cards}
                             entries={allComments}
                             members={members}
-                            currentUserEmail={auth.user!.email}
+                            currentUserEmail={auth.user.email}
                             filter={commentFilter}
                             activeComments={activeComments}
                             commentContextMenu={commentContextMenu}
                             onOpenCard={setOpenCardId}
                         />
                     )}
-                    {/* The comment/activity pane wins over the properties panel (the slides arrangement). */}
-                    {activeImage && !panel && (
-                        <ImagePropertiesPanel
-                            image={activeImage}
+                    {/* The comment/activity pane wins over the properties panel (the slides arrangement), and a phone
+                        has no room for it (MOBILE.md). */}
+                    {activeObject && !panel && !isMobile && (
+                        <FloatingObjectPanel
+                            item={activeObject}
                             canWrite={canWrite}
-                            aspectLocked={imageAspectLocked}
-                            onAspectLockChange={setImageAspectLocked}
-                            onChange={handleImageTransform}
-                            onDelete={() => workbookRef.current?.removeActiveImage()}
-                        />
+                            aspectLocked={aspectLocked}
+                            onAspectLockChange={setAspectLocked}
+                            onChange={handleObjectTransform}
+                            onArrange={(op) =>
+                                workbookRef.current?.reorderFloatingObject(
+                                    { kind: activeObject.kind, id: activeObject.object.id },
+                                    op,
+                                )
+                            }
+                            beginGesture={beginObjectGesture}
+                            history={objectHistory}
+                        >
+                            {chartPanel && (
+                                <ChartPanelSections
+                                    key={chartPanel.chart.id}
+                                    panel={chartPanel}
+                                    workbook={workbookRef}
+                                />
+                            )}
+                        </FloatingObjectPanel>
                     )}
                 </div>
             </div>

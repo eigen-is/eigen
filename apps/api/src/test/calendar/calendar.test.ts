@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { rmSync } from 'node:fs';
-import { type SeriesEdit, seriesEditFromOccurrence } from '@workspace/lib/calendar/calendar-utils';
+import type { SeriesEdit } from '@workspace/lib/calendar/calendar-utils';
+import { seriesEditFromOccurrence } from '@workspace/lib/calendar/calendar-utils';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,

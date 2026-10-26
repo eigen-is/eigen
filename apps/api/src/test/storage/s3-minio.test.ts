@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import type { DatabaseConfig, SchemaType } from '../../lib/core';
+import { ManagedDatabase } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import {
@@ -568,7 +569,7 @@ describe.skipIf(!live)('Mount (s3 storage, MinIO)', () => {
         managed.db.insert(docSchema.items).values({ id: 1, data: 'acked' }).run();
         await mount.closeDatabase(dataDbId);
 
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
         expect(await mount.storage.exists(storageKey)).toBe(true);
     });

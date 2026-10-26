@@ -65,7 +65,7 @@ export class UploadQueue {
     // Backoff before a failed row is retried. A field so tests can hold the jittered retry timer.
     private backoffMs = uploadBackoffMs;
 
-    constructor(deps: UploadQueueDeps) {
+    public constructor(deps: UploadQueueDeps) {
         this.db = deps.db;
         this.storage = deps.storage;
         this.stagingDir = deps.stagingDir;
@@ -76,7 +76,7 @@ export class UploadQueue {
     // A staged copy is opaque bytes under a name of its own. The `.db` tail is historical — the
     // queue was written for managed databases — and nothing reads it: what a copy holds is the
     // row's `isDatabase`, never its name.
-    newStagingPath(): string {
+    public newStagingPath(): string {
         return path.join(this.stagingDir, `${randomUUID()}.db`);
     }
 
@@ -89,7 +89,7 @@ export class UploadQueue {
 
     // The full on-disk path of the pending staged copy for storageKey, or null if none. External
     // callers (Mount recovery/copy) fs-check the returned path, so it must be absolute.
-    getPendingStagingPath(storageKey: string): string | null {
+    public getPendingStagingPath(storageKey: string): string | null {
         const row = this.db
             .select({ stagingPath: pendingUploads.stagingPath })
             .from(pendingUploads)
@@ -99,7 +99,7 @@ export class UploadQueue {
     }
 
     // Queue depth (observability).
-    get pendingCount(): number {
+    public get pendingCount(): number {
         const row = this.db.select({ c: count() }).from(pendingUploads).get();
         return row?.c ?? 0;
     }
@@ -109,7 +109,7 @@ export class UploadQueue {
     // a plain file, which only a restore stages. Durable: the row is written synchronously before this
     // returns. Newest staging wins (PK upsert); a superseded staged copy is deleted unless it's
     // mid-PUT (the worker deletes that one on completion).
-    enqueueStaged(storageKey: string, stagingPath: string, isDatabase: boolean): void {
+    public enqueueStaged(storageKey: string, stagingPath: string, isDatabase: boolean): void {
         // Store only the basename so a data-dir relocation (host migration / restore-from-backup)
         // still resolves the staged copy against the current stagingDir (schema.ts "moves with the
         // Home"). An absolute path would miss on the new host and reconcile would drop the row.
@@ -134,7 +134,7 @@ export class UploadQueue {
     // permanent delete + chat-restore replace so a queued PUT can't resurrect a removed object
     // (invariant 7). performUpload re-checks the row immediately before/after its PUT, so a cancel
     // that lands mid-flight still aborts the upload and removes any object the PUT resurrected.
-    async cancel(storageKey: string): Promise<void> {
+    public async cancel(storageKey: string): Promise<void> {
         const orphan = this.orphans.get(storageKey);
         if (orphan) {
             // A timed-out PUT is still on the wire and may resurrect the object after the delete
@@ -150,7 +150,7 @@ export class UploadQueue {
     // On mount open, re-enqueue every persisted pending upload (resume a restart / home-reopen) and
     // sweep orphaned staged copies (a crash between staging and the row insert). Must run before the
     // mount's tmp sweep so a recovered staged copy can't be purged.
-    reconcile(): void {
+    public reconcile(): void {
         const rows = this.db.select().from(pendingUploads).all();
         const referenced = new Set<string>();
         for (const row of rows) {
@@ -178,7 +178,7 @@ export class UploadQueue {
 
     // Stop the queue (mount teardown): no more drains, cancel the pending retry. Leftover rows replay
     // on the next mount open. For a graceful shutdown, call drain({flushNow}) first.
-    close(): void {
+    public close(): void {
         this.closing = true;
         if (this.retryTimer) {
             clearTimeout(this.retryTimer);
@@ -190,7 +190,7 @@ export class UploadQueue {
     // concurrent calls coalesce. A failed PUT backs its row off into the future, so the due-selection
     // drops it and the loop never spins on a dead backend. flushNow resets every backoff so the
     // shutdown flush + tests get one immediate attempt at each.
-    async drain(opts: { flushNow?: boolean } = {}): Promise<void> {
+    public async drain(opts: { flushNow?: boolean } = {}): Promise<void> {
         if (opts.flushNow) this.db.update(pendingUploads).set({ nextAttemptAt: Date.now() }).run();
         if (this.draining) return this.draining;
         this.draining = this.runDrainLoop().finally(() => {

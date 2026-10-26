@@ -1,4 +1,5 @@
-import { type DrivePath, isContainerType } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isContainerType } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
 import { getMountQuotaState } from '../config/enforcement';
 import { ApiError } from '../core/errors';

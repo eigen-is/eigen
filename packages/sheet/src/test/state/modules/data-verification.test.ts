@@ -9,6 +9,7 @@ import type { Context } from '../../../state/context';
 import {
     applyDataVerification,
     cellTextBox,
+    checkboxAlign,
     checkboxChange,
     checkboxRect,
     confirmMessage,
@@ -261,8 +262,40 @@ describe('cellTextBox', () => {
 });
 
 describe('isCheckboxClick', () => {
-    // A default left/middle rule puts the 10px box at x 2..12, y 5..15.
+    // A cell without its own alignment centres the 10px box, at x 31..41, y 5..15.
     const box = cellTextBox(0, 0, 74, 20);
+
+    // As Google centres it: ticked, unticked and empty boxes sit in one place. A box with a label beside it sits left,
+    // so the label keeps the cell's width; the cell's own alignment places either.
+    const YES_NO: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
+    const ticked = { v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } };
+    test('a tick box drawn alone is centred, one with a label left, unless its cell is aligned', () => {
+        const alone = [
+            [ticked, 'TRUE'],
+            [{ ...ticked, v: false, m: 'FALSE' }, 'FALSE'],
+            [null, null],
+            [{}, ''],
+        ] as const;
+        expect(alone.map(([cell, value]) => checkboxAlign(cell, TICK_BOX, value))).toEqual([0, 0, 0, 0]);
+        expect(checkboxAlign({ v: 'Done', m: 'Done' }, TICK_BOX, 'Done')).toBe(1);
+        // A rule with its own values labels every box, so an empty one stays in its column.
+        expect(checkboxAlign({ v: 'Yes', m: 'Yes' }, YES_NO, 'Yes')).toBe(1);
+        expect(checkboxAlign(null, YES_NO, null)).toBe(1);
+        expect([1, 2, 0].map((ht) => checkboxAlign({ ...ticked, ht }, TICK_BOX, 'TRUE'))).toEqual([1, 2, 0]);
+        expect([1, 2, 0].map((ht) => checkboxAlign({ v: 'Yes', m: 'Yes', ht }, YES_NO, 'Yes'))).toEqual([1, 2, 0]);
+    });
+
+    test('a click finds a labelled box at the left, where the painter draws it', () => {
+        const ctx = tickBoxContext([
+            [{ v: 'Yes', m: 'Yes' }, null, null, null],
+            [null, null, null, null],
+            [null, null, null, null],
+            [null, null, null, null],
+        ]);
+        ctx.sheets[0].dataVerification = { '0_0': YES_NO };
+        expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(true);
+        expect(isCheckboxClick(ctx, 0, 0, box, 36, 9)).toBe(false);
+    });
 
     test('places the box by the cell alignment', () => {
         expect(checkboxRect(box, 1, 0)).toEqual({ x: 2, y: 5, size: 10 });
@@ -277,11 +310,11 @@ describe('isCheckboxClick', () => {
             [null, null, null, null],
             [null, null, null, null],
         ]);
-        expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(true);
+        expect(isCheckboxClick(ctx, 0, 0, box, 36, 9)).toBe(true);
         // Just outside the box on each axis, and out in the empty rest of the cell.
-        expect(isCheckboxClick(ctx, 0, 0, box, 13, 9)).toBe(false);
-        expect(isCheckboxClick(ctx, 0, 0, box, 7, 16)).toBe(false);
-        expect(isCheckboxClick(ctx, 0, 0, box, 60, 9)).toBe(false);
+        expect(isCheckboxClick(ctx, 0, 0, box, 42, 9)).toBe(false);
+        expect(isCheckboxClick(ctx, 0, 0, box, 36, 16)).toBe(false);
+        expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(false);
     });
 
     test('every pixel of the painted box answers a click, its top row included', () => {
@@ -291,7 +324,7 @@ describe('isCheckboxClick', () => {
             [null, null, null, null],
             [null, null, null, null],
         ]);
-        const rect = checkboxRect(box, 1, 0);
+        const rect = checkboxRect(box, 0, 0);
         for (const [x, y] of [
             [rect.x, rect.y],
             [rect.x + rect.size, rect.y],

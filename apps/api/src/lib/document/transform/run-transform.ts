@@ -1,47 +1,67 @@
+// The one main-thread path every document transform takes: admit the job, surface its warnings and map its failures,
+// and for a document-sourced job capture the compressed Yjs blobs first. A caller adds only its job fields and what it
+// does with the result, so a new operation is a thin wrapper here plus a pure converter in the transform process. There
+// is no main-thread fallback: a runner 503 and a controlled document error keep their status, an import or a search
+// extract out of memory is a file too large, a search extract that timed out too, and any other failure throws.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
+import { IMPORT_MESSAGES } from '../../import/messages';
 import type { Mount } from '../../mount';
 import { captureCollabSource } from './collab-source';
 import type {
     BytesPreviewJob,
     CollabPreviewJob,
     DocImportJob,
-    DocImportWorkerResult,
+    DocImportResult,
     DocumentTransformRequest,
     ExportTransformJob,
     ExtractTextJob,
+    PreviewResult,
     SheetsImportJob,
+    SlidesImportJob,
+    SlidesImportWorkerResult,
+    TransformError,
+    TransformMedia,
     TransformResultFor,
     TransformWarning,
 } from './protocol';
-import { documentTransformRunner, type RunOptions, TRANSFORM_LIMITS, type TransformPriority } from './runner';
-
-// The one main-thread path every document transform takes: admit the job, surface
-// warnings, map failures — plus, for document-sourced jobs, the capture of the
-// compressed Yjs blobs. A caller adds only its job fields and what it does with
-// the result, so a new operation (doc/slides preview, HTML/PDF/DOCX export, DOCX
-// import) is a thin wrapper plus a pure converter in the Worker — no new
-// orchestration.
-//
-// There is deliberately no main-thread fallback: a runner 503 and controlled
-// document errors keep their HTTP status, every other failure throws.
+import type { RunOptions, TransformPriority } from './runner';
+import { documentTransformRunner, TRANSFORM_LIMITS } from './runner';
 
 // What a caller still decides; the limits belong to the job kind (TRANSFORM_LIMITS),
 // and the capture time is measured here. prepMs: main-thread media preparation time,
-// measured by the caller's wrapper — logged with the job so a fast Worker behind slow
+// measured by the caller's wrapper — logged with the job so a fast transform behind slow
 // preparation stays visible.
 type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionCostMs' | 'captureMs'> & {
     priority?: TransformPriority;
 };
 
+const TOO_LARGE_TO_INDEX = 'Document too large to index';
+
+// The failures the same input repeats: a job past its memory or its deadline. A crash may be the install, not the input.
+function repeatsForSameInput(code: TransformError['code']): boolean {
+    return code === 'out-of-memory' || code === 'timeout';
+}
+
+// Every other failure, with whether the same input would fail again, so a caller can stop rerunning it.
+export class TransformFailedError extends Error {
+    public readonly repeats: boolean;
+
+    public constructor(code: TransformError['code'], message: string) {
+        super(message);
+        this.repeats = repeatsForSameInput(code);
+    }
+}
+
 async function runTransformRequest<R extends DocumentTransformRequest>(
     request: R,
     opts: TransformOptions & { captureMs?: number },
-): Promise<TransformResultFor<R>> {
+): Promise<{ result: TransformResultFor<R>; warnings: TransformWarning[] }> {
     const { priority = 'foreground', ...rest } = opts;
     const limits = TRANSFORM_LIMITS[request.kind];
-    // The media prep spends from the deadline, so an export is one deadline end to end; a spent one times out at once.
+    // The caller's prep spends from the deadline, so a job is one deadline end to end; a spent one times out at once.
     const response = await documentTransformRunner.run(request, {
         ...rest,
         ...limits,
@@ -50,15 +70,25 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
     });
     if (!response.ok) {
         if (response.error.status) throw new ApiError(response.error.status, response.error.message);
+        if (response.error.code === 'out-of-memory' && request.kind === 'import') {
+            throw new ApiError(413, IMPORT_MESSAGES[request.sourceFormat].tooLarge);
+        }
+        // The search extract indexes it as nothing rather than running out, or timing out, again on every drain.
+        if (repeatsForSameInput(response.error.code) && request.kind === 'extract-text') {
+            throw new ApiError(413, TOO_LARGE_TO_INDEX);
+        }
         const what =
             request.kind === 'import' ? `${request.sourceFormat} import` : `${request.documentType} ${request.kind}`;
-        throw new Error(`${what} transform failed (${response.error.code}): ${response.error.message}`);
+        throw new TransformFailedError(
+            response.error.code,
+            `${what} transform failed (${response.error.code}): ${response.error.message}`,
+        );
     }
     for (const warning of response.warnings) surfaceWarning(warning, request.kind);
     // The one seam the kind→result mapping crosses: the runner settles every kind of job
     // through one widened response, having already proved this result pairs with this
     // request (resultMatchesRequest). Past here every caller reads its field with no cast.
-    return response.result as TransformResultFor<R>;
+    return { result: response.result as TransformResultFor<R>, warnings: response.warnings };
 }
 
 // `toRequest` completes the caller's own job with the captured source, so the request
@@ -76,14 +106,15 @@ async function runDocumentTransform<R extends DocumentTransformRequest>(
 
     const captureStart = performance.now();
     const source = await captureCollabSource(mount, drivePath);
-    return runTransformRequest(toRequest(source), {
+    const { result } = await runTransformRequest(toRequest(source), {
         ...opts,
         priority,
         captureMs: performance.now() - captureStart,
     });
+    return result;
 }
 
-// Only recalc-failed needs a line here: the Worker already logs every skipped blob
+// Only recalc-failed needs a line here: the child already logs every skipped blob
 // and the runner logs each warning code with the job. The two fallbacks differ —
 // a read serves replayed values, an import persists the parsed ones.
 function surfaceWarning(warning: TransformWarning, kind: DocumentTransformRequest['kind']): void {
@@ -96,17 +127,16 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
 }
 
 // Text results (preview bodies, indexable content) and binary results (exports). The
-// job kind decides which the Worker returns and which limits it runs under. The runner
+// job kind decides which the child returns and which limits it runs under. The runner
 // validated the result pairs with the request (protocol.ts's resultMatchesRequest), so
 // these narrow instead of re-checking.
-export async function runTransformToText(
+export async function runTransformToPreview(
     mount: Mount,
     drivePath: DrivePath,
     job: CollabPreviewJob,
     opts: TransformOptions,
-): Promise<string> {
-    const { body } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
-    return body;
+): Promise<PreviewResult> {
+    return runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
 }
 
 export async function runTransformToExtractedText(
@@ -124,9 +154,9 @@ export async function runTransformToBytes(
     drivePath: DrivePath,
     job: ExportTransformJob,
     opts: TransformOptions,
-): Promise<Buffer> {
-    const { data } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
-    return Buffer.from(data);
+): Promise<{ data: Buffer; zoom?: number }> {
+    const { data, zoom } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
+    return { data: Buffer.from(data), zoom };
 }
 
 // The bytes-sourced counterpart of runDocumentTransform: the input is the file itself, read from
@@ -152,33 +182,45 @@ export async function runFileTransformToText(
     });
 }
 
-// The same job with the bytes already in hand — a mail part has no Mount to read them from. The buffer
-// is transferred to the Worker, so the caller must own it.
+// The same job with the bytes already in hand — a mail part has no Mount to read them from.
 export async function runBytesTransformToText(
     job: BytesPreviewJob,
     data: ArrayBuffer,
     opts: TransformOptions & { captureMs?: number },
 ): Promise<string> {
-    const { body } = await runTransformRequest({ ...job, data }, opts);
-    return body;
+    const { result } = await runTransformRequest({ ...job, data }, opts);
+    return result.body;
 }
 
 // Imports carry uploaded bytes instead of a captured document, and hand back what
 // the caller commits: the snapshot JSON (decoded, never parsed, on the main thread)
-// for sheets, a ready Yjs update plus extracted media for documents.
+// for sheets, a ready Yjs update for documents and decks, each with its extracted media.
+// The warnings come back too, for the summary an import answers with.
+export type SheetsImportSnapshot = { snapshotJson: string; images: TransformMedia[]; warnings: TransformWarning[] };
+
 export async function runImportToSnapshotJson(
     job: SheetsImportJob,
     data: ArrayBuffer,
     opts: TransformOptions,
-): Promise<string> {
-    const result = await runTransformRequest({ ...job, data }, opts);
-    return new TextDecoder().decode(result.snapshotJson);
+): Promise<SheetsImportSnapshot> {
+    const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
+    return { snapshotJson: new TextDecoder().decode(result.snapshotJson), images: result.images, warnings };
 }
 
 export async function runImportToDocumentUpdate(
     job: DocImportJob,
     data: ArrayBuffer,
     opts: TransformOptions,
-): Promise<DocImportWorkerResult> {
-    return runTransformRequest({ ...job, data }, opts);
+): Promise<DocImportResult> {
+    const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
+    return { ...result, warnings };
+}
+
+export async function runImportToSlidesUpdate(
+    job: SlidesImportJob,
+    data: ArrayBuffer,
+    opts: TransformOptions,
+): Promise<SlidesImportWorkerResult & { warnings: TransformWarning[] }> {
+    const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
+    return { ...result, warnings };
 }

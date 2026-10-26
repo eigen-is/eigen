@@ -1,9 +1,15 @@
+// The Drive HTTP routes, for example listing a folder, reading and writing files, sharing, trash and
+// previews. Each route checks who is asking and then goes through SharedDrive, which applies the
+// access rules before the Drive underneath does the work.
+
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
-import { type DriveAccessCheckResult, type DrivePath, isConvertTarget } from '@workspace/lib/types/drive';
+import type { DriveAccessCheckResult, DrivePath, ImportResult } from '@workspace/lib/types/drive';
+import { isConvertTarget } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
-import { Elysia, type ElysiaCustomStatusResponse, t } from 'elysia';
+import type { ElysiaCustomStatusResponse } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
@@ -23,6 +29,7 @@ import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
+import { foldName } from '../lib/mount/names';
 import {
     assertEmlPreviewable,
     assertIcsPreviewable,
@@ -40,7 +47,12 @@ import {
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
-import { clientFileEventBody, eigenDocTypeSchema, importFromDriveSchema } from './shared-schemas';
+import {
+    clientFileEventBody,
+    documentImportFromDriveSchema,
+    documentImportSchema,
+    eigenDocTypeSchema,
+} from './shared-schemas';
 
 // One cap for every free-text share note (collaborator email + access request), so a single
 // oversized body can't be persisted or mailed.
@@ -49,8 +61,8 @@ const MAX_SHARE_MESSAGE_LENGTH = 12000;
 // Preview and thumb URLs carry updatedAt, so a content change is a new URL and the entry can live a day.
 const PREVIEW_MAX_AGE_SECONDS = 86400;
 
-// Drive routes allow cross-owner access (shared drives, team drives).
-// Access control is enforced by getSharedDrive() → SharedDrive ACL checks, not by ownerId === user.id.
+// A drive route may serve another owner's drive, such as a team drive or a path shared with the user.
+// getSharedDrive checks the access, so a route never compares ownerId with user.id itself.
 export const driveRouter = new Elysia({ name: 'drive' })
     .use(betterAuth)
     // Mount management
@@ -172,7 +184,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/copy',
         async ({ params, body, request, user, server }) => {
-            // A deep cross-mount or S3 copy stays silent past the server-wide idleTimeout — without this the client retries into a duplicate tree.
+            // A deep copy across mounts or on S3 sends nothing for longer than the server's idle timeout.
+            // Without this the client would retry and copy the tree twice.
             server?.timeout(request, 0);
             const sourceDrive = await getSharedDrive(params.ownerId, user);
             const src = await sourceDrive.getPath(params.mountId, params.pathId);
@@ -183,16 +196,15 @@ export const driveRouter = new Elysia({ name: 'drive' })
 
             const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
 
-            // Dedup the root name against the target folder. Done here (not in Drive.copyPath) so
-            // WebDAV COPY keeps its overwrite/409 semantics. The self-into-subtree cycle guard lives
-            // in Drive.copyPath, which WebDAV COPY enters too — cross-mount copies can never be
-            // self-descendant.
+            // The copy gets a free name in the target folder here and not in Drive.copyPath, because a
+            // WebDAV COPY overwrites or answers 409 instead. Drive.copyPath refuses a copy into its own
+            // subtree, for WebDAV too. A copy to another mount can never land in its own subtree.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
             // NFC first: the store keeps names NFC, so the compare below has to see the same form.
             const desired = (body.name ?? src.name).replace(/[/\\]/g, '_').normalize('NFC');
             const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
-            const used = new Set(siblings.map((s) => s.name.toLowerCase()));
-            const finalName = used.has(desired.toLowerCase()) ? getUniqueFileName(desired, used) : desired;
+            const used = new Set(siblings.map((s) => foldName(s.name)));
+            const finalName = used.has(foldName(desired)) ? getUniqueFileName(desired, used) : desired;
 
             if (sameMount) {
                 return await sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, finalName, user);
@@ -220,15 +232,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/export/:format',
         async ({ params, request, user, set, server }) => {
-            // The response streams nothing while the job queues and its Worker runs —
-            // queue wait + 120s deadline (+ 60s WeasyPrint for pdf) can outlast any
-            // server-wide idleTimeout (Bun caps it at 255s), so exempt this request.
-            // request.signal still fires on a real client disconnect.
+            // The response sends nothing while the job waits in the queue and its Worker runs. That can
+            // take longer than any idle timeout Bun allows, so this request switches it off. The
+            // request's signal still fires when the client really disconnects.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            // A disconnected export has no cached value — the signal lets the runner
-            // drop the queued job or terminate its Worker.
+            // An export nobody waits for is worth nothing, so the signal lets the runner drop the job or
+            // stop its Worker.
             const result = await exportDocument(mount, path, params.format, request.signal);
             set.headers['Content-Type'] = result.contentType;
             set.headers['Content-Disposition'] = contentDisposition('attachment', result.fileName);
@@ -239,31 +250,30 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
-        async ({ params, request, user, server }) => {
-            // Same idle-timeout exemption as the export route: silent while queued + transforming.
+        async ({ params, request, user, server }): Promise<DrivePath> => {
+            // The same as the export route: it sends nothing while the job waits and runs.
             server?.timeout(request, 0);
             if (!isConvertTarget(params.targetType)) {
                 throw new ApiError(400, `Conversion to "${params.targetType}" is not supported`);
             }
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            // The stored file is buffered whole for parsing, and the upload limit that
-            // applied when it landed may have been higher — bound it here too.
+            // The parser reads the whole file into memory. The upload limit may have been higher when the
+            // file was stored, so the limit applies here too.
             if (path.size > (await getUploadMaxSize(params.ownerId, params.mountId))) {
                 throw new ApiError(413, 'Source file too large');
             }
-            // Deliberately no abort signal: a page reload aborts every in-flight fetch,
-            // and a large workbook needs a minute of Worker time — the conversion
-            // finishes anyway and the new file surfaces via the drive SSE refresh
-            // (preview generation takes no signal for the same reason).
+            // No abort signal on purpose. A page reload aborts every fetch, and a large workbook takes a
+            // minute of Worker time. So the conversion finishes anyway, and the new file shows up through
+            // the drive's SSE refresh. The previews take no signal for the same reason.
             return await convertToDocument(drive, mount, path, params.targetType, user);
         },
         { auth: true },
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import',
-        async ({ params, request, user, server }) => {
-            // Same idle-timeout exemption as the export route: silent while queued + transforming.
+        async ({ params, query, request, user, server }): Promise<ImportResult> => {
+            // The same as the export route: it sends nothing while the job waits and runs.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
@@ -273,21 +283,23 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
             // Bounded reader: Content-Length over the ceiling is refused before any read, a lying stream is cancelled as it crosses it.
             const bytes = await readBoundedBodyBytes(request, maxSize);
-            await importIntoDocument(
+            const summary = await importIntoDocument(
                 drive,
                 path,
                 Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+                query,
                 user,
                 request.signal,
             );
-            return { success: true };
+            return { success: true, summary };
         },
-        { auth: true, parse: 'none' },
+        // The body is the file, so the mode rides in the query.
+        { query: documentImportSchema, auth: true, parse: 'none' },
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import-from-drive',
-        async ({ params, body, request, user, server }) => {
-            // Same idle-timeout exemption as the export route: silent while queued + transforming.
+        async ({ params, body, request, user, server }): Promise<ImportResult> => {
+            // The same as the export route: it sends nothing while the job waits and runs.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
@@ -301,17 +313,18 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 rejection: 'Source is not a file',
                 maxBytes: maxSize,
             });
-            await importIntoDocument(
+            const summary = await importIntoDocument(
                 drive,
                 path,
                 Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+                { mode: body.mode, afterFrameId: body.afterFrameId },
                 user,
                 request.signal,
             );
-            return { success: true };
+            return { success: true, summary };
         },
         {
-            body: importFromDriveSchema,
+            body: documentImportFromDriveSchema,
             auth: true,
         },
     )
@@ -352,11 +365,11 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return answerPreview(request, set, path, TEXT_FORMAT, () => getTextPreview(mount, path));
         },
-        // updatedAt is a cache-buster — browser HTTP cache and TanStack queryKey both key
-        // off the URL, so a stale URL serves stale content after an inline edit.
+        // updatedAt only makes the URL new. The browser cache and the query key both go by the URL, so
+        // an old URL would serve old content after an inline edit.
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
-    // A .vcf answers with the contact cards themselves rather than a body — the overlay and the drive hero render them (PREVIEWS.md).
+    // A .vcf answers with its contact cards instead of a body, and the preview draws them.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/vcard-preview',
         async ({ params, request, user, set }): Promise<VCardPreview | ElysiaCustomStatusResponse<304>> => {
@@ -367,7 +380,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
-    // An .eml answers with the message it holds — headers, sanitized body and part list (PREVIEWS.md).
+    // An .eml answers with the message it holds: its headers, its sanitized body and its parts.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/eml-preview',
         async ({ params, request, user, set }): Promise<EmlPreview | ElysiaCustomStatusResponse<304>> => {
@@ -378,7 +391,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
-    // An .ics answers with the events it holds — the overlay draws them as cards (PREVIEWS.md).
+    // An .ics answers with the events it holds, and the preview draws them as cards.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/ics-preview',
         async ({ params, request, user, set }): Promise<IcsPreview | ElysiaCustomStatusResponse<304>> => {
@@ -470,9 +483,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, body, user }) => {
             requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
-            // Delta contract: the server merges add/remove onto the current ACL, so concurrent
-            // sharers can't revert each other's entries.
-            // Raw Drive (own-owner) needs the actor passed explicitly for share emails; SharedDrive ignores it.
+            // The server merges the change onto the ACL as it is now, so two people sharing at once
+            // can't undo each other's entries. The owner's own Drive needs the actor for the share
+            // emails, and SharedDrive uses its own user.
             await drive.updateACLDelta(
                 params.mountId,
                 params.pathId,
@@ -520,8 +533,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Per-email access probe for the mail-a-link share dialog. Guests can't share, so gate them out
-    // here; the sender's own address is stripped so the domain method stays a pure recipient probe.
+    // Tells the dialog that mails a link which addresses can already read the path. Guests can't share,
+    // so they get no answer. The sender's own address is left out, so only recipients are checked.
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/access-check',
         async ({ params, body, user }): Promise<DriveAccessCheckResult> => {
@@ -541,6 +554,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/email-collaborators',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
             return await drive.emailCollaborators(
                 params.mountId,
@@ -643,12 +657,12 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/request-access',
         async ({ params, user, body }) => {
-            // Guests can't be granted shares, so there's nothing to request — gate them out like
-            // the sibling share routes (acl, access-check).
+            // A guest can't be given a share, so there is nothing to request, the same as on the other
+            // share routes.
             requireNonGuest(user);
-            // Skips the SharedDrive facade by design: the caller has NO permission yet — that is
-            // the point of the request. propagateAccessRequest only notifies the owner (via the
-            // home relay); it never reads or returns path data to the requester.
+            // This skips SharedDrive on purpose, because the caller has no access yet, which is why they
+            // ask. propagateAccessRequest only notifies the owner through the home relay. It never
+            // reads the path for the requester or answers with its data.
             await propagateAccessRequest(
                 params.ownerId,
                 params.mountId,
@@ -682,8 +696,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true, query: t.Object({ limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })) }) },
     )
-    // Client-emitted history events. The typebox union is the allowlist: only event
-    // types with a real client emitter are postable; everything else is server-only.
+    // History events that a client sends. The body's union lists the event types that a client may
+    // post. Every other type is written by the server only.
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/history',
         async ({ params, body, user }) => {
@@ -696,7 +710,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             body: clientFileEventBody,
         },
     )
-    // Watching (file/folder notification subscriptions; folder watches cascade)
+    // Watching a file or a folder. A folder's watch covers everything under it.
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/watch',
         async ({ params, user }) => {

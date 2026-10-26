@@ -1,6 +1,7 @@
 import type { MountConfig } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';
-import { pullTeamQuotaOverrides, type TeamQuotaOverrides } from '../home/home-relay';
+import type { TeamQuotaOverrides } from '../home/home-relay';
+import { pullTeamQuotaOverrides } from '../home/home-relay';
 import { getServerSettings } from './server-settings';
 
 export type ResolvedQuotas = {

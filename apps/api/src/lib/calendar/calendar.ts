@@ -9,21 +9,15 @@ import type {
     CalendarShare,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
-import {
-    ApiError,
-    BroadcastBatch,
-    computeResourceEtag,
-    newSyncGen,
-    normalizeResourceUri,
-    PATHS,
-    type PutResourceResult,
-} from '../core';
+import type { PutResourceResult } from '../core';
+import { ApiError, BroadcastBatch, computeResourceEtag, newSyncGen, normalizeResourceUri, PATHS } from '../core';
 import type { DeleteResourceResult, ManagedDatabase, ResourcePreconditions } from '../core/';
 import type { Home } from '../home';
 import { atHome } from '../home';
@@ -71,17 +65,17 @@ function validateCalendarProps(props: { name?: string; color?: string }): void {
 
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
-    db!: BunSQLiteDatabase<typeof schema>;
-    home: Home;
+    public db!: BunSQLiteDatabase<typeof schema>;
+    public home: Home;
 
     // bun:sqlite makes a transaction atomic and serial by itself, but a write path holds async gaps between
     // its check and its commit (the quota check, an invitation fan-out), and a racing If-Match PUT must lose
     // inside the lock, not after it.
-    writeLock = new Semaphore(1);
+    public writeLock = new Semaphore(1);
 
     // Running total so size() answers from memory: a SUM per metered write makes an N-event device sync O(N²).
     // Each delta is read inside the transaction that moves it and applied after: a rollback would otherwise leave it applied.
-    eventsBytes = 0;
+    private eventsBytes = 0;
 
     // Whether resource writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
@@ -92,7 +86,7 @@ export class Calendar {
     // Which calendars the held announcements were for, so the batched event reaches everybody they would.
     private readonly heldCalendars = new Set<string>();
 
-    constructor(home: Home) {
+    public constructor(home: Home) {
         this.home = home;
     }
 
@@ -123,7 +117,7 @@ export class Calendar {
         return this.eventsBytes;
     }
 
-    async destruct(): Promise<void> {
+    public async destruct(): Promise<void> {
         if (this.managedDb) {
             await this.managedDb.close();
         }
@@ -131,11 +125,11 @@ export class Calendar {
 
     // --- Seams used by calendar/*.ts ---
 
-    calendarRow(id: string): typeof schema.calendars.$inferSelect | null {
+    public calendarRow(id: string): typeof schema.calendars.$inferSelect | null {
         return this.db.select().from(schema.calendars).where(eq(schema.calendars.id, id)).get() ?? null;
     }
 
-    bumpCtag(tx: Tx, calendarId: string): number {
+    public bumpCtag(tx: Tx, calendarId: string): number {
         tx.update(schema.calendars)
             .set({ ctag: sql`${schema.calendars.ctag} + 1`, updatedAt: sql`unixepoch()` })
             .where(eq(schema.calendars.id, calendarId))
@@ -147,7 +141,7 @@ export class Calendar {
             .get()!.ctag;
     }
 
-    tombstone(tx: Tx, calendarId: string, uri: string, ctag: number): void {
+    public tombstone(tx: Tx, calendarId: string, uri: string, ctag: number): void {
         tx.insert(schema.resourceTombstones)
             .values({ calendarId, uri, deletedAtCtag: ctag })
             .onConflictDoUpdate({
@@ -161,7 +155,7 @@ export class Calendar {
     // ceilings judge the bytes right before the transaction that stores them, so a refusal leaves the
     // calendar as it was. `creditBytes` is the stored resource this one replaces, or a rewrite that shrinks
     // a resource would be refused on a quota its own bytes already hold.
-    async writeResource(opts: {
+    public async writeResource(opts: {
         calendarId: string;
         uri: string;
         prepared: PreparedResource;
@@ -200,7 +194,7 @@ export class Calendar {
     }
 
     // Callers hold the write lock and have already run their own guards (preconditions, the linked-copy rule).
-    async purgeResource(row: Pick<PurgedResource, 'id' | 'calendarId' | 'uri'>): Promise<void> {
+    public async purgeResource(row: Pick<PurgedResource, 'id' | 'calendarId' | 'uri'>): Promise<void> {
         const removed = this.db.transaction((tx) => {
             const size = tx
                 .select({ size: resourceBytes })
@@ -287,7 +281,7 @@ export class Calendar {
             .get()?.ctag;
     }
 
-    calendarIdTaken(id: string): boolean {
+    private calendarIdTaken(id: string): boolean {
         return !!this.db
             .select({ id: schema.calendars.id })
             .from(schema.calendars)
@@ -422,7 +416,7 @@ export class Calendar {
 
     // --- Events (reads) ---
 
-    joinedEvents() {
+    public joinedEvents() {
         return this.db
             .select({
                 events: getTableColumns(schema.events),
@@ -499,7 +493,7 @@ export class Calendar {
 
     // --- Announcements ---
 
-    announce(type: Parameters<typeof buildCalendarEvent>[0], calendarId: string): void {
+    public announce(type: Parameters<typeof buildCalendarEvent>[0], calendarId: string): void {
         if (this.batch.hold()) {
             this.heldCalendars.add(calendarId);
             return;
@@ -524,7 +518,7 @@ export class Calendar {
     }
 
     // A bulk write (a whole-file import) tells the tabs once instead of per resource.
-    withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
+    public withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
         return this.batch.run(fn);
     }
 

@@ -1,8 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { ApiError, type DatabaseConfig, type SchemaType } from '../../lib/core';
-import SharedDrive from '../../lib/drive/sharedDrive';
+import type { DatabaseConfig, SchemaType } from '../../lib/core';
+import { ApiError } from '../../lib/core';
+import { SharedDrive } from '../../lib/drive/shared-drive';
 import { getHome } from '../../lib/home';
-import { getUserById, type User } from '../../lib/user';
+import type { User } from '../../lib/user';
+import { getUserById } from '../../lib/user';
 import { driveGet, drivePost, driveUpload, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -66,12 +68,11 @@ describe('SharedDrive gating enumeration', () => {
 
     const classification: Record<string, Entry> = {
         // TS-private helpers — on the prototype at runtime, not callable from routes.
-        getUserMemberships: { gate: 'private-helper', reason: 'membership lookup feeding the gates' },
-        withReadPermission: { gate: 'private-helper', reason: 'the read gate itself' },
-        withWritePermission: { gate: 'private-helper', reason: 'the write gate itself' },
-        withParentWritePermission: { gate: 'private-helper', reason: 'the rename gate (write on parent)' },
-        requireTeamMembership: { gate: 'private-helper', reason: 'the drive-wide listing gate' },
-        isEffectiveOwnerSync: { gate: 'private-helper', reason: 'team co-owner check feeding the gates' },
+        requireRead: { gate: 'private-helper', reason: 'the read gate itself' },
+        requireWrite: { gate: 'private-helper', reason: 'the write gate itself' },
+        requireDriveOwner: { gate: 'private-helper', reason: 'the drive-wide listing and trash gate' },
+        isEffectiveOwner: { gate: 'private-helper', reason: 'team co-owner check feeding the gates' },
+        sharingRestrictedFor: { gate: 'private-helper', reason: 'the sharingRestricted gate for ACL changes' },
 
         // Drive-wide listings — gated on team membership of the owner; alice is a user, so 403.
         listMounts: { gate: 'denies', reason: 'team-membership gated', call: (sd) => sd.listMounts() },
@@ -154,8 +155,8 @@ describe('SharedDrive gating enumeration', () => {
         },
         getPath: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.getPath(mountId, fileId) },
         resolvePath: {
-            gate: 'denies',
-            reason: 'read-gated once the path string resolves',
+            gate: 'denies-null',
+            reason: 'an unreadable path resolves like a missing one, so no name leaks',
             call: (sd) => sd.resolvePath(mountId, 'Gating Probe/secret.txt'),
         },
         downloadFile: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.downloadFile(mountId, fileId) },

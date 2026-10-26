@@ -1,9 +1,8 @@
-import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
-import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
+import { cellFontName, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
+import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cellWrapsText } from '../../engine/format';
 import type { Cell, CellStyle } from '../../engine/types';
 import type { Context } from '../context';
-import { isdatatypemulti } from '.';
 import { normalizedCellAttr } from './cell';
 import { isInlineStringCell } from './inline-string';
 
@@ -140,44 +139,29 @@ function getTextSize(text: string, font: string) {
     return [w, h];
 }
 
-export function defaultFont(defaultFontSize: number) {
-    return `normal normal normal ${defaultFontSize}pt "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC",  "WenQuanYi Micro Hei", sans-serif`;
-}
+// After the cell's font: the faces for a glyph it lacks, CJK among them, or for a name the browser doesn't have.
+const FALLBACK_FAMILIES = `"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif`;
 
-// `ff` is persisted either as an index into the font list (legacy numeric or
-// numeric-string form) or as a family name. One decoder serves the canvas
-// renderer and the toolbar picker, so they can't disagree about a cell's font.
-export function resolveFontName(ff: number | string | undefined | null): string {
-    if (ff == null || ff === '') return EIGEN_FONTS[0].name;
-    if (isdatatypemulti(ff)) return EIGEN_FONTS[Number.parseInt(String(ff), 10)]?.name ?? EIGEN_FONTS[0].name;
-    return String(ff).replace(/["']/g, '').split(',')[0]?.trim() || EIGEN_FONTS[0].name;
+export function defaultFont(defaultFontSize: number) {
+    return getFontSet(null, defaultFontSize);
 }
 
 export function getFontSet(format: CellStyle | null | undefined, defaultFontSize: number) {
-    if (format == null || !isPlainObject(format)) {
-        return defaultFont(defaultFontSize);
-    }
-
     const fontAttr: string[] = [];
 
     // font-style
-    fontAttr.push(!format.it ? 'normal' : 'italic');
+    fontAttr.push(!format?.it ? 'normal' : 'italic');
 
     // font-variant
     fontAttr.push('normal');
 
     // font-weight
-    fontAttr.push(!format.bl ? 'normal' : 'bold');
+    fontAttr.push(!format?.bl ? 'normal' : 'bold');
 
     // font-size
-    fontAttr.push(`${format.fs ? Math.ceil(format.fs) : defaultFontSize}pt`);
+    fontAttr.push(`${format?.fs || defaultFontSize}pt`);
 
-    const fallback = `"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif`;
-
-    const name = resolveFontName(format.ff);
-    const primary = name.includes(' ') ? `"${name}"` : name;
-
-    return `${fontAttr.join(' ')} ${primary},${fallback}`;
+    return `${fontAttr.join(' ')} "${cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name}",${FALLBACK_FAMILIES}`;
 }
 
 // Get text size for cells with a value. Row/column headers pass numeric sequence

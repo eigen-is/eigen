@@ -5,6 +5,7 @@
 // paste CONSUMER is tools/paste-elements.ts.
 
 import {
+    buildChartClipboardItem,
     buildImageClipboardItem,
     buildTextClipboardItem,
     CLIPBOARD_SVG_MAX_BYTES,
@@ -15,20 +16,17 @@ import { stripTagsServer } from '@workspace/lib/html';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import {
-    buildElementsClipboardItem,
-    eigenMediaHref,
-    sceneToSvg,
-    type VectorElement,
-    type VectorMeta,
-} from '@workspace/lib/vector';
+import type { VectorElement, VectorMeta } from '@workspace/lib/vector';
+import { buildElementsClipboardItem, canvasPxToPt, eigenMediaHref, sceneToSvg } from '@workspace/lib/vector';
 
 // The items a foreign host reads: an image item per selected image (also the cross-mount re-upload
-// manifest a canvas→canvas paste keys on by `mediaName`), and a text item per rich-text box carrying
-// the flattened text and the box's typography, which is what makes it paste styled.
+// manifest a canvas→canvas paste keys on by `mediaName`), a text item per rich-text box carrying
+// the flattened text and the box's typography, which is what makes it paste styled, and a chart item per
+// chart with inline data, which pastes live.
 function foreignItems(
     selected: VectorElement[],
     resolveMediaPath: (name: string) => DrivePath | undefined,
+    slideWidth: number | undefined,
 ): EigenClipboardItem[] {
     const items: EigenClipboardItem[] = [];
     for (const el of selected) {
@@ -36,6 +34,9 @@ function foreignItems(
         if (el.type === 'image') {
             const source = resolveMediaPath(el.mediaName);
             if (source) items.push(buildImageClipboardItem({ mediaName: el.mediaName, source, box }));
+        } else if (el.type === 'chart') {
+            const item = buildChartClipboardItem({ chart: el, box, look: el });
+            if (item) items.push(item);
         } else if (el.type === 'richtext') {
             items.push(
                 buildTextClipboardItem({
@@ -46,7 +47,7 @@ function foreignItems(
                     // stopped surviving a copy into docs. Every one has a consumer (see the type).
                     typography: {
                         fontFamily: el.fontFamily,
-                        fontSize: el.fontSize,
+                        fontSize: canvasPxToPt(el.fontSize, slideWidth),
                         textAlign: el.textAlign,
                         color: el.color,
                         fontWeight: el.fontWeight,
@@ -65,11 +66,11 @@ function foreignItems(
 
 // The SVG flavor for a selection, or undefined when it must not be written. Two gates:
 //
-// TEXT-ONLY selections skip it. Every foreign host runs its svg rung BEFORE the typed items, so a
-// drawing that is nothing but a rich-text box would land in a document as a flat picture of itself —
-// the typed text item and its typography never read. An SVG conveys nothing about a text box
-// that the text item doesn't, so not writing it is what makes a copied text box paste as styled,
-// editable text.
+// TEXT-ONLY and CHART-ONLY selections skip it. Every foreign host runs its svg rung BEFORE the typed
+// items, so a drawing that is nothing but a rich-text box or a chart would land in a document as a flat
+// picture of itself — the typed item never read. An SVG conveys nothing about a text box or a chart that
+// its item doesn't, so not writing it is what makes a copied text box paste as styled, editable text and
+// a chart as a live chart.
 //
 // BIG selections skip it too (see the caps): the SVG is the expensive half of a copy and the typed
 // items are the lossless half.
@@ -86,7 +87,8 @@ function selectionSvg(
     meta: VectorMeta,
     resolveMediaPath: (name: string) => DrivePath | undefined,
 ): string | undefined {
-    if (selected.length === 0 || selected.every((el) => el.type === 'richtext')) return undefined;
+    if (selected.length === 0) return undefined;
+    if (selected.every((el) => el.type === 'richtext') || selected.every((el) => el.type === 'chart')) return undefined;
     if (selected.length > CLIPBOARD_SVG_MAX_ELEMENTS) return undefined;
     // Rich text's `html` is a stored scalar, so it arrives verbatim from any peer with write access —
     // sanitized here as at every other seam that renders it (the layer mount, the paste planner).
@@ -105,7 +107,8 @@ function selectionSvg(
 
 // The full eigen payload for a selection: the native `elements` item (a canvas→canvas paste), the typed
 // image/text items beside it (every other host) and — unless a gate above says otherwise — the SVG
-// flavor for hosts that can place neither.
+// flavor for hosts that can place neither. `slideWidth` is a deck's, the scale its text items' sizes cross at; a
+// drawing has none.
 //
 // It returns the ids it ACTUALLY serialized alongside the payload, and they are not always the
 // selection: an image whose media path doesn't resolve yet (a still-pending upload, or one whose folder
@@ -122,6 +125,7 @@ export function buildSelectionData(
     meta: VectorMeta,
     frameId: string,
     resolveMediaPath: (name: string) => DrivePath | undefined,
+    slideWidth?: number,
 ): { data: EigenClipboardData; serializedIds: string[]; pendingImages: number } {
     const selected: VectorElement[] = [];
     let pendingImages = 0;
@@ -135,7 +139,7 @@ export function buildSelectionData(
     }
     const elementsItem = buildElementsClipboardItem(selected, frameId);
     const items: EigenClipboardItem[] = elementsItem ? [elementsItem] : [];
-    items.push(...foreignItems(selected, resolveMediaPath));
+    items.push(...foreignItems(selected, resolveMediaPath, slideWidth));
     return {
         data: { version: 1, items, svg: selectionSvg(selected, items, meta, resolveMediaPath) },
         serializedIds: selected.map((el) => el.id),

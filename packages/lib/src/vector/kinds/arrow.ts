@@ -1,32 +1,32 @@
+// The arrow kind: a line of points with heads, an optional label, and a binding at each end to the shape it
+// points at. Its read keeps only what is valid: canonical bindings and pinned segments rebuilt from the points it
+// stores. Its routing, docking and painting live in the geometry and the arrow's painter.
+
 import type { Drawable } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { validateElbowPoints } from '../elbow-pins';
+import type { Bounds, Point } from '../geometry';
 import {
     arrowLabelBox,
-    type Bounds,
     distanceToPolyline,
     getElementBounds,
     LINEAR_HIT_SCREEN_FACTOR,
     linearLocalToScene,
     linearSceneToLocal,
-    type Point,
-    parsePoints,
-    pointsBounds,
-    serializePoints,
     unionBounds,
 } from '../geometry';
 import { polylineOutline } from '../outline';
+import { parsePoints, pointsBounds, serializePoints } from '../points';
+import type { FixedSegment, VectorArrowElement } from '../types';
 import {
     ARROWHEADS,
     DEFAULT_ARROW_PROPS,
     DEFAULT_LINEAR_ROUNDNESS,
-    type FixedSegment,
     parseBinding,
     parseFixedSegments,
     ROUNDNESS,
     serializeBinding,
     serializeFixedSegments,
-    type VectorArrowElement,
 } from '../types';
 import { elbowRoundedShaftPath, labelMask, maskShaft, renderArrowhead, renderArrowLabel } from './arrow-render';
 import { defineKind } from './kind';

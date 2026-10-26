@@ -1,9 +1,6 @@
-import {
-    BORDER_SIDE_CSS,
-    type CellBorderSides,
-    type ConditionalFormatRule,
-    type DataVerificationRule,
-} from '@workspace/lib/sheets';
+import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
+import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import {
     cloneDeep,
     forEach,
@@ -18,14 +15,14 @@ import {
     zip,
 } from 'es-toolkit/compat';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
-import { numberDisplay, parseCellInput } from '../../engine/format';
+import { numberDisplay, parseCellInput, richText } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
-import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
+import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import { carrySides, clearSides, getBorderInfoCompute } from '../modules/border';
 import { getdatabyselection, getQKBorder, setCellValue } from '../modules/cell';
-import { FONT_INDEX_BY_NAME } from '../modules/fonts';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
@@ -114,7 +111,7 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
                 ctx.visibledatarow.push(ctx.rh_height);
                 continue;
             } else {
-                ctx.rh_height += rowlen + 1;
+                ctx.rh_height += rowlen;
             }
 
             ctx.visibledatarow.push(ctx.rh_height); // temporary row height distribution
@@ -1058,8 +1055,9 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         v = '';
                     }
 
-                    if (isNil(v) && d[r]?.[c]?.ct?.t === 'inlineStr') {
-                        v = d[r]![c]!.ct!.s!.map((val: InlineStringSegment) => val.v).join('');
+                    const rich = isNil(v) ? richText(d[r]?.[c]) : undefined;
+                    if (rich !== undefined) {
+                        v = rich;
                         isInlineStr = true;
                     }
                     if (isNil(v)) {
@@ -1208,24 +1206,12 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                     ? 1
                                     : undefined;
 
-                            const ff = td.style.fontFamily || styles['font-family'] || '';
-                            const ffs = ff.split(',');
-                            for (let i = 0; i < ffs.length; i += 1) {
-                                const faKey = trim(ffs[i].toLowerCase());
-                                const fa: number | undefined = FONT_INDEX_BY_NAME[faKey];
-                                if (isNil(fa)) {
-                                    cell.ff = 0;
-                                } else {
-                                    cell.ff = fa;
-                                    break;
-                                }
-                            }
-                            const fs = Math.round(
-                                styles['font-size']
-                                    ? parseInt(styles['font-size'].replace('pt', ''), 10)
-                                    : (parseInt(td.style.fontSize || '13', 10) * 72) / 96,
-                            );
-                            cell.fs = fs;
+                            const ff = bundledFontOfStack(td.style.fontFamily || styles['font-family'] || '');
+                            if (ff) cell.ff = ff;
+                            cell.fs =
+                                readCssFontSize(td.style.fontSize) ??
+                                readCssFontSize(styles['font-size'] ?? '') ??
+                                SHEET_DEFAULT_FONT_SIZE;
 
                             cell.fc = td.style.color || styles.color;
 

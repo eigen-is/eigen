@@ -1,4 +1,5 @@
-import { matchesCommentFilter, type useCommentFilter } from '@workspace/lib/comments';
+import type { useCommentFilter } from '@workspace/lib/comments';
+import { matchesCommentFilter } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { MessageSquareOff } from 'lucide-react';

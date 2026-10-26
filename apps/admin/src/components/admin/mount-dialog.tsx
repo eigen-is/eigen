@@ -1,7 +1,8 @@
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import { MountForm, type MountFormValues } from '@workspace/ui/components/mount/mount-form';
+import type { MountFormValues } from '@workspace/ui/components/mount/mount-form';
+import { MountForm } from '@workspace/ui/components/mount/mount-form';
 
 type MountDialogProps = {
     open: boolean;

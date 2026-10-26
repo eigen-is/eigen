@@ -7,20 +7,13 @@ import { elbowRoutingContext } from './elbow-route';
 import { isTransparentFill, parseFill } from './fill';
 import { getLineHeightPx } from './font-metrics';
 // The registry imports geometry's box primitives and geometry dispatches through the registry: one
-// deliberate cycle. Safe because every export on both sides is a hoisted `function` declaration and no
-// module body calls across the cycle while either is still evaluating (test/vector/kinds/cycle.test.ts
-// pins both entry orders).
+// deliberate cycle. It is safe only when the entry goes through the vector barrel, which loads geometry
+// before any kind. Importing a kind's own module first throws a TDZ ReferenceError.
 import { ELEMENT_KINDS, isBindable } from './kinds';
-import { clamp, distanceToSegment, nearestPoint, outlineHits, segSegIntersect } from './outline';
-import {
-    type Arrowhead,
-    parseBinding,
-    serializeBinding,
-    type VectorArrowElement,
-    type VectorBindableElement,
-    type VectorElement,
-    type VectorLinearElement,
-} from './types';
+import { clamp, distanceToSegment, nearestPoint, outlineHits, pointInPolygon, segSegIntersect } from './outline';
+import { DEG_TO_RAD, parsePoints, pointsBounds, round, serializePoints } from './points';
+import type { Arrowhead, VectorArrowElement, VectorBindableElement, VectorElement, VectorLinearElement } from './types';
+import { parseBinding, serializeBinding } from './types';
 
 export type Point = { x: number; y: number };
 
@@ -29,8 +22,6 @@ export type Point = { x: number; y: number };
 export type Box = { x: number; y: number; width: number; height: number; angle: number };
 
 export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
-
-const DEG_TO_RAD = Math.PI / 180;
 
 // Canvas interaction steps shared by vector + slides, in scene/document units: arrow-key nudge
 // (Shift = large) and the duplicate/paste cascade offset. One source so the two apps' keymaps match.
@@ -186,31 +177,6 @@ export function hitThresholdScreen(coarse: boolean): number {
     return coarse ? HIT_THRESHOLD_SCREEN * COARSE_HIT_SLOP_MULTIPLIER : HIT_THRESHOLD_SCREEN;
 }
 
-export function parsePoints(points: string): Point[] {
-    let raw: unknown;
-    try {
-        raw = JSON.parse(points);
-    } catch {
-        return [];
-    }
-    if (!Array.isArray(raw)) return [];
-    const out: Point[] = [];
-    for (const pair of raw) {
-        if (!Array.isArray(pair)) return [];
-        const [x, y] = pair;
-        if (typeof x !== 'number' || typeof y !== 'number') return [];
-        // A non-finite coord (e.g. 1e400 → Infinity via JSON overflow) drops just that point, not the
-        // whole stroke — read-vector then clamps the survivors per axis.
-        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-        out.push({ x, y });
-    }
-    return out;
-}
-
-export function serializePoints(points: Point[]): string {
-    return JSON.stringify(points.map((p) => [round(p.x), round(p.y)]));
-}
-
 // Per-point pen pressure, the parallel array to a freedraw's points (Excalidraw's `pressures`). Any
 // structural garbage or a non-finite/non-number entry ⇒ [] (the caller then falls back to simulate);
 // finite values clamp to [0,1]. Kept a JSON string like points so a whole stroke is one scalar write.
@@ -352,40 +318,6 @@ export function linearLocalToScene(box: Box, local: Point): Point {
     return rotatePoint({ x: box.x + local.x, y: box.y + local.y }, boxCenter(box), box.angle);
 }
 
-// Even-odd ray cast, for inside-hits on a closed filled path.
-function pointInPolygon(p: Point, points: Point[]): boolean {
-    let inside = false;
-    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-        const a = points[i];
-        const b = points[j];
-        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-    }
-    return inside;
-}
-
-export function pointsBounds(points: Point[]): Bounds {
-    let minX = Number.POSITIVE_INFINITY;
-    let minY = Number.POSITIVE_INFINITY;
-    let maxX = Number.NEGATIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-    for (const { x, y } of points) {
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
-    }
-    return { minX, minY, maxX, maxY };
-}
-
-// 2-decimal rounding, the precision every serialized length uses: the stored point lists here and the
-// SVG path data the kinds emit (Excalidraw's TO_FIXED_PRECISION, without the regex). `-0` collapses to
-// `0` so two identical geometries can't serialize differently. The 3- and 4-decimal siblings below are
-// deliberately different precisions, not copies of this one.
-export function round(n: number): number {
-    const r = Math.round(n * 100) / 100;
-    return r === 0 ? 0 : r;
-}
-
 // A point at stored precision, the same quantization serializePoints applies on the way out.
 function roundPoint(p: Point): Point {
     return { x: round(p.x), y: round(p.y) };
@@ -440,10 +372,10 @@ function pointInShape(shape: VectorBindableElement, point: Point): boolean {
 }
 
 // The four dock anchors of a shape in SCENE space, rotated by its angle — the registry's anchorPoints
-// (rect/ellipse: the right/bottom/left/top edge midpoints; diamond: its four tips). Excalidraw's
-// getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side on a tie. The one owner
-// of this geometry — both the snap-to-midpoint bind and the snap-dot overlay read it, so the dots sit
-// exactly where the dock lands.
+// (rect/ellipse: the right/bottom/left/top edge midpoints; diamond: its four tips; pie: points on the
+// slice). Excalidraw's getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side
+// on a tie. The one owner of this geometry — both the snap-to-midpoint bind and the snap-dot overlay read
+// it, so the dots sit exactly where the dock lands.
 export function shapeAnchorPoints(shape: VectorBindableElement): Point[] {
     return ELEMENT_KINDS[shape.type].anchorPoints(shape);
 }
@@ -792,7 +724,7 @@ export function boundShape(binding: string, byId: Map<string, VectorElement>): V
 // How near (SCENE units) a dragged endpoint binds: 15 at zoom ≥ 1, growing to 30 when zoomed out so the
 // reach stays a constant on-screen distance (Excalidraw's maxBindingDistance_simple).
 export function bindingDistance(zoom: number): number {
-    const z = zoom < 1 ? zoom : 1;
+    const z = Math.min(zoom, 1);
     return clamp(BASE_BINDING_DISTANCE / (z * 1.5), BASE_BINDING_DISTANCE, BASE_BINDING_DISTANCE * 2);
 }
 
@@ -834,6 +766,9 @@ export function arrowheadGeometry(
     const angle = head === 'bar' ? 90 : head === 'arrow' ? 20 : 25;
     return { kind: 'barbs', tip, barb1: rotatePoint(base, tip, -angle), barb2: rotatePoint(base, tip, angle) };
 }
+
+// The clearance an arrow label's mask leaves around its text, on every side.
+export const ARROW_LABEL_PAD = 5;
 
 // The label's center (arrow local frame) and box: centered on the polyline's index-midpoint (odd → the
 // middle vertex, even → the middle segment's midpoint), width client-measured (labelWidth),

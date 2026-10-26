@@ -5,12 +5,12 @@
   "private": true,
   "sideEffects": false,
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun check --no-script",
     "test": "bun test"
   },
   "devDependencies": {
     "@types/jsdom": "^28.0.3",
-    "happy-dom": "^20.14.0",
+    "happy-dom": "^20.14.6",
     "jsdom": "^29.1.1"
   },
   "dependencies": {
@@ -18,16 +18,18 @@
     "@better-auth/api-key": "^1.7.3",
     "@elysiajs/eden": "^1.4.9",
     "@tanstack/react-hotkeys": "^0.1.3",
+    "@workspace/math": "workspace:*",
     "better-auth": "^1.7.3",
-    "es-toolkit": "^1.52.0",
+    "es-toolkit": "^1.53.0",
     "immer": "^9.0.21",
-    "lib0": "^0.2.117",
+    "lib0": "^0.2.119",
+    "linkifyjs": "^4.4.0",
     "nanoid": "^5.1.16",
     "perfect-freehand": "1.2.3",
     "roughjs": "4.6.4",
     "rrule": "^2.8.1",
     "y-websocket": "^3.1.0",
-    "yjs": "^13.6.32"
+    "yjs": "^13.6.33"
   },
   "exports": {
     "./api": "./src/core/api.ts",
@@ -89,12 +91,14 @@
     "./sheets/*": "./src/sheets/*.ts",
     "./vector": "./src/vector/index.ts",
     "./vector/*": "./src/vector/*.ts",
-    "./background": "./src/background/index.ts"
+    "./background": "./src/background/index.ts",
+    "./charts": "./src/charts/index.ts"
   },
   "peerDependencies": {
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-code-block-lowlight": "^3.31.3",
     "@tiptap/extension-highlight": "^3.31.3",
+    "@tiptap/extension-link": "^3.31.3",
     "@tiptap/extension-list": "^3.31.3",
     "@tiptap/extension-subscript": "^3.31.3",
     "@tiptap/extension-superscript": "^3.31.3",

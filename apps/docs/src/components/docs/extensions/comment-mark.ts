@@ -4,12 +4,15 @@ import type { EditorState } from '@tiptap/pm/state';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
-import { CommentMarkSchema } from '@workspace/lib/docs/eigendoc';
+import type { FigureFrameNode } from '@workspace/lib/docs/eigendoc';
+import { CommentMarkSchema, isFigureFrameNode, PAGE_NUMBER_TEXT, readEquation } from '@workspace/lib/docs/eigendoc';
+import { textOutsideNotes } from './footnote';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
     onCommentContextMenu?: (cardId: string, event: MouseEvent) => void;
-    onSelectionContextMenu?: (event: MouseEvent) => void;
+    // True when it opened a menu; false leaves the browser's own.
+    onSelectionContextMenu?: (event: MouseEvent) => boolean;
     onAddComment?: () => void;
     onToggleCommentPanel?: () => void;
 };
@@ -21,19 +24,87 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// The card a node anchors: an image holds it as an attribute, text as the comment mark.
+// A node whose schema gives it a commentCardId, an image, a chart or an equation, holds its card there: the Yjs binding
+// persists a mark only on text.
+const anchorsByAttribute = (node: Node): boolean => node.type.spec.attrs?.['commentCardId'] !== undefined;
+
+// The card a node anchors: by attribute, or on text as the comment mark.
 export function nodeCommentCardId(node: Node): string | null {
-    if (node.type.name === 'figure') return node.attrs.commentCardId;
+    if (anchorsByAttribute(node)) return node.attrs.commentCardId;
     return node.marks.find((m) => m.type.name === 'comment')?.attrs.cardId ?? null;
 }
 
-// A comment on an image alone has no text to quote, so the image reads as "Image".
+function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: number; end: number }[] {
+    const anchors: { node: Node; pos: number; end: number }[] = [];
+    doc.descendants((node, pos) => {
+        if (nodeCommentCardId(node) === cardId) anchors.push({ node, pos, end: pos + node.nodeSize });
+    });
+    return anchors;
+}
+
+// The card of the comment highlight an event lands on, as text draws it.
+export function commentCardIdAt(target: EventTarget | null): string | null {
+    if (!(target instanceof Element)) return null;
+    return target.closest('.comment-highlight')?.getAttribute('data-comment-id') || null;
+}
+
+// A new card anchors by attribute on an image, a chart or an equation selected alone, else as the mark on the range's text.
+export function addCommentAnchor(editor: Editor, { from, to }: { from: number; to: number }, cardId: string): void {
+    const node = editor.state.doc.nodeAt(from);
+    if (node && anchorsByAttribute(node) && to === from + node.nodeSize) {
+        editor.view.dispatch(editor.state.tr.setNodeAttribute(from, 'commentCardId', cardId));
+        return;
+    }
+    editor.chain().focus().setTextSelection({ from, to }).setComment(cardId).run();
+}
+
+// Whether addCommentAnchor would anchor a card on the selection: a node holding a card attribute selected alone, or
+// text. AtomMarks strips the mark from any other atom, so a page number alone takes no comment, and a footnote's note
+// keeps the body's marks off its text, so a reference alone takes none either.
+export function canAnchorComment({ doc, selection: { from, to, empty } }: EditorState): boolean {
+    if (empty) return false;
+    const node = doc.nodeAt(from);
+    if (node && anchorsByAttribute(node) && to === from + node.nodeSize) return true;
+    let text = false;
+    doc.nodesBetween(from, to, (child) => {
+        text ||= child.isText;
+        return !text && child.type.name !== 'footnote';
+    });
+    return text;
+}
+
+// A deleted card leaves no anchor behind.
+export function removeCommentAnchors(editor: Editor, cardId: string): void {
+    const { tr } = editor.state;
+    const commentType = editor.state.schema.marks.comment;
+    for (const { node, pos, end } of findCommentAnchors(editor.state.doc, cardId)) {
+        if (anchorsByAttribute(node)) tr.setNodeAttribute(pos, 'commentCardId', null);
+        else tr.removeMark(pos, end, commentType);
+    }
+    editor.view.dispatch(tr);
+}
+
+// Scrolls to a card's first anchor and selects it: a node whole, text at its start.
+export function selectCommentAnchor(editor: Editor, cardId: string): void {
+    const anchors = findCommentAnchors(editor.state.doc, cardId);
+    if (anchors.length === 0) return;
+    const { node, pos } = anchors[0];
+    const chain = editor.chain().focus();
+    const selected = anchorsByAttribute(node) ? chain.setNodeSelection(pos) : chain.setTextSelection(pos);
+    selected.scrollIntoView().run();
+}
+
+const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart' };
+
+// A comment on an image or a chart alone has no text to quote, so it reads as "Image" or "Chart", and an equation with
+// no text as "Equation", and a page number as its #. A footnote's note is no part of the quote, as its reference takes no
+// comment.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
-    return doc
-        .textBetween(from, to, ' ', (leaf) =>
-            leaf.type.name === 'figure' ? 'Image' : (leaf.type.spec.leafText?.(leaf) ?? ''),
-        )
-        .slice(0, 100);
+    return textOutsideNotes(doc, from, to, ' ', '', (leaf) => {
+        if (isFigureFrameNode(leaf.type.name)) return QUOTE_WORDS[leaf.type.name];
+        if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text || 'Equation';
+        return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
+    }).slice(0, 100);
 }
 
 function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet {
@@ -42,24 +113,18 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
         const cardId = nodeCommentCardId(node);
         if (cardId) {
             const end = pos + node.nodeSize;
-
-            // An image's node view paints the corner mark from this spec, resolved or not, like a
-            // commented canvas element.
-            if (node.type.name === 'figure') {
-                decorations.push(Decoration.node(pos, end, {}, { commentColor: meta.colorMap.get(cardId) }));
-            } else if (meta.resolvedIds.has(cardId)) {
-                // Resolved comments: no decoration, keep default highlight appearance.
-                // Resolved status is visible in the sidebar (checkmark icon + filter).
-            } else {
-                const color = meta.colorMap.get(cardId);
-                if (color) {
-                    decorations.push(
-                        Decoration.inline(pos, end, {
-                            class: 'comment-colored',
-                            style: `background-color:${lightenColor(color, 0.25)}`,
-                        }),
-                    );
-                }
+            const color = meta.colorMap.get(cardId);
+            // An image's, a chart's or an equation's node view paints the corner mark from this spec, resolved or not,
+            // like a commented canvas element.
+            if (anchorsByAttribute(node)) decorations.push(Decoration.node(pos, end, {}, { commentColor: color }));
+            // Text, and an equation among it, is highlighted until resolved; the sidebar shows a resolved one.
+            if (!isFigureFrameNode(node.type.name) && !meta.resolvedIds.has(cardId) && color) {
+                decorations.push(
+                    Decoration.inline(pos, end, {
+                        class: 'comment-colored',
+                        style: `background-color:${lightenColor(color, 0.25)}`,
+                    }),
+                );
             }
         }
     });
@@ -84,8 +149,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
     addKeyboardShortcuts() {
         return {
             'Mod-Alt-m': () => {
-                const { empty } = this.editor.state.selection;
-                if (!empty && this.options.onAddComment) {
+                if (canAnchorComment(this.editor.state) && this.options.onAddComment) {
                     this.options.onAddComment();
                     return true;
                 }
@@ -110,8 +174,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                 props: {
                     handleClick: onCommentClick
                         ? (_view, _pos, event) => {
-                              const el = (event.target as HTMLElement).closest('.comment-highlight');
-                              const cardId = el?.getAttribute('data-comment-id');
+                              const cardId = commentCardIdAt(event.target);
                               if (cardId) {
                                   onCommentClick(cardId);
                                   return true;
@@ -121,18 +184,14 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                         : undefined,
                     handleDOMEvents: {
                         contextmenu: (view, event) => {
-                            // Right-click on a comment highlight → comment context menu
-                            const el = (event.target as HTMLElement).closest('.comment-highlight');
-                            const cardId = el?.getAttribute('data-comment-id');
+                            const cardId = commentCardIdAt(event.target);
                             if (cardId && onCommentContextMenu) {
                                 event.preventDefault();
                                 onCommentContextMenu(cardId, event);
                                 return true;
                             }
-                            // Right-click with text selected → selection context menu
-                            if (!view.state.selection.empty && onSelectionContextMenu) {
+                            if (canAnchorComment(view.state) && onSelectionContextMenu?.(event)) {
                                 event.preventDefault();
-                                onSelectionContextMenu(event);
                                 return true;
                             }
                             return false;

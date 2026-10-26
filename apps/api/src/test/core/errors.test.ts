@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { Elysia } from 'elysia';
-import { handleApiError } from '../../lib/core/errors';
+import { handleApiError, isOutOfMemory } from '../../lib/core/errors';
 
 const app = new Elysia()
     .onError(handleApiError)
@@ -25,5 +25,19 @@ describe('handleApiError', () => {
         } finally {
             logged.mockRestore();
         }
+    });
+});
+
+// JSC's own words for every allocation it can refuse with a throw: ArrayBuffers, strings past their length, JSON, zlib.
+describe('isOutOfMemory', () => {
+    test.each([
+        [new RangeError('Out of memory'), true],
+        [new RangeError('Out of memory: string too long'), true],
+        [new RangeError('Maximum call stack size exceeded.'), false],
+        [new RangeError('Invalid array length'), false],
+        [new Error('Out of memory'), false],
+        ['Out of memory', false],
+    ])('%p is %p', (error, expected) => {
+        expect(isOutOfMemory(error)).toBe(expected);
     });
 });

@@ -1,10 +1,8 @@
-// Heading + shape-geometry helpers for elbow routing, ported from Excalidraw's heading.ts + the
-// binding/bounds seams the elbow router reaches into (packages/element/src/{heading,binding,bounds,distance}.ts).
-// Kept separate from elbow-route.ts the way Excalidraw keeps heading.ts separate: this file answers
-// "which side does the arrow leave a bound shape from, and where is its rest endpoint", the router answers
-// "how does it snake there". Everything is SCENE space; shape angles are DEGREES (rotatePoint owns the
-// radian conversion), matching the rest of packages/lib/src/vector.
+// The shape helpers an elbow arrow's router needs, ported from Excalidraw: which side the arrow leaves a
+// bound shape from (a Heading), where its rest endpoint is, and the padded bounds around a shape.
+// elbow-route and elbow-pins call it. Everything is in scene space, and shape angles are degrees.
 
+import type { Point } from './geometry';
 import {
     bindingAnchor,
     bindingGap,
@@ -14,19 +12,13 @@ import {
     linearLocalToScene,
     normalizeFixedPoint,
     outlineIntersections,
-    type Point,
-    parsePoints,
     rotatePoint,
 } from './geometry';
 import { capabilitiesOf, ELEMENT_KINDS, isBindable } from './kinds';
 import { clamp, nearestPoint, outlineDistance } from './outline';
-import {
-    parseBinding,
-    serializeBinding,
-    type VectorArrowElement,
-    type VectorBindableElement,
-    type VectorElement,
-} from './types';
+import { parsePoints } from './points';
+import type { VectorArrowElement, VectorBindableElement, VectorElement } from './types';
+import { parseBinding, serializeBinding } from './types';
 
 // A unit orthogonal direction. Compared by value (compareHeading), never by reference.
 export type Heading = { x: number; y: number };

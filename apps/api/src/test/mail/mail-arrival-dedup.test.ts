@@ -1,11 +1,14 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { renameSync } from 'node:fs';
+import { readdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
-import { boxDir } from '../mail-test-helpers';
-import { assertJson, authedRequest, createTestUser, eventually, getTestContext, type TestUser } from '../setup';
+import { SSEventType } from '@workspace/lib/types/sse';
+import { evictHome } from '../../lib/home/get-home';
+import { boxDir, WATCHER_TEST_TIMEOUT_MS } from '../mail-test-helpers';
+import type { TestUser } from '../setup';
+import { assertJson, authedRequest, collectSSE, createTestUser, eventually, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 let ctx: TestCtx;
@@ -112,4 +115,76 @@ describe('Mail-arrival notification read state', () => {
             expect(await mailNewIsRead()).toBe(true);
         }
     });
+});
+
+describe('Mail read in another mail app', () => {
+    async function mailNewUnread(user: TestUser): Promise<boolean> {
+        const rows = await assertJson<Notification[]>(
+            await authedRequest(user.sessionToken, `/notifications/${user.id}`),
+        );
+        return rows.find((n) => n.tag === 'mail:new')?.read === false;
+    }
+
+    // The phone reads everything, the welcome mail included: the IMAP server gives each message the
+    // Seen flag, in cur/ (moving it there from new/).
+    function readOnThePhone(user: TestUser): void {
+        const inbox = boxDir(user.id, MAILBOX_INBOX);
+        for (const dir of ['new', 'cur']) {
+            for (const name of readdirSync(join(inbox, dir))) {
+                const flags = name.split(':2,')[1];
+                if (flags?.includes('S')) continue;
+                renameSync(
+                    join(inbox, dir, name),
+                    join(inbox, 'cur', flags === undefined ? `${name}:2,S` : `${name}S`),
+                );
+            }
+        }
+    }
+
+    test(
+        'while an Eigen tab is open reads the notification without anyone opening Mail',
+        async () => {
+            const user = await createTestUser(`mail-tab-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail Tab');
+            // A fresh home whose mail nobody listed; the open tab is only an event stream.
+            await evictHome(user.id);
+            const tab = await collectSSE(user.id);
+            try {
+                await deliverEmail(user.email, 'phone@external.com', 'Read on the phone', 'body');
+                expect(await mailNewUnread(user)).toBe(true);
+
+                readOnThePhone(user);
+                // The watcher's event can come seconds late on macOS, so the test waits for the tab to hear the bell change.
+                await tab.next((event) => event.type === SSEventType.NOTIFICATION_CHANGED);
+                expect(await mailNewUnread(user)).toBe(false);
+            } finally {
+                tab.stop();
+            }
+        },
+        WATCHER_TEST_TIMEOUT_MS,
+    );
+
+    test(
+        'before any Eigen tab is open reads the notification once one opens',
+        async () => {
+            const user = await createTestUser(
+                `mail-notab-${Date.now()}@test.eigen.is`,
+                'testpassword123',
+                'Mail No Tab',
+            );
+            await evictHome(user.id);
+            await deliverEmail(user.email, 'phone@external.com', 'Read on the phone', 'body');
+            readOnThePhone(user);
+            // Nobody watches the folders yet, so the index has not heard of it.
+            expect(await mailNewUnread(user)).toBe(true);
+
+            const tab = await collectSSE(user.id);
+            try {
+                await tab.next((event) => event.type === SSEventType.NOTIFICATION_CHANGED);
+                expect(await mailNewUnread(user)).toBe(false);
+            } finally {
+                tab.stop();
+            }
+        },
+        WATCHER_TEST_TIMEOUT_MS,
+    );
 });

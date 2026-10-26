@@ -1,40 +1,45 @@
-import { type DrivePath, isCollabType, isContainerType } from '@workspace/lib/types/drive';
+// The drive side of the trash: moving a path to the trash, back out of it, and deleting it for good.
+// Drive methods such as deletePath check the path and then call these. They close open documents,
+// take away sharing, tell open tabs and write the history.
+
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
 import type { User } from '../user';
 import { propagateSharedPathChange } from './acl-propagation';
-import type Drive from './drive';
+import type { Drive } from './drive';
 import { broadcastFileHistoryUpdated } from './sse-events';
 
-// Trash lifecycle bodies. Drive's deletePath/restorePath/permanentlyDelete keep their
-// liveness checks and delegate here (the versioning/restore.ts pattern).
-
 export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, user?: User): Promise<void> {
-    // Capture BEFORE trashPath re-parents the item to the mount root — the
-    // post-trash breadcrumb would lose the old folder's ACL and silently skip
-    // exactly the folder-watchers this event is for.
+    // Read before the trash moves the item to the mount root. The breadcrumb after the move has lost the
+    // old folders, and with them the folder watchers this event is for.
     const preTrashChain = user ? await mount.getBreadcrumb(item.id) : [];
 
-    // Effective members of the OLD location — captured before trashPath re-parents the item to
-    // root and strips its share, so the post-record history broadcast still reaches everyone who
-    // could see it (getEffectiveMembers walks the current chain, which is gone after the trash).
+    // Read before the trash for the same reason. The history broadcast at the end must still reach
+    // everyone who could see the item in its old place.
     const members = user ? await drive.getEffectiveMembers(mount.id, item.id) : [];
 
-    // Close collab docs before trashPath closes their databases under them, so each persists its last state.
+    // Open documents close before trashPath closes their databases, so each one saves its last state.
+    // Drive.deletePath refuses new opens until the trash is done.
     if (isContainerType(item.type)) {
         await closeCollabDocumentsRecursively(drive, mount, item.id);
-        await propagateACLRemovalRecursively(mount, item.id, user);
-    } else if (item.acl) {
-        await propagateSharedPathChange(item, item.acl, null, user ?? null);
     }
 
     const trashedItem = await mount.trashPath(item.id);
-    // A socket opening during the fan-out above still found the path active.
-    if (isContainerType(item.type)) await closeCollabDocumentsRecursively(drive, mount, item.id);
+    // A document can move into the folder after Drive.deletePath read the paths it guards. trashPath
+    // closed its database with the rest, so the document closes now, before the slow steps below, and
+    // stops taking edits it can't save. The trash is in, so a close that fails is only logged.
+    for (const id of [item.id, ...mount.collectDescendantIds(item.id)]) {
+        if (!drive.hasCollabDocument(mount.id, id)) continue;
+        await drive
+            .closeCollabDocument(mount.id, id, { skipFinalSnapshot: true })
+            .catch((error) => console.error(`Failed to close collab document ${id}:`, error));
+    }
     drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
     if (user) {
         mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
-        // path: pre-trash snapshot — trashedAt is still null so the fan-out guard passes
+        // The item as it was before the trash. fanOut skips paths in the trash, and this one isn't yet.
         await mount.history.fanOut({
             eventType: 'trashed',
             actor: user,
@@ -42,87 +47,91 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
             chainRootIds: [item.parentId],
             verifyAncestors: preTrashChain,
         });
-        // Live-refresh open Activity panels for the owner + the pre-trash members (drive.emit is
-        // owner-home only). Fire-and-forget, mirroring recordFileEvent.
+        // Nobody waits for it, the same as in Drive.recordFileEvent.
         broadcastFileHistoryUpdated(item.ownerId, item, members).catch(() => {});
     }
+
+    // The sharing goes last, the same as in Drive.renamePath. It goes only once the trash is in, so a
+    // trash that fails leaves it as it was. The rows keep their ACL in the trash, so the walk below
+    // still finds every entry. Drive.deletePath holds the item's ACL chain, so the item's own push
+    // goes out directly.
+    if (trashedItem.acl) await propagateSharedPathChange(trashedItem, trashedItem.acl, null, user ?? null);
+    if (isContainerType(item.type)) await pushSharingBelow(drive, mount, item.id, 'trashed', user);
 }
 
 export async function restorePath(drive: Drive, mount: Mount, pathId: string, user?: User): Promise<void> {
     const restoredItem = await mount.restorePath(pathId);
-
-    // Re-propagate ACL. old=new ACL → empty added-diff: restore re-shares (naming the actor) without re-emailing.
-    if (restoredItem.acl) {
-        await propagateSharedPathChange(restoredItem, restoredItem.acl, restoredItem.acl, user ?? null);
-    }
-    // For containers, re-propagate for descendants with ACL
-    if (isContainerType(restoredItem.type)) {
-        await propagateACLRestoreRecursively(mount, restoredItem.id, user);
-    }
-
     drive.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
-    // recordFileEvent re-fetches the path, so it sees the post-restore row
-    // (trashedAt cleared, original parentId) — the chain it walks is the restored one
+    // recordFileEvent reads the path again, so it walks the parent chain of the restored path.
     if (user) await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' });
+
+    // The sharing comes back last, the same as in Drive.renamePath, and nobody gets an email again.
+    await drive.pushSharing(mount.id, pathId, 'live', user ?? null);
+    if (isContainerType(restoredItem.type)) await pushSharingBelow(drive, mount, restoredItem.id, 'live', user);
 }
 
-export async function permanentlyDelete(drive: Drive, mount: Mount, item: DrivePath, user?: User): Promise<void> {
-    // Notification-only ('deleted' has no history row — the FK cascade would kill
-    // it instantly). Capture watchers + the trashedFrom id that justifies the
-    // notification BEFORE the delete removes the path_watchers rows.
-    let watcherIds: string[] = [];
-    let trashedFrom: string | null = null;
-    if (user) {
-        trashedFrom = await mount.getTrashedFrom(item.id);
-        watcherIds = mount.history.collectWatcherIds(trashedFrom ? [item.id, trashedFrom] : [item.id], user.id);
-    }
+// Returns false when the item is gone or no longer in trash by the time the delete holds its lock.
+export async function permanentlyDelete(drive: Drive, mount: Mount, item: DrivePath, user?: User): Promise<boolean> {
+    // A folder's delete takes the items trashed on their own from inside it with it. Each of them gets
+    // the events and the notices of a delete of its own.
+    const roots = isContainerType(item.type) ? [item, ...(await mount.listTrashRootsInside(item.id))] : [item];
+    const notices = user ? await Promise.all(roots.map((root) => readDeleteNotice(mount, root, user))) : [];
 
-    await mount.permanentlyDeleteFromTrash(item.id);
+    if (!(await mount.permanentlyDeleteFromTrash(item.id))) return false;
 
-    if (isContainerType(item.type)) {
-        drive.emit(SSEventType.DRIVE_FOLDER_DELETED, item);
-    } else {
-        drive.emit(SSEventType.DRIVE_FILE_DELETED, item);
+    for (const [index, root] of roots.entries()) {
+        // A restore can take the lock of an item trashed on its own first, and then the item stays.
+        if (root !== item && (await mount.getPath(root.id))) continue;
+        drive.emit(
+            isContainerType(root.type) ? SSEventType.DRIVE_FOLDER_DELETED : SSEventType.DRIVE_FILE_DELETED,
+            root,
+        );
+        const notice = notices[index];
+        if (user && notice.watcherIds.length > 0) {
+            await mount.history.notifyWatchers(notice.watcherIds, {
+                eventType: 'deleted',
+                actor: user,
+                itemName: root.name,
+                pathType: root.type,
+                tagPathId: root.id,
+                verifyAncestors: notice.verifyAncestors,
+            });
+        }
     }
-
-    if (user && watcherIds.length > 0) {
-        // The item itself joins the chain so direct-file-share watchers still verify
-        // (the trashedFrom folder survives the delete, so its breadcrumb is intact).
-        await mount.history.notifyWatchers(watcherIds, {
-            eventType: 'deleted',
-            actor: user,
-            itemName: item.name,
-            pathType: item.type,
-            tagPathId: item.id,
-            verifyAncestors: [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item],
-        });
-    }
+    return true;
 }
 
-async function propagateACLRemovalRecursively(mount: Mount, pathId: string, user?: User): Promise<void> {
-    const path = await mount.getPath(pathId);
-    if (!path) return;
-    if (path.acl) {
-        await propagateSharedPathChange(path, path.acl, null, user ?? null);
-    }
-    if (isContainerType(path.type)) {
-        const children = await mount.listFolderAll(pathId);
-        for (const child of children) {
-            await propagateACLRemovalRecursively(mount, child.id, user);
-        }
-    }
+// A deleted path gets no history row, because deleting the path deletes its rows too. The watchers only
+// get a notification. Who watches, and the folders it was trashed from, are read before the delete
+// removes them.
+async function readDeleteNotice(
+    mount: Mount,
+    item: DrivePath,
+    user: User,
+): Promise<{ watcherIds: string[]; verifyAncestors: DrivePath[] }> {
+    const trashedFrom = await mount.getTrashedFrom(item.id);
+    const chain = [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item];
+    return {
+        watcherIds: mount.history.collectWatcherIds(trashedFrom ? [item.id, trashedFrom] : [item.id], user.id),
+        // The item joins the chain, so someone who watched a file shared with them directly still
+        // qualifies. The chain is checked as it was before the trash, because a path in the trash lets
+        // nobody but the owner in. The folder the item came from can be in the trash too.
+        verifyAncestors: chain.map((path) => ({ ...path, trashedAt: null })),
+    };
 }
 
-async function propagateACLRestoreRecursively(mount: Mount, pathId: string, user?: User): Promise<void> {
-    const children = await mount.listFolderAll(pathId);
-    for (const child of children) {
-        if (child.acl) {
-            // old=new ACL → empty added-diff so restore re-shares without re-emailing (see restorePath).
-            await propagateSharedPathChange(child, child.acl, child.acl, user ?? null);
-        }
-        if (isContainerType(child.type)) {
-            await propagateACLRestoreRecursively(mount, child.id, user);
-        }
+// Read access comes from the whole chain of folders, so every path below the folder with an ACL of its
+// own gets its own push, each in its own ACL chain.
+async function pushSharingBelow(
+    drive: Drive,
+    mount: Mount,
+    folderId: string,
+    state: 'live' | 'trashed',
+    user?: User,
+): Promise<void> {
+    for (const child of await mount.listFolderAll(folderId)) {
+        await drive.pushSharing(mount.id, child.id, state, user ?? null);
+        if (isContainerType(child.type)) await pushSharingBelow(drive, mount, child.id, state, user);
     }
 }
 

@@ -2,13 +2,17 @@ import * as fs from 'node:fs';
 import { BACKUP_LEVELS, ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { getBackupJob, isServerJob } from '../lib/backup/jobs';
-import { type ControlBackupJob, startServerBackup, toControlJob } from '../lib/backup/server-job';
+import type { ControlBackupJob } from '../lib/backup/server-job';
+import { startServerBackup, toControlJob } from '../lib/backup/server-job';
 import { getControlSocketPath } from '../lib/config/paths';
-import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
+import type { ControlStatus } from '../lib/config/server-status';
+import { getServerStatus } from '../lib/config/server-status';
 import { ApiError } from '../lib/core';
 import { handleApiError } from '../lib/core/errors';
-import { createSetupLink, type SetupLink } from '../lib/setup/setup-token';
-import { type ResetPasswordResult, resetUserPassword } from '../lib/user/reset-password';
+import type { SetupLink } from '../lib/setup/setup-token';
+import { createSetupLink } from '../lib/setup/setup-token';
+import type { ResetPasswordResult } from '../lib/user/reset-password';
+import { resetUserPassword } from '../lib/user/reset-password';
 
 // The CLI's online commands, on the Unix socket `docker compose exec` reaches as the API's user; never the web.
 export const controlRouter = new Elysia({ name: 'control' })

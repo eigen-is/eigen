@@ -1,19 +1,24 @@
 // The shared element fixtures for the vector suites. A row is the base fields plus the kind's own
 // style defaults, so a fixture never re-lists what the registry already owns.
 
-import { serializePoints } from '../../vector/geometry';
+import { newChartSpecParts } from '../../charts/spec';
+import type { ChartSpec } from '../../types/chart';
 import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
-import {
-    DEFAULT_ELEMENT_PROPS,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorEllipseElement,
-    type VectorImageElement,
-    type VectorLinearElement,
-    type VectorRectangleElement,
-    type VectorRichTextElement,
-    type VectorScene,
+import { serializePoints } from '../../vector/points';
+import type {
+    VectorArrowElement,
+    VectorChartElement,
+    VectorElement,
+    VectorEllipseElement,
+    VectorImageElement,
+    VectorLinearElement,
+    VectorPathElement,
+    VectorPieElement,
+    VectorRectangleElement,
+    VectorRichTextElement,
+    VectorScene,
 } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META } from '../../vector/types';
 
 // A fixed seed and the host's roughness, since the shared table's are the reader's fallbacks (0/0).
 const BASE = {
@@ -58,6 +63,30 @@ export function ellipse(over: Partial<VectorEllipseElement> & Pick<VectorEllipse
     return { ...BASE, ...ELEMENT_KINDS.ellipse.defaults(VECTOR_STYLE_DEFAULTS), type: 'ellipse', ...over };
 }
 
+export function pie(over: Partial<VectorPieElement> & Pick<VectorPieElement, 'id'>): VectorPieElement {
+    return { ...BASE, ...ELEMENT_KINDS.pie.defaults(VECTOR_STYLE_DEFAULTS), type: 'pie', ...over };
+}
+
+export function path(over: Partial<VectorPathElement> & Pick<VectorPathElement, 'id'>): VectorPathElement {
+    return { ...BASE, ...ELEMENT_KINDS.path.defaults(VECTOR_STYLE_DEFAULTS), type: 'path', ...over };
+}
+
+// The kind's sample chart, or the spec given stored as a new chart's parts.
+export function chart(
+    over: Partial<VectorChartElement> & Pick<VectorChartElement, 'id'>,
+    spec?: ChartSpec,
+): VectorChartElement {
+    return {
+        ...BASE,
+        width: 640,
+        height: 400,
+        ...ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS),
+        ...(spec && newChartSpecParts(spec)),
+        type: 'chart',
+        ...over,
+    };
+}
+
 export function image(over: Partial<VectorImageElement> & Pick<VectorImageElement, 'id'>): VectorImageElement {
     return { ...BASE, ...ELEMENT_KINDS.image.defaults(VECTOR_STYLE_DEFAULTS), type: 'image', ...over };
 }
@@ -85,7 +114,7 @@ export function arrow(over: Partial<VectorArrowElement> & Pick<VectorArrowElemen
 }
 
 export function scene(elements: VectorElement[], background = 'transparent'): VectorScene {
-    return { meta: { background }, frames: [], elements };
+    return { meta: { ...DEFAULT_SCENE_META, background }, frames: [], elements };
 }
 
 // The scene lookup every geometry entry point takes, from the elements a test cares about.

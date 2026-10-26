@@ -4,10 +4,10 @@ import { heldAttendees, normalizeTimezone } from '@workspace/lib/calendar/calend
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
+import type { ExclusionStamp } from './ical-parse';
 import {
     calAddress,
     EIGEN,
-    type ExclusionStamp,
     icalTimeToInstant,
     icalTimeToRecurrenceKey,
     isEigenName,

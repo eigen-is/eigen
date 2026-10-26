@@ -2,6 +2,7 @@ import { useIsMobile } from '@workspace/lib/media';
 import { Activity, MessageSquare, Pencil, UserRoundPlus, WifiOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '../../button';
+import { MenuSections } from '../../context-menu/menu-sections';
 import { CountBadge } from '../../count-badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '../../dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '../../popover';
@@ -127,34 +128,44 @@ function MobileClusterKebab({
             <DropdownMenu>
                 <KebabTrigger />
                 <DropdownMenuContent align="end" onCloseAutoFocus={onCloseAutoFocus}>
-                    {onRename && (
-                        <DropdownMenuItem onClick={onRename}>
-                            <Pencil className="mr-2" />
-                            Edit
-                        </DropdownMenuItem>
-                    )}
-                    {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
-                    <FindInDocumentMenuItem focusFindBarRef={focusFindBarRef} />
-                    {mobileMenuItems}
-                    {onToggleActivityPanel && (
-                        <DropdownMenuItem onClick={onToggleActivityPanel}>
-                            <Activity className="mr-2" />
-                            Activity
-                        </DropdownMenuItem>
-                    )}
-                    {watchTarget && <WatchMenuItem {...watchTarget} />}
-                    {onToggleCommentPanel && (
-                        <DropdownMenuItem onClick={onToggleCommentPanel}>
-                            <MessageSquare className="mr-2" />
-                            {assignedCommentCount ? `Comments (${assignedCommentCount})` : 'Comments'}
-                        </DropdownMenuItem>
-                    )}
-                    {canWrite && (
-                        <DropdownMenuItem onClick={onAccessDialogOpen}>
-                            <UserRoundPlus className="mr-2" />
-                            Share
-                        </DropdownMenuItem>
-                    )}
+                    <MenuSections
+                        create={
+                            <>
+                                {onRename && (
+                                    <DropdownMenuItem onClick={onRename}>
+                                        <Pencil />
+                                        Edit
+                                    </DropdownMenuItem>
+                                )}
+                                {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
+                                <FindInDocumentMenuItem focusFindBarRef={focusFindBarRef} />
+                                {mobileMenuItems}
+                            </>
+                        }
+                        collaborate={
+                            <>
+                                {onToggleActivityPanel && (
+                                    <DropdownMenuItem onClick={onToggleActivityPanel}>
+                                        <Activity />
+                                        Activity
+                                    </DropdownMenuItem>
+                                )}
+                                {onToggleCommentPanel && (
+                                    <DropdownMenuItem onClick={onToggleCommentPanel}>
+                                        <MessageSquare />
+                                        {assignedCommentCount ? `Comments (${assignedCommentCount})` : 'Comments'}
+                                    </DropdownMenuItem>
+                                )}
+                                {canWrite && (
+                                    <DropdownMenuItem onClick={onAccessDialogOpen}>
+                                        <UserRoundPlus />
+                                        Share
+                                    </DropdownMenuItem>
+                                )}
+                                {watchTarget && <WatchMenuItem {...watchTarget} />}
+                            </>
+                        }
+                    />
                 </DropdownMenuContent>
             </DropdownMenu>
             {onToggleCommentPanel && <CountBadge count={assignedCommentCount ?? 0} />}

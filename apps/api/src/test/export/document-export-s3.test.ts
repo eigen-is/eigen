@@ -2,10 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { openZip } from '../../lib/core/zip';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home';
-import { createFakeS3Mount, type FakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
+import { openZip } from '../../lib/ooxml/zip';
+import type { FakeS3Mount } from '../fault-storage-helpers';
+import { createFakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedDocumentMedia, seedEigendoc } from '../fixtures/golden-documents';
 import { authedRequest, getTestContext, TEST_PNG_BYTES } from '../setup';
 
@@ -31,7 +32,7 @@ beforeAll(async () => {
     seedEigendoc((await drive.getCollabDocument(MOUNT_ID, docPath.id)).doc, buildGoldenDocJson());
     mediaId = await seedDocumentMedia(mount, docPath, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
     // Uploaded, so the export reads the image from the bucket and not from its staged copy.
-    await mount.drainPendingUploads({ flushNow: true });
+    await mount.uploadQueue?.drain({ flushNow: true });
     mediaKey = await mount.getStorageKey(mediaId);
 });
 

@@ -65,6 +65,18 @@
     --selected-hover: oklch(0.9 0.04 255);
     --link: #2563eb;
     --selection-handle: #3b82f6;
+
+    /* The spreadsheet grid, one look for Sheets and the chart Edit data grid. Sheets' canvas reads
+       the plain colors (packages/sheet state/render/colors.ts). No dark values: both grids sit on
+       a light-pinned .eigen-paper. */
+    --sheet-grid-line: rgb(0 0 0 / 10%);
+    --sheet-header-background: #ffffff;
+    --sheet-header-text: #000000;
+    --sheet-header-highlight: color-mix(in oklab, var(--app-current-color) 14%, transparent);
+    --sheet-cell-text: #000000;
+    --sheet-selection-fill: color-mix(in oklab, var(--selection-handle) 10%, transparent);
+    --sheet-editor-border: #5292f7;
+    --sheet-editor-shadow: rgb(0 0 0 / 40%);
 }
 
 .dark,
@@ -122,9 +134,8 @@
    the slides canvas, and the sheets workbook + formula bar. The surface gets
    the complete light palette via the shared `:root, .eigen-paper` block above,
    so every token inside the paper — current and future — resolves light in
-   both themes. Not pinned on purpose: the sheet canvas colors (hardcoded light
-   in canvas.ts) and the per-app accents (--app-current-color — theme-invariant
-   by definition); if either ever themes, pin it here. In-paper app chrome
+   both themes. Not pinned on purpose: the per-app accents (--app-current-color —
+   theme-invariant by definition); if they ever theme, pin them here. In-paper app chrome
    (sheet link card, validation hint box) opts back into the theme with
    .eigen-paper-chrome (declared alongside .dark above). */
 .eigen-paper,
@@ -417,8 +428,8 @@
 
     /* The fit box a server-composed canvas page is scaled in. renderFittedPage
        (apps/api/src/lib/export/canvas/render.ts) emits the wrapper and its size as
-       custom properties, so a 16:9 slide and a drawing of any ratio fit the same
-       way; the standalone HTML export mirrors these rules in its own <style>. */
+       custom properties, so a slide of either size and a drawing of any ratio fit
+       the same way; the standalone HTML export mirrors these rules in its own <style>. */
     .page-fit {
         container-type: inline-size;
         width: 100%;
@@ -454,6 +465,14 @@
        inside them. */
     .drive-preview-hero .page-fit:not(:first-child) {
         display: none;
+    }
+    /* The hero is 16:9 and scales its body as if CANVAS_PREVIEW_WIDTH wide, so it
+       is --preview-h (CANVAS_PREVIEW_HEIGHT, set by HtmlPreview) tall in the body's
+       space. A taller page, a 4:3 slide, narrows to fit that height, centered,
+       instead of losing its bottom to the clip. */
+    .drive-preview-hero .page-fit {
+        max-width: min(var(--page-w), calc(var(--preview-h) * var(--page-ar)));
+        margin-inline: auto;
     }
     .drive-preview-hero .eigen-prose {
         padding: 1rem;
@@ -742,7 +761,7 @@
 }
 
 /* Selected-object chrome (shared: docs figure, slides, vector, and sheets' floating
-   image (ImgBoxs), all via ObjectTransform): the ring around the object and the square
+   images and charts, all via ObjectTransform): the ring around the object and the square
    resize grips, one visual for every editor. A selected rule or page break in docs takes the ring too. */
 .eigen-selection-ring,
 .tiptap hr.ProseMirror-selectednode,

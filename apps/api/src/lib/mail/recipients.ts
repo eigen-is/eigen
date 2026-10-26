@@ -1,5 +1,6 @@
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
-import { type CanonicalRecipient, canonicalRecipients } from '@workspace/lib/mail/addresses';
+import type { CanonicalRecipient } from '@workspace/lib/mail/addresses';
+import { canonicalRecipients } from '@workspace/lib/mail/addresses';
 import type { AddressObject } from '@workspace/lib/types/mail';
 import { ApiError } from '../core/errors';
 

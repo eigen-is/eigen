@@ -7,15 +7,22 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { Editor } = await import('@tiptap/react');
-const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { DEFAULT_NORMAL_STYLE, getDocExtensions, readNormalStyle, STYLE_ROOT } = await import(
+    '@workspace/lib/docs/eigendoc'
+);
+const Y = await import('yjs');
 const { useToolbarState } = await import('../../../../components/docs/hooks/use-toolbar-state');
+const { useYMapRead } = await import('../../../../components/docs/hooks/use-y-map-read');
 
 let unmount = async () => {};
 afterEach(() => unmount());
 
+// The doc's Normal, as the style map would hold it.
+let normal = DEFAULT_NORMAL_STYLE;
+
 // "plain " at 1-7, the bold Source Serif 4 "caps" at 7-11, then a heading.
 const editor = new Editor({
-    extensions: getDocExtensions(),
+    extensions: getDocExtensions({ normalStyle: () => normal }),
     content: {
         type: 'doc',
         content: [
@@ -53,6 +60,48 @@ test('a caret move alone updates what the toolbar draws', async () => {
 
     await act(async () => editor.commands.setTextSelection(14));
     expect(seen.at(-1)).toMatchObject({ bold: false, fontName: 'Inter', paragraphStyle: 'Heading 2' });
+});
+
+// Google's toolbar shows Normal text's font and size where the text sets none, and its line spacing ticks.
+test("unformatted text reads as the doc's Normal, and a new Normal reaches the toolbar", async () => {
+    editor.commands.setTextSelection(3);
+    ({ unmount } = await renderInDocument(createElement(Probe)));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Inter', fontSize: 11, lineSpacing: 1.4 });
+
+    normal = { ...DEFAULT_NORMAL_STYLE, font: 'Source Serif 4', size: 12, lineSpacing: 1.15 };
+    await unmount();
+    ({ unmount } = await renderInDocument(createElement(Probe)));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', fontSize: 12, lineSpacing: 1.15 });
+
+    // A heading draws its own size and line, which no CSS here gives.
+    await act(async () => editor.commands.setTextSelection(14));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', lineSpacing: undefined });
+    normal = DEFAULT_NORMAL_STYLE;
+});
+
+// A peer's new Normal is no transaction of this editor: it reaches the toolbar through the style map's reader, which
+// renders the toolbar again, as the editor's page does.
+test("a peer's new Normal reaches the toolbar live", async () => {
+    const yDoc = new Y.Doc();
+    const styles = yDoc.getMap(STYLE_ROOT);
+    const live = new Editor({
+        extensions: getDocExtensions({ normalStyle: () => readNormalStyle(styles.toJSON()) }),
+        content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'plain' }] }] },
+    });
+    live.commands.setTextSelection(3);
+    function Page() {
+        useYMapRead(styles, readNormalStyle);
+        return createElement(Probe, { of: live });
+    }
+    ({ unmount } = await renderInDocument(createElement(Page)));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Inter', fontSize: 11, lineSpacing: 1.4 });
+
+    const peer = new Y.Doc();
+    const set = { font: 'Source Serif 4', size: 12, lineSpacing: 1.15 };
+    for (const [key, value] of Object.entries(set)) peer.getMap(STYLE_ROOT).set(key, value);
+    await act(async () => Y.applyUpdate(yDoc, Y.encodeStateAsUpdate(peer)));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', fontSize: 12, lineSpacing: 1.15 });
+    live.destroy();
 });
 
 test('a caret move that changes nothing drawn renders nothing', async () => {
@@ -215,4 +264,73 @@ test('outside a table no transaction tries the cell commands', async () => {
     await act(async () => editor.commands.setTextSelection(4));
     expect(can).not.toHaveBeenCalled();
     can.mockRestore();
+});
+
+// Google's size box: the size the selection draws at, and empty for a mix.
+test("the size reads the body's 11 pt where none is set, 9 for Small, and none for a mix", async () => {
+    // "body " at 1-6, the Small "fine " at 6-11, the 14 pt "big" at 11-14.
+    const sized = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'body ' },
+                        { type: 'text', text: 'fine ', marks: [{ type: 'small' }] },
+                        { type: 'text', text: 'big', marks: [{ type: 'textStyle', attrs: { fontSize: 14 } }] },
+                    ],
+                },
+            ],
+        },
+    });
+    sized.commands.setTextSelection(3);
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: sized })));
+    expect(seen.at(-1)?.fontSize).toBe(11);
+
+    await act(async () => sized.commands.setTextSelection(8));
+    expect(seen.at(-1)?.fontSize).toBe(9);
+
+    await act(async () => sized.commands.setTextSelection({ from: 11, to: 14 }));
+    expect(seen.at(-1)?.fontSize).toBe(14);
+
+    await act(async () => sized.commands.setTextSelection({ from: 2, to: 14 }));
+    expect(seen.at(-1)?.fontSize).toBeUndefined();
+    sized.destroy();
+});
+
+// A heading draws its own size, which the toolbar reads off the page; happy-dom has no prose CSS, so the page is stubbed
+// with eigen-prose.css's 1.75rem.
+test("the size in an unsized heading is the heading's drawn size, a sized run its own", async () => {
+    const computed = spyOn(globalThis, 'getComputedStyle').mockImplementation((element) => {
+        const { style } = document.createElement('p');
+        style.fontSize = element.tagName === 'H1' ? '28px' : '14.6667px';
+        return style;
+    });
+    // "Plan " at 1-6, the 30 pt "big" at 6-9.
+    const heading = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: [
+                {
+                    type: 'heading',
+                    attrs: { level: 1 },
+                    content: [
+                        { type: 'text', text: 'Plan ' },
+                        { type: 'text', text: 'big', marks: [{ type: 'textStyle', attrs: { fontSize: 30 } }] },
+                    ],
+                },
+            ],
+        },
+    });
+    heading.commands.setTextSelection(3);
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: heading })));
+    expect(seen.at(-1)?.fontSize).toBe(21);
+
+    await act(async () => heading.commands.setTextSelection({ from: 6, to: 9 }));
+    expect(seen.at(-1)?.fontSize).toBe(30);
+    computed.mockRestore();
+    heading.destroy();
 });

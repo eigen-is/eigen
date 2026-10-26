@@ -12,6 +12,8 @@ type PropertyNumberInputProps = {
     placeholder?: string;
     disabled?: boolean;
     className?: string;
+    // Makes an emptied field a value of its own (a chart axis's Auto); without it, empty writes nothing.
+    onClear?: () => void;
 };
 
 // The panel's number field. It writes on EVERY change — a keystroke, a spinner click, an arrow-key
@@ -26,26 +28,25 @@ export function PropertyNumberInput({
     placeholder,
     disabled,
     className,
+    onClear,
 }: PropertyNumberInputProps) {
-    const [localValue, setLocalValue] = useState(() => String(value ?? ''));
-    const [focused, setFocused] = useState(false);
-    const { hold, end: endGesture } = useHeldGesture();
-
-    const externalStr = String(value ?? '');
-    if (!focused && localValue !== externalStr) {
-        setLocalValue(externalStr);
-    }
+    // While focused the field shows its own draft, so a half-typed "-" or a clamped value never jumps under the caret.
+    const [draft, setDraft] = useState<string | null>(null);
+    const { hold, end: endGesture, undoKey } = useHeldGesture();
 
     return (
         <Input
             type="number"
             className={cn('h-7 text-xs', className)}
-            value={focused ? localValue : externalStr}
+            value={draft ?? String(value ?? '')}
             placeholder={placeholder}
             onChange={(e) => {
                 const raw = e.target.value;
-                setLocalValue(raw);
-                if (raw !== '' && raw !== '-') {
+                setDraft(raw);
+                if (raw === '' && onClear) {
+                    hold();
+                    onClear();
+                } else if (raw !== '' && raw !== '-') {
                     const v = Number(raw);
                     // Clamped BEFORE it is written: the input's own min/max only drive the spinner and
                     // validity styling, so typing 0 into a width would otherwise reach the document. An
@@ -59,17 +60,15 @@ export function PropertyNumberInput({
                 }
             }}
             // Enter and Escape end the edit where the caret stays in the field, so the next one is a
-            // step of its own; every other way out is a blur.
+            // step of its own; ⌘Z ends it too and shows what the undo left. Every other way out is a blur.
             onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === 'Escape') endGesture();
+                if (undoKey(e)) setDraft(null);
+                else if (e.key === 'Enter' || e.key === 'Escape') endGesture();
             }}
-            onFocus={() => setFocused(true)}
+            onFocus={() => setDraft(String(value ?? ''))}
             onBlur={() => {
                 endGesture();
-                setFocused(false);
-                if (localValue === '' || localValue === '-') {
-                    setLocalValue(externalStr);
-                }
+                setDraft(null);
             }}
             min={min}
             max={max}

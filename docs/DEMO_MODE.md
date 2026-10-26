@@ -72,7 +72,7 @@ It applies the demo's settings before any home exists, because a home fixes its 
 
 In production better-auth prefixes cookie names with `__Secure-`, so the seeder keeps the whole `name=value` pair from `Set-Cookie` for its admin session. Rebuilding the name aborts the seed on a real box.
 
-`apps/api/src/scripts/demo/content.ts` holds the personas and every text as data. Docs go HTML → `.docx` → `convertToDocument`, the shipped importer. Comment threads are real chats in the container's `chat/` folder, and each card's anchor is a `comment` mark, as the editor writes them. Every seeded card gets `DEFAULT_CARD_COLOR`, the card dialog's fallback, so seeded and hand-made cards match.
+`apps/api/src/scripts/demo/content.ts` holds the personas and every text as data. Docs go HTML → `.docx` → `convertToDocument`, the shipped importer. Comment threads are real chats in the container's `chat/` folder, and each card's anchor is a `comment` mark, as the editor writes them. Every seeded card gets `DEFAULT_CARD_COLOR`, the card dialog's fallback, so seeded and hand-made cards match. A file in a card chat is seeded as an upload into the chat's own `media/`, the way a user's upload lands, because a drive-reference chip to a plain file breaks. A seeded `attach` names a document, and only one the seeder made earlier.
 
 ## Two containers are byte-copied fixtures
 
@@ -86,7 +86,7 @@ A card chat reply can `attach` seeded team documents as drive references, or `at
 
 ## The canvases are built from typed specs
 
-The site plan (`demo/vector-build.ts`) and the sponsor deck (`demo/deck-build.ts`) are written straight into fresh Y.Docs, because frozen bytes cannot survive a change to the stored element shape and a spec can. Every element carries the full field set the editor writes. Ids, indices and roughjs seeds are deterministic, so every reseed renders the same jitter. Text is sized from `demo/excalifont-metrics.ts`, since the seeder has no DOM. Arrows settle through the lib's `followBindings`, as in the editor.
+The site plan (`demo/vector-build.ts`) and the sponsor deck (`demo/deck-build.ts`) are written straight into fresh Y.Docs, because frozen bytes cannot survive a change to the stored element shape and a spec can. Every element carries the full field set the editor writes. Ids, indices and roughjs seeds are deterministic, so every reseed renders the same jitter. Text is sized with `measureLabel` (`@workspace/lib/vector`), since the seeder has no DOM. Arrows settle through the lib's `followBindings`, as in the editor.
 
 To check a site plan change without a browser, build a Y.Doc with `buildVectorDoc`, render it with `readVectorFromDoc` and `sceneToSvg`, and open the SVG.
 

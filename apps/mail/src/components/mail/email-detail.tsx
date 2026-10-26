@@ -1,5 +1,6 @@
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
-import { type Attachment, type Email, isCalendarPart, type MaildirMailbox } from '@workspace/lib/types/mail';
+import type { Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
+import { isCalendarPart } from '@workspace/lib/types/mail';
 import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
 import { MessageView } from '@workspace/ui/components/mail';

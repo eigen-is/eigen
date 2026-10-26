@@ -1,3 +1,4 @@
+import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -6,8 +7,10 @@ import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import { cellDisplay } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { type Context, getSheetIndex, indexToColumnChar, sortSelection } from '../../state';
+import type { Context } from '../../state';
+import { getSheetIndex, sortSelection } from '../../state';
 
 export function CustomSort() {
     const [rangeColChar, setRangeColChar] = useState<string[]>([]);
@@ -29,17 +32,17 @@ export function CustomSort() {
         if (isTitleChange) {
             for (let i = col_start; i <= col_end; i += 1) {
                 const cell = context.sheets[sheetIndex].data?.[row_start]?.[i];
-                const colHeaderValue = cell?.m || cell?.v;
+                const colHeaderValue = cellDisplay(cell) || cell?.v;
                 if (colHeaderValue) {
                     list.push(colHeaderValue as string);
                 } else {
-                    const ColumnChar = indexToColumnChar(i);
+                    const ColumnChar = columnIndexToLabel(i);
                     list.push(`Column ${ColumnChar}`);
                 }
             }
         } else {
             for (let i = col_start; i <= col_end; i += 1) {
-                const ColumnChar = indexToColumnChar(i);
+                const ColumnChar = columnIndexToLabel(i);
                 list.push(ColumnChar);
             }
         }
@@ -52,8 +55,8 @@ export function CustomSort() {
                 <DialogTitle>Custom sort</DialogTitle>
             </DialogHeader>
             <div className="text-sm">
-                Sort range from {`${indexToColumnChar(col_start)}${row_start + 1}`} to{' '}
-                {`${indexToColumnChar(col_end)}${row_end + 1}`}
+                Sort range from {`${columnIndexToLabel(col_start)}${row_start + 1}`} to{' '}
+                {`${columnIndexToLabel(col_end)}${row_end + 1}`}
             </div>
 
             <div className="space-y-2.5">

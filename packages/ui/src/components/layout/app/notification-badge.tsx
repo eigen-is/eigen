@@ -1,6 +1,8 @@
 import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
-import { type DrivePathType, getEigenDocInfoByType, isFolderType } from '@workspace/lib/types/drive';
-import { AlertTriangle, Calendar, File, Folder, type LucideIcon, Mail, MessageSquare } from 'lucide-react';
+import type { DrivePathType } from '@workspace/lib/types/drive';
+import { getEigenDocInfoByType, isFolderType } from '@workspace/lib/types/drive';
+import type { LucideIcon } from 'lucide-react';
+import { AlertTriangle, Calendar, File, Folder, Mail, MessageSquare } from 'lucide-react';
 
 // Notification type (+ path type when known) → app icon + color for the bell avatar badge (spec § App badge).
 function pathTypeBadge(pathType: DrivePathType): { icon: LucideIcon; colorVar: string } {

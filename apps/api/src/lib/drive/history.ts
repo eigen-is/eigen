@@ -1,21 +1,20 @@
+// The file history of one mount: a row for each change to a path, such as an upload, a rename or a
+// share, and the users who watch a path. After a change, the watchers of the path and of the folders
+// above it get a notification. Each Mount builds one, and Drive records changes through it.
+
 import { randomUUID } from 'node:crypto';
-import { type DrivePath, type DrivePathType, isDocumentType } from '@workspace/lib/types/drive';
-import {
-    aclPrincipalsToResolve,
-    describeFileEvent,
-    type FileEvent,
-    type FileEventInput,
-    type FileEventType,
-    type PathWatchStatus,
-    toFileEventType,
-} from '@workspace/lib/types/file-history';
+import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
+import { isDocumentType } from '@workspace/lib/types/drive';
+import type { FileEvent, FileEventInput, FileEventType, PathWatchStatus } from '@workspace/lib/types/file-history';
+import { aclPrincipalsToResolve, describeFileEvent, toFileEventType } from '@workspace/lib/types/file-history';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { sendToHome } from '../home/home-relay';
+import { sendToUserHomes } from '../home/home-relay';
 import type * as schema from '../mount/schema';
 import { fileEvents, paths, pathWatchers } from '../mount/schema';
 import { getBatchPublicInfo } from '../space/public';
-import { getMemberships, getUserById, type User } from '../user';
+import type { User } from '../user';
+import { getMemberships, getUserById } from '../user';
 import { canReadFromAncestors } from './acl';
 
 // Per-path caps, no age cap: a quiet file keeps its whole story. 'edited' rows are the noise
@@ -24,10 +23,10 @@ const HISTORY_MAX_EDITED_PER_PATH = 100;
 const HISTORY_MAX_PER_PATH = 500;
 
 export class FileHistory {
-    constructor(
+    public constructor(
         private db: BunSQLiteDatabase<typeof schema>,
-        readonly ownerId: string,
-        readonly mountId: string,
+        public readonly ownerId: string,
+        public readonly mountId: string,
     ) {}
 
     // Entities inside an eigendoc/chat container (per-card comment threads, attachment media)
@@ -45,7 +44,7 @@ export class FileHistory {
         return ancestors.some((a) => isDocumentType(a.type));
     }
 
-    record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): void {
+    public record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): void {
         if (this.isContainerInternal(input.pathId)) return;
         if (opts?.dedupeWindowMs) {
             const last = this.db
@@ -80,7 +79,7 @@ export class FileHistory {
 
     // File: direct events. Folder/container: events on the path and every descendant
     // (recursive CTE downward), newest first.
-    list(pathId: string, opts?: { limit?: number }): FileEvent[] {
+    public list(pathId: string, opts?: { limit?: number }): FileEvent[] {
         const limit = opts?.limit ?? 50;
 
         const rows = this.db.all<{
@@ -121,18 +120,18 @@ export class FileHistory {
         }));
     }
 
-    addWatcher(pathId: string, userId: string): void {
+    public addWatcher(pathId: string, userId: string): void {
         this.db.insert(pathWatchers).values({ pathId, userId, createdAt: new Date() }).onConflictDoNothing().run();
     }
 
-    removeWatcher(pathId: string, userId: string): void {
+    public removeWatcher(pathId: string, userId: string): void {
         this.db
             .delete(pathWatchers)
             .where(and(eq(pathWatchers.pathId, pathId), eq(pathWatchers.userId, userId)))
             .run();
     }
 
-    getWatchStatus(pathId: string, userId: string): PathWatchStatus {
+    public getWatchStatus(pathId: string, userId: string): PathWatchStatus {
         const direct = this.db
             .select({ pathId: pathWatchers.pathId })
             .from(pathWatchers)
@@ -161,7 +160,7 @@ export class FileHistory {
         };
     }
 
-    listWatchedPathIds(userId: string): string[] {
+    public listWatchedPathIds(userId: string): string[] {
         return this.db
             .select({ pathId: pathWatchers.pathId })
             .from(pathWatchers)
@@ -172,7 +171,7 @@ export class FileHistory {
 
     // Watchers on the root paths and on every ancestor of each root (one inclusive
     // upward CTE seeded with all roots), deduped, with the acting user removed.
-    collectWatcherIds(rootPathIds: string[], excludeUserId: string): string[] {
+    public collectWatcherIds(rootPathIds: string[], excludeUserId: string): string[] {
         const rootList = sql.join(
             rootPathIds.map((id) => sql`${id}`),
             sql`, `,
@@ -194,7 +193,7 @@ export class FileHistory {
     // revoked since watching is silently skipped. verifyAncestors is the chain
     // that justifies the notification — callers capture it BEFORE mutations that
     // rewrite the parent chain (trash re-parents to the mount root).
-    async notifyWatchers(
+    public async notifyWatchers(
         watcherIds: string[],
         opts: {
             eventType: FileEventType;
@@ -212,7 +211,13 @@ export class FileHistory {
         // The body is persisted, so the team names an acl-changed row shows are resolved here
         // rather than at render time; describeFileEvent prints every other principal id verbatim.
         const d = opts.details;
-        const names = await getBatchPublicInfo(aclPrincipalsToResolve(d));
+        // The change has landed by now. A notification that can't be written is logged, and never
+        // fails the change.
+        const names = await getBatchPublicInfo(aclPrincipalsToResolve(d)).catch((error: unknown) => {
+            console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
+            return null;
+        });
+        if (!names) return;
         const lines = describeFileEvent(
             {
                 eventType: opts.eventType,
@@ -225,36 +230,42 @@ export class FileHistory {
         );
         const cardId = d && 'cardId' in d ? d.cardId : undefined;
         const chatName = d && 'chatName' in d ? d.chatName : undefined;
-        // Concurrent + per-watcher isolated: delivery runs after the mutation committed, so one
-        // watcher's auth-db hiccup must neither reject the fan-out nor drop the other watchers.
-        await Promise.all(
+        // One failed lookup skips only that watcher, because the change has landed already.
+        const recipients = await Promise.all(
             watcherIds.map(async (watcherId) => {
                 try {
                     const watcher = await getUserById(watcherId);
-                    if (!watcher) return;
-                    if (opts.excludeEmails?.has(watcher.email.toLowerCase())) return;
+                    if (!watcher) return null;
+                    if (opts.excludeEmails?.has(watcher.email.toLowerCase())) return null;
                     const memberships = await getMemberships(watcherId);
-                    if (!canReadFromAncestors(opts.verifyAncestors, watcher, memberships)) return;
-                    await sendToHome(watcherId, {
-                        type: 'notification',
-                        notification: {
-                            type: 'file-event',
-                            actorEmail: opts.actor.email,
-                            title: `${opts.actor.name} ${lines.action}`,
-                            body: lines.primary,
-                            tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
-                            coalesce: true,
-                            details: { secondary: lines.secondary, cardId, chatName, pathType: opts.pathType },
-                        },
-                    });
+                    return canReadFromAncestors(opts.verifyAncestors, watcher, memberships) ? watcherId : null;
                 } catch {
-                    // best-effort delivery — never surface to the triggering mutation
+                    return null;
                 }
             }),
         );
+        // The deliveries open each watcher's home and share the relay's budget with other fan-outs.
+        // So they run after the change answers, and a busy budget never holds up the change.
+        sendToUserHomes(
+            recipients.filter((id) => id !== null),
+            {
+                type: 'notification',
+                notification: {
+                    type: 'file-event',
+                    actorEmail: opts.actor.email,
+                    title: `${opts.actor.name} ${lines.action}`,
+                    body: lines.primary,
+                    tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
+                    coalesce: true,
+                    details: { secondary: lines.secondary, cardId, chatName, pathType: opts.pathType },
+                },
+            },
+        ).catch((error: unknown) => {
+            console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
+        });
     }
 
-    async fanOut(opts: {
+    public async fanOut(opts: {
         eventType: FileEventType;
         actor: User;
         path: DrivePath; // affected item (pre-mutation shape where relevant)
@@ -287,7 +298,7 @@ export class FileHistory {
         });
     }
 
-    prune(): void {
+    public prune(): void {
         this.db.run(sql`
             DELETE FROM ${fileEvents} WHERE id IN (
                 SELECT id FROM (

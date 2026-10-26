@@ -2,9 +2,9 @@ import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import type { Freezen } from '../../state';
 import {
     computeRowHeaderRegions,
-    type Freezen,
     fixPositionOnFrozenCells,
     getSheetIndex,
     handleRowFreezeHandleMouseDown,
@@ -126,7 +126,6 @@ export const RowHeader: React.FC = () => {
             setContext((draftCtx) => {
                 handleRowFreezeHandleMouseDown(
                     draftCtx,
-                    refs.globalCache,
                     nativeEvent,
                     containerRef.current!,
                     refs.workbookContainer.current!,
@@ -135,7 +134,7 @@ export const RowHeader: React.FC = () => {
             });
             e.stopPropagation();
         },
-        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
+        [refs.cellArea, refs.workbookContainer, setContext],
     );
 
     useEffect(() => {

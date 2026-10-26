@@ -1,12 +1,13 @@
 /* Shared prose + code styles for rendered HTML content and TipTap editors */
 /* Used via .eigen-prose class (previews, rendered content) and .tiptap class (editors) */
 
-/* Base font — eigen-prose containers only (editors inherit from app) */
+/* Base font — eigen-prose containers only (editors inherit from app). A doc's Normal sets the --doc-* properties on
+   its page where it is not Eigen's own (normalStyleProperties); the fallbacks are Eigen's, DEFAULT_NORMAL_STYLE. */
 .eigen-prose {
-    font-family: var(--font-sans);
-    font-size: 11pt;
+    font-family: var(--doc-font-family, var(--font-sans));
+    font-size: var(--doc-font-size, 11pt);
     line-height: 1.5;
-    color: #1a1a2e;
+    color: var(--doc-color, #1a1a2e);
 }
 
 /* ===== Shared rules: headings, code, formatting, tables, images ===== */
@@ -78,6 +79,7 @@
         line-height: 1.2;
         margin-top: 0;
         margin-bottom: 3pt;
+        padding-top: 0;
     }
 
     p[data-type="subtitle"] {
@@ -85,6 +87,7 @@
         line-height: 1.3;
         margin-top: 0;
         margin-bottom: 16pt;
+        padding-top: 0;
     }
 
     /* Google Docs' grey, which no theme token matches. */
@@ -276,6 +279,13 @@
     figure img,
     .figure img {
         margin: 0;
+    }
+
+    /* A chart's inline SVG, as an image: never wider than the column, its height following. */
+    .figure svg {
+        display: block;
+        max-width: 100%;
+        height: auto;
     }
 
     /* Tables */
@@ -470,13 +480,32 @@
 
 /* ===== Prose-specific spacing (wider margins for reading) ===== */
 .eigen-prose {
+    /* A doc's paragraph that sets no format draws its Normal: by default line spacing 1.4 of Inter's 1.21 line, nothing
+       before and 11 pt after (DOCUMENT_PARAGRAPH_FORMAT, held to these by looks.test.ts). Space before is padding, as a
+       paragraph's own is; the title and subtitle keep their own. */
     p {
-        line-height: 1.7;
-        margin-bottom: 1em;
+        line-height: var(--doc-line-height, 1.694);
+        padding-top: var(--doc-space-before, 0);
+        margin-bottom: var(--doc-space-after, 11pt);
     }
 
     & > * + * {
         margin-top: 0.75em;
+    }
+
+    /* A paragraph's space before is its own (DOCUMENT_PARAGRAPH_FORMAT's 0), so one follows another at the space after
+       the first alone, as in Word and Google Docs. */
+    & > p + p {
+        margin-top: 0;
+    }
+
+    /* Lists, quotes and table cells own the spacing of the paragraphs they hold, as the docx reader and writer take
+       it: a paragraph's own space before or after draws only where it stands in the doc itself. */
+    :is(li, blockquote, td, th) p {
+        /* biome-ignore lint/complexity/noImportantStyles: must beat the format's inline padding */
+        padding-top: 0 !important;
+        /* biome-ignore lint/complexity/noImportantStyles: must beat the format's inline margin */
+        margin-bottom: 0 !important;
     }
 
     a {
@@ -493,10 +522,9 @@
         margin-bottom: 1em;
     }
 
-    /* A restarted list runs on from the one before it at the items' own step, as Google's does: the last item's margin
-       is all that is left between them. */
+    /* A restarted list runs on from the one before it at the items' own step, as Google's does. */
     ol:has(+ ol) {
-        margin-bottom: 0;
+        margin-bottom: 0.25em;
     }
 
     ol + ol {
@@ -517,6 +545,51 @@
 
     blockquote {
         margin-bottom: 1em;
+    }
+}
+
+/* A header's or footer's last block has no space after, as in Word's Header and Footer styles (PAGE_BAND_CLASS) */
+.eigen-prose.page-band > :last-child {
+    margin-bottom: 0;
+}
+
+/* ===== Docs: the editor, its quick look and its exports carry .eigen-doc (DOC_PROSE_CLASS); mail and chat don't ===== */
+.eigen-doc {
+    /* A list is its own formatting context, so beside a float it narrows as a whole and its markers stay clear of it. */
+    ul,
+    ol {
+        display: flow-root;
+    }
+
+    /* The context keeps the margins of its first and last items in, where they would collapse with the list's own:
+       they go, so a list and a nested one space as their margins say. */
+    li:first-child,
+    li:first-child > :first-child {
+        margin-top: 0;
+    }
+
+    li:last-child,
+    li:last-child > :last-child {
+        margin-bottom: 0;
+    }
+
+    /* A list with no type of its own numbers by depth, as Google's default, 1. a. i. and again, over Word's nine
+       levels; a type the list stores is drawn on it and wins. The docx writer reads its levels from these. */
+    ol ol,
+    ol ol ol ol ol,
+    ol ol ol ol ol ol ol ol {
+        list-style-type: lower-alpha;
+    }
+
+    ol ol ol,
+    ol ol ol ol ol ol,
+    ol ol ol ol ol ol ol ol ol {
+        list-style-type: lower-roman;
+    }
+
+    ol ol ol ol,
+    ol ol ol ol ol ol ol {
+        list-style-type: decimal;
     }
 }
 
@@ -573,6 +646,140 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
     .tiptap li:has(:where(.figure[data-layout^="wrap"])) {
         contain: layout;
     }
+}
+
+/* ===== Equations ===== */
+
+/* Every <math> Eigen draws, in the editor, its panel and an export. */
+math {
+    font-family: "STIX Two Math", math;
+}
+
+/* MathML's own cell spacing, which Tailwind's reset takes away, so a matrix's columns touch. An equations table's
+   cells meet at their alignment point, as Word's do. */
+mtd {
+    padding: 0.5ex 0.4em;
+}
+
+mtable[displaystyle="true"] > mtr > mtd {
+    padding-inline: 0;
+}
+
+/* The writer aligns an equations table as Word's & marks do: right of the first, left of the next, by turns, and a
+   cases table's columns left. Browsers leave columnalign to CSS and centre every cell. */
+mtable[displaystyle="true"] > mtr > mtd:nth-child(odd) {
+    text-align: right;
+}
+
+mtable[displaystyle="true"] > mtr > mtd:nth-child(even),
+mtable[columnalign="left"] > mtr > mtd {
+    text-align: left;
+}
+
+/* MathML Core, which Chrome implements and names `display: block math`, lays a cell's content out as a block, which
+   only the -webkit- values move (in WebKit they break the row), and draws no menclose, which WebKit and Firefox draw
+   themselves. Each notation's line is a border or a background layer of its own, so any set of them combines. The HTML
+   download needs this block in Chrome; WeasyPrint skips @supports, and the PDF draws an equation as SVG anyway. */
+@supports (display: block math) {
+    mtable[displaystyle="true"] > mtr > mtd:nth-child(odd) {
+        text-align: -webkit-right;
+    }
+
+    mtable[displaystyle="true"] > mtr > mtd:nth-child(even),
+    mtable[columnalign="left"] > mtr > mtd {
+        text-align: -webkit-left;
+    }
+
+    menclose {
+        --strike-horizontal: none;
+        --strike-vertical: none;
+        --strike-up: none;
+        --strike-down: none;
+        padding: 0.1em 0.15em;
+        background-image: var(--strike-horizontal), var(--strike-vertical), var(--strike-up), var(--strike-down);
+    }
+
+    menclose[notation~="top"] {
+        border-top: 0.06em solid;
+    }
+
+    menclose[notation~="bottom"] {
+        border-bottom: 0.06em solid;
+    }
+
+    menclose[notation~="left"] {
+        border-left: 0.06em solid;
+    }
+
+    menclose[notation~="right"] {
+        border-right: 0.06em solid;
+    }
+
+    menclose[notation~="horizontalstrike"] {
+        --strike-horizontal: linear-gradient(
+            transparent calc(50% - 0.03em),
+            currentColor 0 calc(50% + 0.03em),
+            transparent 0
+        );
+    }
+
+    menclose[notation~="verticalstrike"] {
+        --strike-vertical: linear-gradient(
+            to right,
+            transparent calc(50% - 0.03em),
+            currentColor 0 calc(50% + 0.03em),
+            transparent 0
+        );
+    }
+
+    menclose[notation~="updiagonalstrike"] {
+        --strike-up: linear-gradient(
+            to top left,
+            transparent calc(50% - 0.03em),
+            currentColor 0 calc(50% + 0.03em),
+            transparent 0
+        );
+    }
+
+    menclose[notation~="downdiagonalstrike"] {
+        --strike-down: linear-gradient(
+            to top right,
+            transparent calc(50% - 0.03em),
+            currentColor 0 calc(50% + 0.03em),
+            transparent 0
+        );
+    }
+}
+
+/* An inline atom, so the comment mark's button sits in its corner. */
+.tiptap .equation {
+    position: relative;
+}
+
+/* A displayed equation takes its line, centred, in the editor and the HTML exports; as the figure, a full-width box on
+   the bottom of its line keeps ProseMirror's trailing break on that line. */
+.eigen-prose .equation[data-display] {
+    display: inline-flex;
+    justify-content: center;
+    width: 100%;
+    vertical-align: bottom;
+    /* Two in a row part by a paragraph's gap (p + p), or one's limits touch the next. */
+    margin-block: 0.25em;
+}
+
+/* An empty equation, in the editor and its panel. */
+.equation-placeholder {
+    display: inline-block;
+    width: 0.8em;
+    height: 1em;
+    vertical-align: -0.15em;
+    border: 1px dashed currentColor;
+    opacity: 0.5;
+}
+
+/* An empty argument's box, which only the editor and its panel draw. */
+.equation-slot {
+    opacity: 0.5;
 }
 
 /* ===== Dark mode — follows app theme (.dark class), not OS preference ===== */

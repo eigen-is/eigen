@@ -1,18 +1,20 @@
 import { EML_MAX_BYTES, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import { type DrivePath, EML_MIME, isEmlFile } from '@workspace/lib/types/drive';
-import {
-    type DraftAttachmentUpload,
-    type Email,
-    type EmailDraft,
-    type EmailSummary,
-    type ImportMailResult,
-    type MaildirMailbox,
-    mailAttachmentName,
-    type NewDraft,
-    type SentMailResult,
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { EML_MIME, isEmlFile } from '@workspace/lib/types/drive';
+import type {
+    DraftAttachmentUpload,
+    Email,
+    EmailDraft,
+    EmailSummary,
+    ImportMailResult,
+    MaildirMailbox,
+    NewDraft,
+    SentMailResult,
 } from '@workspace/lib/types/mail';
+import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
-import { Elysia, type ElysiaCustomStatusResponse, type Static, t } from 'elysia';
+import type { ElysiaCustomStatusResponse, Static } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { ApiError, contentDisposition, NOT_AN_EMAIL_FILE, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireMailEnabled, requireNonGuest, requireSelf } from '../lib/core/access';
 import { readImportSourceBytes } from '../lib/drive';
@@ -369,7 +371,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
                 set,
                 (att) => {
                     assertVCardPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-                    // A copy: content is a view over the whole parsed message, and the Worker detaches the buffer it gets.
+                    // A copy: content is a view over the whole parsed message, which would all cross to the transform process.
                     return getBytesVCardPreview(new Uint8Array(att.content).buffer);
                 },
                 VCARD_FORMAT,
@@ -391,7 +393,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
                 set,
                 (att) => {
                     assertEmlPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-                    // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
+                    // A copy, for the reason the cards route copies: only the part crosses to the transform process.
                     return getBytesEmlPreview(new Uint8Array(att.content).buffer);
                 },
                 EML_FORMAT,
@@ -413,7 +415,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
                 set,
                 (att) => {
                     assertIcsPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-                    // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
+                    // A copy, for the reason the cards route copies: only the part crosses to the transform process.
                     return getBytesIcsPreview(new Uint8Array(att.content).buffer);
                 },
                 ICS_FORMAT,

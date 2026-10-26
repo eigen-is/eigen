@@ -6,14 +6,8 @@
 // field in place (the arrow already exists), so commit writes `text` + `labelWidth`, empty clears both,
 // and it never deletes the arrow. Rich text gets its own in-place editor.
 
-import {
-    arrowLabelBox,
-    arrowLabelCenter,
-    linearLocalToScene,
-    type Point,
-    type TextAlign,
-    type VectorArrowElement,
-} from '@workspace/lib/vector';
+import type { Point, TextAlign, VectorArrowElement } from '@workspace/lib/vector';
+import { arrowLabelBox, arrowLabelCenter, linearLocalToScene } from '@workspace/lib/vector';
 
 export type EditingState = {
     id: string;

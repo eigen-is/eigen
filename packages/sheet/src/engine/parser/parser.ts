@@ -10,7 +10,7 @@ import type {
     RangeCell,
 } from '../types';
 import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, valueIsError } from './error';
-import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator';
+import evaluateByOperator, { callFunction } from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
 import { extractLabel, offsetCoordinate, offsetRange, toLabel } from './helper/cell';
 import { invertNumber, toNumber } from './helper/number';
@@ -24,7 +24,7 @@ class Parser {
     private options: ParserOptions;
     private emitter: TinyEmitter;
 
-    constructor() {
+    public constructor() {
         this.emitter = new TinyEmitter();
         this.parser = new GrammarParser();
         this.parser.yy = {
@@ -34,7 +34,7 @@ class Parser {
             throwError: (errorName: string) => this._throwError(errorName),
             callVariable: (variable: string) => this._callVariable(variable),
             evaluateByOperator,
-            callFunction: evaluateByOperator,
+            callFunction,
             cellValue: (value: string) => this._callCellValue(value),
             rangeValue: (start: string, end: string) => this._callRangeValue(start, end),
         };
@@ -44,16 +44,16 @@ class Parser {
         this.setVariable('TRUE', true).setVariable('FALSE', false).setVariable('NULL', null);
     }
 
-    on(event: string, listener: ParserEventListener): void {
+    public on(event: string, listener: ParserEventListener): void {
         this.emitter.on(event, listener);
     }
 
-    parse(expression: string, options: ParserOptions = {}): ParseResult {
+    public parse(expression: string, options: ParserOptions = {}): ParseResult {
         return this.evaluate(this.compile(expression), options);
     }
 
     // A syntax error is deferred to evaluation, where it surfaces like any other error.
-    compile(expression: string): CompiledFormula {
+    public compile(expression: string): CompiledFormula {
         if (expression === '') {
             return () => '';
         }
@@ -66,7 +66,7 @@ class Parser {
         }
     }
 
-    evaluate(compiled: CompiledFormula, options: ParserOptions = {}): ParseResult {
+    public evaluate(compiled: CompiledFormula, options: ParserOptions = {}): ParseResult {
         let result: unknown = null;
         let error: string | null = null;
         this.options = options;
@@ -89,7 +89,7 @@ class Parser {
     // Folded like function names (evaluate-by-operator) and cell labels (helper/cell):
     // Excel writes bare TRUE/FALSE/NULL lower-cased into xlsx formula text, and both Excel
     // and Sheets resolve them case-insensitively.
-    setVariable(name: string, value: FormulaArg): Parser {
+    public setVariable(name: string, value: FormulaArg): Parser {
         this.variables[name.toUpperCase()] = value;
         return this;
     }
@@ -97,7 +97,7 @@ class Parser {
     // `FormulaArg` because variables feed directly into the grammar's arithmetic/comparison
     // pipelines, which expect scalars or arrays (e.g. `setVariable('range', [1, 2, 3])` for
     // CORREL-style formulas).
-    getVariable(name: string): FormulaArg {
+    public getVariable(name: string): FormulaArg {
         return this.variables[name.toUpperCase()];
     }
 

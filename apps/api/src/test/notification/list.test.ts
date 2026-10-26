@@ -2,7 +2,8 @@ import { beforeAll, expect, setSystemTime, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getHome } from '../../lib/home';
-import { assertJson, authedRequest, createTestUser, getTestContext, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { assertJson, authedRequest, createTestUser, getTestContext } from '../setup';
 
 let user: TestUser;
 

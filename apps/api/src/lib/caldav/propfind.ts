@@ -1,7 +1,8 @@
 import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
 import type { ResourceRow } from '../calendar/dav-store';
 import type { CalendarCollection } from '../calendar/resource-store';
-import { type PropfindRequest, selectProps } from '../dav/propfind';
+import type { PropfindRequest } from '../dav/propfind';
+import { selectProps } from '../dav/propfind';
 import { memberRowProps, multistatusResponse, response } from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
 import { calendarCollectionProps } from './xml-builder';

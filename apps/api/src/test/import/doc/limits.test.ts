@@ -1,28 +1,41 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+import * as math from '@workspace/math';
 import { ApiError } from '../../../lib/core/errors';
-import { LIST_LEVELS } from '../../../lib/core/ooxml';
 import * as xml from '../../../lib/core/xml';
-import { openZip, ZipReader } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { QUOTE_LOOK } from '../../../lib/document/looks';
+import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
-import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
-import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
-import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
+import { MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
+import { docxToPmJson, MAX_DOCX_TEXT } from '../../../lib/import/doc/from-docx';
+import { MAX_DOCX_CHART_WORK, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
+import { PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
+import { CHARS_PER_UNIT } from '../../../lib/ooxml/budget';
+import { C_NS, M_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
+import { CHART_NOT_IMPORTED, chartCost } from '../../../lib/ooxml/ooxml-chart';
+import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
+import { LIST_LEVELS } from '../../../lib/ooxml/wordml';
+import { MAX_DECOMPRESSED_BYTES, openZip, ZipReader } from '../../../lib/ooxml/zip';
 import {
     buildDocxWithBody,
+    chartParts,
+    chartRun,
     GOLDEN_DOCX_IMAGE_RUN,
     importDocxBody,
     marksOfType,
     nodesOfType,
+    unprefixed,
 } from '../../fixtures/golden-docx';
 import { build, deflated, stored } from '../../fixtures/raw-zip';
 
 // The bounds an untrusted docx meets: the XML the reader parses, the structures it walks and every value it writes.
+
+// No body here has a section, so Word's: A4 less its 1 in margins, a 601 px text column.
+const COLUMN_PX = 601;
 
 const run = (text: string, rPr = '') => `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t>${text}</w:t></w:r>`;
 const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
@@ -58,15 +71,17 @@ const smartArtData = (inner: string) => ({
 const imported = async (body: string, parts = {}) => (await importDocxBody(body, parts)).json;
 const cells = (json: JSONContent) => nodesOfType(json, 'tableCell');
 const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => node.text);
-// The notes list closes the document, one item per note.
-const notes = (json: JSONContent) => (json.content?.at(-1)?.content ?? []).map((item) => texts(item).join(''));
+// Each note's text, in document order.
+const notes = (json: JSONContent) => nodesOfType(json, 'footnote').map((note) => texts(note).join(''));
 
-// A process of its own with a deadline, for a file that could hold the reader in a loop.
+// A process of its own with a deadline, for a file that could hold the reader in a loop. Bun.write, not console.log:
+// once a module reads process.stdout (lib0 does, so anything that reaches yjs), a console.log into the pipe ends at
+// 64 KB when the process exits.
 function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
     const script = `
         const { docxToPmJson } = await import(process.env.READER);
         const { json } = docxToPmJson(Buffer.from(await Bun.stdin.arrayBuffer()));
-        console.log(JSON.stringify(json));
+        await Bun.write(Bun.stdout, JSON.stringify(json));
     `;
     const child = Bun.spawnSync([process.execPath, '-e', script], {
         env: { ...process.env, READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir) },
@@ -103,7 +118,7 @@ function measuredImport(
         let result;
         try {
             if (process.env.THROUGH === 'transform') {
-                importDocxToEigendocUpdate(data, undefined);
+                importDocxToEigendocUpdate(data, { publicOrigin: undefined, maxMediaBytes: ${MAX_DECOMPRESSED_BYTES} });
                 result = {};
             } else {
                 const { json } = docxToPmJson(Buffer.from(data));
@@ -124,7 +139,7 @@ function measuredImport(
             ...process.env,
             READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir),
             TRANSFORM: Bun.resolveSync('../../../lib/import/doc/transform', import.meta.dir),
-            PEAK_RSS: Bun.resolveSync('../../rss-test-helpers', import.meta.dir),
+            PEAK_RSS: Bun.resolveSync('../../../lib/core/peak-rss', import.meta.dir),
             THROUGH: through,
         },
         stdin: new Uint8Array(docx),
@@ -160,49 +175,46 @@ describe('XML budget', () => {
     const padding = (bytes: number) => `<!--${'x'.repeat(bytes)}-->`;
 
     test('a document.xml past the budget is 413 before it inflates or parses', async () => {
-        const docx = await buildDocxWithBody(`${paragraph(run('Body'))}${padding(MAX_DOCX_XML_BYTES)}`);
+        const docx = await buildDocxWithBody(`${paragraph(run('Body'))}${padding(MAX_PACKAGE_XML_BYTES)}`);
         const reads = spyOn(ZipReader.prototype, 'read');
         const parses = spyOn(xml, 'parseXml');
         spies.push(reads, parses);
         const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
         // The package's structure was read through the spies; the body was not.
         expect(parses).toHaveBeenCalled();
         expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
-        expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(MAX_DOCX_XML_BYTES);
+        expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(MAX_PACKAGE_XML_BYTES);
     });
 
     // Memory follows the elements, not the bytes: 4.5 MB of empty paragraphs would cost more than 16 MB of prose.
     test('a body past the tag budget is 413 before it parses', async () => {
-        const docx = await buildDocxWithBody('<w:p/>'.repeat(MAX_DOCX_XML_TAGS));
+        const docx = await buildDocxWithBody('<w:p/>'.repeat(MAX_PACKAGE_XML_TAGS));
         const parses = spyOn(xml, 'parseXml');
         spies.push(parses);
         const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
         expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(1024 * 1024);
     });
 
-    test('a fontTable.xml past the budget is 413 before the body inflates', async () => {
-        const reads = spyOn(ZipReader.prototype, 'read');
-        spies.push(reads);
+    test('a fontTable.xml past the budget is 413', async () => {
         const error = await rejection(() =>
-            importDocxBody(paragraph(run('Body')), { fontTable: padding(MAX_DOCX_XML_BYTES) }),
+            importDocxBody(paragraph(run('Body')), { fontTable: padding(MAX_PACKAGE_XML_BYTES) }),
         );
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
-        expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     });
 
     test('a styles.xml past the tag budget is 413', async () => {
         const error = await rejection(() =>
-            importDocxBody(paragraph(run('Body')), { styles: '<w:style/>'.repeat(MAX_DOCX_XML_TAGS) }),
+            importDocxBody(paragraph(run('Body')), { styles: '<w:style/>'.repeat(MAX_PACKAGE_XML_TAGS) }),
         );
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     });
 
     test('the budget counts the parts together', async () => {
-        const half = padding(MAX_DOCX_XML_BYTES / 2);
+        const half = padding(MAX_PACKAGE_XML_BYTES / 2);
         const error = await rejection(() => importDocxBody(`${paragraph(run('Body'))}${half}`, { styles: half }));
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     });
 
     test('a 23 MB webSettings.xml beside a small body imports: the reader never parses it', async () => {
@@ -283,40 +295,56 @@ describe('XML budget', () => {
                 .join(''),
             media: { 'word/notes.xml': encode(notes), 'word/_rels/notes.xml.rels': encode('<Relationships>') },
         });
-        expect(texts(json)).toEqual(['Body', '[1]']);
-    });
-
-    // A graphic's part is read once every content part is, so a cap it meets costs the graphic, not the document.
-    test('a SmartArt part past the byte budget is dropped and the document imports', async () => {
-        const { json, warnings } = await importDocxBody(
-            `${paragraph(run('Body'))}${paragraph(smartArt)}`,
-            smartArtData(padding(MAX_DOCX_XML_BYTES)),
-        );
+        // Neither name reads the notes, so the reference has no note to hold.
         expect(texts(json)).toEqual(['Body']);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
     });
 
-    test('a chart past the tag budget is dropped, and a SmartArt after it still reads', async () => {
-        const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
-        const points = '<c:pt idx="0"><c:v>v</c:v></c:pt>'.repeat(MAX_DOCX_XML_TAGS / 4);
-        const chart = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
-        const smartArtPart = smartArtData(
-            '<dgm:pt modelId="1"><dgm:t><a:p><a:r><a:t>Kept</a:t></a:r></a:p></dgm:t></dgm:pt>',
+    // A graphic's part is charged as every other part is: past the budget it refuses the document.
+    test('a SmartArt part past the byte budget is 413', async () => {
+        const error = await rejection(() =>
+            importDocxBody(
+                `${paragraph(run('Body'))}${paragraph(smartArt)}`,
+                smartArtData(padding(MAX_PACKAGE_XML_BYTES)),
+            ),
         );
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
+    });
+
+    test('a chart past the tag budget is 413', async () => {
+        const points = '<c:pt idx="0"><c:v>v</c:v></c:pt>'.repeat(MAX_PACKAGE_XML_TAGS / 4);
+        const error = await rejection(() =>
+            importDocxBody(
+                `${paragraph(run('Body'))}${paragraph(chartRun('rId20'))}`,
+                chartParts([
+                    `<c:chartSpace xmlns:c="${C_NS}"><c:chart><c:title><c:tx><c:strRef><c:strCache>${points}</c:strCache></c:strRef></c:tx></c:title></c:chart></c:chartSpace>`,
+                ]),
+            ),
+        );
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
+    });
+
+    // A cache declares its points in one tag, so a chart is charged them before it is read. Each chart past the
+    // allowance leaves the plain note, and a part named again costs nothing more. An area chart, which Eigen can't
+    // draw, tells the read charts apart.
+    test('a chart past the chart allowance says a chart was not imported', async () => {
+        const series =
+            '<c:ser><c:val><c:numRef><c:numCache><c:ptCount val="2000"/></c:numCache></c:numRef></c:val></c:ser>';
+        const heavy = `<c:chartSpace xmlns:c="${C_NS}"><c:chart><c:plotArea><c:areaChart>${series.repeat(32)}</c:areaChart></c:plotArea></c:chart></c:chartSpace>`;
+        const root = parseOoxml(heavy);
+        const affordable = root ? Math.floor(MAX_DOCX_CHART_WORK / chartCost(root)) : 0;
+        const parts = Array.from({ length: affordable + 1 }, () => heavy);
+        const runs = parts.map((_, i) => paragraph(chartRun(`rId${20 + i}`)));
         const { json, warnings } = await importDocxBody(
-            `${paragraph(run('Body'))}${paragraph(chart)}${paragraph(smartArt)}`,
-            {
-                rels: `${smartArtPart.rels}<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
-                media: {
-                    ...smartArtPart.media,
-                    'word/charts/chart1.xml': new TextEncoder().encode(
-                        `<c:chartSpace xmlns:c="${C}"><c:chart><c:title><c:tx><c:strRef><c:strCache>${points}</c:strCache></c:strRef></c:tx></c:title></c:chart></c:chartSpace>`,
-                    ),
-                },
-            },
+            `${runs.join('')}${paragraph(chartRun('rId20'))}`,
+            chartParts(parts),
         );
-        expect(texts(json)).toEqual(['Body', 'Kept']);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 2 }]);
+        const notes = nodesOfType(json, 'paragraph')
+            .map((node) => texts(node).join(''))
+            .filter(Boolean);
+        const read = 'Area chart not imported';
+        expect(affordable).toBeGreaterThan(1);
+        expect(notes).toEqual([...Array(affordable).fill(read), CHART_NOT_IMPORTED, read]);
+        expect(warnings).toEqual([{ code: 'charts-dropped', count: affordable + 2 }]);
     });
 
     // As a corrupt file is, rather than as a server error.
@@ -356,7 +384,43 @@ describe('XML budget', () => {
     });
 });
 
-// A run's text splits where its face or its look changes, and each piece past a run's first counts against a cap of its own.
+// A run's text splits where its face or its look changes, and each piece past a run's first counts against a cap of its
+// own: about 600 bytes a piece before the output is weighed, so 4 million of them from 5.7 MB of XML took 2.5 GB.
+describe('bands', () => {
+    // A part all four references name is parsed once, and read once: each copy is weighed, so four copies of a header
+    // past the weight are 413 for the price of one read, where four reads of a 38 KB file took 15 s and 8 GB.
+    test('a band part named by all four references is read once, each copy weighed', async () => {
+        const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+        const docx = (references: string[]) =>
+            buildDocxWithBody(`${paragraph(run('Body'))}<w:sectPr>${references.join('')}<w:titlePg/></w:sectPr>`, {
+                rels: ['h1', 'h2', 'f1', 'f2']
+                    .map(
+                        (id) =>
+                            `<Relationship Id="${id}" Type="${REL}/${id[0] === 'h' ? 'header' : 'footer'}" Target="x.xml"/>`,
+                    )
+                    .join(''),
+                media: {
+                    'word/x.xml': new TextEncoder().encode(
+                        `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${paragraph(run('a')).repeat(MAX_DOCX_WEIGHT / 2 + 5_000)}</w:hdr>`,
+                    ),
+                },
+            });
+        const one = measuredImport(await docx(['<w:headerReference w:type="default" r:id="h1"/>']));
+        const four = measuredImport(
+            await docx([
+                '<w:headerReference w:type="default" r:id="h1"/>',
+                '<w:headerReference w:type="first" r:id="h2"/>',
+                '<w:footerReference w:type="default" r:id="f1"/>',
+                '<w:footerReference w:type="first" r:id="f2"/>',
+            ]),
+        );
+        expect(one.status).toBe(413);
+        expect(four.status).toBe(413);
+        expect(four.cpuMs).toBeLessThan(2 * one.cpuMs);
+        expect(four.rssGrowth).toBeLessThan(2 * one.rssGrowth);
+    });
+});
+
 describe('text pieces', () => {
     test('Latin and Arabic in one face and one look are one piece', async () => {
         const result = measuredImport(await buildDocxWithBody(paragraph(run('aب'.repeat(4_000_000)))));
@@ -393,31 +457,9 @@ describe('text pieces', () => {
         const body = paragraph(`<w:hyperlink r:id="rId9">${run('aب'.repeat(MAX_DOCX_PIECES), rich)}</w:hyperlink>`);
         const rels = `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com" TargetMode="External"/>`;
         const result = measuredImport(await buildDocxWithBody(body, { rels }), 'transform');
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
         expect(result.rssGrowth).toBeLessThan(256 * MB);
     }, 30_000);
-
-    // A graphic's part reads through the tags, and a run's pieces are no XML, so neither spends what the other needs.
-    test.each(['before', 'after'])(
-        'a chart that takes nearly every tag %s a split run leaves each its own',
-        async (order) => {
-            const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
-            const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
-            const chart = paragraph(
-                `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
-            );
-            const title = '<c:title><c:tx><c:rich><a:p><a:r><a:t>Kept</a:t></a:r></a:p></c:rich></c:tx></c:title>';
-            const part = `<c:chartSpace xmlns:c="${C}" xmlns:a="${A}"><c:chart>${title}${'<c:pt/>'.repeat(MAX_DOCX_XML_TAGS - 5000)}</c:chart></c:chartSpace>`;
-            const split = paragraph(run('aب'.repeat(5000), '<w:bCs/>'));
-            const { json } = await importDocxBody(order === 'before' ? `${chart}${split}` : `${split}${chart}`, {
-                rels: `<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
-                media: { 'word/charts/chart1.xml': new TextEncoder().encode(part) },
-            });
-            expect(texts(json)).toContain('Kept');
-            expect(texts(json)).toHaveLength(10_001);
-        },
-        30_000,
-    );
 
     test('alternating looks within the piece cap keep each', async () => {
         const json = await imported(paragraph(run('aب'.repeat(1000), '<w:bCs/>')));
@@ -442,7 +484,7 @@ describe('output budget', () => {
         expect(at.json.content).toHaveLength(MAX_DOCX_WEIGHT);
         const past = await buildDocxWithBody('<w:p/>'.repeat(MAX_DOCX_WEIGHT + 1));
         const error = await rejection(() => docxToPmJson(Buffer.from(past)));
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     }, 30_000);
 
     // A tab in a link with eight looks is a text node and nine marks; 360,000 of them took 4.4 GB.
@@ -451,16 +493,53 @@ describe('output budget', () => {
             rels: linkTo('https://example.com'),
         });
         const result = measuredImport(docx, 'transform');
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
         expect(result.rssGrowth).toBeLessThan(128 * MB);
+    }, 30_000);
+
+    // One w:t compresses a gigabyte into a small upload, and the update holds every character.
+    test('text past the cap in all is 413, at it imports', async () => {
+        const half = MAX_DOCX_TEXT / 2;
+        const at = measuredImport(await buildDocxWithBody(paragraph(run('a'.repeat(half))).repeat(2)));
+        expect(at.texts).toBe(2);
+        const past = measuredImport(
+            await buildDocxWithBody(`${paragraph(run('a'.repeat(half)))}${paragraph(run('a'.repeat(half + 1)))}`),
+        );
+        expect([past.status, past.message]).toEqual([413, 'This document is too large to import']);
+    }, 30_000);
+
+    // The update spells a link's href out for every text node it marks, so its characters count as text too.
+    test('a long href in many links is text past the cap: 413', async () => {
+        const href = `https://example.com/${'x'.repeat(1024 * 1024)}`;
+        const body = paragraph(`<w:hyperlink r:id="rId9">${run('Link')}</w:hyperlink>`).repeat(70);
+        const result = measuredImport(await buildDocxWithBody(body, { rels: linkTo(href) }));
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
     }, 30_000);
 
     // The update spells a link's href out for every text node it marks.
     test('a long href weighs by its length', async () => {
         const href = `https://example.com/${'x'.repeat(16 * 1024)}`;
         const result = measuredImport(await buildDocxWithBody(linked(10_000), { rels: linkTo(href) }), 'transform');
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
         expect(result.rssGrowth).toBeLessThan(128 * MB);
+    }, 30_000);
+
+    // A space in m:t writes 26 characters of MathML: these 22 KB zipped built 400M characters, 1.07 GB, before the weigh.
+    test('MathML past the budget is 413 once the budget and one equation are written', async () => {
+        const space = `<m:oMath><m:r><m:t xml:space="preserve">a${' '.repeat(3990)}a</m:t></m:r></m:oMath>`;
+        const docx = await buildDocxWithBody(`<w:p xmlns:m="${M_NS}">${space.repeat(3870)}</w:p>`);
+        const writes = spyOn(math, 'writeMathml');
+        try {
+            const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
+            expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
+            const written = writes.mock.results.map(({ value }) => String(value).length);
+            expect(written.reduce((sum, length) => sum + length, 0)).toBeLessThanOrEqual(
+                MAX_DOCX_WEIGHT * CHARS_PER_UNIT + Math.max(...written),
+            );
+        } finally {
+            writes.mockRestore();
+        }
     }, 30_000);
 });
 
@@ -543,7 +622,7 @@ describe("the editor's TableMap", () => {
         const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
         const row = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="63"/></w:tcPr><w:p/></w:tc></w:tr>';
         const result = measuredImport(await buildDocxWithBody(`<w:tbl>${grid}${row.repeat(45_000)}</w:tbl>`));
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
     }, 60_000);
 });
 
@@ -624,6 +703,25 @@ describe('structure', () => {
         const json = await imported(paragraph(run('Item'), ordered(10)), { styles, numbering });
         expect(nodesOfType(json, 'orderedList')).toHaveLength(1);
     }, 5000);
+
+    // A style's numbering without a level looks through its definition's levels for every paragraph.
+    test('100,000 levels past the ninth in one definition cost 10,000 styled paragraphs nothing', async () => {
+        const levels = Array.from(
+            { length: 100_000 },
+            (_, index) => `<w:lvl w:ilvl="${index + LIST_LEVELS}"><w:numFmt w:val="decimal"/></w:lvl>`,
+        ).join('');
+        const numbering = `<w:abstractNum w:abstractNumId="1">${levels}<w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;
+        const styles =
+            '<w:style w:type="paragraph" w:styleId="L"><w:name w:val="L"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:style>';
+        const docx = await buildDocxWithBody(paragraph(run('Item'), '<w:pStyle w:val="L"/>').repeat(10_000), {
+            numbering,
+            styles,
+        });
+        const started = performance.now();
+        const { json } = docxToPmJson(Buffer.from(docx));
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(nodesOfType(json, 'listItem')).toHaveLength(10_000);
+    }, 60_000);
 
     test('quotes nest at most eight deep, deeper ones joining the eighth', async () => {
         const bar = `<w:pBdr><w:left w:val="single" w:sz="${QUOTE_LOOK.border.sz}" w:space="12" w:color="${QUOTE_LOOK.border.color}"/></w:pBdr>`;
@@ -723,6 +821,7 @@ describe('structure', () => {
         expect(nodesOfType(json, 'heading')).toHaveLength(200);
     }, 30_000);
 
+    // A note in a note is its text, read at most two deep: a note's reference to itself, or back to the note around it, goes.
     test('a footnote that references itself, or one that references it back, is read once', async () => {
         const docx = await buildDocxWithBody(paragraph(`${run('Body')}${noteRef(1)}${noteRef(3)}`), {
             footnotes: [
@@ -732,18 +831,28 @@ describe('structure', () => {
             ].join(''),
         });
         const json = importInChild(docx, 10_000);
-        expect(notes(json)).toEqual(['One[3] ↑', 'Self[2] ↑', 'Two[1] ↑']);
-        expect(texts(json.content?.[0] ?? {})).toEqual(['Body', '[1]', '[2]']);
+        expect(notes(json)).toEqual(['One Two', 'Self']);
     }, 15_000);
 
-    test('a long note referenced 400 times is read once', async () => {
-        const body = paragraph(noteRef(1).repeat(400));
+    // Each reference holds the note, so every copy past the first is charged as the pieces no tag counts are.
+    test('a long note referenced 400 times is read once, and its copies are charged', async () => {
         const footnotes = footnote(1, paragraph(run('Note')).repeat(2000));
+        expect(notes(await imported(paragraph(noteRef(1).repeat(2)), { footnotes }))).toHaveLength(2);
         const started = performance.now();
-        const json = await imported(body, { footnotes });
+        const error = await rejection(() => imported(paragraph(noteRef(1).repeat(400)), { footnotes }));
         expect(performance.now() - started).toBeLessThan(1000);
-        expect(notes(json)).toHaveLength(1);
-        expect(texts(json.content?.[0] ?? {})).toEqual(['[1]'.repeat(400)]);
+        expect(error.status).toBe(413);
+    }, 20_000);
+
+    // Read inside a note too, a note is read once and each copy charged: 1,000 references to a 1,000-paragraph note in
+    // a note took 5 s and 1.2 GB.
+    test('a note referenced 1,000 times in a note is read once there, and its copies are charged', async () => {
+        const footnotes =
+            footnote(1, paragraph(run('x')).repeat(1000)) + footnote(2, paragraph(noteRef(1).repeat(1000)));
+        const started = performance.now();
+        const error = await rejection(() => imported(paragraph(`${run('Body')}${noteRef(2)}`), { footnotes }));
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(error.status).toBe(413);
     }, 20_000);
 
     test('a SmartArt that 1,000 graphics name is read once', async () => {
@@ -756,7 +865,7 @@ describe('structure', () => {
         const { json, warnings } = await importDocxBody(paragraph(smartArt.repeat(1000)), smartArtData(points));
         expect(performance.now() - started).toBeLessThan(1000);
         expect(texts(json)).toHaveLength(1000);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1000 }]);
+        expect(warnings).toEqual([{ code: 'diagrams-dropped', count: 1000 }]);
     }, 60_000);
 
     test('12,000 notes stay linear', async () => {
@@ -774,8 +883,8 @@ describe('structure', () => {
         const item = (text: string) => paragraph(run(text), ordered(2));
         const body = `${item('One')}${floating(`${item('Two')}${paragraph(`${run('Cell')}${noteRef(1)}`)}`)}${item('Three')}`;
         const json = await imported(body, { footnotes: footnote(1, paragraph(run('Note'))) });
-        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1, 2, 3, 1]);
-        expect(notes(json)).toEqual(['Note ↑']);
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1, 2, 3]);
+        expect(notes(json)).toEqual(['Note']);
     });
 
     test('floating tables nest at most eight deep, each read once', async () => {
@@ -830,7 +939,7 @@ describe('structure', () => {
     test('a paragraph past the inline node cap is 413 through the Yjs update', async () => {
         const body = paragraph(`<w:r>${'<w:tab/><w:br/>'.repeat(MAX_INLINE_NODES / 2 + 1)}</w:r>`);
         const result = measuredImport(await buildDocxWithBody(body), 'transform');
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
     }, 30_000);
 
     test('a paragraph at the inline node cap imports', async () => {
@@ -892,6 +1001,16 @@ describe('values', () => {
         expect(marksOfType(json, 'highlight').map((mark) => mark.attrs['color'])).toEqual(['#00ff00', '#ffe4b5']);
     });
 
+    test('a length past 64 characters is none, before it is parsed: no length needs more', async () => {
+        const sizes = async (value: string) =>
+            marksOfType(await imported(paragraph(run('Text', `<w:sz w:val="${value}"/>`))), 'textStyle').map(
+                (mark) => mark.attrs['fontSize'],
+            );
+        expect(await sizes(`${'0'.repeat(60)}24pt`)).toEqual([24]);
+        expect(await sizes(`${'0'.repeat(61)}24pt`)).toEqual([]);
+        expect(await sizes(`24.${'0'.repeat(4_000_000)}pt`)).toEqual([]);
+    });
+
     test('a font that is no Eigen name gives no font', async () => {
         const json = await imported(paragraph(run('Text', '<w:rFonts w:ascii="Inter;x" w:hAnsi="Inter;x"/>')));
         expect(marksOfType(json, 'textStyle')).toEqual([]);
@@ -931,24 +1050,24 @@ describe('figures and media', () => {
     const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 
     test('a figure names its media and carries no src', async () => {
-        const { json, images } = await importDocxBody(paragraph(picture(381000)));
+        const { json, media } = await importDocxBody(paragraph(picture(381000)));
+        expect(media.map((image) => unprefixed(image.name))).toEqual(['image-1.png']);
         expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['mediaName'], node.attrs?.['src']])).toEqual([
-            ['image-1.png', null],
+            [media[0]?.name, null],
         ]);
-        expect(images.map((image) => image.name)).toEqual(['image-1.png']);
     });
 
     // A file may hold 200 MB of media; each image is the bytes the zip read, not a copy of them.
     test('an image is a view of the bytes read, not a copy', async () => {
-        const media = { 'word/media/pixel.png': new Uint8Array(64 * 1024).fill(1) };
-        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)), { media })));
+        const parts = { 'word/media/pixel.png': new Uint8Array(64 * 1024).fill(1) };
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)), { media: parts })));
         const input = build(golden.names().map((name) => stored(name, golden.read(name) ?? new Uint8Array())));
-        const { images } = docxToPmJson(input);
-        expect(images[0]?.data.buffer).toBe(input.buffer);
+        const { media } = docxToPmJson(input);
+        expect(media[0]?.data.buffer).toBe(input.buffer);
     });
 
     // As a damaged optional part costs only its looks.
-    test('a damaged image entry is not stored and counts as unshown; the figure and the rest import', async () => {
+    test('a damaged image entry is left out and counted as dropped; the rest imports', async () => {
         const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)))));
         const input = build(
             golden.names().map((name) => {
@@ -956,10 +1075,11 @@ describe('figures and media', () => {
                 return name.startsWith('word/media/') ? { ...part, crc: part.crc ^ 1 } : part;
             }),
         );
-        const { json, images, warnings } = docxToPmJson(input);
-        expect(images).toEqual([]);
-        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(['image-1.png']);
-        expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+        const { json, media, warnings } = docxToPmJson(input);
+        expect(media).toEqual([]);
+        expect(nodesOfType(json, 'figure')).toEqual([]);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toContain(PICTURE_NOT_IMPORTED);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
 
     test("a figure in a block the schema refuses goes with it, and its media isn't stored", async () => {
@@ -967,20 +1087,36 @@ describe('figures and media', () => {
             throw new RangeError('refused');
         });
         try {
-            const { json, images, warnings } = await importDocxBody(
+            const { json, media, warnings } = await importDocxBody(
                 `${paragraph(picture(381000))}${paragraph(run('After.'))}`,
             );
             expect(nodesOfType(json, 'figure')).toEqual([]);
-            expect(images).toEqual([]);
+            expect(media).toEqual([]);
             expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
         } finally {
             refuses.mockRestore();
         }
     });
 
-    test('a part of a type no image has is not stored: the figure goes, its caption stays', async () => {
+    test('an equation in a block the schema refuses stays in its line', async () => {
+        const refuses = spyOn(docSchema(), 'nodeFromJSON').mockImplementationOnce(() => {
+            throw new RangeError('refused');
+        });
+        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:r><m:t>x</m:t></m:r></m:oMath>`;
+        try {
+            const { json, warnings } = await importDocxBody(
+                `${paragraph(`${run('So ')}${math}`)}${paragraph(run('After.'))}`,
+            );
+            expect(json.content?.[0]?.content?.map((node) => node.type)).toEqual(['text', 'equation']);
+            expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
+        } finally {
+            refuses.mockRestore();
+        }
+    });
+
+    test('a part of a type no image has is not stored: the figure goes, a line saying so and its caption stay', async () => {
         const styles = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
-        const { json, images } = await importDocxBody(
+        const { json, media } = await importDocxBody(
             `${paragraph(GOLDEN_DOCX_IMAGE_RUN.replace('rId4', 'rId9'))}${paragraph(run('Figure 1'), '<w:pStyle w:val="Caption"/>')}`,
             {
                 styles,
@@ -989,19 +1125,36 @@ describe('figures and media', () => {
                 media: { 'word/media/page.png': new TextEncoder().encode('<script>alert(1)</script>') },
             },
         );
-        expect(images).toEqual([]);
+        expect(media).toEqual([]);
         expect(nodesOfType(json, 'figure')).toEqual([]);
-        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Figure 1']);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual([PICTURE_NOT_IMPORTED, 'Figure 1']);
     });
 
-    test('a linked picture is dropped, its alt text kept as text', async () => {
+    test('a linked picture is left out and counted as a pptx and an xlsx count theirs, its alt text after the line', async () => {
         const linked = GOLDEN_DOCX_IMAGE_RUN.replace('r:embed="rId4"', 'r:link="rId9"');
-        const { json, images } = await importDocxBody(paragraph(linked), {
+        const { json, media, warnings } = await importDocxBody(paragraph(linked), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="https://example.com/chart.png" TargetMode="External"/>`,
         });
-        expect(images).toEqual([]);
+        expect(media).toEqual([]);
         expect(nodesOfType(json, 'figure')).toEqual([]);
-        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['A pixel']);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual([PICTURE_NOT_IMPORTED, 'A pixel']);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
+    });
+
+    // A pptx draws its box and an xlsx counts its picture for the same file.
+    test('a picture whose r:embed names no relationship, or an external one, is left out and counted, the external its alt text after the line', async () => {
+        const embedded = (rid: string) => paragraph(GOLDEN_DOCX_IMAGE_RUN.replace('rId4', rid));
+        const { json, media, warnings } = await importDocxBody(`${embedded('rId99')}${embedded('rId9')}`, {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="https://example.com/chart.png" TargetMode="External"/>`,
+        });
+        expect(media).toEqual([]);
+        expect(nodesOfType(json, 'figure')).toEqual([]);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual([
+            PICTURE_NOT_IMPORTED,
+            PICTURE_NOT_IMPORTED,
+            'A pixel',
+        ]);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
     });
 });
 
@@ -1031,11 +1184,11 @@ describe('links', () => {
     });
 });
 
-// The measure behind the budget: a tree costs 20–40× its XML. Seconds of work, so on CI and locally on request.
+// Seconds of work, so on CI and locally on request.
 const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
 
 // What a long report holds: headings, sentences in styled runs, links, lists two deep and tables, repeated up to
-// whichever budget it meets first: the output's, a node and a mark weighing one each.
+// whichever budget it meets first: the XML's bytes or tags, or the output's, a node and a mark weighing one each.
 async function honestBody(): Promise<string> {
     const sentence = 'The committee reviewed the quarterly figures and agreed on the next steps for the project. ';
     const blocks = [
@@ -1059,7 +1212,7 @@ async function honestBody(): Promise<string> {
         (node.marks?.length ?? 0) + (node.content ?? []).reduce((sum, child) => sum + 1 + weigh(child), 0);
     const weight = weigh((await importDocxBody(blocks)).json);
     const margin = 0.98;
-    const fits = Math.min(MAX_DOCX_XML_BYTES / blocks.length, MAX_DOCX_XML_TAGS / tags, MAX_DOCX_WEIGHT / weight);
+    const fits = Math.min(MAX_PACKAGE_XML_BYTES / blocks.length, MAX_PACKAGE_XML_TAGS / tags, MAX_DOCX_WEIGHT / weight);
     return blocks.repeat(Math.floor(margin * fits));
 }
 
@@ -1073,13 +1226,14 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
                 sourceFormat: 'docx',
                 targetType: 'eigendoc',
                 publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
                 data: await buildDocxWithBody(body),
             },
             { ...TRANSFORM_LIMITS.import, priority: 'foreground' },
         );
         expect(response.ok ? undefined : [response.error.status, response.error.message]).toEqual([
             413,
-            'Document too large',
+            'This document is too large to import',
         ]);
     }, 120_000);
 
@@ -1088,6 +1242,56 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
         expect(result.blocks).toBeGreaterThan(10_000);
         expect(result.rssGrowth).toBeLessThan(1024 * MB);
         expect(result.cpuMs).toBeLessThan(10_000);
+    }, 120_000);
+
+    // Word's spelling marks and language tags: 17 elements a paragraph, few of them the document's.
+    test('paragraphs of 17 tags each just under the budgets import within 1 GB of peak RSS', async () => {
+        const lang = '<w:rPr><w:lang w:val="en-US"/></w:rPr>';
+        // A paragraph and its text weigh two.
+        const count = Math.floor(0.98 * Math.min(MAX_PACKAGE_XML_TAGS / 17, MAX_DOCX_WEIGHT / 2));
+        const body = paragraph(
+            `<w:proofErr w:type="spellStart"/>${run('Word', '<w:lang w:val="en-US"/>')}<w:proofErr w:type="spellEnd"/>`,
+            `<w:spacing w:after="0"/>${lang}`,
+        ).repeat(count);
+        const result = measuredImport(await buildDocxWithBody(body));
+        expect(result.blocks).toBe(count);
+        expect(result.rssGrowth).toBeLessThan(1024 * MB);
+    }, 120_000);
+});
+
+// The transform process's memory limit is Linux's alone, the backstop past the budgets. At 1 GiB of data segment the child
+// has 0.35 to 0.7 GB to use, by architecture; empty paragraphs just under the tag budget cost the reader about 2.2 GB
+// before the weight refuses them, so the limit ends it with a crash, never the kernel's OOM killer, whose SIGKILL the job
+// line would show.
+describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the memory of the transform process', () => {
+    test('is 413, ended by the memory limit', async () => {
+        const runner = documentTransformRunner as unknown as { memoryLimitKiB: number };
+        const limit = runner.memoryLimitKiB;
+        runner.memoryLimitKiB = 1024 * 1024;
+        const logSpy = spyOn(console, 'log');
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const docx = await buildDocxWithBody('<w:p/>'.repeat(Math.floor(0.98 * MAX_PACKAGE_XML_TAGS)));
+            const job = {
+                kind: 'import',
+                sourceFormat: 'docx',
+                targetType: 'eigendoc',
+                publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
+            } as const;
+            const error = await runImportToDocumentUpdate(job, docx, {}).catch((reason: unknown) => reason);
+            expect(error).toBeInstanceOf(ApiError);
+            expect(error).toMatchObject({ status: 413, message: 'This document is too large to import' });
+            const line = logSpy.mock.calls
+                .map((args) => String(args[0]))
+                .find((logged) => logged.includes('[transform] job=') && logged.includes('format=docx'));
+            expect(line).toContain('outcome=out-of-memory');
+            expect(line).toMatch(/ signal=SIG(ABRT|SEGV|BUS|TRAP)\b/);
+        } finally {
+            runner.memoryLimitKiB = limit;
+            logSpy.mockRestore();
+            errorSpy.mockRestore();
+        }
     }, 120_000);
 });
 
@@ -1101,13 +1305,14 @@ describe.skipIf(!runSlow)('the Yjs conversion in the Worker', () => {
                 sourceFormat: 'docx',
                 targetType: 'eigendoc',
                 publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
                 data: await buildDocxWithBody(body),
             },
             { ...TRANSFORM_LIMITS.import, priority: 'foreground' },
         );
         expect(response.ok ? undefined : [response.error.status, response.error.message]).toEqual([
             413,
-            'Document too large',
+            'This document is too large to import',
         ]);
     }, 120_000);
 });

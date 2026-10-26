@@ -6,11 +6,13 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { useOptionalDocSearchBar } from '@workspace/ui/components/search/doc-search-provider';
-import { type RefObject, useContext } from 'react';
+import type { RefObject } from 'react';
+import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import {
     clearSelectedContents,
+    copyActiveObject,
     flushPendingCopy,
     handleCopy,
     handleCut,
@@ -50,6 +52,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
             {context.allowEdit && (
                 <DropdownMenuItem
                     onClick={() => {
+                        if (context.activeObject) return copyActiveObject(true);
                         setContext((draftCtx) => {
                             handleCut(draftCtx);
                             flushPendingCopy();
@@ -61,6 +64,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
             )}
             <DropdownMenuItem
                 onClick={() => {
+                    if (context.activeObject) return copyActiveObject(false);
                     setContext((draftCtx) => {
                         handleCopy(draftCtx);
                         flushPendingCopy();

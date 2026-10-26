@@ -1,8 +1,11 @@
-// The element budget both canvas previews share.
-import { sceneReadingOrder, type VectorElement, type VectorScene } from '@workspace/lib/vector';
+// The element budget the canvas previews share, so a crowded drawing or slide costs the transform process no more
+// than a glance does.
+
+import type { VectorElement, VectorScene } from '@workspace/lib/vector';
+import { sceneReadingOrder } from '@workspace/lib/vector';
 
 // A glance, not the whole canvas: like the doc's 20 blocks and the deck's 8 slides, so a scene with
-// tens of thousands of elements cannot make the Worker generate a roughjs path for every one of
+// tens of thousands of elements cannot make the transform process generate a roughjs path for every one of
 // them. One number for both canvas previews — a crowded slide costs what a crowded drawing costs.
 const PREVIEW_MAX_ELEMENTS = 500;
 

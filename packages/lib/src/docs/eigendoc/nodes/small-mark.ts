@@ -1,13 +1,6 @@
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-declare module '@tiptap/core' {
-    interface Commands<ReturnType> {
-        small: {
-            toggleSmall: () => ReturnType;
-        };
-    }
-}
-
+// Off the menus since font sizes, and kept: the Yjs binding deletes the text of a mark the schema lacks.
 export const SmallMark = Mark.create({
     name: 'small',
 
@@ -17,15 +10,5 @@ export const SmallMark = Mark.create({
 
     renderHTML({ HTMLAttributes }) {
         return ['small', mergeAttributes(HTMLAttributes), 0];
-    },
-
-    addCommands() {
-        return {
-            toggleSmall:
-                () =>
-                ({ commands }) => {
-                    return commands.toggleMark(this.name);
-                },
-        };
     },
 });

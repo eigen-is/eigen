@@ -1,5 +1,5 @@
 import { XML } from 'bun';
-import { ApiError } from './errors';
+import { ApiError, isOutOfMemory } from './errors';
 
 // Bun's tree shape keeps document order; namespaces are resolved here, since Bun reports names as written.
 // Callers bound their input: a tree costs about 100× the input in memory when the input is all small elements, and
@@ -20,7 +20,7 @@ type XmlContent = string | XmlElement | XML.Comment | XML.ProcessingInstruction;
 
 // Every refusal of parseXml (malformed, DOCTYPE, too deep, a namespace rule) and of serializeXmlChildren is this 400.
 export class XmlError extends ApiError {
-    constructor(message: string, options?: ErrorOptions) {
+    public constructor(message: string, options?: ErrorOptions) {
         super(400, message, options);
     }
 }
@@ -39,7 +39,7 @@ export function parseXml(input: string | Uint8Array, aliases?: ReadonlyMap<strin
     try {
         return resolve(XML.parse(input, { compact: false }), aliases);
     } catch (error) {
-        if (error instanceof SyntaxError || error instanceof RangeError) {
+        if (error instanceof SyntaxError || (error instanceof RangeError && !isOutOfMemory(error))) {
             throw new XmlError('Malformed XML', { cause: error });
         }
         throw error;
@@ -208,6 +208,10 @@ export function xmlChild(element: XmlElement, ns: string, local: string): XmlEle
     return element.children.find(
         (child): child is XmlElement => isXmlElement(child) && child.ns === ns && child.local === local,
     );
+}
+
+export function hasXmlName(element: XmlElement, ns: string, local: string): boolean {
+    return element.ns === ns && element.local === local;
 }
 
 // As written: trimming is the caller's call.

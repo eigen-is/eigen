@@ -250,7 +250,7 @@ export function generateNKeysBetween(
 // plain materialized objects, so repair mutates `index` in place.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type IndexedElement = { id: string; index: string };
+export type IndexedElement = { id: string; index: string };
 
 // Format-check `index`, then confirm it sits strictly between its neighbors.
 export function isValidFractionalIndex(
@@ -369,4 +369,57 @@ export function syncInvalidIndices<T extends IndexedElement>(elements: T[]): T[]
         }
     }
     return elements;
+}
+
+// `count` keys that place records directly after `afterId` in `ordered` (orderByFractionalIndex's order, key then id):
+// at the front for null, at the end when no record has that id. Records sharing the anchor's key, which concurrent
+// inserts leave behind, have no key between them, so the keys go above all of them: a key between two equal bounds
+// can't exist (generateKeyBetween throws), and this never asks for one.
+export function keysAfter(ordered: readonly IndexedElement[], afterId: string | null, count: number): string[] {
+    if (afterId === null) return generateNKeysBetween(null, ordered[0]?.index ?? null, count);
+    const anchor = ordered.find((e) => e.id === afterId)?.index;
+    if (anchor === undefined) return generateNKeysBetween(ordered[ordered.length - 1]?.index ?? null, null, count);
+    return generateNKeysBetween(anchor, ordered.find((e) => e.index > anchor)?.index ?? null, count);
+}
+
+export type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
+
+// The index writes for a z-order change, {id, index} per element whose key changes, [] for a no-op. The
+// selection moves as a block relative to the non-selected elements, so a non-contiguous selection collapses
+// into one clean gap (Excalidraw's raise/lower); for one element it is a one-step swap. Elements order by
+// index, then id, and the block goes after its anchor through keysAfter. A tied or malformed key is repaired
+// first and the repair rides along in the writes, so a block moved below a tied element lands below it, not
+// above the tie.
+export function zOrderKeys(elements: IndexedElement[], selectedIds: string[], op: ZOp): IndexedElement[] {
+    const stored = new Map(elements.map((e) => [e.id, e.index]));
+    const ordered = syncInvalidIndices(orderByFractionalIndex(elements).map(({ id, index }) => ({ id, index })));
+    const sel = ordered.filter((e) => selectedIds.includes(e.id));
+    const nonSel = ordered.filter((e) => !selectedIds.includes(e.id));
+    if (sel.length === 0) return [];
+
+    // The non-selected element the block goes directly after, null for the front.
+    let afterId: string | null;
+    if (op === 'toFront') {
+        afterId = nonSel[nonSel.length - 1]?.id ?? null;
+    } else if (op === 'toBack') {
+        afterId = null;
+    } else if (op === 'forward') {
+        const topPos = ordered.indexOf(sel[sel.length - 1]);
+        const above = ordered.slice(topPos + 1).find((e) => !selectedIds.includes(e.id));
+        if (!above) return []; // block already above every non-selected element
+        afterId = above.id;
+    } else {
+        const bottomPos = ordered.indexOf(sel[0]);
+        const below = ordered
+            .slice(0, bottomPos)
+            .reverse()
+            .find((e) => !selectedIds.includes(e.id));
+        if (!below) return []; // block already below every non-selected element
+        afterId = nonSel[nonSel.indexOf(below) - 1]?.id ?? null;
+    }
+    const keys = keysAfter(nonSel, afterId, sel.length);
+    sel.forEach((e, i) => {
+        e.index = keys[i];
+    });
+    return ordered.filter((e) => e.index !== stored.get(e.id));
 }

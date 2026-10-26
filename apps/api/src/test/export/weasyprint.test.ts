@@ -41,8 +41,9 @@ describe('shebangPython', () => {
 
 // A fresh process, since the probe is cached, with only a stub on PATH: a `weasyprint` launcher whose shebang names a
 // stub python. Not python3, which the probe would try next. Its `probe` answers the version probe and its `render` a
-// render; each export's outcome comes back.
-async function exportWithStubPython(probe: string, render: string, exports = 1) {
+// render. `script` runs with htmlToPdf, HTML and `outcome` (a render's PDF text or its status and message) in scope, and
+// what it writes to stdout comes back parsed.
+async function runWithStubPython(probe: string, render: string, script: string) {
     const dir = mkdtempSync(join(tmpdir(), 'stub-weasyprint-'));
     const python = join(dir, 'python3.13');
     writeFileSync(python, `#!/bin/sh\nif [ "$2" = -c ]; then\n${probe}\nfi\n/bin/cat > /dev/null\n${render}\n`, {
@@ -56,14 +57,12 @@ async function exportWithStubPython(probe: string, render: string, exports = 1) 
                 process.execPath,
                 '-e',
                 `const { htmlToPdf } = await import(${module});
-                const outcomes = [];
-                for (let i = 0; i < ${exports}; i++) {
-                    outcomes.push(await htmlToPdf(${JSON.stringify(HTML)}).then(
-                        (pdf) => ({ pdf: pdf.toString() }),
-                        ({ status, message }) => ({ status, message }),
-                    ));
-                }
-                process.stdout.write(JSON.stringify(outcomes));`,
+                const HTML = ${JSON.stringify(HTML)};
+                const outcome = (render) => render.then(
+                    (pdf) => ({ pdf: pdf.toString() }),
+                    ({ status, message }) => ({ status, message }),
+                );
+                ${script}`,
             ],
             { env: { ...process.env, PATH: dir }, stdout: 'pipe', stderr: 'pipe' },
         );
@@ -71,10 +70,22 @@ async function exportWithStubPython(probe: string, render: string, exports = 1) 
             new Response(proc.stdout).text(),
             new Response(proc.stderr).text(),
         ]);
-        return { outcomes: JSON.parse(stdout), stderr };
+        return { result: JSON.parse(stdout), stderr, dir };
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
+}
+
+// Each export's outcome, one after the other.
+async function exportWithStubPython(probe: string, render: string, exports = 1) {
+    const { result, stderr } = await runWithStubPython(
+        probe,
+        render,
+        `const outcomes = [];
+        for (let i = 0; i < ${exports}; i++) outcomes.push(await outcome(htmlToPdf(HTML)));
+        process.stdout.write(JSON.stringify(outcomes));`,
+    );
+    return { outcomes: result, stderr };
 }
 
 describe('htmlToPdf with a stub WeasyPrint', () => {
@@ -94,6 +105,28 @@ describe('htmlToPdf with a stub WeasyPrint', () => {
         expect(stderr).toContain('Traceback');
     });
 
+    test('a render that segfaults renders once more', async () => {
+        const { outcomes, stderr } = await exportWithStubPython(
+            'echo 70.0; exit 0',
+            `if [ ! -e "$0.crashed" ]; then : > "$0.crashed"; kill -SEGV $$; fi\nprintf '%%PDF-'`,
+        );
+        expect(outcomes).toEqual([{ pdf: '%PDF-' }]);
+        expect(stderr).toContain('SIGSEGV');
+    });
+
+    test('a render that segfaults twice answers a bare 500', async () => {
+        const { outcomes } = await exportWithStubPython('echo 70.0; exit 0', 'kill -SEGV $$');
+        expect(outcomes).toEqual([{ status: 500, message: 'PDF generation failed' }]);
+    });
+
+    test('a render that fails otherwise renders no more', async () => {
+        const { outcomes } = await exportWithStubPython(
+            'echo 70.0; exit 0',
+            `if [ -e "$0.failed" ]; then printf '%%PDF-'; exit 0; fi\n: > "$0.failed"; exit 1`,
+        );
+        expect(outcomes).toEqual([{ status: 500, message: 'PDF generation failed' }]);
+    });
+
     // `exec`, so the timeout kills the sleep itself and nothing holds the probe's stdout open.
     test('a probe that hangs answers 501 and the next export probes again', async () => {
         const { outcomes } = await exportWithStubPython(
@@ -106,6 +139,90 @@ describe('htmlToPdf with a stub WeasyPrint', () => {
             { pdf: '%PDF-' },
         ]);
     }, 15_000);
+
+    // A render holds GBs, as a transform child does, so one runs at a time: each stub render takes a lock dir and
+    // reports whether another render held it.
+    test('renders run one at a time', async () => {
+        const { result } = await runWithStubPython(
+            'echo 70.0; exit 0',
+            `if /bin/mkdir "$0.lock" 2>/dev/null; then /bin/sleep 0.2; /bin/rmdir "$0.lock"; printf alone; else printf overlap; fi`,
+            `const outcomes = await Promise.all(Array.from({ length: 4 }, () => outcome(htmlToPdf(HTML))));
+            process.stdout.write(JSON.stringify(outcomes));`,
+        );
+        expect(result).toEqual(Array(4).fill({ pdf: 'alone' }));
+    }, 15_000);
+
+    // A waiting render holds its document and its connection, so past MAX_WAITING_RENDERS the export is the
+    // runner's 503, as a full transform queue is.
+    test('past the waiting renders an export answers 503 busy', async () => {
+        const { result } = await runWithStubPython(
+            'echo 70.0; exit 0',
+            "/bin/sleep 0.2; printf '%%PDF-'",
+            `const outcomes = await Promise.all(Array.from({ length: 6 }, () => outcome(htmlToPdf(HTML))));
+            process.stdout.write(JSON.stringify(outcomes));`,
+        );
+        expect(result).toEqual([
+            ...Array(5).fill({ pdf: '%PDF-' }),
+            { status: 503, message: 'The server is busy, please try again in a moment' },
+        ]);
+    }, 15_000);
+
+    // The aborted waiter leaves the queue at once, its HTML with it, and never spawns.
+    test('a waiting export whose request aborts leaves the queue before the render ahead of it ends', async () => {
+        const { result } = await runWithStubPython(
+            'echo 70.0; exit 0',
+            `echo $$ >> "$0.pids"; /bin/sleep 1; printf '%%PDF-'`,
+            `const controller = new AbortController();
+            const started = Date.now();
+            const first = outcome(htmlToPdf(HTML));
+            const second = htmlToPdf(HTML, 1, controller.signal).then(() => 'rendered', () => Date.now() - started);
+            await Bun.sleep(100);
+            controller.abort();
+            const leftAfter = await second;
+            await first;
+            const { readFileSync } = await import('node:fs');
+            const spawned = readFileSync(process.env.PATH + '/python3.13.pids', 'utf8').trim().split('\\n').length;
+            process.stdout.write(JSON.stringify({ leftAfter, spawned }));`,
+        );
+        expect(result.spawned).toBe(1);
+        expect(result.leftAfter).toBeLessThan(800);
+    }, 15_000);
+
+    // The stub execs the sleep, so its pid is the render's: an abort must leave no such process.
+    test('an aborted export kills its render, and one still waiting never starts', async () => {
+        const { result } = await runWithStubPython(
+            'echo 70.0; exit 0',
+            'echo $$ >> "$0.pids"; exec /bin/sleep 30',
+            `const controller = new AbortController();
+            const started = Date.now();
+            const renders = [outcome(htmlToPdf(HTML, 1, controller.signal)), outcome(htmlToPdf(HTML, 1, controller.signal))];
+            const { readFileSync, existsSync } = await import('node:fs');
+            const pids = () => existsSync(process.env.PATH + '/python3.13.pids') ? readFileSync(process.env.PATH + '/python3.13.pids', 'utf8').trim().split('\\n').map(Number) : [];
+            while (pids().length === 0) await Bun.sleep(20);
+            controller.abort();
+            const outcomes = await Promise.all(renders);
+            const alive = pids().filter((pid) => { try { process.kill(pid, 0); return true; } catch { return false; } });
+            process.stdout.write(JSON.stringify({ ms: Date.now() - started, spawned: pids().length, alive, failed: outcomes.every((o) => !o.pdf) }));`,
+        );
+        expect(result).toMatchObject({ spawned: 1, alive: [], failed: true });
+        expect(result.ms).toBeLessThan(5_000);
+    }, 15_000);
+
+    // The wrapper the transform child runs under: the OOM killer takes the render before the API, a data limit, and no core.
+    test.skipIf(process.platform !== 'linux')(
+        'a render runs under the limits a transform child takes',
+        async () => {
+            const { outcomes } = await exportWithStubPython(
+                'echo 70.0; exit 0',
+                '/bin/cat /proc/self/oom_score_adj /proc/self/coredump_filter; /bin/grep -E "^Max (data size|core file size)" /proc/self/limits',
+            );
+            const [{ pdf }] = outcomes;
+            expect(pdf).toStartWith('1000\n00000000\n');
+            expect(pdf).not.toMatch(/Max data size\s+unlimited/);
+            expect(pdf).toMatch(/Max core file size\s+0\s/);
+        },
+        15_000,
+    );
 });
 
 suite('htmlToPdf', () => {

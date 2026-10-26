@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { ApiError, type DatabaseConfig, ManagedDatabase } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
+import { ApiError, ManagedDatabase } from '../../lib/core';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
@@ -126,7 +127,7 @@ describe('write-behind upload pipeline', () => {
 
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // the upload is queued, not yet done
         fault.releaseHungWrites();
-        await mount.drainPendingUploads({ flushNow: true }); // now await the upload
+        await mount.uploadQueue?.drain({ flushNow: true }); // now await the upload
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
     });
@@ -140,13 +141,13 @@ describe('write-behind upload pipeline', () => {
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // queued, not lost
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBeNull(); // nothing reached "S3"
 
         fault.failNextWrites = 0; // outage over
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
         expect(readdirSync(mount.stagingDir)).toHaveLength(0); // staged copies cleaned up on ack
@@ -163,13 +164,13 @@ describe('write-behind upload pipeline', () => {
         await managed.flush();
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await managed.flush();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         expect(mount.pendingUploadCount).toBe(1); // one row per key, newest wins
 
         fault.failNextWrites = 0;
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2); // final state, not a stale snapshot
     });
 
@@ -183,7 +184,7 @@ describe('write-behind upload pipeline', () => {
         managed1.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         managed1.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await m1.mount.closeDatabase(dataDbId);
-        await m1.mount.drainPendingUploads({ flushNow: true });
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(m1.mount, dataDbId, TEST_DIR)).toBeNull(); // not in "S3"
         // The process the restart replaces is gone: its retry timer must not race mount 2's queue.
         await m1.mount.closeAllDatabases();
@@ -199,7 +200,7 @@ describe('write-behind upload pipeline', () => {
         await m2.mount.closeDatabase(dataDbId);
 
         m2.fault.failNextWrites = 0; // outage over
-        await m2.mount.drainPendingUploads({ flushNow: true });
+        await m2.mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(2);
     });
 
@@ -211,7 +212,7 @@ describe('write-behind upload pipeline', () => {
         const managed1 = await m1.mount.createDatabase(docConfig, dataDbId);
         managed1.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await m1.mount.closeDatabase(dataDbId);
-        await m1.mount.drainPendingUploads({ flushNow: true });
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
         expect(m1.mount.pendingUploadCount).toBeGreaterThan(0);
         // The dead process retries nothing. Left open, its jittered retry lands between m2's uploads
         // and backs a row off into the future, so m2's drain ends with that row still pending.
@@ -220,7 +221,7 @@ describe('write-behind upload pipeline', () => {
         // Restart with a healthy backend: init() reconciles + kicks the drain.
         const m2 = createS3Mount('reconcile');
         await m2.mount.init();
-        await m2.mount.drainPendingUploads({ flushNow: true });
+        await m2.mount.uploadQueue?.drain({ flushNow: true });
         expect(m2.mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
     });
@@ -234,7 +235,7 @@ describe('write-behind upload pipeline', () => {
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId); // also enqueues a close-time version snapshot
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBeGreaterThan(0);
 
         // Permanently delete the whole doc — recursively cancels every queued upload + staged copy.
@@ -243,7 +244,7 @@ describe('write-behind upload pipeline', () => {
         expect(readdirSync(mount.stagingDir)).toHaveLength(0);
 
         fault.failNextWrites = 0;
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await mount.readFile(dataDbId)).toBeNull(); // never resurrected
     });
 
@@ -295,7 +296,7 @@ describe('write-behind upload pipeline', () => {
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
 
         // Outage + a new write {2}: the live/staged state is {1,2} but "S3" is still {1}.
@@ -310,7 +311,7 @@ describe('write-behind upload pipeline', () => {
 
         fault.failNextWrites = 0;
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         expect(await countBackingRows(mount, versionId, TEST_DIR)).toBe(2); // current bytes, not stale {1}
     });
@@ -326,7 +327,7 @@ describe('write-behind upload pipeline', () => {
         await mount.closeDatabase(dataDbId); // enqueue
 
         fault.parkWrites = true; // hold the PUT in flight (its body was already read up-front)
-        const draining = mount.drainPendingUploads({ flushNow: true });
+        const draining = mount.uploadQueue?.drain({ flushNow: true });
         await fault.waitForParked((p) => p.key === key); // performUpload is inside storage.write
         await mount.deletePath(containerId); // cancel + storage.delete while the PUT is in flight
         await fault.releaseOldestParked(); // the PUT lands → the guard must delete what it resurrected
@@ -352,11 +353,11 @@ describe('write-behind upload pipeline', () => {
         const comments = await mount.createDatabase(docConfigNoSnap, commentsId);
         comments.db.insert(docSchema.items).values({ id: 1, data: 'c' }).run();
         await mount.closeDatabase(commentsId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(2); // two distinct keys queued, no collision
 
         fault.failNextWrites = 0; // recovery uploads both
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
         expect(await countBackingRows(mount, commentsId, TEST_DIR)).toBe(1);
@@ -370,7 +371,7 @@ describe('write-behind upload pipeline', () => {
         const managed = await m1.mount.createDatabase(docConfigNoSnap, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await m1.mount.closeDatabase(dataDbId);
-        await m1.mount.drainPendingUploads({ flushNow: true });
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
         expect(m1.mount.pendingUploadCount).toBe(1);
 
         // Plant an orphan staging file (a crash between stageCopy and the row insert leaves one).
@@ -389,7 +390,7 @@ describe('write-behind upload pipeline', () => {
         expect(readdirSync(m2.mount.stagingDir)).toHaveLength(1);
 
         m2.fault.failNextWrites = 0; // and the real one still uploads
-        await m2.mount.drainPendingUploads({ flushNow: true });
+        await m2.mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
     });
 
@@ -402,7 +403,7 @@ describe('write-behind upload pipeline', () => {
         await mount.closeDatabase(dataDbId); // enqueue; mount still live
 
         fault.parkWrites = true; // hold the PUT in flight
-        const draining = mount.drainPendingUploads(); // background drain, no flush
+        const draining = mount.uploadQueue?.drain(); // background drain, no flush
         await fault.waitForParked(() => true);
         // Idle teardown (no shutdown deadline): sets uploadClosing + unregisters, does NOT await the
         // in-flight PUT. The drain must then bail via its uploadClosing guards without throwing.
@@ -425,7 +426,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
 
         // A new write {2} whose upload is HELD in-flight: the staged {1,2} copy + pending row exist,
@@ -476,7 +477,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         const managed = await mountA.createDatabase(docConfigNoSnap, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mountA.closeDatabase(dataDbId);
-        await mountA.drainPendingUploads({ flushNow: true });
+        await mountA.uploadQueue?.drain({ flushNow: true });
         expect(mountA.pendingUploadCount).toBe(1);
         await mountA.closeAllDatabases(); // idle teardown — leaves the row + staged copy for replay
 
@@ -495,7 +496,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         expect(readdirSync(mountB.stagingDir)).toHaveLength(1); // its staged bytes were not swept
 
         backing.failNextWrites = 0; // outage over — the relocated upload still drains
-        await mountB.drainPendingUploads({ flushNow: true });
+        await mountB.uploadQueue?.drain({ flushNow: true });
         expect(mountB.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mountB, dataDbId, TEST_DIR)).toBe(1);
     });
@@ -509,7 +510,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingStagedCopy(await mount.getStorageKey(dataDbId))).not.toBeNull();
 
         const tempId = randomUUID();
@@ -557,7 +558,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
                 .run();
         }
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         // The crash image: the synced main file, and 100 unsynced rows only in the -wal.
         const tempPath = mount.getTempPath(dataDbId);
@@ -618,7 +619,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
             ])
             .run();
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(3);
 
         // Unclean shutdown leaves a poison temp: a 0-byte file from an interrupted/empty GET.
@@ -629,7 +630,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(3);
 
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(3); // good object intact, not overwritten
     });
 
@@ -647,7 +648,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
                 .run();
         }
         await managed.flush();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(500);
         await mount.closeDatabase(dataDbId);
 
@@ -662,7 +663,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(500);
 
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(500); // not collapsed to empty
     });
 
@@ -678,7 +679,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
                 .run();
         }
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         // The crash image: a small main file, and every row plus one unsynced edit only in the -wal.
         const tempPath = mount.getTempPath(dataDbId);
@@ -729,7 +730,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
             ])
             .run();
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         return dataDbId;
     }
 
@@ -807,7 +808,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         const managed = await mount.openDatabase(docConfigNoSnap, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 4, data: 'd' }).run();
         await mount.closeDatabase(dataDbId);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBeGreaterThan(0);
         await plantStaleWal(mount.getTempPath(dataDbId));
 
@@ -860,7 +861,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
 
         // A searchable text file dirties a row → the reindexer drains it → extract runs and parks.
         await mount.createFile(rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
-        const draining = mount.flushContentReindex(); // handle to the in-flight drain loop
+        const draining = mount.reindexQueue?.drain(); // handle to the in-flight drain loop
         await entered; // extract is parked at the gate, before its open
 
         const documentDbs = mount.documentDbs;
@@ -918,7 +919,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
 
         // Pre-fix: storage.write never resolves → this drain never returns (the test times out).
         // Post-fix: the PUT deadline fires, performUpload treats it as a failure and backs off.
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
 
         expect(fault.writeCount).toBeGreaterThan(0); // the PUT was attempted…
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // …and left queued (backed off), not hung/cleared

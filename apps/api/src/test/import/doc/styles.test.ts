@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { parseOoxml, W_NS } from '../../../lib/core/ooxml';
 import { Styles } from '../../../lib/import/doc/styles';
+import { parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // What a paragraph style means: roles come from style names along the basedOn chain, which Word keeps English.
@@ -74,7 +74,7 @@ describe('roles', () => {
         const { json } = await importDocxBody(styled('Heading4', 'Four'), { styles });
         expect(types(json)).toEqual(['heading4']);
         expect(nodesOfType(json, 'text')[0]?.marks).toEqual([
-            { type: 'textStyle', attrs: { color: '#2f5496', fontFamily: null, caps: null } },
+            { type: 'textStyle', attrs: { color: '#2f5496', fontFamily: null, fontSize: null, caps: null } },
             { type: 'italic' },
         ]);
     });
@@ -246,5 +246,21 @@ describe('a style with no id', () => {
         const emptyFirst = styles();
         expect(emptyFirst.run('')).toEqual({ bold: true });
         expect(emptyFirst.run(undefined)).toEqual({});
+    });
+});
+
+// Only a paragraph style is a paragraph's default; a character or table style with the id Normal is none.
+describe('the default paragraph style', () => {
+    const stylesOf = (inner: string) =>
+        new Styles(parseOoxml(`<w:styles xmlns:w="${W_NS}">${inner}</w:styles>`) ?? undefined, {
+            font: () => undefined,
+        });
+
+    test('is the style marked default, else a paragraph style with the id Normal', () => {
+        expect(stylesOf(style('Normal', 'Normal')).defaultParagraph).toBe('Normal');
+        expect(
+            stylesOf('<w:style w:type="character" w:styleId="Normal"><w:name w:val="Normal"/></w:style>')
+                .defaultParagraph,
+        ).toBeUndefined();
     });
 });

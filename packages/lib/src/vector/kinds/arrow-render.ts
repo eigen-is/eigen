@@ -4,13 +4,13 @@
 
 import type { Options } from 'roughjs/bin/core';
 import type { RoughGenerator } from 'roughjs/bin/generator';
-import { getFontFamily } from '../../constants/fonts';
-import { escapeXml } from '../../core/xml';
 import { headingIsHorizontal, vectorToHeading } from '../elbow-heading';
-import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
-import { arrowheadGeometry, distance, type Point, round } from '../geometry';
+import { getLineHeightPx } from '../font-metrics';
+import type { Point } from '../geometry';
+import { ARROW_LABEL_PAD, arrowheadGeometry, distance } from '../geometry';
+import { round } from '../points';
 import type { Arrowhead, VectorArrowElement } from '../types';
-import { baseRoughOptions, drawableToSvg } from './render-utils';
+import { baseRoughOptions, drawableToSvg, svgTextLine } from './render-utils';
 
 // The label rect in the arrow's local frame, as arrowLabelBox returns it.
 type LabelBox = { center: Point; width: number; height: number };
@@ -106,19 +106,18 @@ function headOptions(el: VectorArrowElement, solidFill: boolean, roughnessCap: n
     return options;
 }
 
-// The hole under a label: a white ground rect the shaft paints through, with the label rect + 5px of
-// padding in black so nothing shows under the text. A mask rather than an even-odd clipPath because
+// The hole under a label: a white ground rect the shaft paints through, with the label rect + its pad
+// in black so nothing shows under the text. A mask rather than an even-odd clipPath because
 // WeasyPrint ignores `clip-rule="evenodd"` and the shaft then strikes through the label in a PDF.
 // The ground HIDES anything outside it, so it must enclose the whole shaft — the point bounds (and the
 // hole) padded past roughjs jitter + the stroke half-width, never a fixed square (an arrow larger than
 // it would lose its shaft). userSpaceOnUse with an explicit box, because the default mask region
 // resolves against the shaft's bounding box, not the ground rect.
 export function labelMask(id: string, points: Point[], label: LabelBox, strokeWidth: number): string {
-    const pad = 5;
-    const hx = label.center.x - label.width / 2 - pad;
-    const hy = label.center.y - label.height / 2 - pad;
-    const hw = label.width + pad * 2;
-    const hh = label.height + pad * 2;
+    const hx = label.center.x - label.width / 2 - ARROW_LABEL_PAD;
+    const hy = label.center.y - label.height / 2 - ARROW_LABEL_PAD;
+    const hw = label.width + ARROW_LABEL_PAD * 2;
+    const hh = label.height + ARROW_LABEL_PAD * 2;
 
     let minX = hx;
     let minY = hy;
@@ -147,21 +146,26 @@ export function maskShaft(shaftPaths: string, id: string): string {
     return shaftPaths.replaceAll('<path ', `<path mask="url(#${id})" `);
 }
 
-// The label text, centered on the label rect in the arrow's local frame — the renderText baseline math
-// with text-anchor="middle" and color = strokeColor. Height/position come from arrowLabelBox.
+// The label text, centered on the label rect in the arrow's local frame, color = strokeColor.
+// Height/position come from arrowLabelBox.
 export function renderArrowLabel(el: VectorArrowElement, label: LabelBox): string {
     const lineHeightPx = getLineHeightPx(el.fontFamily, el.fontSize);
-    const verticalOffset = getVerticalOffset(el.fontFamily, el.fontSize, lineHeightPx);
-    const fontFamily = escapeXml(getFontFamily(el.fontFamily));
-    const fill = escapeXml(el.strokeColor);
-    const lines = el.text.replace(/\r\n?/g, '\n').split('\n');
     const top = label.center.y - label.height / 2;
-    const cx = round(label.center.x);
-
-    let out = '';
-    for (let i = 0; i < lines.length; i++) {
-        const y = round(top + i * lineHeightPx + verticalOffset);
-        out += `<text x="${cx}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="middle" style="white-space: pre;">${escapeXml(lines[i])}</text>`;
-    }
-    return out;
+    return el.text
+        .replace(/\r\n?/g, '\n')
+        .split('\n')
+        .map((text, i) =>
+            svgTextLine({
+                text,
+                x: label.center.x,
+                y: top + i * lineHeightPx,
+                anchor: 'middle',
+                fontFamily: el.fontFamily,
+                fontSize: el.fontSize,
+                bold: false,
+                color: el.strokeColor,
+                rotate: 0,
+            }),
+        )
+        .join('');
 }

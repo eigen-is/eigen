@@ -70,18 +70,18 @@ export function installHappyDom(options: HappyDomOptions = {}): Window {
     const { onResizeObserver } = options;
     class FakeResizeObserver {
         private targets: Element[] = [];
-        constructor(callback: (entries: { target: Element; contentRect: DOMRect }[]) => void) {
+        public constructor(callback: (entries: { target: Element; contentRect: DOMRect }[]) => void) {
             onResizeObserver?.(() =>
                 callback(this.targets.map((target) => ({ target, contentRect: target.getBoundingClientRect() }))),
             );
         }
-        observe(target: Element) {
+        public observe(target: Element) {
             this.targets.push(target);
         }
-        unobserve(target: Element) {
+        public unobserve(target: Element) {
             this.targets = this.targets.filter((t) => t !== target);
         }
-        disconnect() {
+        public disconnect() {
             this.targets = [];
         }
     }

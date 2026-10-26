@@ -1,22 +1,39 @@
+// The Docs editor's side of the clipboard. A copy or cut writes the eigen items other apps read beside ProseMirror's
+// HTML and text, and a paste places the items it reads. The menus' Cut, Copy and Paste run through here too, so they
+// reach the editor's own handlers as the keys do.
+
 import type { Editor, JSONContent } from '@tiptap/core';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
+import { CHART_DEFAULT_SIZE, newChartSpecParts } from '@workspace/lib/charts';
 import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
+    buildChartClipboardItem,
     buildImageClipboardItem,
     buildTextClipboardItem,
     clipboardTextItemHasContent,
+    pastedChartFields,
     readClipboardBox,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
-import { getFontName } from '@workspace/lib/constants/fonts';
-import { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR, type TitleType } from '@workspace/lib/docs/eigendoc';
+import { getFontName, readCssFontSize } from '@workspace/lib/constants/fonts';
+import type { TitleType } from '@workspace/lib/docs/eigendoc';
+import {
+    ITALIC_HEADING_LEVELS,
+    ITALIC_HEADING_SELECTOR,
+    PAGE_NUMBER_TEXT,
+    readChartAttrs,
+    readEquation,
+} from '@workspace/lib/docs/eigendoc';
 import type {
+    EigenClipboardChartItem,
     EigenClipboardImageItem,
     EigenClipboardItem,
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_IMAGE_BOX, oneOf, TEXT_ALIGNS } from '@workspace/lib/vector';
+import { textOutsideNotes } from './extensions/footnote';
 
 // The clipboard box for a figure at `pos`. Figures store WIDTH ONLY on purpose (the doc reflows and
 // the height must follow the image), but the wire carries both dims, so measure the rendered <img>.
@@ -54,9 +71,18 @@ function textRunBox(view: EditorView, from: number, to: number): ClipboardBox {
     return box;
 }
 
+// A chart node as another app reads it, its look included: what a copy writes and Download image draws.
+export function chartClipboardItem(node: ProseMirrorNode): EigenClipboardChartItem | null {
+    const attrs = readChartAttrs(node.attrs);
+    const { width, height } = attrs;
+    const box = { width: width ?? CHART_DEFAULT_SIZE.width, height: height ?? CHART_DEFAULT_SIZE.height };
+    return buildChartClipboardItem({ chart: node.attrs, box, look: attrs });
+}
+
 // The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file
-// resolves, and the text between them as a text item, a line per paragraph. None resolves → no items,
-// and the copy is ProseMirror's own.
+// resolves, a chart item per chart with inline data, and the text between them as a text item, a line per
+// paragraph, an equation as its text, a page number as its # and a footnote as nothing. None → no items, and the
+// copy is ProseMirror's own.
 function copiedClipboardItems(
     view: EditorView,
     from: number,
@@ -66,16 +92,31 @@ function copiedClipboardItems(
     const items: EigenClipboardItem[] = [];
     let runFrom = from;
     const pushText = (runTo: number) => {
-        const text = view.state.doc.textBetween(runFrom, runTo, '\n').trim();
+        const text = textOutsideNotes(view.state.doc, runFrom, runTo, '\n', '', (leaf) => {
+            if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text;
+            return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
+        }).trim();
         if (text) items.push(buildTextClipboardItem({ text, box: textRunBox(view, runFrom, runTo) }));
     };
+    // A note's text and images are no part of the sentence around its reference: a paste elsewhere places them as one.
+    const push = (pos: number, size: number, item: EigenClipboardItem) => {
+        pushText(pos);
+        runFrom = pos + size;
+        items.push(item);
+    };
     view.state.doc.nodesBetween(from, to, (node, pos) => {
+        if (node.type.name === 'footnote') return false;
+        if (node.type.name === 'chart') {
+            const item = chartClipboardItem(node);
+            if (item) push(pos, node.nodeSize, item);
+            return;
+        }
         if (node.type.name !== 'figure' || !node.attrs.mediaName) return;
         const mediaPath = resolveMediaPath(node.attrs.mediaName);
         if (!mediaPath) return;
-        pushText(pos);
-        runFrom = pos + node.nodeSize;
-        items.push(
+        push(
+            pos,
+            node.nodeSize,
             buildImageClipboardItem({
                 mediaName: node.attrs.mediaName,
                 source: mediaPath,
@@ -86,6 +127,42 @@ function copiedClipboardItems(
     });
     if (items.length > 0) pushText(to);
     return items;
+}
+
+// A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's copy
+// and cut handlers (writeDocsClipboard, then ProseMirror's) write the clipboard as they would for the keys.
+// The browser sends that event to the element that holds the page's selection. A read-only editor doesn't put its
+// own selection on the page, so a viewer's figure would send it to the body. The page's selection is set to the
+// editor's first, so the event lands in the editor.
+export const runClipboardCommand = (editor: Editor, command: 'copy' | 'cut') => {
+    const { view } = editor;
+    if (!view.editable) {
+        const start = view.domAtPos(view.state.selection.from);
+        const end = view.domAtPos(view.state.selection.to);
+        document.getSelection()?.setBaseAndExtent(start.node, start.offset, end.node, end.offset);
+    }
+    document.execCommand(command);
+    editor.commands.focus();
+};
+
+// A menu's Paste. No ClipboardEvent reaches a menu row, so it reads the clipboard, which asks the browser's permission,
+// and hands its HTML, text and images to the editor's own paste in one, so the editor's paste handler and cleanup run
+// on it as on ⌘V.
+export async function pasteFromClipboard(editor: Editor): Promise<void> {
+    const transfer = new DataTransfer();
+    for (const item of await navigator.clipboard.read()) {
+        for (const type of item.types) {
+            if (type === 'text/html' || type === 'text/plain')
+                transfer.setData(type, await (await item.getType(type)).text());
+            else if (type.startsWith('image/'))
+                transfer.items.add(new File([await item.getType(type)], 'image', { type }));
+        }
+    }
+    editor.commands.focus();
+    const event = new ClipboardEvent('paste', { clipboardData: transfer });
+    const html = transfer.getData('text/html');
+    if (html) editor.view.pasteHTML(html, event);
+    else editor.view.pasteText(transfer.getData('text/plain'), event);
 }
 
 // A copy or cut with eigen items writes them beside ProseMirror's own HTML and text, and a cut deletes the
@@ -126,8 +203,9 @@ export function writeDocsClipboard(
         const { fontSize, color } = getComputedStyle(drawn);
         // An inherited color (the body's, a quote's) is left to the target, as a copied paragraph's is.
         const ownColor = color !== getComputedStyle(drawn.parentElement).color;
+        const size = readCssFontSize(fontSize);
         for (const p of dom.querySelectorAll<HTMLElement>(`p[data-type="${type}"]`)) {
-            p.style.fontSize = fontSize;
+            if (size !== undefined) p.style.fontSize = `${size}pt`;
             if (ownColor) p.style.color = color;
         }
     }
@@ -170,12 +248,14 @@ function eigenTextItemContent({ text, typography: typo }: EigenClipboardTextItem
 // marked with data-pm-slice, pastes through that HTML, which keeps the headings, lists and marks its text items
 // flatten; a figure with no item (unresolved at copy) or a failed re-upload is dropped, so none pastes broken. Any
 // other payload is placed in wire order, text as whole paragraphs, so beside text an image takes a paragraph of its
-// own; an image-only paste stays inline at the caret.
+// own; an image-only paste stays inline at the caret. A chart is as wide as it came, or `columnWidth` keeping its
+// shape when wider, as a pasted span.chart is.
 export async function insertEigenItems(
     editor: Editor,
     items: EigenClipboardItem[],
     html: string,
     pastedMediaName: (item: EigenClipboardImageItem) => Promise<string | null>,
+    columnWidth: number,
 ): Promise<void> {
     const sources = new Map<string, EigenClipboardImageItem>();
     for (const item of items) if (item.type === 'image') sources.set(item.mediaName, item);
@@ -200,16 +280,35 @@ export async function insertEigenItems(
         if (item.type === 'text') {
             const paragraphs = eigenTextItemContent(item);
             if (paragraphs.length > 0) editor.chain().focus().insertContent(paragraphs).run();
-        } else if (item.type === 'image') {
-            const mediaName = storedNames.get(item.mediaName);
-            if (!mediaName) continue;
-            const { width } = readClipboardBox(item);
-            const figure = { type: 'figure', attrs: { mediaName, width, caption: item.caption } };
-            editor
-                .chain()
-                .focus()
-                .insertContent(withText ? { type: 'paragraph', content: [figure] } : figure)
-                .run();
+            continue;
         }
+        const node = atomContent(item, storedNames, columnWidth);
+        if (!node) continue;
+        editor
+            .chain()
+            .focus()
+            .insertContent(withText ? { type: 'paragraph', content: [node] } : node)
+            .run();
     }
+}
+
+// An image item as a figure under its stored name, a chart item as a chart in its look.
+function atomContent(
+    item: EigenClipboardItem,
+    storedNames: Map<string, string | null>,
+    columnWidth: number,
+): JSONContent | null {
+    if (item.type === 'image') {
+        const mediaName = storedNames.get(item.mediaName);
+        if (!mediaName) return null;
+        const { width } = readClipboardBox(item);
+        return { type: 'figure', attrs: { mediaName, width, caption: item.caption } };
+    }
+    if (item.type !== 'chart') return null;
+    // Its parts as they came, an attribute each; the schema declares no attribute for a newer build's part.
+    const parts = pastedChartFields(item.parts, newChartSpecParts);
+    if (!parts) return null;
+    const scale = Math.min(1, columnWidth / item.width);
+    const { look } = item;
+    return { type: 'chart', attrs: { ...parts, width: item.width * scale, height: item.height * scale, ...look } };
 }

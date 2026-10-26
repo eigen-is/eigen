@@ -49,12 +49,19 @@ describe('replaySheetsOps', () => {
     });
 
     test('a sheet an addSheet op introduces is materialized like the replay base', () => {
-        // The editor writes `images` and the config collections as whole values, so a patch
-        // against a sheet that lacks them fails to resolve and drops the batch.
+        // The editor writes each image and chart under its own key and each config entry the same way, so a
+        // patch against a sheet that lacks the map fails to resolve and drops the batch.
         const ops: Op[][] = [[{ op: 'addSheet', path: [], value: baseSheet('s2', 'Sheet2') }]];
         const [base, added] = replaySheetsOps([baseSheet('s1', 'Sheet1')], ops);
-        expect(added.images).toEqual([]);
+        expect(added.images).toEqual({});
+        expect(added.charts).toEqual({});
         expect(added.config).toEqual(base.config);
+    });
+
+    test("an image's first write replays on a base stored without images", () => {
+        const image = { id: 'i1', index: 'a0', x: 0, y: 0, width: 40, height: 30, mediaName: 'a.png' };
+        const ops: Op[][] = [[{ op: 'add', id: 's1', path: ['images', 'i1'], value: image }]];
+        expect(replaySheetsOps([baseSheet('s1', 'Sheet1')], ops)[0].images).toEqual({ i1: image });
     });
 
     test('deleteSheet filters by id', () => {

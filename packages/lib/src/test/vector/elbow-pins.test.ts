@@ -1,14 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    materializeFirstPin,
-    moveEndpoints,
-    moveSegment,
-    type PinRoutingContext,
-    renormalize,
-    unpinSegment,
-} from '../../vector/elbow-pins';
-import { parsePoints } from '../../vector/geometry';
-import { DEFAULT_ELEMENT_PROPS, parseFixedSegments, type VectorArrowElement } from '../../vector/types';
+import type { PinRoutingContext } from '../../vector/elbow-pins';
+import { materializeFirstPin, moveEndpoints, moveSegment, renormalize, unpinSegment } from '../../vector/elbow-pins';
+import { parsePoints } from '../../vector/points';
+import type { VectorArrowElement } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, parseFixedSegments } from '../../vector/types';
 
 const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): VectorArrowElement => ({
     ...DEFAULT_ELEMENT_PROPS,

@@ -1,21 +1,28 @@
+// The chat HTTP routes, for example the wizard that creates a chat with its members, and the messages
+// of one chat room. The room is a .eigenchat file in Drive, so a chat in another owner's drive goes
+// through SharedDrive, which checks the access before ChatRoom does the work.
+
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
-import { DRIVE_TYPE_CHAT, type DrivePath, stripEigenExtension, withEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_CHAT, stripEigenExtension, withEigenExtension } from '@workspace/lib/types/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { MAX_EMAIL_LENGTH, validateEmailTarget } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { findChatsByMembers } from '../lib/chat/find-by-members';
 import { requireNonGuest, requireSelf, requireTeamAccess } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
-import { type Drive, getDrive, getSharedDrive } from '../lib/drive';
+import type { Drive } from '../lib/drive';
+import { getDrive, getSharedDrive } from '../lib/drive';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { getTeamHome } from '../lib/home';
+import { foldName } from '../lib/mount/names';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
 const MAX_CHAT_MEMBERS = 100;
 
-// Person-mode members are email addresses by contract — reject owner-shaped ids (`team_*`,
-// bare user ids would pass the generic ACL validator) before any folder or chat side effect.
+// The members of a person chat are email addresses. An owner id, such as `team_…` or a bare user id,
+// would pass the ACL check, so it is refused here, before anything is created.
 function normalizeMemberEmails(raw: string[]): string[] {
     const emails = raw.map((e) => e.trim().toLowerCase()).filter((e) => e.length > 0);
     if (emails.length > MAX_CHAT_MEMBERS) throw new ApiError(422, `A chat takes at most ${MAX_CHAT_MEMBERS} members`);
@@ -26,14 +33,14 @@ function normalizeMemberEmails(raw: string[]): string[] {
     return emails;
 }
 
-// Chat routes allow cross-owner access (chats live inside shared/team drives).
-// Access control: the :chatId routes go through getSharedDrive() (SharedDrive ACL checks); the two
-// wizard routes below are escape-hatch raw Drive behind requireSelf/requireTeamAccess guards.
+// A chat route may serve another owner's chat, because chats live in shared and team drives. The
+// routes of one chat go through getSharedDrive, which checks the access. The two wizard routes below
+// use the Drive itself, behind requireSelf or requireTeamAccess.
 export const chatRouter = new Elysia({ name: 'chat' })
     .use(betterAuth)
 
-    // The wizard's open-don't-duplicate lookup — reads only the caller's own Home, hence
-    // requireSelf + raw Drive.
+    // The wizard looks for a chat with the same members first, so it opens that one instead of making a
+    // second. It reads only the caller's own Home, so requireSelf and the Drive itself are enough.
     .get(
         '/chat/:ownerId/rooms/by-members',
         async ({ params, query, user }): Promise<{ matches: ChatMatch[] }> => {
@@ -52,8 +59,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
         },
     )
 
-    // The wizard's create step: create + share in one server-side sequence, parent defaulting to
-    // the lazily-ensured `chats` folder. Team chats take no members — membership is implicit.
+    // The wizard's create step: the chat is created and shared in one request, in the `Chats` folder
+    // unless the client names one. A team chat takes no members, because the team's members are in it.
     .post(
         '/chat/:ownerId/:mountId/rooms',
         async ({ params, body, user }): Promise<DrivePath> => {
@@ -72,29 +79,30 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
             const members = normalizeMemberEmails(body.members ?? []);
             if (!isTeam && members.length === 0) throw new ApiError(422, 'At least one member is required');
-            // The wizard guards this client-side, but the API contract must too — an empty name
-            // would create (and share) a bare '.eigenchat' dotfile.
+            // The wizard checks this too, but the route must, because an empty name would create and share
+            // a bare '.eigenchat' dotfile.
             let fileName = body.fileName.trim().normalize('NFC');
             if (!fileName) throw new ApiError(422, 'A chat name is required');
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
 
-            // Auto-named chats dedupe against a sibling snapshot; user-typed names 409 on conflict.
-            // Concurrent same-name creates can slip past the snapshot — the unique index 409s the
-            // loser (the race net every create path shares). Dedupe in the full-name space —
-            // Drive.create re-appends the extension.
+            // A chat the wizard named gets a free name beside its siblings, and a name the user typed is a
+            // 409 on a clash. Two creates of one name at once can both pass this check, and then the
+            // unique index answers 409 for the second. The free name is picked with the extension on,
+            // because Drive.create adds it again.
             if (body.dedupeName) {
                 const desired = withEigenExtension(fileName, DRIVE_TYPE_CHAT);
                 const siblings = await drive.getFolderContents(params.mountId, parentId);
-                const used = new Set(siblings.map((s) => s.name.toLowerCase()));
-                if (used.has(desired.toLowerCase())) {
+                const used = new Set(siblings.map((s) => foldName(s.name)));
+                if (used.has(foldName(desired))) {
                     fileName = stripEigenExtension(getUniqueFileName(desired, used));
                 }
             }
             const chat = await drive.create(params.mountId, parentId, fileName, DRIVE_TYPE_CHAT, user);
 
-            // A wizard chat is born shared — on ACL failure purge the fresh container rather than
-            // leave an unshared orphan. Share email suppressed; in-app notification + SSE still fire.
+            // A wizard chat is shared from the start. When the share fails, the new chat goes again
+            // instead of staying unshared. No share email goes out, but the notification and the event
+            // still do.
             if (!isTeam) {
                 try {
                     await drive.updateACLDelta(

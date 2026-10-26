@@ -6,7 +6,8 @@ import {
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
 } from '@workspace/lib/constants/collab';
 import * as decoding from 'lib0/decoding';
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { reloadReplacedHome } from '../../home/reload-replaced-home';

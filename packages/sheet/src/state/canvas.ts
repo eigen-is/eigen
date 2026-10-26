@@ -3,21 +3,22 @@
 // merges -> borders -> edge clear -> filter UI); freeze regions invoke it once
 // per region with their own offsets.
 
-import { type Context, getFlowdata } from './context';
+import type { Context } from './context';
+import { getFlowdata } from './context';
 import { getComputeMap } from './modules/condition-format';
 import { clearMeasureTextCache, defaultFont } from './modules/text';
 import { drawCellBorders } from './render/borders';
+import { canvasColors } from './render/colors';
 import { drawFilterUI } from './render/filter-ui';
 import { mainVisibleRange } from './render/geometry';
 import { drawColumnHeader, drawRowHeader } from './render/headers';
-import { clearCellOverflowCache, computeCellOverflowMap } from './render/overflow';
+import { computeCellOverflowMap } from './render/overflow';
 import { collectVisibleCells, renderCells, renderMergedCells } from './render/phases';
 import type { RenderPass } from './render/types';
-import { defaultStyle } from './render/types';
 import { getSheetIndex } from './utils';
 
-// The render caches (measured text, overflow rows) survive the multi-pass
-// draw bursts; 100ms without a drawMain call invalidates them.
+// The measured-text cache survives the multi-pass draw bursts; 100ms without a
+// drawMain call invalidates it.
 let renderCacheClearTimeout: ReturnType<typeof setTimeout> | undefined;
 
 export class Canvas {
@@ -25,7 +26,7 @@ export class Canvas {
 
     private sheetCtx: Context;
 
-    constructor(canvasElement: HTMLCanvasElement, ctx: Context) {
+    public constructor(canvasElement: HTMLCanvasElement, ctx: Context) {
         this.canvasElement = canvasElement;
         this.sheetCtx = ctx;
     }
@@ -108,9 +109,10 @@ export class Canvas {
         renderCtx.fillStyle = '#ffffff';
         renderCtx.fillRect(offsetLeft - 1, offsetTop - 1, lastColRight - scrollWidth, lastRowBottom - scrollHeight);
         renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
-        renderCtx.fillStyle = defaultStyle.fillStyle;
+        renderCtx.fillStyle = canvasColors(this.canvasElement).cellText;
 
         const sheetIndex = getSheetIndex(this.sheetCtx, this.sheetCtx.currentSheetId);
+        const dataVerification = sheetIndex == null ? undefined : this.sheetCtx.sheets[sheetIndex].dataVerification;
 
         const pass: RenderPass = {
             sheetCtx: this.sheetCtx,
@@ -127,9 +129,16 @@ export class Canvas {
             colEnd,
             flowdata,
             cfCompute: getComputeMap(this.sheetCtx),
-            dataVerification: sheetIndex == null ? undefined : this.sheetCtx.sheets[sheetIndex].dataVerification,
-            // Overflow cell configuration for render area
-            cellOverflowMap: computeCellOverflowMap(this.sheetCtx, renderCtx, colStart, colEnd, rowStart, rowEnd),
+            dataVerification,
+            cellOverflowMap: computeCellOverflowMap(
+                this.sheetCtx,
+                renderCtx,
+                dataVerification,
+                colStart,
+                colEnd,
+                rowStart,
+                rowEnd,
+            ),
             drawGridLines: !this.sheetCtx.currentSheetIsPivot && this.sheetCtx.showGridLines,
         };
 
@@ -156,7 +165,6 @@ export class Canvas {
 
         renderCacheClearTimeout = setTimeout(() => {
             clearMeasureTextCache();
-            clearCellOverflowCache();
         }, 100);
     }
 
@@ -166,7 +174,7 @@ export class Canvas {
 
         renderCtx.save();
         renderCtx.scale(this.sheetCtx.devicePixelRatio, this.sheetCtx.devicePixelRatio);
-        renderCtx.strokeStyle = '#ccc';
+        renderCtx.strokeStyle = canvasColors(this.canvasElement).freezeLine;
         renderCtx.lineWidth = 2;
 
         if (horizontalTop) {

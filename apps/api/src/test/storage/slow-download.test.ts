@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { consumeStream, type DatabaseConfig } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
+import { consumeStream } from '../../lib/core';
 import { getHome } from '../../lib/home';
 import { CONTENT_REINDEX_CAP_SECONDS } from '../../lib/mount/content-reindex-queue';
 import type { Mount } from '../../lib/mount/mount';
@@ -203,7 +204,7 @@ describe('Whole-body reads', () => {
         await mount.init();
         await waitFor(() => fake.heldCount > 0);
         mount.downloads.abort();
-        await mount.flushContentReindex();
+        await mount.reindexQueue?.drain();
         expect(mount.getContentDirtyPaths(CONTENT_REINDEX_CAP_SECONDS, 100)).toHaveLength(20);
     });
 });
@@ -216,7 +217,7 @@ describe('A stalled DELETE', () => {
         await mount.snapshotContainerDataDb(containerId, policy);
         await Bun.sleep(2);
         await mount.snapshotContainerDataDb(containerId, policy);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         const versions = (await mount.getChildByName(containerId, VERSIONS_FOLDER_NAME))!;
         for (const version of await mount.listFolder(versions.id)) {
             fake.faults.set(await mount.getStorageKey(version.id), 'stall');
@@ -289,7 +290,7 @@ describe('A stalled GET and the Home', () => {
         const open = home.drive.getCollabDocument(homeMount.id, doc.id);
         open.catch(() => {});
         await waitFor(() => fake.heldCount > 0);
-        const shutdown = home.shutdown();
+        const shutdown = home.close();
         const next = getHome(ownerId);
         next.catch(() => {});
         try {
@@ -301,6 +302,39 @@ describe('A stalled GET and the Home', () => {
             await shutdown;
             await open.catch(() => {});
             await next;
+        }
+    });
+
+    test('turning a mount off does not wait on a document whose GET stalls', async () => {
+        setStorageTimeoutMs(3_000);
+        const ctx = await getTestContext();
+        const home = await getHome(ctx.alice.user.id);
+        const homeMount = new FaultMount(
+            home.user.id,
+            home.homeDir,
+            { ...createS3MountConfig('slow-off'), s3Config },
+            home.getLocalDatabase.bind(home),
+        );
+        await homeMount.init();
+        registerFaultMount(home.drive, homeMount);
+        const rootId = (await homeMount.getRootFolder())!.id;
+        const doc = await home.drive.create(homeMount.id, rootId, 'Stalled', 'doc', home.user);
+        await settleContainer(homeMount, doc.id);
+        const dataDb = (await homeMount.getChildByName(doc.id, 'data.db'))!;
+
+        fake.faults.set(await homeMount.getStorageKey(dataDb.id), 'stall-body');
+        const open = home.drive.getCollabDocument(homeMount.id, doc.id);
+        open.catch(() => {});
+        await waitFor(() => fake.heldCount > 0);
+        const turnedOff = home.drive.updateMount(homeMount.config, false);
+        try {
+            expect(await settlesWithin([turnedOff], SETTLE_BOUND_MS)).toBe(true);
+            await turnedOff;
+            expect(home.drive.getMounts()).not.toContain(homeMount);
+        } finally {
+            fake.heal();
+            await turnedOff.catch(() => {});
+            await open.catch(() => {});
         }
     });
 });

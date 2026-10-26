@@ -1,12 +1,6 @@
 import { sortedIndex } from 'es-toolkit/compat';
-import {
-    type Context,
-    colLocationByIndex,
-    type Freezen,
-    type GlobalCache,
-    getSheetIndex,
-    rowLocationByIndex,
-} from '..';
+import type { Context, Freezen, GlobalCache } from '..';
+import { colLocationByIndex, getSheetIndex, rowLocationByIndex } from '..';
 
 function cutVolumn(arr: number[], cutindex: number) {
     if (cutindex <= 0) {

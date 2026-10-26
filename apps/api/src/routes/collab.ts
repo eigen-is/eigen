@@ -1,3 +1,7 @@
+// The collab routes: a document's access info and comment index over HTTP, and the WebSocket each
+// editor opens to sync a document. The socket checks read once when it opens and write on every
+// message, and it hands the frames to the CollabDocument the Drive keeps open for that document.
+
 import {
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
@@ -8,12 +12,13 @@ import {
 } from '@workspace/lib/constants/collab';
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
-import { type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import { getCommentIndex } from '../lib/chat/comment-index';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
-import type CollabDocument from '../lib/collab/collabDocument';
+import type { CollabDocument } from '../lib/collab/collab-document';
 import { registerCollabConnection, unregisterCollabConnection } from '../lib/collab/connections';
 import { collabEpochMessage } from '../lib/collab/epoch';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';

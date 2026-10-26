@@ -3,22 +3,18 @@
 // of buffering each part in memory. Supports exactly what our upload routes need:
 // browser/fetch-generated multipart bodies read from a web ReadableStream on Bun.
 
-import {
-    createPartialTailSearch,
-    createSearch,
-    type PartialTailSearchFunction,
-    type SearchFunction,
-} from './buffer-search';
+import type { PartialTailSearchFunction, SearchFunction } from './buffer-search';
+import { createPartialTailSearch, createSearch } from './buffer-search';
 
 export class MultipartParseError extends Error {
-    constructor(message: string) {
+    public constructor(message: string) {
         super(message);
         this.name = 'MultipartParseError';
     }
 }
 
 export class MaxFileSizeExceededError extends MultipartParseError {
-    constructor(maxFileSize: number) {
+    public constructor(maxFileSize: number) {
         super(`File size exceeds maximum allowed size of ${maxFileSize} bytes`);
         this.name = 'MaxFileSizeExceededError';
     }
@@ -82,7 +78,7 @@ class MultipartParser {
     #buffer: Uint8Array | null = null;
     #partSize = 0;
 
-    constructor(boundary: string, maxFileSize: number) {
+    public constructor(boundary: string, maxFileSize: number) {
         this.#maxFileSize = maxFileSize;
         this.#openingBoundary = new TextEncoder().encode(`--${boundary}`);
         this.#findBoundary = createSearch(`\r\n--${boundary}`);
@@ -90,7 +86,7 @@ class MultipartParser {
         this.#boundaryLength = 4 + boundary.length;
     }
 
-    *write(chunk: Uint8Array): Generator<MultipartEvent, void, unknown> {
+    public *write(chunk: Uint8Array): Generator<MultipartEvent, void, unknown> {
         // Epilogue after the closing boundary is ignored per RFC 2046.
         if (this.#state === StateDone) return;
 
@@ -195,7 +191,7 @@ class MultipartParser {
         return { type: 'chunk', data };
     }
 
-    finish(): void {
+    public finish(): void {
         if (this.#state !== StateDone) {
             throw new MultipartParseError('Multipart stream not finished');
         }

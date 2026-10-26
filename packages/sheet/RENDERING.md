@@ -24,7 +24,7 @@ The fork's class and id prefix is `sheet-`. One engine-private class keeps a bar
           freeze lines
           formula range highlights
           <InputBox>                            SheetOverlay/InputBox.tsx   (ContentEditable over canvas)
-          <ImgBoxs>                             ImgBoxs/index.tsx
+          <FloatingObjects>                     FloatingObjects/index.tsx
           <LinkEditCard>                        LinkEditCard/index.tsx
           <DropDownList>                        DataVerification/DropdownList.tsx
           cell right-click menu anchor          ContextMenu/useSheetContextMenu.tsx (shared ContextMenuAnchor; column/row anchors live in the headers)
@@ -43,8 +43,9 @@ The grid itself (cells, text, gridlines, borders, fill colors) is drawn on an HT
 
 - `Sheet/index.tsx` creates a `<canvas>` element sized to the container. On a context change or a scroll it asks for a redraw through `requestAnimationFrame`, so several changes in one frame paint once.
 - `state/canvas.ts` holds the `Canvas` facade class (`drawMain()`, `drawRowHeader()`, `drawColumnHeader()`, `drawFreezeLine()`). Per-cell painting lives in `state/render/`: `cellRender` in `cells.ts`, driven by the `collectVisibleCells → renderCells → renderMergedCells` phases.
-- Gridlines are stroked paths in the default stroke color (`state/render/types.ts`).
+- Gridlines are stroked paths in the default stroke color (`state/render/types.ts`), on each track's last pixel: a row or column is its stored size, gridline included (`calcRowColSize` in `state/context.ts`).
 - Cell text is `ctx.fillText()` with font metrics from `getMeasureText()`.
+- Text that overflows into empty neighbours paints once, over its whole span, when the span's last visible cell renders (`cellOverflowRender`); `computeCellOverflowMap` finds the spans for the visible rows on every draw ([SHEETS.md § Text spills into empty neighbours](../../docs/SHEETS.md#text-spills-into-empty-neighbours)).
 - Cell backgrounds are `ctx.fillRect()` with the cell's fill color.
 - Borders use `ctx.setLineDash()` over the 13 border styles of `BORDER_STYLES` (`packages/lib/src/sheets/borders.ts`).
 - With frozen rows or columns, `Sheet/index.tsx` draws each pane separately (`drawFrozenBoth()`, `drawFrozenHorizontal()`, `drawFrozenVertical()`), each with its own scroll offset.
@@ -59,7 +60,7 @@ Everything interactive (selection, editing, resize handles, images) is a React D
 
 ### Theming: the light-pinned surface
 
-The workbook surface renders the same in light and dark mode. Like the docs page, the paper does not re-theme; only the app chrome around it does (MenuBar, SheetTab, portaled popups). The Sheet root (`Sheet/index.tsx`, wrapping canvas, headers and overlays) and the formula bar (`FxEditor`) carry the `.eigen-paper` scope class from `packages/ui/src/styles/globals.css`. It re-pins the theme tokens the surface reads to their light values and re-resolves inherited `color` inside the scope. Canvas colors are hardcoded light, and `--sheet-*` and `--app-current-color` do not change with the theme.
+The workbook surface renders the same in light and dark mode. Like the docs page, the paper does not re-theme; only the app chrome around it does (MenuBar, SheetTab, portaled popups). The Sheet root (`Sheet/index.tsx`, wrapping canvas, headers and overlays) and the formula bar (`FxEditor`) carry the `.eigen-paper` scope class from `packages/ui/src/styles/globals.css`. It re-pins the theme tokens the surface reads to their light values and re-resolves inherited `color` inside the scope. The grid's colors (`--sheet-grid-line`, `--sheet-header-*`, `--sheet-cell-text`) are light-only variables in `globals.css`, shared with the chart Edit data grid, and the canvas reads them off its own element once per draw burst (`state/render/colors.ts`); its other colors, such as cell backgrounds, are hardcoded light. `--sheet-*` and `--app-current-color` do not change with the theme.
 
 In-grid popup cards (LinkEditCard, the validation hint card) opt back into the theme with `.eigen-paper-chrome`. Radix-portaled popups leave the scope by themselves. The add-row control stays pinned, because it sits directly on the paper with no card behind it. Its shadcn `dark:` variants still match inside the scope and resolve against the pinned tokens, so it is legible and near-light rather than exactly light, which is acceptable outside the grid.
 
@@ -132,13 +133,13 @@ The autofilter range border and the per-column buttons are painted on the canvas
 - The glyphs follow Google's (a lazy `Path2D`): a bare strainer when idle, a filled green funnel when the column has an active filter, and a green wash on hover.
 - Geometry comes from `filterOptions.items` (`createFilterOptions` in `state/modules/filter.ts`) and the shared `FILTER_BUTTON_WIDTH`/`FILTER_BUTTON_HEIGHT`, the values the mousedown hit test reads too ([SHEETS.md § Painter and hit test read one rect](../../docs/SHEETS.md#painter-and-hit-test-read-one-rect)).
 
-### 7. Images (React DOM + `<img>`)
+### 7. Images and charts (React DOM)
 
-**File**: `ImgBoxs/index.tsx`
+**File**: `FloatingObjects/index.tsx`
 
-- The active image sits at `z-index: 20` and wears the shared `ObjectTransform` ring (`packages/ui/src/components/transform/`) for resize and rotate.
-- An inactive image sits at `z-index: 19`: an `<img>` in an `overflow-hidden` div.
-- ID: `sheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`).
+- One `FloatingObjectFrame` per image or chart, in `floatingItems` order, so DOM order is paint order and an image above a chart in the index draws above it.
+- Not selected at `z-index: 19`, selected at 20, wearing the shared `ObjectTransform` ring (`packages/ui/src/components/transform/`) for resize and rotate, both kinds.
+- The frame is an unrotated positioned box; the content turns inside it, so a hit follows the turned shape. An image is an `<img>` (`ImageContent`), a chart the painter's SVG on the background color (`ChartContent`). Why a chart redraws only when its cells change: [SHEETS.md § A chart on the grid redraws only when a cell matrix it reads changes](../../docs/SHEETS.md#a-chart-on-the-grid-redraws-only-when-a-cell-matrix-it-reads-changes).
 
 ### 8. Comments
 
@@ -203,7 +204,7 @@ Scrolling is the browser's own. `cellArea` (`overflow: auto`, holding a full-siz
 - **Stateful singletons** are never duplicated. The cell editor (InputBox) and the validation dropdown trigger render only into the region that holds their anchor cell, clipped. So editing a frozen cell keeps the editor pinned under the pane, and an editor whose cell scrolls under a band clips at the boundary, as in Excel. Popup chrome (the validation hint card, LinkEditCard) pins with its anchor's pane but never clips. The resize and freeze drag lines span panes and live in an unclipped wrapper on the main transform. With no freeze there is exactly one unclipped main region.
 - The `sheet-cell-flow` spacer (which sets the scroll range and holds the add-row control at the bottom, pinned via `left: scrollLeft`) and the cell context-menu anchor stay direct children of `cellArea`.
 
-**Hit testing.** The layer carries `z-index: 1`, so its content sits above the full-size cell-flow spacer that follows it. Each region's translated content div is its own stacking context, so the children's z-indexes (8 to 30) order them only among themselves. The region divs are `pointer-events: none`. Interactive overlay elements turn it back on with `pointer-events: auto` (selection handles, images, the open editor, drag lines, the validation trigger and hint, the link card), and everything else falls through to `cellArea`. The InputBox that is not editing sits at `z-index: -1` and is hidden with `opacity: 0` and `pointer-events: none`, so the cell input stays focusable at the cell position without painting over the grid or swallowing clicks on the focus cell.
+**Hit testing.** The layer carries `z-index: 1`, so its content sits above the full-size cell-flow spacer that follows it. Each region's translated content div is its own stacking context, so the children's z-indexes (8 to 30) order them only among themselves. The region divs are `pointer-events: none`. Interactive overlay elements turn it back on with `pointer-events: auto` (selection handles, images, charts, the open editor, drag lines, the validation trigger and hint, the link card), and everything else falls through to `cellArea`. The InputBox that is not editing sits at `z-index: -1` and is hidden with `opacity: 0` and `pointer-events: none`, so the cell input stays focusable at the cell position without painting over the grid or swallowing clicks on the focus cell.
 
 ## Z-Index Stack
 
@@ -218,11 +219,11 @@ Scrolling is the browser's own. `cellArea` (`overflow: auto`, holding a full-siz
 | 16 | Move / extend indicators | SheetOverlay |
 | 18 | Copy selection borders (dashed) | SheetOverlay |
 | 19 | Cell editor (InputBox) | SheetOverlay/InputBox |
-| 19 | Images (inactive) | ImgBoxs |
-| 20 | Active image (with resize handles) | ImgBoxs |
+| 19 | Images and charts (not selected) | FloatingObjects |
+| 20 | Selected image or chart (with the transform ring) | FloatingObjects |
 | 50 | Data verification dropdown (portaled shadcn) | DataVerification/DropdownList |
 
-The SheetOverlay, InputBox and ImgBoxs values live inside `.sheet-cell-overlay-layer` (`z-index: 1`), in per-pane region viewports whose translated content divs are each a stacking context ([§ Scrolling](#scrolling)). So they order those elements only among themselves within a pane, and across panes the region clip rects do not overlap. The layer as a whole sits above the canvas and the cell-flow spacer. The header values (10 and 11 for the highlights, 12 for the resize handle, 20 for the freeze handle) are likewise scoped to each header region wrapper. Across wrappers, DOM order decides: the passive regions, then the hover region, then the freeze-handle wrapper on top.
+The SheetOverlay, InputBox and FloatingObjects values live inside `.sheet-cell-overlay-layer` (`z-index: 1`), in per-pane region viewports whose translated content divs are each a stacking context ([§ Scrolling](#scrolling)). So they order those elements only among themselves within a pane, and across panes the region clip rects do not overlap. The layer as a whole sits above the canvas and the cell-flow spacer. The header values (10 and 11 for the highlights, 12 for the resize handle, 20 for the freeze handle) are likewise scoped to each header region wrapper. Across wrappers, DOM order decides: the passive regions, then the hover region, then the freeze-handle wrapper on top.
 
 ## Key Performance Patterns
 

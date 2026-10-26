@@ -1,21 +1,23 @@
 import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { VectorElement } from '@workspace/lib/vector';
 import {
     elementsInFrame,
     parseBackgroundFill,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
-    type VectorElement,
 } from '@workspace/lib/vector';
 import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
+import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';
+import { ContextMenuAnchor, MenuSections, useContextMenu } from '@workspace/ui/components/context-menu';
+import { DocumentImportPicker } from '@workspace/ui/components/drive';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
+import type { CanvasHandle } from '@workspace/ui/components/vector';
 import {
     CanvasDocumentShell,
     CanvasEditor,
-    type CanvasHandle,
     CanvasPropertiesPanel,
     CanvasToolbar,
     useActiveFrame,
@@ -26,9 +28,10 @@ import {
     useSelection,
     useTool,
 } from '@workspace/ui/components/vector';
-import { ArrowDownToLine, ArrowUpToLine, CopyPlus, Play, Plus, Presentation, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpToLine, CopyPlus, FileSliders, Play, Plus, Presentation, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSlideDnd } from './hooks/use-slide-dnd';
+import { PageSetupDialog } from './page-setup-dialog';
 import { PresentMode, presentStep } from './present-mode';
 import { seedDeck } from './seed-deck';
 import { SlideBackgroundPanel } from './slide-background-panel';
@@ -62,7 +65,7 @@ export function SlideEditor(props: SlideEditorProps) {
     );
 }
 
-// The deck: a canvas of 1920x1080 frames, one per slide. Tool, selection and the active frame are
+// The deck: a canvas of frames of the deck's slide size, one per slide. Tool, selection and the active frame are
 // lifted here so the toolbar, rail, canvas and panel share one source; the viewport, gestures,
 // keymap, clipboard and in-place editing are all the engine's.
 function SlideEditorInner({
@@ -171,6 +174,7 @@ function SlideEditorInner({
     }, [doc.elements, searchMatchedIds]);
 
     const [isPresenting, setIsPresenting] = useState(false);
+    const [pageSetupOpen, setPageSetupOpen] = useState(false);
 
     // Adding a slide activates it, the way inserting one always has.
     const addSlideAfter = (afterId: string | null) => {
@@ -183,7 +187,7 @@ function SlideEditorInner({
         addSlideAfter(index > 0 ? doc.frames[index - 1].id : null);
     };
 
-    // One menu for a slide, opened from its rail thumbnail or from empty space on the canvas.
+    // The rail thumbnail's menu; empty space on the canvas opens the canvas' own, with these rows below its Paste.
     const slideMenu = useContextMenu<string>();
     const menuFrameId = slideMenu.item;
 
@@ -191,6 +195,27 @@ function SlideEditorInner({
         const copyId = duplicateFrame(id);
         if (copyId) setFrameId(copyId);
     };
+
+    const slideMenuSections = (id: string): MenuSectionsProps => ({
+        create: (
+            <>
+                <DropdownMenuItem onClick={() => addSlideAbove(id)}>
+                    <ArrowUpToLine className="h-4 w-4" /> New slide above
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => addSlideAfter(id)}>
+                    <ArrowDownToLine className="h-4 w-4" /> New slide below
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => duplicateSlide(id)}>
+                    <CopyPlus className="h-4 w-4" /> Duplicate slide
+                </DropdownMenuItem>
+            </>
+        ),
+        destructive: (
+            <DropdownMenuItem variant="destructive" disabled={doc.frames.length <= 1} onClick={() => deleteFrame(id)}>
+                <Trash2 className="h-4 w-4" /> Delete slide
+            </DropdownMenuItem>
+        ),
+    });
 
     const enterPresent = useCallback(() => {
         // Nothing to show on a frameless deck, and latching isPresenting there would take fullscreen
@@ -248,6 +273,7 @@ function SlideEditorInner({
 
     // Toolbar "Add image": the picker lives here, placement goes through the canvas handle.
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
+    const [importPickerOpen, setImportPickerOpen] = useState(false);
     const insertImage = canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined;
     const canvasRef = useRef<CanvasHandle | null>(null);
 
@@ -322,14 +348,21 @@ function SlideEditorInner({
                     toolLocked={toolLocked}
                     setToolLocked={setToolLocked}
                     onInsertImage={insertImage}
+                    canvasRef={canvasRef}
                     onAccessDialogOpen={onAccessDialogOpen}
                     createLabel="New slides"
                     createIcon={Presentation}
                     createType="slides"
+                    onImport={() => setImportPickerOpen(true)}
+                    fileItems={
+                        <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
+                            <FileSliders className="h-4 w-4" /> Page setup…
+                        </DropdownMenuItem>
+                    }
                     insertItems={
                         <>
                             <DropdownMenuItem onClick={() => addSlideAfter(frameId)}>
-                                <Plus className="h-4 w-4 mr-2" /> New slide
+                                <Plus className="h-4 w-4" /> New slide
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                         </>
@@ -354,9 +387,13 @@ function SlideEditorInner({
                     elements={frameElements}
                     selectedElements={selectedElements}
                     updateElements={doc.updateElements}
+                    reorderElements={doc.reorderElements}
+                    replaceElement={doc.replaceElement}
+                    setSelectedIds={setSelectedIds}
                     undoManager={doc.undoManager}
                     aspectLocked={aspectLocked}
                     onAspectLockChange={setAspectLocked}
+                    slideWidth={doc.meta.slideWidth}
                     emptyTitle="Slide"
                     emptySection={
                         frame ? (
@@ -376,7 +413,7 @@ function SlideEditorInner({
                 />
             }
         >
-            {/* The rail is desktop-only: a phone pages with a swipe (spec D8), and a 52-wide column
+            {/* The rail is desktop-only: a phone pages with a swipe, and a 52-wide column
                 would take a third of the screen. */}
             {!isMobile && (
                 <SlidePanel
@@ -402,6 +439,7 @@ function SlideEditorInner({
                             canEdit={canEdit}
                             ownerId={ownerId}
                             mountId={path.mountId}
+                            fileName={path.name}
                             tool={tool}
                             setTool={setTool}
                             toolLocked={toolLocked}
@@ -418,9 +456,9 @@ function SlideEditorInner({
                             searchMatchedIds={searchMatchedIds}
                             searchActiveId={searchActiveId}
                             onInsertImage={insertImage}
-                            onEmptyContextMenu={(e) => slideMenu.handleContextMenu(e, frameId)}
+                            backgroundMenu={slideMenuSections(frameId)}
                             // A view-only deck pages on a one-finger swipe; an editable one keeps
-                            // that finger for the canvas (D4.13).
+                            // that finger for the canvas.
                             onSwipeFrame={canEdit ? undefined : stepFrame}
                         />
                     </div>
@@ -436,29 +474,23 @@ function SlideEditorInner({
                 </div>
             )}
             <ContextMenuAnchor contextMenu={slideMenu}>
-                {menuFrameId && (
-                    <>
-                        <DropdownMenuItem onClick={() => addSlideAbove(menuFrameId)}>
-                            <ArrowUpToLine className="h-4 w-4 mr-2" /> New slide above
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => addSlideAfter(menuFrameId)}>
-                            <ArrowDownToLine className="h-4 w-4 mr-2" /> New slide below
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => duplicateSlide(menuFrameId)}>
-                            <CopyPlus className="h-4 w-4 mr-2" /> Duplicate
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            variant="destructive"
-                            disabled={doc.frames.length <= 1}
-                            onClick={() => deleteFrame(menuFrameId)}
-                        >
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
-                        </DropdownMenuItem>
-                    </>
-                )}
+                {menuFrameId && <MenuSections {...slideMenuSections(menuFrameId)} />}
             </ContextMenuAnchor>
+            <DocumentImportPicker
+                path={path}
+                open={importPickerOpen}
+                onOpenChange={setImportPickerOpen}
+                target="eigenslides"
+                afterFrameId={frameId}
+            />
+            {/* doc.meta re-reads on a peer's write, so the open dialog follows it. */}
+            <PageSetupDialog
+                open={pageSetupOpen}
+                onOpenChange={setPageSetupOpen}
+                slideSize={doc.meta.slideSize}
+                canWrite={canEdit}
+                onSlideSizeChange={(slideSize) => doc.updateMeta({ slideSize })}
+            />
         </CanvasDocumentShell>
     );
 }

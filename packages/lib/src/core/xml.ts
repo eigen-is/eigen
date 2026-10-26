@@ -32,3 +32,12 @@ export function escapeXml(value: string): string {
 export function escapeXmlText(value: string): string {
     return xmlEscape(value, /[&<>"']/g);
 }
+
+// After the root's open tag, not the first `>`, so a prolog, DOCTYPE or comment an uploaded .svg carries stays ahead.
+export function spliceAfterSvgOpenTag(svg: string, block: string): string {
+    const start = svg.search(/<svg[\s>]/);
+    if (start === -1) return svg;
+    const end = svg.indexOf('>', start);
+    if (end === -1) return svg;
+    return svg.slice(0, end + 1) + block + svg.slice(end + 1);
+}

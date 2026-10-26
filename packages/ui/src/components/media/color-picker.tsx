@@ -1,4 +1,5 @@
-import { EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, type EigenColor, isLightColor } from '@workspace/lib/constants';
+import type { EigenColor } from '@workspace/lib/constants';
+import { EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, isLightColor } from '@workspace/lib/constants';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, RotateCcw } from 'lucide-react';
 

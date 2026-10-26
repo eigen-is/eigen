@@ -199,6 +199,17 @@ expseq
       $1.push($3);
       $$ = $1;
     }
+  | /* empty, before the first separator */ {
+      $$ = [OMITTED];
+    }
+  | expseq ';' {
+      $1.push(OMITTED);
+      $$ = $1;
+    }
+  | expseq ',' {
+      $1.push(OMITTED);
+      $$ = $1;
+    }
 ;
 
 variableSequence

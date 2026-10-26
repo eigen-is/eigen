@@ -1,3 +1,7 @@
+// The contract between the mail part of a Home and the place its messages are kept. Today there is
+// one store, the Maildir folders that the IMAP server shares; the contract keeps the rest of the
+// mail code independent of how messages are kept on disk.
+
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type {
     AddressObject,

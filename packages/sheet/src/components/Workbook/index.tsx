@@ -1,34 +1,52 @@
+import { isSketchCapped, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
     classifyPaste,
     clipboardTextItemHasContent,
+    pastedChartFields,
     svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
+import type { SheetFloatingItem } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import type {
+    EigenClipboardChartItem,
     EigenClipboardData,
     EigenClipboardImageItem,
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
-import { cloneDeep } from 'es-toolkit/compat';
-import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } from 'immer';
+import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
+import { cloneDeep, isEqual } from 'es-toolkit/compat';
+import type { Patch } from 'immer';
+import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
+import { v4 as uuidv4 } from 'uuid';
+import type { RefValues, SetContextOptions } from '../../context';
+import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
+import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
+import type {
+    CellWithRowAndCol,
+    ChartPanelState,
+    Context,
+    GlobalCache,
+    Op,
+    Settings,
+    Sheet as SheetType,
+} from '../../state';
 import {
     api,
     applySheetView,
-    type CellWithRowAndCol,
     COPY_ACTION_TABLE_MARKER,
-    type Context,
+    createContextResolver,
     defaultContext,
     defaultSettings,
+    deleteActiveObject,
     ensureSheetIndex,
     filterPatch,
-    type GlobalCache,
     getFlowdata,
     getSheetIndex,
     groupValuesRefresh,
@@ -37,12 +55,12 @@ import {
     initSheetIndex,
     insertRowCol,
     inverseRowColOptions,
-    type Op,
+    pasteChart,
     patchToOp,
-    type Settings,
-    type Sheet as SheetType,
     settleCurrentSheet,
+    sheetChartClipboardItem,
     warmFormulaCellInfoMap,
+    withoutDeletedFloatingEdits,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
@@ -77,7 +95,7 @@ function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboard
             width: ctx.visibledatacolumn[c2] - (c1 === 0 ? 0 : ctx.visibledatacolumn[c1 - 1]),
             height: ctx.visibledatarow[r2] - (r1 === 0 ? 0 : ctx.visibledatarow[r1 - 1]),
         },
-        typography: { fontSize: getFlowdata(ctx)?.[r1]?.[c1]?.fs ?? 10 }, // 10 = the default cell size
+        typography: { fontSize: getFlowdata(ctx)?.[r1]?.[c1]?.fs ?? SHEET_DEFAULT_FONT_SIZE },
     });
 }
 
@@ -239,11 +257,31 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             // noUndo: emit the op (peers need the swap/correction) but record no local
                             // undo entry, so a cross-mount paste stays a single ⌘Z.
                             if (!options.noUndo) {
-                                globalCache.current.undoList.push({
-                                    patches: filteredPatches,
-                                    inversePatches: filteredInversePatches,
-                                    options,
-                                });
+                                const { undoList, undoGesture } = globalCache.current;
+                                const last = undoList.at(-1);
+                                if (undoGesture && last?.gesture === undoGesture) {
+                                    const [patch] = filteredPatches;
+                                    const previous = last.patches.at(-1);
+                                    // A field typed key by key keeps its first old value and its latest new one.
+                                    if (
+                                        filteredPatches.length === 1 &&
+                                        patch.op === 'replace' &&
+                                        previous?.op === 'replace' &&
+                                        isEqual(previous.path, patch.path)
+                                    ) {
+                                        last.patches[last.patches.length - 1] = patch;
+                                    } else {
+                                        last.patches.push(...filteredPatches);
+                                        last.inversePatches.unshift(...filteredInversePatches);
+                                    }
+                                } else {
+                                    undoList.push({
+                                        patches: filteredPatches,
+                                        inversePatches: filteredInversePatches,
+                                        options,
+                                        gesture: undoGesture,
+                                    });
+                                }
                                 globalCache.current.redoList = [];
                             }
                             emitOp(result, filteredPatches, options);
@@ -260,6 +298,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.undoList.pop();
             if (history) {
                 setContext((ctx_) => {
+                    // A peer deleted an image or chart this entry edits: immer throws on those writes, the rest apply.
+                    history.inversePatches = withoutDeletedFloatingEdits(ctx_, history.inversePatches);
+                    if (history.inversePatches.length === 0) return ctx_;
                     if (history.options?.deleteSheetOp) {
                         history.inversePatches[0].path[1] = ctx_.sheets.length;
                         const order = history.options.deletedSheet?.value?.order as number;
@@ -276,11 +317,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             } as Patch);
                         }
                     }
-                    const newContext = produce(applyPatches(ctx_, history.inversePatches), (draft: Context) => {
-                        settleCurrentSheet(draft);
-                        const si = getSheetIndex(draft, draft.currentSheetId);
-                        if (si != null) draft.insertedImgs = draft.sheets[si].images;
-                    });
+                    const newContext = produce(applyPatches(ctx_, history.inversePatches), settleCurrentSheet);
                     globalCache.current.redoList.push(history);
                     const inversedOptions = inverseRowColOptions(history.options);
                     if (inversedOptions?.insertRowColOp) {
@@ -316,11 +353,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.redoList.pop();
             if (history) {
                 setContext((ctx_) => {
-                    const newContext = produce(applyPatches(ctx_, history.patches), (draft: Context) => {
-                        settleCurrentSheet(draft);
-                        const si = getSheetIndex(draft, draft.currentSheetId);
-                        if (si != null) draft.insertedImgs = draft.sheets[si].images;
-                    });
+                    history.patches = withoutDeletedFloatingEdits(ctx_, history.patches);
+                    if (history.patches.length === 0) return ctx_;
+                    const newContext = produce(applyPatches(ctx_, history.patches), settleCurrentSheet);
                     globalCache.current.undoList.push(history);
                     emitOp(newContext, history.patches, history.options);
 
@@ -342,13 +377,44 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             }
         }, [context.currentSheetId, context.selections, mergedSettings.hooks]);
 
-        // Surface the active floating image to the app so it can mount its properties panel. Fires on
-        // select/deselect and after a geometry commit (insertedImgs changes); `find` returns a stable
-        // reference while unchanged, so the app's setState bails when nothing moved.
+        // Surface the selected image or chart to the app so it can mount its properties panel. Fires on
+        // select and deselect and after a write; immer keeps the record's reference while it is unchanged,
+        // and the item is memoized on it, so the app's setState bails when nothing moved.
+        const currentSheetIndex = getSheetIndex(context, context.currentSheetId);
+        const currentSheet = context.sheets[currentSheetIndex ?? -1];
+        const { activeObject } = context;
+        const activeImage = activeObject?.kind === 'image' ? currentSheet?.images?.[activeObject.id] : undefined;
+        const activeChart = activeObject?.kind === 'chart' ? currentSheet?.charts?.[activeObject.id] : undefined;
+        const activeItem = useMemo((): SheetFloatingItem | null => {
+            if (activeImage) return { kind: 'image', object: activeImage };
+            if (activeChart) return { kind: 'chart', object: activeChart };
+            return null;
+        }, [activeImage, activeChart]);
         useEffect(() => {
-            const active = context.insertedImgs?.find((img) => img.id === context.activeImg) ?? null;
-            mergedSettings.hooks?.onActiveImageChange?.(active);
-        }, [context.activeImg, context.insertedImgs, mergedSettings.hooks]);
+            mergedSettings.hooks?.onActiveObjectChange?.(activeItem);
+        }, [activeItem, mergedSettings.hooks]);
+
+        // Rebuilt on every sheet change while a chart is selected: a renamed sheet renames its data range,
+        // and an edited cell its slices. Memoized, so the app's setState bails out when nothing changed.
+        // biome-ignore lint/correctness/useExhaustiveDependencies: the resolver reads context.sheets alone; depending on `context` would rebuild on every selection and scroll
+        const chartPanel = useMemo((): ChartPanelState | null => {
+            if (!activeChart) return null;
+            const { spec } = readChartSpec(activeChart);
+            const data = spec?.data;
+            const resolver = createContextResolver(context);
+            const resolved = data?.source === 'range' ? resolveRangeChartData(data, resolver) : data;
+            return {
+                chart: activeChart,
+                sheetId: context.currentSheetId,
+                sheets: context.sheets.map(({ id, name }) => ({ id: id ?? '', name })),
+                categories: typeof resolved === 'object' ? resolved.categories : [],
+                seriesNames: data?.source === 'range' ? data.series.map((s) => seriesName(s.name, resolver)) : [],
+                sketchCapped: spec !== null && typeof resolved === 'object' && isSketchCapped(spec, resolved),
+            };
+        }, [activeChart, context.currentSheetId, context.sheets]);
+        useEffect(() => {
+            mergedSettings.hooks?.onChartPanelChange?.(chartPanel);
+        }, [chartPanel, mergedSettings.hooks]);
 
         const providerValue = useMemo(
             () => ({
@@ -517,23 +583,39 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onCopy = useCallback(
             (e: ClipboardEvent) => {
+                // A text field beside a selected chart or image (the chart panel's title, the image panel's
+                // width) copies its own text.
+                const floating = !isTypingTarget();
+                // A selected chart copies itself with its ranges read into inline data, the one thing every
+                // other app can draw; this workbook keeps its ranges for a paste here. A chart that draws
+                // #REF! or too much data copies nothing. A cut deletes it, as Google's does. Read from
+                // ctx.sheets, not the editable current sheet, so a viewer copies too.
+                if (activeChart && floating) {
+                    const item = sheetChartClipboardItem(context, activeChart);
+                    if (!item) return;
+                    e.preventDefault();
+                    writeEigenClipboard(e, { version: 1, items: [item] });
+                    globalCache.current.copiedChart = { inline: item.parts, chart: activeChart };
+                    if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
+                    return;
+                }
                 // A selected floating image takes precedence over the pending cell copy: its
                 // copy is a pure image — eigen JSON only, no text/plain and no png, as vector's is (a
-                // native copy event can't await a media/ blob fetch, so png is dropped).
-                const activeImg = context.insertedImgs?.find((img) => img.id === context.activeImg);
-                if (activeImg) {
-                    const source = mergedSettings.hooks?.resolveImagePath?.(activeImg.mediaName);
+                // native copy event can't await a media/ blob fetch, so png is dropped). A cut deletes it.
+                if (activeImage && floating) {
+                    const source = mergedSettings.hooks?.resolveImagePath?.(activeImage.mediaName);
                     if (source) {
                         e.preventDefault();
                         // Drop any cell table the keyboard copy staged, so a later native-menu copy
                         // with no image active can't emit this stale table.
                         consumePendingCopy();
                         const item = buildImageClipboardItem({
-                            mediaName: activeImg.mediaName,
+                            mediaName: activeImage.mediaName,
                             source,
-                            box: { width: activeImg.width, height: activeImg.height, angle: activeImg.angle },
+                            box: { width: activeImage.width, height: activeImage.height, angle: activeImage.angle },
                         });
                         writeEigenClipboard(e, { version: 1, items: [item] });
+                        if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                         return;
                     }
                 }
@@ -548,19 +630,22 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // a real table, and the custom MIME lands for same-origin reads.
                 const eigenData: EigenClipboardData = {
                     version: 1,
-                    items: [buildCellRangeClipboardItem(context, pending.plainText)],
+                    items: [buildCellRangeClipboardItem(context, pending.cellText)],
                 };
                 writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
             },
-            [context, mergedSettings.hooks],
+            [activeChart, activeImage, context, mergedSettings.hooks, setContextWithProduce],
         );
 
         const onPaste = useCallback(
             (e: ClipboardEvent) => {
-                // deal with multi instance case, only the focused sheet handles the paste
+                // deal with multi instance case, only the focused sheet handles the paste; a selected image or
+                // chart holds the focus
+                const { activeElement } = document;
                 if (
-                    cellInput.current === document.activeElement ||
-                    document.activeElement?.className === 'sheet-overlay'
+                    cellInput.current === activeElement ||
+                    activeElement?.className === 'sheet-overlay' ||
+                    (activeElement?.matches('[data-floating-id]') && workbookContainer.current?.contains(activeElement))
                 ) {
                     const { clipboardData } = e;
                     if (!clipboardData) return;
@@ -598,8 +683,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     }
 
                     if (paste.eigen) {
-                        // Mixed eigen payloads split by kind: image items become floating images,
-                        // text items land in cells. Both apply when both are present. The image
+                        // Mixed eigen payloads split by kind: image and chart items become floating objects,
+                        // text items land in cells. All apply when all are present. The image
                         // insert is app-owned (typed size + cross-mount re-upload), gated on its hook.
                         const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
                         const imageItems = onPasteEigenImage
@@ -612,9 +697,26 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     item.type === 'text' && clipboardTextItemHasContent(item),
                             )
                             .map((item) => item.text);
-                        if (imageItems.length > 0 || textParts.length > 0) {
+                        const chartItems = paste.eigen.items.filter(
+                            (item): item is EigenClipboardChartItem => item.type === 'chart',
+                        );
+                        if (imageItems.length > 0 || chartItems.length > 0 || textParts.length > 0) {
                             e.preventDefault();
                             for (const item of imageItems) onPasteEigenImage?.(item);
+                            // This workbook's own copy keeps the ranges it was copied with.
+                            const copied = globalCache.current.copiedChart;
+                            if (chartItems.length > 0) {
+                                setContextWithProduce((draftCtx) => {
+                                    for (const { parts, width, height, look } of chartItems) {
+                                        const own = copied && isEqual(copied.inline, parts);
+                                        const fields = own
+                                            ? copySheetChartSpec(copied.chart)
+                                            : pastedChartFields(parts, newSheetChartSpecParts);
+                                        if (!fields) continue;
+                                        pasteChart(draftCtx, uuidv4(), fields, { width, height }, look);
+                                    }
+                                });
+                            }
                             if (textParts.length > 0) {
                                 // Create a synthetic paste with the text — let handlePaste process it
                                 const syntheticTransfer = new DataTransfer();
@@ -690,7 +792,15 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // expose APIs
         useImperativeHandle(
             ref,
-            () => generateAPIs(context, setContextWithProduce, handleUndo, handleRedo, mergedSettings),
+            () =>
+                generateAPIs(
+                    context,
+                    setContextWithProduce,
+                    handleUndo,
+                    handleRedo,
+                    mergedSettings,
+                    globalCache.current,
+                ),
             [context, setContextWithProduce, handleUndo, handleRedo, mergedSettings],
         );
 

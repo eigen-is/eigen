@@ -1,8 +1,6 @@
-import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FileMenu } from '@workspace/ui';
-import { DocumentImportPicker } from '@workspace/ui/components/drive/document-import-picker';
-import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
+import { DocumentImportPicker, ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive';
 import { Sheet } from 'lucide-react';
 import { useState } from 'react';
 
@@ -23,7 +21,6 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: Toolbar
                 canWrite={canWrite}
                 onAccessDialogOpen={onAccessDialogOpen}
                 onImport={() => setImportPickerOpen(true)}
-                importLabel="Import xlsx file…"
                 onExport={(format) => exportPath(path, format)}
                 createLabel="New sheet"
                 createIcon={Sheet}
@@ -34,10 +31,7 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: Toolbar
                 path={path}
                 open={importPickerOpen}
                 onOpenChange={setImportPickerOpen}
-                title="Import xlsx file"
-                progressTitle="Importing xlsx file"
-                mime={XLSX_MIME}
-                accept=".xlsx"
+                target="eigensheets"
             />
         </>
     );

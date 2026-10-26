@@ -14,7 +14,8 @@ import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { cn } from '@workspace/ui/lib/utils';
 import { Download, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { DriveLocationField, type DriveLocationValue } from './drive-location-field';
+import type { DriveLocationValue } from './drive-location-field';
+import { DriveLocationField } from './drive-location-field';
 
 type DriveLocationPickerProps = {
     open: boolean;

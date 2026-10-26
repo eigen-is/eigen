@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { forEach } from 'es-toolkit/compat';
-import { type Context, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getSheetConfig } from '../context';
 import { hasChinaword } from './text';
 
 export {

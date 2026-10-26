@@ -5,15 +5,16 @@ import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './index.css';
 import { debounce } from 'es-toolkit/compat';
-import { type SetContextOptions, WorkbookContext } from '../../context';
+import type { SetContextOptions } from '../../context';
+import { WorkbookContext } from '../../context';
+import { cellDisplay } from '../../engine/format';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
+import type { Context, GlobalCache } from '../../state';
 import {
     api,
     applySheetFilter,
-    type Context,
     computeOverlayRegions,
-    type GlobalCache,
     getCellHyperlink,
     getCellRowColumn,
     getRangetxt,
@@ -32,7 +33,7 @@ import {
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropDownList } from '../DataVerification/DropdownList';
 import { ValidationHintCard } from '../DataVerification/HintCard';
-import { ImgBoxs } from '../ImgBoxs';
+import { FloatingObjects } from '../FloatingObjects';
 import { LinkEditCard } from '../LinkEditCard';
 import { ColumnHeader } from './ColumnHeader';
 import { InputBox } from './InputBox';
@@ -365,8 +366,8 @@ export const SheetOverlay: React.FC = () => {
             if (sheetIndex === undefined || sheetIndex === null) return '';
             const rowFocus = selection.row_focus ?? 0;
             const columnFocus = selection.column_focus ?? 0;
-            const cellVal = context.sheets[sheetIndex]?.data?.[rowFocus]?.[columnFocus]?.m || '';
-            return cellVal;
+            const cell = context.sheets[sheetIndex]?.data?.[rowFocus]?.[columnFocus];
+            return cellDisplay(cell) ?? '';
         }
         return '';
     };
@@ -451,7 +452,7 @@ export const SheetOverlay: React.FC = () => {
                         {regions.map(({ pane, ...rect }) => (
                             <OverlayRegion key={pane} {...rect}>
                                 <OverlayVisuals containerRef={containerRef} />
-                                {pane === 'main' && <ImgBoxs />}
+                                {pane === 'main' && <FloatingObjects />}
                             </OverlayRegion>
                         ))}
                         <OverlayRegion {...editorRegion}>

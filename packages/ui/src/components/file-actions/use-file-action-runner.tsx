@@ -6,7 +6,8 @@ import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
 import { useImportMail } from '@workspace/lib/mail';
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
 import type { FileAction, FileActionId, FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { ImportToCalendarPicker } from '../calendar/import-to-calendar-picker';
 import { IMPORTING_CONTACTS_TITLE } from '../contacts/transfer-titles';
 import { ProgressDialog } from '../drive/progress-dialog';
@@ -31,6 +32,12 @@ export type FileActionRunner = {
 // What a row that opens a picker acts on, snapshotted: a host whose subject is state has none left by
 // the time the picker is confirmed. A convert saves first, and its label names the row that asked.
 type PickerState = { subjects: FileSubject[]; convert?: { targetType: ConvertTarget; label: string } };
+
+const CONVERTING_TITLES: Record<ConvertTarget, string> = {
+    eigensheets: 'Converting to sheet',
+    eigendoc: 'Converting to document',
+    eigenslides: 'Converting to slides',
+};
 
 // A host whose subject is state (the right-clicked chip or row) passes null while there is none;
 // `exclude` drops a row the host draws itself (the overlay is Quick Look, so it drops that one).
@@ -99,6 +106,9 @@ export function useFileActionRunner(
             case 'convert-to-document':
                 convert('eigendoc', action.label);
                 return;
+            case 'convert-to-slides':
+                convert('eigenslides', action.label);
+                return;
             case 'import-contacts':
                 runImport(importContacts.mutate);
                 return;
@@ -140,11 +150,7 @@ export function useFileActionRunner(
                 />
                 <ProgressDialog
                     open={convertDocument.isPending}
-                    title={
-                        convertDocument.variables?.targetType === 'eigendoc'
-                            ? 'Converting to document'
-                            : 'Converting to sheet'
-                    }
+                    title={convertDocument.variables ? CONVERTING_TITLES[convertDocument.variables.targetType] : ''}
                 />
                 <ProgressDialog open={importContacts.isPending} title={IMPORTING_CONTACTS_TITLE} />
                 <ProgressDialog open={importMail.isPending} title="Importing mail" />

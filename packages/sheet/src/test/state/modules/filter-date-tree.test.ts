@@ -8,7 +8,8 @@
 import { describe, expect, test } from 'bun:test';
 import { parseCellInput } from '../../../engine/format';
 import type { Context } from '../../../state/context';
-import { type FilterDate, getFilterColumnValues } from '../../../state/modules/filter';
+import type { FilterDate } from '../../../state/modules/filter';
+import { getFilterColumnValues } from '../../../state/modules/filter';
 import type { Cell } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 

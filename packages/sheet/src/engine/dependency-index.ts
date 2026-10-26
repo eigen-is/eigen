@@ -22,6 +22,34 @@ type RangeEntry = {
 
 type KeyedEntry = { sheetId: string; point: number } | { sheetId: string; entry: RangeEntry };
 
+// A dependency's sheet and cells, its corners in order and none below 0; null when it names no sheet.
+export function cellsOf(
+    dep: FormulaDependency,
+): { sheetId: string; r0: number; r1: number; c0: number; c1: number } | null {
+    if (dep.sheetId == null) return null;
+    return {
+        sheetId: dep.sheetId,
+        r0: Math.max(0, Math.min(dep.row[0], dep.row[1])),
+        r1: Math.max(0, dep.row[0], dep.row[1]),
+        c0: Math.max(0, Math.min(dep.column[0], dep.column[1])),
+        c1: Math.max(0, dep.column[0], dep.column[1]),
+    };
+}
+
+// The blocks `set` lists a formula's ranges in, a single cell costing none: what recalc charges an untrusted
+// workbook's formulas before the index holds them.
+export function dependencyBlocks(deps: FormulaDependency[]): number {
+    let blocks = 0;
+    for (const dep of deps) {
+        const cells = cellsOf(dep);
+        if (cells == null || (cells.r0 === cells.r1 && cells.c0 === cells.c1)) continue;
+        blocks +=
+            (Math.floor(cells.r1 / ROW_BLOCK) - Math.floor(cells.r0 / ROW_BLOCK) + 1) *
+            (Math.floor(cells.c1 / COL_BLOCK) - Math.floor(cells.c0 / COL_BLOCK) + 1);
+    }
+    return blocks;
+}
+
 function forEachBlock(entry: RangeEntry, fn: (block: number) => void): void {
     for (let rb = Math.floor(entry.r0 / ROW_BLOCK); rb <= Math.floor(entry.r1 / ROW_BLOCK); rb += 1) {
         for (let cb = Math.floor(entry.c0 / COL_BLOCK); cb <= Math.floor(entry.c1 / COL_BLOCK); cb += 1) {
@@ -38,18 +66,14 @@ export class DependencyIndex {
     private byKey = new Map<string, KeyedEntry[]>();
     private queryCache = new Map<string, Map<number, readonly string[]>>();
 
-    set(key: string, deps: FormulaDependency[]): void {
+    public set(key: string, deps: FormulaDependency[]): void {
         this.delete(key);
 
         const stored: KeyedEntry[] = [];
         for (const dep of deps) {
-            const { sheetId } = dep;
-            if (sheetId == null) continue;
-
-            const r0 = Math.max(0, Math.min(dep.row[0], dep.row[1]));
-            const r1 = Math.max(0, dep.row[0], dep.row[1]);
-            const c0 = Math.max(0, Math.min(dep.column[0], dep.column[1]));
-            const c1 = Math.max(0, dep.column[0], dep.column[1]);
+            const cells = cellsOf(dep);
+            if (cells == null) continue;
+            const { sheetId, r0, r1, c0, c1 } = cells;
 
             if (r0 === r1 && c0 === c1) {
                 const point = r0 * CELL_PACK + c0;
@@ -85,7 +109,7 @@ export class DependencyIndex {
         this.queryCache.clear();
     }
 
-    delete(key: string): void {
+    public delete(key: string): void {
         const stored = this.byKey.get(key);
         if (stored == null) return;
         this.byKey.delete(key);
@@ -117,7 +141,7 @@ export class DependencyIndex {
         this.queryCache.clear();
     }
 
-    clear(): void {
+    public clear(): void {
         this.points.clear();
         this.ranges.clear();
         this.byKey.clear();
@@ -126,7 +150,7 @@ export class DependencyIndex {
 
     // Keys of formulas whose dependency ranges cover (r, c). Results are cached
     // until the next mutation; callers must not mutate the returned array.
-    dependentsOf(sheetId: string, r: number, c: number): readonly string[] {
+    public dependentsOf(sheetId: string, r: number, c: number): readonly string[] {
         const packed = r * CELL_PACK + c;
         let sheetCache = this.queryCache.get(sheetId);
         const cached = sheetCache?.get(packed);

@@ -1,19 +1,23 @@
-// The eigen canvas element model. React-free shared core (the packages/lib/src/sheets
-// precedent). Element shape adopted from Excalidraw's `_ExcalidrawElementBase`, trimmed to
-// what Eigen's Yjs CRDT needs: no tombstones, no version/versionNonce, no groupIds. Every
-// stored field is a scalar or a string — arrays (points, comment cards, fills) ride JSON scalars.
+// The eigen canvas element model, a React-free shared core like the sheets one. The element shape is Excalidraw's
+// `_ExcalidrawElementBase`, trimmed to what Eigen's Yjs CRDT needs: no tombstones, no version or versionNonce, and no
+// groupIds. Every stored field is a scalar or a string, so arrays such as points, comment cards and fills ride as JSON
+// strings.
 
-import type { VectorFrame } from './frames';
+import type { ChartSpecPartKey } from '../types/chart';
+import type { SlideSize, VectorFrame } from './frames';
 
 export type VectorElementType =
     | 'rectangle'
     | 'diamond'
     | 'ellipse'
+    | 'pie'
     | 'image'
     | 'richtext'
     | 'freedraw'
     | 'line'
-    | 'arrow';
+    | 'arrow'
+    | 'chart'
+    | 'path';
 
 // The runtime value lists are the single source; the union types derive from them, so a grown
 // list and its type can never drift. read-vector's validators consume the same arrays.
@@ -91,6 +95,27 @@ export type VectorEllipseElement = VectorElementBase & Fillable & { type: 'ellip
 // The roughjs-drawn closed shapes.
 export type VectorShapeElement = VectorRectangleElement | VectorDiamondElement | VectorEllipseElement;
 
+// A sector of the ellipse its box inscribes (OOXML's `pie`). Degrees, clockwise from 3 o'clock, in the
+// box-normalized circle (roughjs arc's parametric angle), so a resize scales the slice like any shape.
+// Start + sweep, not start + end: a 360° slice has no distinct end.
+export type VectorPieElement = VectorElementBase &
+    Fillable & {
+        type: 'pie';
+        startAngle: number; // [0, 360)
+        sweepAngle: number; // (0, 360]
+    };
+
+// A free contour of lines and Bézier curves (a pptx custGeom). `path` is absolute M/L/C/Q/Z in the unit
+// box, the canonical string parseNormalizedPath writes, so a resize changes width/height and never the path.
+// A hole is a subpath wound the other way, where SVG's nonzero fill and roughjs's even-odd hatching agree.
+export type VectorPathElement = VectorElementBase &
+    Fillable & {
+        type: 'path';
+        path: string;
+        // Whether the path fills; it reads false for a path without a Z. An open path only strokes.
+        closed: boolean;
+    };
+
 export type VectorImageElement = VectorElementBase & {
     type: 'image';
     mediaName: string; // filename in the container's media/ folder, NEVER a dataURL
@@ -119,11 +144,44 @@ export type VectorRichTextElement = VectorElementBase &
         padding: number; // px inset between the box edge and the text; the box keeps its stored size
     };
 
-// What an arrow endpoint may dock to: the closed shapes plus the two DOM boxes, whose outline is the
-// rounded rect their `corners` describes. The RUNTIME answer is the registry's `bindable` capability
-// (isBindable in kinds/index.ts) — this union is its type-level face, and the registry test pins the two
-// against each other so neither can grow without the other.
-export type VectorBindableElement = VectorShapeElement | VectorRichTextElement | VectorImageElement;
+// One line of plain text in a kind's local frame, as svgTextLine draws it. y is the line's TOP: a renderer
+// adds the font's baseline offset. The line turns `rotate` degrees about (x, y).
+export type TextLine = {
+    text: string;
+    x: number;
+    y: number;
+    anchor: 'start' | 'middle' | 'end';
+    fontFamily: string;
+    fontSize: number;
+    bold: boolean;
+    color: string;
+    rotate: number;
+};
+
+// A chart: its ChartSpec as a JSON string per part, `specChart` … `specData`, so two peers who edit two parts both keep
+// their edit. On a canvas a chart holds inline data only. `fill` is its background and the hatch style of its bars and
+// slices. The stroke draws its axes and gridlines. `color` is its labels' color, and their font is the spec's.
+// `seriesStrokeWidth` is the width of a line series, which an Office import sets. Where it is unset, a line series
+// draws at the stroke's width.
+export type VectorChartElement = VectorElementBase &
+    Fillable &
+    Record<ChartSpecPartKey, string> & {
+        type: 'chart';
+        color: string;
+        seriesStrokeWidth?: number;
+    };
+
+// What an arrow endpoint may dock to: the closed shapes, the pie slice, a closed path, the chart and the two
+// DOM boxes, whose outline is the rounded rect their `corners` describes. The RUNTIME answer is the registry's
+// `bindable` capability (isBindable in kinds/index.ts) — this union is its type-level face, and the
+// registry test pins the two against each other so neither can grow without the other.
+export type VectorBindableElement =
+    | VectorShapeElement
+    | VectorPieElement
+    | VectorPathElement
+    | VectorChartElement
+    | VectorRichTextElement
+    | VectorImageElement;
 
 // Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
 // to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant).
@@ -173,6 +231,9 @@ export type VectorArrowElement = VectorElementBase & {
 
 export type VectorElement =
     | VectorShapeElement
+    | VectorPieElement
+    | VectorPathElement
+    | VectorChartElement
     | VectorImageElement
     | VectorRichTextElement
     | VectorLinearElement
@@ -183,6 +244,22 @@ export type VectorElement =
 // element type whose `type` is the pair — Extract would match neither.
 type OfType<T, K> = T extends { type: infer U } ? (K extends U ? T : never) : never;
 export type ElementOfType<K extends VectorElementType> = OfType<VectorElement, K>;
+
+// A partial patch over the write/read allow-list — every field optional, so a caller sets any
+// subset of any element variant's fields (the union members share the geometry base). id/type
+// are never patched; z-order changes rewrite `index`.
+export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
+    Partial<Omit<VectorPieElement, 'id' | 'type'>> &
+    Partial<Omit<VectorPathElement, 'id' | 'type'>> &
+    Partial<Omit<VectorChartElement, 'id' | 'type'>> &
+    Partial<Omit<VectorRichTextElement, 'id' | 'type'>> &
+    Partial<Omit<VectorImageElement, 'id' | 'type'>> &
+    Partial<Omit<VectorLinearElement, 'id' | 'type'>> &
+    Partial<Omit<VectorArrowElement, 'id' | 'type'>>;
+
+// A new element: the caller names a `type` and overrides whatever it likes; the writer fills the
+// rest from the kind defaults and generates id/seed.
+export type NewVectorElement = { type: VectorElementType } & VectorElementPatch;
 
 // A forward binding: an anchor as a proportion (fixedPoint) of the target shape's local w/h, so the
 // anchor follows the shape by construction. Not clamped on write; consumers clamp to [0,1] on read.
@@ -198,7 +275,10 @@ export type FixedSegment = { index: number; start: [number, number]; end: [numbe
 // arrow's whole pin state, decoded from the one JSON scalar.
 type ParsedFixedSegments = { segments: FixedSegment[]; startIsSpecial: boolean; endIsSpecial: boolean };
 
-export type VectorMeta = { background: string };
+// `slideWidth` is the deck's physical width in pt (frames.ts).
+export type VectorMeta = { background: string; slideSize: SlideSize; slideWidth: number };
+// A deck's page: its shape and its physical width.
+export type SlidePage = Pick<VectorMeta, 'slideSize' | 'slideWidth'>;
 
 export type VectorScene = { elements: VectorElement[]; frames: VectorFrame[]; meta: VectorMeta };
 
@@ -238,8 +318,9 @@ export const DEFAULT_LINE_ROUNDNESS: Roundness = 'round';
 // arrows keep their meaning.
 const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';
 
-// Canvas-level defaults (the `meta` root).
-export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent' };
+// Canvas-level defaults (the `meta` root). A new deck is PowerPoint's widescreen, 16:9 and 13.33 in wide, so a pt is
+// 2 px of the frame; a deck that stores no width reads as UNSTORED_SLIDE_WIDTH instead (frames.ts).
+export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', slideSize: '16:9', slideWidth: 960 };
 
 // Shared element defaults, adopted from Excalidraw's DEFAULT_ELEMENT_PROPS.
 export const DEFAULT_ELEMENT_PROPS = {
@@ -310,17 +391,6 @@ export const DEFAULT_ARROW_PROPS = {
     | 'labelWidth'
     | 'roundness'
 >;
-
-// Shared line-width presets — the ONE source for the thin/medium/bold vocabulary, consumed by both
-// the vector panel (strokeWidth, scene-px) and the slides panel (borderWidth, slide-units ≡ scene-px).
-// The Excalidraw constants (1/2/4). Data-driven: growing to more weights is an array edit, no UI
-// change. Values are Select strings (MergedSelect is string-typed, like sibling ROUGHNESS_OPTIONS);
-// consumers parse them back to the literal numeric width with Number().
-export const STROKE_WIDTH_OPTIONS: { value: string; label: string }[] = [
-    { value: '1', label: 'Thin' },
-    { value: '2', label: 'Medium' },
-    { value: '4', label: 'Bold' },
-];
 
 // The ONE labeling of the Roundness vocabulary, consumed by the panel's Edges row for boxes and
 // lines and by the arrow section (where an elbow's roundness means its corner style).

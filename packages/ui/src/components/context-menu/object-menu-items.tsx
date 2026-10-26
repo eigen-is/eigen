@@ -1,8 +1,10 @@
-// The object context menu's shared row groups, one set of labels and order for every host (the writes
-// stay host-side), plus every embedded image's download row.
+// The object menus' shared rows, one set of labels and order for every host (the writes stay host-side), plus the two
+// download rows: an embedded image's original file and the image the browser draws of a chart or a selection.
 
+import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { downloadDriveFile } from '@workspace/lib/download';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { ZOp } from '@workspace/lib/vector';
 import {
     ArrowDownToLine,
     ArrowUpToLine,
@@ -10,82 +12,73 @@ import {
     ChevronUp,
     ClipboardPaste,
     Copy,
-    CopyPlus,
     Download,
+    ImageDown,
+    Layers,
     Scissors,
-    Trash2,
 } from 'lucide-react';
-import { DropdownMenuItem } from '../dropdown-menu';
-import type { ZOp } from '../properties-panel/z-order';
+import {
+    DropdownMenuItem,
+    DropdownMenuShortcut,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+} from '../dropdown-menu';
+import { Z_ORDER_ROWS } from '../properties-panel/z-order';
 
-// The Arrange group: Bring to front / Bring forward / Send backward / Send to back (front at top,
-// matching the properties-panel order + labels). Presentational — the host owns what each op does.
-export function ArrangeMenuItems({ onApply }: { onApply: (op: ZOp) => void }) {
+const ORDER_ICONS = { toFront: ArrowUpToLine, forward: ChevronUp, backward: ChevronDown, toBack: ArrowDownToLine };
+
+// Google Slides' Order ▸, with the brackets useZOrderHotkeys answers to. Presentational: the host owns what each op does.
+export function OrderMenuSub({ onApply }: { onApply: (op: ZOp) => void }) {
     return (
-        <>
-            <DropdownMenuItem onClick={() => onApply('toFront')}>
-                <ArrowUpToLine className="h-4 w-4 mr-2" /> Bring to front
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onApply('forward')}>
-                <ChevronUp className="h-4 w-4 mr-2" /> Bring forward
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onApply('backward')}>
-                <ChevronDown className="h-4 w-4 mr-2" /> Send backward
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onApply('toBack')}>
-                <ArrowDownToLine className="h-4 w-4 mr-2" /> Send to back
-            </DropdownMenuItem>
-        </>
+        <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+                <Layers className="h-4 w-4" /> Order
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+                {Z_ORDER_ROWS.map(({ op, label, hotkey }) => {
+                    const Icon = ORDER_ICONS[op];
+                    return (
+                        <DropdownMenuItem key={op} onClick={() => onApply(op)}>
+                            <Icon className="h-4 w-4" /> {label}
+                            <DropdownMenuShortcut>{formatForDisplay(hotkey)}</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                    );
+                })}
+            </DropdownMenuSubContent>
+        </DropdownMenuSub>
     );
 }
 
-// Clipboard group: Copy / Cut / Paste. Each row appears only when its callback is supplied, so a host
-// with only synchronous copy (slides) and one with the full set (vector) compose the same
-// builder. Labels + order are the single source so the apps' menus read identically.
+// Cut, Copy, Paste, the order of every Edit menu. Each row appears only when its callback is supplied, so a host
+// that can only paste here (an empty canvas) and one with the full set compose the same rows.
 export function ClipboardMenuItems({
-    onCopy,
     onCut,
+    onCopy,
     onPaste,
 }: {
-    onCopy?: () => void;
     onCut?: () => void;
+    onCopy?: () => void;
     onPaste?: () => void;
 }) {
     return (
         <>
-            {onCopy && (
-                <DropdownMenuItem onClick={onCopy}>
-                    <Copy className="h-4 w-4 mr-2" /> Copy
-                </DropdownMenuItem>
-            )}
             {onCut && (
                 <DropdownMenuItem onClick={onCut}>
-                    <Scissors className="h-4 w-4 mr-2" /> Cut
+                    <Scissors className="h-4 w-4" /> Cut
+                    <DropdownMenuShortcut>{formatForDisplay('Mod+X')}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+            )}
+            {onCopy && (
+                <DropdownMenuItem onClick={onCopy}>
+                    <Copy className="h-4 w-4" /> Copy
+                    <DropdownMenuShortcut>{formatForDisplay('Mod+C')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {onPaste && (
                 <DropdownMenuItem onClick={onPaste}>
-                    <ClipboardPaste className="h-4 w-4 mr-2" /> Paste
-                </DropdownMenuItem>
-            )}
-        </>
-    );
-}
-
-// Generic object actions: Duplicate then Delete. Each row appears only when its callback is supplied,
-// so slides (Delete only — it duplicates via ⌘D / Alt-drag, not the menu) and vector (both) compose
-// the same group. Delete stays the destructive variant.
-export function ObjectActionMenuItems({ onDuplicate, onDelete }: { onDuplicate?: () => void; onDelete?: () => void }) {
-    return (
-        <>
-            {onDuplicate && (
-                <DropdownMenuItem onClick={onDuplicate}>
-                    <CopyPlus className="h-4 w-4 mr-2" /> Duplicate
-                </DropdownMenuItem>
-            )}
-            {onDelete && (
-                <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                    <Trash2 className="h-4 w-4 mr-2" /> Delete
+                    <ClipboardPaste className="h-4 w-4" /> Paste
+                    <DropdownMenuShortcut>{formatForDisplay('Mod+V')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
         </>
@@ -94,11 +87,22 @@ export function ObjectActionMenuItems({ onDuplicate, onDelete }: { onDuplicate?:
 
 // Every embedded image's download row (canvas, docs, sheets). The host resolves the image's media name
 // to its path; none yet (a pending upload, a deleted file) hides the row.
-export function DownloadImageMenuItem({ path }: { path?: DrivePath | null }) {
+export function DownloadOriginalImageMenuItem({ path }: { path?: DrivePath | null }) {
     if (!path) return null;
     return (
         <DropdownMenuItem onClick={() => downloadDriveFile(path)}>
-            <Download className="h-4 w-4 mr-2" /> Download original image
+            <Download className="h-4 w-4" /> Download original image
+        </DropdownMenuItem>
+    );
+}
+
+// Download image, the SVG the browser draws (downloadCanvasImage) of a chart in any app or a canvas selection. A host
+// with nothing to draw, a single image among them, passes no callback and the row hides.
+export function DownloadImageMenuItem({ onDownload }: { onDownload?: () => void }) {
+    if (!onDownload) return null;
+    return (
+        <DropdownMenuItem onClick={onDownload}>
+            <ImageDown className="h-4 w-4" /> Download image
         </DropdownMenuItem>
     );
 }

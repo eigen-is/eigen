@@ -1,4 +1,5 @@
-import sharp, { type Sharp } from 'sharp';
+import type { Sharp } from 'sharp';
+import sharp from 'sharp';
 import { THUMBNAIL_TIMEOUT_SECONDS } from './thumbnail-timeout';
 import type { ImageResult, WorkerInput } from './thumbnail-worker';
 

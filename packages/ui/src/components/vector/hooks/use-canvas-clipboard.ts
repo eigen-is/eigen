@@ -3,6 +3,8 @@
 // tools/clipboard, the paste DECISIONS in tools/paste-elements; this hook owns the events, the
 // transacts and the placement.
 
+import { onMutationError } from '@workspace/lib/api-error';
+import { newChartSpecParts } from '@workspace/lib/charts';
 import {
     classifyPaste,
     clipboardTextItemHasContent,
@@ -10,6 +12,7 @@ import {
     extractClipboardSvgMetadata,
     inlineClipboardSvgMedia,
     needsReUpload,
+    pastedChartFields,
     readClipboardBox,
     readEigenClipboardAsync,
     reUploadImage,
@@ -23,29 +26,35 @@ import { textToParagraphHtml } from '@workspace/lib/html';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
 import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type {
+    NewVectorElement,
+    Point,
+    StyleDefaults,
+    TextAlign,
+    VectorElement,
+    VectorElementPatch,
+    VectorMeta,
+} from '@workspace/lib/vector';
 import {
+    canvasPtToPx,
     IMAGE_CASCADE_OFFSET,
-    num,
-    type Point,
     pasteAnchorOffset,
     readClipboardTypography,
     readElementsClipboardItem,
     reanchorElements,
-    type StyleDefaults,
-    type TextAlign,
-    type VectorElement,
-    type VectorMeta,
 } from '@workspace/lib/vector';
+import { sealed } from '@workspace/ui/components/properties-panel';
 import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
+import { downloadCanvasImage } from '../canvas-image';
 import { measureVectorText } from '../text-measure';
 import { remapPastedArrows } from '../tools/binding';
 import { buildSelectionData, selectionPlainText } from '../tools/clipboard';
-import { type PastePlan, planElementsPaste } from '../tools/paste-elements';
+import type { PastePlan } from '../tools/paste-elements';
+import { planElementsPaste } from '../tools/paste-elements';
 import { deleteSelection } from './selection-ops';
-import { type NewVectorElement, sealed, type VectorElementPatch } from './use-canvas-doc';
 
 // How many cross-mount images re-upload at once. The wire is forgeable, so a paste must not turn into
 // hundreds of parallel fetch + upload round-trips; a handful keeps a normal multi-image paste quick.
@@ -129,9 +138,11 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     // The clipboard PRODUCER (the native elements item, the typed image/text items and the
     // self-contained SVG flavor) + the plain-text flavor live in ../tools/clipboard; this calls them
     // with the live z-order, selection, background, home frame and path resolver.
+    // A deck converts a text item's size at its own width, a drawing at 96 dpi (canvasPxToPt).
+    const slideWidth = viewport === 'frame' ? meta.slideWidth : undefined;
     const buildData = useCallback(
-        () => buildSelectionData(ordered, selectedIds, meta, frameId, resolveMediaPath),
-        [ordered, selectedIds, meta, frameId, resolveMediaPath],
+        () => buildSelectionData(ordered, selectedIds, meta, frameId, resolveMediaPath, slideWidth),
+        [ordered, selectedIds, meta, frameId, resolveMediaPath, slideWidth],
     );
     const plainText = useCallback(() => selectionPlainText(ordered, selectedIds), [ordered, selectedIds]);
 
@@ -166,7 +177,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         [fetchMediaBlob],
     );
 
-    // A payload with no native elements item: another app's images and text. Each lands centered on the
+    // A payload with no native elements item: another app's images, charts and text. Each lands centered on the
     // viewport, cascading so a multi-item paste stays visible. An image sizes from the TYPED wire box
     // (authoritative), text re-measures LOCALLY (a wire size is never written onto text).
     const planForeignPaste = useCallback(
@@ -201,11 +212,32 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     if (crossMount) plan.crossMount.push({ index, item });
                     continue;
                 }
+                // A chart keeps its parts as they came, a newer build's too, its font included, and its look as the
+                // element's own fields.
+                if (item.type === 'chart') {
+                    const parts = pastedChartFields(item.parts, newChartSpecParts);
+                    if (!parts) continue;
+                    const { width, height } = box;
+                    plan.partials.push({
+                        type: 'chart',
+                        ...placeAt(width, height),
+                        width,
+                        height,
+                        angle,
+                        ...parts,
+                        ...item.look,
+                    });
+                    continue;
+                }
                 // An empty text item is a foreign contentless carrier — skip it.
                 if (item.type !== 'text' || !clipboardTextItemHasContent(item)) continue;
                 const typo = item.typography ?? {};
                 const fontFamily = typo.fontFamily ?? styleDefaults.fontFamily;
-                const fontSize = num(typo.fontSize, styleDefaults.fontSize);
+                // The wire's size is pt; the payload is forgeable, so only a finite number is one.
+                const fontSize =
+                    typo.fontSize !== undefined && Number.isFinite(typo.fontSize)
+                        ? canvasPtToPx(typo.fontSize, slideWidth)
+                        : styleDefaults.fontSize;
                 const { width, height } = measureVectorText(item.text, fontSize, fontFamily);
                 plan.partials.push({
                     type: 'richtext',
@@ -222,7 +254,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             }
             return plan;
         },
-        [viewportCenterScene, mediaFolderId, styleDefaults],
+        [viewportCenterScene, mediaFolderId, styleDefaults, slideWidth],
     );
 
     // One paste = one undo step: every ADD in one transact, the arrow-binding remap inside the same
@@ -541,5 +573,13 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         });
     };
 
-    return { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText };
+    // Download image: the elements as the browser draws them, on the drawing's background when it is the whole drawing.
+    const downloadImage = useCallback(
+        (name: string, elements: VectorElement[], background?: string) => {
+            downloadCanvasImage(elements, { name, background, fetchMedia: fetchMediaBlob }).catch(onMutationError);
+        },
+        [fetchMediaBlob],
+    );
+
+    return { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText, downloadImage };
 }

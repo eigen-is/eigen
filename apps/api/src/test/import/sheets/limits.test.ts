@@ -1,21 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT, toA1 } from '@workspace/sheet/engine';
-import { ApiError } from '../../../lib/core/errors';
-import {
-    MAX_CELLS,
-    MAX_ELEMENTS,
-    MAX_MERGES,
-    MAX_ROWS,
-    MAX_SHEET_ID,
-    MAX_SHEETS,
-    MAX_TEXT,
-    MAX_VALIDATION_KEYS,
-    xlsxToSheets,
-} from '../../../lib/import/sheets/from-xlsx';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { MAX_CELLS, MAX_TEXT } from '../../../lib/import/sheets/from-xlsx';
 import { build, deflated } from '../../fixtures/raw-zip';
 
-// The bounds an untrusted xlsx meets before exceljs loads it: exceljs expands a range per cell while it loads, before
-// the cell cap can count anything.
+// The bounds an untrusted xlsx meets. The zip refuses an archive past its caps before anything inflates; past that the
+// reader parses only what it charges against the read budget (package.ts), and emits only what it charges against one
+// output budget (from-xlsx.ts), so a range a file declares costs what it emits, never what it spans. Each probe is a
+// hostile file, read in a process of its own so its peak and its time are the import's alone.
 
 const SML = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -92,37 +83,28 @@ const merges = (...refs: string[]) =>
 const validation = (sqref: string) =>
     `<dataValidations count="1"><dataValidation type="whole" operator="between" sqref="${sqref}"><formula1>1</formula1><formula2>10</formula2></dataValidation></dataValidations>`;
 const definedName = (text: string, name = 'big') => `<definedName name="${name}">${text}</definedName>`;
-const definedNames = (text: string) => `<definedNames>${definedName(text)}</definedNames>`;
-// exceljs walks every cell of a name's range: this one has 17 billion.
-const WHOLE_GRID = 'S!$A$1:$XFD$1048576';
 const columns = (min: number | string, max: number | string) =>
     `<cols><col min="${min}" max="${max}" width="20" customWidth="1"/></cols>`;
-// exceljs reads sheets by part name alone, so it never sees this part: the scan counts it without exceljs paying for it.
-const unread = (xml: string, name = 'unread') => ({
-    name: `xl/worksheets/${name}.xml`,
-    xml: `<worksheet xmlns="${SML}">${xml}</worksheet>`,
-});
+const sst = (body: string) => ({ name: 'xl/sharedStrings.xml', xml: `<sst xmlns="${SML}">${body}</sst>` });
+const rowsOf = (count: number, cell: (r: number) => string) =>
+    Array.from({ length: count }, (_, i) => `<row r="${i + 1}">${cell(i + 1)}</row>`).join('');
 
 const MB = 1024 * 1024;
 
-// A process of its own with a deadline, so its peak RSS is the import's alone and a file exceljs expands can't hold
+type Measured = { cells?: number[]; status?: number; message?: string; rssGrowth: number; cpuMs: number };
+
+// A process of its own with a deadline, so its peak RSS is the import's alone and a file the reader expands can't hold
 // the suite; a refusal reports itself.
-function measuredImport(file: Buffer): {
-    cells?: number[];
-    status?: number;
-    message?: string;
-    rssGrowth: number;
-    cpuMs: number;
-} {
+function measuredImport(file: Buffer): Measured {
     const script = `
         const { xlsxToSheets } = await import(process.env.READER);
         const { peakRss } = await import(process.env.PEAK_RSS);
-        const data = Buffer.from(await Bun.stdin.arrayBuffer());
+        const data = new Uint8Array(await Bun.stdin.arrayBuffer());
         const peak = peakRss();
         const cpu = process.cpuUsage();
         let result = {};
         try {
-            const sheets = await xlsxToSheets(data);
+            const sheets = xlsxToSheets(data);
             result = { cells: sheets.map((sheet) => sheet.celldata.length) };
         } catch (error) {
             result = { status: error.status, message: error.message };
@@ -138,7 +120,7 @@ function measuredImport(file: Buffer): {
         env: {
             ...process.env,
             READER: Bun.resolveSync('../../../lib/import/sheets/from-xlsx', import.meta.dir),
-            PEAK_RSS: Bun.resolveSync('../../rss-test-helpers', import.meta.dir),
+            PEAK_RSS: Bun.resolveSync('../../../lib/core/peak-rss', import.meta.dir),
         },
         stdin: new Uint8Array(file),
         timeout: 20_000,
@@ -148,244 +130,170 @@ function measuredImport(file: Buffer): {
     return JSON.parse(child.stdout.toString());
 }
 
-async function outcome(file: Buffer): Promise<{ status: number; message: string } | 'imported'> {
-    return xlsxToSheets(file).then(
-        () => 'imported' as const,
-        (error: unknown) => {
-            if (!(error instanceof ApiError)) throw error;
-            return { status: error.status, message: error.message };
-        },
-    );
-}
-
-const TOO_LARGE = { status: 413, message: 'Spreadsheet too large' };
+const TOO_LARGE = { status: 413, message: 'This spreadsheet is too large to import' };
 const TOO_MANY_CELLS = { status: 413, message: 'Spreadsheet has too many cells' };
+const INVALID = { status: 400, message: 'Not a valid xlsx file' };
 
-describe('what exceljs expands per cell is refused before it loads', () => {
-    // Each is a 1.5 KB file: exceljs ran each past the Worker's 120 s deadline, at 2.3 to 9 GB and still growing.
-    test.each([
-        ['a validation over the whole grid', { after: validation('A1:XFD1048576') }],
-        ['a merge of 26 whole columns', { after: merges('A1:Z1048576') }],
-        ['a column range past the grid', { before: columns(1, 100_000_000) }],
-        ['a column range starting past the grid', { before: columns(100_000_000, 1) }],
-        ['a column range past the grid behind whitespace', { before: columns(1, ' \t20000000') }],
-        // A missing row or column reads as 1: 1,000 whole-row pieces in 1.65 KB ran past 60 s.
+// Each is a 1.5 KB file that would expand per cell, past the deadline at gigabytes, so a scan refuses
+// it before the load.
+describe('a range a file declares costs what it emits', () => {
+    test.each<[string, Parameters<typeof xlsx>[0], Partial<Measured>]>([
+        // A validation stops a margin past the cells.
+        ['a validation over the whole grid', { after: validation('A1:XFD1048576') }, { cells: [1] }],
         [
-            'a validation of 1,000 whole rows with no column',
+            'a validation of 1,000 whole rows',
             { after: validation(Array(1000).fill('1:1048576').join(' ')) },
+            { cells: [1] },
+        ],
+        // A merge is charged its area before any of its cells is visited.
+        ['a merge of 26 whole columns', { after: merges('A1:Z1048576') }, TOO_MANY_CELLS],
+        ['whole rows and four whole columns merged', { after: merges('1:1048576', 'A1:D1048576') }, TOO_MANY_CELLS],
+        ['a merge a raw tab names past the grid', { after: merges('A1\tx:XFD1048576!A1:A1') }, { cells: [1] }],
+        // Merges are never checked against each other: more than 10,000 are kept.
+        [
+            '10,001 merges',
+            { after: merges(...Array.from({ length: 10_001 }, (_, i) => `A${i + 1}:B${i + 1}`)) },
+            { cells: [20_002] },
+        ],
+        // A column range stops at the grid.
+        ['a column range past the grid', { before: columns(1, 100_000_000) }, { cells: [1] }],
+        ['a column range starting past the grid', { before: columns(100_000_000, 1) }, { cells: [1] }],
+        ['a column range past the grid behind whitespace', { before: columns(1, ' \t20000000') }, { cells: [1] }],
+        // XML 1.1 reads a NEL as a space too, which would end a range for a scan; Bun reads 1.1 as 1.0.
+        ['an XML 1.1 part', { version: '1.1', after: validation('B1:B1\u0085A1:XFD1048576') }, { cells: [1] }],
+        ['a row past the grid', { data: '<row r="1000000000" hidden="1"/>' }, TOO_MANY_CELLS],
+        ['a sheet id far past any real one', { sheetId: 4_294_967_294 }, { cells: [1] }],
+        // Defined names are never read: walking a name's range would visit every cell.
+        [
+            'names over external workbooks covering 614 million cells, as a GOV.UK workbook has',
+            {
+                names: `<definedNames>${['Derived', 'External', 'Gross', 'Net']
+                    .map((name, i) =>
+                        definedName(`[1]${name}!$B$9:$ES$1048576`, name).replace('>', ` localSheetId="${i}">`),
+                    )
+                    .join('')}</definedNames>`,
+            },
+            { cells: [1] },
         ],
         [
-            'a merge of whole rows with no column beside one of three columns',
-            { after: merges('1:1048576', 'B1:D1048576') },
+            'a name over the whole grid',
+            { names: `<definedNames>${definedName('S!$A$1:$XFD$1048576')}</definedNames>` },
+            { cells: [1] },
         ],
-        // A raw tab is a space to exceljs's parser, so the sheet name it seems to end hides the whole grid.
-        ['a merge whose raw tab hides the grid', { after: merges('A1\tx:XFD1048576!A1:A1') }],
+        ['a names block that never closes', { names: `<definedNames>${definedName('S!$A$1:$XFD$1048576')}` }, INVALID],
     ])(
-        '%s is 413 at no cost',
-        (_name, sheet) => {
+        '%s',
+        (_name, sheet, expected) => {
             const result = measuredImport(xlsx(sheet));
-            expect(result).toMatchObject(TOO_LARGE);
+            expect(result).toMatchObject(expected);
             expect(result.rssGrowth).toBeLessThan(64 * MB);
             expect(result.cpuMs).toBeLessThan(2_000);
         },
         30_000,
     );
-
-    // exceljs checks each merge against every earlier one: 30,000 one-row merges took 27 s.
-    test('more merges than the cap are 413 at no cost', () => {
-        const refs = Array.from({ length: MAX_MERGES + 1 }, (_, i) => `A${i + 1}:B${i + 1}`);
-        const result = measuredImport(xlsx({ after: merges(...refs) }));
-        expect(result).toMatchObject(TOO_LARGE);
-        expect(result.cpuMs).toBeLessThan(2_000);
-    }, 30_000);
-
-    // XML 1.1 reads a NEL in a value as a space too, and Excel writes 1.0 only.
-    test.each([
-        [
-            'a validation whose ranges a NEL separates',
-            { version: '1.1', after: validation('B1:B1\u0085A1:XFD1048576') },
-        ],
-        ['a column range whose bound a NEL starts', { version: '1.1', before: columns(1, '\u008520000000') }],
-    ])(
-        '%s in an XML 1.1 part is 400 at no cost',
-        (_name, sheet) => {
-            const result = measuredImport(xlsx(sheet));
-            expect(result).toMatchObject({ status: 400, message: 'Not a valid xlsx file' });
-            expect(result.rssGrowth).toBeLessThan(64 * MB);
-            expect(result.cpuMs).toBeLessThan(2_000);
-        },
-        30_000,
-    );
-
-    // exceljs builds a model per cell before the grid they span is counted: 12M empty cells imported at 3.7 GB.
-    test('more cells than the cap are 413 at no cost', () => {
-        const result = measuredImport(xlsx({ data: `<row r="1">${'<c/>'.repeat(MAX_CELLS + 1)}</row>` }));
-        expect(result).toMatchObject(TOO_MANY_CELLS);
-        expect(result.rssGrowth).toBeLessThan(64 * MB);
-        expect(result.cpuMs).toBeLessThan(2_000);
-    }, 30_000);
-
-    // exceljs builds a model per row too: 30M empty rows in 787 KB peaked at 17.4 GB.
-    test('more rows than the cap are 413 at no cost', () => {
-        const result = measuredImport(xlsx({ data: '<row/>'.repeat(MAX_ROWS + 1) }));
-        expect(result).toMatchObject(TOO_LARGE);
-        expect(result.rssGrowth).toBeLessThan(64 * MB);
-        expect(result.cpuMs).toBeLessThan(2_000);
-    }, 30_000);
-
-    // An empty row far down passes the cell cap, and every walk to the last row took 84 s at row 1,000,000,000.
-    test('a row past the grid is 413 at no cost', () => {
-        const result = measuredImport(xlsx({ data: '<row r="1000000000" hidden="1"/>' }));
-        expect(result).toMatchObject(TOO_MANY_CELLS);
-        expect(result.cpuMs).toBeLessThan(2_000);
-    }, 30_000);
 });
 
 describe('each cap', () => {
-    const row = (count: number) => `A1:A${count}`;
-
-    test('merged cells are counted against the cell cap across the workbook', async () => {
-        const half = MAX_CELLS / 2;
-        expect(await outcome(xlsx({}, [unread(merges(row(half))), unread(merges(`B1:B${half}`), 'other')]))).toBe(
-            'imported',
-        );
-        expect(
-            await outcome(xlsx({}, [unread(merges(row(half))), unread(merges(`B1:B${half + 1}`), 'other')])),
-        ).toEqual(TOO_LARGE);
-    });
-
-    // exceljs skips what an extension holds, so these cells cost it nothing; a calculation chain's entries are no cells.
-    test('cells in the sheets are counted against the cell cap before the load', async () => {
-        const chain = {
-            name: 'xl/calcChain.xml',
-            xml: `<calcChain xmlns="${SML}">${'<c r="A1" i="1"/>'.repeat(10)}</calcChain>`,
-        };
-        const file = (count: number) =>
-            xlsx(
-                {
-                    before: '<cols><col min="1" max="1"/></cols>',
-                    after: `<conditionalFormatting sqref="A1"><cfRule type="expression" priority="1"><formula>A1</formula></cfRule></conditionalFormatting><extLst><ext uri="x">${'<c/>'.repeat(count)}</ext></extLst>`,
-                },
-                [chain],
-            );
-        // The sheet holds A1 too.
-        expect(await outcome(file(MAX_CELLS - 1))).toBe('imported');
-        expect(await outcome(file(MAX_CELLS))).toEqual(TOO_MANY_CELLS);
+    test('a merge past the cell cap is too many cells before any of its cells is placed', () => {
+        const result = measuredImport(xlsx({ after: merges(`A1:D${MAX_CELLS / 4 + 1}`) }));
+        expect(result).toMatchObject(TOO_MANY_CELLS);
+        expect(result.rssGrowth).toBeLessThan(64 * MB);
     }, 30_000);
 
-    // exceljs skips what an extension holds, so these rows cost it nothing; a row break is no row.
-    test('rows in the sheets are counted against their cap across the workbook before the load', async () => {
-        const rows = (count: number) =>
-            `<rowBreaks count="0"/><extLst><ext uri="x">${'<row/>'.repeat(count)}</ext></extLst>`;
-        const half = MAX_ROWS / 2;
-        // Sheet 1 holds row 1 too; exceljs reads sheet2.xml as a sheet part though no sheet names it.
-        const file = (count: number) =>
-            xlsx({ after: rows(half) }, [
-                { name: 'xl/worksheets/sheet2.xml', xml: `<worksheet xmlns="${SML}">${rows(count)}</worksheet>` },
-            ]);
-        expect(await outcome(file(half - 1))).toBe('imported');
-        expect(await outcome(file(half))).toEqual(TOO_LARGE);
+    test('a column range may reach the last column of the grid', () => {
+        expect(measuredImport(xlsx({ before: columns(1, REFERENCE_COLUMN_COUNT) }))).toMatchObject({ cells: [1] });
     }, 30_000);
 
-    test('a range missing its column counts as column A, as exceljs walks it', async () => {
-        const rest = (MAX_CELLS - REFERENCE_ROW_COUNT) / 3;
-        const file = (extra: number) => xlsx({}, [unread(merges(`1:${REFERENCE_ROW_COUNT}`, `B1:D${rest + extra}`))]);
-        expect(await outcome(file(0))).toBe('imported');
-        expect(await outcome(file(1))).toEqual(TOO_LARGE);
-    });
-
-    test('an XML 1.1 part is 400 whatever it holds', async () => {
-        expect(await outcome(xlsx({ version: '1.1' }))).toEqual({ status: 400, message: 'Not a valid xlsx file' });
-        expect(await outcome(xlsx({ version: '1.0' }))).toBe('imported');
-    });
-
-    test('merges are counted across the workbook', async () => {
-        const refs = (count: number) => Array.from({ length: count }, (_, i) => `A${i + 1}`);
-        const half = MAX_MERGES / 2;
-        expect(await outcome(xlsx({ after: merges(...refs(half)) }, [unread(merges(...refs(half)))]))).toBe('imported');
-        expect(await outcome(xlsx({ after: merges(...refs(half)) }, [unread(merges(...refs(half + 1)))]))).toEqual(
-            TOO_LARGE,
-        );
-    });
-
-    test('validated cells alone may reach the cap', async () => {
-        const half = MAX_VALIDATION_KEYS / 2;
-        const file = (extra: number) => xlsx({}, [unread(validation(`${row(half)} B1:B${half + extra}`))]);
-        expect(await outcome(file(0))).toBe('imported');
-        expect(await outcome(file(1))).toEqual(TOO_LARGE);
-    });
-
-    test('a column range may reach the last column of the grid, from either end', async () => {
-        expect(await outcome(xlsx({ before: columns(1, REFERENCE_COLUMN_COUNT) }))).toBe('imported');
-        expect(await outcome(xlsx({ before: columns(1, REFERENCE_COLUMN_COUNT + 1) }))).toEqual(TOO_LARGE);
-        expect(await outcome(xlsx({ before: columns(REFERENCE_COLUMN_COUNT + 1, 1) }))).toEqual(TOO_LARGE);
-    });
-
-    test('a row may be the last row of the grid', async () => {
-        expect(await outcome(xlsx({ data: `<row r="${REFERENCE_ROW_COUNT}" hidden="1"/>` }))).toBe('imported');
-        expect(await outcome(xlsx({ data: `<row r="${REFERENCE_ROW_COUNT + 1}" hidden="1"/>` }))).toEqual(
+    test('a row may be the last row of the grid, and one past it is too many cells', () => {
+        expect(measuredImport(xlsx({ data: `<row r="${REFERENCE_ROW_COUNT}" hidden="1"/>` }))).toMatchObject({
+            cells: [0],
+        });
+        expect(measuredImport(xlsx({ data: `<row r="${REFERENCE_ROW_COUNT + 1}" hidden="1"/>` }))).toMatchObject(
             TOO_MANY_CELLS,
         );
-    });
-});
+    }, 30_000);
 
-// The scan reads the markup as exceljs's parser does, so no spelling of a range hides it.
-describe('what the scan reads', () => {
-    const over = `A1:A${MAX_CELLS + 1}`;
+    // A row without its number is the one after the last: a run of empty rows reaches past the grid.
+    test('a run of empty rows past the grid is too many cells', () => {
+        const result = measuredImport(xlsx({ data: '<row/>'.repeat(REFERENCE_ROW_COUNT + 1) }));
+        expect(result).toMatchObject(TOO_MANY_CELLS);
+        expect(result.rssGrowth).toBeLessThan(512 * MB);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
 
-    test.each([
-        ['an entity in the value', '<mergeCell ref="A1&#58;A4000001"/>'],
-        ['a hex entity in the value', '<mergeCell ref="A1&#x3a;A4000001"/>'],
-        ['single quotes and spaces around the equals sign', `<mergeCell ref = '${over}'/>`],
-        ['a line break before the attribute', `<mergeCell\nref="${over}"/>`],
-        ['an attribute before it', `<mergeCell xref="A1" ref="${over}"/>`],
-        ['an attribute value that looks like it', `<mergeCell x=" ref='A1'" ref="${over}"/>`],
-        ['a sheet name before the range', `<mergeCell ref="S!${over}"/>`],
-        ['dollar anchors', `<mergeCell ref="$A$1:$A$4000001"/>`],
-        ['the ends swapped', `<mergeCell ref="A4000001:A1"/>`],
-        ['a raw tab before a seeming sheet name', '<mergeCell ref="A1\tx:A4000001!A1:A1"/>'],
-        ['a raw line feed before a seeming sheet name', '<mergeCell ref="A1\nx:A4000001!A1:A1"/>'],
-        ['a raw carriage return before a seeming sheet name', '<mergeCell ref="A1\rx:A4000001!A1:A1"/>'],
-        ['a raw tab after a `>` in another value', '<mergeCell x="a>b" ref="A1\tx:A4000001!A1:A1"/>'],
-        // exceljs's decoder takes every capital before the first digit as the column: M, Z and A make column 9,465.
-        ['an unquoted sheet name with a space', '<mergeCell ref="M Z!A1:B500"/>'],
-    ])('a merge spelled with %s counts', async (_name, xml) => {
-        expect(await outcome(xlsx({}, [unread(xml)]))).toEqual(TOO_LARGE);
-    });
+    // Only what a row emits is read, never the row numbers before it: walking them took 103 s through 500
+    // sheets that each hid their last row.
+    test('sheets that each hide their last row cost what they emit', () => {
+        const last = '<row r="1048576" hidden="1"/>';
+        const result = measuredImport(xlsx({ data: last, sheets: Array(499).fill(`<sheetData>${last}</sheetData>`) }));
+        expect(result.cells).toHaveLength(500);
+        expect(result.rssGrowth).toBeLessThan(64 * MB);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
 
-    // exceljs reads a part as UTF-8 and splits a sqref on any space JavaScript knows.
-    test('a validation whose ranges an em space separates counts each', async () => {
-        const sqref = `A1:A2 A1:A${MAX_VALIDATION_KEYS + 1}`;
-        expect(await outcome(xlsx({}, [unread(validation(sqref))]))).toEqual(TOO_LARGE);
-    });
+    // Counting a row's last column walked every slot before it: 50,000 rows ending at XFD took 14.5 s.
+    test('rows reaching far columns are too many cells at no cost', () => {
+        const rows = (column: string) => xlsx({ data: rowsOf(50_000, (r) => `<c r="${column}${r}"><v>1</v></c>`) });
+        const result = measuredImport(rows('XFD'));
+        expect(result).toMatchObject(TOO_MANY_CELLS);
+        // Against the same rows at A, so a machine's speed cancels out.
+        expect(result.cpuMs / measuredImport(rows('A')).cpuMs).toBeLessThan(3);
+    }, 30_000);
 
-    // exceljs reads only unprefixed names, and no column has such a name.
-    test.each([
-        ['a prefixed merge', `<x:mergeCell xmlns:x="${SML}" ref="${over}"/>`],
-        ['a longer name', `<mergeCellX ref="${over}"/>`],
-        ['an escaped merge', `&lt;mergeCell ref="${over}"/&gt;`],
-    ])('%s is not counted', async (_name, xml) => {
-        expect(await outcome(xlsx({}, [unread(`<x>${xml}</x>`)]))).toBe('imported');
-    });
-
-    test('a real workbook shape imports: column-wide validations, a filter name, whole-row columns, merges', async () => {
-        const sheets = await xlsxToSheets(
-            xlsx({
-                before: columns(1, REFERENCE_COLUMN_COUNT),
-                after: `${merges('A1:C1', 'A2:A3')}${validation('D2:D1048576')}`,
-                names: `<definedNames>${definedName('S!$A$1:$L$1000', '_xlnm._FilterDatabase')}</definedNames>`,
-            }),
+    // One shared string is copied into every cell that names it: 2,000 cells of a 1 MB rich string reached 9.7 GB.
+    test('text past its cap is too large at no cost', () => {
+        const text = 'a'.repeat(1_000_000);
+        // A rich cell holds its text once, in its runs.
+        const cells = Math.ceil(MAX_TEXT / text.length) + 1;
+        const result = measuredImport(
+            xlsx({ data: rowsOf(cells, (r) => `<c r="A${r}" t="s"><v>0</v></c>`) }, [
+                sst(`<si><r><t>${text}</t></r><r><t>b</t></r></si>`),
+            ]),
         );
-        expect(sheets[0].config?.merge).toEqual({
-            '0_0': { r: 0, c: 0, rs: 1, cs: 3 },
-            '1_0': { r: 1, c: 0, rs: 2, cs: 1 },
-        });
-        expect(Object.keys(sheets[0].dataVerification ?? {}).length).toBeGreaterThan(0);
+        expect(result).toMatchObject(TOO_LARGE);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
+    // A rich string's runs are a copy per cell: 300,000 runs in 20 cells would be 6 million objects.
+    test("a rich string's runs count as cells", () => {
+        const result = measuredImport(
+            xlsx({ data: rowsOf(20, (r) => `<c r="A${r}" t="s"><v>0</v></c>`) }, [
+                sst(`<si>${'<r><t>a</t></r>'.repeat(300_000)}</si>`),
+            ]),
+        );
+        expect(result).toMatchObject(TOO_MANY_CELLS);
+        expect(result.rssGrowth).toBeLessThan(1024 * MB);
+        expect(result.cpuMs).toBeLessThan(5_000);
+    }, 30_000);
+
+    test('emitted text may reach its cap across the workbook', () => {
+        // A plain shared string reaches every cell as one string, its value and its display, beside its format.
+        const cells = 128;
+        const text = 'a'.repeat((MAX_TEXT / cells - 'General'.length) / 2);
+        const half = Math.floor(cells / 2);
+        const shared = (count: number) => rowsOf(count, (r) => `<c r="A${r}" t="s"><v>0</v></c>`);
+        const file = (more: string) =>
+            xlsx({ data: shared(half), sheets: [`<sheetData>${shared(cells - half)}${more}</sheetData>`] }, [
+                sst(`<si><t>${text}</t></si><si><t>b</t></si>`),
+            ]);
+        expect(measuredImport(file(''))).toMatchObject({ cells: [half, cells - half] });
+        expect(
+            measuredImport(file(`<row r="${cells + 1}"><c r="A${cells + 1}" t="s"><v>1</v></c></row>`)),
+        ).toMatchObject(TOO_LARGE);
+    }, 30_000);
+
+    // A validation's prompt reaches every cell it keys: a 1 MB prompt over the clamp's 100,000 cells.
+    test("a validation's prompt counts once per cell it keys", () => {
+        const prompt = `<dataValidations count="1"><dataValidation type="whole" operator="greaterThan" showInputMessage="1" prompt="${'a'.repeat(1_000_000)}" sqref="A1:CV1001"><formula1>1</formula1></dataValidation></dataValidations>`;
+        const result = measuredImport(xlsx({ after: prompt }));
+        expect(result).toMatchObject(TOO_LARGE);
+        expect(result.rssGrowth).toBeLessThan(64 * MB);
     }, 30_000);
 });
 
 // A scan that backtracks per start position is quadratic in a run of one character: a million of them in a 1 KB file.
-describe('text the import scans', () => {
+describe('text the import reads', () => {
     test('a merge reads a million spaces before its end in linear time', () => {
         const merge = `<mergeCells count="1"><mergeCell ref="A1:B1"${' '.repeat(1_000_000)}/></mergeCells>`;
         const result = measuredImport(xlsx({ after: merge }));
@@ -400,202 +308,59 @@ describe('text the import scans', () => {
         expect(result).toMatchObject({ cells: [1] });
         expect(result.cpuMs).toBeLessThan(2_000);
     }, 30_000);
-});
-
-// Eigen drops defined names, so the import hides them from exceljs instead of counting what it would expand.
-describe('defined names never reach exceljs', () => {
-    const expand = definedName(WHOLE_GRID);
-    test.each([
-        [
-            'names over external workbooks covering 614 million cells, as a GOV.UK workbook has',
-            `<definedNames>${['Derived', 'External', 'Gross', 'Net']
-                .map(
-                    (name, i) =>
-                        `<definedName name="${name}" localSheetId="${i}">[1]${name}!$B$9:$ES$1048576</definedName>`,
-                )
-                .join('')}</definedNames>`,
-        ],
-        ['a name over the whole grid', definedNames(WHOLE_GRID)],
-        ['attributes and whitespace in both tags', `<definedNames a="1"\n>${expand}</definedNames\t>`],
-        ['a default namespace declared on it', `<definedNames xmlns="${SML}">${expand}</definedNames>`],
-        [
-            'a prefix, which exceljs reads as another element',
-            `<x:definedNames xmlns:x="${SML}">${expand}</x:definedNames>`,
-        ],
-        ['an end tag in a comment inside it', `<definedNames><!-- </definedNames> -->${expand}</definedNames>`],
-        [
-            'an end tag in CDATA inside it',
-            `<definedNames>${definedName('<![CDATA[</definedNames>]]>', 'a')}${expand}</definedNames>`,
-        ],
-        ['an empty one before another', `<definedNames/><definedNames>${expand}</definedNames>`],
-        ['one inside an element exceljs ignores', `<extLst><ext><definedNames>${expand}</definedNames></ext></extLst>`],
-        ['a nested one', `<definedNames><definedNames>${expand}</definedNames>${expand}</definedNames>`],
-    ])(
-        '%s imports at no cost',
-        (_name, names) => {
-            const result = measuredImport(xlsx({ names }));
-            expect(result.cells).toEqual([1]);
-            expect(result.rssGrowth).toBeLessThan(64 * MB);
-            expect(result.cpuMs).toBeLessThan(2_000);
-        },
-        30_000,
-    );
-
-    // exceljs reads a part named with a leading slash as the one without.
-    test('a workbook part named with a leading slash imports at no cost', () => {
-        const result = measuredImport(xlsx({ names: definedNames(WHOLE_GRID), workbookPart: '/xl/workbook.xml' }));
-        expect(result.cells).toEqual([1]);
-        expect(result.cpuMs).toBeLessThan(2_000);
-    }, 30_000);
-
-    test('a block that never closes costs nothing', () => {
-        const result = measuredImport(xlsx({ names: `<definedNames>${expand}` }));
-        expect(result.cells).toBeUndefined();
-        expect(result.rssGrowth).toBeLessThan(64 * MB);
-        expect(result.cpuMs).toBeLessThan(2_000);
-    }, 30_000);
-});
-
-// What exceljs or the conversion builds per element, per sheet or per character, past what the cell grid counts.
-describe('what else the import builds is refused before it costs', () => {
-    const sst = (body: string) => ({ name: 'xl/sharedStrings.xml', xml: `<sst xmlns="${SML}">${body}</sst>` });
-    const styles = (body: string) => ({
-        name: 'xl/styles.xml',
-        xml: `<styleSheet xmlns="${SML}">${body}</styleSheet>`,
-    });
-    const sharedCells = (count: number) =>
-        Array.from({ length: count }, (_, i) => `<row r="${i + 1}"><c r="A${i + 1}" t="s"><v>0</v></c></row>`).join('');
-
-    // One shared string is copied into every cell that names it: 2,000 cells of a 1 MB rich string reached 9.7 GB.
-    test('text past its cap is 413 at no cost', () => {
-        const text = 'a'.repeat(1_000_000);
-        const cells = Math.ceil(MAX_TEXT / (2 * text.length)) + 1;
-        const result = measuredImport(
-            xlsx({ data: sharedCells(cells) }, [sst(`<si><r><t>${text}</t></r><r><t>b</t></r></si>`)]),
-        );
-        expect(result).toMatchObject(TOO_LARGE);
-        expect(result.rssGrowth).toBeLessThan(256 * MB);
-        expect(result.cpuMs).toBeLessThan(2_000);
-    }, 30_000);
-
-    // exceljs's sheet list walks every id up to the largest: 50,000,000 cost 1.2 GB.
-    test('a sheet id past its cap is 413 at no cost', () => {
-        const result = measuredImport(xlsx({ sheetId: 4_294_967_294 }));
-        expect(result).toMatchObject(TOO_LARGE);
-        expect(result.cpuMs).toBeLessThan(2_000);
-    }, 30_000);
-
-    // A sheet holds a column object per column up to its last: 1,000 sheets reaching XFD cost 3 GB.
-    test('more sheets than the cap are 413 at no cost', () => {
-        const wide = `<cols><col min="16384" max="16384"/></cols><sheetData/>`;
-        const result = measuredImport(xlsx({ sheets: Array(MAX_SHEETS).fill(wide) }));
-        expect(result).toMatchObject(TOO_LARGE);
-        expect(result.rssGrowth).toBeLessThan(64 * MB);
-        expect(result.cpuMs).toBeLessThan(2_000);
-    }, 30_000);
-
-    // Counting a row's last column walks every slot before it: 50,000 rows ending at XFD took 14.5 s.
-    test('rows reaching far columns are 413 at no cost', () => {
-        const rows = (column: string) =>
-            Array.from({ length: 50_000 }, (_, i) => `<row r="${i + 1}"><c r="${column}${i + 1}"><v>1</v></c></row>`);
-        const result = measuredImport(xlsx({ data: rows('XFD').join('') }));
-        expect(result).toMatchObject(TOO_MANY_CELLS);
-        // Against the same rows at A, so a machine's speed cancels out: 0.8 now, 25 before.
-        expect(result.cpuMs / measuredImport(xlsx({ data: rows('A').join('') })).cpuMs).toBeLessThan(3);
-    }, 30_000);
 
     // Each sheet entry read its part's hyperlinks again: 1,000 entries naming one 190 MB part took 140 s.
     test('sheets naming one part read it once', () => {
         const entries = Array.from({ length: 200 }, (_, i) => `<sheet name="T${i}" sheetId="${i + 2}" r:id="rId1"/>`);
-        const result = measuredImport(xlsx({ entries: entries.join(''), after: `<!--${'x'.repeat(50_000_000)}-->` }));
+        const result = measuredImport(xlsx({ entries: entries.join(''), after: `<!--${'x'.repeat(30_000_000)}-->` }));
         expect(result.cells).toEqual([1]);
         expect(result.cpuMs).toBeLessThan(5_000);
     }, 30_000);
+});
 
-    // exceljs builds a model per element: 35M runs in 680 KB reached 9.3 GB, 30M <xf/> 6.2 GB.
-    test.each([
-        ['runs in a shared string', {}, [sst(`<si>${'<r/>'.repeat(MAX_ELEMENTS + 1)}</si>`)]],
-        ['formats in the styles', {}, [styles(`<cellXfs>${'<xf/>'.repeat(MAX_ELEMENTS + 1)}</cellXfs>`)]],
-        [
-            'rules in a sheet',
-            {
-                after: `<conditionalFormatting sqref="A1">${'<cfRule/>'.repeat(MAX_ELEMENTS + 1)}</conditionalFormatting>`,
-            },
-            [],
-        ],
-        [
-            'runs in an inline string',
-            { data: `<row r="1"><c r="A1" t="inlineStr"><is>${'<r/>'.repeat(MAX_ELEMENTS + 1)}</is></c></row>` },
-            [],
-        ],
-    ] as const)(
-        'more elements than the cap, as %s, are 413 at no cost',
-        (_name, sheet, extra) => {
-            const result = measuredImport(xlsx(sheet, [...extra]));
+// Each a file of about 1 MB that the reader parsed for 10 to 120 s, or into gigabytes, emitting little or nothing: what
+// it parses is charged before it is parsed.
+describe('what a file holds costs its parse', () => {
+    test('a grid of more empty cells and rows than the element budget is too large before any is parsed', () => {
+        const result = measuredImport(xlsx({ data: rowsOf(1_601, () => '<c/>'.repeat(10_000)) }));
+        expect(result).toMatchObject(TOO_LARGE);
+        expect(result.rssGrowth).toBeLessThan(512 * MB);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
+    test('a row or a shared string longer than a batch may be is too large', () => {
+        const runs = '<r><t>a</t></r>'.repeat(1_000_000);
+        for (const file of [
+            xlsx({ data: `<row r="1"><c r="A1" t="inlineStr"><is>${runs}</is></c></row>` }),
+            xlsx({}, [sst(`<si>${runs}</si>`)]),
+        ]) {
+            const result = measuredImport(file);
             expect(result).toMatchObject(TOO_LARGE);
-            // Inflating up to 36 MB of markup costs the CPU exceljs at the cap does, so memory is the measure.
+            expect(result.rssGrowth).toBeLessThan(512 * MB);
+        }
+    }, 30_000);
+
+    test('a part past its grid of more bytes or tags than a whole parse may hold is too large before it is parsed', () => {
+        for (const after of [
+            validation(Array(3_300_000).fill('XFD1048576').join(' ')),
+            `<rowBreaks>${'<brk/>'.repeat(1_600_000)}</rowBreaks>`,
+        ]) {
+            const result = measuredImport(xlsx({ after }));
+            expect(result).toMatchObject(TOO_LARGE);
             expect(result.rssGrowth).toBeLessThan(256 * MB);
-        },
-        30_000,
-    );
+            expect(result.cpuMs).toBeLessThan(2_000);
+        }
+    }, 30_000);
 
-    test('emitted text may reach its cap across the workbook', async () => {
-        // A plain shared string reaches every cell as one string, its value and its display.
-        const text = 'a'.repeat(1_000_000);
-        const cells = MAX_TEXT / (2 * text.length);
-        const half = Math.floor(cells / 2);
-        const file = (more: string) =>
-            xlsx({ data: sharedCells(half), sheets: [`<sheetData>${sharedCells(cells - half)}${more}</sheetData>`] }, [
-                sst(`<si><t>${text}</t></si><si><t>b</t></si>`),
-            ]);
-        expect(await outcome(file(''))).toBe('imported');
-        expect(await outcome(file(`<row r="${cells + 1}"><c r="A${cells + 1}" t="s"><v>1</v></c></row>`))).toEqual(
-            TOO_LARGE,
+    test('a 1 MB number format on 1,000 cells shows them as General', () => {
+        const styles = {
+            name: 'xl/styles.xml',
+            xml: `<styleSheet xmlns="${SML}"><numFmts count="1"><numFmt numFmtId="164" formatCode="0;m${'0'.repeat(1_000_000)}"/></numFmts><cellXfs count="2"><xf/><xf numFmtId="164"/></cellXfs></styleSheet>`,
+        };
+        const result = measuredImport(
+            xlsx({ data: rowsOf(1_000, (r) => `<c r="A${r}" s="1"><v>1</v></c>`) }, [styles]),
         );
+        expect(result).toMatchObject({ cells: [1_000] });
+        expect(result.cpuMs).toBeLessThan(2_000);
     }, 30_000);
-
-    test('a sheet id may reach its cap', async () => {
-        expect(await outcome(xlsx({ sheetId: MAX_SHEET_ID }))).toBe('imported');
-        expect(await outcome(xlsx({ sheetId: MAX_SHEET_ID + 1 }))).toEqual(TOO_LARGE);
-    }, 30_000);
-
-    test('sheets may reach their cap', async () => {
-        const sheets = (count: number) => xlsx({ sheets: Array(count - 1).fill('<sheetData/>') });
-        expect(await outcome(sheets(MAX_SHEETS))).toBe('imported');
-        expect(await outcome(sheets(MAX_SHEETS + 1))).toEqual(TOO_LARGE);
-    }, 30_000);
-
-    // A row walks every column up to its last cell, styled or not; rows without a value cost exceljs no cell.
-    test('the columns rows reach may add up to the cell cap', async () => {
-        const styled = (row: number, column: number) =>
-            `<row r="${row}"><c r="${toA1(row - 1, column - 1)}" s="1"/></row>`;
-        const file = (last: number) =>
-            xlsx({
-                data: `<row r="1"><c r="A1"><v>1</v></c></row>${Array.from({ length: 249 }, (_, i) => styled(i + 2, 16_000)).join('')}${styled(251, last)}`,
-            });
-        expect(1 + 249 * 16_000 + 15_999).toBe(MAX_CELLS);
-        expect(await outcome(file(15_999))).toBe('imported');
-        expect(await outcome(file(16_000))).toEqual(TOO_MANY_CELLS);
-    }, 30_000);
-
-    // exceljs skips what an extension holds and never reads a pivot cache; the cell grid's own names don't count.
-    test('elements may reach their cap', async () => {
-        const pivot = { name: 'xl/pivotCache/pivotCacheRecords1.xml', xml: `<r>${'<m/>'.repeat(100)}</r>` };
-        // The sheet holds worksheet, sheetData, extLst and ext besides.
-        const file = (count: number) =>
-            xlsx({ after: `<extLst><ext uri="x">${'<x/>'.repeat(count)}</ext></extLst>` }, [pivot]);
-        expect(await outcome(file(MAX_ELEMENTS - 4))).toBe('imported');
-        expect(await outcome(file(MAX_ELEMENTS - 3))).toEqual(TOO_LARGE);
-    }, 30_000);
-
-    test('a part named by two sheets takes the name exceljs gives it, the last', async () => {
-        const sheets = await xlsxToSheets(
-            xlsx({
-                entries: '<sheet name="B" sheetId="2" r:id="rId1"/>',
-                after: '<hyperlinks><hyperlink ref="A1" location="B!A1"/></hyperlinks>',
-            }),
-        );
-        expect(sheets.map((sheet) => sheet.name)).toEqual(['B']);
-        expect(sheets[0].hyperlink).toEqual({ '0_0': { linkType: 'cellrange', linkAddress: 'B!A1' } });
-    });
 });

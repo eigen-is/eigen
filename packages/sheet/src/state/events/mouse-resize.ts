@@ -1,8 +1,8 @@
-import type { InlineStringSegment } from '../../engine/types';
+import { cellDisplay } from '../../engine/format';
 import type { Freezen } from '..';
-import { type Context, getFlowdata } from '../context';
-import { cancelActiveImgItem, israngeseleciton } from '../modules';
-import { isInlineStringCell } from '../modules/inline-string';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
+import { deselectFloatingObject, israngeseleciton } from '../modules';
 import { colLocation, rowLocation } from '../modules/location';
 import { getFontSet } from '../modules/text';
 import type { GlobalCache } from '../types';
@@ -44,7 +44,7 @@ export function handleColSizeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     ctx.editingCellPosition = [];
 
@@ -83,7 +83,7 @@ export function handleRowSizeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     if (
         ctx.formulaCache.rangestart ||
@@ -123,13 +123,12 @@ export function handleRowSizeHandleMouseDown(
 
 export function handleColFreezeHandleMouseDown(
     ctx: Context,
-    globalCache: GlobalCache,
     e: MouseEvent,
     headerContainer: HTMLDivElement,
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     ctx.editingCellPosition = [];
 
@@ -167,13 +166,12 @@ export function handleColFreezeHandleMouseDown(
 
 export function handleRowFreezeHandleMouseDown(
     ctx: Context,
-    globalCache: GlobalCache,
     e: MouseEvent,
     headerContainer: HTMLDivElement,
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     ctx.editingCellPosition = [];
 
@@ -228,14 +226,9 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
             if (cell.mc.c !== colIndex) continue;
         }
 
-        let text: string;
-        if (isInlineStringCell(cell)) {
-            text = cell.ct!.s.map((seg: InlineStringSegment) => seg.v ?? '').join('');
-        } else {
-            const display = cell.m ?? cell.v;
-            if (display == null) continue;
-            text = String(display);
-        }
+        const display = cellDisplay(cell);
+        if (display == null) continue;
+        const text = String(display);
         if (!text) continue;
 
         const fontset = getFontSet(cell, ctx.defaultFontSize);

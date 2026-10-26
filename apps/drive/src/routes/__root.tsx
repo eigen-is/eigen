@@ -1,5 +1,6 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { type RouterAppContext, useAuth, useIsGuest } from '@workspace/lib/auth';
+import type { RouterAppContext } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
 import type { DriveContextType } from '@workspace/lib/types/drive';
 import { AppShell, AppSidebar, ErrorState, LoadingState } from '@workspace/ui';

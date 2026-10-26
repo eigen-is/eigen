@@ -1,12 +1,16 @@
+import { isRecord } from '@workspace/lib/guards';
 import type { MergeCell, SingleRange } from '@workspace/lib/sheets';
-import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
+import { assign, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import {
     applySheetsDeleteRowCol,
     applySheetsInsertRowCol,
     shiftCellKeyedForDelete,
     shiftCellKeyedForInsert,
+    shiftRangeForDelete,
+    shiftRangeForInsert,
 } from '../../engine/rowcol';
-import { type Context, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getSheetConfig } from '../context';
 import type { FilterEntry, FormulaCell, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
 
@@ -35,6 +39,17 @@ const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet
         }
     }
 };
+
+// Writes `frozen` whole, never into it: a peer's unfreeze removes it, and a write inside it would resolve on nothing.
+function shiftFrozenFocus(file: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
+    const { frozen } = file;
+    if (!frozen?.range) return;
+    const ranged = type === 'row' ? frozen.type === 'rangeRow' : frozen.type === 'rangeColumn';
+    if (!ranged && frozen.type !== 'rangeBoth') return;
+    const axis = type === 'row' ? 'row_focus' : 'column_focus';
+    const focus = shift(frozen.range[axis]);
+    if (focus !== frozen.range[axis]) file.frozen = { ...frozen, range: { ...frozen.range, [axis]: focus } };
+}
 
 function shiftStateOnlyFieldsForInsert(
     ctx: Context,
@@ -183,21 +198,8 @@ function shiftStateOnlyFieldsForInsert(
         file.filterRange = newFilterObj.filterRange ?? undefined;
     }
 
-    // Freeze config update
-    const { frozen } = file;
-    if (frozen) {
-        const normalizedIndex = direction === 'lefttop' ? index - 1 : index;
-        if (type === 'row' && (frozen.type === 'rangeRow' || frozen.type === 'rangeBoth')) {
-            if ((frozen.range?.row_focus ?? -1) > normalizedIndex) {
-                frozen.range!.row_focus += count;
-            }
-        }
-        if (type === 'column' && (frozen.type === 'rangeColumn' || frozen.type === 'rangeBoth')) {
-            if ((frozen.range?.column_focus ?? -1) > normalizedIndex) {
-                frozen.range!.column_focus += count;
-            }
-        }
-    }
+    const normalizedIndex = direction === 'lefttop' ? index - 1 : index;
+    shiftFrozenFocus(file, type, (focus) => (focus > normalizedIndex ? focus + count : focus));
 
     // Inserted rows/columns clone the template's validation rules, not its hyperlinks.
     file.dataVerification = shiftCellKeyedForInsert(file.dataVerification, type, index, count, direction, cloneDeep);
@@ -380,20 +382,7 @@ function shiftStateOnlyFieldsForDelete(
         file.filterRange = newFilterObj.filterRange ?? undefined;
     }
 
-    // Freeze config update
-    const { frozen } = file;
-    if (frozen) {
-        if (type === 'row' && (frozen.type === 'rangeRow' || frozen.type === 'rangeBoth')) {
-            if ((frozen.range?.row_focus ?? -1) >= start) {
-                frozen.range!.row_focus -= Math.min(end, frozen.range!.row_focus) - start + 1;
-            }
-        }
-        if (type === 'column' && (frozen.type === 'rangeColumn' || frozen.type === 'rangeBoth')) {
-            if ((frozen.range?.column_focus ?? -1) >= start) {
-                frozen.range!.column_focus -= Math.min(end, frozen.range!.column_focus) - start + 1;
-            }
-        }
-    }
+    shiftFrozenFocus(file, type, (focus) => (focus >= start ? focus - (Math.min(end, focus) - start + 1) : focus));
 
     file.dataVerification = shiftCellKeyedForDelete(file.dataVerification, type, start, end);
     file.hyperlink = shiftCellKeyedForDelete(file.hyperlink, type, start, end);
@@ -435,6 +424,36 @@ function adjustSelectionForInsert(
     }
 }
 
+// Per sheet and per field, never `ctx.sheets = ...` or a whole sheet: a wholesale reassignment makes immer emit one
+// replace carrying the whole workbook, shipped over collab on every edit (rowcol-patches.test.ts), and a whole sheet's
+// undo would put back its images and charts over a peer's later ones. A moved chart gets only the fields that changed,
+// its spec parts, a keyed part an entry at a time, so a peer's move or delete of it, or its edit of another entry, at
+// once survives, and the undo puts back only the entries the op moved; an image never moves.
+function writeBackSheets(ctx: Context, sheets: Sheet[]) {
+    sheets.forEach((next, i) => {
+        const sheet: Record<string, unknown> = ctx.sheets[i];
+        for (const [key, value] of Object.entries(next)) {
+            if (key !== 'charts' && sheet[key] !== value) sheet[key] = value;
+        }
+        const { charts } = ctx.sheets[i];
+        for (const chart of Object.values(next.charts ?? {})) {
+            const stored: Record<string, unknown> | undefined = charts?.[chart.id];
+            if (!stored || stored === chart) continue;
+            for (const [field, value] of Object.entries(chart)) {
+                const record = stored[field];
+                if (record === value) continue;
+                if (isRecord(record) && isRecord(value)) writeEntries(record, value);
+                else stored[field] = value;
+            }
+        }
+    });
+}
+
+function writeEntries(record: Record<string, unknown>, next: Record<string, unknown>) {
+    for (const [entry, value] of Object.entries(next)) if (record[entry] !== value) record[entry] = value;
+    for (const entry of Object.keys(record)) if (!Object.hasOwn(next, entry)) delete record[entry];
+}
+
 export function insertRowCol(
     ctx: Context,
     op: {
@@ -453,16 +472,9 @@ export function insertRowCol(
     const id = op.id || ctx.currentSheetId;
     if (typeof id !== 'string') return;
 
-    const { type, index, count, direction } = op;
+    const { type, index, count } = op;
 
-    // Per-sheet write-back, not `ctx.sheets = ...`: a wholesale
-    // reassignment makes immer emit one synthetic root-level replace patch
-    // carrying the whole workbook, which is then shipped over collab on every
-    // edit. See packages/sheet/src/state/test/modules/rowcol-patches.test.ts.
-    const insertedSheets = applySheetsInsertRowCol(ctx.sheets, { ...op, id });
-    for (let i = 0; i < insertedSheets.length; i += 1) {
-        ctx.sheets[i] = insertedSheets[i];
-    }
+    writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, { ...op, id }));
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
@@ -497,63 +509,10 @@ export function insertRowCol(
         cfg.colReadOnly = columnReadOnly_new;
     }
 
-    // Alternating colors config update
-    const AFarr = file.alternateFormatRules;
-    const newAFarr = [];
-    if (AFarr != null && AFarr.length > 0) {
-        for (let i = 0; i < AFarr.length; i += 1) {
-            let AFr1 = AFarr[i].cellrange.row[0];
-            let AFr2 = AFarr[i].cellrange.row[1];
-            let AFc1 = AFarr[i].cellrange.column[0];
-            let AFc2 = AFarr[i].cellrange.column[1];
-
-            const af = clone(AFarr[i]);
-
-            if (type === 'row') {
-                if (AFr1 < index) {
-                    if (AFr2 === index && direction === 'lefttop') {
-                        AFr2 += count;
-                    } else if (AFr2 > index) {
-                        AFr2 += count;
-                    }
-                } else if (AFr1 === index) {
-                    if (direction === 'lefttop') {
-                        AFr1 += count;
-                        AFr2 += count;
-                    } else if (direction === 'rightbottom' && AFr2 > index) {
-                        AFr2 += count;
-                    }
-                } else {
-                    AFr1 += count;
-                    AFr2 += count;
-                }
-            } else if (type === 'column') {
-                if (AFc1 < index) {
-                    if (AFc2 === index && direction === 'lefttop') {
-                        AFc2 += count;
-                    } else if (AFc2 > index) {
-                        AFc2 += count;
-                    }
-                } else if (AFc1 === index) {
-                    if (direction === 'lefttop') {
-                        AFc1 += count;
-                        AFc2 += count;
-                    } else if (direction === 'rightbottom' && AFc2 > index) {
-                        AFc2 += count;
-                    }
-                } else {
-                    AFc1 += count;
-                    AFc2 += count;
-                }
-            }
-
-            af.cellrange = { row: [AFr1, AFr2], column: [AFc1, AFc2] };
-
-            newAFarr.push(af);
-        }
-    }
-
-    file.alternateFormatRules = newAFarr;
+    file.alternateFormatRules = (file.alternateFormatRules ?? []).map((af) => ({
+        ...af,
+        cellrange: shiftRangeForInsert(af.cellrange, op),
+    }));
     file.config = cfg;
 
     shiftStateOnlyFieldsForInsert(ctx, { ...op, id });
@@ -584,11 +543,7 @@ export function deleteRowCol(
     const { type, start, end } = op;
     const slen = end - start + 1;
 
-    // See insertRowCol above for why this isn't a wholesale reassignment.
-    const deletedSheets = applySheetsDeleteRowCol(ctx.sheets, { ...op, id });
-    for (let i = 0; i < deletedSheets.length; i += 1) {
-        ctx.sheets[i] = deletedSheets[i];
-    }
+    writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, { ...op, id }));
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
@@ -623,71 +578,12 @@ export function deleteRowCol(
         cfg.colReadOnly = columnReadOnly_new;
     }
 
-    // Alternating colors config update
-    const AFarr = file.alternateFormatRules;
-    const newAFarr = [];
-    if (AFarr != null && AFarr.length > 0) {
-        for (let i = 0; i < AFarr.length; i += 1) {
-            let AFr1 = AFarr[i].cellrange.row[0];
-            let AFr2 = AFarr[i].cellrange.row[1];
-            let AFc1 = AFarr[i].cellrange.column[0];
-            let AFc2 = AFarr[i].cellrange.column[1];
-
-            if (type === 'row') {
-                if (!(AFr1 >= start && AFr2 <= end)) {
-                    const af = clone(AFarr[i]);
-
-                    if (AFr1 > end) {
-                        AFr1 -= slen;
-                        AFr2 -= slen;
-                    } else if (AFr1 < start) {
-                        if (AFr2 < start) {
-                        } else if (AFr2 <= end) {
-                            AFr2 = start - 1;
-                        } else {
-                            AFr2 -= slen;
-                        }
-                    } else {
-                        if (AFr2 > end) {
-                            AFr1 = start;
-                            AFr2 -= slen;
-                        }
-                    }
-
-                    af.cellrange = { row: [AFr1, AFr2], column: [AFc1, AFc2] };
-
-                    newAFarr.push(af);
-                }
-            } else if (type === 'column') {
-                if (!(AFc1 >= start && AFc2 <= end)) {
-                    const af = clone(AFarr[i]);
-
-                    if (AFc1 > end) {
-                        AFc1 -= slen;
-                        AFc2 -= slen;
-                    } else if (AFc1 < start) {
-                        if (AFc2 < start) {
-                        } else if (AFc2 <= end) {
-                            AFc2 = start - 1;
-                        } else {
-                            AFc2 -= slen;
-                        }
-                    } else {
-                        if (AFc2 > end) {
-                            AFc1 = start;
-                            AFc2 -= slen;
-                        }
-                    }
-
-                    af.cellrange = { row: [AFr1, AFr2], column: [AFc1, AFc2] };
-
-                    newAFarr.push(af);
-                }
-            }
-        }
+    const alternateFormats = [];
+    for (const af of file.alternateFormatRules ?? []) {
+        const cellrange = shiftRangeForDelete(af.cellrange, op);
+        if (cellrange) alternateFormats.push({ ...af, cellrange });
     }
-
-    file.alternateFormatRules = newAFarr;
+    file.alternateFormatRules = alternateFormats;
     file.config = cfg;
 
     shiftStateOnlyFieldsForDelete(ctx, { ...op, id });

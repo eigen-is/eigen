@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun check --no-script"
   },
   "dependencies": {
-    "@codemirror/commands": "^6.11.0",
+    "@codemirror/commands": "^6.11.1",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.12",
     "@codemirror/lang-javascript": "^6.2.5",
@@ -21,10 +21,10 @@
     "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/lang-yaml": "^6.1.3",
-    "@codemirror/language": "^6.12.4",
-    "@codemirror/state": "^6.7.4",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/state": "^6.7.6",
     "@codemirror/theme-one-dark": "^6.1.3",
-    "@codemirror/view": "^6.43.11",
+    "@codemirror/view": "^6.43.15",
     "@tanstack/react-hotkeys": "^0.1.3",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-code-block-lowlight": "^3.31.3",

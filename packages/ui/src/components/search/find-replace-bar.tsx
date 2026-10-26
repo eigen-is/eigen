@@ -9,7 +9,9 @@ import {
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Toggle } from '@workspace/ui/components/toggle';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
+import { undoChord } from '@workspace/ui/lib/undoChord';
 import { cn } from '@workspace/ui/lib/utils';
+import type { LucideIcon } from 'lucide-react';
 import {
     ALargeSmall,
     ArrowDown,
@@ -17,7 +19,6 @@ import {
     CaseSensitive,
     ChevronDown,
     ChevronRight,
-    type LucideIcon,
     Regex,
     WholeWord,
     X,
@@ -124,15 +125,11 @@ export function FindReplaceBar({
             )}
             // One handler on the root — events bubble here from both inputs and the buttons.
             onKeyDown={(e) => {
-                if (!onUndo || !(e.metaKey || e.ctrlKey)) return;
-                if (e.key === 'z' || e.key === 'Z') {
-                    e.preventDefault();
-                    if (e.shiftKey) onRedo?.();
-                    else onUndo();
-                } else if (e.key === 'y' || e.key === 'Y') {
-                    e.preventDefault(); // Windows redo
-                    onRedo?.();
-                }
+                const chord = undoChord(e);
+                if (!onUndo || !chord) return;
+                e.preventDefault();
+                if (chord === 'undo') onUndo();
+                else onRedo?.();
             }}
         >
             <div className="flex items-center gap-1">

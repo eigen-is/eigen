@@ -1,4 +1,7 @@
 import type { BytesTextPreviewMode } from '../constants/preview';
+import { BAND_ROOTS } from '../docs/eigendoc/bands';
+import { STYLE_ROOT } from '../docs/eigendoc/normal-style';
+import { PAGE_ROOT } from '../docs/eigendoc/page';
 
 export type DriveACL = {
     id: string;
@@ -57,16 +60,35 @@ export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
 
 // Every download format the export route can produce. A type's own list is below and keeps this order,
 // so ⌘K's per-format rows read like that type's Download menu.
-export const EXPORT_FORMATS = ['docx', 'xlsx', 'svg', 'pdf', 'html'] as const;
+export const EXPORT_FORMATS = ['docx', 'xlsx', 'pptx', 'pdf', 'html'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
-// What the convert route turns an office file into.
-export const CONVERT_TARGETS = ['eigensheets', 'eigendoc'] as const;
-export type ConvertTarget = (typeof CONVERT_TARGETS)[number];
+// What the convert route turns an office file into: the one format each target reads, by its extension alone, and the
+// type of the document it makes. The file action offers a convert by the same extension the route refuses on.
+export const CONVERT_SOURCES = {
+    eigensheets: { format: 'xlsx', type: 'sheets' },
+    eigendoc: { format: 'docx', type: 'doc' },
+    eigenslides: { format: 'pptx', type: 'slides' },
+} as const satisfies Record<string, { format: string; type: EigenDocType }>;
+export type ConvertTarget = keyof typeof CONVERT_SOURCES;
 
 export function isConvertTarget(t: string): t is ConvertTarget {
-    return CONVERT_TARGETS.some((x) => x === t);
+    return Object.hasOwn(CONVERT_SOURCES, t);
 }
+
+export function isConvertSource(name: string, target: ConvertTarget): boolean {
+    return name.toLowerCase().endsWith(`.${CONVERT_SOURCES[target].format}`);
+}
+
+// What an import answers: `summary` says what the file held that did not come over, for a toast. A convert answers its
+// new document's path alone, and shows no summary: the document opens at once.
+export type ImportResult = { success: true; summary: string | null };
+
+// How File › Import… writes the file into the open document: beside what it holds (a deck's slides after the slide
+// `afterFrameId` names, or after its last; a workbook's tabs after its own), or in place of it, a version saved first.
+// A doc is only ever replaced: the file's page setup and headers can't sit beside the doc's.
+export type ImportMode = 'insert' | 'replace';
+export type DocumentImportOptions = { mode: ImportMode; afterFrameId?: string };
 
 // `mime` is the real mime (`application/eigendoc`); `urlSlug` is the route-safe
 // form (`application-eigendoc`) used by `/drive/.../mime/:slug` — the server
@@ -105,7 +127,12 @@ export const EIGEN_DOC_TYPE_INFO = {
         colorVar: '--app-docs-color',
         softColorVar: '--app-docs-color-soft',
         appName: 'docs',
-        yjsRoots: { default: 'xmlfragment' },
+        yjsRoots: {
+            default: 'xmlfragment',
+            [PAGE_ROOT]: 'map',
+            [STYLE_ROOT]: 'map',
+            ...Object.fromEntries(BAND_ROOTS.map((root) => [root, 'xmlfragment' as const])),
+        },
         exportFormats: ['docx', 'pdf', 'html'],
     },
     stickies: {
@@ -132,7 +159,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         softColorVar: '--app-slides-color-soft',
         appName: 'slides',
         yjsRoots: { elements: 'map', frames: 'map', meta: 'map' },
-        exportFormats: ['pdf', 'html'],
+        exportFormats: ['pptx', 'pdf', 'html'],
     },
     sheets: {
         type: DRIVE_TYPE_SHEETS,
@@ -169,7 +196,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         softColorVar: '--app-vector-color-soft',
         appName: 'vector',
         yjsRoots: { elements: 'map', frames: 'map', meta: 'map' },
-        exportFormats: ['svg', 'pdf'],
+        exportFormats: ['pdf'],
     },
 } as const satisfies Record<EigenDocType, EigenDocTypeInfo>;
 
@@ -192,7 +219,7 @@ export function exportFormatsFor(type: DrivePathType): readonly ExportFormat[] {
 export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
     docx: 'Microsoft Word (.docx)',
     xlsx: 'Microsoft Excel (.xlsx)',
-    svg: 'SVG image (.svg)',
+    pptx: 'Microsoft PowerPoint (.pptx)',
     pdf: 'PDF (.pdf)',
     html: 'Web Page (.html)',
 };
@@ -453,7 +480,8 @@ export type DrivePath = {
 };
 
 export type DriveViewMode = 'list' | 'grid';
-export type DriveSortKey = 'name' | 'modified' | 'size';
+export const DRIVE_SORT_KEYS = ['name', 'modified', 'size'] as const;
+export type DriveSortKey = (typeof DRIVE_SORT_KEYS)[number];
 export type DriveSortDir = 'asc' | 'desc';
 export type DriveViewPreferences = { mode: DriveViewMode; sortKey: DriveSortKey; sortDir: DriveSortDir };
 

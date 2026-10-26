@@ -1,8 +1,15 @@
+// One chat room: a .eigenchat file in Drive, which is a standalone chat or a comment thread inside a
+// document. Drive opens a room for each chat request. The room stores, edits and deletes messages,
+// and after a post it notifies the people mentioned, the earlier participants and the file's watchers.
+
 import { randomUUID } from 'node:crypto';
 import { chatActivityTag, chatMentionTag } from '@workspace/lib/notification/tags';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
-import { type DrivePath, type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
-import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
+import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
+import type { NotificationPersistInput } from '@workspace/lib/types/notification';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -10,10 +17,12 @@ import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Drive } from '../drive';
 import type { Home } from '../home';
-import { relayEventToMembers, sendToHome } from '../home/home-relay';
-import { getUserByEmail, type User } from '../user/';
+import { relayEventToMembers, sendToUserHomes } from '../home/home-relay';
+import type { User } from '../user/';
+import { getUserByEmail } from '../user/';
 import { formatEmoteForViewer, parseCommand, searchableMessageText } from './commands';
-import { type CommentIndex, openCommentIndex, RECENT_TEXT_CAP } from './comment-index';
+import type { CommentIndex } from './comment-index';
+import { openCommentIndex, RECENT_TEXT_CAP } from './comment-index';
 import { CHAT_ROOM_DB_CONFIG } from './db-config';
 import { extractMentionedEmails } from './mentions';
 import * as schema from './schema';
@@ -27,26 +36,24 @@ export class ChatRoom {
     private db!: BunSQLiteDatabase<typeof schema>;
     private managedDb!: ManagedDatabase<typeof schema>;
 
-    constructor(drive: Drive, home: Home, path: DrivePath) {
+    public constructor(drive: Drive, home: Home, path: DrivePath) {
         this.drive = drive;
         this.home = home;
         this.path = path;
     }
 
-    static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
-        // Atomic provision so a transient storage failure can't leave a
-        // dead-letter data.db row that would make every subsequent
-        // ChatRoom.init throw 503.
+    public static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
+        // The databases are set up in one step that cleans up after itself. A storage failure then leaves
+        // no data.db row without a database, which would make every later init answer 503.
         await drive.provisionManagedDbs(mountId, roomId, [{ name: 'data.db', config: CHAT_ROOM_DB_CONFIG }]);
         await drive.createFolder(mountId, roomId, 'media');
     }
 
-    async init(): Promise<ChatRoom> {
+    public async init(): Promise<ChatRoom> {
         let dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
         if (!dataDbPath) {
-            // Provision the missing data.db under the container lock and re-check under it:
-            // Drive.getChat builds a fresh ChatRoom per request, so two concurrent first requests
-            // would otherwise each provision a data.db.
+            // Drive.getChat builds a new ChatRoom for every request. Two first requests at once would each
+            // create a data.db, so the create runs under the chat's lock and checks again there.
             dataDbPath = await this.drive.withPathLock(this.path.mountId, this.path.id, async () => {
                 const existing = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
                 if (existing) return existing;
@@ -57,8 +64,8 @@ export class ChatRoom {
             });
         }
 
-        // openDatabase (potentially cold S3 GET) and findContainerPath
-        // (local metadata walk) don't depend on each other — run concurrently.
+        // The open may wait for a download from S3, and the container lookup reads only the local
+        // metadata. Neither needs the other, so they run at the same time.
         const dataDbId = dataDbPath.id;
         const [managedDb, containerPath] = await Promise.all([
             this.drive.openDatabase(this.path.mountId, CHAT_ROOM_DB_CONFIG, dataDbId),
@@ -71,7 +78,7 @@ export class ChatRoom {
         return this;
     }
 
-    async postMessage(
+    public async postMessage(
         author: User,
         content: string,
         type: ChatMessage['type'] = 'message',
@@ -146,11 +153,11 @@ export class ChatRoom {
         });
         this.home.broadcast(event);
 
-        // Resolved once here and reused by the comment-index relay and the notification fan-out
-        // below — each getEffectiveMembers is a full ACL/team walk (mirrors edit/deleteMessage).
+        // Each getEffectiveMembers walks the whole chain of ACLs and teams. So the members are read once
+        // here, and the comment index and the notifications below both use them.
         const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
 
-        // Update comment index if this chat is embedded in a container document
+        // A comment thread inside a document keeps the document's comment index up to date.
         if (this.containerPath && type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
                 await index.ensureComment(this.path.name, { createdBy: authorEmail });
@@ -161,11 +168,11 @@ export class ChatRoom {
             }, members);
         }
 
-        // Notifications: mentions + activity. This guard also gates the cross-home
-        // SSE relay (notifySharedUsers) — harmless today since 'system' messages aren't
-        // postable via any route; revisit if that changes so the relay still fires for them.
+        // A system message notifies nobody, and it also skips the event to other homes below. No route can
+        // post one, so no tab misses an event today.
         if (type !== 'system') {
-            this.notifySharedUsers(event, members); // fire-and-forget, members already resolved
+            // Nobody waits for it.
+            this.notifySharedUsers(event, members);
 
             const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
             const targetPath = this.containerPath ?? this.path;
@@ -179,10 +186,23 @@ export class ChatRoom {
             const body = content.length > 100 ? `${content.slice(0, 100)}...` : content;
             const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
 
-            // Mention notifications (non-whisper only). Populate the set synchronously first — the
-            // activity loop below filters on it — then fan out the sends concurrently (mirrors
-            // notifyWatchers): each getUserByEmail + sendToHome is an independent auth-db/home
-            // round-trip, isolated so one failure never rejects the batch or delays the sender.
+            // The deliveries open each recipient's home and share the relay's budget with other
+            // fan-outs. So they run after the post answers, and a busy budget never holds up a message.
+            const notify = (userIds: string[], notification: NotificationPersistInput) => {
+                sendToUserHomes(userIds, { type: 'notification', notification }).catch((error: unknown) => {
+                    console.error('Failed to send the chat notifications:', error);
+                });
+            };
+            // The message is stored already, so a failed lookup costs only that person's notification.
+            // It is logged, and the post still answers.
+            const findUser = (email: string) =>
+                getUserByEmail(email).catch((error: unknown) => {
+                    console.error(`Failed to look up ${email} for a chat notification:`, error);
+                    return null;
+                });
+
+            // A mentioned member hears about the message once, as a mention. So the activity
+            // notifications below skip everyone in this set.
             const mentionedEmailSet = new Set<string>();
             if (type !== 'whisper') {
                 const mentionTitle = `${author.name} mentioned you in "${displayName}"`;
@@ -193,70 +213,59 @@ export class ChatRoom {
                 }
                 await Promise.all(
                     [...mentionedEmailSet].map(async (email) => {
-                        try {
-                            const mentionedUser = await getUserByEmail(email);
-                            if (!mentionedUser) return;
-                            await sendToHome(mentionedUser.id, {
-                                type: 'notification',
-                                notification: this.containerPath
-                                    ? {
-                                          type: 'mention-comment',
-                                          actorEmail: authorEmail,
-                                          title: mentionTitle,
-                                          body,
-                                          tag: chatMentionTag(thread, email),
-                                          details: { pathType: this.containerPath.type },
-                                      }
-                                    : {
-                                          type: 'mention-chat',
-                                          actorEmail: authorEmail,
-                                          title: mentionTitle,
-                                          body,
-                                          tag: chatMentionTag(thread, email),
-                                      },
-                            });
-                        } catch {
-                            // user or home may not exist
-                        }
+                        const mentionedUser = await findUser(email);
+                        if (!mentionedUser) return;
+                        // Each mention carries its own tag, so each one is its own delivery.
+                        notify(
+                            [mentionedUser.id],
+                            this.containerPath
+                                ? {
+                                      type: 'mention-comment',
+                                      actorEmail: authorEmail,
+                                      title: mentionTitle,
+                                      body,
+                                      tag: chatMentionTag(thread, email),
+                                      details: { pathType: this.containerPath.type },
+                                  }
+                                : {
+                                      type: 'mention-chat',
+                                      actorEmail: authorEmail,
+                                      title: mentionTitle,
+                                      body,
+                                      tag: chatMentionTag(thread, email),
+                                  },
+                        );
                     }),
                 );
             }
 
-            // Activity notifications: whispers → recipient only, messages/emotes → previous participants + owner
+            // A whisper notifies its recipient only. A message or an emote notifies the earlier
+            // participants and the owner.
             const activityNotifiedEmails = new Set<string>();
-            const notifyActivity = async (userId: string) => {
-                try {
-                    await sendToHome(userId, {
-                        type: 'notification',
-                        notification: this.containerPath
-                            ? {
-                                  type: 'comment-reply',
-                                  actorEmail: authorEmail,
-                                  title: `${author.name} commented on "${displayName}"`,
-                                  body,
-                                  tag: chatActivityTag(thread),
-                                  details: { pathType: this.containerPath.type },
-                              }
-                            : {
-                                  type: 'chat-message',
-                                  actorEmail: authorEmail,
-                                  title: `New message from ${author.name} in "${displayName}"`,
-                                  body,
-                                  tag: chatActivityTag(thread),
-                              },
-                    });
-                } catch {
-                    // user home may not exist
-                }
-            };
+            const activity: NotificationPersistInput = this.containerPath
+                ? {
+                      type: 'comment-reply',
+                      actorEmail: authorEmail,
+                      title: `${author.name} commented on "${displayName}"`,
+                      body,
+                      tag: chatActivityTag(thread),
+                      details: { pathType: this.containerPath.type },
+                  }
+                : {
+                      type: 'chat-message',
+                      actorEmail: authorEmail,
+                      title: `New message from ${author.name} in "${displayName}"`,
+                      body,
+                      tag: chatActivityTag(thread),
+                  };
 
             if (type === 'whisper' && whisperTo) {
                 if (
                     whisperTo.toLowerCase() !== authorEmail.toLowerCase() &&
                     memberEmails.has(whisperTo.toLowerCase())
                 ) {
-                    const recipientUser = await getUserByEmail(whisperTo);
-                    if (recipientUser) await notifyActivity(recipientUser.id);
+                    const recipientUser = await findUser(whisperTo);
+                    if (recipientUser) notify([recipientUser.id], activity);
                 }
             } else if (type === 'message' || type === 'emote') {
                 const rows = await this.db
@@ -268,26 +277,27 @@ export class ChatRoom {
                 participantEmails.add(this.home.user.email.toLowerCase());
                 participantEmails.delete(authorEmail.toLowerCase());
 
-                // Containers hold no user ids, so each distinct participant email resolves through
-                // getUserByEmail (one lookup per email, as mentions/whispers already do); unresolvable
-                // emails are skipped. Resolved recipients feed activityNotifiedEmails for coveredEmails
-                // below. The batch is awaited, so the set is fully populated before the watcher fan-out.
-                await Promise.all(
+                // A room stores emails, not user ids, so each participant is looked up by email, and an
+                // email without an account is skipped. The watcher fan-out below skips everyone found.
+                const participants = await Promise.all(
                     [...participantEmails].map(async (email) => {
-                        if (mentionedEmailSet.has(email)) return;
-                        if (!memberEmails.has(email)) return;
-                        const participant = await getUserByEmail(email);
-                        if (!participant) return;
+                        if (mentionedEmailSet.has(email)) return null;
+                        if (!memberEmails.has(email)) return null;
+                        const participant = await findUser(email);
+                        if (!participant) return null;
                         activityNotifiedEmails.add(email);
-                        await notifyActivity(participant.id);
+                        return participant.id;
                     }),
+                );
+                notify(
+                    participants.filter((id) => id !== null),
+                    activity,
                 );
             }
 
-            // File history: 'commented' on the container (or the standalone chat itself).
-            // Whisper content is private to its recipient — never expose it via history.
-            // Everyone the mention/activity notifications already covered is excluded
-            // from the watcher fan-out so nobody is notified twice.
+            // The history gets a 'commented' row on the document, or on a chat on its own. A whisper is
+            // private to its recipient, so it never reaches the history. The watchers skip everyone the
+            // notifications above reached, so nobody hears about one message twice.
             if (type !== 'whisper') {
                 const coveredEmails = new Set<string>([
                     authorEmail.toLowerCase(),
@@ -327,7 +337,7 @@ export class ChatRoom {
         return rows.map((r) => this.toMessage(r)).reverse();
     }
 
-    async getMessagesForUser(userEmail: string, limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
+    public async getMessagesForUser(userEmail: string, limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
         const allMessages = await this.getMessages(limit, beforeId);
         const viewerEmail = userEmail.toLowerCase();
 
@@ -359,7 +369,7 @@ export class ChatRoom {
         });
     }
 
-    async editMessage(messageId: string, content: string, userEmail: string): Promise<ChatMessage> {
+    public async editMessage(messageId: string, content: string, userEmail: string): Promise<ChatMessage> {
         const existing = await this.db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
         if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
             throw new ApiError(404, 'Message not found or not owned');
@@ -391,7 +401,7 @@ export class ChatRoom {
         return updated;
     }
 
-    async deleteMessage(messageId: string, userEmail: string): Promise<void> {
+    public async deleteMessage(messageId: string, userEmail: string): Promise<void> {
         const existing = await this.db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
         if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
             throw new ApiError(404, 'Message not found or not owned');
@@ -404,8 +414,8 @@ export class ChatRoom {
             .where(eq(schema.messages.id, messageId));
 
         if (existing.attachments) {
-            // Attachment strings are file names in this chat's own media/ folder; resolve within it
-            // so a crafted pathId can't trash arbitrary owner-writable paths elsewhere in the mount.
+            // An attachment is a file name in this chat's own media folder. It is looked up only there, so a
+            // crafted name can't trash another path of the owner's.
             const mediaFolder = await this.drive.getChildByName(this.path.mountId, this.path.id, 'media');
             if (mediaFolder) {
                 for (const attachment of existing.attachments) {
@@ -447,8 +457,8 @@ export class ChatRoom {
         }
     }
 
-    // Newest-first tail of the live thread text, rebuilt in full on every indexed write (recompute,
-    // not append — deleted messages leave the index, edits don't duplicate; threads are short).
+    // The newest text of the thread, newest first, for the comment index. It is built again in full on
+    // every write, so a deleted message leaves it and an edit never shows twice. Threads are short.
     private async buildRecentText(): Promise<string> {
         const rows = await this.db
             .select({
@@ -459,8 +469,8 @@ export class ChatRoom {
             .from(schema.messages)
             .where(and(schema.SEARCHABLE_MESSAGES, ne(schema.messages.content, '')))
             .orderBy(...schema.NEWEST_FIRST)
-            // Empty messages are filtered out above, so every row adds at least one char and
-            // RECENT_TEXT_CAP rows always fill the byte cap — bound the fetch instead of scanning the thread.
+            // Every row adds at least one character, because empty messages are left out above. So this
+            // many rows always fill the cap, and the query needn't read the whole thread.
             .limit(RECENT_TEXT_CAP)
             .all();
         let text = '';
@@ -472,12 +482,11 @@ export class ChatRoom {
         return text.slice(0, RECENT_TEXT_CAP);
     }
 
-    // Uses getEffectiveMembers to resolve all users with access — handles inherited
-    // ACL from parent folders, team membership, and container document ACL.
-    // Pass pre-resolved members to avoid a redundant ACL walk when postMessage has already fetched them.
+    // Sends the event to the tabs of everyone with access, through the folders above, a team or the
+    // document's ACL. A caller that read the members already passes them, so they aren't read twice.
     private async notifySharedUsers(event: SSEvent, members?: EffectiveMember[]) {
-        // Non-rejecting: every caller fires this without awaiting, so a relay/lookup failure must
-        // never surface as an unhandled rejection or break the mutation that triggered it.
+        // Every caller starts this without waiting for it. So a failure is logged here, and it never breaks
+        // the change that sent the event.
         try {
             const resolved = members ?? (await this.drive.getEffectiveMembers(this.path.mountId, this.path.id));
             await relayEventToMembers(resolved, event);

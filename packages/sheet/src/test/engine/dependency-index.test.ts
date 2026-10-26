@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DependencyIndex } from '../../engine/dependency-index';
+import { DependencyIndex, dependencyBlocks } from '../../engine/dependency-index';
 import type { FormulaDependency } from '../../engine/types';
 
 function dep(r0: number, r1: number, c0: number, c1: number, sheetId = 's1'): FormulaDependency {
@@ -135,5 +135,19 @@ describe('engine/dependency-index — DependencyIndex', () => {
         expect(index.dependentsOf('s1', 0, 0)).toEqual(['f1']);
         expect(index.dependentsOf('s1', 2, 1)).toEqual(['f1']);
         expect(index.dependentsOf('s1', 3, 0)).toEqual([]);
+    });
+});
+
+describe('engine/dependency-index — dependencyBlocks', () => {
+    test('a range costs every 64 × 16 block it meets, a single cell none', () => {
+        expect(dependencyBlocks([dep(5, 5, 5, 5)])).toBe(0);
+        expect(dependencyBlocks([dep(0, 63, 0, 15)])).toBe(1);
+        expect(dependencyBlocks([dep(63, 64, 15, 16)])).toBe(4);
+        expect(dependencyBlocks([dep(0, 127, 0, 31), dep(200, 200, 40, 56)])).toBe(4 + 2);
+        expect(dependencyBlocks([{ row: [0, 1], column: [0, 0], sheetId: undefined }])).toBe(0);
+    });
+
+    test('the whole grid is 16 million blocks', () => {
+        expect(dependencyBlocks([dep(0, 1_048_575, 0, 16_383)])).toBe(16_384 * 1_024);
     });
 });

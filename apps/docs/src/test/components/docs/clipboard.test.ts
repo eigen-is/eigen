@@ -1,18 +1,23 @@
 // A paste through the eigen clipboard: what a docs copy writes, placed by the paste.
-import { expect, spyOn, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { Editor } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
+import { readLatex, writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
 
 const { buildTextClipboardItem, classifyPaste } = await import('@workspace/lib/clipboard');
+const { FLAT_CHART_LOOK, MAX_CHART_SPEC_BYTES } = await import('@workspace/lib/charts');
 const { DOCUMENT_FONT, EIGEN_FONTS } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
-const { insertEigenItems, writeDocsClipboard } = await import('../../../components/docs/clipboard');
+const { insertEigenItems, runClipboardCommand, writeDocsClipboard } = await import(
+    '../../../components/docs/clipboard'
+);
 const { cleanPastedHTML } = await import('../../../components/docs/paste');
+const { sampleChartParts } = await import('../../fixtures/chart-parts');
 
 const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
 const text = (t: string, ...marks: object[]) => ({ type: 'text', text: t, ...(marks.length > 0 ? { marks } : {}) });
@@ -52,9 +57,9 @@ async function paste(
 ) {
     const target = new Editor({
         extensions: getDocExtensions(),
-        editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600, cardIds) },
+        editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600, cardIds, DOCUMENT_FONT) },
     });
-    await insertEigenItems(target, clipboard.eigen?.items ?? [], clipboard.html, pastedMediaName);
+    await insertEigenItems(target, clipboard.eigen?.items ?? [], clipboard.html, pastedMediaName, 600);
     return target;
 }
 
@@ -105,6 +110,37 @@ test('a copy of text and an image pastes both, in document order', async () => {
     expect(blocks(await paste(clipboard))).toEqual([['Intro'], ['chart.png'], ['One'], ['Two']]);
 });
 
+// A menu's Copy fires the native copy, which the browser sends to the element that holds the page's selection.
+// The HTML isn't compared: happy-dom reports the selection change at once, so ProseMirror reads back a text selection.
+test("a viewer's menu Copy of a figure writes what an editor's copy writes", () => {
+    const content = [paragraph(text('Intro')), paragraph(figure('chart.png'))];
+    const viewer = source(content);
+    document.body.append(viewer.view.dom);
+    viewer.setEditable(false);
+    viewer.commands.setNodeSelection(8);
+    let written: DataTransfer | null = null;
+    document.execCommand = mock((command: string) => {
+        const anchor = document.getSelection()?.anchorNode;
+        const target = anchor instanceof Element ? anchor : (anchor?.parentElement ?? document.body);
+        const event = new ClipboardEvent(command, {
+            clipboardData: new DataTransfer(),
+            bubbles: true,
+            cancelable: true,
+        });
+        target.dispatchEvent(event);
+        written = event.clipboardData;
+        return true;
+    });
+    runClipboardCommand(viewer, 'copy');
+    const editor = source(content);
+    editor.commands.setNodeSelection(8);
+    const expected = copyOrCut(editor, 'copy');
+    if (!written) throw new Error('no copy event');
+    const { eigen, text: plain } = classifyPaste(written);
+    expect(eigen?.items.map((item) => item.type)).toEqual(['image']);
+    expect({ eigen, plain }).toEqual({ eigen: expected.eigen, plain: expected.text });
+});
+
 // A figure whose file does not resolve, as one still uploading, has no item; its paragraph stays in the text.
 test('a figure that does not resolve is left out', async () => {
     const clipboard = copy([
@@ -113,6 +149,46 @@ test('a figure that does not resolve is left out', async () => {
         paragraph(text('Two'), figure('chart.png')),
     ]);
     expect(blocks(await paste(clipboard))).toEqual([['One'], [], ['Two', 'chart.png']]);
+});
+
+// Slides and sheets read the text item, so an equation beside an image keeps its linear form there.
+test("an equation copied beside an image is its linear form in the copy's text item", () => {
+    const latex = '\\pi r^2';
+    const equation = { type: 'equation', attrs: { mathml: writeMathml(readLatex(latex), latex) } };
+    const { eigen } = copy([paragraph(text('Area '), equation), paragraph(figure('chart.png'))]);
+    expect(eigen?.items.map((item) => (item.type === 'text' ? item.text : item.type))).toEqual(['Area πr^2', 'image']);
+});
+
+// Another editor reads the <math> with its LaTeX, a plain-text one the linear form.
+test('an equation copied writes its MathML in the HTML and its linear form as plain text', () => {
+    const latex = '\\pi r^2';
+    const equation = { type: 'equation', attrs: { mathml: writeMathml(readLatex(latex), latex) } };
+    const { html, text: plain } = copy([paragraph(text('Area '), equation)]);
+    expect(html).toContain(writeMathml(readLatex(latex), latex));
+    expect(plain).toBe('Area πr^2');
+});
+
+test("a page number copied beside an image is # in the copy's text item", () => {
+    const { eigen } = copy([
+        paragraph(text('Page '), { type: 'pageNumber', attrs: { kind: 'page' } }),
+        paragraph(figure('chart.png')),
+    ]);
+    expect(eigen?.items.map((item) => (item.type === 'text' ? item.text : item.type))).toEqual(['Page #', 'image']);
+});
+
+// A note is no part of the sentence around its reference, and its image no item of its own.
+test("a copy's items leave a note's text and images out", () => {
+    const { eigen } = copy([
+        paragraph(
+            text('Claim'),
+            { type: 'footnote', content: [paragraph(text('Note'), figure('noted.png'))] },
+            text('.'),
+        ),
+        paragraph(figure('chart.png')),
+    ]);
+    expect(
+        eigen?.items.map((item) => (item.type === 'image' ? item.mediaName : item.type === 'text' && item.text)),
+    ).toEqual(['Claim.', 'chart.png']);
 });
 
 test('a figure whose re-upload fails is left out', async () => {
@@ -183,8 +259,9 @@ test('a copy writes an italic mark in Heading 6 upright and pastes it back as th
     expect(target.getJSON()).toEqual(expected.getJSON());
 });
 
-// A title's look is its node's, which Google Docs and Word don't read: the copy writes the size and color the page
-// draws it in on the p, the body's color left to the target, and a paste here reads the node from its data-type.
+// A title's look is its node's, which Google Docs and Word don't read: the copy writes the size, in pt as the clipboard
+// carries every size, and color the page draws it in on the p, the body's color left to the target, and a paste here
+// reads the node from its data-type.
 // happy-dom computes no nested CSS, so the page's look is stubbed.
 test('a copy writes the title and subtitle look inline and pastes them back as the nodes', async () => {
     const content = [
@@ -208,8 +285,8 @@ test('a copy writes the title and subtitle look inline and pastes them back as t
     expect(
         [...html.querySelectorAll<HTMLElement>('p')].map((p) => [p.dataset['type'], p.style.fontSize, p.style.color]),
     ).toEqual([
-        ['title', '34.6667px', ''],
-        ['subtitle', '20px', 'rgb(102, 102, 102)'],
+        ['title', '26pt', ''],
+        ['subtitle', '15pt', 'rgb(102, 102, 102)'],
         [undefined, '', ''],
     ]);
 
@@ -259,6 +336,97 @@ test('a text item pastes its text literally', async () => {
     const item = buildTextClipboardItem({ text: 'if a<b and c>d then\nAT&amp;T', box: { width: 100, height: 20 } });
     const target = await paste({ eigen: { version: 1, items: [item] }, html: '', text: '', files: [], imageFiles: [] });
     expect(blocks(target)).toEqual([['if a<b and c>d then'], ['AT&amp;T']]);
+});
+
+const LOOK = {
+    fill: JSON.stringify({ type: 'solid', color: '#ffeeaa', style: 'zigzag' }),
+    color: '#ffffff',
+    strokeColor: '#336699',
+    strokeWidth: 4,
+    strokeStyle: 'dotted',
+    roughness: 2,
+    seed: 77,
+} as const;
+
+// A chart writes its item for the other apps, and within Docs pastes back whole through the docs HTML, alone or
+// beside a figure.
+test('a chart copies and pastes back whole within Docs, alone or beside a figure', async () => {
+    const chart = {
+        type: 'chart',
+        attrs: {
+            ...sampleChartParts('pie'),
+            width: 300,
+            height: 200,
+            caption: 'Share',
+            alignment: 'center',
+            layout: 'wrap-left',
+            commentCardId: null,
+            seriesStrokeWidth: null,
+            ...LOOK,
+        },
+    };
+    const chartsIn = (editor: Editor) => {
+        const attrs: Record<string, unknown>[] = [];
+        editor.state.doc.descendants((node) => {
+            if (node.type.name === 'chart') attrs.push(node.attrs);
+        });
+        return attrs;
+    };
+
+    const alone = copy([paragraph(text('a'), chart)]);
+    expect(alone.eigen?.items.at(-1)).toEqual({
+        type: 'chart',
+        parts: sampleChartParts('pie'),
+        width: 300,
+        height: 200,
+        look: LOOK,
+    });
+    expect(chartsIn(await paste(alone))).toEqual([chart.attrs]);
+
+    const beside = copy([paragraph(figure('a.png'), chart)]);
+    expect(beside.eigen?.items.map((item) => item.type)).toEqual(['image', 'chart']);
+    expect(chartsIn(await paste(beside))).toEqual([chart.attrs]);
+
+    const placeholder = copy([paragraph(text('a'), { ...chart, attrs: { ...chart.attrs, specData: '{' } })]);
+    expect(placeholder.eigen).toBeUndefined();
+});
+
+// Sheets, Slides and Vector write no docs HTML: a chart item lands as a chart node, its width capped at the column
+// with its shape kept, and its sizes otherwise as they came.
+test('a chart item from another app pastes as a chart, capped at the column', async () => {
+    const parts = sampleChartParts('line');
+    const items = [
+        { type: 'chart' as const, parts, width: 400.5, height: 250.25, look: LOOK },
+        { type: 'chart' as const, parts, width: 1200, height: 675, look: FLAT_CHART_LOOK },
+    ];
+    const target = await paste({ eigen: { version: 1, items }, html: '', text: '', files: [], imageFiles: [] });
+    const charts: Record<string, unknown>[] = [];
+    target.state.doc.descendants((node) => {
+        if (node.type.name === 'chart') charts.push(node.attrs);
+    });
+    expect(charts).toMatchObject([
+        { ...parts, width: 400.5, height: 250.25, ...LOOK },
+        { ...parts, width: 600, height: 337.5, ...FLAT_CHART_LOOK },
+    ]);
+});
+
+// At the limit as the item carries it, past it once the doc adds the specPoints it lacks.
+test('a chart item that would land past the byte limit pastes nothing', async () => {
+    const { specPoints: _, ...lacking } = sampleChartParts('line');
+    const bytes = (texts: Record<string, string>) =>
+        Object.entries(texts).reduce((sum, [key, text]) => sum + new TextEncoder().encode(key + text).length, 0);
+    const padded = (pad: string) => ({
+        ...lacking,
+        specChart: JSON.stringify({ ...JSON.parse(lacking.specChart), pad }),
+    });
+    const parts = padded('x'.repeat(MAX_CHART_SPEC_BYTES - bytes(padded(''))));
+    const items = [{ type: 'chart' as const, parts, width: 400, height: 250, look: LOOK }];
+    const target = await paste({ eigen: { version: 1, items }, html: '', text: '', files: [], imageFiles: [] });
+    const charts: string[] = [];
+    target.state.doc.descendants((node) => {
+        if (node.type.name === 'chart') charts.push(node.type.name);
+    });
+    expect(charts).toEqual([]);
 });
 
 // A copy with no figure, title or upright italic is ProseMirror's own, so it never serializes the selection itself.

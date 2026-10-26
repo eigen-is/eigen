@@ -6,18 +6,12 @@ import { MAILBOX_ARCHIVE, MAILBOX_INBOX } from '@workspace/lib/constants/mailbox
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import type { SearchResponse } from '@workspace/lib/types/search';
+import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { getHome } from '../../lib/home';
 import { boxDir, mailRootOf, makeEml, seedMaildirFile, seedMaildirFolder } from '../mail-test-helpers';
-import {
-    app,
-    assertJson,
-    authedRequest,
-    collectSSE,
-    createTestUser,
-    ensureServer,
-    findOrFail,
-    type TestUser,
-} from '../setup';
+import type { TestUser } from '../setup';
+import { app, assertJson, authedRequest, collectSSE, createTestUser, ensureServer, findOrFail } from '../setup';
 
 // createTestUser hits the auth DB directly, so the setup wizard (which creates the auth schema and
 // configures the org) must have run first. Under --parallel each file boots its own server; gate on it.
@@ -307,5 +301,37 @@ describe.skipIf(isWindows)('Only the delivered message is new', () => {
         expect(await mailNewRows(user)).toEqual([]);
         const archive = await listBox(user.sessionToken, user.id, MAILBOX_ARCHIVE, 50);
         expect(archive.map((row) => row.subject)).toEqual(['The original']);
+    });
+});
+
+describe.skipIf(isWindows)('A sync that joins a running one', () => {
+    test('settles only after a pass that read the folder after it joined', async () => {
+        const userEmail = `mailjoin-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(userEmail, 'testpassword123', 'Mail Join Test');
+        await initHome(user);
+        // Outside the standard six, so no watcher syncs it. Two chunks: the first one's events fire while the pass still runs.
+        seedMaildirFolder(user.id, 'Filed');
+        for (let i = 0; i < 499; i++) {
+            seedMaildirFile(user.id, 'Filed', `${Date.now()}.seed${i}`, makeEml(`Seed ${i}`));
+        }
+
+        const home = await getHome(user.id);
+        const lateId = `${Date.now()}.late`;
+        let joined: Promise<EmailSummary[]> | undefined;
+        // Runs inside the first open's pass, after it read the folder: the file lands too late for it.
+        const listener = (event: SSEvent): void => {
+            if (joined || event.type !== SSEventType.MAIL_RECEIVED || event.mail.mailbox !== 'Filed') return;
+            seedMaildirFile(user.id, 'Filed', lateId, makeEml('Filed during the sync'));
+            joined = home.mail.mailboxGet('Filed');
+        };
+        home.subscribeSSE(listener);
+        try {
+            const opened = await listBox(user.sessionToken, user.id, 'Filed', 500);
+            expect(joined).toBeDefined();
+            await joined;
+            expect(opened.map((message) => message.id)).toContain(lateId);
+        } finally {
+            home.unsubscribeSSE(listener);
+        }
     });
 });

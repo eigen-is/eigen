@@ -1,5 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { bundledFont, bundledFontOfCategory, EIGEN_FONT_NAMES } from '../../constants/fonts';
+import {
+    bundledFont,
+    bundledFontOfCategory,
+    bundledFontOfStack,
+    EIGEN_FONT_NAMES,
+    fontFacesFor,
+    MAX_FONT_SIZE,
+    MIN_FONT_SIZE,
+    nextFontSize,
+    readCssFontSize,
+    readFontSize,
+} from '../../constants/fonts';
 
 describe('bundledFont', () => {
     test('a bundled font is its own', () => {
@@ -57,5 +68,94 @@ describe('bundledFontOfCategory', () => {
         ['hand-drawn', 'Excalifont'],
     ] as const)('%s is drawn in %s', (category, name) => {
         expect(bundledFontOfCategory(category)).toBe(name);
+    });
+});
+
+describe('font sizes', () => {
+    test("a size lands in Google's 1 to 400 pt, in Word's half points", () => {
+        expect(readFontSize(12)).toBe(12);
+        expect(readFontSize(10.3)).toBe(10.5);
+        expect(readFontSize(0)).toBe(MIN_FONT_SIZE);
+        expect(readFontSize(1e6)).toBe(MAX_FONT_SIZE);
+    });
+
+    // A peer writes the attribute, so a string would otherwise reach a style attribute.
+    test.each([['12'], ['12pt; position: fixed'], [Number.NaN], [Number.POSITIVE_INFINITY], [null], [undefined]])(
+        '%p is no size',
+        (value) => {
+            expect(readFontSize(value)).toBeUndefined();
+        },
+    );
+
+    test('a step is a point, and stops at the ends of the range', () => {
+        expect(nextFontSize(11, 1)).toBe(12);
+        expect(nextFontSize(10.5, -1)).toBe(9.5);
+        expect(nextFontSize(MAX_FONT_SIZE, 1)).toBe(MAX_FONT_SIZE);
+        expect(nextFontSize(MIN_FONT_SIZE, -1)).toBe(MIN_FONT_SIZE);
+    });
+});
+
+describe('readCssFontSize', () => {
+    test('pt reads as pt and px at 96 dpi, on the half-point grid', () => {
+        expect(readCssFontSize('14pt')).toBe(14);
+        expect(readCssFontSize('12.0pt')).toBe(12);
+        expect(readCssFontSize('16px')).toBe(12);
+        expect(readCssFontSize('34.6667px')).toBe(26);
+    });
+
+    // Relative to what the source drew around it, so no size of its own.
+    test.each([['1.2em'], ['120%'], ['large'], ['']])('%p is no size', (value) => {
+        expect(readCssFontSize(value)).toBeUndefined();
+    });
+});
+
+describe('bundledFontOfStack', () => {
+    test.each([
+        ['Georgia,serif', 'Source Serif 4'],
+        ['"Times New Roman", serif', 'Source Serif 4'],
+        ["'Source Serif 4', serif", 'Source Serif 4'],
+        ['Wingdings, "Courier New", monospace', 'JetBrains Mono'],
+        ['Calibri', 'Inter'],
+    ])('%s is drawn in %s', (stack, bundled) => {
+        expect(bundledFontOfStack(stack)).toBe(bundled);
+    });
+
+    test('a stack of unknown and generic families maps to none', () => {
+        expect(bundledFontOfStack('Wingdings, sans-serif')).toBeUndefined();
+        expect(bundledFontOfStack('')).toBeUndefined();
+    });
+});
+
+describe('fontFacesFor', () => {
+    const files = (uses: { family: string; style: string }[]) => fontFacesFor(uses).map((face) => face.file);
+
+    test("an upright run needs only its family's upright face, an italic one only its italic face", () => {
+        expect(files([{ family: 'Inter', style: 'normal' }])).toEqual(['inter/Inter-Variable.woff2']);
+        expect(files([{ family: 'Source Serif 4', style: 'italic' }])).toEqual([
+            'source-serif/SourceSerif4-Variable-Italic.woff2',
+        ]);
+    });
+
+    test('a family without an italic face draws its italic from the upright one, which is embedded', () => {
+        expect(files([{ family: 'Excalifont', style: 'italic' }])).toEqual(['excalifont/Excalifont-Regular.woff2']);
+        expect(files([{ family: 'JetBrains Mono', style: 'oblique' }])).toEqual([
+            'jetbrains-mono/JetBrainsMono-Variable.woff2',
+        ]);
+    });
+
+    test('each face once, in registry order; an unknown family has none', () => {
+        expect(
+            files([
+                { family: 'Inter', style: 'italic' },
+                { family: 'Excalifont', style: 'normal' },
+                { family: 'Inter', style: 'normal' },
+                { family: 'Inter', style: 'italic' },
+                { family: 'Wingdings', style: 'normal' },
+            ]),
+        ).toEqual([
+            'inter/Inter-Variable.woff2',
+            'inter/Inter-Variable-Italic.woff2',
+            'excalifont/Excalifont-Regular.woff2',
+        ]);
     });
 });

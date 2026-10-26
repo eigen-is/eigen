@@ -1,7 +1,8 @@
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { ApiError } from '../core';
 import type { Mount } from '../mount/mount';
-import { DEFAULT_RETENTION, type RetentionPolicy } from './retention';
+import type { RetentionPolicy } from './retention';
+import { DEFAULT_RETENTION } from './retention';
 import { parseSnapshotTimestamp } from './timestamp';
 
 export async function saveVersion(

@@ -1,11 +1,10 @@
+// Who may read or write a Drive path, decided from the chain of folders above it. SharedDrive asks
+// this before every call it passes on, and the watcher fan-out asks it before each notification. The
+// helpers that merge, normalize and trim an ACL before Drive saves it live here too.
+
 import { parseOwnerId } from '@workspace/lib/types';
-import {
-    type DriveACL,
-    type DriveACLDelta,
-    type DrivePath,
-    type DriveVisibility,
-    isCollabType,
-} from '@workspace/lib/types/drive';
+import type { DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import { isCollabType } from '@workspace/lib/types/drive';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import type { User } from '../user';
 import type { Memberships } from '../user/';
@@ -14,13 +13,21 @@ export function grantsPublicRead(visibility: DriveVisibility): boolean {
     return visibility === 'public-read' || visibility === 'public-write';
 }
 
-// Ownership, team membership, public visibility or an ACL entry on the path or any ancestor.
+// Whether the path, or a folder above it, is in the trash. A path in the trash is the owner's alone until
+// it is restored. Its ACL and visibility stay, so the restore gives everyone their access back.
+export function isTrashedChain(ancestors: DrivePath[]): boolean {
+    return ancestors.some((path) => path.trashedAt);
+}
+
+// Ownership, team membership, public visibility or an ACL entry on the path or any ancestor. Only the
+// first two count in the trash.
 function canFromAncestors(
     ancestors: DrivePath[],
     user: User,
     memberships: Memberships,
     permission: 'read' | 'write',
 ): boolean {
+    const trashed = isTrashedChain(ancestors);
     for (const path of ancestors) {
         if (path.ownerId === user.id) return true;
 
@@ -28,6 +35,8 @@ function canFromAncestors(
         if (parsed.type === 'team') {
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
+
+        if (trashed) continue;
 
         if (permission === 'read' ? grantsPublicRead(path.visibility) : path.visibility === 'public-write') {
             return true;
@@ -72,10 +81,10 @@ export function matchesACL(
     return false;
 }
 
-// Merges an add/remove delta onto the current ACL: removals first (matched on canonicalACLId),
-// then upserts — re-adding an existing id replaces its entry, which is how permission changes
-// travel. The server-side merge is what makes concurrent sharers safe: a full-array replace
-// built from a stale client cache silently reverts other people's entries.
+// Merges a change onto the ACL as it is now. The removals go first, matched by canonicalACLId. Then each
+// added entry goes in, and one for an id that is there already replaces it, which is how a permission
+// changes. The merge runs on the server, so two people who share at once keep each other's entries. A
+// whole ACL built from an old copy in a tab would drop them.
 export function mergeACLDelta(current: DriveACL[] | null, delta: DriveACLDelta): DriveACL[] {
     const removed = new Set((delta.remove ?? []).map(canonicalACLId));
     const merged = (current ?? []).filter((entry) => !removed.has(canonicalACLId(entry.id)));

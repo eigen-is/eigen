@@ -1,115 +1,114 @@
+// A docx's drawings as the doc holds them: pictures as figures, placed and sized as Word places them, charts as chart
+// nodes through the shared chart reader or the words for one left out, and the text of SmartArt and text boxes. The
+// paragraph walk calls it for each w:drawing and VML shape it meets.
+
 import type { JSONContent } from '@tiptap/core';
+import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
+import { isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
+import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
+import { blipEmbeds, IMAGE_MIME_BY_EXTENSION } from '../../ooxml/drawingml';
 import {
     A_NS,
-    ASVG_NS,
     C_NS,
     DGM_NS,
     DSP_NS,
     EMU_PER_PX,
-    EMU_PER_TWIP,
-    FLOATING_WRAPS,
+    isOn,
     O_NS,
     PIC_NS,
+    POINTS_PER_UNIT,
     R_NS,
-    TWIPS_PER_PX,
     V_NS,
     W_NS,
     WP_NS,
-} from '../../core/ooxml';
-import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
-import { COLUMN_PX, type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
-import { contentTypeOf, descendants, int, POINTS_PER_UNIT } from './package';
-import { type Reader, readBlocks, type Scope } from './paragraphs';
-import { pushText, type RunContext } from './runs';
+} from '../../ooxml/ooxml';
+import {
+    CHART_NOT_IMPORTED,
+    chartCost,
+    chartPart,
+    droppedChart,
+    readChart,
+    readChartPartLook,
+} from '../../ooxml/ooxml-chart';
+import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
+import { declaredImageType, IMAGE_TYPES, mediaPart, PICTURE_NOT_IMPORTED } from '../image-types';
+import type { Item, ParagraphItem } from './assemble';
+import { inlineText, isCaptionLike, isFigureOnly, paraOf } from './assemble';
+import { descendants, roundedInt } from './package';
+import type { Reader, Scope } from './paragraphs';
+import { readBlocks } from './paragraphs';
+import type { RunContext } from './runs';
 
-// The image types a part may be stored as, each under its own extension. WMF and EMF are kept though no browser or
-// sharp draws them: the figure shows its alt text in a broken image, and an export leaves it out.
-const IMAGE_EXTENSION_BY_MIME = new Map([
-    ['image/png', 'png'],
-    ['image/jpeg', 'jpeg'],
-    ['image/gif', 'gif'],
-    ['image/webp', 'webp'],
-    ['image/svg+xml', 'svg'],
-    ['image/tiff', 'tiff'],
-    ['image/bmp', 'bmp'],
-    ['image/x-wmf', 'wmf'],
-    ['image/x-emf', 'emf'],
-]);
-
-// A part the package gives no type takes its extension's, and image/jpg is a common misspelling; both only through
-// the allowlist, so a part declared as anything else is still never stored.
-const MIME_BY_EXTENSION = new Map([
-    ...[...IMAGE_EXTENSION_BY_MIME].map(([mime, extension]): [string, string] => [extension, mime]),
-    ['jpg', 'image/jpeg'],
-]);
-const MIME_ALIASES = new Map([['image/jpg', 'image/jpeg']]);
-
-function imageType(reader: Reader, path: string): string | undefined {
-    const declared = contentTypeOf(reader.pkg, path);
-    if (declared) return MIME_ALIASES.get(declared) ?? declared;
-    return MIME_BY_EXTENSION.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase());
-}
-
-// sharp has no loader for these, so no screen preview shows them.
-export const UNSHOWN_IMAGE_TYPES = new Set(['image/bmp', 'image/x-wmf', 'image/x-emf']);
-
-export type MediaPart = { name: string; path: string; contentType: string };
-
-// One media file per image part, named by encounter order.
-function mediaName(reader: Reader, path: string): string | undefined {
-    const known = reader.imageNames.get(path);
-    if (known) return known;
-    const contentType = imageType(reader, path);
-    const extension = contentType && IMAGE_EXTENSION_BY_MIME.get(contentType);
-    if (!contentType || !extension || !reader.pkg.zip.entry(path)) return undefined;
-    const name = `image-${reader.images.length + 1}.${extension}`;
-    reader.images.push({ name, path, contentType });
-    reader.imageNames.set(path, name);
-    return name;
-}
-
-function partPath(id: string | undefined, scope: Scope): string | undefined {
-    const rel = id ? scope.part.rels.get(id) : undefined;
-    return rel && !rel.external ? rel.target : undefined;
-}
-
-function widthPx(px: number): number {
-    return Math.min(COLUMN_PX, Math.max(1, Math.round(px)));
-}
+// A chart part as the doc holds it: the parts of the spec the node stores, with the part its look is read from at each
+// drawing's size, or the lines a chart left out leaves in its place; and its title, which a band or a note keeps.
+export type DocxChart = { title: string } & (
+    | { parts: Record<ChartSpecPartKey, string>; root: XmlElement }
+    | { dropped: string[] }
+);
 
 export function readDrawing(reader: Reader, drawing: XmlElement, context: RunContext): void {
     for (const frame of xmlElements(drawing)) {
         if (frame.ns !== WP_NS) continue;
-        const layout = frame.local === 'anchor' ? anchorLayout(frame, reader.columnTwips * EMU_PER_TWIP) : {};
+        const anchored = frame.local === 'anchor';
+        // A band holds no floating picture: a header's logo would cover the page's body. One behind the text, a full-page
+        // letterhead or a watermark, it drops, as a block it would push the body off the page.
+        const inBand = context.scope.story === 'band';
+        if (anchored && inBand && isOn(xmlAttr(frame, '', 'behindDoc'))) {
+            reader.lost('band-content-dropped');
+            continue;
+        }
+        const layout = anchored ? anchorLayout(frame, reader, inBand) : {};
         const docPr = xmlChild(frame, WP_NS, 'docPr');
-        const alt = docPr?.attributes['descr'] || docPr?.attributes['title'] || null;
+        const alt = (docPr && (xmlAttr(docPr, '', 'descr') || xmlAttr(docPr, '', 'title'))) || null;
         const extent = xmlChild(frame, WP_NS, 'extent');
         const pictures = descendants(frame, PIC_NS, 'pic');
         const figures: JSONContent[] = [];
         for (const picture of pictures) {
             const [blip] = descendants(picture, A_NS, 'blip');
-            const [svg] = blip ? descendants(blip, ASVG_NS, 'svgBlip') : [];
-            const embedded = (element: XmlElement | undefined) => element && xmlAttr(element, R_NS, 'embed');
-            const path = partPath(embedded(svg), context.scope) ?? partPath(embedded(blip), context.scope);
-            const name = path && mediaName(reader, path);
+            const [svg, raster] = blipEmbeds(blip);
+            const name =
+                pictureName(reader, partPath(svg, context.scope)) ??
+                pictureName(reader, partPath(raster, context.scope));
             if (!name) {
-                // A linked picture lives outside the file; its alt text says what it was.
-                if (blip && !embedded(blip) && xmlAttr(blip, R_NS, 'link') && alt) pushText(reader, alt, {}, context);
+                // A blip that names nothing is an empty frame. A linked picture, or one embedded from outside the file,
+                // lives outside it, so its alt text stays after the line.
+                const rels = context.scope.part.rels;
+                const outside =
+                    [svg, raster].some((id) => id && rels.get(id)?.external) ||
+                    (blip && !raster && xmlAttr(blip, R_NS, 'link'));
+                if (svg || raster || outside) pictureLeftOut(reader, context, outside ? alt : null);
                 continue;
             }
             const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];
-            const cx = int(ext?.attributes['cx']);
-            const width = cx ? widthPx(cx / EMU_PER_PX) : null;
+            const cx = roundedInt(ext && xmlAttr(ext, '', 'cx'));
+            const width = cx ? widthPx(cx / EMU_PER_PX, reader.columnPx) : null;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, width, ...layout } });
+            if (anchored && inBand) reader.lost('band-images-unanchored');
+        }
+        // Only the body holds a chart: a band's schema has none and a note's Insert leaves it out, so there it keeps its
+        // title.
+        const inBody = context.scope.story === 'body';
+        for (const [reference, ext] of chartsIn(frame, extent)) {
+            const chart = readDocxChart(reader, reference, context.scope);
+            if (inBody && 'parts' in chart) {
+                const { emuPerPx, ...size } = chartSize(ext, reader.columnPx);
+                const look = readChartPartLook(chart.root, { theme: reader.colors, emuPerPx, host: 'docx' });
+                figures.push({ type: 'chart', attrs: { ...chart.parts, ...look, ...size, ...layout } });
+                continue;
+            }
+            reader.lost('charts-dropped');
+            leaveLines(context, inBody && 'dropped' in chart ? chart.dropped : [chart.title].filter(Boolean));
         }
         // A shape's text boxes: the caption of a grouped picture, a picture with its caption, or text that follows.
         const boxed = descendants(frame, W_NS, 'txbxContent').flatMap((box) =>
-            readBlocks(reader, xmlElements(box), onShape(context.scope)),
+            readBlocks(reader, xmlElements(box), onShapeFill(context.scope)),
         );
         const content = boxed.filter((item) => item.kind !== 'para' || !item.empty);
-        const paras = content.filter((item): item is Para => item.kind === 'para');
+        const paras = content.filter((item): item is ParagraphItem => item.kind === 'para');
         const [head, ...tail] = paras;
-        const inner = head && isFigureOnly(head) ? head.inlines.filter((node) => node.type === 'figure') : [];
+        const inner = head && isFigureOnly(head) ? head.inlines.filter((node) => isFigureFrameNode(node.type)) : [];
         const [boxedFigure] = inner;
         const onlyParas = paras.length > 0 && paras.length === content.length;
         if (onlyParas && figures.length === 1 && paras.every(isCaptionLike)) {
@@ -131,35 +130,147 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
     }
 }
 
-// SmartArt's text is the document's: its drawing's shapes in order, else its data model's points. A chart keeps its
-// title only. The schema holds neither graphic, so each counts as dropped.
+export function readVml(reader: Reader, element: XmlElement, context: RunContext): void {
+    for (const shape of xmlElements(element)) {
+        if (shape.ns !== V_NS) {
+            if (shape.ns !== W_NS || shape.local !== 'control') readVml(reader, shape, context);
+            continue;
+        }
+        if (xmlAttr(shape, O_NS, 'hr') === 't') {
+            context.pieces.push({ kind: 'hr' });
+            continue;
+        }
+        // A band's VML text is Word's text watermark, its text a path no node holds; a shapetype only defines one.
+        const textPath = descendants(shape, V_NS, 'textpath').some((path) => xmlAttr(path, '', 'string'));
+        if (context.scope.story === 'band' && shape.local !== 'shapetype' && textPath)
+            reader.lost('band-content-dropped');
+        for (const data of descendants(shape, V_NS, 'imagedata')) {
+            // A band's VML picture is Word's picture watermark, laid over the page.
+            if (context.scope.story === 'band') {
+                reader.lost('band-content-dropped');
+                continue;
+            }
+            const id = xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid');
+            const name = pictureName(reader, partPath(id, context.scope));
+            const alt = xmlAttr(shape, '', 'alt') || xmlAttr(data, O_NS, 'title') || null;
+            if (!name) {
+                // A linked picture lives outside the file, so its alt text stays after the line, as a DrawingML one's.
+                if (id) pictureLeftOut(reader, context, context.scope.part.rels.get(id)?.external ? alt : null);
+                continue;
+            }
+            const width = vmlWidthPx(xmlAttr(shape, '', 'style') ?? '', reader.columnPx);
+            context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, width } } });
+        }
+        for (const box of descendants(shape, W_NS, 'txbxContent'))
+            for (const item of readBlocks(reader, xmlElements(box), onShapeFill(context.scope)))
+                context.pending.push(item);
+    }
+}
+
+// A part the package gives no type takes its extension's, as Word reads one. Only a type of the allowlist is stored.
+function imageType(reader: Reader, path: string): string | undefined {
+    if (reader.pkg.contentTypeOf(path)) return declaredImageType(reader.pkg, path);
+    return IMAGE_MIME_BY_EXTENSION.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase());
+}
+
+// One media file per image part, named in encounter order. A part that is missing or of no image type, whose bytes
+// don't read, or that is past the pictures' caps has none.
+function pictureName(reader: Reader, path: string | undefined): string | undefined {
+    const part = path && mediaPart(reader.pkg.zip, path, imageType(reader, path), IMAGE_TYPES);
+    return part && reader.files.name(part);
+}
+
+// A picture left out is counted and leaves a line saying so, as a slide leaves a box; a linked one, which lives outside
+// the file, its alt text after the line.
+function pictureLeftOut(reader: Reader, context: RunContext, alt: string | null): void {
+    reader.lost('images-dropped');
+    leaveLines(context, alt ? [PICTURE_NOT_IMPORTED, alt] : [PICTURE_NOT_IMPORTED]);
+}
+
+// What a drawing left out says in its place, a paragraph after the one it stood in, aligned as that one is.
+function leaveLines(context: RunContext, lines: string[]): void {
+    if (lines.length === 0) return;
+    const line = paraOf(
+        lines.flatMap((text, index) => [...(index > 0 ? [{ type: 'hardBreak' }] : []), { type: 'text', text }]),
+    );
+    context.pending.push(line);
+    context.leftOut.push(line);
+}
+
+function partPath(id: string | undefined, scope: Scope): string | undefined {
+    const rel = id ? scope.part.rels.get(id) : undefined;
+    return rel && !rel.external ? rel.target : undefined;
+}
+
+function widthPx(px: number, columnPx: number): number {
+    return Math.min(columnPx, Math.max(1, Math.round(px)));
+}
+
+const NOT_IMPORTED: DocxChart = { title: '', dropped: [CHART_NOT_IMPORTED] };
+
+// Each chart a drawing shows with the a:ext it is drawn at: alone, the drawing's extent; in a group or a canvas, its own
+// graphicFrame's. A text box's content is its own paragraphs', read with them.
+function chartsIn(frame: XmlElement, extent: XmlElement | undefined): [XmlElement, XmlElement | undefined][] {
+    const charts: [XmlElement, XmlElement | undefined][] = [];
+    const stack: [XmlElement, XmlElement | undefined][] = [[frame, extent]];
+    for (let next = stack.pop(); next; next = stack.pop()) {
+        const [element, ext] = next;
+        if (hasXmlName(element, C_NS, 'chart')) charts.push(next);
+        else if (!hasXmlName(element, W_NS, 'txbxContent')) {
+            const xfrm =
+                element.local === 'graphicFrame' && xmlElements(element).find((child) => child.local === 'xfrm');
+            const own = xfrm ? xmlChild(xfrm, A_NS, 'ext') : ext;
+            for (const child of xmlElements(element).reverse()) stack.push([child, own]);
+        }
+    }
+    return charts;
+}
+
+// The chart a c:chart names, read once per part: its spec, or the words for a chart the reader can't draw, a part
+// missing, damaged or of another type, or one past the chart allowance, as Slides leaves a box for each.
+function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): DocxChart {
+    const root = chartPart(reader.pkg, scope.part.rels, xmlAttr(reference, R_NS, 'id'), 'word/charts/');
+    if (!root) return NOT_IMPORTED;
+    const known = reader.charts.get(root);
+    if (known) return known;
+    const read = reader.pkg.charts.spend(chartCost(root)) && readChart(root, { theme: reader.colors, data: 'cache' });
+    const chart: DocxChart = !read
+        ? NOT_IMPORTED
+        : 'spec' in read
+          ? { title: read.spec.title.text, parts: newChartSpecParts(read.spec), root }
+          : { title: read.unsupported.title, dropped: droppedChart(read.unsupported) };
+    reader.charts.set(root, chart);
+    return chart;
+}
+
+// Its drawn size, shrunk to the text column and to the node's largest side, keeping its shape, and the EMU one px of
+// that size is drawn at in the file.
+function chartSize(ext: XmlElement | undefined, columnPx: number): { width: number; height: number; emuPerPx: number } {
+    const cx = roundedInt(ext && xmlAttr(ext, '', 'cx')) ?? 0;
+    const cy = roundedInt(ext && xmlAttr(ext, '', 'cy')) ?? 0;
+    const drawn = cx > 0 && cy > 0;
+    const { width, height } = drawn ? { width: cx / EMU_PER_PX, height: cy / EMU_PER_PX } : CHART_DEFAULT_SIZE;
+    const scale = Math.min(1, columnPx / width, CHART_MAX_SIDE / height);
+    const size = { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+    return { ...size, emuPerPx: drawn ? cx / size.width : EMU_PER_PX };
+}
+
+// SmartArt's text is the document's: its drawing's shapes in order, else its data model's points; the schema holds no
+// SmartArt, so each counts as dropped.
 function graphicText(reader: Reader, frame: XmlElement, scope: Scope): Item[] {
     const lines: JSONContent[][] = [];
     for (const diagram of descendants(frame, DGM_NS, 'relIds')) {
-        reader.graphicsDropped++;
+        reader.lost('diagrams-dropped');
         const data = readOnce(reader, partPath(xmlAttr(diagram, R_NS, 'dm'), scope));
         if (!data) continue;
         const [ext] = descendants(data, DSP_NS, 'dataModelExt');
-        const drawing = readOnce(reader, partPath(ext?.attributes['relId'], scope));
+        const drawing = readOnce(reader, partPath(ext && xmlAttr(ext, '', 'relId'), scope));
         const paragraphs = drawing
             ? descendants(drawing, DSP_NS, 'txBody').flatMap((body) => xmlChildren(body, A_NS, 'p'))
             : descendants(data, DGM_NS, 'pt')
-                  .filter((point) => SMARTART_TEXT_POINTS.has(point.attributes['type'] ?? 'node'))
+                  .filter((point) => SMARTART_TEXT_POINTS.has(xmlAttr(point, '', 'type') ?? 'node'))
                   .flatMap((point) => descendants(point, A_NS, 'p'));
         for (const paragraph of paragraphs) lines.push(drawingLine(paragraph));
-    }
-    for (const chart of descendants(frame, C_NS, 'chart')) {
-        reader.graphicsDropped++;
-        const space = readOnce(reader, partPath(xmlAttr(chart, R_NS, 'id'), scope));
-        const plot = space && xmlChild(space, C_NS, 'chart');
-        const title = plot && xmlChild(plot, C_NS, 'title');
-        const text = title && xmlChild(title, C_NS, 'tx');
-        if (!text) continue;
-        const rich = xmlChild(text, C_NS, 'rich');
-        // A title from a cell keeps the cell's cached text.
-        const cached = descendants(text, C_NS, 'v').map(xmlText).join('');
-        if (rich) for (const paragraph of xmlChildren(rich, A_NS, 'p')) lines.push(drawingLine(paragraph));
-        else if (cached) lines.push([{ type: 'text', text: cached }]);
     }
     return lines.filter((line) => line.some((node) => node.type === 'text')).map(paraOf);
 }
@@ -171,7 +282,7 @@ const SMARTART_TEXT_POINTS = new Set(['node', 'asst']);
 function readOnce(reader: Reader, path: string | undefined): XmlElement | undefined {
     if (!path || reader.graphicParts.has(path)) return undefined;
     reader.graphicParts.add(path);
-    return reader.pkg.readPart(path);
+    return reader.pkg.part(path);
 }
 
 function drawingLine(paragraph: XmlElement): JSONContent[] {
@@ -186,61 +297,59 @@ function drawingLine(paragraph: XmlElement): JSONContent[] {
     return line;
 }
 
-export function readVml(reader: Reader, element: XmlElement, context: RunContext): void {
-    for (const shape of xmlElements(element)) {
-        if (shape.ns !== V_NS) {
-            if (shape.ns !== W_NS || shape.local !== 'control') readVml(reader, shape, context);
-            continue;
-        }
-        if (xmlAttr(shape, O_NS, 'hr') === 't') {
-            context.pieces.push({ kind: 'hr' });
-            continue;
-        }
-        for (const data of descendants(shape, V_NS, 'imagedata')) {
-            const path = partPath(xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid'), context.scope);
-            const name = path && mediaName(reader, path);
-            if (!name) continue;
-            const width = vmlWidthPx(shape.attributes['style'] ?? '');
-            const alt = shape.attributes['alt'] || xmlAttr(data, O_NS, 'title') || null;
-            context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, width } } });
-        }
-        for (const box of descendants(shape, W_NS, 'txbxContent'))
-            for (const item of readBlocks(reader, xmlElements(box), onShape(context.scope))) context.pending.push(item);
-    }
-}
-
 // A shape's text sits on its fill, which the schema drops.
-function onShape(scope: Scope): Scope {
+function onShapeFill(scope: Scope): Scope {
     return { ...scope, onFill: true };
 }
 
-// Wrapped beside the text, on the side its alignment or its offset puts it; otherwise a block, aligned if Word aligns it.
-function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, string> {
+// Wrapped beside the text, on the side its alignment or its offset puts it; otherwise, or as a block, aligned if Word
+// aligns it.
+function anchorLayout(anchor: XmlElement, reader: Reader, block: boolean): Record<string, string> {
     const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
     const offset = positionH && xmlChild(positionH, WP_NS, 'posOffset');
-    const cx = int(xmlChild(anchor, WP_NS, 'extent')?.attributes['cx']) ?? 0;
+    const extent = xmlChild(anchor, WP_NS, 'extent');
+    const cx = roundedInt(extent && xmlAttr(extent, '', 'cx')) ?? 0;
     const side = align
         ? xmlText(align).trim()
-        : offset && (int(xmlText(offset)) ?? 0) + cx / 2 > columnEmu / 2
+        : offset &&
+            columnOffset(reader, xmlAttr(positionH, '', 'relativeFrom'), roundedInt(xmlText(offset)) ?? 0, cx) +
+                cx / 2 >
+                reader.columnTwips * EMU_PER_TWIP * 0.5
           ? 'right'
           : 'left';
-    if (wrapped) return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
+    if (wrapped && !block) return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
     return side === 'left' || side === 'right' || side === 'center' ? { alignment: side } : {};
 }
 
-// A point is 20 twips.
+// An offset from the area relativeFrom names, from the text column's left edge, kept on the paper: the page and the
+// left or inside margin start at the paper's edge, the right or outside margin at the column's end, and the margin, the
+// column and a character at the column, a character's place in its line being unknown.
+function columnOffset(reader: Reader, relativeFrom: string | undefined, offset: number, cx: number): number {
+    const { width, margin } = pageTwips(reader.page);
+    const marginLeft = margin.left * EMU_PER_TWIP;
+    const area = AREA_AT_PAPER_EDGE.has(relativeFrom ?? '')
+        ? -marginLeft
+        : AREA_AT_COLUMN_END.has(relativeFrom ?? '')
+          ? reader.columnTwips * EMU_PER_TWIP
+          : 0;
+    return Math.min(Math.max(area + offset, -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
+}
+
+const AREA_AT_PAPER_EDGE = new Set(['page', 'leftMargin', 'insideMargin']);
+const AREA_AT_COLUMN_END = new Set(['rightMargin', 'outsideMargin']);
+
 const PX_PER_UNIT = new Map([
     ['px', 1],
-    ...[...POINTS_PER_UNIT].map(([unit, points]): [string, number] => [unit, (points * 20) / TWIPS_PER_PX]),
+    ...[...POINTS_PER_UNIT].map(([unit, points]): [string, number] => [unit, ptToPx(points)]),
 ]);
 
 const VML_WIDTH = new RegExp(`(?:^|;)\\s*width\\s*:\\s*([\\d.]+)(${[...PX_PER_UNIT.keys()].join('|')})?`, 'i');
 
-function vmlWidthPx(style: string): number | null {
+function vmlWidthPx(style: string, columnPx: number): number | null {
     const match = style.match(VML_WIDTH);
     if (!match) return null;
     const px = Number(match[1]) * (PX_PER_UNIT.get((match[2] ?? 'px').toLowerCase()) ?? 1);
-    return Number.isFinite(px) && px > 0 ? widthPx(px) : null;
+    return Number.isFinite(px) && px > 0 ? widthPx(px, columnPx) : null;
 }

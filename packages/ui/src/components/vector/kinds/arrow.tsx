@@ -2,22 +2,20 @@
 // selected arrow carries a label — the label's font. The generic capability rows (stroke, sketch,
 // opacity) stay the panel's; these are the questions only an arrow answers.
 
+import type { Arrowhead, ArrowShape, VectorArrowElement } from '@workspace/lib/vector';
 import {
     ARROW_SHAPES,
-    type Arrowhead,
-    type ArrowShape,
     arrowShapeFields,
     arrowShapeOf,
     EDGES_OPTIONS,
     normalizeLinear,
     parsePoints,
     redockBindingsForElbow,
-    type VectorArrowElement,
 } from '@workspace/lib/vector';
 import {
     FontRow,
+    FontSizeRow,
     getMergedValue,
-    MergedNumberInput,
     MergedSelect,
     PropertyRow,
     PropertySection,
@@ -41,7 +39,7 @@ const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
     { value: 'circle', label: 'Circle' },
 ];
 
-export function ArrowPanelSection({ elements, scene, onChange, onChangeEach }: KindPanelSectionProps) {
+export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onChangeEach }: KindPanelSectionProps) {
     const { hold, end: endGesture } = useHeldGesture();
     const pendingFontWrites = useRef(0);
     // The panel mounts a kind's section only for a SOLE-kind selection, so this narrows rather than filters.
@@ -57,7 +55,6 @@ export function ArrowPanelSection({ elements, scene, onChange, onChangeEach }: K
     const startArrowhead = getMergedValue(arrows, (el) => el.startArrowhead);
     const endArrowhead = getMergedValue(arrows, (el) => el.endArrowhead);
     const fontFamily = getMergedValue(arrows, (el) => el.fontFamily);
-    const fontSize = getMergedValue(arrows, (el) => el.fontSize);
 
     // arrowShapeFields owns the stored fields each shape writes back. Switching TO elbow first collapses
     // the arrow to its two endpoints — an elbow route is DERIVED from them, so interior vertices would
@@ -83,15 +80,19 @@ export function ArrowPanelSection({ elements, scene, onChange, onChangeEach }: K
     // The Size field holds its own gesture only while it is focused, and on a cold face the write lands
     // after the blur that released it — every digit would be its own undo step. So the write takes the
     // window back itself and keeps it until the last pending load has landed.
-    const applyFont = async (patch: { fontSize?: number; fontFamily?: string }) => {
+    const applyFont = async (fields: (el: VectorArrowElement) => { fontSize?: number; fontFamily?: string }) => {
         pendingFontWrites.current += 1;
         try {
             await Promise.all(
-                arrows.map((el) => loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily)),
+                arrows.map((el) => {
+                    const patch = fields(el);
+                    return loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily);
+                }),
             );
             hold();
             onChangeEach((el) => {
-                if (el.type !== 'arrow') return patch;
+                if (el.type !== 'arrow') return {};
+                const patch = fields(el);
                 const size = patch.fontSize ?? el.fontSize;
                 const family = patch.fontFamily ?? el.fontFamily;
                 return { ...patch, labelWidth: measureVectorText(el.text, size, family).width };
@@ -110,20 +111,16 @@ export function ArrowPanelSection({ elements, scene, onChange, onChangeEach }: K
                     <FontRow
                         value={fontFamily}
                         onChange={(f) => {
-                            applyFont({ fontFamily: f }).catch(() => {});
+                            applyFont(() => ({ fontFamily: f })).catch(() => {});
                         }}
                     />
-                    <PropertyRow label="Size">
-                        <MergedNumberInput
-                            value={fontSize}
-                            onChange={(v) => {
-                                applyFont({ fontSize: v }).catch(() => {});
-                            }}
-                            min={8}
-                            max={200}
-                            step={1}
-                        />
-                    </PropertyRow>
+                    <FontSizeRow
+                        sizes={arrows.map((el) => el.fontSize)}
+                        slideWidth={slideWidth}
+                        onChange={(size) => {
+                            applyFont((el) => ({ fontSize: size(el.fontSize) })).catch(() => {});
+                        }}
+                    />
                 </PropertySection>
             )}
 

@@ -1,3 +1,8 @@
+// MaildirStore keeps a user's mail as plain files in the Maildir layout, the same folders the IMAP
+// server reads, so Eigen and other mail apps always see the same mail. Next to the files it keeps an
+// index database for fast lists and search. The mail part of a Home reads, writes and moves
+// messages and drafts through it.
+
 import type { FSWatcher } from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -81,11 +86,13 @@ function safeFileId(id: string): string {
 }
 
 export class MaildirStore implements MailStore {
-    readonly basePath: string;
-    readonly storage: LocalFilesystem;
+    private readonly basePath: string;
+    public readonly storage: LocalFilesystem;
     private db!: MailDB;
     private events!: MailStoreEvents;
     private reconcilingMailboxes = new Map<string, Promise<void>>();
+    // Mailboxes whose running sync was joined: the joiner's change may land after that pass read the folder.
+    private reconcileAgain = new Set<string>();
     private lastReconcileStartedAt = new Map<string, number>();
     // Whether a delivered id was an arrival, read by whichever sync reaches the file first: this append's or a watcher's.
     private deliveries = new Map<string, boolean>();
@@ -98,14 +105,14 @@ export class MaildirStore implements MailStore {
     private stagedBytes = 0;
     private parsedMessages = new Map<string, ParsedMessage>();
 
-    constructor(private home: Home) {
+    public constructor(private home: Home) {
         this.basePath = PATHS.MAIL.MAILDIR;
         this.storage = new LocalFilesystem(`${home.homeDir}/${PATHS.MAIL.ROOT}`);
     }
 
     // -- Lifecycle --
 
-    async init(events: MailStoreEvents): Promise<boolean> {
+    public async init(events: MailStoreEvents): Promise<boolean> {
         this.events = events;
         // With mail off the store builds no Maildir and opens no index, yet the mail kept on disk still counts.
         if (!isMailAppEnabled()) {
@@ -125,26 +132,32 @@ export class MaildirStore implements MailStore {
         return isNew;
     }
 
-    // The standard six only: a watcher per IMAP folder spends the per-user inotify limit every home shares.
-    async watch(): Promise<void> {
-        await Promise.all(STANDARD_MAILBOXES.map((mailbox) => this.watchMailbox(mailbox)));
-    }
-
-    async unwatch(): Promise<void> {
+    public async unwatch(): Promise<void> {
         for (const watcher of this.watchers.values()) watcher.close();
         this.watchers.clear();
         // A sync still in flight would reach a closed db once the domain flushes drafts.
         await Promise.allSettled([...this.reconcilingMailboxes.values()]);
     }
 
-    private async watchMailbox(mailbox: string): Promise<void> {
+    // Watches the standard six, so a change an IMAP client makes reaches the index, and the user, at once.
+    // A folder that gets its watcher only now is reconciled once, for what changed while nobody watched it.
+    public async watch(): Promise<void> {
+        for (const mailbox of STANDARD_MAILBOXES) {
+            if (!(await this.watchMailbox(mailbox))) continue;
+            this.reconcileMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err));
+        }
+    }
+
+    // True when it attached a watcher: a subdir missing last time is retried, and only the caller that attached reconciles.
+    private async watchMailbox(mailbox: string): Promise<boolean> {
+        let attached = false;
         for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
             const dir = path.join(this.mailboxDir(mailbox), subdir);
             if (this.watchers.has(dir)) continue;
             // Read before the watch attaches, so a dir replaced in between costs a spare re-attach, never a dead watcher.
             const identity = await this.dirIdentity(dir);
             // A listing still in flight during teardown would re-attach what unwatch() just closed.
-            if (identity === null || this.home.destructing || this.watchers.has(dir)) continue;
+            if (identity === null || this.home.closing || this.watchers.has(dir)) continue;
             try {
                 const watcher = this.storage.watch(dir, () => {
                     this.reconcileMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err));
@@ -155,18 +168,18 @@ export class MaildirStore implements MailStore {
                             this.dropWatcher(dir, watcher);
                             if (current === null) return;
                             await this.watchMailbox(mailbox);
-                            // A sync already running may have read the dir before the new watch attached.
-                            await this.reconcilingMailboxes.get(mailbox)?.catch(() => undefined);
                             await this.reconcileMailbox(mailbox);
                         })
                         .catch((err) => console.error('maildir: watcher check failed', err));
                 });
                 watcher.on('error', () => this.dropWatcher(dir, watcher));
                 this.watchers.set(dir, watcher);
+                attached = true;
             } catch {
                 // Removed between the stat and the watch
             }
         }
+        return attached;
     }
 
     private dropWatcher(dir: string, watcher: FSWatcher): void {
@@ -182,14 +195,14 @@ export class MaildirStore implements MailStore {
         );
     }
 
-    async destruct(): Promise<void> {
+    public async destruct(): Promise<void> {
         // init() can throw before the db opens, and the home destructs regardless.
         if (this.db) {
             await this.db.destruct();
         }
     }
 
-    async size(): Promise<number> {
+    public async size(): Promise<number> {
         return this.indexBytes + this.stagedBytes;
     }
 
@@ -198,21 +211,21 @@ export class MaildirStore implements MailStore {
         this.stagedBytes = await readDraftStagingSize(this.home.fs);
     }
 
-    search(opts: MailSearchOptions): EmailSummary[] {
+    public search(opts: MailSearchOptions): EmailSummary[] {
         return this.db.searchMail(opts);
     }
 
     // -- Mailbox operations --
 
-    async mailboxesList(): Promise<MaildirMailbox[]> {
+    public async mailboxesList(): Promise<MaildirMailbox[]> {
         const mailboxes: MaildirMailbox[] = [];
+        // Also gives a standard folder that was recreated since its watcher back.
+        await this.watch();
         const paths = await this.listMailboxPaths();
         for (const name of paths) {
-            // Counts come from the index. A standard folder recreated since load gets its watcher back here;
-            // any other folder has none and reconciles here, in the background.
-            if (isStandardMailbox(name)) {
-                await this.watchMailbox(name);
-            } else if (this.reconcileDue(name)) {
+            // Counts come from the index. A folder outside the standard six has no watcher, because each one
+            // spends the per-user inotify limit that every home shares. It reconciles here instead.
+            if (!isStandardMailbox(name) && this.reconcileDue(name)) {
                 this.reconcileMailbox(name).catch((err) =>
                     console.error('maildir: background mailbox sync failed', err),
                 );
@@ -222,7 +235,7 @@ export class MaildirStore implements MailStore {
         return mailboxes;
     }
 
-    async listMessages(
+    public async listMessages(
         mailbox: string,
         opts: { limit: number; before?: { date: Date; id: string } },
     ): Promise<EmailSummary[]> {
@@ -242,16 +255,16 @@ export class MaildirStore implements MailStore {
 
     // -- Message operations --
 
-    getSummary(messageId: string): EmailSummary | undefined {
+    public getSummary(messageId: string): EmailSummary | undefined {
         return this.db.getEmail(messageId);
     }
 
-    unreadCount(mailbox: string): number {
+    public unreadCount(mailbox: string): number {
         return this.db.getEmailsCountUnread(mailbox);
     }
 
     // null means "no summary row" only: a parse, read or DB fault propagates rather than masking as a missing message.
-    async getMessage(messageId: string): Promise<Email | null> {
+    public async getMessage(messageId: string): Promise<Email | null> {
         const cached = this.db.getEmail(messageId);
         if (!cached) return null;
 
@@ -264,13 +277,13 @@ export class MaildirStore implements MailStore {
         return { ...parsed, ...cached };
     }
 
-    async getRawMessage(messageId: string): Promise<ArrayBuffer> {
+    public async getRawMessage(messageId: string): Promise<ArrayBuffer> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Email '${messageId}' not found`);
         return this.getMessageFile(email.mailbox, email.filename).arrayBuffer();
     }
 
-    async getAttachments(messageId: string): Promise<Attachment[]> {
+    public async getAttachments(messageId: string): Promise<Attachment[]> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
         const date = email.date.getTime();
@@ -295,7 +308,7 @@ export class MaildirStore implements MailStore {
         return parsed.attachments;
     }
 
-    async getModifiedAt(email: EmailSummary): Promise<number> {
+    public async getModifiedAt(email: EmailSummary): Promise<number> {
         const filePath = path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR, email.filename);
         // A flag change from Dovecot renames the file before the index hears of it: answer "changed", never a 500.
         return this.storage.stat(filePath).then(
@@ -307,7 +320,7 @@ export class MaildirStore implements MailStore {
         );
     }
 
-    async append(
+    public async append(
         mailbox: string,
         message: Buffer,
         opts?: { skipReconcile?: boolean; arrival?: boolean },
@@ -328,7 +341,7 @@ export class MaildirStore implements MailStore {
         return uniqueId;
     }
 
-    async saveDraft(raw: string, existingId?: string): Promise<Email> {
+    public async saveDraft(raw: string, existingId?: string): Promise<Email> {
         // Parsed off the lock: these bytes are exactly what parseEml would read back from the delivered file.
         const messageId = existingId ?? createUniqueMessageId();
         const bytes = Buffer.from(raw, 'utf-8');
@@ -353,7 +366,7 @@ export class MaildirStore implements MailStore {
         });
     }
 
-    async delete(messageId: string): Promise<void> {
+    public async delete(messageId: string): Promise<void> {
         return this.storeLock.run(async () => {
             const email = this.db.getEmail(messageId);
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
@@ -364,7 +377,7 @@ export class MaildirStore implements MailStore {
         });
     }
 
-    async move(messageId: string, targetMailbox: string): Promise<void> {
+    public async move(messageId: string, targetMailbox: string): Promise<void> {
         return this.storeLock.run(async () => {
             const email = this.db.getEmail(messageId);
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
@@ -378,7 +391,7 @@ export class MaildirStore implements MailStore {
         });
     }
 
-    async setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void> {
+    public async setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void> {
         return this.storeLock.run(async () => {
             const email = this.db.getEmail(messageId);
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
@@ -401,7 +414,7 @@ export class MaildirStore implements MailStore {
         });
     }
 
-    applyDraftMeta(draftId: string, meta: DraftMeta): void {
+    public applyDraftMeta(draftId: string, meta: DraftMeta): void {
         this.db.updateDraftContent(draftId, meta.subject, meta.text, buildRecipientSummary(meta.to, meta.cc));
     }
 
@@ -414,18 +427,30 @@ export class MaildirStore implements MailStore {
 
     private async reconcileMailbox(mailbox: string): Promise<void> {
         // A watcher's fire-and-forget sync started during teardown would query a closed db.
-        if (this.home.destructing) return;
+        if (this.home.closing) return;
         this.lastReconcileStartedAt.set(mailbox, Date.now());
         const running = this.reconcilingMailboxes.get(mailbox);
-        if (running) return running;
-
-        const promise = this.storeLock.run(() => this.doReconcileMailbox(mailbox));
-        this.reconcilingMailboxes.set(mailbox, promise);
-        try {
-            await promise;
-        } finally {
-            this.reconcilingMailboxes.delete(mailbox);
+        if (running) {
+            this.reconcileAgain.add(mailbox);
+            return running;
         }
+
+        // Cleared inside the lock, so a caller that joins a pass still waiting for the lock costs no extra one.
+        const promise = (async () => {
+            try {
+                do {
+                    await this.storeLock.run(() => {
+                        this.reconcileAgain.delete(mailbox);
+                        return this.doReconcileMailbox(mailbox);
+                    });
+                } while (this.reconcileAgain.has(mailbox) && !this.home.closing);
+            } finally {
+                // In the same turn as the last check, so nobody joins a loop that already ended.
+                this.reconcilingMailboxes.delete(mailbox);
+            }
+        })();
+        this.reconcilingMailboxes.set(mailbox, promise);
+        return promise;
     }
 
     private async doReconcileMailbox(mailbox: string): Promise<void> {
@@ -525,11 +550,11 @@ export class MaildirStore implements MailStore {
         return path.join(this.getDraftMetaDir(), `${name}.json`);
     }
 
-    async writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void> {
+    public async writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void> {
         await this.storage.writeAtomic(this.getDraftMetaPath(safeFileId(draftId)), JSON.stringify(meta));
     }
 
-    async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
+    public async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
         // Another MDA's filename can hold characters no Eigen id has: no sidecar exists for it, and it must not fail the sync.
         const name = foldFileId(draftId);
         if (!name) return null;
@@ -543,7 +568,7 @@ export class MaildirStore implements MailStore {
         }
     }
 
-    async deleteDraftMeta(draftId: string): Promise<void> {
+    public async deleteDraftMeta(draftId: string): Promise<void> {
         // No sidecar can exist under an id Eigen did not mint.
         const name = foldFileId(draftId);
         if (!name) return;
@@ -555,7 +580,7 @@ export class MaildirStore implements MailStore {
         } catch {}
     }
 
-    async listDraftMetaIds(): Promise<string[]> {
+    public async listDraftMetaIds(): Promise<string[]> {
         const dir = this.getDraftMetaDir();
         if (!(await this.storage.dirExists(dir))) return [];
         const files = await this.storage.readdir(dir);
@@ -564,7 +589,7 @@ export class MaildirStore implements MailStore {
 
     // -- Draft temp staging --
 
-    async persistDraftTemp(
+    public async persistDraftTemp(
         write: (writer: FileSink) => Promise<number>,
         filename: string,
         contentType: string,
@@ -605,7 +630,7 @@ export class MaildirStore implements MailStore {
         await this.storage.write(this.getDraftTempMetaPath(tempId), JSON.stringify(meta));
     }
 
-    async readDraftTempFile(
+    public async readDraftTempFile(
         tempId: string,
     ): Promise<{ content: Buffer; filename: string; contentType: string } | null> {
         const tempPath = this.getDraftTempPath(tempId);
@@ -637,7 +662,7 @@ export class MaildirStore implements MailStore {
         return `${this.getDraftTempPath(tempId)}.json`;
     }
 
-    async cleanupDraftTemp(tempId: string): Promise<void> {
+    public async cleanupDraftTemp(tempId: string): Promise<void> {
         const tempPath = this.getDraftTempPath(tempId);
         const metaPath = this.getDraftTempMetaPath(tempId);
         try {
@@ -653,7 +678,7 @@ export class MaildirStore implements MailStore {
         await this.recountStaged();
     }
 
-    async cleanupStaleDraftTemps(): Promise<void> {
+    public async cleanupStaleDraftTemps(): Promise<void> {
         await this.cleanupStaleMaildirTemps();
         // The sidecars are written through writeAtomic, and nothing else passes that directory.
         await this.storage.sweepAtomicTemps(this.getDraftMetaDir(), STALE_DRAFT_TEMP_MAX_AGE_MS);
@@ -706,7 +731,7 @@ export class MaildirStore implements MailStore {
         await this.storage.writeAtomic(path.join(this.basePath, 'subscriptions'), subscriptions);
     }
 
-    async mailboxExists(mailbox: string): Promise<boolean> {
+    public async mailboxExists(mailbox: string): Promise<boolean> {
         return this.storage.dirExists(this.mailboxDir(mailbox));
     }
 
@@ -779,7 +804,7 @@ export class MaildirStore implements MailStore {
         return this.storage.readdir(curPath);
     }
 
-    getMessageFile(mailbox: string, filename: string): BunFile {
+    public getMessageFile(mailbox: string, filename: string): BunFile {
         const filePath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename);
         return this.storage.file(filePath);
     }
