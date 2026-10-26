@@ -1,3 +1,7 @@
+// The Docs editor's side of the clipboard. A copy or cut writes the eigen items other apps read beside ProseMirror's
+// HTML and text, and a paste places the items it reads. The menus' Cut, Copy and Paste run through here too, so they
+// reach the editor's own handlers as the keys do.
+
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
@@ -127,7 +131,16 @@ function copiedClipboardItems(
 
 // A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's copy
 // and cut handlers (writeDocsClipboard, then ProseMirror's) write the clipboard as they would for the keys.
+// The browser sends that event to the element that holds the page's selection. A read-only editor doesn't put its
+// own selection on the page, so a viewer's figure would send it to the body. The page's selection is set to the
+// editor's first, so the event lands in the editor.
 export const runClipboardCommand = (editor: Editor, command: 'copy' | 'cut') => {
+    const { view } = editor;
+    if (!view.editable) {
+        const start = view.domAtPos(view.state.selection.from);
+        const end = view.domAtPos(view.state.selection.to);
+        document.getSelection()?.setBaseAndExtent(start.node, start.offset, end.node, end.offset);
+    }
     document.execCommand(command);
     editor.commands.focus();
 };
