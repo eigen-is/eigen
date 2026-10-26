@@ -1,8 +1,13 @@
+// One chat room: a .eigenchat file in Drive, which is a standalone chat or a comment thread inside a
+// document. Drive opens a room for each chat request. The room stores, edits and deletes messages,
+// and after a post it notifies the people mentioned, the earlier participants and the file's watchers.
+
 import { randomUUID } from 'node:crypto';
 import { chatActivityTag, chatMentionTag } from '@workspace/lib/notification/tags';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
+import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
@@ -12,7 +17,7 @@ import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Drive } from '../drive';
 import type { Home } from '../home';
-import { relayEventToMembers, sendToHome } from '../home/home-relay';
+import { relayEventToMembers, sendToUserHomes } from '../home/home-relay';
 import type { User } from '../user/';
 import { getUserByEmail } from '../user/';
 import { formatEmoteForViewer, parseCommand, searchableMessageText } from './commands';
@@ -183,10 +188,16 @@ export class ChatRoom {
             const body = content.length > 100 ? `${content.slice(0, 100)}...` : content;
             const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
 
-            // Mention notifications (non-whisper only). Populate the set synchronously first — the
-            // activity loop below filters on it — then fan out the sends concurrently (mirrors
-            // notifyWatchers): each getUserByEmail + sendToHome is an independent auth-db/home
-            // round-trip, isolated so one failure never rejects the batch or delays the sender.
+            // The deliveries open each recipient's home and share the relay's budget with other
+            // fan-outs. So they run after the post answers, and a busy budget never holds up a message.
+            const notify = (userIds: string[], notification: NotificationPersistInput) => {
+                sendToUserHomes(userIds, { type: 'notification', notification }).catch((error: unknown) => {
+                    console.error('Failed to send the chat notifications:', error);
+                });
+            };
+
+            // A mentioned member hears about the message once, as a mention. So the activity
+            // notifications below skip everyone in this set.
             const mentionedEmailSet = new Set<string>();
             if (type !== 'whisper') {
                 const mentionTitle = `${author.name} mentioned you in "${displayName}"`;
@@ -197,62 +208,50 @@ export class ChatRoom {
                 }
                 await Promise.all(
                     [...mentionedEmailSet].map(async (email) => {
-                        try {
-                            const mentionedUser = await getUserByEmail(email);
-                            if (!mentionedUser) return;
-                            await sendToHome(mentionedUser.id, {
-                                type: 'notification',
-                                notification: this.containerPath
-                                    ? {
-                                          type: 'mention-comment',
-                                          actorEmail: authorEmail,
-                                          title: mentionTitle,
-                                          body,
-                                          tag: chatMentionTag(thread, email),
-                                          details: { pathType: this.containerPath.type },
-                                      }
-                                    : {
-                                          type: 'mention-chat',
-                                          actorEmail: authorEmail,
-                                          title: mentionTitle,
-                                          body,
-                                          tag: chatMentionTag(thread, email),
-                                      },
-                            });
-                        } catch {
-                            // user or home may not exist
-                        }
+                        const mentionedUser = await getUserByEmail(email);
+                        if (!mentionedUser) return;
+                        // Each mention carries its own tag, so each one is its own delivery.
+                        notify(
+                            [mentionedUser.id],
+                            this.containerPath
+                                ? {
+                                      type: 'mention-comment',
+                                      actorEmail: authorEmail,
+                                      title: mentionTitle,
+                                      body,
+                                      tag: chatMentionTag(thread, email),
+                                      details: { pathType: this.containerPath.type },
+                                  }
+                                : {
+                                      type: 'mention-chat',
+                                      actorEmail: authorEmail,
+                                      title: mentionTitle,
+                                      body,
+                                      tag: chatMentionTag(thread, email),
+                                  },
+                        );
                     }),
                 );
             }
 
             // Activity notifications: whispers → recipient only, messages/emotes → previous participants + owner
             const activityNotifiedEmails = new Set<string>();
-            const notifyActivity = async (userId: string) => {
-                try {
-                    await sendToHome(userId, {
-                        type: 'notification',
-                        notification: this.containerPath
-                            ? {
-                                  type: 'comment-reply',
-                                  actorEmail: authorEmail,
-                                  title: `${author.name} commented on "${displayName}"`,
-                                  body,
-                                  tag: chatActivityTag(thread),
-                                  details: { pathType: this.containerPath.type },
-                              }
-                            : {
-                                  type: 'chat-message',
-                                  actorEmail: authorEmail,
-                                  title: `New message from ${author.name} in "${displayName}"`,
-                                  body,
-                                  tag: chatActivityTag(thread),
-                              },
-                    });
-                } catch {
-                    // user home may not exist
-                }
-            };
+            const activity: NotificationPersistInput = this.containerPath
+                ? {
+                      type: 'comment-reply',
+                      actorEmail: authorEmail,
+                      title: `${author.name} commented on "${displayName}"`,
+                      body,
+                      tag: chatActivityTag(thread),
+                      details: { pathType: this.containerPath.type },
+                  }
+                : {
+                      type: 'chat-message',
+                      actorEmail: authorEmail,
+                      title: `New message from ${author.name} in "${displayName}"`,
+                      body,
+                      tag: chatActivityTag(thread),
+                  };
 
             if (type === 'whisper' && whisperTo) {
                 if (
@@ -260,7 +259,7 @@ export class ChatRoom {
                     memberEmails.has(whisperTo.toLowerCase())
                 ) {
                     const recipientUser = await getUserByEmail(whisperTo);
-                    if (recipientUser) await notifyActivity(recipientUser.id);
+                    if (recipientUser) notify([recipientUser.id], activity);
                 }
             } else if (type === 'message' || type === 'emote') {
                 const rows = await this.db
@@ -272,19 +271,21 @@ export class ChatRoom {
                 participantEmails.add(this.home.user.email.toLowerCase());
                 participantEmails.delete(authorEmail.toLowerCase());
 
-                // Containers hold no user ids, so each distinct participant email resolves through
-                // getUserByEmail (one lookup per email, as mentions/whispers already do); unresolvable
-                // emails are skipped. Resolved recipients feed activityNotifiedEmails for coveredEmails
-                // below. The batch is awaited, so the set is fully populated before the watcher fan-out.
-                await Promise.all(
+                // A room stores emails, not user ids, so each participant is looked up by email, and an
+                // email without an account is skipped. The watcher fan-out below skips everyone found.
+                const participants = await Promise.all(
                     [...participantEmails].map(async (email) => {
-                        if (mentionedEmailSet.has(email)) return;
-                        if (!memberEmails.has(email)) return;
+                        if (mentionedEmailSet.has(email)) return null;
+                        if (!memberEmails.has(email)) return null;
                         const participant = await getUserByEmail(email);
-                        if (!participant) return;
+                        if (!participant) return null;
                         activityNotifiedEmails.add(email);
-                        await notifyActivity(participant.id);
+                        return participant.id;
                     }),
+                );
+                notify(
+                    participants.filter((id) => id !== null),
+                    activity,
                 );
             }
 

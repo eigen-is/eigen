@@ -15,7 +15,7 @@ function syncUpdateMessage(value: string): Uint8Array {
     const edit = new Y.Doc();
     edit.getMap('edited-events-test').set('k', value);
     const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collabDocument.ts)
+    encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collab-document.ts)
     syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(edit));
     return encoding.toUint8Array(encoder);
 }

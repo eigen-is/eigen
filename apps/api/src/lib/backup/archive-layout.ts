@@ -1,3 +1,7 @@
+// What a home archive holds, read without a live home: the home databases, and a mount's paths table turned into
+// archive paths and storage keys. The backup steps share it, such as capture, verify and restore. Nothing it
+// imports opens a file, so ./eigen restore can stage an archive with it while the API runs on the same data/.
+
 import type { Database } from 'bun:sqlite';
 import type { DrivePathType } from '@workspace/lib/types/drive';
 import { isCollabType, isDocumentType } from '@workspace/lib/types/drive';
@@ -14,10 +18,6 @@ import { isUsableName, trashStorageKey } from '../mount/names';
 import { paths } from '../mount/schema';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
 import { VERSIONS_FOLDER_NAME } from '../versioning/versions-folder';
-
-// What a home archive holds, read without a live home: the home databases, and a mount's paths table turned into
-// archive paths and storage keys. Capture, verify and both restores share it. Nothing it imports opens a file, so
-// ./eigen restore can stage an archive with it while the API runs on the same data/.
 
 // Home-level databases outside the mounts. Absent files are skipped: a team home has no mail,
 // contacts or notifications, and opening one through getLocalDatabase would create it empty.
@@ -182,7 +182,7 @@ function unusableParts(row: MountPathRow): string[] {
     const failures: string[] = [];
     if (!isUsableName(row.id)) failures.push(`path row "${row.id}" has an unusable id`);
     if (!isUsableName(row.name)) failures.push(`path row ${row.id} has an unusable name "${row.name}"`);
-    // Empty is how a flat-key mount spells a folder row (Mount.buildFileValue).
+    // Empty is how a flat-key mount spells a folder row (Mount.createFolder).
     const trashKey = row.trashedFrom !== null && row.file === trashStorageKey(row.id, row.name);
     if (row.file !== '' && !trashKey && !isUsableName(row.file)) {
         failures.push(`path row ${row.id} has an unusable file "${row.file}"`);

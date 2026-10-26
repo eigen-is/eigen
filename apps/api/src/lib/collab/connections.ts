@@ -1,10 +1,11 @@
+// Every open collab socket, grouped by the home that owns the document it edits. A CollabDocument
+// keeps its own connections, but a backup restore evicts the owner's Drive, and its documents with it.
+// So the route also registers each socket here when it opens and drops it when it closes, and a
+// restore can still close every socket of the home.
+
 import { COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON } from '@workspace/lib/constants/collab';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 
-// Every open collab socket, grouped by the home that owns the document it edits. A CollabDocument
-// keeps its own connections, but they live in the owner's Drive registry — which a restore has just
-// evicted — so the sockets are tracked here, next to the route that opens them, and a restore can
-// still reach them. Registered on open, dropped on close.
 const connectionsByOwner = new Map<string, Set<ServerWebSocket<unknown>>>();
 
 export function registerCollabConnection(ownerId: string, ws: ServerWebSocket<unknown>): void {

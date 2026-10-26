@@ -97,17 +97,20 @@ export class TeamHome extends Home {
         const existing = this.settings.get().mounts?.[mountId];
         if (!existing) throw new ApiError(404, 'Mount not found');
 
-        // Same gate as addMount — a typo'd s3Config would tear down the working live backend and
-        // pile every write into the upload queue's retry loop against a dead destination.
+        // The same check as addMount. A mistyped s3Config would replace the working storage with a
+        // dead one, and every write would then pile up in the upload queue.
         if (existing.storageType === 's3' && update.s3Config) {
             const s3Result = await checkS3Connection(update.s3Config);
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
         }
 
-        const updated = { ...existing, ...update };
-        await this.settings.set({ mounts: { [mountId]: updated } });
-        // Persisting alone leaves the already-built Drive on a stale config until the Home is evicted;
-        // push the change onto the live mount so quota/name/enabled apply immediately.
+        // Only the changed fields are saved. The store merges them into what it holds at that moment,
+        // so a change saved by someone else during the check stays.
+        const saved = await this.settings.set({ mounts: { [mountId]: update } });
+        const updated = saved.mounts?.[mountId];
+        if (!updated) throw new ApiError(404, 'Mount not found');
+        // The Drive built its mounts from the settings it read at start, so the change goes to the
+        // live mount too. Otherwise a new quota, name or on/off would wait until the home reloads.
         await this.drive.updateMount(createMountConfig(mountId, updated), updated.enabled);
         return updated;
     }

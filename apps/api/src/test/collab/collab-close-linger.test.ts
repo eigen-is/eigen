@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
-import CollabDocument from '../../lib/collab/collabDocument';
+import { CollabDocument } from '../../lib/collab/collab-document';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { driveGet, drivePost, getTestContext } from '../setup';

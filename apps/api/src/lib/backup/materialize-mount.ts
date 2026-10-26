@@ -1,3 +1,6 @@
+// A home folder's mounts put back from an archive, and the check of what landed. The restores use it, such as
+// ./eigen restore, whose stage runs beside a live API. So nothing imported here opens a file on load.
+
 import { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -15,9 +18,6 @@ import { paths, pendingUploads } from '../mount/schema';
 import { errnoOf } from '../storage/deadline';
 import { archivePath, HOME_DATABASES, listManagedDatabases, readMountPathRows, storageKeyOf } from './archive-layout';
 import { requireMountDir, resolveInside } from './paths';
-
-// A home folder's mounts put back from an archive, and the check of what landed. Shared by the per-home restore
-// and ./eigen restore, whose stage runs beside a live API: nothing imported here opens a file on load.
 
 // A restored database and the schema this build expects of it.
 export type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> };
@@ -241,9 +241,9 @@ export function containerDatabasesIn(homeDir: string, mountIds: string[]): Versi
         try {
             const rows = readMountPathRows(db);
             const byId = new Map(rows.map((row) => [row.id, row]));
-            // A folder row carries its own name as `file` on a path-based mount and nothing at all on
-            // a flat-key one (Mount.buildFileValue) — which is what tells the two layouts apart with
-            // no manifest to ask. A mount with no folders has no containers either.
+            // A folder row carries its own name as `file` on a path-based mount, and nothing on a
+            // flat-key one (Mount.createFolder). That tells the two layouts apart with no manifest to
+            // ask. A mount with no folders has no containers either.
             const isPathBased = rows.some((row) => row.type !== 'file' && row.parentId !== null && row.file !== '');
             for (const entry of listManagedDatabases(rows)) {
                 found.push({

@@ -52,7 +52,9 @@ A whisper's target must be a registered user, or the post answers 404. On read, 
 
 - Every email in the text is a mention (`extractMentionedEmails`), and a mentioned effective member gets `mention-chat`, or `mention-comment` in a comment thread.
 - Everyone who posted before, plus the room's owner, gets `chat-message` or `comment-reply`, unless the mention already covered them. A whisper notifies its recipient only.
-- The container (or the standalone room) records a `commented` file event. Its watcher fan-out excludes the author and everyone the two steps above reached, so nobody hears about one message twice ([FILE-HISTORY.md](FILE-HISTORY.md)).
+- The container (or the standalone room) records a `commented` file event. Its watcher fan-out excludes the author and everyone the two steps before it reached, so nobody hears about one message twice ([FILE-HISTORY.md](FILE-HISTORY.md)).
+
+The post waits for the user lookups only. The deliveries go out through the relay's `sendToUserHomes` after the post answers. Each one opens the recipient's home, and the relay opens at most eight homes at once for all its fan-outs together, so a post in a large room never waits behind a large share elsewhere.
 
 The mention list in the composer opens on `@` only at the start of the text or after whitespace, a comma or a period, so typing an email never triggers it. The tags these notifications carry, and how opening a thread marks them read, are in [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md#chat-and-comment-tags-name-the-thread).
 

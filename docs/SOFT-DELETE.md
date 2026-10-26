@@ -43,7 +43,7 @@ A moved-aside entry is kept, not deleted, because it may hold older versions or 
 
 ## Trash closes what is open under the item first
 
-Before any column changes, `Drive.deletePath` closes every collab document under the item and `Mount.trashPath` flushes and closes every cached database. A still-open database would otherwise keep syncing its `data.db` to the old key: a folder rebuilt outside `.trash/` on `local`, a revived object on `s3`. A collab socket that opens between the collab close and the trash write still gets the document, because `getActivePath` passes until `trashedAt` is set. So the trash closes the collab documents under the item a second time once the row is trashed, which ends any session opened in that window.
+Before any column changes, `Drive.deletePath` closes every collab document under the item and `Mount.trashPath` flushes and closes every cached database. A still-open database would otherwise keep syncing its `data.db` to the old key: a folder rebuilt outside `.trash/` on `local`, a revived object on `s3`. `getActivePath` passes until `trashedAt` is set, so a collab socket could open a document between the collab close and the trash write. Its database would then close under it, and its later edits would be lost. So `Drive.deletePath` has the collab registry refuse every open at or below the item with a 503 until the trash is done. The socket gets the storage-unavailable close and retries, and by then the item is in the trash, so the retry gets a 404 ([COLLAB.md](COLLAB.md#a-drive-mount-or-trash-that-is-closing-refuses-a-new-open)). `apps/api/src/test/drive/trash-collab-close.test.ts` pins it.
 
 ## Trash revokes every share, and restore re-shares without an email
 
@@ -51,21 +51,21 @@ The `acl` column survives trashing. Trash calls `propagateSharedPathChange(path,
 
 ## Restore goes back to the original folder when it still can
 
-The item returns to `trashedFrom` if that folder exists and is not trashed itself, else to the mount root. A name conflict there, or a reserved name, gets a ` (n)` suffix. The folder and name are picked under the lock, because on `local` a storage rename would replace a file a create put there in the meantime, so a restore that raced a same-name create gets the suffix too. A descendant with its own `trashedFrom` stays in trash, since the user trashed it separately.
+The item returns to `trashedFrom` if that folder exists and no folder from it up to the root is in trash, else to the mount root. A name conflict there, or a reserved name, gets a ` (n)` suffix. The folder and name are picked under the lock, because on `local` a storage rename would replace a file a create put there in the meantime, so a restore that raced a same-name create gets the suffix too. A descendant with its own `trashedFrom` stays in trash, since the user trashed it separately.
 
 ## Permanent delete takes the separately trashed descendants with it
 
-A folder's permanent delete first removes every trash root whose `trashedFrom` lies inside the folder. Those items hang under the mount root, and once the folder is gone they could never be restored to it. The delete itself is `Mount.deletePath`: rows first, then storage ([STORAGE.md](STORAGE.md)).
+A folder's permanent delete first removes every trash root whose `trashedFrom` lies inside the folder. Those items hang under the mount root, and once the folder is gone they could never be restored to it. The delete itself is `Mount.deletePath`: rows first, then storage ([STORAGE.md](STORAGE.md)). A permanent delete holds the item's path lock, the lock trash and restore take, and reads the row under it. So a restore that got there first keeps the item, and one that waited answers 404. Each separately trashed descendant is deleted the same way, under its own lock. Permanent deletes on one mount run one at a time, because two whose trash roots each hold the other's original folder would each hold one lock and wait on the other.
 
 ## Only the drive owner sees and manages trash
 
 `SharedDrive` lets the effective owner alone (`isEffectiveOwnerSync`: the owner, or a member of the owning team) list, restore, permanently delete and empty. `listTrash` has its own check, so a collaborator cannot enumerate what the owner deleted. Trashing needs write access. A path shared directly with the caller is left instead of trashed ([ACL.md](ACL.md)).
 
-`Drive.emptyTrash` loops `permanentlyDelete` per item, so every item gets the same sharing, SSE and history handling. Trashing the mount root is a 400.
+`Drive.emptyTrash` loops `permanentlyDelete` per item, so every item gets the same sharing, SSE and history handling. An item that is gone or no longer in trash by its turn is skipped: a folder's delete took it with it, or a restore got its lock first. A single permanent delete of such an item is a 404. Trashing the mount root is a 400.
 
 ## Expired trash is purged only when a Home loads
 
-`Mount.init` purges trash roots older than `quotas.trashRetentionDays` (30 by default, `apps/api/src/lib/config/server-settings.ts`). A Home opens its mounts when it loads, so that is the only time the purge runs. A disabled mount never opens, and neither does a mount whose Home nobody loads, so both keep their trash past the window. A value of 0 turns the purge off. The purge calls `Mount.permanentlyDeleteFromTrash` directly, so it sends no SSE and notifies no watcher.
+`Mount.init` purges trash roots older than `quotas.trashRetentionDays` (30 by default, `apps/api/src/lib/config/server-settings.ts`). A Home opens its mounts when it loads, so that is the only time the purge runs. A disabled mount never opens, and neither does a mount whose Home nobody loads, so both keep their trash past the window. A value of 0 turns the purge off. The purge runs in the background, and a mount close stops it between items and waits for the item in flight. What is left keeps its rows, so the next open finishes it. On `s3` a folder in flight is one DELETE per object, one after the other, each bounded by the 30 s storage deadline, so a close during a bucket outage can wait minutes, and a shutdown waits with it. The purge calls `Mount.permanentlyDeleteFromTrash` directly, so it sends no SSE and notifies no watcher.
 
 History and watcher notifications for trash, restore and permanent delete are in [FILE-HISTORY.md](FILE-HISTORY.md#chain-rewriting-mutations-record-their-own-events).
 

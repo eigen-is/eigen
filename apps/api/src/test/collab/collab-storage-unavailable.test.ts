@@ -9,8 +9,8 @@ import {
 } from '@workspace/lib/constants/collab';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import * as decoding from 'lib0/decoding';
-import { MESSAGE_SYNC } from '../../lib/collab/collabDocument';
-import type Drive from '../../lib/drive/drive';
+import { MESSAGE_SYNC } from '../../lib/collab/collab-document';
+import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
 import type { User } from '../../lib/user';

@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -199,12 +199,54 @@ describe('concurrent same-name create → exactly one 409', () => {
 
         const children = await mount.listFolder(rootId);
         expect(children.filter((c) => c.name === 'race.txt').length).toBe(1);
+        // Off `local` each create has its own key, so the loser's object goes with its row.
+        if (storageType === 'local-key') expect(readdirSync(mount.dataDir).length).toBe(1);
 
         await mount.closeAllDatabases();
     }
 
     test('path-based (local) mount', () => raceOnBackend('local'));
     test('id-based (local-key) mount', () => raceOnBackend('local-key'));
+
+    // The second write lands after the first create's row. On `local` both creates share one name path,
+    // so a second write that got that far would replace the winner's bytes. APFS treats ß as ss and ſ as s.
+    test.each([
+        ['same.txt', 'same.txt'],
+        ['strasse.txt', 'straße.txt'],
+        ['s.txt', 'ſ.txt'],
+        ['office.txt', 'oﬃce.txt'],
+    ])("creates of %s and %s keep the winner's bytes, path-based (local)", async (first, second) => {
+        const config = createTestMountConfig(`race-bytes-local-${randomUUID()}`, 'local');
+        const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        const write = mount.storage.write.bind(mount.storage);
+        let writes = 0;
+        const spy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
+            await Bun.sleep(writes++ === 0 ? 5 : 30);
+            return write(key, data);
+        });
+        let results: PromiseSettledResult<string>[];
+        try {
+            results = await Promise.allSettled([
+                mount.createFile(rootId, first, 'text/plain', 5, Buffer.from('AAAAA')),
+                mount.createFile(rootId, second, 'text/plain', 5, Buffer.from('BBBBB')),
+            ]);
+        } finally {
+            spy.mockRestore();
+        }
+
+        const [winner, loser] = results;
+        expect(winner.status).toBe('fulfilled');
+        expect(((loser as PromiseRejectedResult).reason as ApiError).status).toBe(409);
+        const row = await mount.getPath((winner as PromiseFulfilledResult<string>).value);
+        const bytes = readFileSync(join(mount.dataDir, first));
+        expect(bytes.toString()).toBe('AAAAA');
+        expect(row!.hash).toBe(new Bun.CryptoHasher('sha256').update(bytes).digest('hex'));
+
+        await mount.closeAllDatabases();
+    });
 
     // The index also constrains UPDATEs: a raced rename/move that would collide must surface as the
     // same 409 the create path raises, not a raw UNIQUE-constraint 500.
@@ -291,7 +333,7 @@ describe('concurrent same-name create → exactly one 409', () => {
         await mount.closeAllDatabases();
     });
 
-    // Pins the translation's precision: rethrowDuplicateActiveName must map ONLY the
+    // Pins the translation's precision: rethrowPathWriteError must map ONLY the
     // idx_paths_unique_active_name violation to 409. A duplicate paths.id (PRIMARY KEY) through the
     // same insert seam is a real bug, not a name race — it must re-throw raw, not become a 409.
     test('a duplicate paths.id violation re-throws raw instead of mapping to 409', async () => {

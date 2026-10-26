@@ -5,7 +5,7 @@ import * as encoding from 'lib0/encoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import CollabDocument from '../../lib/collab/collabDocument';
+import { CollabDocument } from '../../lib/collab/collab-document';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { driveGet, drivePost, getTestContext } from '../setup';
@@ -29,7 +29,7 @@ function makeSpyConn(): SpyConn {
     return conn as unknown as SpyConn;
 }
 
-// MESSAGE_SYNC (0) + payload, the frames a y-websocket client sends (mirrors collabDocument.ts).
+// MESSAGE_SYNC (0) + payload, the frames a y-websocket client sends (mirrors collab-document.ts).
 function syncFrame(write: (encoder: encoding.Encoder) => void): Uint8Array {
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, 0);

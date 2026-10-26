@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { CollabDocument } from '../../lib/collab/collab-document';
+import { ApiError } from '../../lib/core/errors';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
@@ -54,21 +56,43 @@ describe('trash closes open collab documents', () => {
         expect(logged).toEqual([]);
     });
 
-    // The path stays active until trashPath writes trashedAt, so a socket can open the doc after the
-    // first close. The trash closes it again once the row is trashed.
-    test('a doc opened between the collab close and the trash write is closed too', async () => {
-        const doc = await createDoc('trash-reopen');
+    // The path stays active until trashPath writes trashedAt, and trashPath closes the databases first.
+    // A document opened in between would save its edits into a closed data.db, so the open is refused.
+    test('an open while the trash runs is refused, and every edit made before it is there after a restore', async () => {
+        const doc = await createDoc('trash-window');
+        const collab = await home.drive.getCollabDocument(mountId, doc.id);
+        collab.doc.getMap('state').set('before', 'kept');
         const { mount } = await home.drive.resolveFile(mountId, doc.id);
         const trashPath = mount.trashPath.bind(mount);
-        const spy = spyOn(mount, 'trashPath').mockImplementation(async (pathId) => {
-            await home.drive.getCollabDocument(mountId, doc.id);
+        const withTreeExclusive = mount.withTreeExclusive.bind(mount);
+        let lateOpen: unknown = null;
+        const trashSpy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
+            lateOpen = await home.drive.getCollabDocument(mountId, doc.id).catch((e: unknown) => e);
             return trashPath(pathId);
         });
+        // trashPath takes the tree lock right after it closed the databases under the item.
+        const lockSpy = spyOn(mount, 'withTreeExclusive').mockImplementationOnce(async (work) => {
+            if (lateOpen instanceof CollabDocument) lateOpen.doc.getMap('state').set('during', 'edited');
+            return withTreeExclusive(work);
+        });
+        const errors = spyOn(console, 'error');
+        let logged: unknown[][];
         try {
             await home.drive.deletePath(mountId, doc.id);
         } finally {
-            spy.mockRestore();
+            logged = errors.mock.calls;
+            errors.mockRestore();
+            trashSpy.mockRestore();
+            lockSpy.mockRestore();
         }
+
+        expect(lateOpen).toBeInstanceOf(ApiError);
+        expect(lateOpen instanceof ApiError && lateOpen.status).toBe(503);
+        expect(logged.some((call) => call.some((part) => String(part).includes('closed database')))).toBe(false);
         expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+
+        await home.drive.restorePath(mountId, doc.id);
+        const restored = await home.drive.getCollabDocument(mountId, doc.id);
+        expect(restored.doc.getMap('state').get('before')).toBe('kept');
     });
 });

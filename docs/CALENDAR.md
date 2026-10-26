@@ -142,6 +142,10 @@ Two access rules guard a team home's calendars in `routes/calendar.ts`. Creating
 
 REST bounds are never tighter than what a PUT may store. The ids Eigen mints cap at 512 characters, and every field a client spells caps at `EVENT_MAX_BYTES`, or an event a CalDAV client stored would be uneditable in the web app.
 
+## Asking about another owner's calendar never opens a home it would create
+
+Some reads take another owner's id before any permission exists: the share check behind every event route (`checkCalendarAccess`), `shared-with-me` and the signup reconciliation. They reach the owner through `calendarOf` in `home-relay.ts`, which checks that the owner's home folder exists before it opens the home. A user who never signed in has no folder yet. A guest's and an org's folders sit elsewhere, and their homes have no calendar. An id without a user has neither. All four answer as a calendar the caller may not see: 403 for an event or the access list, and `[]` for `shared-with-me`. So a caller can't tell which ids exist, and asking never creates a home folder that the backup would then pick up. A disabled team calendar still answers 404, because the team sync reads that 404 to remove stale entries.
+
 ## Calendar shares the home data budget
 
 Calendar counts against the home data quota with mail and contacts ([QUOTA.md](QUOTA.md)). `Calendar.size()` answers from the in-memory `eventsBytes`, so a device sync costs no query per resource. Each commit reads its delta inside its transaction and applies it after, so a rolled-back write moves nothing. A rewrite is credited the bytes it replaces, so a shrinking edit is never refused. A move and a delete are not metered. An inbound invitation over budget is dropped while its mail still lands, because a fire-and-forget receiver has nobody to answer a 507 to.

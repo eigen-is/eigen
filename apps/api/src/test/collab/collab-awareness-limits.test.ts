@@ -35,7 +35,7 @@ function awarenessFrame(entries: { clientId: number; clock: number; state: unkno
         encoding.writeVarString(inner, JSON.stringify(e.state));
     }
     const outer = encoding.createEncoder();
-    encoding.writeVarUint(outer, 1); // MESSAGE_AWARENESS (mirrors collabDocument.ts)
+    encoding.writeVarUint(outer, 1); // MESSAGE_AWARENESS (mirrors collab-document.ts)
     encoding.writeVarUint8Array(outer, encoding.toUint8Array(inner));
     return encoding.toUint8Array(outer);
 }

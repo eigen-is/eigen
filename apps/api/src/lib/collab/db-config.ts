@@ -1,3 +1,7 @@
+// The layout of a collab document's data.db: the Yjs updates as they arrive, and the one snapshot they
+// fold into. The managed database layer runs these migrations when it opens the file, and it saves a
+// version of the file once enough writes have piled up.
+
 import type { DatabaseConfig } from '../core/managed-database';
 import { DEFAULT_RETENTION } from '../versioning/retention';
 import * as schema from './schema';

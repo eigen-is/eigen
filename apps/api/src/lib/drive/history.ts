@@ -1,3 +1,7 @@
+// The file history of one mount: a row for each change to a path, such as an upload, a rename or a
+// share, and the users who watch a path. After a change, the watchers of the path and of the folders
+// above it get a notification. Each Mount builds one, and Drive records changes through it.
+
 import { randomUUID } from 'node:crypto';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import { isDocumentType } from '@workspace/lib/types/drive';
@@ -5,7 +9,7 @@ import type { FileEvent, FileEventInput, FileEventType, PathWatchStatus } from '
 import { aclPrincipalsToResolve, describeFileEvent, toFileEventType } from '@workspace/lib/types/file-history';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { sendToHome } from '../home/home-relay';
+import { sendToUserHomes } from '../home/home-relay';
 import type * as schema from '../mount/schema';
 import { fileEvents, paths, pathWatchers } from '../mount/schema';
 import { getBatchPublicInfo } from '../space/public';
@@ -207,7 +211,13 @@ export class FileHistory {
         // The body is persisted, so the team names an acl-changed row shows are resolved here
         // rather than at render time; describeFileEvent prints every other principal id verbatim.
         const d = opts.details;
-        const names = await getBatchPublicInfo(aclPrincipalsToResolve(d));
+        // The change has landed by now. A notification that can't be written is logged, and never
+        // fails the change.
+        const names = await getBatchPublicInfo(aclPrincipalsToResolve(d)).catch((error: unknown) => {
+            console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
+            return null;
+        });
+        if (!names) return;
         const lines = describeFileEvent(
             {
                 eventType: opts.eventType,
@@ -220,33 +230,39 @@ export class FileHistory {
         );
         const cardId = d && 'cardId' in d ? d.cardId : undefined;
         const chatName = d && 'chatName' in d ? d.chatName : undefined;
-        // Concurrent + per-watcher isolated: delivery runs after the mutation committed, so one
-        // watcher's auth-db hiccup must neither reject the fan-out nor drop the other watchers.
-        await Promise.all(
+        // One failed lookup skips only that watcher, because the change has landed already.
+        const recipients = await Promise.all(
             watcherIds.map(async (watcherId) => {
                 try {
                     const watcher = await getUserById(watcherId);
-                    if (!watcher) return;
-                    if (opts.excludeEmails?.has(watcher.email.toLowerCase())) return;
+                    if (!watcher) return null;
+                    if (opts.excludeEmails?.has(watcher.email.toLowerCase())) return null;
                     const memberships = await getMemberships(watcherId);
-                    if (!canReadFromAncestors(opts.verifyAncestors, watcher, memberships)) return;
-                    await sendToHome(watcherId, {
-                        type: 'notification',
-                        notification: {
-                            type: 'file-event',
-                            actorEmail: opts.actor.email,
-                            title: `${opts.actor.name} ${lines.action}`,
-                            body: lines.primary,
-                            tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
-                            coalesce: true,
-                            details: { secondary: lines.secondary, cardId, chatName, pathType: opts.pathType },
-                        },
-                    });
+                    return canReadFromAncestors(opts.verifyAncestors, watcher, memberships) ? watcherId : null;
                 } catch {
-                    // best-effort delivery — never surface to the triggering mutation
+                    return null;
                 }
             }),
         );
+        // The deliveries open each watcher's home and share the relay's budget with other fan-outs.
+        // So they run after the change answers, and a busy budget never holds up the change.
+        sendToUserHomes(
+            recipients.filter((id) => id !== null),
+            {
+                type: 'notification',
+                notification: {
+                    type: 'file-event',
+                    actorEmail: opts.actor.email,
+                    title: `${opts.actor.name} ${lines.action}`,
+                    body: lines.primary,
+                    tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
+                    coalesce: true,
+                    details: { secondary: lines.secondary, cardId, chatName, pathType: opts.pathType },
+                },
+            },
+        ).catch((error: unknown) => {
+            console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
+        });
     }
 
     public async fanOut(opts: {

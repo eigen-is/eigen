@@ -82,7 +82,7 @@ Inside the child's graph `ApiError` comes from `core/errors`, never the `core` b
 
 ## A capture is always the whole document
 
-The snapshot flush deletes every update with `id <= lastUpdateId` in the same transaction that inserts the snapshot (`collab/collabDocument.ts`). So the newest snapshot plus the newer updates is the complete state, and the capture reads nothing else. A blob that fails to decode is skipped with a `corrupt-blobs-skipped` warning, as on a live load.
+The snapshot flush deletes every update with `id <= lastUpdateId` in the same transaction that inserts the snapshot (`collab/db-provider.ts`). So the newest snapshot plus the newer updates is the complete state, and the capture reads nothing else. A blob that fails to decode is skipped with a `corrupt-blobs-skipped` warning, as on a live load.
 
 ## One child runs at a time
 

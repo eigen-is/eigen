@@ -56,6 +56,8 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 
 - **Access** — when someone removes your write access to a document you have open in Docs, the editor turns read-only right away
 - **Sharing** — a sharing change applies right away to every open document in that drive
+- **Team drives** — edits in an open document stay saved when an admin gives its team drive new storage or turns the drive off
+- **Settings** — two settings changes saved at the same moment both stick, and neither shows an error
 - **Links in Docs** — a collaborator's edit or an undo no longer turns a file name like plan.md into a link
 - **Wrapped images in Docs** — a wrapped image leaves room for the text and lists beside it
 - **Tables in Word downloads** — a table you download as Word and import again keeps its column widths. This holds for a table inside a cell and for a table without set widths too
@@ -64,7 +66,16 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 - **Keys in Sheets** — Tab and Ctrl+arrow move the way they do in Excel
 - **Mixed formatting in Sheets** — a cell with more than one format in its text, such as one bold word, counts in sorting, filters and formulas
 - **Trash** — on local storage, a crash during a trash or a restore no longer leaves the file out of reach
+- **Trash** — a file you restore while the Trash is being emptied either comes back or is reported gone. It is never reported restored and then deleted
+- **Trash** — a drive that closes while it clears out expired trash leaves no deleted files behind in its S3 bucket
+- **Trash** — when you trash a document while someone opens it, every edit made before the trash is there after you restore it
+- **Copying documents** — opening a copy of a document before the copy is done waits for it. The copy then finishes with all of its content, instead of stopping halfway with an empty document
+- **Uploads** — two uploads of one name into one folder at the same moment keep the first file's contents on local storage. The second is refused as a duplicate
+- **Uploads** — a file added to a folder someone deletes at that moment is refused as not found, and leaves nothing behind in storage
+- **Folder sizes** — a folder shows the right size after a file in it is moved twice in quick succession
 - **Large files** — a file too large for the server's memory to import, export, preview or index is refused, instead of taking the server down
+- **Calendar** — looking up the calendar of a guest or of the organization answers that you have no access, instead of failing with a server error
+- **Calendar** — looking up the calendar of an account that doesn't exist answers the same as one you can't see, so it doesn't tell which accounts exist
 
 ## [0.3.3] - 2026-10-13
 

@@ -304,4 +304,37 @@ describe('A stalled GET and the Home', () => {
             await next;
         }
     });
+
+    test('turning a mount off does not wait on a document whose GET stalls', async () => {
+        setStorageTimeoutMs(3_000);
+        const ctx = await getTestContext();
+        const home = await getHome(ctx.alice.user.id);
+        const homeMount = new FaultMount(
+            home.user.id,
+            home.homeDir,
+            { ...createS3MountConfig('slow-off'), s3Config },
+            home.getLocalDatabase.bind(home),
+        );
+        await homeMount.init();
+        registerFaultMount(home.drive, homeMount);
+        const rootId = (await homeMount.getRootFolder())!.id;
+        const doc = await home.drive.create(homeMount.id, rootId, 'Stalled', 'doc', home.user);
+        await settleContainer(homeMount, doc.id);
+        const dataDb = (await homeMount.getChildByName(doc.id, 'data.db'))!;
+
+        fake.faults.set(await homeMount.getStorageKey(dataDb.id), 'stall-body');
+        const open = home.drive.getCollabDocument(homeMount.id, doc.id);
+        open.catch(() => {});
+        await waitFor(() => fake.heldCount > 0);
+        const turnedOff = home.drive.updateMount(homeMount.config, false);
+        try {
+            expect(await settlesWithin([turnedOff], SETTLE_BOUND_MS)).toBe(true);
+            await turnedOff;
+            expect(home.drive.getMounts()).not.toContain(homeMount);
+        } finally {
+            fake.heal();
+            await turnedOff.catch(() => {});
+            await open.catch(() => {});
+        }
+    });
 });

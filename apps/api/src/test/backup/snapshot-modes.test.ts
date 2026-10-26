@@ -480,7 +480,7 @@ describe('Backup of a disabled mount enabled while it is captured', () => {
         });
         await ownerHome.drive.updateMount(createMountConfig(MOUNT_ID, off.mounts![MOUNT_ID]), false);
 
-        let overwrite: Promise<number> | undefined;
+        let overwrite: Promise<void> | undefined;
         let overwroteDuringCopy = false;
         const withPathLock = Mount.prototype.withPathLock;
         const lock = spyOn(Mount.prototype, 'withPathLock').mockImplementation(async function <T>(
