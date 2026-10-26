@@ -761,7 +761,8 @@ export class Drive {
     }
 
     // Replaces the whole ACL. Routes only send changes, through updateACLDelta, so no client can
-    // replace a whole ACL.
+    // replace a whole ACL. A path in the trash keeps its ACL as it is, because the restore shares it
+    // again with the same people.
     public async updateACL(
         mountId: string,
         pathId: string,
@@ -772,10 +773,7 @@ export class Drive {
         options?: ACLPropagationOptions,
     ): Promise<void> {
         const mount = this.getMount(mountId);
-        const item = await mount.getPath(pathId);
-        if (!item) {
-            throw new ApiError(404, 'Path not found');
-        }
+        const item = await mount.getActivePath(pathId);
         if (item.parentId === null) {
             throw new ApiError(403, 'Cannot update ACL for root folder');
         }
@@ -909,22 +907,25 @@ export class Drive {
     }
 
     // Gives someone access to a chat. A chat inside a document shares the document, because its ACL is
-    // the one that counts. A chat on its own shares itself.
+    // the one that counts. A chat on its own shares itself. SharedDrive passes the path it checked, so
+    // a move in between can't make the invite share a document nobody checked.
     public async inviteToChat(
         mountId: string,
         chatId: string,
         email: string,
         actor: User | null = null,
+        checkedTarget?: DrivePath,
     ): Promise<InviteResult> {
         if (!validateEmailAddress(email)) {
             throw new ApiError(400, 'Invalid email address');
         }
 
-        const chatPath = await this.getPath(mountId, chatId);
-        if (!chatPath) throw new ApiError(404, 'Chat not found');
-
-        const container = await this.findContainerPath(mountId, chatPath.parentId ?? '');
-        const targetPath = container ?? chatPath;
+        let targetPath = checkedTarget;
+        if (!targetPath) {
+            const chatPath = await this.getPath(mountId, chatId);
+            if (!chatPath) throw new ApiError(404, 'Chat not found');
+            targetPath = (await this.findContainerPath(mountId, chatPath.parentId ?? '')) ?? chatPath;
+        }
 
         const id = email.toLowerCase();
         if (targetPath.acl?.some((entry) => entry.id.toLowerCase() === id)) {
@@ -981,9 +982,11 @@ export class Drive {
 
     // ---- Chats and comments ----
 
+    // A trashed chat is refused. Opening it would create a new data.db inside it, and that one would
+    // take the trashed one's name and block the restore.
     public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
-        const path = await this.getMount(mountId).getPath(chatId);
-        if (!path || path.type !== DRIVE_TYPE_CHAT) {
+        const path = await this.getMount(mountId).getActivePath(chatId);
+        if (path.type !== DRIVE_TYPE_CHAT) {
             throw new ApiError(404, 'Chat not found');
         }
         return new ChatRoom(this, this.home, path).init();

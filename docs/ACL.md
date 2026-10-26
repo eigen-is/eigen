@@ -37,6 +37,8 @@ Walks a pre-fetched breadcrumb (root-first, ending at the path itself) and retur
 4. User in local `acl` with `read: true` (by email or team membership) → true
 5. Default → false
 
+When the path or any folder above it is in the trash, only steps 1 and 2 count, so a trashed item is its owner's alone until it is restored ([SOFT-DELETE.md](SOFT-DELETE.md#trash-revokes-every-share-and-restore-re-shares-without-an-email)).
+
 The `Drive.canRead(mountId, pathId, user, memberships?)` method fetches the breadcrumb and delegates to this function.
 
 ### canWriteFromAncestors
@@ -63,6 +65,7 @@ Strips entries an ancestor's ACL already grants to the same id, and a team entry
 - **Team ACL**: Additive with user ACL
 - **No org-level ACL**: `parseOwnerId` recognizes the `org_` prefix but `matchesACL` only checks `user` and `team` entries. Org-wide sharing is not implemented; use teams instead
 - **The root folder has no ACL**: `Drive.updateACL` refuses a mount's root with 403
+- **A move needs write on the item, on the folder it leaves and on the folder it lands in** (`SharedDrive.movePath`), as a rename needs write on the folder. Otherwise an editor of one file could pull it out of a folder they can't change, into one where more people see it
 
 ## Visibility
 
@@ -190,7 +193,7 @@ In `apps/api/src/lib/drive/acl.ts`. Walks a pre-fetched breadcrumb (root-first) 
 - Standalone chat → ACL lands on the chat itself; embedded or nested → on the outermost container
 - The invitee gets read and write
 - Target already named in the target path's own ACL → `alreadyHasAccess: true`, no ACL write. Access inherited from a folder above does not count
-- The route refuses a guest (`requireNonGuest`), and `SharedDrive.inviteToChat()` requires write on the chat **and** on the container, otherwise 403
+- The route refuses a guest (`requireNonGuest`), and `SharedDrive.inviteToChat()` requires write on the chat **and** on the container, otherwise 403. It hands the container it checked to `Drive.inviteToChat()`, so a move that lands in between can't make the invite share a document nobody checked
 - `sharingRestricted` on the container blocks editors; the owner (or a team member on a team path) passes
 - Emails are lowercased before comparison and storage; invalid email → 400; self-invite is allowed
 
@@ -206,7 +209,7 @@ The ACL model treats "can edit content" and "can manage access" as one permissio
 
 **Schema**: `sharingRestricted INTEGER NOT NULL DEFAULT 0` on `paths` (`apps/api/src/lib/mount/schema.ts`) and on `shared_paths` (`apps/api/src/lib/drive/sharedschema.ts`); `sharingRestricted: boolean` on `DrivePath`.
 
-**Enforcement**: `SharedDrive.updateACLDelta()` checks write permission first, so viewers get the generic "no write permission" 403 and never learn a restriction exists. Then `isEffectiveOwnerSync()` (a team member on a team path) decides: a restricted non-owner gets 403, and a non-owner's `sharingRestricted` value is silently dropped rather than applied. Chat `/invite` and the drive `access-check` (`canShare`) run the same check. The owner is unaffected: `getSharedDrive` hands the owner their own `Drive`, with no wrapper and no restriction check. `receiveSharedPathChange()` mirrors the flag into `shared_paths`, so recipients see the current restriction state.
+**Enforcement**: `SharedDrive.updateACLDelta()` checks write permission first, so a viewer gets the generic "no write permission" 403, the same as on any path they can't change. Then `isEffectiveOwner()` (a team member on a team path) decides: a restricted non-owner gets 403, and a non-owner's `sharingRestricted` value is silently dropped rather than applied. Chat `/invite` and the drive `access-check` (`canShare`) run the same check. The owner is unaffected: `getSharedDrive` hands the owner their own `Drive`, with no wrapper and no restriction check. `receiveSharedPathChange()` mirrors the flag into `shared_paths`, so recipients see the current restriction state.
 
 ### ACL Route
 
@@ -234,7 +237,7 @@ Leaving a share is a delete: `SharedDrive.deletePath` checks whether the path's 
 
 **Visibility blocked too.** An editor cannot flip a restricted file to `public-read`: same route, same check.
 
-**Team members are co-owners.** No team user logs in, so team members always arrive through `SharedDrive`. `isEffectiveOwnerSync()` uses `parseOwnerId()` plus pre-fetched `memberships.teamIds` to grant them full ACL control on team paths, including toggling the flag itself.
+**Team members are co-owners.** No team user logs in, so team members always arrive through `SharedDrive`. `isEffectiveOwner()` uses `parseOwnerId()` plus pre-fetched `memberships.teamIds` to grant them full ACL control on team paths, including toggling the flag itself.
 
 Integration tests: `apps/api/src/test/acl/acl-bubbling.test.ts`, `apps/api/src/test/acl/sharing-restricted.test.ts`.
 

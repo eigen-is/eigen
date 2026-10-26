@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, guests, sharing, access]
 related: [admin/get-started, drive/share-a-file]
 order: 50
-updated: 2026-10-05
+updated: 2026-10-26
 ---
 
 Guest access lets people outside your organization view files you have shared with them. Guests sign in with a one-time code sent to their email address, not a password, so they do not need a full account on your server.
@@ -17,6 +17,8 @@ When you share a file or folder with an email address that does not belong to a 
 A code works for 5 minutes. If a guest asks for another code, only the newest one works. A mistyped code can be entered again.
 
 Guest accounts are separate from member accounts. They cannot access any app, setting, or file that has not been explicitly shared with them.
+
+A guest you give edit access works on the file like anyone else. They can't share it with more people, and the **File** menu offers them no **Email collaborators**.
 
 ## Configure guest access settings
 
