@@ -4,12 +4,13 @@
 import {
     chartSearchText,
     chartSpecTexts,
+    isChartSpecPartKey,
     mapChartSpecParts,
     newChartSpecParts,
     readChartSpec,
     sampleChartSpec,
 } from '../../charts';
-import { CHART_SPEC_PART_KEY, CHART_SPEC_PART_KEYS } from '../../types/chart';
+import { CHART_SPEC_PART_KEY } from '../../types/chart';
 import { hitTestBox } from '../geometry';
 import { rectOutline } from '../outline';
 import type { VectorChartElement } from '../types';
@@ -18,8 +19,6 @@ import { chartToElements } from './chart-convert';
 import { chartElementLayout, renderChartSvg } from './chart-render';
 import { defineKind } from './kind';
 import { color, fillField, optionalStrokeWidth } from './read-fields';
-
-const PART_KEYS: ReadonlySet<string> = new Set(CHART_SPEC_PART_KEYS);
 
 export const chartKind = defineKind<VectorChartElement>({
     type: 'chart',
@@ -52,7 +51,7 @@ export const chartKind = defineKind<VectorChartElement>({
         const texts = chartSpecTexts(src) ?? {};
         return {
             ...base,
-            ...Object.fromEntries(Object.entries(texts).filter(([key]) => !PART_KEYS.has(key))),
+            ...Object.fromEntries(Object.entries(texts).filter(([key]) => !isChartSpecPartKey(key))),
             type: 'chart',
             ...mapChartSpecParts((part) => texts[CHART_SPEC_PART_KEY[part]] ?? ''),
             fill: fillField(src.get('fill')),

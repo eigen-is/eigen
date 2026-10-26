@@ -45,6 +45,7 @@ export { BAR_GROUP_WIDTH } from './scales';
 export {
     chartSpecTexts,
     chartSpecWrites,
+    isChartSpecPartKey,
     mapChartSpecParts,
     newChartSpecParts,
     newSheetChartSpecParts,
