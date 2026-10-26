@@ -368,7 +368,7 @@ function clipRulesToWindow(
 ): ConditionalFormatRule[] {
     const clipped: ConditionalFormatRule[] = [];
     for (const rule of rules) {
-        const ranges = Array.isArray(rule.cellrange) ? rule.cellrange : [];
+        const ranges = Array.isArray(rule?.cellrange) ? rule.cellrange : [];
         if (!ranges.every((range) => Array.isArray(range?.row) && Array.isArray(range.column))) continue;
         const cellrange = ranges
             .map((range) => ({

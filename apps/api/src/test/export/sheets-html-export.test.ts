@@ -1824,7 +1824,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
         }
     });
 
-    test('a rule with no ranges, or a range with no rows, is dropped and the export still renders', () => {
+    test('a null rule, a rule with no ranges, or a range with no rows, is dropped and the export still renders', () => {
         const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
         const valid: ConditionalFormatRule = {
             type: 'default',
@@ -1836,6 +1836,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
         };
         const { cellrange: _, ...noRanges } = valid;
         const forged = [
+            null,
             noRanges,
             { ...valid, cellrange: [{ row: null, column: [0, 0] }] },
             { ...valid, cellrange: [null] },
