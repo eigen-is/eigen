@@ -151,7 +151,7 @@ Every ending (completion, cancel, timeout, exit, a duplicate message) races thro
 
 **Side effects.** Neither runs nor mutating calls are retried. A timeout or cancel stops further calls; it does not undo written files, sent mail, changed events or HTTP requests, and an operation past its commit point may still finish. The host keeps such operations tracked and bounded until they settle, and `effects` reports ambiguity instead of implying nothing happened.
 
-**Shutdown.** Stop admission, cancel queued runs, terminate and drain running ones, then close transform workers and Homes. Runs use both, so they go first, inside the existing bounded shutdown in `apps/api/src/index.ts`.
+**Shutdown.** Stop admission, cancel queued runs, terminate and drain running ones, then close the transform runner's children and Homes. Runs use both, so they go first, inside the existing bounded shutdown in `apps/api/src/index.ts`.
 
 ### The runner
 
@@ -165,6 +165,8 @@ The child runs `runner.js`, a trusted, dependency-free entry shipped with Eigen;
 The trusted entry must load without granting script code read access. That combination is verified against the pinned Deno binary; a failing flag is a blocker, never a reason to widen permissions. Deno treats module loading separately from read and net permissions and allows some import hosts by default, so no single flag is the import policy; the combination is.
 
 The child gets an explicit minimal environment, not the API's: no permission-broker, loader, proxy, inspector or telemetry variables, update checks off. Each run gets private temp and cache directories outside Eigen data, removed after reap; no Deno KV or cache is shared between users. Disk and memory limits are both provisioned and documented. The V8 heap flag is a heap target, not an RSS limit.
+
+On Linux the child starts through `limitedCommand`, the transform runner's wrapper that WeasyPrint uses too ([DOCUMENT-TRANSFORMS.md](../DOCUMENT-TRANSFORMS.md#a-child-runs-under-the-machines-memory)): the kernel's OOM killer picks it before the API, its data segment is capped at the machine's memory, a soft CPU limit backs the deadline, and core dumps are off, the dump filter included, so a crashing run writes no multi-GB core.
 
 The API holds an absolute monotonic deadline until the child is reaped, not merely until init is written. Spawn failure, startup timeout, unexpected exit, truncated stdout and protocol errors are explicit outcomes. stderr drains continuously into a capped buffer. The child is killed and reaped through Bun's process API, with no reliance on `setsid` or process-group tricks; deployment hardening that adds a group or cgroup tracks it explicitly. The child exits on stdin EOF and carries its own deadline, which bounds an orphan after an abrupt API death; beyond that, containment is the deployment's process lifecycle.
 
@@ -209,7 +211,7 @@ Collections paginate with bounded cursors. Sizes, cell counts, range dimensions,
 
 ### Document reads
 
-Reads add explicit, bounded operations to the transform runner's closed protocol, with typed JSON-safe results and admission costs; no callbacks, Homes, Mounts, databases or live Y.Docs go into a worker, and nothing falls back to materializing on the main thread. Scripts share transform capacity with previews and exports under their own admission class, which rejects on saturation rather than queueing without bound.
+Reads add explicit, bounded operations to the transform runner's closed protocol, with typed JSON-safe results and admission costs; no callbacks, Homes, Mounts, databases or live Y.Docs go into a transform child, and nothing falls back to materializing on the main thread. Scripts share transform capacity with previews and exports under their own admission class, which rejects on saturation rather than queueing without bound.
 
 A read captures from the live document, including acknowledged but unflushed changes, so a read after a write in the same run sees the write. Sheets reads follow the existing replay and recalc policy: no full-workbook recalc per `getCell()`, and stale computed values are reported as such. A1 addresses go through the existing spreadsheet address helpers and name a stable sheet.
 
@@ -219,7 +221,7 @@ An import-time writer that edits a detached Y.Doc or replaces a snapshot does no
 
 **Revisions.** `CollabDocument` gains one opaque live revision: its generation plus a sequence bumped by every Yjs update, delete-only updates included. A reopen starts a new generation, so an old token never matches. A sheet op count, a bare state vector or the persistence counter (which resets at snapshot) is not enough. `readWithRevision(...)` returns `{ revision, content }` from one captured state and retries within a small bound if the revision moves during capture. Simple reads like `getText()` keep plain return shapes and cannot authorize a write.
 
-**Commit.** A write takes `expectedRevision` and returns the new one, so writes chain deliberately. Planning runs in a transform worker; then, with no `await` in between, the API rechecks write permission, cancellation, grant generation and revision, and commits one synchronous Yjs transaction. A mismatch is `CONFLICT`: the script decides what to do, nothing reruns user logic or overwrites a collaborator. Operations that merge by stable ID say so explicitly.
+**Commit.** A write takes `expectedRevision` and returns the new one, so writes chain deliberately. Planning runs in a transform child; then, with no `await` in between, the API rechecks write permission, cancellation, grant generation and revision, and commits one synchronous Yjs transaction. A mismatch is `CONFLICT`: the script decides what to do, nothing reruns user logic or overwrites a collaborator. Operations that merge by stable ID say so explicitly.
 
 | Type | Writer |
 |---|---|
