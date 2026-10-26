@@ -139,6 +139,8 @@ test('⌘C on a selected chart writes the chart with its cells as inline data, a
     try {
         const { select } = await mount();
         await select();
+        // The pending copy is one per process, and an earlier file's cell copy can still sit in it.
+        clipboardModule.consumePendingCopy();
         const { event, clipboardData } = await shortcut('KeyC');
         expect(event.defaultPrevented).toBe(true);
         expect(copied).not.toHaveBeenCalled();
