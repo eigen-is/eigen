@@ -1362,7 +1362,7 @@ test("a block figure at a heading's start keeps the heading's space above it", (
     const figureBefore = (docx: Uint8Array) =>
         new TextDecoder()
             .decode(openZip(docx).read('word/document.xml'))
-            .match(/w:before="(\d+)"[^]*?<w:drawing>/)?.[1];
+            .match(/w:before="(\d+)"[\s\S]*?<w:drawing>/)?.[1];
     const source = docSchema()
         .nodeFromJSON({
             type: 'doc',
