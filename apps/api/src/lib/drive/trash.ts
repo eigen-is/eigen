@@ -27,9 +27,6 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     }
 
     const trashedItem = await mount.trashPath(item.id);
-    // The sharing goes once the trash is in, so a trash that fails leaves it as it was. The rows keep
-    // their ACL in the trash, so the walk below still finds every entry.
-    await propagateACLRemovalRecursively(mount, item.id, user);
     drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
     if (user) {
         mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
@@ -44,6 +41,13 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
         // Nobody waits for it, the same as in Drive.recordFileEvent.
         broadcastFileHistoryUpdated(item.ownerId, item, members).catch(() => {});
     }
+
+    // The sharing goes last, the same as in Drive.renamePath. It goes only once the trash is in, so a
+    // trash that fails leaves it as it was. The rows keep their ACL in the trash, so the walk below
+    // still finds every entry. Drive.deletePath holds the item's ACL chain, so the item's own push
+    // goes out directly.
+    if (trashedItem.acl) await propagateSharedPathChange(trashedItem, trashedItem.acl, null, user ?? null);
+    if (isContainerType(item.type)) await pushSharingBelow(drive, mount, item.id, 'trashed', user);
 }
 
 export async function restorePath(drive: Drive, mount: Mount, pathId: string, user?: User): Promise<void> {
@@ -52,14 +56,9 @@ export async function restorePath(drive: Drive, mount: Mount, pathId: string, us
     // recordFileEvent reads the path again, so it walks the parent chain of the restored path.
     if (user) await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' });
 
-    // The sharing comes back last, the same as in Drive.renamePath. Passing the same ACL as old and
-    // new adds nobody, so nobody gets an email again.
-    if (restoredItem.acl) {
-        await propagateSharedPathChange(restoredItem, restoredItem.acl, restoredItem.acl, user ?? null);
-    }
-    if (isContainerType(restoredItem.type)) {
-        await propagateACLRestoreRecursively(mount, restoredItem.id, user);
-    }
+    // The sharing comes back last, the same as in Drive.renamePath, and nobody gets an email again.
+    await drive.pushSharing(mount.id, pathId, 'live', user ?? null);
+    if (isContainerType(restoredItem.type)) await pushSharingBelow(drive, mount, restoredItem.id, 'live', user);
 }
 
 // Returns false when the item is gone or no longer in trash by the time the delete holds its lock.
@@ -101,30 +100,18 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
     return true;
 }
 
-async function propagateACLRemovalRecursively(mount: Mount, pathId: string, user?: User): Promise<void> {
-    const path = await mount.getPath(pathId);
-    if (!path) return;
-    if (path.acl) {
-        await propagateSharedPathChange(path, path.acl, null, user ?? null);
-    }
-    if (isContainerType(path.type)) {
-        const children = await mount.listFolderAll(pathId);
-        for (const child of children) {
-            await propagateACLRemovalRecursively(mount, child.id, user);
-        }
-    }
-}
-
-async function propagateACLRestoreRecursively(mount: Mount, pathId: string, user?: User): Promise<void> {
-    const children = await mount.listFolderAll(pathId);
-    for (const child of children) {
-        if (child.acl) {
-            // The same ACL as old and new, so nobody gets an email again.
-            await propagateSharedPathChange(child, child.acl, child.acl, user ?? null);
-        }
-        if (isContainerType(child.type)) {
-            await propagateACLRestoreRecursively(mount, child.id, user);
-        }
+// Read access comes from the whole chain of folders, so every path below the folder with an ACL of its
+// own gets its own push, each in its own ACL chain.
+async function pushSharingBelow(
+    drive: Drive,
+    mount: Mount,
+    folderId: string,
+    state: 'live' | 'trashed',
+    user?: User,
+): Promise<void> {
+    for (const child of await mount.listFolderAll(folderId)) {
+        await drive.pushSharing(mount.id, child.id, state, user ?? null);
+        if (isContainerType(child.type)) await pushSharingBelow(drive, mount, child.id, state, user);
     }
 }
 

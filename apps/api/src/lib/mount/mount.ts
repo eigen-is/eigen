@@ -744,7 +744,17 @@ export class Mount {
             const targetParentId = updates.parentId;
             try {
                 if (updates.name === undefined && targetParentId === undefined) {
-                    await this.db.update(paths).set(set).where(eq(paths.id, pathId));
+                    // An ACL goes only onto a live row. A trash can land after the caller checked the
+                    // path, and a new sharee would then get the item, an email included, while it is
+                    // in the trash.
+                    const live = updates.acl !== undefined ? isNull(paths.trashedAt) : undefined;
+                    const written = await this.db
+                        .update(paths)
+                        .set(set)
+                        .where(and(eq(paths.id, pathId), live))
+                        .returning({ id: paths.id })
+                        .get();
+                    if (live && !written) throw new ApiError(404, 'File is in trash');
                 } else {
                     // One synchronous transaction, so no trash or opposite move lands between the checks
                     // and the UPDATE.

@@ -617,7 +617,7 @@ export class Drive {
         // The people the path is shared with keep a copy of it, and this gives them the new name. It
         // reaches other homes, so it goes last: when it fails, this owner's tabs and history are up to
         // date already. The actor stays null, because a rename must not email them.
-        await propagateSharedPathChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
+        await this.pushSharing(mountId, pathId, 'live', null);
     }
 
     public async copyPath(
@@ -691,11 +691,15 @@ export class Drive {
 
     // ---- Trash ----
 
+    // The trash runs in the path's ACL chain. An ACL change that started first lands first, and the
+    // trash then takes it away with the rest. One that comes after finds the path in the trash.
     public async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
-        const item = await mount.getActivePath(pathId);
-        if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-        await this.documents.whileTrashing(mount, item.id, () => deletePath(this, mount, item, user));
+        return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
+            const item = await mount.getActivePath(pathId);
+            if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
+            await this.documents.whileTrashing(mount, item.id, () => deletePath(this, mount, item, user));
+        });
     }
 
     public async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {
@@ -820,6 +824,25 @@ export class Drive {
         await this.documents.enforceReadAccessBelow(mount, pathId);
         // The copies in the homes of the people it is shared with go last, the same as in renamePath.
         await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
+    }
+
+    // Sends a path's sharing to the homes it is shared with, after a change that keeps its ACL, such as
+    // a rename, a restore or the trash of a folder above it. It runs in the path's ACL chain and reads
+    // the path there, so it can't overtake an ACL change that started first and bring back a removed
+    // sharee. A live path goes out with the same ACL again, which emails nobody. A trashed path goes out
+    // with none. A path that is no longer in the state the caller left it in is skipped, because the
+    // change that moved it sends its own push.
+    public async pushSharing(
+        mountId: string,
+        pathId: string,
+        state: 'live' | 'trashed',
+        actor: User | null,
+    ): Promise<void> {
+        return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
+            const path = await this.getMount(mountId).getPath(pathId);
+            if (!path?.acl || (path.trashedAt !== null) !== (state === 'trashed')) return;
+            await propagateSharedPathChange(path, path.acl, state === 'live' ? path.acl : null, actor);
+        });
     }
 
     // Every user who can reach the path, through its own ACL or a folder above it. A team in an
