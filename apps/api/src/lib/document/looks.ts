@@ -10,7 +10,7 @@ import {
 } from '@workspace/lib/constants/fonts';
 import type { NormalStyle, TitleType } from '@workspace/lib/docs/eigendoc';
 import { DOC_PROSE_CLASS, listTypeOfStyle, ptToTwips } from '@workspace/lib/docs/eigendoc';
-import { LIST_FORMATS, LIST_LEVELS } from '../ooxml/wordml';
+import { LIST_FORMATS, LIST_LEVELS, SINGLE_LINE } from '../ooxml/wordml';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';
 
@@ -135,10 +135,9 @@ export const CAPTION_LOOK = {
     color: proseColor('.eigen-prose figcaption', 'color'),
 };
 
-// A note's text at Google's and Word's footnote size, which eigen-prose.css can't give: the editor lists its notes off
-// the page's prose.
-// Word's FootnoteText, which Google's notes take too: 10 pt, single spaced, no space after.
-export const FOOTNOTE_LOOK = { sizePt: FOOTNOTE_FONT_SIZE, line: 240, after: 0 };
+// A note's text is Word's FootnoteText, single spaced with no space after, at the footnote size Google's notes take
+// too. eigen-prose.css can't give it, as the editor lists its notes off the page's prose.
+export const FOOTNOTE_LOOK = { sizePt: FOOTNOTE_FONT_SIZE, line: SINGLE_LINE, after: 0 };
 
 type TextLook = { color?: string; italic?: true };
 
@@ -175,8 +174,8 @@ export function lineHeightPt(value: string, sizePt: number): number {
     return /^[\d.]+$/.test(value) ? Number(value) * sizePt : cssPt(value, sizePt);
 }
 
-// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do: its size the
-// Normal's.
+// A heading's or title's size, spacing and line. One without its own size or line height inherits the prose root's,
+// as h5 and h6 do, so its size is the Normal's.
 export function textMetrics(selector: string, normalPt: number) {
     const size = proseValueIfSet(selector, 'font-size');
     const sizePt = size === undefined ? normalPt : cssPt(size, BODY.sizePt);
@@ -193,17 +192,17 @@ export function textMetrics(selector: string, normalPt: number) {
 
 // A multiple of the font's own line height, so the pitch is the CSS one: Google Docs reads every atLeast as single.
 export function autoLine(linePt: number, sizePt: number, font: string): number {
-    return Math.round((240 * linePt) / (sizePt * fontLineHeight(font)));
+    return Math.round((SINGLE_LINE * linePt) / (sizePt * fontLineHeight(font)));
 }
 
-// A line spacing, which CSS draws in Inter's line, in the Normal's font, as Word draws it.
+// The auto line Word draws a line spacing at in the Normal's font. CSS draws a line spacing in Inter's line.
 export function normalLine(lineSpacing: number, normal: NormalStyle): number {
     return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
 }
 
 // normalLine's inverse: the line spacing an auto line written in this font draws.
 export function lineMultiple(written: number, font: string): number {
-    return (written * fontLineHeight(font)) / DOCUMENT_LINE_RATIO / 240;
+    return (written * fontLineHeight(font)) / DOCUMENT_LINE_RATIO / SINGLE_LINE;
 }
 
 // A run's family and size in half-points, which the height of its line follows.
@@ -226,8 +225,8 @@ export function familyLineScale(mark: RunFace, faces: RunFace[]): number {
 
 type OwnLook = { sizePt: number; before: number; after: number; line: number };
 
-// What a text node draws with no mark or format of its own, which the docx writer's styles write, and so what the reader
-// and the audit take as none: its size in points, its space before and after in twips and its auto line in the
+// What a text node draws with no mark or format of its own. The docx writer's styles write it, so the reader and the
+// audit read it as no format. The size is in points, the space before and after in twips, and the auto line in the
 // Normal's font. A note's paragraph draws Word's FootnoteText over the Normal.
 export function ownTextLook(type: string, level: number, normal: NormalStyle, inNote: boolean): OwnLook | undefined {
     if (inNote) return noteTextLook(normal);
@@ -268,6 +267,13 @@ const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
 export const TABLE_CELL_PADDING = {
     vertical: twips(cssPt(boxSide(CELL_PADDING, 'top'), BODY.sizePt)),
     horizontal: twips(cssPt(boxSide(CELL_PADDING, 'left'), BODY.sizePt)),
+};
+
+// In twips: the margin above and below a block figure, which the paragraph holding it draws.
+const FIGURE_MARGIN_CSS = proseValue('.eigen-prose .figure', 'margin');
+export const FIGURE_MARGIN = {
+    top: twips(cssPt(boxSide(FIGURE_MARGIN_CSS, 'top'), BODY.sizePt)),
+    bottom: twips(cssPt(boxSide(FIGURE_MARGIN_CSS, 'bottom'), BODY.sizePt)),
 };
 
 // In twips: the writer spaces the block after an in-flow table by it, and the reader takes that space as the table's.

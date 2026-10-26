@@ -319,7 +319,7 @@ describe('docx writer — package', () => {
                 xmlAttr(o, '', 'ContentType'),
             ]),
         );
-        expect([...defaults].sort()).toEqual(['jpeg', 'odttf', 'png', 'rels', 'svg', 'xlsx', 'xml']);
+        expect([...defaults].sort()).toEqual(['jpeg', 'odttf', 'png', 'rels', 'svg', 'webp', 'xlsx', 'xml']);
         for (const path of paths) {
             if (!MEDIA_PARTS.includes(path) && !FONT_PARTS.includes(path) && path !== WORKBOOK) await part(zip, path);
             expect(overrides.has(`/${path}`) || defaults.has(path.split('.').pop())).toBe(true);
@@ -2575,20 +2575,32 @@ describe('docx writer — figures', () => {
         expect(entryText(zip, 'word/media/image1.png')).toBe('diagram png');
     });
 
-    test('a raster is its PNG or JPEG part as prepared, and no WebP type is declared', async () => {
-        const zip = await unzip(doc(p(figure({ mediaName: 'photo.jpeg' })), p(figure(CHART))));
+    test('a raster is its PNG, JPEG or WebP part as prepared, each type declared', async () => {
+        const webp = {
+            name: 'photo.webp',
+            contentType: 'image/webp',
+            data: toTransferableText('photo webp'),
+            width: 4,
+            height: 3,
+        };
+        const zip = await unzip(
+            doc(p(figure({ mediaName: 'photo.jpeg' })), p(figure(CHART)), p(figure({ mediaName: 'photo.webp' }))),
+            undefined,
+            [...buildAllFeaturesDocMedia(), webp],
+        );
         expect((await relationshipsOf(zip)).slice(4)).toEqual([
             ['rId5', IMAGE_REL, 'media/image1.jpeg'],
             ['rId6', IMAGE_REL, 'media/image2.png'],
+            ['rId7', IMAGE_REL, 'media/image3.webp'],
         ]);
         expect(entryText(zip, 'word/media/image1.jpeg')).toBe('photo jpeg');
+        expect(entryText(zip, 'word/media/image3.webp')).toBe('photo webp');
         // Stored, not deflated: the bytes stand in the zip as prepared.
         const bytes = await docx(doc(p(figure({ mediaName: 'photo.jpeg' }))));
         expect(Buffer.from(bytes).includes('photo jpeg')).toBe(true);
         const types = await part(zip, '[Content_Types].xml');
         const extensions = xmlChildren(types, CONTENT_TYPES, 'Default').map((d) => xmlAttr(d, '', 'Extension'));
-        expect(extensions).not.toContain('webp');
-        expect(extensions).toEqual(expect.arrayContaining(['png', 'jpeg', 'svg']));
+        expect(extensions).toEqual(expect.arrayContaining(['png', 'jpeg', 'webp', 'svg']));
     });
 
     test('media one doc shows twice is one part and one relationship, and every drawing has its own id', async () => {
@@ -2638,7 +2650,7 @@ describe('docx writer — figures', () => {
     test.each([
         ['missing media', { mediaName: 'gone' }, media({})],
         ['an external src', { src: 'https://example.com/x.png' }, media({})],
-        ['a WebP', { mediaName: 'x' }, media({ contentType: 'image/webp' })],
+        ['an AVIF', { mediaName: 'x' }, media({ contentType: 'image/avif' })],
         ['an SVG without its PNG', { mediaName: 'x' }, media({ contentType: 'image/svg+xml' })],
         ['no width', { mediaName: 'x' }, media({ width: undefined })],
         ['a zero height', { mediaName: 'x' }, media({ height: 0 })],

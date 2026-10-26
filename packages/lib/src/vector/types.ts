@@ -1,7 +1,7 @@
-// The eigen canvas element model. React-free shared core (the packages/lib/src/sheets
-// precedent). Element shape adopted from Excalidraw's `_ExcalidrawElementBase`, trimmed to
-// what Eigen's Yjs CRDT needs: no tombstones, no version/versionNonce, no groupIds. Every
-// stored field is a scalar or a string — arrays (points, comment cards, fills) ride JSON scalars.
+// The eigen canvas element model, a React-free shared core like the sheets one. The element shape is Excalidraw's
+// `_ExcalidrawElementBase`, trimmed to what Eigen's Yjs CRDT needs: no tombstones, no version or versionNonce, and no
+// groupIds. Every stored field is a scalar or a string, so arrays such as points, comment cards and fills ride as JSON
+// strings.
 
 import type { ChartSpecPartKey } from '../types/chart';
 import type { SlideSize, VectorFrame } from './frames';
@@ -158,10 +158,11 @@ export type TextLine = {
     rotate: number;
 };
 
-// A chart: its ChartSpec as a JSON string per part, `specChart` … `specData` (charts/spec.ts), so two peers who edit
-// two parts both keep their edit; inline data only on a canvas. `fill` is its background and the hatch style of its
-// bars and slices; the stroke draws its axes and gridlines. `color` is its labels' color; their font is the spec's.
-// `seriesStrokeWidth` is a line series' width, the stroke's where unset, as an Office import sets it.
+// A chart: its ChartSpec as a JSON string per part, `specChart` … `specData`, so two peers who edit two parts both keep
+// their edit. On a canvas a chart holds inline data only. `fill` is its background and the hatch style of its bars and
+// slices. The stroke draws its axes and gridlines. `color` is its labels' color, and their font is the spec's.
+// `seriesStrokeWidth` is the width of a line series, which an Office import sets. Where it is unset, a line series
+// draws at the stroke's width.
 export type VectorChartElement = VectorElementBase &
     Fillable &
     Record<ChartSpecPartKey, string> & {

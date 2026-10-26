@@ -1,3 +1,7 @@
+// A sheet's floating images and charts: one paint order for both, the box every painter draws, and the index an
+// insert takes. floatingWriteFilter decides which of a batch's writes into them apply, so every client, the replay and
+// an undo agree when a peer deleted an object.
+
 import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES } from '../charts/limits';
 import { SHEET_CHART_KEYED_PART_KEYS } from '../charts/spec';
 import { isRecord } from '../core/guards';

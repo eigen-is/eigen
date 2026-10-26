@@ -148,6 +148,22 @@ describe('media', () => {
         ]);
     });
 
+    test('a PNG stands in for an SVG whose part is missing', async () => {
+        const svg = GOLDEN_DOCX_IMAGE_RUN.replace(
+            '<a:blip r:embed="rId4"/>',
+            '<a:blip r:embed="rId4"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="rId9"/></a:ext></a:extLst></a:blip>',
+        );
+        const { media, warnings } = await importDocxBody(paragraph(svg), {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/gone.svg"/>`,
+            contentTypes: '<Default Extension="svg" ContentType="image/svg+xml"/>',
+            media: { 'word/media/pixel.png': BYTES },
+        });
+        expect(media.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+            ['image-1.png', 'image/png'],
+        ]);
+        expect(warnings).toEqual([]);
+    });
+
     // Word for Mac's logo: a PDF for Mac Office (ma) first, the PNG every other Word draws as the fallback.
     test("a picture's blip is the branch Word reads, a choice for a namespace the reader doesn't know left for its fallback", async () => {
         const blipFill = (rid: string) =>
@@ -291,6 +307,14 @@ describe('VML', () => {
             ),
         );
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['alt'])).toEqual(['Office', null]);
+    });
+
+    test('a linked picture is left out and counted, its alt text after the line, as a DrawingML one is', async () => {
+        const { json, warnings } = await importDocxBody(paragraph(vml('alt="Logo"', '<v:imagedata r:id="rId9"/>')), {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="https://example.com/logo.png" TargetMode="External"/>`,
+        });
+        expect(lines(json)).toEqual([`${PICTURE_NOT_IMPORTED}\nLogo`]);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
 });
 

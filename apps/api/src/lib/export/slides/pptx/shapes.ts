@@ -17,7 +17,7 @@ import {
     rectOutline,
 } from '@workspace/lib/vector';
 import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml } from '../../../ooxml/drawingml';
-import { chartGraphicXml, chartLookSimplified } from '../../../ooxml/ooxml-chart-writer';
+import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import { addOfficeChart } from '../../office-chart';
 import { arrowXml, freedrawXml, linearXml, lineXml, pathXml } from './lines';
 import type { Slide } from './package';
@@ -173,24 +173,14 @@ function countPlainLook(el: VectorElement, slide: Slide): void {
     if (el.roughness > 0 && (filled || outlined)) slide.deck.lost('shapes-simplified', el);
 }
 
-// A graphic frame showing the chart's own part, drawn plain, upright and opaque: a frame turns and fades no chart, and a
-// chart part paints no sketch, hatch or dash, which counts the chart as simplified once. A spec that doesn't parse or holds range data draws nothing, as
-// on the canvas it draws only its placeholder, and counts as a chart left out. Its numbers go in a workbook of its own,
-// the format desktop PowerPoint's Edit Data opens.
+// A graphic frame showing the chart's own part. The frame can't turn or fade a chart, so the chart is drawn upright and
+// opaque. A chart addOfficeChart leaves out draws nothing, as the canvas draws only its placeholder.
 function chartXml(el: VectorChartElement, slide: Slide): string {
-    const { spec } = readChartSpec(el);
-    if (spec?.data.source !== 'inline') {
-        slide.deck.lost('charts-dropped', el);
-        return '';
-    }
-    const frame = { width: el.width, height: el.height, emuPerPx: slide.deck.scale };
-    const look = readChartLook(el);
-    if (chartLookSimplified(look, el)) slide.deck.lost('charts-simplified', el);
     const rId = addOfficeChart(
         slide.deck.charts,
-        spec,
-        { look, frame },
-        { target: '../charts/', relate: slide.part.relate },
+        readChartSpec(el).spec,
+        { look: readChartLook(el), frame: { width: el.width, height: el.height, emuPerPx: slide.deck.scale } },
+        { target: '../charts/', relate: slide.part.relate, lost: (code) => slide.deck.lost(code, el), layer: el },
     );
     if (!rId) return '';
     const id = ++slide.shapes;

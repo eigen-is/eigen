@@ -41,6 +41,7 @@ export {
 } from './limits';
 export { chartPaintOf, FLAT_CHART_LOOK, readChartLook } from './look';
 export { chartLabel, chartSearchText, holdsUnknownChartData } from './resolve';
+export { BAR_GROUP_WIDTH } from './scales';
 export {
     chartSpecTexts,
     chartSpecWrites,

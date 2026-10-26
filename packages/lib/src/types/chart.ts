@@ -172,8 +172,8 @@ export const CHART_LOOK_FIELDS = [
 export type ChartLook = Pick<VectorChartElement, (typeof CHART_LOOK_FIELDS)[number]>;
 
 // What a chart paints with besides its spec's font, from its look (chartPaintOf).
-// background is a serialized Fill (transparent draws none); strokeColor and strokeStyle draw the axes and gridlines,
-// seriesStrokeWidth a line series.
+// background is a serialized Fill, and a transparent one draws none. strokeColor and strokeStyle draw the axes and
+// gridlines. seriesStrokeWidth is the width of a line series.
 export type ChartPaint = {
     color: string;
     background: string;

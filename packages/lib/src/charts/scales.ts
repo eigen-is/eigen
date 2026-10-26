@@ -10,13 +10,14 @@ import { nice, tickStep, ticks } from './ticks';
 // The most value ticks asked of d3 however long the axis: Google's axes stop at about 20 labels, and the
 // box comes from a peer, so its length must not set the work.
 export const MAX_TICK_COUNT = 20;
-// Share of its category's band a category's bars fill, side by side or stacked: Google's bar.groupWidth, the golden ratio.
-const BAR_GROUP_WIDTH = 0.618;
-// d3 ticks a step under one by its inverse, which overflows near the smallest double, so a span under
-// this lays out as a zero span.
+// The share of its category's band that a category's bars fill, side by side or stacked. It is Google's
+// bar.groupWidth, the golden ratio.
+export const BAR_GROUP_WIDTH = 0.618;
+// d3 ticks a step under one by its inverse, which overflows near the smallest double. So a span under this lays out
+// as a zero span.
 const MIN_SPAN = 1e-300;
-// A line's axis takes in zero when its smallest magnitude is under this share of its largest, LibreOffice's
-// ScaleAutomatism rule, which mirrors Excel's: the spread is then over a sixth of the largest magnitude.
+// A line's axis takes in zero when its smallest magnitude is under this share of its largest, so when the spread is
+// over a sixth of the largest magnitude. That is Excel's rule, which LibreOffice's ScaleAutomatism mirrors.
 const WIDE_SPREAD = 5 / 6;
 
 export type ValueAxis = { lo: number; hi: number; ticks: number[]; texts: string[]; widths: number[] };
@@ -29,8 +30,8 @@ export type Band = {
     center: (i: number) => number;
 };
 
-// The data's range, zero included for bars, which grow from it; a line's axis takes in zero when the line is flat
-// or spreads wide, else fits its data. Stacks sum positives and negatives apart.
+// The data's range. Bars grow from zero, so it takes in zero for them. A line's axis takes in zero when the line is
+// flat or spreads wide, and otherwise fits its data. Stacks sum positives and negatives apart.
 export function valueExtent(
     values: (number | null)[][],
     stacked: boolean,
@@ -105,9 +106,9 @@ export function valueAxis(
     }
 }
 
-// One band per category tiling `from` to `to`, as Office and Google lay out a category axis, the first at `from`
-// unless reversed; `width` is the bars' share, centered. The end bands' centers keep at least `edge` in from the
-// ends, the range inset where thin bands would put them closer.
+// One band per category, tiling `from` to `to` as Office and Google lay out a category axis. The first band is at
+// `from` unless the axis is reversed. `width` is the bars' share of a band, centered in it. The end bands' centers
+// keep at least `edge` in from the ends, so where thin bands would put them closer the range is inset.
 export function bandScale(count: number, from: number, to: number, reversed: boolean, edge = 0): Band {
     const length = to - from;
     const inset = count > 1 && length / count / 2 < edge ? (edge * count - length / 2) / (count - 1) : 0;

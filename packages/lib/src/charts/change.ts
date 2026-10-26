@@ -29,7 +29,7 @@ export function applyChartSpecChange(stored: StoredChartSpec, change: ChartSpecC
     return next;
 }
 
-// The records one apply made, each keyed by itself, so a later op of that apply writes into one in place: N moves
+// The records one apply made, each keyed by itself. A later op of that apply writes into one in place, so N moves
 // within a series' points copy its record once, not N times.
 type Made = WeakMap<StoredChartSpec, StoredRecord>;
 
@@ -95,10 +95,10 @@ export function chartSpecChange(base: ChartSpec, next: ChartSpec): ChartSpecChan
     return leaves(base, next, []);
 }
 
-// The ops that take every stored point, of the series this build reads and the ones it doesn't, from its index to
-// target(index), null removing it, for a remap that keeps their order (a row op, Edit data's deleted rows). Per series
-// the moves down run first from the lowest target, those up last from the highest, so none lands on a point still to
-// move.
+// The ops that move every stored point from its index to target(index), for a remap that keeps the points' order, such
+// as a row op or Edit data's deleted rows. A null target removes the point. They cover the series this build reads and
+// the ones it doesn't. Within a series the moves down run first, from the lowest target, and the moves up run last,
+// from the highest, so no point lands on one that has still to move.
 export function chartPointMoves(stored: StoredChartSpec, target: (index: number) => number | null): ChartSpecOp[] {
     const points = stored['points'];
     if (!isRecord(points)) return [];

@@ -110,7 +110,7 @@ export function strokeWidth(v: unknown, fallback = DEFAULT_ELEMENT_PROPS.strokeW
     return clampNum(v, 0, 100, fallback);
 }
 
-// A width a field may leave unset: unset where it is no number.
+// Undefined unless the value is a finite number, which is then clamped like any stroke width.
 export function optionalStrokeWidth(v: unknown): number | undefined {
     return typeof v === 'number' && Number.isFinite(v) ? strokeWidth(v) : undefined;
 }

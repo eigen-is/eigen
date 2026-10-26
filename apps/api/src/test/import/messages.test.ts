@@ -74,10 +74,15 @@ describe('importSummary', () => {
         expect(
             importSummary([
                 { code: 'text-simplified', count: 1 },
-                { code: 'mirrors-dropped', count: 2 },
                 { code: 'fills-simplified', count: 396 },
             ]),
-        ).toBe('396 fills, 1 text box and 2 flipped pictures were simplified.');
+        ).toBe('396 fills and 1 text box were simplified.');
+    });
+
+    // A flipped picture comes in, unflipped.
+    test("a picture's flip is said to be what was not imported", () => {
+        expect(importSummary([{ code: 'mirrors-dropped', count: 1 }])).toBe("1 picture's flip was not imported.");
+        expect(importSummary([{ code: 'mirrors-dropped', count: 2 }])).toBe("2 pictures' flips were not imported.");
     });
 
     test("a docx's losses have their nouns", () => {

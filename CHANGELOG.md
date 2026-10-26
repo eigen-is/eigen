@@ -13,7 +13,7 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 - **Excel files** — keep their hidden sheets and pictures
 - **PowerPoint files** — keep their shapes, pictures and backgrounds
 - **Charts in these files** — come in as charts you can edit, not as pictures, with their background, text color, line color and line widths
-- **Charts in downloads** — a chart in a Word, Excel or PowerPoint download is a chart there too, not a picture. A sketched or hatched chart draws plain, a rotated one sits upright, and a see-through one on a slide is solid
+- **Charts in downloads** — a chart in a Word, Excel or PowerPoint download is a chart there too, not a picture, with bars as wide as Eigen draws them. A sketched, hatched or dashed chart draws plain, a gradient background takes its middle color, a rotated one sits upright, and a see-through one on a slide is solid
 - **Chart data in Word and PowerPoint downloads** — a chart keeps its numbers in a small spreadsheet inside the file, the way Word and PowerPoint keep a chart's data
 - **Import into a spreadsheet or deck** — add a file's sheets or slides to the one you have open, or replace it with the file. Eigen saves a version before it replaces anything, so you can go back
 - **What didn't come across** — after you import a file into an open document, spreadsheet or deck, a message counts what Eigen left out or simplified, such as a chart it can't draw
@@ -38,6 +38,7 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 
 - **Find and replace** — ⇧⌘H opens it in every editor, as in Google Docs. In Docs, ⌥⌘F now inserts a footnote
 - **Printing from Docs** — Eigen prints through a PDF, so headers, footers and page numbers print too
+- **WebP pictures in downloads** — a WebP picture stays a WebP in a Word, Excel or PowerPoint download, at full quality and with its photo details, location included. Microsoft 365 shows it, but desktop Office 2016 and 2019 don't
 - **Nested numbered lists** — number by level, as in Google Docs: 1., then a., then i. A nested list that showed 1. 2. 3. on every level now shows a. or i. on the deeper levels. To keep 1. 2. 3., pick that style for the list again
 - **Text in Sheets** — long text spills into the empty cells next to it
 - **Alignment in Sheets** — numbers and dates line up on the right unless you align them yourself

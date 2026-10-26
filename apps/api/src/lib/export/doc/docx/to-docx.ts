@@ -135,6 +135,6 @@ export function writeDocx(
             ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
             ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
         ],
-        files: [...fonts.files.map(([name, data]) => ({ name, data })), ...pkg.images.files, ...pkg.charts.files],
+        files: [...fonts.files.map(([name, data]) => ({ name, data })), ...pkg.images.files, ...pkg.charts.workbooks],
     });
 }

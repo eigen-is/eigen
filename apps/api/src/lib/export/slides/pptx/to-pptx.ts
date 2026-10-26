@@ -93,6 +93,6 @@ export function writePptx(
             ]),
             ...deck.charts.parts,
         ],
-        files: [...deck.images.files, ...deck.charts.files],
+        files: [...deck.images.files, ...deck.charts.workbooks],
     });
 }

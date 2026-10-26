@@ -1,18 +1,19 @@
-// Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback, and charts, each a Word chart.
+// Figures: a WebP as it is, the thumbnail Worker's PNG or JPEG of any other raster, an SVG beside its PNG fallback, and
+// charts, each a Word chart.
 
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
 import { readChartAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
-import { BODY, boxSide, cssPt, twips } from '../../../document/looks';
+import { BODY, boxSide, cssPt, FIGURE_MARGIN, twips } from '../../../document/looks';
 import { sanitizeMedia } from '../../../document/media';
 import { proseValue } from '../../../document/prose-css';
 import type { ExportMedia } from '../../../document/transform/protocol';
 import { toTransferableBuffer } from '../../../document/transform/protocol';
 import { blipXml } from '../../../ooxml/drawingml';
 import { EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
-import { chartGraphicXml, chartLookSimplified } from '../../../ooxml/ooxml-chart-writer';
-import { BORDER_SIDES, EMU_PER_TWIP, TWIPS_PER_PX } from '../../../ooxml/wordml';
+import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
+import { BORDER_SIDES, EMU_PER_TWIP, SINGLE_LINE, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import { splitDataUri } from '../../../shared/data-uri';
 import { addOfficeChart } from '../../office-chart';
 import type { OfficeImage } from '../../office-image';
@@ -76,9 +77,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
     const jc = side ? 'center' : (alignment ?? 'center');
     const captionRuns = caption ? textXml(caption) : '';
     if (captionRuns) useFace(context.pkg, {}, 'Caption');
-    const margin = proseValue('.eigen-prose .figure', 'margin');
-    const top = twips(cssPt(boxSide(margin, 'top'), BODY.sizePt));
-    const bottom = twips(cssPt(boxSide(margin, 'bottom'), BODY.sizePt));
+    const { top, bottom } = FIGURE_MARGIN;
     const captionBefore = styleSpacing(context.pkg.styles, 'Caption', 'before');
     const captionParagraph = (before: number, inset: Inset): Paragraph => ({
         props: {
@@ -114,7 +113,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
     );
     if (!side) {
         // Single, or LibreOffice adds 5 pt above every image.
-        const spacing = { before: 0, after: 0, line: 240 };
+        const spacing = { before: 0, after: 0, line: SINGLE_LINE };
         // The caption takes the figure's margin below.
         const inset = { top, bottom: captionRuns ? 0 : bottom };
         // A note's every paragraph is Footnote Text, its image's too.
@@ -146,7 +145,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         `<w:tblCellMar>${unpadded}</w:tblCellMar>`,
     ].join('');
     const cell = [
-        paragraphXml({ props: { spacing: { before: 0, after: 0, line: 240 }, jc: 'center' }, runs: drawing }),
+        paragraphXml({ props: { spacing: { before: 0, after: 0, line: SINGLE_LINE }, jc: 'center' }, runs: drawing }),
         captionRuns &&
             paragraphXml({
                 props: {
@@ -186,28 +185,22 @@ function imageOf(name: string | null, pkg: Package): Image | undefined {
     };
 }
 
-// Drawn plain, as a chart part paints no sketch, hatch, gradient or dash, and at the scale `extent` draws it at. A doc
-// has no sheet, so a spec that doesn't parse or holds range data draws nothing. It is counted as a chart left out, and
-// its caption stands alone. The labels draw in the spec's font, embedded as a run's is, the title in the bold. Its
-// numbers go in a workbook of its own, the format desktop Word's Edit Data opens.
+// The chart at the scale `extent` draws it at. A chart addOfficeChart leaves out draws nothing, and its caption stands
+// alone. Word draws the labels in the spec's font, so that font is embedded as a run's is, and its bold for the title.
 function wordChartOf(node: JSONContent, pkg: Package, extent: (natural: number) => number): WordChart | undefined {
     const attrs = readChartAttrs(node.attrs ?? {});
     const { spec } = readChartSpec(node.attrs ?? {});
-    if (spec?.data.source !== 'inline') {
-        pkg.lost('charts-dropped');
-        return undefined;
-    }
     const width = attrs.width ?? CHART_DEFAULT_SIZE.width;
     const height = attrs.height ?? CHART_DEFAULT_SIZE.height;
     const frame = { width, height, emuPerPx: extent(width) / width };
-    if (chartLookSimplified(attrs)) pkg.lost('charts-simplified');
     const rId = addOfficeChart(
         pkg.charts,
         spec,
         { look: attrs, frame },
-        { target: 'charts/', relate: pkg.part.relate },
+        { target: 'charts/', relate: pkg.part.relate, lost: pkg.lost },
     );
-    if (!rId) return undefined;
+    // addOfficeChart relates no part without a spec, so `!spec` only narrows its type.
+    if (!spec || !rId) return undefined;
     const font = spec.chart.fontFamily;
     useFace(pkg, { font }, undefined);
     if (spec.title.text) useFace(pkg, { font, bold: true }, undefined);

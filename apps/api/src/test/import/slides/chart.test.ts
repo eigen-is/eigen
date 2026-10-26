@@ -342,14 +342,15 @@ describe('bounds', () => {
     });
 
     test('a chart is charged the points its caches declare, not only its elements', () => {
-        // A few hundred elements declaring 32 series of 2,000 points each, past what a spec holds only once all 64,000
-        // values are built: charged its elements alone, the part was built again for every one of 60 colour maps.
+        // A few hundred elements declaring 32 series of 2,000 points each. Charged its elements alone, the part was
+        // read again for every one of 60 colour maps. An area chart, which Eigen can't draw, tells the read part apart
+        // from one past the budget.
         const series = Array.from(
             { length: 32 },
             (_, i) =>
                 `<c:ser><c:idx val="${i}"/><c:order val="${i}"/><c:val><c:numLit><c:ptCount val="2000"/></c:numLit></c:val></c:ser>`,
         ).join('');
-        const part = chartSpace(`<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>${series}</c:barChart>`);
+        const part = chartSpace(`<c:areaChart><c:grouping val="standard"/>${series}</c:areaChart>`);
         const slots = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
         const pptx = buildPptx({
             slides: Array.from({ length: 60 }, (_, i) => ({
@@ -361,7 +362,7 @@ describe('bounds', () => {
             files: { 'ppt/charts/chart1.xml': part },
         });
         const deck = readPptx(pptx, OPTIONS);
-        expect(deck.slides[0].elements[0]?.html).toBe('<p>Clustered Column chart not imported</p>');
+        expect(deck.slides[0].elements[0]?.html).toBe('<p>Area chart not imported</p>');
         expect(deck.slides[59].elements[0]?.html).toBe('<p>Chart not imported</p>');
     });
 

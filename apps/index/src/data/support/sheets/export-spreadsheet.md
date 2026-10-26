@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, export, download, excel, xlsx, pdf]
 related: [sheets/import-excel, sheets/get-started]
 order: 160
-updated: 2026-10-23
+updated: 2026-10-26
 ---
 
 You can download a copy of any spreadsheet to your computer without removing it from Eigen. Three formats are available: Excel, PDF, and web page.
@@ -38,7 +38,7 @@ When you download as **Microsoft Excel (.xlsx)**, the following are preserved:
 - Hidden gridlines (if you hid them)
 - Conditional formatting rules, data validation rules, and hyperlinks (Google Sheets doesn't show top or bottom, above-average, duplicate or data-bar rules)
 - Charts, as charts you can edit in Excel (a rotated chart sits upright)
-- Images, over the same cells and at the same angle, in front of or behind the charts as in Sheets
+- Images, over the same cells and at the same angle, in front of or behind the charts as in Sheets. A WebP image stays a WebP, which Microsoft 365 shows but Excel 2016 and 2019 can't
 - Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are not carried over)
 
 ## What to use each format for

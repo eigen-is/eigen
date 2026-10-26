@@ -1,3 +1,7 @@
+// The Docs chart node: an inline atom framed like a figure, its spec stored as one attribute per part and its look as
+// an attribute per field, so two peers' edits of different parts both stand. It renders the chart as SVG at its stored
+// size, and reads a pasted chart's parts and look through the chart validators.
+
 import type { CommandProps } from '@tiptap/core';
 import { Node } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';

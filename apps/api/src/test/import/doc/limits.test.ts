@@ -322,12 +322,13 @@ describe('XML budget', () => {
         expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     });
 
-    // A cache declares its points in one tag, which readChart builds before the spec refuses them: each chart past the
-    // allowance is the note a chart it can't draw leaves, and a part named again costs nothing more.
+    // A cache declares its points in one tag, so a chart is charged them before it is read. Each chart past the
+    // allowance leaves the plain note, and a part named again costs nothing more. An area chart, which Eigen can't
+    // draw, tells the read charts apart.
     test('a chart past the chart allowance says a chart was not imported', async () => {
         const series =
             '<c:ser><c:val><c:numRef><c:numCache><c:ptCount val="2000"/></c:numCache></c:numRef></c:val></c:ser>';
-        const heavy = `<c:chartSpace xmlns:c="${C_NS}"><c:chart><c:plotArea><c:barChart>${series.repeat(32)}</c:barChart></c:plotArea></c:chart></c:chartSpace>`;
+        const heavy = `<c:chartSpace xmlns:c="${C_NS}"><c:chart><c:plotArea><c:areaChart>${series.repeat(32)}</c:areaChart></c:plotArea></c:chart></c:chartSpace>`;
         const root = parseOoxml(heavy);
         const affordable = root ? Math.floor(MAX_DOCX_CHART_WORK / chartCost(root)) : 0;
         const parts = Array.from({ length: affordable + 1 }, () => heavy);
@@ -339,7 +340,7 @@ describe('XML budget', () => {
         const notes = nodesOfType(json, 'paragraph')
             .map((node) => texts(node).join(''))
             .filter(Boolean);
-        const read = 'Clustered Column chart not imported';
+        const read = 'Area chart not imported';
         expect(affordable).toBeGreaterThan(1);
         expect(notes).toEqual([...Array(affordable).fill(read), CHART_NOT_IMPORTED, read]);
         expect(warnings).toEqual([{ code: 'charts-dropped', count: affordable + 2 }]);

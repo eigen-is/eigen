@@ -319,6 +319,17 @@ describe('writeChart with inline data', () => {
         expect(read(writeChart(spec, INLINE), 'cache')).toEqual(spec);
     });
 
+    test('a name and a category keep the spaces they start or end with', () => {
+        const spec = parsed(
+            defaultChartSpec('column', {
+                source: 'inline',
+                categories: [' lead', 'trail '],
+                series: [{ id: 's-1', name: ' Revenue ', values: [1, 2] }],
+            }),
+        );
+        expect(read(writeChart(spec, INLINE), 'cache')).toEqual(spec);
+    });
+
     test('a literal read through ranges reads as its literals', () => {
         const spec = sampleChartSpec('column');
         expect(read(writeChart(spec, INLINE), { ranges: ids })).toEqual(spec);
@@ -344,6 +355,21 @@ describe('writeChart with inline data', () => {
         expect(new Set(at(FRAME))).toEqual(new Set([String(label), String(title)]));
         // A slide's px is half a page's: 1920 px across 720 pt.
         expect(at({ ...FRAME, emuPerPx: EMU_PER_PX / 2 })).toContain(String(Math.round(label / 2)));
+    });
+
+    test("the bars fill Eigen's share of their category, so Office draws them as wide, up to the widest gap Office allows", () => {
+        const gapOf = (type: 'column' | 'bar', stacking: ChartStacking, count: number) => {
+            const series = Array.from({ length: count }, (_, i) => ({ id: `s-${i + 1}`, name: '', values: [1, 2] }));
+            const data = { source: 'inline' as const, categories: ['a', 'b'], series };
+            const spec = parsed({ ...defaultChartSpec(type, data), ...stacked(type, stacking) });
+            return val(root(writeChart(spec, INLINE)), 'gapWidth');
+        };
+        // One bar fills 61.8% of its category when the gap is 61.8% of a bar's width.
+        expect(gapOf('column', 'none', 1)).toBe('62');
+        expect(gapOf('bar', 'none', 2)).toBe('124');
+        expect(gapOf('column', 'stacked', 3)).toBe('62');
+        expect(gapOf('column', 'percent', 3)).toBe('62');
+        expect(gapOf('column', 'none', 9)).toBe('500');
     });
 
     test("a chart drawn tiny keeps its text at Office's smallest size, 1 pt", () => {
@@ -381,6 +407,10 @@ describe('writeChart with an embedded workbook', () => {
         ],
         ['a single category', inline('line', ['Only'], [{ id: 's-1', name: 'One', values: [3] }])],
         [
+            'names and categories that start or end with a space',
+            inline('column', [' lead', 'trail '], [{ id: 's-1', name: ' Revenue ', values: [1, 2] }]),
+        ],
+        [
             'an empty series beside a ragged one',
             inline(
                 'line',
@@ -409,7 +439,7 @@ describe('writeChart with an embedded workbook', () => {
     });
 
     test("the refs name Office's layout: names along row 1 from B, categories down A, each series down its column", () => {
-        const formulas = find(root(writeChart(SPECS[4][1], EMBEDDED)), 'f').map(xmlTrimmedText);
+        const formulas = find(root(writeChart(SPECS[5][1], EMBEDDED)), 'f').map(xmlTrimmedText);
         expect(formulas.slice(0, 3)).toEqual(['Sheet1!$B$1', 'Sheet1!$A$2:$A$3', 'Sheet1!$B$2:$B$3']);
         expect(formulas.slice(-3)).toEqual(['Sheet1!$AE$1', 'Sheet1!$A$2:$A$3', 'Sheet1!$AE$2:$AE$3']);
     });

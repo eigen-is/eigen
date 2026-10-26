@@ -550,6 +550,14 @@ describe('a worksheet picture', () => {
         expect(warnings).toEqual([{ code: 'images-dropped', count: 4 }]);
     });
 
+    test('a WebP comes in, as a browser and sharp both draw one', () => {
+        const { media, warnings } = readPictures(
+            pictures(twoCell([0, 0, 0, 0], [1, 0, 1, 0], pic('rIdP')), [['rIdP', '../media/image1.webp', JPEG]]),
+        );
+        expect(media.map(({ contentType }) => contentType)).toEqual(['image/webp']);
+        expect(warnings).toEqual([]);
+    });
+
     // markitdown's sample, written by openpyxl: four PNGs over three sheets, each a one-cell anchor at 300 by 80 px.
     test("a real workbook's pictures come in, each sheet's in file order", () => {
         const bytes = readFileSync(

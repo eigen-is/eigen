@@ -20,7 +20,8 @@ Ranked by how many corpus files hold one (xlsx, docx and pptx together; files, n
 | 8 | **Stacked and 100% line** | 3 (2 / 0 / 1) | S | The stacking the bars have. |
 | 9 | **Pie of pie, bar of pie** | 6 (5 / 1 / 0) | M | |
 | 10 | **Waterfall** (chartex) | 7 (1 / 4 / 2) | M | A stacked column with an invisible base, plus the first `cx:` reader. |
-| 11 | **Histogram and Pareto** (chartex) | 7 (7 / 0 / 0) | M | On the `cx:` reader from 10. |
+| 11 | **Dash, hatch and gradient in a written chart's `c:spPr`** | S–M | `writeChart` writes solid fills and lines only, so a chart's dashed stroke and hatch draw plain in Excel, Word and PowerPoint, and a gradient background goes as its middle color. DrawingML holds each: `a:prstDash`, `a:pattFill` and `a:gradFill`. Map them in `writeChart` and `readChartPartLook`, so all three formats gain them together ([ROADMAP.md](ROADMAP.md), Office charts: the look and Edit Data). The sketch has no equivalent. |
+| 12 | **A pie's radius is sized from labels it then hides** | S | `layoutPie` (`packages/lib/src/charts/pie.ts`) shrinks the radius until every label of a slice of 5% or more fits the frame, and only then hides the labels that touch one placed before them. So a hidden label can still make the pie smaller. Size the radius from the labels that show, or let row 1's spread decide which show first. |
 | 12 | **The other chartex kinds**: box and whisker, funnel, treemap, sunburst, region map | 5, 4, 3, 3, 1 | L each | A new layout each. |
 | 13 | **Stock, surface** | 3 (docx), 4 | M each | |
 

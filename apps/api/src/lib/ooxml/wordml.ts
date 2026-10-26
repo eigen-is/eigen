@@ -192,6 +192,12 @@ export const TWIPS_PER_PX = ptToTwips(pxToPt(1));
 
 export const EMU_PER_TWIP = 635;
 
+// An auto w:line counts in 240ths of a single line.
+export const SINGLE_LINE = 240;
+
+// A run that states no w:sz draws at Word's 10 pt, which w:sz counts in half-points.
+export const DEFAULT_RUN_SIZE = 20;
+
 // ── Borders, fonts, drawings and links ──────────────────────────────────────────────────────────────────────────
 
 // A paragraph's border sides, as pBdr orders them.

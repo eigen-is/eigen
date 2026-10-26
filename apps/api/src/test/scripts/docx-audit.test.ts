@@ -20,7 +20,7 @@ import {
 } from '../../scripts/docx-audit';
 import { sampleChartParts } from '../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
-import { buildDocxWithBody } from '../fixtures/golden-docx';
+import { buildDocxWithBody, GOLDEN_DOCX_IMAGE_RUN } from '../fixtures/golden-docx';
 import { PIXEL_PNG } from '../fixtures/pptx';
 
 // The audit measures a docx importer against what Word shows, so what it counts is pinned here: Word's semantics on
@@ -905,6 +905,21 @@ describe('round trip', () => {
             { differences: 0, files: 0 },
             { differences: 0, files: 0 },
         ]);
+    }, 60_000);
+
+    // Readers collapse the space above a paragraph with the one above it leaves below, so the figure's paragraph keeps
+    // none of a space the paragraph above already gives.
+    test("a figure's paragraph comes back without a space above that the paragraph above gives", async () => {
+        const body = `<w:p><w:pPr><w:spacing w:after="120"/></w:pPr><w:r><w:t>Above</w:t></w:r></w:p>
+<w:p><w:pPr><w:spacing w:before="120"/></w:pPr>${GOLDEN_DOCX_IMAGE_RUN}<w:r><w:t>Note</w:t></w:r></w:p>`;
+        const file = new Uint8Array(await buildDocxWithBody(body, { media: { 'word/media/pixel.png': PIXEL_PNG } }));
+        const dir = await corpus('collapsed', { 'doc.docx': file });
+        const meta = await runRoundtrip({
+            corpora: [dir],
+            out: path.join(scratch, 'out-collapsed'),
+            timeoutMs: 30_000,
+        });
+        expect([meta.outcomes.ok, meta.unlisted]).toEqual([1, { differences: 0, files: 0 }]);
     }, 60_000);
 
     test('a writer that changes a run, moves a heading a level and drops a picture fails the gate, each by kind', async () => {

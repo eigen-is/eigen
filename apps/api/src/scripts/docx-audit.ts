@@ -6,13 +6,14 @@
 //   bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>
 //   bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]
 //
-// The importer module exports `docxToPmJson` with from-docx.ts's signature. It runs in a Worker, and the source is read
-// in another, so a hang is cut at the time cap and a crash is a result; every importer is measured by the same code.
-// The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
+// The importer module exports `docxToPmJson` with that function's signature. It runs in a Worker, and the source is
+// read in another, so a hang is cut at the time cap and a crash is a result. Every importer is measured by the same
+// code. The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
 //
-// roundtrip is the docx writer's gate (office-audit.ts): each file the reader imports is written by the writer
-// (`--writer`, writeDocx's signature) and imported again, and the two eigendoc JSON documents, their bands, page and
-// Normal compared node by node, a picture by its type and pixel size.
+// roundtrip is the docx writer's gate, on the round-trip gate the Office audits share. Each file the reader imports is
+// written by the writer (`--writer`, writeDocx's signature) and imported again. The two eigendoc JSON documents, their
+// bands, page and Normal are compared node by node, a picture by its type and pixel size.
+
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -25,6 +26,7 @@ import {
     isFigureFrameNode,
     PROSE_TEXTBLOCKS,
     pageTwips,
+    twipsToPt,
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../lib/core/xml';
 import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
@@ -2085,7 +2087,7 @@ export function asWritten(
     // nested: inside a list, a quote or a cell, which owns the spacing of what it holds.
     const blocks = (nodes: JSONContent[], at: string, nested: boolean): JSONContent[] => {
         const out: JSONContent[] = [];
-        for (const node of nodes) {
+        for (const [index, node] of nodes.entries()) {
             const place = `${at}.${out.length}`;
             if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) {
                 out.push(node.content ? { ...node, content: blocks(node.content, place, true) } : node);
@@ -2122,7 +2124,25 @@ export function asWritten(
                     floating.push(child);
                 } else if (isBlockFigure(child)) {
                     if (inline.length > 0) flush();
-                    const piece = { type: 'paragraph', attrs: paragraphAttrs, content: [child] };
+                    // The first piece takes the space above its textblock, which the reader keeps on a figure's paragraph
+                    // past the figure's own margin. A paragraph's own space is its spaceBefore, a heading's or a title's
+                    // its look's too. The reader keeps it only past the space the textblock above leaves below it.
+                    const own = node.attrs?.['spaceBefore'];
+                    const look = ownTextLook(
+                        node.type ?? '',
+                        Number(node.attrs?.['level'] ?? 1),
+                        imported.style,
+                        false,
+                    );
+                    const above =
+                        typeof own === 'number' ? own : node.type === 'paragraph' ? 0 : twipsToPt(look?.before ?? 0);
+                    // A band writes no space above its first block, and a paragraph draws the Normal's anyway.
+                    const floor = node.type === 'paragraph' ? imported.style.spaceBefore : 0;
+                    const body = at.startsWith('body');
+                    const below = spaceBelowAsWritten(nodes[index - 1], imported.style);
+                    const kept = body && !nested && pieces.length === 0 && above > Math.max(floor, below);
+                    const spaceBefore = kept ? above : null;
+                    const piece = { type: 'paragraph', attrs: { ...paragraphAttrs, spaceBefore }, content: [child] };
                     fresh.add(piece);
                     pieces.push(piece);
                     split = true;
@@ -2175,6 +2195,16 @@ export function asWritten(
     };
 }
 
+// The space a textblock leaves below it as the writer writes it, in pt: its own space after, else its style's. Any other
+// block counts none.
+function spaceBelowAsWritten(node: JSONContent | undefined, style: Imported['style']): number {
+    if (!node || !PROSE_TEXTBLOCKS.includes(node.type ?? '')) return 0;
+    const own = node.attrs?.['spaceAfter'];
+    if (typeof own === 'number') return own;
+    if (node.type === 'paragraph') return style.spaceAfter;
+    return twipsToPt(ownTextLook(node.type ?? '', Number(node.attrs?.['level'] ?? 1), style, false)?.after ?? 0);
+}
+
 // The differences the writer explains, each with why it is no loss or a loss the writer accepts. A difference none
 // matches is unlisted, and fails the gate.
 export const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = [
@@ -2197,7 +2227,7 @@ export const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = 
     },
     {
         kind: 'pictures re-encoded',
-        why: 'The export re-encodes a raster as PNG (a lossless source) or JPEG, no larger than OFFICE_IMAGE_MAX_SIZE, so its type or size comes back as the export made it',
+        why: 'The export re-encodes a raster other than WebP as PNG (a lossless source) or JPEG, and a WebP only past OFFICE_IMAGE_MAX_SIZE, as a WebP no larger than it, so its type or size comes back as the export made it',
         matches: ({ feature, at, b }, context) => {
             const name = nodeAt(context.a, at)?.attrs?.['mediaName'];
             return feature === 'figure media' && canonical(b) === canonical(context.prepared.get(String(name)));

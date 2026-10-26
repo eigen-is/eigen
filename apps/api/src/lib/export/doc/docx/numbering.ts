@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { BLOCK_MARGINS } from '../../../document/looks';
 import { W_NS } from '../../../ooxml/ooxml';
-import { CHECKBOX_GLYPHS, LIST_LEVELS } from '../../../ooxml/wordml';
+import { CHECKBOX_GLYPHS, LIST_LEVELS, SINGLE_LINE } from '../../../ooxml/wordml';
 import type { Context, Package } from './package';
 import type { Block, Paragraph, ParagraphProps } from './paragraphs';
 import { blocksOf, indentOf, pPrXml, quoteBar, textProps, withAfter } from './paragraphs';
@@ -82,7 +82,7 @@ export function itemOf(
     const clearing: ParagraphProps = {
         style: 'Spacer',
         pBdr: quoteBar('Spacer', context),
-        spacing: { after, line: 240 },
+        spacing: { after, line: SINGLE_LINE },
         ind: indentOf('Spacer', context),
     };
     return [...opened, { props: clearing, runs: CLEAR_FLOATS }];

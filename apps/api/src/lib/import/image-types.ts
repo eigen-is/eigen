@@ -7,11 +7,19 @@ import type { OoxmlPackage, Relationship } from '../ooxml/opc';
 import { relTarget } from '../ooxml/opc';
 import type { ZipReader } from '../ooxml/zip';
 
-// What an import stores a picture part as: a docx every type it has an extension for, as Word keeps a figure it can't
-// draw; a slide and a sheet only those they draw. Any other, for a deck or a workbook an EMF, a WMF or a TIFF, is left
-// out and counted.
+// What an import stores a picture part as. A docx keeps every type it has an extension for, as Word keeps a figure it
+// can't draw. A slide and a sheet keep only the types they draw, and leave any other out and count it.
 export const IMAGE_TYPES: ReadonlySet<string> = new Set(IMAGE_EXTENSION_BY_MIME.keys());
-const PICTURE_TYPES: ReadonlySet<string> = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml']);
+
+// The types sharp has no loader for. The editor and quick look load a doc's picture through its sharp preview, so a
+// docx figure of one of these shows as a broken image.
+export const UNSHOWN_IMAGE_TYPES: ReadonlySet<string> = new Set(['image/bmp', 'image/x-wmf', 'image/x-emf']);
+
+// A slide or a sheet draws its picture in the browser and exports it through sharp, so it keeps only the types both
+// draw, a type added to IMAGE_TYPES staying out until it is listed. No browser but Safari draws a TIFF.
+const PICTURE_TYPES: ReadonlySet<string> = new Set(
+    ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'].filter((type) => IMAGE_TYPES.has(type)),
+);
 
 // What a picture left out leaves in its place: a slide's box, a document's line.
 export const PICTURE_NOT_IMPORTED = 'Picture not imported';
@@ -43,8 +51,13 @@ export function pictureMediaPart(
 ): MediaPart | undefined {
     const path = relTarget(rels, id, 'image');
     if (!path?.startsWith(folder)) return undefined;
+    return mediaPart(pkg.zip, path, declaredImageType(pkg, path), PICTURE_TYPES);
+}
+
+// The type [Content_Types].xml gives a picture part, a misspelt one read as its alias.
+export function declaredImageType(pkg: Pick<OoxmlPackage, 'contentTypeOf'>, path: string): string | undefined {
     const declared = pkg.contentTypeOf(path);
-    return mediaPart(pkg.zip, path, declared && (MIME_ALIASES.get(declared) ?? declared), PICTURE_TYPES);
+    return declared && (MIME_ALIASES.get(declared) ?? declared);
 }
 
 export type ImportedMedia = { name: string; contentType: string; data: Buffer };

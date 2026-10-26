@@ -8,9 +8,9 @@ import { MAX_DECOMPRESSED_BYTES } from '../ooxml/zip';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { getScreenPreview, isScreenPreviewRedirect } from '../preview/preview-cache';
 import { generateImagePreview } from '../shared/thumbnails';
-import { encodeOfficeImage, WEBP_SCAN_BYTES } from './office-image';
+import { encodeOfficeImage } from './office-image';
 
-// The formats an Office reader opens, which take a PNG or JPEG from the source file.
+// The formats an Office reader opens, which take a WebP as it is and a PNG or JPEG from any other source file.
 const OFFICE_FORMATS = new Set<ExportTransformJob['format']>(['docx', 'pptx', 'xlsx']);
 
 const TOO_LARGE = "This document's images are too large to export";
@@ -19,8 +19,8 @@ const TOO_LARGE = "This document's images are too large to export";
 // document names, as exact buffers the transform process gets a copy of (an SVG's sanitizing, base64
 // and the data: URIs happen there). All Mount I/O — and the globally capped thumbnail path behind
 // getScreenPreview — stays here: the transform never receives a Mount and never spawns thumbnail
-// Workers. A docx, pptx or xlsx takes PNG or JPEG from the source file instead, since Office for the web and
-// Google's editors show no WebP, with the thumbnail Worker's width and height for its extent.
+// Workers. A docx, pptx or xlsx takes each image from its source file instead, a WebP as it is and any other type as
+// PNG or JPEG, with the thumbnail Worker's width and height for its extent.
 //
 // The bytes are held in the API's heap and copied over IPC, so what is sent is held to
 // MAX_DECOMPRESSED_BYTES, an import source's cap, as it is prepared. An SVG travels as its own bytes,
@@ -69,11 +69,13 @@ async function prepareOfficeMedia(mount: Mount, name: string, file: DrivePath): 
     // What getScreenPreview shows as an image, and nothing else.
     if (isScreenPreviewRedirect(mime) || !isExiftoolCandidate(mime, file.name)) return null;
     if (file.size > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, TOO_LARGE);
+    // From the source, never the lossy WebP preview. Only a WebP, which keeps its bytes, is read here; the Worker reads
+    // every other source itself.
     const source = await mount.readFile(file.id);
     if (!source) return null;
-    // From the source, never the lossy WebP preview.
-    const webp = mime === 'image/webp' ? await mount.readBytes(file.id, WEBP_SCAN_BYTES) : null;
-    return encodeOfficeImage(name, mime, webp && Buffer.from(webp), (options) =>
-        generateImagePreview(source, mime, file.name, '', file.id, options),
+    const read = mime === 'image/webp' ? await mount.readBytes(file.id) : null;
+    const webp = read && Buffer.from(read);
+    return encodeOfficeImage(name, mime, webp, (options) =>
+        generateImagePreview(webp ?? source, mime, file.name, '', file.id, options),
     );
 }

@@ -2,12 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { ConditionalFormatRule, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import sharp from 'sharp';
 import type { XmlElement } from '../../lib/core/xml';
 import { xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import type { TransformWarning } from '../../lib/document/transform/protocol';
 import { exportDocument } from '../../lib/export/export-document';
 import { getHome } from '../../lib/home/get-home';
-import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
+import { readXlsx, xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { parseOoxml, SML_NS } from '../../lib/ooxml/ooxml';
 import { openZip } from '../../lib/ooxml/zip';
 import { seedDocumentMedia } from '../fixtures/golden-documents';
@@ -1249,7 +1250,7 @@ describe('Sheets xlsx export — colors', () => {
 // The whole export: the transform names the sheets' images, the main thread prepares them as a docx's, and the drawing
 // part shows them among the charts.
 describe('an xlsx export carries the sheets’ images', () => {
-    test('each image once under xl/media, the PNG from its source and an SVG beside its PNG', async () => {
+    test('each image once under xl/media, the PNG from its source, the WebP as it is and an SVG beside its PNG', async () => {
         const ctx = await getTestContext();
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, 'default', 'root');
         const created = await drivePost<DrivePath>(
@@ -1270,6 +1271,7 @@ describe('an xlsx export carries the sheets’ images', () => {
                     photo: { id: 'photo', index: 'a0', ...box, mediaName: 'photo.png' },
                     drawing: { id: 'drawing', index: 'a2', ...box, angle: 90, mediaName: 'drawing.svg' },
                     gone: { id: 'gone', index: 'a3', ...box, mediaName: 'gone.png' },
+                    webp: { id: 'webp', index: 'a4', ...box, mediaName: 'photo.webp' },
                 },
                 charts: {
                     chart: { id: 'chart', index: 'a1', ...box, ...newSheetChartSpecParts(sampleChartSpec('pie')) },
@@ -1287,6 +1289,10 @@ describe('an xlsx export carries the sheets’ images', () => {
         const svg =
             '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20"/></svg>';
         await seedDocumentMedia(mount, path, 'drawing.svg', new TextEncoder().encode(svg), 'image/svg+xml');
+        const webp = await sharp({ create: { width: 40, height: 20, channels: 3, background: '#2563eb' } })
+            .webp()
+            .toBuffer();
+        await seedDocumentMedia(mount, path, 'photo.webp', webp, 'image/webp');
 
         const result = await exportDocument(mount, path, 'xlsx');
         const zip = openZip(result.data);
@@ -1294,7 +1300,16 @@ describe('an xlsx export carries the sheets’ images', () => {
             'xl/media/image1.png',
             'xl/media/image2.png',
             'xl/media/image2.svg',
+            'xl/media/image3.webp',
         ]);
+        expect(Buffer.from(zip.read('xl/media/image3.webp') ?? []).equals(webp)).toBe(true);
+        expect(readZipEntry(result.data, '[Content_Types].xml')).toContain(
+            '<Default Extension="webp" ContentType="image/webp"/>',
+        );
+        const reimported = readXlsx(result.data, { maxMediaBytes: 1024 * 1024 }).media;
+        expect(
+            reimported.filter((item) => item.contentType === 'image/webp').map((item) => item.data.equals(webp)),
+        ).toEqual([true]);
         const signature = (name: string) =>
             Buffer.from(zip.read(name) ?? [])
                 .subarray(1, 4)

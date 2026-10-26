@@ -13,7 +13,7 @@ import { toTransferableBuffer } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/office-image';
 import type { ImportedMedia } from '../lib/import/image-types';
-import { CHART_NOT_IMPORTED } from '../lib/ooxml/ooxml-chart';
+import { CHART_NOT_IMPORTED, KIND_NOT_IMPORTED } from '../lib/ooxml/ooxml-chart';
 
 export const MB = 1024 * 1024;
 
@@ -186,7 +186,7 @@ export type ChartsNotImported = { count: number; kinds: Record<string, number> }
 
 const NO_KIND = '(none named)';
 const NO_PLACEHOLDER = '(no placeholder)';
-const PLACEHOLDER = new RegExp(`(?:^|>)([^<>]*?) chart not imported(?=<|$)|(?:^|>)${CHART_NOT_IMPORTED}(?=<|$)`, 'g');
+const PLACEHOLDER = new RegExp(`(?:^|>)([^<>]*?) ${KIND_NOT_IMPORTED}(?=<|$)|(?:^|>)${CHART_NOT_IMPORTED}(?=<|$)`, 'g');
 
 // The writer's counted losses as the round trip reports them: each code with its count.
 export function lossCounts(warnings: TransformWarning[]): Map<string, number> {
@@ -315,10 +315,10 @@ export async function roundtripChild(
     }
 }
 
-// An import's pictures as the export's media prep makes them (export/media.ts): a raster re-encoded as PNG or JPEG, an
-// SVG as it is, and any the writer draws itself, each SVG with its PNG beside it.
+// An import's pictures as the export's media prep makes them (export/media.ts): a WebP and an SVG as they are, any other
+// raster re-encoded as PNG or JPEG, and any the writer draws itself, each SVG with its PNG beside it.
 export async function officeMedia(media: ImportedMedia[], drawn: ExportMedia[] = []): Promise<OfficeMedia[]> {
-    const { encodeOfficeImage, WEBP_SCAN_BYTES, withSvgFallbacks } = await import('../lib/export/office-image');
+    const { encodeOfficeImage, withSvgFallbacks } = await import('../lib/export/office-image');
     const { sharpResize } = await import('../lib/shared/sharp-resize');
     const prepared: ExportMedia[] = [];
     for (const { name, contentType, data } of media) {
@@ -326,8 +326,7 @@ export async function officeMedia(media: ImportedMedia[], drawn: ExportMedia[] =
             prepared.push({ name, contentType, data: toTransferableBuffer(data) });
             continue;
         }
-        const webp = contentType === 'image/webp' ? data.subarray(0, WEBP_SCAN_BYTES) : null;
-        const item = await encodeOfficeImage(name, contentType, webp, (options) => sharpResize(data, options));
+        const item = await encodeOfficeImage(name, contentType, data, (options) => sharpResize(data, options));
         if (item) prepared.push(item);
     }
     return withSvgFallbacks([...prepared, ...drawn]);

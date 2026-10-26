@@ -1,3 +1,7 @@
+// Eigen's own clipboard payload: the items one app copies, such as an image, a text box or a chart, with their
+// geometry on typed fields, carried in the HTML and SVG beside what other apps paste. The apps' copy and paste hooks
+// build and read every item through these helpers, and a paste drops any item that doesn't match its own shape.
+
 import { toast } from 'sonner';
 import { exceedsChartSpecBytes, exceedsChartSpecDepth, isChartSpecKey } from '../../charts/limits';
 import { readChartLook } from '../../charts/look';

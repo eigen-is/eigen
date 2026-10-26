@@ -66,7 +66,7 @@ After an import into an open document, a message counts what didn't come across,
 - Tracked changes come in as if you had accepted them all.
 - Line spacing set to **Exactly** or **At least** in Word follows the normal text's, and normal text set that way is single-spaced.
 - A SmartArt graphic comes in as its text, one paragraph per shape.
-- A chart Eigen can't draw the way Word does, such as an area, scatter, doughnut, or combo chart, becomes a line that names the kind of chart and its title, for example **Scatter chart not imported**.
+- A chart Eigen can't draw the way Word does, such as an area, scatter, doughnut, or combo chart, becomes a line that names the kind of chart and its title, for example **Scatter chart not imported**. A chart with more than 32 series, or more than 2,000 values in all, becomes a line that says **Chart not imported**, with its title.
 - A chart in a header, footer, or footnote comes in as its title only.
 - An equation takes the size of the text around it, so a size set inside a Word equation doesn't come across.
 - A picture Eigen can't read is left out, and so is every picture after the first 1,000, or once the pictures add up to more than the largest file you can upload (35 MB unless your administrator changed it). A line that says **Picture not imported** takes its place.
