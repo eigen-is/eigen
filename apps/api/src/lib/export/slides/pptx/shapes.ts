@@ -17,6 +17,7 @@ import {
     rectOutline,
 } from '@workspace/lib/vector';
 import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml } from '../../../ooxml/drawingml';
+import { pxToEmu } from '../../../ooxml/ooxml';
 import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import { addOfficeChart } from '../../office-chart';
 import { arrowXml, freedrawXml, linearXml, lineXml, pathXml } from './lines';
@@ -28,7 +29,7 @@ import { paragraphsOf, textBodyXml } from './text';
 const MAX_COORDINATE = 27_273_042_316_900;
 
 export function toEmu(slide: Slide, px: number): number {
-    return Math.min(MAX_COORDINATE, Math.max(-MAX_COORDINATE, Math.round(px * slide.deck.scale)));
+    return Math.min(MAX_COORDINATE, Math.max(-MAX_COORDINATE, pxToEmu(px, slide.deck.scale)));
 }
 
 // 1000ths of a percent, DrawingML's share of a whole.
