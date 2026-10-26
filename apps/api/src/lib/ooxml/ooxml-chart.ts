@@ -70,7 +70,7 @@ export const KIND_NOT_IMPORTED = 'chart not imported';
 
 // ── Tables the writer shares ────────────────────────────────────────────────────────────────────────────────────
 
-const TYPES = new Map<string, ChartType>([
+const TYPE_BY_GROUP = new Map<string, ChartType>([
     ['barChart', 'column'],
     ['bar3DChart', 'column'],
     ['lineChart', 'line'],
@@ -80,7 +80,7 @@ const TYPES = new Map<string, ChartType>([
 ]);
 
 // The groups a line chart is drawn from, whose series' line has a width of its own.
-const LINE_GROUPS = new Set([...TYPES].flatMap(([local, type]) => (type === 'line' ? [local] : [])));
+const LINE_GROUPS = new Set([...TYPE_BY_GROUP].flatMap(([local, type]) => (type === 'line' ? [local] : [])));
 
 export const STACKING_BY_GROUPING: ReadonlyMap<string, ChartStacking> = new Map<string, ChartStacking>([
     ['clustered', 'none'],
@@ -193,7 +193,7 @@ function chartSpec(
     data: ChartSource,
     fontFamily: string,
 ): Omit<ChartSpec, 'title'> {
-    const kind = TYPES.get(group.local) ?? unsupported();
+    const kind = TYPE_BY_GROUP.get(group.local) ?? unsupported();
     const type = kind === 'column' && val(child(group, 'barDir')) === 'bar' ? 'bar' : kind;
     const grouping = val(child(group, 'grouping')) ?? (type === 'line' ? 'standard' : 'clustered');
     // A pie has no grouping, so it reads as clustered. The spec draws no stacked line, so a line chart must be
@@ -218,7 +218,7 @@ function chartSpec(
     const all = children(group, 'ser');
     if (all.length > MAX_CHART_SERIES) tooLarge();
     const ordered = all
-        .map((ser, i) => ({ ser, order: count(val(child(ser, 'order'))) ?? i }))
+        .map((ser, i) => ({ ser, order: nonNegativeInt(val(child(ser, 'order'))) ?? i }))
         .sort((a, b) => a.order - b.order)
         .map(({ ser }) => ser);
     const series = type === 'pie' ? ordered.slice(0, 1) : ordered;
@@ -229,14 +229,14 @@ function chartSpec(
     };
     const fillColor = (shape: XmlElement | undefined) =>
         drawingColor(shape && xmlChild(shape, A_NS, 'solidFill'), colors);
-    // Eigen's writer writes an automatic colour as the palette's colour at its place, so that colour reads back as
+    // Eigen's writer writes an automatic color as the palette's color at its place, so that color reads back as
     // automatic.
     const automatic = (color: string, index: number) => (color === chartColor(index) ? null : color);
     const markers = type === 'line' && isOnElement(child(group, 'marker')) !== false;
     const seriesColor = (ser: XmlElement) => {
         const shape = child(ser, 'spPr');
         const fill = type === 'line' ? shape && xmlChild(shape, A_NS, 'ln') : shape;
-        return fillColor(fill) ?? accent(count(val(child(ser, 'idx'))) ?? 0);
+        return fillColor(fill) ?? accent(nonNegativeInt(val(child(ser, 'idx'))) ?? 0);
     };
     const style = (ser: XmlElement, index: number): ChartSeriesStyle => ({
         ...DEFAULT_CHART_SERIES_STYLE,
@@ -296,14 +296,14 @@ function chartSpec(
         plots: { ...defaults.plots, [type]: { stacking } },
         series: Object.fromEntries(series.map((ser, i) => [ids[i], style(ser, i)])),
     };
-    // A pie's slices are its first series' points. Each takes its c:dPt's colour, else the palette's or the series'
-    // colour as c:varyColors says. A slice in its automatic colour is left out.
+    // A pie's slices are its first series' points. Each takes its c:dPt's color, else the palette's or the series'
+    // color as c:varyColors says. A slice in its automatic color is left out.
     const slices = (total: number): ChartSpec['points'] => {
         if (type !== 'pie' || !first) return {};
         if (total > MAX_CHART_POINTS) tooLarge();
         const points = new Map<number, string>();
         for (const point of children(first, 'dPt')) {
-            const index = count(val(child(point, 'idx')));
+            const index = nonNegativeInt(val(child(point, 'idx')));
             const color = fillColor(child(point, 'spPr'));
             if (index !== undefined && color) points.set(index, color);
         }
@@ -345,7 +345,7 @@ function chartSpec(
     // A literal has no cells to name, so it is unsupported. An empty c:cat or c:val names no cells.
     const range = (source: XmlElement | undefined): CellRangeRef | null => {
         const ref = child(source, 'numRef') ?? child(source, 'strRef') ?? child(source, 'multiLvlStrRef');
-        if (ref) return cellRange(xmlTrimmedText(child(ref, 'f')), data.ranges);
+        if (ref) return refOfFormula(xmlTrimmedText(child(ref, 'f')), data.ranges);
         return child(source, 'numLit') || child(source, 'strLit') ? unsupported() : null;
     };
     // A sheet chart draws a row or a column of values or categories, never an area.
@@ -393,7 +393,7 @@ function seriesIds(series: XmlElement[]): string[] {
         const [unique] = elements(child(ser, 'extLst'))
             .flatMap((ext) => xmlChildren(ext, C16_NS, 'uniqueId'))
             .map((element) => xmlAttr(element, '', 'val')?.replace(/^\{(.*)\}$/, '$1'));
-        const index = count(val(child(ser, 'idx'))) ?? i;
+        const index = nonNegativeInt(val(child(ser, 'idx'))) ?? i;
         const id = [unique, `x-${index}`].find(
             (candidate) => candidate !== undefined && isChartSeriesId(candidate) && !ids.includes(candidate),
         );
@@ -436,7 +436,7 @@ function legendPosition(legend: XmlElement | undefined): LegendPosition {
 // Excel names a series without a name by its index.
 function seriesName(ser: XmlElement | undefined): string {
     const text = cachedText(child(ser, 'tx'));
-    return chartLabel(text ?? `Series${(count(val(child(ser, 'idx'))) ?? 0) + 1}`);
+    return chartLabel(text ?? `Series${(nonNegativeInt(val(child(ser, 'idx'))) ?? 0) + 1}`);
 }
 
 // A c:tx's text: rich text, a literal, or a ref's cached cells, joined as Excel joins a name over several cells. A
@@ -463,15 +463,15 @@ function cacheOf(source: XmlElement | undefined): XmlElement | undefined {
 // comes from the file, so it is checked against the cap before anything is built.
 function cachedPoints(cache: XmlElement | undefined): (string | undefined)[] {
     const points = children(child(cache, 'lvl') ?? cache, 'pt');
-    let total = count(val(child(cache, 'ptCount')));
+    let total = nonNegativeInt(val(child(cache, 'ptCount')));
     if (total === undefined) {
         total = 0;
-        for (const point of points) total = Math.max(total, (count(xmlAttr(point, '', 'idx')) ?? -1) + 1);
+        for (const point of points) total = Math.max(total, (nonNegativeInt(xmlAttr(point, '', 'idx')) ?? -1) + 1);
     }
     if (total > MAX_CHART_POINTS) tooLarge();
     const values = new Array<string | undefined>(total).fill(undefined);
     for (const point of points) {
-        const index = count(xmlAttr(point, '', 'idx'));
+        const index = nonNegativeInt(xmlAttr(point, '', 'idx'));
         if (index !== undefined && index < total) values[index] = pointText(point);
     }
     return values;
@@ -486,7 +486,7 @@ function pointText(point: XmlElement): string {
 // A chart's c:f as a sheet's A1 cell or area. A ref Excel shows as #REF! is null, and a shape a range can't hold is
 // unsupported. The ref is split at its last '!' rather than by the engine's sheet prefix, because Excel leaves a sheet
 // name of any script's letters unquoted.
-function cellRange(formula: string, sheetId: (sheetName: string) => string | undefined): CellRangeRef | null {
+function refOfFormula(formula: string, sheetId: (sheetName: string) => string | undefined): CellRangeRef | null {
     if (formula.includes('#REF!')) return null;
     const bang = formula.lastIndexOf('!');
     if (bang < 1 || formula.startsWith('(')) unsupported();
@@ -590,29 +590,29 @@ function chartName(groups: XmlElement[]): string {
 // Where a part states no look of its own, Office draws chart style 2's automatic look. LibreOffice's oox chart
 // ObjectFormatter reads it the same way (spChartSpaceFill, spAxisLines, spMajorGridLines, PptGraphicHelper). The
 // background is bg1, but none on a slide, and every line is tx1 at a 75% tint, 9525 EMU wide.
-const BG1 = automatic('<a:solidFill><a:schemeClr val="bg1"/></a:solidFill>');
+const BG1 = automaticShape('<a:solidFill><a:schemeClr val="bg1"/></a:solidFill>');
 const AUTOMATIC_BACKGROUND: Record<ChartHost, XmlElement | undefined> = {
     docx: BG1,
     xlsx: BG1,
-    pptx: automatic('<a:noFill/>'),
+    pptx: automaticShape('<a:noFill/>'),
 };
-const AUTOMATIC_LINE = automatic(
+const AUTOMATIC_LINE = automaticShape(
     '<a:solidFill><a:schemeClr val="tx1"><a:tint val="75000"/></a:schemeClr></a:solidFill>',
 );
 const AUTOMATIC_LINE_WIDTH = 9525;
 // A line series' own width where it states none, 2.25 pt, as Office draws it.
 const AUTOMATIC_SERIES_WIDTH = 28575;
 
-function automatic(fill: string): XmlElement | undefined {
+function automaticShape(fill: string): XmlElement | undefined {
     return parseXml(`<a:spPr xmlns:a="${A_NS}">${fill}</a:spPr>`) ?? undefined;
 }
 
 // The look writeChart maps onto the part, read back. The background comes from c:chartSpace's c:spPr. The label
-// colour comes from its c:txPr, else from the theme's tx1, as Office draws a label without one. The stroke's colour
+// color comes from its c:txPr, else from the theme's tx1, as Office draws a label without one. The stroke's color
 // and width come from the category axis's line, as the writer strokes every axis and gridline with it. An axis Office
 // draws no line along still shows its gridlines, so then the stroke is theirs. A line chart's series width is its
-// first series' line's. A gradient reads as its middle colour and a pattern as its foreground, since the writer writes
-// one colour. `emuPerPx` is how many EMU one px of the chart's own box is in the file. A pie has no stroke to read, so
+// first series' line's. A gradient reads as its middle color and a pattern as its foreground, since the writer writes
+// one color. `emuPerPx` is how many EMU one px of the chart's own box is in the file. A pie has no stroke to read, so
 // it reads flat.
 export function readChartPartLook(
     root: XmlElement,
@@ -631,8 +631,8 @@ export function readChartPartLook(
         const shape = child(owner, 'spPr');
         return shape && xmlChild(shape, A_NS, 'ln');
     };
-    const widthOf = (line: XmlElement | undefined, automatic: number) => {
-        const width = lineWidthEmu(line && xmlAttr(line, '', 'w')) ?? automatic;
+    const widthOf = (line: XmlElement | undefined, fallbackEmu: number) => {
+        const width = lineWidthEmu(line && xmlAttr(line, '', 'w')) ?? fallbackEmu;
         return Math.round((width / emuPerPx) * 100) / 100;
     };
     let text = child(root, 'txPr');
@@ -659,7 +659,7 @@ export function readChartPartLook(
     };
 }
 
-// The colour halfway along a gradient's stops that show a colour, by position, as the writer writes a gradient
+// The color halfway along a gradient's stops that show a color, by position, as the writer writes a gradient
 // background.
 function gradientMiddle(gradient: XmlElement, colors: DrawingTheme): string | undefined {
     const list = xmlChild(gradient, A_NS, 'gsLst');
@@ -679,7 +679,7 @@ function gradientMiddle(gradient: XmlElement, colors: DrawingTheme): string | un
 
 // ── Elements ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-// The host's colours through the part's own c:clrMapOvr, which replaces the host's colour map.
+// The host's colors through the part's own c:clrMapOvr, which replaces the host's color map.
 function chartColors(root: XmlElement, theme: DrawingTheme): DrawingTheme {
     const override = child(root, 'clrMapOvr');
     return override ? { scheme: theme.scheme, map: readColorMap(override) } : theme;
@@ -702,7 +702,7 @@ function val(element: XmlElement | undefined): string | undefined {
     return element && xmlAttr(element, '', 'val');
 }
 
-function count(value: string | undefined): number | undefined {
+function nonNegativeInt(value: string | undefined): number | undefined {
     const number = value?.trim() ? Number(value) : Number.NaN;
     return Number.isInteger(number) && number >= 0 ? number : undefined;
 }
