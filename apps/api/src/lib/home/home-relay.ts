@@ -15,7 +15,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
-import { teamOwnerId } from '@workspace/lib/types/owner';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
@@ -376,8 +376,8 @@ export async function pullDriveSearch(ownerId: string, opts: { q: string; limit:
 // Reads the home's files instead of opening the Home. The admin Users page sizes every user at once,
 // and opening each home would take seconds.
 export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeResponse> {
-    // Sizing reads the folders and quotas of a user home. A team or org home has neither.
-    if (ownerUserId.startsWith('team_') || ownerUserId.startsWith('org_')) {
+    // Sizing reads the folders and quotas of a user home. Other homes, such as a team's, have neither.
+    if (parseOwnerId(ownerUserId).type !== 'user') {
         throw new Error(`pullHomeSize expects a user owner id, got ${ownerUserId}`);
     }
     // A guest's home has no folders or quotas of its own, so it answers what the guest home answers.

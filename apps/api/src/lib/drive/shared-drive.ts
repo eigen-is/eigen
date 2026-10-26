@@ -27,7 +27,7 @@ import type { Mount } from '../mount';
 import type { StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
-import { canReadFromAncestors } from './acl';
+import { canonicalACLId, canReadFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
 import type { Drive } from './drive';
 import type { LockManager } from './lock-manager';
@@ -278,7 +278,7 @@ export class SharedDrive {
     // A path in the trash can't be left. The caller gets the same 403 as for a path they can't see.
     public async deletePath(mountId: string, pathId: string, _user?: User): Promise<void> {
         const path = await this.drive.getPath(mountId, pathId);
-        const own = path?.acl?.find((entry) => entry.id.toLowerCase() === this.user.email.toLowerCase());
+        const own = path?.acl?.find((entry) => canonicalACLId(entry.id) === canonicalACLId(this.user.email));
         if (
             path &&
             !path.trashedAt &&

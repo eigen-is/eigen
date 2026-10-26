@@ -1231,7 +1231,7 @@ describe('GET /settings/users/usage', () => {
         const db = getAuthDrizzleDb();
         const now = new Date();
         await db.insert(user).values({
-            id: 'unsized-home-id',
+            id: 'UnsizedHomeId0000000000000000000',
             name: 'No Home',
             email: 'no-home-usage@test.eigen.is',
             emailVerified: true,
@@ -1240,11 +1240,11 @@ describe('GET /settings/users/usage', () => {
         });
         const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/users/usage');
         const usage = await assertJson<Record<string, HomeSizeResponse>>(res);
-        expect(usage['unsized-home-id']?.total.used).toBe(0);
-        expect(usage['unsized-home-id']?.total.max).toBeGreaterThan(0);
-        expect(atHome('unsized-home-id')).toBe(false);
-        expect(fs.existsSync(getUserHomePath('unsized-home-id'))).toBe(false);
-        await db.delete(user).where(eq(user.id, 'unsized-home-id'));
+        expect(usage['UnsizedHomeId0000000000000000000']?.total.used).toBe(0);
+        expect(usage['UnsizedHomeId0000000000000000000']?.total.max).toBeGreaterThan(0);
+        expect(atHome('UnsizedHomeId0000000000000000000')).toBe(false);
+        expect(fs.existsSync(getUserHomePath('UnsizedHomeId0000000000000000000'))).toBe(false);
+        await db.delete(user).where(eq(user.id, 'UnsizedHomeId0000000000000000000'));
     });
 
     // The admin view sizes from the home's own files, the user's own storage page from their booted
@@ -1271,8 +1271,10 @@ describe('GET /settings/users/usage', () => {
         expect(sized.homeData.used).toBeGreaterThan(0);
     });
 
-    test('refuses a team owner id rather than sizing nothing', async () => {
+    test('refuses a team, org or external owner id rather than sizing nothing', async () => {
         await expect(pullHomeSize(teamOwnerId('team-1'))).rejects.toThrow('expects a user owner id');
+        await expect(pullHomeSize('org_org-1')).rejects.toThrow('expects a user owner id');
+        await expect(pullHomeSize('external_someone')).rejects.toThrow('expects a user owner id');
     });
 
     test('sizes a guest as the guest home does, not as a user with the default quotas', async () => {

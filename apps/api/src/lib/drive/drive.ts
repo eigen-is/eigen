@@ -62,6 +62,7 @@ import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
 import {
+    canonicalACLId,
     canReadFromAncestors,
     canWriteFromAncestors,
     filterRedundantACL,
@@ -959,8 +960,8 @@ export class Drive {
             targetPath = (await this.findContainerPath(mountId, chatPath.parentId ?? '')) ?? chatPath;
         }
 
-        const id = email.toLowerCase();
-        if (targetPath.acl?.some((entry) => entry.id.toLowerCase() === id)) {
+        const id = canonicalACLId(email);
+        if (targetPath.acl?.some((entry) => canonicalACLId(entry.id) === id)) {
             return { alreadyHasAccess: true, targetPathId: targetPath.id };
         }
 

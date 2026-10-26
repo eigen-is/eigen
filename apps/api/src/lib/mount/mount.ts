@@ -38,6 +38,7 @@ import {
     buildUploadDestinationKey,
     createMountStorage,
     docContainerDescendantIds,
+    nameTakenError,
     renameThenWriteRow,
     rethrowPathWriteError,
 } from './helpers';
@@ -657,7 +658,7 @@ export class Mount {
                 .get()) ?? (await this.findCaseFoldedChild(parentId, name));
 
         if (existing && existing.id !== excludeId) {
-            throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+            throw nameTakenError(name);
         }
     }
 
@@ -698,7 +699,7 @@ export class Mount {
         if (!this.isPathBased || !this.storage.rename) return;
         const occupant = await trash.renameTarget(this, parentId, key);
         if (occupant === 'live') {
-            throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+            throw nameTakenError(name);
         }
         if (occupant === 'leftover') {
             await trash.moveAside(this.storage.rename.bind(this.storage), key, trashStorageKey(id, name));

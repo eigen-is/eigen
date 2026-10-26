@@ -42,6 +42,11 @@ export function ancestorIds(...pathIds: string[]): SQL {
     `;
 }
 
+// The 409 of a create, rename, move or restore whose name a live sibling has already.
+export function nameTakenError(name: string): ApiError {
+    return new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+}
+
 // What a write to a paths row throws when it raced another write. The v7 partial unique index (parentId,
 // LOWER(name)) WHERE trashedAt IS NULL refuses a second live sibling of one name, and that is the same
 // 409 assertUniqueName gives. The message names the index, so the id PRIMARY KEY stays a real error.
@@ -49,7 +54,7 @@ export function ancestorIds(...pathIds: string[]): SQL {
 // is a 404.
 export function rethrowPathWriteError(e: unknown, name: string): never {
     if (e instanceof Error && e.message.includes(`index 'idx_paths_unique_active_name'`)) {
-        throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+        throw nameTakenError(name);
     }
     if (e instanceof Error && e.message.includes('FOREIGN KEY constraint failed')) {
         throw new ApiError(404, 'Folder not found');
