@@ -1,3 +1,6 @@
+// The line kind: a polyline of stored points, straight or rounded, that a closed line can fill. It is drawn by
+// roughjs, with the stroke style and roughness every shape takes.
+
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { hitTestLinear, isClosedLinear, linearLocalToScene } from '../geometry';
 import { polylineOutline } from '../outline';
