@@ -19,7 +19,7 @@ Server-wide surfaces that act on no Home carry none, and `OWNER_ID_EXEMPT` lists
 When one user's action touches another Home, it goes through `home-relay.ts`, in one of three shapes, all keyed by the target's `ownerId`:
 
 - **Pushes**: `sendToHome(targetUserId, message)` with a typed `HomeMessage` (ACL changes, calendar shares and invitations, RSVPs, SSE broadcasts, notifications), plus `push*` helpers for profile and team avatars. Fire and forget.
-- **Pulls**: one typed function per cross-home read, such as `pullSharedPaths`, `pullCalendars` and `pullDriveSearch`. `pullHomeSize` and `pullHomeBackupBytes` read a home's folder without booting it, and `pullHomeSnapshot` captures a home for a backup.
+- **Pulls**: one typed function per cross-home read, such as `pullSharedPaths`, `pullCalendars` and `pullDriveSearch`. `pullHomeSize` and `pullHomeBackupBytes` read a home's folder without booting it, and `pullHomeSnapshot` captures a home for a backup. A calendar pull never opens a home that has no folder yet ([CALENDAR.md](CALENDAR.md#asking-about-another-owners-calendar-never-opens-a-home-it-would-create)).
 - **Event writes**: `createEventAt`, `updateEventAt`, `deleteEventAt` and `moveEventAt`, which return a value and so are not pushes.
 
 Today each is a direct `getHome()` in the same process. Sharded, `sendToHome` routes or enqueues a message and a pull becomes a request to the owning process, and nothing outside the file changes. A `HomeMessage` is plain data for that reason.

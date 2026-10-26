@@ -22,6 +22,7 @@ import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { atHome } from '../../lib/home/get-home';
+import { homeSize } from '../../lib/home/home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
 import { addMember, assertJson, authedRequest, createTestUser, driveGet, driveUpload, getTestContext } from '../setup';
@@ -1272,5 +1273,11 @@ describe('GET /settings/users/usage', () => {
 
     test('refuses a team owner id rather than sizing nothing', async () => {
         await expect(pullHomeSize(teamOwnerId('team-1'))).rejects.toThrow('expects a user owner id');
+    });
+
+    test('sizes a guest as the guest home does, not as a user with the default quotas', async () => {
+        const guest = await createTestUser('usage-guest@test.eigen.is', 'testpassword123', 'Usage Guest');
+        getAuthDrizzleDb().update(user).set({ role: 'guest' }).where(eq(user.id, guest.id)).run();
+        expect(await pullHomeSize(guest.id)).toEqual(homeSize());
     });
 });

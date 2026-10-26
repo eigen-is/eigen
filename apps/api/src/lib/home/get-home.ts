@@ -141,7 +141,7 @@ async function createHome(ownerId: string, onClosed: () => void): Promise<Home> 
     }
 }
 
-// The caller's own home, checked to be the kind it must be.
+// getHome, checked to be the kind of home the caller expects.
 export async function getTeamHome(teamOwnerId: string): Promise<TeamHome> {
     const home = await getHome(teamOwnerId);
     if (!(home instanceof TeamHome)) {

@@ -26,6 +26,7 @@ import {
     drivePut,
     driveUpload,
     driveUploadMultiple,
+    eventually,
     findOrFail,
     getTestContext,
 } from '../setup';
@@ -37,6 +38,22 @@ function fileEventTag(ownerId: string, mountId: string, pathId: string): string 
 async function notificationsFor(userId: string): Promise<Notification[]> {
     const home = await getHome(userId);
     return home.notifications.list();
+}
+
+// The watcher deliveries run after the request answers, so wait until the rows the test needs have landed.
+async function notificationsWhen(
+    userId: string,
+    ready: (rows: Notification[]) => boolean,
+    what: string,
+): Promise<Notification[]> {
+    return eventually(async () => {
+        const rows = await notificationsFor(userId);
+        return ready(rows) ? rows : undefined;
+    }, what);
+}
+
+function hasTitle(rows: Notification[], tag: string, title: string): boolean {
+    return rows.some((n) => n.tag === tag && n.title === title);
 }
 
 describe('File watch + fan-out', () => {
@@ -112,7 +129,13 @@ describe('File watch + fan-out', () => {
         const file = await driveUpload(aliceToken, aliceOwnerId, mountId, sub.id, new File(['x'], 'deep.txt'));
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/rename`, { newName: 'deeper.txt' });
 
-        const notifications = await notificationsFor(ctx.bob.user.id);
+        const notifications = await notificationsWhen(
+            ctx.bob.user.id,
+            (rows) =>
+                hasTitle(rows, fileEventTag(aliceOwnerId, mountId, file.id), 'Alice Test renamed') &&
+                [folder.id, sub.id].every((id) => rows.some((n) => n.tag === fileEventTag(aliceOwnerId, mountId, id))),
+            'the cascade notifications',
+        );
         const tags = notifications.filter((n) => n.type === 'file-event').map((n) => n.tag);
         expect(tags).toContain(fileEventTag(aliceOwnerId, mountId, folder.id));
         expect(tags).toContain(fileEventTag(aliceOwnerId, mountId, sub.id));
@@ -180,7 +203,11 @@ describe('File watch + fan-out', () => {
         });
         expect(res.status).toBe(200);
 
-        const notifications = await notificationsFor(ctx.bob.user.id);
+        const notifications = await notificationsWhen(
+            ctx.bob.user.id,
+            (rows) => hasTitle(rows, fileEventTag(aliceOwnerId, mountId, file.id), 'Alice Test trashed'),
+            'the trash notification',
+        );
         const trashed = notifications.find((n) => n.tag === fileEventTag(aliceOwnerId, mountId, file.id));
         expect(trashed?.title).toBe('Alice Test trashed');
         expect(trashed?.body).toBe('doomed.txt');
@@ -199,7 +226,11 @@ describe('File watch + fan-out', () => {
         expect(res.status).toBe(200);
 
         // Same tag as the trash notification — the upsert leaves the latest verb
-        const notifications = await notificationsFor(ctx.bob.user.id);
+        const notifications = await notificationsWhen(
+            ctx.bob.user.id,
+            (rows) => hasTitle(rows, fileEventTag(aliceOwnerId, mountId, file.id), 'Alice Test restored'),
+            'the restore notification',
+        );
         const restored = notifications.find((n) => n.tag === fileEventTag(aliceOwnerId, mountId, file.id));
         expect(restored?.title).toBe('Alice Test restored');
         expect(restored?.body).toBe('phoenix.txt');
@@ -217,8 +248,16 @@ describe('File watch + fan-out', () => {
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/move`, { targetParentId: newParent.id });
 
         const tag = fileEventTag(aliceOwnerId, mountId, file.id);
-        const bobMoved = (await notificationsFor(ctx.bob.user.id)).find((n) => n.tag === tag);
-        const charlieMoved = (await notificationsFor(ctx.charlie.user.id)).find((n) => n.tag === tag);
+        const bobMoved = (
+            await notificationsWhen(ctx.bob.user.id, (rows) => hasTitle(rows, tag, 'Alice Test moved'), 'bob moved')
+        ).find((n) => n.tag === tag);
+        const charlieMoved = (
+            await notificationsWhen(
+                ctx.charlie.user.id,
+                (rows) => hasTitle(rows, tag, 'Alice Test moved'),
+                'charlie moved',
+            )
+        ).find((n) => n.tag === tag);
         expect(bobMoved?.title).toBe('Alice Test moved');
         expect(bobMoved?.body).toBe('mover.txt');
         expect(charlieMoved?.title).toBe('Alice Test moved');
@@ -238,9 +277,14 @@ describe('File watch + fan-out', () => {
         });
         expect(res.status).toBe(200);
 
-        const deleted = (await notificationsFor(ctx.bob.user.id)).find(
-            (n) => n.tag === fileEventTag(aliceOwnerId, mountId, file.id),
-        );
+        const deleteTag = fileEventTag(aliceOwnerId, mountId, file.id);
+        const deleted = (
+            await notificationsWhen(
+                ctx.bob.user.id,
+                (rows) => hasTitle(rows, deleteTag, 'Alice Test deleted'),
+                'the delete notification',
+            )
+        ).find((n) => n.tag === deleteTag);
         expect(deleted?.title).toBe('Alice Test deleted');
         expect(deleted?.body).toBe('gone.txt');
 
@@ -264,7 +308,11 @@ describe('File watch + fan-out', () => {
             add: [{ id: ctx.charlie.user.email, read: true, write: false }],
         });
 
-        const notifications = await notificationsFor(ctx.bob.user.id);
+        const notifications = await notificationsWhen(
+            ctx.bob.user.id,
+            (rows) => hasTitle(rows, fileEventTag(aliceOwnerId, mountId, file.id), 'Alice Test trashed'),
+            'the trash notification',
+        );
         const latest = notifications.find((n) => n.tag === fileEventTag(aliceOwnerId, mountId, file.id));
         // Still the trash notification — the acl-changed event never fired
         expect(latest?.title).toBe('Alice Test trashed');
@@ -282,16 +330,19 @@ describe('File watch + fan-out', () => {
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/rename`, { newName: 'co1.txt' });
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/rename`, { newName: 'co2.txt' });
 
-        await new Promise((r) => setTimeout(r, 50));
-        sse.stop();
-
         const tag = fileEventTag(aliceOwnerId, mountId, file.id);
+        const landed = await notificationsWhen(
+            ctx.bob.user.id,
+            (rows) => rows.some((n) => n.tag === tag && n.body === 'co1.txt → co2.txt'),
+            'the coalesced rename',
+        );
+        sse.stop();
         const broadcasts = sse.events.filter(
             (e): e is SSEventNotificationCreated => e.type === SSEventType.NOTIFICATION_CREATED && 'tag' in e,
         );
         expect(broadcasts.filter((e) => e.tag === tag)).toHaveLength(1);
 
-        const rows = (await notificationsFor(ctx.bob.user.id)).filter((n) => n.tag === tag);
+        const rows = landed.filter((n) => n.tag === tag);
         expect(rows).toHaveLength(1);
         expect(rows[0].title).toBe('Alice Test renamed');
         expect(rows[0].body).toBe('co1.txt → co2.txt');
@@ -309,7 +360,13 @@ describe('File watch + fan-out', () => {
         ]);
 
         const tag = fileEventTag(aliceOwnerId, mountId, folder.id);
-        const rows = (await notificationsFor(ctx.bob.user.id)).filter((n) => n.tag === tag);
+        const rows = (
+            await notificationsWhen(
+                ctx.bob.user.id,
+                (all) => all.some((n) => n.tag === tag && n.title.includes('uploaded')),
+                'the burst notification',
+            )
+        ).filter((n) => n.tag === tag);
         expect(rows).toHaveLength(1);
         expect(rows[0].title).toContain('uploaded');
     });
@@ -719,7 +776,11 @@ describe('File events: collab edits, client posts, comments', () => {
             expect(commented[0].actorEmail).toBe(ctx.alice.user.email);
 
             // bob (watcher, never commented) gets exactly ONE file-event row, no comment-reply
-            const notifications = await notificationsFor(ctx.bob.user.id);
+            const notifications = await notificationsWhen(
+                ctx.bob.user.id,
+                (rows) => rows.some((n) => n.tag === fileEventTag(aliceOwnerId, mountId, doc.id)),
+                'the comment file-event',
+            );
             const fileEvents = notifications.filter((n) => n.tag === fileEventTag(aliceOwnerId, mountId, doc.id));
             expect(fileEvents).toHaveLength(1);
             expect(fileEvents[0].title).toBe('Alice Test commented on "CommentWatch"');
@@ -741,7 +802,11 @@ describe('File events: collab edits, client posts, comments', () => {
                 content: `hey ${ctx.charlie.user.email}`,
             });
 
-            const notifications = await notificationsFor(ctx.charlie.user.id);
+            const notifications = await notificationsWhen(
+                ctx.charlie.user.id,
+                (rows) => rows.some((n) => n.type === 'mention-comment' && (n.tag ?? '').includes(doc.id)),
+                'the comment mention',
+            );
             expect(notifications.some((n) => n.type === 'mention-comment' && (n.tag ?? '').includes(doc.id))).toBe(
                 true,
             );
