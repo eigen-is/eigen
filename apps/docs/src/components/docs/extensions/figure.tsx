@@ -1,3 +1,7 @@
+// The Docs editor's picture: the shared figure node with a view that resolves its media, draws a placeholder for a
+// missing file and resizes by its width inside the figure frame, keeping the image's own aspect ratio. Shift and an
+// arrow key resize a selected picture too.
+
 import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
