@@ -981,9 +981,11 @@ export class Drive {
 
     // ---- Chats and comments ----
 
+    // A trashed chat is refused. Opening it would create a new data.db inside it, and that one would
+    // take the trashed one's name and block the restore.
     public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
-        const path = await this.getMount(mountId).getPath(chatId);
-        if (!path || path.type !== DRIVE_TYPE_CHAT) {
+        const path = await this.getMount(mountId).getActivePath(chatId);
+        if (path.type !== DRIVE_TYPE_CHAT) {
             throw new ApiError(404, 'Chat not found');
         }
         return new ChatRoom(this, this.home, path).init();
