@@ -123,7 +123,13 @@ bun run test           # Run all tests
 bun run check          # lint + typecheck + repo guards + tests (run this before submitting a PR)
 ```
 
-Committing runs Biome on the staged files (`.githooks/pre-commit`, which `bun install` sets up). What `check` runs and how to run one test file: [TESTING.md](TESTING.md).
+Committing runs Biome on the staged files (`.githooks/pre-commit`, which `bun install` sets up). The hook re-stages every staged file whole from the working tree, so a hunk staged with `git add -p` is lost: to commit part of a file, make the working tree match the commit first. What `check` runs and how to run one test file: [TESTING.md](TESTING.md).
+
+After a `bun.lock` dedupe, `bun install` can keep stale `node_modules/.bun` links, report no changes, and the build then bundles two copies of one package. A crash about a duplicate class after a dependency change goes away with `rm -rf node_modules apps/*/node_modules packages/*/node_modules && bun install`.
+
+Vite reads the `exports` maps once, at start. After you add a `packages/lib` or `packages/ui` subpath, the new specifier answers 500 until you stop the vite servers, `rm -rf node_modules/.vite` and start them again; a hot reload never picks it up. A new Tailwind arbitrary value (`h-[3px]`) can fail to apply on a long-running dev server too, so restart it before you debug the component.
+
+A commit SHA from before 2026-07-06, as older notes cite, predates a history rewrite. Find the commit by its subject, or map the SHA through `.git/filter-repo/commit-map` in a clone that has one.
 
 ### Eigen in Docker
 
@@ -142,6 +148,8 @@ From then on, run the clone as an operator would: `./eigen logs`, `./eigen statu
 
 To start fresh, stop it with `docker compose --env-file .env.production down`, move `data/` and `caddy-data/` aside, and run `./eigen setup` again.
 
+When the stack was down for more than 7 days, Caddy's local CA has expired, and `docker compose --env-file .env.production restart caddy` renews it. On a Mac, `sqlite3` on the host lags the container's writes over the bind mount, so read a database from inside the API container with `docker compose --env-file .env.production exec eigen-api`.
+
 Mail from outside reaches Eigen through Postfix, which calls the API on the Docker network; the web server hides that route. To deliver a message by hand, post it from inside the API container:
 
 ```bash
@@ -159,7 +167,8 @@ It's a monorepo: one API server in `apps/api/`, frontend apps in `apps/*/`, and 
 
 Start here:
 
-- **[AGENTS.md](../AGENTS.md)** has the full project context and the critical rules. Written for humans and AI assistants alike.
+- **[AGENTS.md](../AGENTS.md)** has the critical rules every change follows. Written for humans and AI assistants alike.
+- **[docs/README.md](README.md)** indexes every doc by domain.
 - **[CODE-STANDARDS.md](CODE-STANDARDS.md)** covers code patterns and Eden Treaty usage; **[ARCHITECTURE.md](ARCHITECTURE.md)** has the backend and frontend location tables, the Drive layers and the pitfalls.
 - **[STORAGE.md](STORAGE.md)** explains the per-user SQLite + file storage design.
 - **[ACL.md](ACL.md)** describes sharing and permissions.

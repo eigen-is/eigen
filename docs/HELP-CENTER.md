@@ -87,7 +87,7 @@ The search box on `/support` (`components/support/support-search.tsx`) and the c
 
 `getSupportUrl()` resolves the index app's `/support`. The topbar links to it as "Support" with a `LifeBuoy` icon from the signed-in menu, the guest menu and the app switcher's footer, which shows it to every user, guests included, below an admin's "Admin". The Space landing grid ends with a muted "Help and support" card (`apps/space/src/routes/_auth.index.tsx`), outside the `apps` registry so it never shows up as an app tile. Every link lands on `/support`, and none opens a single article.
 
-The index app sends a signed-in visitor on to `/space/` from a `useEffect` in `routes/index.tsx`. The redirect belongs to that one route, so `/support/*` and `/blog/*` stay reachable while signed in with no exemption logic.
+The index app sends a signed-in visitor on to `/space/` from a `useEffect` in `routes/index.tsx`. The redirect belongs to that one route, so `/support/*` and `/blog/*` stay reachable while signed in with no exemption logic. It is an effect, not a router `beforeLoad`, because the landing is prerendered and `AuthProvider` doesn't block there, so a `beforeLoad` only ever sees a signed-out visitor.
 
 ## The help center uses the shared app shell
 

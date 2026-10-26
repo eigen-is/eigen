@@ -13,6 +13,9 @@ This codebase values **simplicity, directness, and consistency** over cleverness
 - Trust the type system: no defensive null checks on typed data, no fallback defaults for required fields. Validate at system boundaries (user input, external APIs), trust internal code everywhere else
 - Consistency over originality: new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
 - Fewer lines beat more: removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
+- No placeholders: no stub method, type, field or flag for later. Code lands with its first real caller
+- Fix the root cause, through the framework's own pipeline: a guest session goes through better-auth's API, never a row inserted by hand. Code that routes around a framework is a hack
+- Code that wipes or overwrites data first writes a timestamped copy it can be restored from, and a failed copy stops the wipe; skip it only when there is nothing to lose. A guard alone is not enough: a flag kept in another file than the data it guards can be wrong about that data
 
 ## Review Hot Spots
 
@@ -29,6 +32,8 @@ Types flow end-to-end: Elysia route handler return type → Eden Treaty → hook
 - Infer locally, annotate publicly: no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
 - `import type` for type-only imports, as a statement of its own next to the value import from the same module (`import type { A } from 'x'` and `import { b } from 'x'`), so each import fits on one line
 - Drizzle `.$inferSelect` for DB row types: never redefine column types by hand
+- One type per concept: pass `User` or `DrivePath` even when a function reads two of its fields, never a narrower projection type. Convert a library's narrower shape where it enters. Test fixtures may keep their own
+- Only `apps/api`'s tsconfig sets `noPropertyAccessFromIndexSignature`; `packages/sheet`'s does not, so an index-signature read that compiles there fails in the API
 
 ## Code Style
 
@@ -43,6 +48,9 @@ Examples per rule: [CODE-EXAMPLES.md § Code Style](CODE-EXAMPLES.md#code-style)
 - Class members in this order: fields, constructor, getters, lifecycle (init, close), then the rest
 - File names are kebab-case (`get-home.ts`); route files follow TanStack Router's naming. Named exports only, no `export default`, except in a config file whose tool requires one (`vite.config.ts`, the Drizzle config). An older file that breaks either is fixed when someone cleans it up
 - Backend errors use `ApiError`: `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`; internal invariants (db not open, missing config) may use `throw new Error()`
+- Think about every `await`: a bare async call returns a truthy Promise, so `if (!asyncFn())` is always false. Fire-and-forget has a `.catch()`. Skip the `await` when blocking would hurt response time and failure is acceptable
+- Sanitize user-provided paths: refuse `..`, `/` and control characters before filesystem or header use, and never put raw user input into an HTTP header
+- `for (const x of arr)`, not `arr.forEach` (es-toolkit's `forEach(coll, fn)` excepted). Flip one when you touch it
 - Theme tokens, not colors: `text-muted-foreground`, `bg-muted`, not `text-gray-500`; `selection-handle` for selection UI
 - Use `cn()` for class merging: from `@workspace/ui/lib/utils`, never raw `clsx`/`twMerge` or string concatenation
 - Name for grep-ability; don't shadow libraries: `use*`, `Eigen*`, `*Dialog`, `*Provider`, `invalidate*`, `*Keys`; never reuse a name a dependency owns (`useSearchQuery`, not `useSearch`) or give three helpers one name (`isMobile`)
@@ -68,7 +76,7 @@ Workspace imports resolve through each package's `exports` map, with no tsconfig
 | `@workspace/lib/validation` | Shared FE/BE validation schemas |
 | `@workspace/math` | The math package's one barrel: the equation tree, its OMML, MathML and LaTeX readers and writers, and the LaTeX command table ([MATH.md](MATH.md)) |
 
-**User-visible dates are day-month-year**: "5 January 2026", "5 Jan", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Format through `formatDayMonth` / `formatDate` in `@workspace/lib/date` (they assemble the order from the `'en'` locale's parts; `'en-GB'` spells a short September "Sept" in browsers), and write hand-built shapes as `d MMM yyyy`. Spelling everywhere else stays en-US.
+**User-visible dates are day-month-year**: "5 January 2026", "5 Jan", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Format through `formatDayMonth` / `formatDate` in `@workspace/lib/date` (they assemble the order from the `'en'` locale's parts; `'en-GB'` spells a short September "Sept" in browsers), and write hand-built shapes as `d MMM yyyy`. Every `toLocale*String` on a date passes `'en'`, never `[]` or no locale, or a Dutch browser writes "januari" into the English UI; a sibling that passes `[]` is a bug to fix on touch. A plain number's `.toLocaleString()` stays as it is. Spelling everywhere else stays en-US: fix British spelling in prose and display strings on touch, and never rename an identifier for spelling.
 
 ## Key Patterns
 
@@ -78,6 +86,7 @@ Worked examples: [CODE-EXAMPLES.md § Key Patterns](CODE-EXAMPLES.md#key-pattern
 - **API client (Eden Treaty)**: `driveApi({ ownerId })({ mountId }).folder({ pathId }).get()`; types flow directly from the Elysia route definitions, no manual type sync
 - **Error handling**: in hooks (`packages/lib/src/core/[domain]/hooks/`), never in app components: every `useMutation` has `onError` using `onMutationError` from `api-error.ts`; apps never add `try/catch` + `toast.error()`. Full pattern: [NOTIFICATIONS.md](NOTIFICATIONS.md)
 - **Invalidation functions**: export `invalidateFoo(queryClient, ...)` next to the query keys; apps call these, never `useQueryClient` + `invalidateQueries()` directly
+- **Timestamps are `Date` end to end**: an `INTEGER` column of Unix seconds with Drizzle `mode: 'timestamp'`, routes that return `Date` (never `.toISOString()`), and shared types that say `Date`, because Eden's reviver turns the ISO string back into one. A path-param time bound stays `t.Numeric()`. `assertJson<T>` in the API tests and a raw `fetch` + `res.json()` skip the reviver, so revive at that seam. The reviver also turns a bare `YYYY-MM-DD` into a `Date`, so date-only payloads go through `plainApi`
 
 ## Self-Review Checklist
 
@@ -100,3 +109,5 @@ Before declaring any task complete, review every changed file against this list:
 The mechanical rules are enforced, not just documented: Biome carries what it can express, and `bun scripts/check-standards.ts` (part of `bun run check`) counts fourteen metrics over `apps/` and `packages/`: nine hard zeros and five ratcheting counts whose allowance in `scripts/standards-baseline.json` can fall but never rise (`bun run standards:update` after a cleanup). What each metric catches: [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).
 
 Biome also enforces the import and class rules in § Code Style: `style/useImportType` with `separatedType`, and `style/useConsistentMemberAccessibility` with `explicit`.
+
+Never restructure code only to silence a lint rule. Use a lint-clean idiom that reads naturally (`/\p{Cc}/gu` for control characters), else a `biome-ignore` with a one-line reason and `bun run standards:update`. The ratchet stops laziness, not natural code.

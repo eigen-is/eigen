@@ -72,7 +72,7 @@ It applies the demo's settings before any home exists, because a home fixes its 
 
 In production better-auth prefixes cookie names with `__Secure-`, so the seeder keeps the whole `name=value` pair from `Set-Cookie` for its admin session. Rebuilding the name aborts the seed on a real box.
 
-`apps/api/src/scripts/demo/content.ts` holds the personas and every text as data. Docs go HTML → `.docx` → `convertToDocument`, the shipped importer. Comment threads are real chats in the container's `chat/` folder, and each card's anchor is a `comment` mark, as the editor writes them. Every seeded card gets `DEFAULT_CARD_COLOR`, the card dialog's fallback, so seeded and hand-made cards match.
+`apps/api/src/scripts/demo/content.ts` holds the personas and every text as data. Docs go HTML → `.docx` → `convertToDocument`, the shipped importer. Comment threads are real chats in the container's `chat/` folder, and each card's anchor is a `comment` mark, as the editor writes them. Every seeded card gets `DEFAULT_CARD_COLOR`, the card dialog's fallback, so seeded and hand-made cards match. A file in a card chat is seeded as an upload into the chat's own `media/`, the way a user's upload lands, because a drive-reference chip to a plain file breaks. A seeded `attach` names a document, and only one the seeder made earlier.
 
 ## Two containers are byte-copied fixtures
 

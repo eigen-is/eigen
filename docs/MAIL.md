@@ -20,7 +20,7 @@ Mail is the one domain whose truth is files, because Dovecot moves and renames t
 
 ## Only the reader's parse sanitizes
 
-`parseMail` (`mail-parser/`) is Eigen's own parser. Its contract is the golden corpus in `apps/api/src/test/fixtures/mail-corpus/` (`UPDATE_GOLDEN=1` regenerates it).
+`parseMail` (`mail-parser/`) is Eigen's own parser. Its contract is the golden corpus in `apps/api/src/test/fixtures/mail-corpus/`. `UPDATE_GOLDEN=1` regenerates it, every golden at once, so revert the ones your change did not mean to move.
 
 DOMPurify costs more than the parse (9.4 ms against 2.5 ms on a 25 KiB message), and almost nothing that parses a message wants its body. So `parseEml` returns an `IndexedEmail`, whose `html` is `null` by type, for the index, the sync and attachment reads. `parseEmlForReader` sanitizes, and only `MaildirStore.getMessage` calls it. The type guarantees that a caller that never asked for a body never gets an unsanitized one.
 
@@ -68,6 +68,10 @@ A full save rebuilds the `.eml` and bakes the Drive link pills into its HTML. A 
 
 The client chooses a draft's id, and that id names a file. So the domain answers 400 to an id `isSafePathSegment` refuses, under any `MailStore`. It never maps one onto a safe name, because two mapped ids would collide on one file.
 
+## The composer is seeded in TipTap's own form
+
+The composer seeds its HTML the way TipTap writes it: an empty paragraph is `<p><br></p>` (`EMPTY_PARA` in `use-draft.ts`), never a bare `<br>` between blocks. Otherwise TipTap's first normalization reads as an edit, and `useDraft` auto-saves a draft the user never touched. The plain text works the same way: `plainSignature` mirrors how `getText()` joins blocks, so a new block type in the LightEditor goes into it too.
+
 ## Delivery attempts every copy and retries none
 
 `messageSend` full-saves the draft and hands each copy to `sendMail` (`lib/core/mailer.ts`). That save pins From to the account, so a crafted draft can't send as anyone else. The route needs hosted mail, so user mail leaves through the bundled Postfix ([SERVER-SETTINGS.md § Hosted mail and the relay are environment, not settings](SERVER-SETTINGS.md#hosted-mail-and-the-relay-are-environment-not-settings)).
@@ -84,7 +88,7 @@ When a mail links documents and has external recipients, internal recipients sha
 
 ## Submission is held to the login's own address
 
-The app sends to `postfix:25` without authenticating. External clients submit on 587 and 465, where a login may only send as its own address (`docker/postfix/sender_login.regexp`). There are no aliases, so login and sender are one string. The empty sender `MAIL FROM:<>` is exempt, because read receipts and vacation replies must use it (RFC 3834).
+The app sends to `postfix:25` without authenticating. External clients submit on 587 and 465, where a login may only send as its own address (`docker/postfix/sender_login.regexp`). There are no aliases, so login and sender are one string. The empty sender `MAIL FROM:<>` is exempt, because read receipts and vacation replies must use it (RFC 3834). A `-o` value in `master.cf` can't hold an `inline:{}` map, so a submission service's map ships as a `regexp:` file, as `null_sender.regexp` does.
 
 Port 25 relays without a login only for `mynetworks`: loopback and the `eigen` bridge subnet minus its gateway (`docker/postfix/entrypoint.sh`). Some clients of a published port reach Postfix from that gateway: the host itself, every client under Docker Desktop, and every client under rootless Docker with its default `builtin` port driver. Trusting the gateway would make Postfix an open relay for all of them. OpenDKIM's `InternalHosts` leaves it out too, or it would sign their forged mail from our domain. A program on the host submits on 587 with a login, like any other client.
 

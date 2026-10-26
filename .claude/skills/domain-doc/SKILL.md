@@ -110,7 +110,7 @@ EOF
 - Present tense. Short sentences in simple English. No slop em-dashes (dramatic pause, stacked asides, a dash doing a colon's or full stop's job), no "Note that", "robust", "seamlessly".
 - No hard line breaks inside a paragraph.
 - No line numbers anywhere in the doc. Every path you name exists, and both link checks print nothing. A symbol named with a path is grepped in that file. A symbol named without one must have its definition in exactly one file of a repo grep, or it gets its path.
-- A new doc gets its line in the AGENTS.md index and its row in `docs/ARCHITECTURE.md`.
+- A new doc gets its line in the `docs/README.md` index and its row in `docs/ARCHITECTURE.md`.
 
 ## Common mistakes
 

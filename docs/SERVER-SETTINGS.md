@@ -37,6 +37,7 @@ At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded v
 - The merge recurses into plain objects only. An array or `null` in an update replaces the stored value whole, and an explicit `undefined` clears the key. That is how `routes/team.ts` clears a member override.
 - `set()` writes a temp file and renames it over the old one, and rolls the in-memory state back when the write fails.
 - The file appears at the first `set()`, not at `load()`.
+- A settings PUT takes a partial update, so its typebox schema is `t.Optional` all the way down, matching the `DeepPartial` the store merges.
 
 ## What settings.json holds
 
@@ -88,7 +89,7 @@ Admins keep what the Users, Guests and team pages need. They read `GET /settings
 
 ## S3 becomes the default only while it connects
 
-`PUT /settings/s3config` runs `checkS3Connection` before it saves. `PUT /settings/server` refuses `storageType: 's3'` unless a saved S3 config exists and still connects. So new drives never default to a bucket the server cannot reach. The Admin settings page saves the S3 config before the other settings, so switching to S3 and entering its config in one Save passes that check. A team mount's own S3 config gets the same check when it is added or changed (`TeamHome.addMount`, `updateMount`).
+`PUT /settings/s3config` runs `checkS3Connection` before it saves. `PUT /settings/server` refuses `storageType: 's3'` unless a saved S3 config exists and still connects. So new drives never default to a bucket the server cannot reach. The Admin settings page saves the S3 config before the other settings, so switching to S3 and entering its config in one Save passes that check. A team mount's own S3 config gets the same check when it is added or changed (`TeamHome.addMount`, `updateMount`). An endpoint on a private address is allowed: MinIO on the LAN is a real setup, and first-run setup is a window in which only the trusted operator acts.
 
 ## The settings page asks before it drops changes
 

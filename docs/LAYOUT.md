@@ -2,7 +2,7 @@
 
 > **TLDR:** Every app is `EigenApp` (the provider stack) around `AppShell` (topbar, sidebar, content), and every page is a `ColumnLayout` of `Column`s with the toolbar passed as a prop. The shell lives in `packages/ui/src/components/layout/`, Drive's file UI in `packages/ui/src/components/drive/`. Five things are not obvious from the code: on a phone only the `mobileColumn` renders and the sidebar is a column, not an overlay; every context and ⋮ menu draws its rows in one order, with a destructive row last and red; z-index is one project-wide scale and app code sets none; buttons navigate in the same tab while links inside content open a new tab; and every document-level keymap stands down while a dialog is open.
 
-This doc governs the frame every app draws its pages in and the conventions that make the apps feel like one product: the shell, the columns, the gutter, Drive's file UI, lists, drag, the keyboard, layering and where a click opens. Read it before you add a page, a list, a menu or a shortcut. The pieces live in `packages/ui`, with their logic in `packages/lib`, so an app composes the shared pieces instead of laying out its own, and a fix to the shell reaches every app at once. Phones and touch screens add their own rules on top ([MOBILE.md](MOBILE.md)).
+This doc governs the frame every app draws its pages in and the conventions that make the apps feel like one product: the shell, the columns, the gutter, Drive's file UI, lists, drag, the keyboard, layering, where a click opens, and the Radix traps. Read it before you add a page, a list, a menu or a shortcut. The pieces live in `packages/ui`, with their logic in `packages/lib`, so an app composes the shared pieces instead of laying out its own, and a fix to the shell reaches every app at once. Phones and touch screens add their own rules on top ([MOBILE.md](MOBILE.md)).
 
 ## Every app is `EigenApp` around `AppShell`
 
@@ -144,6 +144,8 @@ A row's state is a class in `packages/ui/src/styles/globals.css`, painted in the
 
 `ContextMenuAnchor` portals its zero-size trigger into `document.body`. The trigger sits at viewport coordinates, and a transformed ancestor (a dialog's centering translate) would otherwise become its containing block and open the menu somewhere else.
 
+One context menu serves the whole list, so a list never draws a `DropdownMenu` per row. A row's button opens it with `openAt(item, rect.right, rect.bottom)` from the button's own bounding rect, because a click made with the keyboard's Enter has clientX and clientY 0,0.
+
 A menu row's 16 px between icon and label lives in the item primitives in `dropdown-menu.tsx` (`gap-4`), which the Sheets right-click menu uses too. Put the bare icon in the row; never add `mr-*` or a `gap-*` override to a menu icon.
 
 ## Reordering uses dnd-kit, moving between lists uses native drag
@@ -164,7 +166,7 @@ Icon buttons with a tooltip are `TooltipButton`. When hover icons would change t
 
 ## Document keymaps stand down while a dialog is open
 
-Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDisplay()` for tooltip labels. Manual listeners stay for stateful navigation (`use-keyboard-list-navigation.ts`) and for editors that own their keys (Tiptap, the canvas keymap in [CANVAS.md](CANVAS.md)). Mod+K is a raw window listener rather than a `useHotkey`, so the palette opens from inside a text field too.
+Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDisplay()` for tooltip labels. Manual listeners stay for stateful navigation (`use-keyboard-list-navigation.ts`) and for editors that own their keys (Tiptap, the canvas keymap in [CANVAS.md](CANVAS.md)). Mod+K is a raw window listener rather than a `useHotkey`, so the palette opens from inside a text field too. A `'*'` chord needs a capture-phase listener, and `'Shift+8'` never matches.
 
 **A document-level keymap folds `useDialogOpen()` into its `enabled`.** The library's own guard covers text fields only, so a key pressed on a dialog button otherwise acts on the document behind it: Delete on a confirm button deleting the canvas selection, `#` in Mail's location picker trashing the message. The hook watches the DOM for an open `role="dialog"` or `role="alertdialog"`, so it keeps no registry. An overlay that is a dialog itself (the file preview, Mail's cheat sheet) registers its keys ungated.
 
@@ -202,6 +204,18 @@ Two cases leave the same-tab side:
 
 - The user asked for a new tab: Drive's Open in new tab row and the `drive.open-in-new-tab` command. Prefer a real `<a href>` for a navigation affordance where the markup allows it (`DriveItemNameLink`, the quick-look overlay's Open, Drive's recent-activity rows through `ActivityRow`'s `href`), because Cmd-click and middle-click then open a new tab and the user keeps the choice. Two things block an anchor: a URL that needs an async resolve (the notification bell), and a button in the row's `trailing` slot, since a `<button>` inside an `<a>` is invalid HTML.
 - The destination is outside the app: downloads, the marketing site, exported HTML, and mail. Mail is deliberate twice over. A share email is read in other clients as often as in Eigen Mail, and deciding "open in this tab" from a stranger's URL is exactly where an Eigen-looking phishing host would replace the reader's inbox.
+
+## Radix and the DOM have defaults that break a component silently
+
+Each of these looks like a bug in our own code, so the cause and the fix are written down:
+
+- `TooltipTrigger asChild` overwrites its child's `data-state`, so a Toggle's `data-[state=on]:*` never matches inside a tooltip. Style the pressed state with `aria-pressed:*`, as the find bar's option toggles do (`find-replace-bar.tsx`).
+- A non-modal Popover inside a Radix Dialog can't scroll: the dialog's scroll lock eats the wheel while hover still works. Pass `modal`.
+- A Popover inside a Radix menu closes on focus-outside. Use `DropdownMenuSub`.
+- A Radix menu takes focus back to its trigger on close. To focus something else, `preventDefault` in `onCloseAutoFocus`, then focus the target.
+- Radix `onOpenChange` never fires on unmount, so state it set stays behind.
+- A flex item that loses `overflow-hidden` loses its escape from its minimum size too: add `min-h-0`.
+- An input focused in `pointerdown` is blurred again by the mousedown that follows. `preventDefault` the pointerdown.
 
 ## See also
 

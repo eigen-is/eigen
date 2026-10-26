@@ -1,0 +1,30 @@
+# Docs
+
+How each part of Eigen works and why, one doc per domain. Where each concept lives in the code, the package boundaries and the pitfalls: [ARCHITECTURE.md](ARCHITECTURE.md). How code is written: [CODE-STANDARDS.md](CODE-STANDARDS.md). Designs not built yet: `proposals/`.
+
+- Drive, storage, mounts, versioning, copy/move: [STORAGE.md](STORAGE.md); soft delete and trash: [SOFT-DELETE.md](SOFT-DELETE.md); file history and watch: [FILE-HISTORY.md](FILE-HISTORY.md)
+- Databases: [DATABASE.md](DATABASE.md)
+- Sharing and permissions: [ACL.md](ACL.md); guests: [GUEST-ACCESS.md](GUEST-ACCESS.md); organizations and teams: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md)
+- Collab documents (Yjs, offline, restore): [COLLAB.md](COLLAB.md)
+- Canvas engine (vector + slides): [CANVAS.md](CANVAS.md), [SLIDES.md](SLIDES.md); charts: [CHARTS.md](CHARTS.md), and the research behind their look: [CHART-DRAWING-RESEARCH.md](CHART-DRAWING-RESEARCH.md); clipboard: [CLIPBOARD.md](CLIPBOARD.md)
+- Docs app, the eigendoc schema and figures: [DOCS.md](DOCS.md); equations, the math tree and its OMML, MathML and LaTeX: [MATH.md](MATH.md)
+- Sheets: [SHEETS.md](SHEETS.md); stickies: [STICKIES.md](STICKIES.md); how the server reads and writes document content: [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md); editing a text file in Drive: [INLINE-EDITING.md](INLINE-EDITING.md); the files a document embeds: [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)
+- Comments: [COMMENTS.md](COMMENTS.md)
+- Mail: [MAIL.md](MAIL.md), [IMAP.md](IMAP.md)
+- Chat: [CHAT.md](CHAT.md)
+- Calendar, iCalendar, invitations and iMIP: [CALENDAR.md](CALENDAR.md); CalDAV: [CALDAV.md](CALDAV.md)
+- Contacts: [CONTACTS.md](CONTACTS.md); CardDAV: [CARDDAV.md](CARDDAV.md)
+- WebDAV: [WEBDAV.md](WEBDAV.md)
+- Search: [SEARCH.md](SEARCH.md); in-document find bar: [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md)
+- SSE: [SSE.md](SSE.md); toasts: [NOTIFICATIONS.md](NOTIFICATIONS.md); notification center: [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md); activity rows: [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md)
+- Previews, quick look and file actions: [PREVIEWS.md](PREVIEWS.md); export and import: [EXPORT.md](EXPORT.md); off-thread transforms: [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)
+- Uploads and S3 sync: [SYNC.md](SYNC.md), [STREAMING_UPLOADS.md](STREAMING_UPLOADS.md)
+- Backup and restore: [BACKUP.md](BACKUP.md)
+- Self-hosting and `./eigen`: [SELF-HOSTING.md](SELF-HOSTING.md); the operator's steps live in the help center's `self-hosting/` section
+- Server config, settings, quotas: [SERVER-SETTINGS.md](SERVER-SETTINGS.md), [QUOTA.md](QUOTA.md); demo instance: [DEMO_MODE.md](DEMO_MODE.md)
+- Cross-home relay and sharding: [SCALABILITY.md](SCALABILITY.md)
+- Layout, lists, Drive's file UI, keyboard, z-index, hover icons: [LAYOUT.md](LAYOUT.md); mobile: [MOBILE.md](MOBILE.md); typography: [TYPOGRAPHY.md](TYPOGRAPHY.md); command palette: [COMMAND-PALETTE.md](COMMAND-PALETTE.md)
+- Testing and browser verification: [TESTING.md](TESTING.md), the [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md)
+- Help center: [HELP-CENTER.md](HELP-CENTER.md), [SUPPORT-STYLE-GUIDE.md](SUPPORT-STYLE-GUIDE.md)
+- Code standards and their worked examples: [CODE-STANDARDS.md](CODE-STANDARDS.md), [CODE-EXAMPLES.md](CODE-EXAMPLES.md); what a review holds a change to: [REVIEW-STANDARD.md](REVIEW-STANDARD.md); every shared export, generated: [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md); cleaning up or writing one source file: the [source-file skill](../.claude/skills/source-file/SKILL.md); setting up and contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Backlog: [ROADMAP.md](ROADMAP.md); after 1.0: [ROADMAP-POST-1.md](ROADMAP-POST-1.md); sheets: [SHEETS-TODO.md](SHEETS-TODO.md); chart kinds: [CHARTS-TODO.md](CHARTS-TODO.md)

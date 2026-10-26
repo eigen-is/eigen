@@ -161,7 +161,7 @@ Found a security issue? Please **do not** open a public issue. [SECURITY.md](SEC
 
 ### Documentation
 
-The docs in `docs/` explain how each part of Eigen works and why. The index of every doc, by domain, is in [AGENTS.md](AGENTS.md#where-things-are-documented).
+The docs in `docs/` explain how each part of Eigen works and why. The index of every doc, by domain, is [docs/README.md](docs/README.md).
 
 ## Contact
 

@@ -22,6 +22,8 @@ test.eigendoc/          (pathId: abc123)
 
 On a temp-copy backend (`s3`, `local`) the mount downloads the object to a temp file and the database works on that copy. On `local-key` it opens the stored file itself.
 
+drizzle's bun-sqlite driver types `.run()` as void, so a write that must count the rows it matched uses `.returning().all()`.
+
 `users3.db` is the one database `ManagedDatabase` does not open. better-auth owns the connection, there are no versioned migrations, and `ensureAuthSchemaColumns` (`apps/api/src/lib/auth/auth.ts`) adds any missing column at boot.
 
 ## A migration runs in its own transaction
