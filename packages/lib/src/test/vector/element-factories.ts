@@ -3,8 +3,8 @@
 
 import { newChartSpecParts } from '../../charts/spec';
 import type { ChartSpec } from '../../types/chart';
-import { serializePoints } from '../../vector/geometry';
 import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
+import { serializePoints } from '../../vector/points';
 import type {
     VectorArrowElement,
     VectorChartElement,

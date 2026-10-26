@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { PinRoutingContext } from '../../vector/elbow-pins';
 import { materializeFirstPin, moveEndpoints, moveSegment, renormalize, unpinSegment } from '../../vector/elbow-pins';
-import { parsePoints } from '../../vector/geometry';
+import { parsePoints } from '../../vector/points';
 import type { VectorArrowElement } from '../../vector/types';
 import { DEFAULT_ELEMENT_PROPS, parseFixedSegments } from '../../vector/types';
 

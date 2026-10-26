@@ -9,10 +9,10 @@ import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';
 import { elementsInFrame } from './frames';
 import type { Point } from './geometry';
-import { round } from './geometry';
 import type { RenderOutput } from './kinds';
 import { ELEMENT_KINDS } from './kinds';
 import { SVG_NS } from './kinds/render-utils';
+import { round } from './points';
 import type { MediaResolver } from './scene-to-svg';
 import type { VectorElement, VectorScene } from './types';
 

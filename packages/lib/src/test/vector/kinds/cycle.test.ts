@@ -35,4 +35,10 @@ describe('the vector engine survives either entry order', () => {
     test('kinds as the process entry builds the same table', async () => {
         expect(await elementFieldsFromEntry('kinds/index.ts')).toEqual([...ELEMENT_FIELDS]);
     });
+
+    // The charts layout reaches vector/ only through modules that import no kind, so the chart kind
+    // finds the charts barrel evaluated whichever loads first.
+    test('the charts barrel as the process entry builds the same table', async () => {
+        expect(await elementFieldsFromEntry('../charts/index.ts')).toEqual([...ELEMENT_FIELDS]);
+    });
 });

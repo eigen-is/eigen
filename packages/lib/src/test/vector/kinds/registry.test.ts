@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { solidFill } from '../../../vector/fill';
-import { getElementBounds, serializePoints } from '../../../vector/geometry';
+import { getElementBounds } from '../../../vector/geometry';
 import {
     baseDefaultsFor,
     CREATION_TOOL_TYPES,
@@ -13,6 +13,7 @@ import {
     VECTOR_STYLE_DEFAULTS,
 } from '../../../vector/kinds';
 import { EMPTY_OUTLINE } from '../../../vector/outline';
+import { serializePoints } from '../../../vector/points';
 import { readElementFromFields } from '../../../vector/read-vector';
 import type { VectorElement, VectorElementBase, VectorRichTextElement } from '../../../vector/types';
 import { BASE_ELEMENT_FIELDS, DEFAULT_ELEMENT_PROPS } from '../../../vector/types';

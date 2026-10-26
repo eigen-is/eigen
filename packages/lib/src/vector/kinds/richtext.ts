@@ -1,7 +1,8 @@
 import { getFontFamily } from '../../constants/fonts';
 import { stripTagsServer } from '../../core/html';
-import { hitTestBox, round } from '../geometry';
+import { hitTestBox } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
+import { round } from '../points';
 import type { VectorRichTextElement } from '../types';
 import {
     CORNERS,

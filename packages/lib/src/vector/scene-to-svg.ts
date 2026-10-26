@@ -9,9 +9,9 @@ import { escapeXml } from '../core/xml';
 import { arrowRoute, sceneBounds } from './elbow-route';
 import { isTransparentColor } from './fill';
 import { orderByFractionalIndex } from './fractional-index';
-import { round } from './geometry';
 import { ELEMENT_KINDS } from './kinds';
 import { elementGroupOpen, SVG_NS } from './kinds/render-utils';
+import { round } from './points';
 import { RICH_TEXT_CLASS } from './scene-layers';
 import type { VectorElement, VectorScene } from './types';
 

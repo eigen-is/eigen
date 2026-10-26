@@ -11,7 +11,7 @@
 // every normalize, so the stored copies never drift.
 
 import type { Point } from './geometry';
-import { parsePoints, serializePoints } from './geometry';
+import { parsePoints, serializePoints } from './points';
 import type { FixedSegment, VectorArrowElement } from './types';
 import { parseFixedSegments, serializeFixedSegments } from './types';
 

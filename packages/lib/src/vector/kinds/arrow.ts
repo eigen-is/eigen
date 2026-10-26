@@ -9,12 +9,10 @@ import {
     LINEAR_HIT_SCREEN_FACTOR,
     linearLocalToScene,
     linearSceneToLocal,
-    parsePoints,
-    pointsBounds,
-    serializePoints,
     unionBounds,
 } from '../geometry';
 import { polylineOutline } from '../outline';
+import { parsePoints, pointsBounds, serializePoints } from '../points';
 import type { FixedSegment, VectorArrowElement } from '../types';
 import {
     ARROWHEADS,

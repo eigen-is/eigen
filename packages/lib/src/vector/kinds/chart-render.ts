@@ -1,6 +1,6 @@
 // The chart's drawing body: the layout's shapes, each drawn by its own kind in its own group, then the
-// labels as SVG text. Split from the kind like arrow-render.ts. The kinds are imported one by one, never
-// through the registry, which imports the chart kind.
+// labels as SVG text. It is split from the chart kind, as the arrow's painter is. The shape kinds are
+// imported one by one, never through the registry, which imports the chart kind.
 
 import {
     CHART_MESSAGES,
@@ -13,7 +13,7 @@ import {
     readChartSpec,
 } from '../../charts';
 import type { ChartBox, ChartDataError, ChartLayout, ChartShape, ChartSpecSvgInput } from '../../types/chart';
-import { round } from '../geometry';
+import { round } from '../points';
 import type { VectorChartElement } from '../types';
 import { ellipseKind } from './ellipse';
 import type { ElementKind } from './kind';
@@ -27,6 +27,11 @@ const SHAPE_KINDS: Record<ChartShape['type'], ElementKind> = {
     line: lineKind,
     ellipse: ellipseKind,
     pie: pieKind,
+};
+
+const DATA_ERROR_MESSAGES: Record<ChartDataError, string> = {
+    ref: CHART_MESSAGES.ref,
+    'too-many-points': CHART_MESSAGES.tooManyPoints,
 };
 
 export function renderChartSvg(el: VectorChartElement): string {
@@ -46,7 +51,7 @@ export function renderChartSpecSvg({
     let body: string;
     if (spec === null || resolved === null) body = chartBodySvg(box, null);
     else if (typeof resolved === 'string')
-        body = layoutSvg(layoutChartMessage(box, dataErrorMessage(resolved), spec.chart.fontFamily));
+        body = layoutSvg(layoutChartMessage(box, DATA_ERROR_MESSAGES[resolved], spec.chart.fontFamily));
     else body = layoutSvg(layoutChart({ ...box, spec, data: resolved, formatTick }));
     const width = round(Math.max(0, box.width));
     const height = round(Math.max(0, box.height));
@@ -67,16 +72,6 @@ function chartBodySvg(box: ChartBox, layout: ChartLayout | null): string {
     if (layout) return layoutSvg(layout);
     const outline = `<rect x="0" y="0" width="${round(box.width)}" height="${round(box.height)}" ${PLACEHOLDER_STROKE}/>`;
     return outline + layoutSvg(layoutChartMessage(box, CHART_MESSAGES.unreadable, DEFAULT_CHART_FONT));
-}
-
-// Built per call: charts/ reaches this module through geometry's import of the kinds, so CHART_MESSAGES
-// isn't initialized yet when this module evaluates.
-function dataErrorMessage(error: ChartDataError): string {
-    const messages: Record<ChartDataError, string> = {
-        ref: CHART_MESSAGES.ref,
-        'too-many-points': CHART_MESSAGES.tooManyPoints,
-    };
-    return messages[error];
 }
 
 // The element's own fields are its look; the font is the spec's.

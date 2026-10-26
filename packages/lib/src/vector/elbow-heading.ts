@@ -15,11 +15,11 @@ import {
     linearLocalToScene,
     normalizeFixedPoint,
     outlineIntersections,
-    parsePoints,
     rotatePoint,
 } from './geometry';
 import { capabilitiesOf, ELEMENT_KINDS, isBindable } from './kinds';
 import { clamp, nearestPoint, outlineDistance } from './outline';
+import { parsePoints } from './points';
 import type { VectorArrowElement, VectorBindableElement, VectorElement } from './types';
 import { parseBinding, serializeBinding } from './types';
 

@@ -1,7 +1,8 @@
 import type { Point } from '../geometry';
-import { boxCenter, DEG_TO_RAD, rotatePoint } from '../geometry';
+import { boxCenter, rotatePoint } from '../geometry';
 import type { OutlineShape } from '../outline';
 import { EMPTY_OUTLINE, ellipseOutline, normalizeAngle, outlineDistance } from '../outline';
+import { DEG_TO_RAD } from '../points';
 import type { VectorPieElement } from '../types';
 import { defineKind } from './kind';
 import { fillField, num } from './read-fields';

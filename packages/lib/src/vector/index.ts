@@ -32,6 +32,7 @@ export {
 export { isBordered, SVG_NS } from './kinds/render-utils';
 export * from './media-refs';
 export * from './outline';
+export * from './points';
 export * from './read-vector';
 export * from './rich-text-svg';
 export * from './scene-layers';

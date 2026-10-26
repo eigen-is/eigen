@@ -1,7 +1,8 @@
 import { isTransparentFill, parseFill } from '../fill';
 import type { Bounds, Point } from '../geometry';
-import { boxCenter, distanceToPolyline, LINEAR_HIT_SCREEN_FACTOR, pointsBounds, rotatePoint } from '../geometry';
+import { boxCenter, distanceToPolyline, LINEAR_HIT_SCREEN_FACTOR, rotatePoint } from '../geometry';
 import { clamp, nearestPoint, polylineOutline, scaledPathCommands } from '../outline';
+import { pointsBounds } from '../points';
 import type { VectorPathElement } from '../types';
 import { boxAnchorPoints, defineKind } from './kind';
 import { bool, fillField, parseNormalizedPath } from './read-fields';

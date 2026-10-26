@@ -5,8 +5,8 @@
 
 import type { ChartLabel, ChartShape, ChartSpec } from '../types/chart';
 import { serializeFill } from '../vector/fill';
-import { DEG_TO_RAD } from '../vector/geometry';
 import { normalizeAngle } from '../vector/outline';
+import { DEG_TO_RAD } from '../vector/points';
 import type { Context, Frame } from './context';
 import { LABEL_SHARE } from './context';
 import { chartColor, chartPointColor } from './defaults';

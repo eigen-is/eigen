@@ -29,14 +29,8 @@ import {
 } from './elbow-heading';
 import type { PinRoutingContext } from './elbow-pins';
 import type { Bounds, Point } from './geometry';
-import {
-    boundShape,
-    elementBounds,
-    linearLocalToScene,
-    linearSceneToLocal,
-    parsePoints,
-    unionBounds,
-} from './geometry';
+import { boundShape, elementBounds, linearLocalToScene, linearSceneToLocal, unionBounds } from './geometry';
+import { parsePoints } from './points';
 import type { VectorArrowElement, VectorBindableElement, VectorElement } from './types';
 
 // Excalidraw's BASE_PADDING / BASE_BINDING_GAP_ELBOW / DEDUP_TRESHOLD.

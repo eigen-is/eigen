@@ -9,12 +9,11 @@ import {
     isClosedLinear,
     isClosedPath,
     linearLocalToScene,
-    parsePoints,
     parsePressures,
-    serializePoints,
     serializePressures,
 } from '../geometry';
 import { polylineOutline } from '../outline';
+import { parsePoints, serializePoints } from '../points';
 import type { VectorLinearElement } from '../types';
 import { DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS } from '../types';
 import { defineKind } from './kind';
