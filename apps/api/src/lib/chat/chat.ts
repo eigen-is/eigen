@@ -195,6 +195,13 @@ export class ChatRoom {
                     console.error('Failed to send the chat notifications:', error);
                 });
             };
+            // The message is stored already, so a failed lookup costs only that person's notification.
+            // It is logged, and the post still answers.
+            const findUser = (email: string) =>
+                getUserByEmail(email).catch((error: unknown) => {
+                    console.error(`Failed to look up ${email} for a chat notification:`, error);
+                    return null;
+                });
 
             // A mentioned member hears about the message once, as a mention. So the activity
             // notifications below skip everyone in this set.
@@ -208,7 +215,7 @@ export class ChatRoom {
                 }
                 await Promise.all(
                     [...mentionedEmailSet].map(async (email) => {
-                        const mentionedUser = await getUserByEmail(email);
+                        const mentionedUser = await findUser(email);
                         if (!mentionedUser) return;
                         // Each mention carries its own tag, so each one is its own delivery.
                         notify(
@@ -258,7 +265,7 @@ export class ChatRoom {
                     whisperTo.toLowerCase() !== authorEmail.toLowerCase() &&
                     memberEmails.has(whisperTo.toLowerCase())
                 ) {
-                    const recipientUser = await getUserByEmail(whisperTo);
+                    const recipientUser = await findUser(whisperTo);
                     if (recipientUser) notify([recipientUser.id], activity);
                 }
             } else if (type === 'message' || type === 'emote') {
@@ -277,7 +284,7 @@ export class ChatRoom {
                     [...participantEmails].map(async (email) => {
                         if (mentionedEmailSet.has(email)) return null;
                         if (!memberEmails.has(email)) return null;
-                        const participant = await getUserByEmail(email);
+                        const participant = await findUser(email);
                         if (!participant) return null;
                         activityNotifiedEmails.add(email);
                         return participant.id;
