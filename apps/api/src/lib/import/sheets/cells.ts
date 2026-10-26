@@ -47,8 +47,6 @@ export type Grid = {
     borderInfo: Record<string, CellBorderSides>;
     // In points, as written.
     heights: Map<number, number>;
-    // The rows whose height the user set (customHeight), which no estimate overrides.
-    customHeights: Set<number>;
     rowhidden: Record<string, number>;
     // The rows and columns the cells reach; recalc materialises at least a default grid's.
     rows: number;
@@ -68,7 +66,6 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
         celldata: [],
         borderInfo: {},
         heights: new Map(),
-        customHeights: new Set(),
         rowhidden: {},
         rows: 0,
         columns: 0,
@@ -93,8 +90,7 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
         const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
         // A custom height that draws no pixel is a row Excel draws as none, as the editor draws a hidden one.
         const pixels = Math.round(ptToPx(height));
-        const custom = isOn(xmlAttr(row, '', 'customHeight')) === true;
-        const none = pixels === 0 && (height > 0 || custom);
+        const none = pixels === 0 && (height > 0 || isOn(xmlAttr(row, '', 'customHeight')) === true);
         if ((none || isOn(xmlAttr(row, '', 'hidden'))) && !(r in grid.rowhidden)) {
             context.charge(1, 0);
             grid.rowhidden[r] = 0;
@@ -102,7 +98,6 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
         if (pixels > 0) {
             if (!grid.heights.has(r)) context.charge(1, 0);
             grid.heights.set(r, height);
-            if (custom) grid.customHeights.add(r);
         }
         let c = -1;
         for (const element of xmlChildren(row, SML_NS, 'c')) {
