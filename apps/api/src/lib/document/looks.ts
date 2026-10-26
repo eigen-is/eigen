@@ -269,7 +269,6 @@ export const TABLE_CELL_PADDING = {
     horizontal: twips(cssPt(boxSide(CELL_PADDING, 'left'), BODY.sizePt)),
 };
 
-// In twips: the writer spaces the block after an in-flow table by it, and the reader takes that space as the table's.
 // In twips: the margin above and below a block figure, which the paragraph holding it draws.
 const FIGURE_MARGIN_CSS = proseValue('.eigen-prose .figure', 'margin');
 export const FIGURE_MARGIN = {
@@ -277,6 +276,7 @@ export const FIGURE_MARGIN = {
     bottom: twips(cssPt(boxSide(FIGURE_MARGIN_CSS, 'bottom'), BODY.sizePt)),
 };
 
+// In twips: the writer spaces the block after an in-flow table by it, and the reader takes that space as the table's.
 export const TABLE_MARGIN = twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt));
 
 // In twips: the margin the writer gives an outermost list's and a quote's last block, and to a table that ends one, so

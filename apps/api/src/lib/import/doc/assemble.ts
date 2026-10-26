@@ -608,14 +608,14 @@ const CONTAINER_MARGINS = new Map([
     ['taskItem', 0],
 ]);
 
-// A table holds no space after, so the writer starts the block below one with its margin, or with the larger margin of
-// a list or quote it ends, as withAfter gives that to the table.
 // The space a paragraph leaves below it as the file writes it, in twips.
 function spaceBelow(item: Item | undefined): number {
     const after = item?.kind === 'para' ? (item.format?.spaceAfter ?? item.format?.baseAfter) : undefined;
     return after === undefined ? 0 : ptToTwips(after);
 }
 
+// A table holds no space after, so the writer starts the block below one with its margin, or with the larger margin of
+// a list or quote it ends, as withAfter gives that to the table.
 function gapBelowTable(block: JSONContent | undefined): number | undefined {
     if (block?.type === 'table') return TABLE_MARGIN;
     const margin = CONTAINER_MARGINS.get(block?.type ?? '');
