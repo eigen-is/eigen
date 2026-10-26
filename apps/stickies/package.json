@@ -17,6 +17,6 @@
     "@dnd-kit/utilities": "^3.2.2",
     "nanoid": "^5.1.16",
     "y-websocket": "^3.1.0",
-    "yjs": "^13.6.32"
+    "yjs": "^13.6.33"
   }
 }

@@ -18,7 +18,7 @@
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
     "dayjs": "^1.11.23",
-    "es-toolkit": "^1.52.0",
+    "es-toolkit": "^1.53.0",
     "immer": "^9.0.21",
     "numeral": "^2.0.6",
     "numfmt": "^3.2.6",
@@ -28,10 +28,10 @@
   "devDependencies": {
     "@types/numeral": "^2.0.5",
     "@types/uuid": "^9.0.8",
-    "happy-dom": "^20.14.0"
+    "happy-dom": "^20.14.6"
   },
   "peerDependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }
