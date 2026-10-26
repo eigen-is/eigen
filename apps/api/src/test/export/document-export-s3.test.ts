@@ -32,7 +32,7 @@ beforeAll(async () => {
     seedEigendoc((await drive.getCollabDocument(MOUNT_ID, docPath.id)).doc, buildGoldenDocJson());
     mediaId = await seedDocumentMedia(mount, docPath, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
     // Uploaded, so the export reads the image from the bucket and not from its staged copy.
-    await mount.drainPendingUploads({ flushNow: true });
+    await mount.uploadQueue?.drain({ flushNow: true });
     mediaKey = await mount.getStorageKey(mediaId);
 });
 

@@ -738,8 +738,8 @@ describe('Name validation', () => {
     });
 
     test('rejects .trash compatibility-character aliases', async () => {
-        // U+017F LATIN SMALL LETTER LONG S: '.traſh' IS the '.trash' dir under APFS case folding,
-        // but survives NFC + toLowerCase. NFKC maps ſ→s.
+        // U+017F LATIN SMALL LETTER LONG S: '.traſh' is the '.trash' dir under APFS case folding,
+        // though toLowerCase keeps it apart. foldName folds it onto s.
         await expect(mount.createFolder(rootId, '.traſh')).rejects.toThrow('reserved name');
     });
 
@@ -2615,7 +2615,7 @@ describe('trash/restore content reindex', () => {
         // First index: a synced write marks the container dirty; the drain extracts body v1.
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await mount.flushContentReindex();
+        await mount.reindexQueue?.drain();
         expect(mount.searchPaths({ q: 'grendelone', limit: 20 }).some((h) => h.id === containerId)).toBe(true);
 
         // Dirty it again (the trash-time close syncs it, re-marking the container; the 2-min cap

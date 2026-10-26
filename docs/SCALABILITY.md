@@ -50,7 +50,7 @@ The Calendar and Drive `receive*` methods write the database, broadcast the SSE 
 
 ## A relay message in flight is lost on a crash
 
-`sendToHome` has no durable queue. The ACL fan-out is bounded and ordered per path (`apps/api/src/lib/drive/acl-propagation.ts`), but a delivery in flight when the process dies is gone. [PROPOSAL_HOME_RELAY_OUTBOX.md](proposals/PROPOSAL_HOME_RELAY_OUTBOX.md) turns each push into a row in a server-level outbox with one drain loop, FIFO per target, retries and replay on boot. In a sharded deployment that drain is the one place that learns about other processes.
+`sendToHome` has no durable queue. The ACL fan-out is bounded and ordered per path (`apps/api/src/lib/drive/acl-propagation.ts`), but a delivery in flight when the process dies is gone. A graceful shutdown is not a crash: it waits for the queued ACL fan-outs and for every `sendToUserHomes` delivery still in flight (`drainDeliveriesWithin`) before it closes the homes, because a delivery opens its recipient's home again. The wait gives up after 10 s, and a delivery still running then is lost as in a crash. [PROPOSAL_HOME_RELAY_OUTBOX.md](proposals/PROPOSAL_HOME_RELAY_OUTBOX.md) turns each push into a row in a server-level outbox with one drain loop, FIFO per target, retries and replay on boot. In a sharded deployment that drain is the one place that learns about other processes.
 
 ## Multi-server questions without an answer yet
 

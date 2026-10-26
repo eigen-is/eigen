@@ -40,7 +40,7 @@ const COMPRESS_FRAME_MIN_BYTES = 1024;
 const TOUCH_THROTTLE_MS = 60_000;
 // The wait between the last unsubscribe and the close. A reload or a y-websocket retry within it
 // reattaches to the loaded document instead of loading it again.
-const CLOSE_LINGER_MS = 60_000;
+export const CLOSE_LINGER_MS = 60_000;
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes
 // and opens again within it records an extra row. That is cheaper than storing the window.
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
@@ -86,7 +86,6 @@ export class CollabDocument {
     private readonly clientIdOwners = new Map<number, ServerWebSocket<unknown>>();
     private closed = false;
     private closeTimer: ReturnType<typeof setTimeout> | undefined;
-    private closeLingerMs = CLOSE_LINGER_MS;
     private lastTouchedAt = 0;
     // The time of an update the touch throttle skipped. The close stamps it, so a document that was only
     // read keeps its Modified time, and the linger never shows as the time of the last edit.
@@ -305,7 +304,7 @@ export class CollabDocument {
         this.closeTimer = setTimeout(() => {
             if (this.closed || this.connections.size > 0) return;
             this.drive.closeCollabDocument(this.path.mountId, this.path.id).catch(() => {});
-        }, this.closeLingerMs);
+        }, CLOSE_LINGER_MS);
         // A lingering document must never keep the process alive at shutdown.
         this.closeTimer.unref();
     }

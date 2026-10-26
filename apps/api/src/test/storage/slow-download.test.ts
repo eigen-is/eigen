@@ -204,7 +204,7 @@ describe('Whole-body reads', () => {
         await mount.init();
         await waitFor(() => fake.heldCount > 0);
         mount.downloads.abort();
-        await mount.flushContentReindex();
+        await mount.reindexQueue?.drain();
         expect(mount.getContentDirtyPaths(CONTENT_REINDEX_CAP_SECONDS, 100)).toHaveLength(20);
     });
 });
@@ -217,7 +217,7 @@ describe('A stalled DELETE', () => {
         await mount.snapshotContainerDataDb(containerId, policy);
         await Bun.sleep(2);
         await mount.snapshotContainerDataDb(containerId, policy);
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         const versions = (await mount.getChildByName(containerId, VERSIONS_FOLDER_NAME))!;
         for (const version of await mount.listFolder(versions.id)) {
             fake.faults.set(await mount.getStorageKey(version.id), 'stall');

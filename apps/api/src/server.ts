@@ -1,3 +1,6 @@
+// The API's entry point. It runs the recoveries a restart needs, starts the HTTP server, the control
+// socket and the scheduled jobs, and on SIGTERM or SIGINT shuts them down in order, the homes last.
+
 import { MAX_REQUEST_BODY_BYTES } from '@workspace/lib/constants/mount';
 import { app } from './app';
 import { drainBackupJobs } from './lib/backup/jobs';
@@ -7,7 +10,7 @@ import { recoverInterruptedServerBackups } from './lib/backup/server-archives';
 import { isProduction } from './lib/config/env';
 import { assertMailDomainUnchanged, isSetupRequired } from './lib/config/server-config';
 import { documentTransformRunner } from './lib/document/transform/runner';
-import { drainACLFanOuts } from './lib/drive/acl-propagation';
+import { drainDeliveriesWithin } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
 import { pinDefaultTeam } from './lib/org';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
@@ -16,10 +19,14 @@ import { createSetupLink } from './lib/setup/setup-token';
 import { setShutdownDrainDeadline } from './lib/sync';
 import { startControlSocket } from './routes/control';
 
-// Wall-clock budget for flushing pending S3 uploads on shutdown. With the backup jobs' budget
-// before it, it must stay below docker-compose's stop_grace_period so the drain finishes before
-// SIGKILL; anything not drained in time stays in pending_uploads and replays on the next boot.
+// How long a shutdown may spend uploading the pending S3 writes. With the waits for the backup jobs
+// and the deliveries before it, it stays below docker-compose's stop_grace_period, so the drain ends
+// before SIGKILL. An upload that doesn't make it stays queued and runs again at the next boot.
 const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
+
+// How long a shutdown waits for the deliveries into other homes before it closes the homes. A delivery
+// that hangs, such as on a stalled bucket, is given up after it, so the upload time above stays whole.
+const SHUTDOWN_DELIVERY_BOUND_MS = 10_000;
 
 // Both before the server listens: a request that resolved a home while the recovery was still
 // deciding about it would open a half-written folder as if it were the home. A restore that died
@@ -35,20 +42,17 @@ await assertMailDomainUnchanged();
 await pinDefaultTeam().catch((error) => console.error('[org] pinning the default team:', error));
 
 const server = app.listen({
-    // 8000 in every deployment — Caddy, Dovecot and the container healthcheck all name it. The
-    // override is what lets a test spawn this file as a real child process on a free port, boot
-    // sequence and signal handlers included.
+    // 8000 in every deployment, because Caddy, Dovecot and the container healthcheck all name it. The
+    // override lets a test start this file as a real child process on a free port, with the boot and
+    // the signal handlers included.
     port: Number(process.env['EIGEN_API_PORT']) || 8000,
-    // Per-file limits are enforced by the streaming parser and the backup upload's own check; this is
-    // the backstop under both.
+    // The streaming parser and the backup upload check their own limits per file. This is the backstop
+    // under both.
     maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
-    // Bun closes idle connections by default (10s documented; ~30s observed on 1.3.14),
-    // which killed every silent long-running response. 200s is a broad floor for slow
-    // routes (protocol ops); it can NOT cover the transform routes — queue
-    // wait + 120s deadline (+ 60s WeasyPrint) exceeds Bun's 255s cap on this knob — so
-    // those and the copy routes exempt themselves per-request via server.timeout(request, 0)
-    // (routes/drive.ts).
-    // WebSockets are unaffected (own keepalive config).
+    // Bun closes a connection that stays silent for a while, and that would cut off every slow response
+    // that sends nothing until it is done. 200 s covers the slow protocol routes. The transform routes
+    // can wait longer than Bun's cap of 255 s on this setting, so they and the copy routes switch it off
+    // for their own request with server.timeout(request, 0). WebSockets keep their own keepalive.
     idleTimeout: 200,
 });
 
@@ -66,19 +70,20 @@ async function gracefulShutdown(signal: string) {
     stopAllSchedules();
     server.stop();
     controlSocket.stop();
-    // Stop transform admission and finish or kill the active transform before the
-    // Mount/database teardown below — jobs hold no db leases, but their results
-    // must not race the cache/mount shutdown.
+    // The transforms stop taking jobs, and the one that runs finishes or is killed, before the mounts
+    // and databases close below. A job holds no database, but its result must not land during the
+    // teardown.
     await documentTransformRunner.close();
-    // A running snapshot reads databases shutdownAllHomes is about to close, and a half-done restore
-    // would leave a user with no home folder — so jobs settle before the teardown, and before the
-    // S3 drain budget below starts counting.
+    // A running snapshot reads databases that shutdownAllHomes is about to close, and a half-done restore
+    // would leave a user with no home folder. So the backup jobs settle first, before the S3 drain time
+    // below starts counting.
     await drainBackupJobs();
-    // Each mount flushes its upload queue (bounded by this deadline) during destruct, after
-    // its final close-time enqueues but before metadata.db closes.
+    // A delivery reopens its recipient's home, so the queued ACL fan-outs and every other delivery
+    // still in flight, such as watcher and chat notifications, finish before the homes close.
+    await drainDeliveriesWithin(SHUTDOWN_DELIVERY_BOUND_MS);
+    // Each mount uploads its queue during its close, until this deadline. That runs after the last writes
+    // of the close are queued and before metadata.db closes.
     setShutdownDrainDeadline(Date.now() + SHUTDOWN_DRAIN_BUDGET_MS);
-    // In-flight ACL fan-outs reopen recipient homes to deliver, so drain them before closing homes.
-    await drainACLFanOuts();
     await shutdownAllHomes();
     console.log('All homes shut down, exiting.');
     process.exit(0);

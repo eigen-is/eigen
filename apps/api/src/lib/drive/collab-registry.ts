@@ -18,8 +18,9 @@ export class CollabRegistry {
     // its documents open again.
     private readonly closedMounts = new WeakSet<Mount>();
     // The keys of a path that is moving to the trash, and of everything under it. The trash closes their
-    // databases before it marks them trashed, so a document opened in between would lose its edits.
-    private readonly trashing = new Set<string>();
+    // databases before it marks them trashed, so a document opened in between would lose its edits. A
+    // key counts the trashes that guard it, because two trashes of nested paths can overlap.
+    private readonly trashing = new Map<string, number>();
 
     public constructor(private ownerId: string) {}
 
@@ -73,15 +74,25 @@ export class CollabRegistry {
         }
     }
 
+    // Whether the path is on its way to the trash, on its own or with a folder above it.
+    public isTrashing(mount: Mount, pathId: string): boolean {
+        return this.trashing.has(this.key(mount.id, pathId));
+    }
+
     // Runs a trash of the path and refuses every open at or below it until the trash is done. The
-    // refused socket tries again, and by then the path is in the trash, so it gets a 404.
+    // refused socket tries again, and by then the path is in the trash, so it gets a 404. A document
+    // that moves in after the keys are read isn't refused, so the trash closes it itself.
     public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {
         const keys = [pathId, ...mount.collectDescendantIds(pathId)].map((id) => this.key(mount.id, id));
-        for (const key of keys) this.trashing.add(key);
+        for (const key of keys) this.trashing.set(key, (this.trashing.get(key) ?? 0) + 1);
         try {
             await trash();
         } finally {
-            for (const key of keys) this.trashing.delete(key);
+            for (const key of keys) {
+                const count = this.trashing.get(key) ?? 0;
+                if (count > 1) this.trashing.set(key, count - 1);
+                else this.trashing.delete(key);
+            }
         }
     }
 

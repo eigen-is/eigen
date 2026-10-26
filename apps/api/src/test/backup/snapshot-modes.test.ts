@@ -157,7 +157,7 @@ beforeAll(async () => {
     await s3Mount.createFile(s3Root, 'stored.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
     const storedBytes = new TextEncoder().encode('in the bucket');
     const pending = await s3Mount.createFile(s3Root, 'pending.txt', 'text/plain', storedBytes.byteLength, storedBytes);
-    await s3Mount.drainPendingUploads({ flushNow: true });
+    await s3Mount.uploadQueue?.drain({ flushNow: true });
     pendingObjectKey = await s3Mount.getStorageKey(pending);
     // What an outage leaves: newer bytes in staging/ with a pending row, their PUT parked.
     s3Fault.parkWrites = true;

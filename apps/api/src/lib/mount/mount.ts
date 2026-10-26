@@ -38,6 +38,7 @@ import {
     buildUploadDestinationKey,
     createMountStorage,
     docContainerDescendantIds,
+    nameTakenError,
     renameThenWriteRow,
     rethrowPathWriteError,
 } from './helpers';
@@ -112,6 +113,8 @@ export class Mount {
     private readonly baseDir: string;
     private readonly getLocalDatabase: LocalDatabaseGetter;
     private readonly extractContent?: ContentExtractor;
+    // One map holds three kinds of lock key: a path id, a folder id with a folded name for a create, and
+    // the one key that permanent deletes share. Ids are UUIDs, so the kinds never collide.
     private readonly pathLocks: Map<string, Promise<void>>;
     private readonly treeLock: RWLock;
 
@@ -526,6 +529,7 @@ export class Mount {
         const fileValue = this.isPathBased ? name : '';
 
         await this.withCreateLock(parentId, name, async () => {
+            this.assertLiveFolder(folderId, parentId);
             // Checked under the lock, because on `local` a rename that took the lock first owns the
             // key this create would replace.
             await this.assertUniqueName(parentId, name);
@@ -598,6 +602,7 @@ export class Mount {
 
         const searchable = isSearchableTextFile(mimeType, name);
         await this.withCreateLock(parentId, name, async () => {
+            this.assertLiveFolder(fileId, parentId);
             // Checked under the lock, because on `local` a rename that took the lock first owns the
             // key this create would replace.
             await this.assertUniqueName(parentId, name);
@@ -655,15 +660,28 @@ export class Mount {
                 .get()) ?? (await this.findCaseFoldedChild(parentId, name));
 
         if (existing && existing.id !== excludeId) {
-            throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+            throw nameTakenError(name);
         }
     }
 
+    // A create checks its folder before it writes any bytes. A folder that went to the trash while the
+    // create waited is a 404, the same as for a move. On `local` the create then holds the tree lock
+    // shared, so no trash can land before its row is in.
+    private assertLiveFolder(id: string, parentId: string): void {
+        const error = this.db.transaction((tx) => this.targetFolderErrorInTx(tx, id, parentId));
+        if (error) throw error;
+    }
+
     // assertUniqueName's SELECT leaves a race open: two creates can both pass it before either inserts.
-    // Off `local` no lock keeps a folder's permanent delete out of a create either.
+    // Off `local` no lock keeps a trash or a permanent delete of the folder out of a create either. So
+    // the folder is checked again in the transaction of the insert.
     private async insertPathRow(values: typeof paths.$inferInsert): Promise<void> {
         try {
-            await this.db.insert(paths).values(values);
+            this.db.transaction((tx) => {
+                const error = this.targetFolderErrorInTx(tx, values.id, values.parentId ?? null);
+                if (error) throw error;
+                tx.insert(paths).values(values).run();
+            });
         } catch (e) {
             rethrowPathWriteError(e, values.name);
         }
@@ -683,7 +701,7 @@ export class Mount {
         if (!this.isPathBased || !this.storage.rename) return;
         const occupant = await trash.renameTarget(this, parentId, key);
         if (occupant === 'live') {
-            throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+            throw nameTakenError(name);
         }
         if (occupant === 'leftover') {
             await trash.moveAside(this.storage.rename.bind(this.storage), key, trashStorageKey(id, name));
@@ -729,7 +747,17 @@ export class Mount {
             const targetParentId = updates.parentId;
             try {
                 if (updates.name === undefined && targetParentId === undefined) {
-                    await this.db.update(paths).set(set).where(eq(paths.id, pathId));
+                    // An ACL goes only onto a live row. A trash can land after the caller checked the
+                    // path, and a new sharee would then get the item, an email included, while it is
+                    // in the trash.
+                    const live = updates.acl !== undefined ? isNull(paths.trashedAt) : undefined;
+                    const written = await this.db
+                        .update(paths)
+                        .set(set)
+                        .where(and(eq(paths.id, pathId), live))
+                        .returning({ id: paths.id })
+                        .get();
+                    if (live && !written) throw new ApiError(404, 'File is in trash');
                 } else {
                     // One synchronous transaction, so no trash or opposite move lands between the checks
                     // and the UPDATE.
@@ -945,6 +973,10 @@ export class Mount {
 
     public async getTrashedFrom(pathId: string): Promise<string | null> {
         return trash.getTrashedFrom(this, pathId);
+    }
+
+    public async listTrashRootsInside(folderId: string): Promise<DrivePath[]> {
+        return trash.listTrashRootsInside(this, folderId);
     }
 
     public async restorePath(pathId: string): Promise<DrivePath> {
@@ -1263,11 +1295,12 @@ export class Mount {
         return this.withPathLock(pathId, fn);
     }
 
-    // On `local` a storage key is a name path. A write that derives its key holds the tree lock shared,
-    // from resolving the key through the row write, and a folder rename holds it exclusive. Other
-    // backends have id keys and take no tree lock. The order is path lock, then document database slot,
-    // then tree lock. A create's lock comes right before the tree lock. A holder never takes the tree lock
-    // again: a shared lock inside a shared lock deadlocks once an exclusive one waits.
+    // On `local` a storage key is a name path, so a folder rename changes the keys of everything under
+    // it. A write that derives a key holds the tree lock shared until its row is written. A folder
+    // rename holds it exclusive. Other backends have id keys and take no tree lock. The locks are taken
+    // in one order: the path lock, then the document database slot, then the tree lock. A create's lock
+    // comes right before the tree lock. A holder never takes the tree lock a second time, because a
+    // shared lock inside a shared lock deadlocks once an exclusive one waits.
     public async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
         return this.isPathBased ? this.treeLock.shared(fn) : fn();
     }
@@ -1366,20 +1399,6 @@ export class Mount {
 
     public searchPaths(opts: { q: string; limit: number }): DrivePath[] {
         return searchIndex.searchPaths(this, opts);
-    }
-
-    // Drains the content reindex queue now and waits for it. The queue normally runs by itself. A
-    // mount whose init built no queue has nothing to drain.
-    public flushContentReindex(): Promise<void> {
-        return this.reindexQueue?.drain() ?? Promise.resolve();
-    }
-
-    // ---- Uploads ----
-
-    // Drains the pending uploads now. The queue normally runs by itself, and closeAllDatabases drains
-    // it at shutdown, so this is for tests. A mount without a queue has nothing to drain.
-    public drainPendingUploads(opts?: { flushNow?: boolean }): Promise<void> {
-        return this.uploadQueue?.drain(opts) ?? Promise.resolve();
     }
 
     // ---- Sizes ----

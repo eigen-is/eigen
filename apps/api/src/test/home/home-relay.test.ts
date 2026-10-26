@@ -3,8 +3,9 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../../lib/config/server-config';
+import { drainDeliveriesWithin } from '../../lib/drive/acl-propagation';
 import * as getHomeModule from '../../lib/home/get-home';
-import { sendToHome } from '../../lib/home/home-relay';
+import { drainHomeDeliveries, sendToHome, sendToUserHomes } from '../../lib/home/home-relay';
 import type { TestContext, TestUser } from '../setup';
 import {
     addMember,
@@ -186,5 +187,59 @@ describe('A fan-out to many homes', () => {
         }
         expect(held.peak()).toBeGreaterThan(0);
         expect(held.peak()).toBeLessThanOrEqual(DELIVERY_BUDGET);
+    });
+});
+
+describe('A graceful shutdown', () => {
+    afterEach(() => {
+        mock.restore();
+    });
+
+    // A delivery reopens the recipient's home, so the shutdown waits for it before it closes the homes.
+    test('waits for the deliveries a fan-out started after its request answered', async () => {
+        const tag = 'relay-drain:detached';
+        const held = holdMemberHomes();
+        let drainedFirst: boolean;
+        try {
+            sendToUserHomes(
+                members.map((member) => member.id),
+                { type: 'notification', notification: { type: 'admin-alert', title: 'Detached', tag } },
+            ).catch(() => {});
+            drainedFirst = await answersFirst(drainHomeDeliveries());
+        } finally {
+            held.release();
+        }
+        expect(drainedFirst).toBe(false);
+
+        await drainHomeDeliveries();
+        for (const member of members) {
+            expect(await notificationsWithTag(member, tag)).toHaveLength(1);
+        }
+    });
+
+    // A delivery stuck on a home that never opens must not hold the shutdown, or eat the time the
+    // mounts need to upload. The wait gives up at its bound and logs what is left.
+    test('stops waiting for a delivery that never settles once the bound is over', async () => {
+        const tag = 'relay-drain:stalled';
+        const held = holdMemberHomes();
+        const warnings = spyOn(console, 'warn').mockImplementation(() => {});
+        let drainedFirst: boolean;
+        let logged: unknown[][];
+        try {
+            sendToUserHomes([members[0].id], {
+                type: 'notification',
+                notification: { type: 'admin-alert', title: 'Stalled', tag },
+            }).catch(() => {});
+            drainedFirst = await answersFirst(drainDeliveriesWithin(100));
+        } finally {
+            logged = warnings.mock.calls;
+            warnings.mockRestore();
+            held.release();
+        }
+        expect(drainedFirst).toBe(true);
+        expect(logged.some((call) => String(call[0]).includes('1 home deliveries'))).toBe(true);
+
+        await drainHomeDeliveries();
+        expect(await notificationsWithTag(members[0], tag)).toHaveLength(1);
     });
 });

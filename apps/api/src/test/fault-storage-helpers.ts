@@ -273,7 +273,7 @@ export async function settleContainer(mount: Mount, containerId: string): Promis
         const child = await mount.getChildByName(containerId, name);
         if (child) await mount.closeDatabase(child.id);
     }
-    await mount.drainPendingUploads({ flushNow: true });
+    await mount.uploadQueue?.drain({ flushNow: true });
 }
 
 export async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {

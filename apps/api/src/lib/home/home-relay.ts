@@ -15,7 +15,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
-import { teamOwnerId } from '@workspace/lib/types/owner';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
@@ -168,9 +168,13 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
 // and a user home relays no further. So a delivery never waits for a permit that its own fan-out holds.
 const deliveryBudget = new Semaphore(8);
 
+// The fan-outs that are still delivering. Most of them run after their request answered, so nobody
+// waits for them. A delivery opens its recipient's home, so a shutdown drains them first.
+const deliveries = new Set<Promise<unknown>>();
+
 // A failed delivery is logged, and the other homes still get the message.
 export async function sendToUserHomes(userIds: Iterable<string>, message: HomeMessage): Promise<void> {
-    await Promise.all(
+    const delivery = Promise.all(
         [...userIds].map((id) =>
             deliveryBudget.run(() =>
                 sendToHome(id, message).catch((err) =>
@@ -179,6 +183,25 @@ export async function sendToUserHomes(userIds: Iterable<string>, message: HomeMe
             ),
         ),
     );
+    deliveries.add(delivery);
+    try {
+        await delivery;
+    } finally {
+        deliveries.delete(delivery);
+    }
+}
+
+// Waits for every fan-out that is still delivering, and for the ones that start meanwhile, such as a
+// team notification that a delivery passes on to the members. Graceful shutdown calls it before it
+// closes the homes.
+export async function drainHomeDeliveries(): Promise<void> {
+    while (deliveries.size > 0) {
+        await Promise.allSettled([...deliveries]);
+    }
+}
+
+export function countHomeDeliveries(): number {
+    return deliveries.size;
 }
 
 // Tells the open tabs of each member, such as everyone a file is shared with, about one event. A
@@ -357,8 +380,8 @@ export async function pullDriveSearch(ownerId: string, opts: { q: string; limit:
 // Reads the home's files instead of opening the Home. The admin Users page sizes every user at once,
 // and opening each home would take seconds.
 export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeResponse> {
-    // Sizing reads the folders and quotas of a user home. A team or org home has neither.
-    if (ownerUserId.startsWith('team_') || ownerUserId.startsWith('org_')) {
+    // Sizing reads the folders and quotas of a user home. Other homes, such as a team's, have neither.
+    if (parseOwnerId(ownerUserId).type !== 'user') {
         throw new Error(`pullHomeSize expects a user owner id, got ${ownerUserId}`);
     }
     // A guest's home has no folders or quotas of its own, so it answers what the guest home answers.

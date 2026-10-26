@@ -419,7 +419,7 @@ beforeAll(async () => {
     const s3Root = (await s3Mount.getRootFolder())!.id;
     const bytes = new TextEncoder().encode('in the bucket');
     const pending = await s3Mount.createFile(s3Root, 'pending.txt', 'text/plain', bytes.byteLength, bytes);
-    await s3Mount.drainPendingUploads({ flushNow: true });
+    await s3Mount.uploadQueue?.drain({ flushNow: true });
     const key = await s3Mount.getStorageKey(pending);
     s3Fault.parkWrites = true;
     const queue = s3Mount.uploadQueue!;

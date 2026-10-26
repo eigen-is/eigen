@@ -1,5 +1,5 @@
 import { Database as BunDatabase } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ChatMessage, DrivePath } from '@workspace/lib/types';
@@ -10,6 +10,7 @@ import { CHAT_ROOM_DB_CONFIG } from '../../lib/chat/db-config';
 import { messages } from '../../lib/chat/schema';
 import { ManagedDatabase } from '../../lib/core';
 import { getHome } from '../../lib/home';
+import * as userModule from '../../lib/user';
 import {
     authedRequest,
     chatGet,
@@ -1456,6 +1457,40 @@ describe('Chat', () => {
             expect(mention).toBeDefined();
             expect(chatMessage).toBeUndefined();
             expect(mention!.title).toBe('Alice Test mentioned you in "Notification Chat"');
+        });
+
+        // The message is stored before its notifications go out. A lookup that fails then costs only
+        // that one notification, never the answer of a message that is posted already.
+        test('a failed lookup of a mentioned user still answers the post', async () => {
+            const getUserByEmail = userModule.getUserByEmail;
+            const lookup = spyOn(userModule, 'getUserByEmail').mockImplementation(async (email) => {
+                if (email.toLowerCase() === ctx.bob.user.email.toLowerCase()) throw new Error('auth db down');
+                return getUserByEmail(email);
+            });
+            const errors = spyOn(console, 'error').mockImplementation(() => {});
+            let res: Response;
+            try {
+                res = await chatPostRaw(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    aliceMountId,
+                    `${chatId}/messages`,
+                    {
+                        content: `Lookup fails for @${ctx.bob.user.email}`,
+                    },
+                );
+            } finally {
+                lookup.mockRestore();
+                errors.mockRestore();
+            }
+            expect(res.status).toBe(200);
+            const listed = await chatGet<ChatMessage[]>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+            );
+            expect(listed.some((m) => m.content === `Lookup fails for @${ctx.bob.user.email}`)).toBe(true);
         });
 
         test('embedded chat uses comment-reply notification type', async () => {

@@ -76,7 +76,7 @@ Once `Drive.destruct` starts its sweep of the open documents, the registry (`app
 
 One mount closes the same way. When a team mount gets new storage or is turned off, `Drive.removeMount` destructs that mount's open documents before it closes the mount's databases, so each document saves its last edits. The registry then answers an open on the old `Mount` with a 503. The closed sockets reconnect to the new `Mount`, and the handshake syncs the edits a tab made in between. `apps/api/src/test/drive/collab-registry.test.ts` pins it.
 
-A trash closes the documents under a path, then the databases, and only then marks the path trashed. A document opened in between would save its edits into a closed `data.db`. So while `Drive.deletePath` runs, the registry answers an open of the path or of anything under it with a 503 ([SOFT-DELETE.md](SOFT-DELETE.md#trash-closes-what-is-open-under-the-item-first)). A document created inside the folder during the trash is not covered, because the registry collects the ids before the trash starts ([ROADMAP.md](ROADMAP.md)).
+A trash closes the documents under a path, then the databases, and only then marks the path trashed. A document opened in between would save its edits into a closed `data.db`. So while `Drive.deletePath` runs, the registry answers an open of the path or of anything under it with a 503 ([SOFT-DELETE.md](SOFT-DELETE.md#trash-closes-what-is-open-under-the-item-first)). The registry collects those ids before the trash starts, so a document created or moved inside the folder meanwhile is not refused. Its database closes with the rest, so the trash closes every document still open under the path right after `Mount.trashPath` returns.
 
 ## An open waits for data.db and never makes one
 

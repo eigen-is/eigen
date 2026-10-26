@@ -569,7 +569,7 @@ describe.skipIf(!live)('Mount (s3 storage, MinIO)', () => {
         managed.db.insert(docSchema.items).values({ id: 1, data: 'acked' }).run();
         await mount.closeDatabase(dataDbId);
 
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
         expect(await mount.storage.exists(storageKey)).toBe(true);
     });

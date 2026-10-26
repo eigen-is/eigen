@@ -62,11 +62,13 @@ import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
 import {
+    canonicalACLId,
     canReadFromAncestors,
     canWriteFromAncestors,
     filterRedundantACL,
     findContainerFromAncestors,
     grantsPublicRead,
+    isTrashedChain,
     matchesACL,
     mergeACLDelta,
     normalizeACL,
@@ -321,13 +323,6 @@ export class Drive {
         return merged.slice(0, opts.limit);
     }
 
-    // The search index catches up on its own. Waiting for it here is for tests and manual jobs.
-    public async flushContentReindex(): Promise<void> {
-        for (const mount of this.mounts.values()) {
-            await mount.flushContentReindex();
-        }
-    }
-
     // ---- Changing the tree ----
 
     public async createFolder(
@@ -338,7 +333,7 @@ export class Drive {
         containerType: DriveContainerType = 'folder',
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const parent = await mount.getActivePath(parentId);
+        const parent = await this.getTargetFolder(mount, parentId);
         if (!isContainerType(parent.type)) {
             throw new ApiError(404, 'Parent folder not found');
         }
@@ -360,7 +355,7 @@ export class Drive {
         user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const parent = await mount.getActivePath(parentId);
+        const parent = await this.getTargetFolder(mount, parentId);
         if (!isContainerType(parent.type)) {
             throw new ApiError(404, 'Parent folder not found');
         }
@@ -419,7 +414,7 @@ export class Drive {
         user?: User,
     ): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
-        const parent = await mount.getActivePath(parentId);
+        const parent = await this.getTargetFolder(mount, parentId);
         if (parent.type !== DRIVE_TYPE_FOLDER) {
             throw new ApiError(404, 'Parent folder not found');
         }
@@ -462,7 +457,7 @@ export class Drive {
         user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const parent = await mount.getActivePath(parentId);
+        const parent = await this.getTargetFolder(mount, parentId);
         // A document container is a valid parent too. Copying a document to another drive writes its
         // databases into the new container this way.
         if (!isContainerType(parent.type)) throw new ApiError(400, 'Target is not a folder');
@@ -549,6 +544,14 @@ export class Drive {
         return updated;
     }
 
+    // The folder that a create, copy or move puts something in. A folder on its way to the trash is a
+    // 404 already, the same as one in the trash. Its trash closes the databases under it, and a
+    // document put there meanwhile could take edits it can't save.
+    private async getTargetFolder(mount: Mount, folderId: string): Promise<DrivePath> {
+        if (this.documents.isTrashing(mount, folderId)) throw new ApiError(404, 'Folder not found');
+        return mount.getActivePath(folderId);
+    }
+
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
         await this.getMount(mountId).updatePath(pathId, { details });
     }
@@ -562,7 +565,7 @@ export class Drive {
         const path = await mount.getActivePath(pathId);
         const oldParentId = path.parentId;
 
-        const targetParent = await mount.getActivePath(targetParentId);
+        const targetParent = await this.getTargetFolder(mount, targetParentId);
         if (targetParent.type !== DRIVE_TYPE_FOLDER) {
             throw new ApiError(404, 'Target parent is not a folder');
         }
@@ -609,7 +612,7 @@ export class Drive {
         // The people the path is shared with keep a copy of it, and this gives them the new name. It
         // reaches other homes, so it goes last: when it fails, this owner's tabs and history are up to
         // date already. The actor stays null, because a rename must not email them.
-        await propagateSharedPathChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
+        await this.pushSharing(mountId, pathId, 'live', null);
     }
 
     public async copyPath(
@@ -625,6 +628,7 @@ export class Drive {
         if (await mount.isSelfOrDescendant(srcPathId, destParentId)) {
             throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
         }
+        await this.getTargetFolder(mount, destParentId);
         const copied = await mount.copyPath(srcPathId, destParentId, name, user);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
@@ -682,11 +686,15 @@ export class Drive {
 
     // ---- Trash ----
 
+    // The trash runs in the path's ACL chain. An ACL change that started first lands first, and the
+    // trash then takes it away with the rest. One that comes after finds the path in the trash.
     public async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
-        const item = await mount.getActivePath(pathId);
-        if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-        await this.documents.whileTrashing(mount, item.id, () => deletePath(this, mount, item, user));
+        return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
+            const item = await mount.getActivePath(pathId);
+            if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
+            await this.documents.whileTrashing(mount, item.id, () => deletePath(this, mount, item, user));
+        });
     }
 
     public async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {
@@ -813,6 +821,25 @@ export class Drive {
         await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
     }
 
+    // Sends a path's sharing to the homes it is shared with, after a change that keeps its ACL, such as
+    // a rename, a restore or the trash of a folder above it. It runs in the path's ACL chain and reads
+    // the path there, so it can't overtake an ACL change that started first and bring back a removed
+    // sharee. A live path goes out with the same ACL again, which emails nobody. A trashed path goes out
+    // with none. A path that is no longer in the state the caller left it in is skipped, because the
+    // change that moved it sends its own push.
+    public async pushSharing(
+        mountId: string,
+        pathId: string,
+        state: 'live' | 'trashed',
+        actor: User | null,
+    ): Promise<void> {
+        return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
+            const path = await this.getMount(mountId).getPath(pathId);
+            if (!path?.acl || (path.trashedAt !== null) !== (state === 'trashed')) return;
+            await propagateSharedPathChange(path, path.acl, state === 'live' ? path.acl : null, actor);
+        });
+    }
+
     // Every user who can reach the path, through its own ACL or a folder above it. A team in an
     // ACL counts as all of its members.
     public async getEffectiveMembers(mountId: string, pathId: string): Promise<EffectiveMember[]> {
@@ -822,9 +849,10 @@ export class Drive {
         return this.membersFromCrumbs(await mount.getBreadcrumb(pathId));
     }
 
-    // Takes the breadcrumb of the path, so checkAccessForEmails can use the one it already has.
+    // Takes the breadcrumb of the path, so checkAccessForEmails can use the one it already has. A path
+    // in the trash is its owner's alone, so the ACLs of its chain let nobody else in until the restore.
     private async membersFromCrumbs(crumbs: DrivePath[]): Promise<EffectiveMember[]> {
-        const allACL = crumbs.flatMap((crumb) => crumb.acl ?? []);
+        const allACL = isTrashedChain(crumbs) ? [] : crumbs.flatMap((crumb) => crumb.acl ?? []);
 
         // Every member of a team has full access to the team's drive. So the team goes in as one more
         // ACL entry, and resolveACLToEmails turns it into its members.
@@ -854,7 +882,7 @@ export class Drive {
 
         const members = await this.membersFromCrumbs(crumbs);
         const memberByEmail = new Map(members.map((m) => [m.email, m]));
-        const ancestorPublic = crumbs.some((crumb) => grantsPublicRead(crumb.visibility));
+        const ancestorPublic = !isTrashedChain(crumbs) && crumbs.some((crumb) => grantsPublicRead(crumb.visibility));
         const openSignup = getServerSettings().guests.openSignup;
 
         const recipients: DriveAccessRecipient[] = [];
@@ -927,8 +955,8 @@ export class Drive {
             targetPath = (await this.findContainerPath(mountId, chatPath.parentId ?? '')) ?? chatPath;
         }
 
-        const id = email.toLowerCase();
-        if (targetPath.acl?.some((entry) => entry.id.toLowerCase() === id)) {
+        const id = canonicalACLId(email);
+        if (targetPath.acl?.some((entry) => canonicalACLId(entry.id) === id)) {
             return { alreadyHasAccess: true, targetPathId: targetPath.id };
         }
 

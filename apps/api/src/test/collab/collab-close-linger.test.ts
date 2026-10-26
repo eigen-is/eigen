@@ -1,15 +1,14 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
-import { CollabDocument } from '../../lib/collab/collab-document';
+import { CLOSE_LINGER_MS, CollabDocument } from '../../lib/collab/collab-document';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { driveGet, drivePost, getTestContext } from '../setup';
 
-// Teardown linger: the last unsubscribe schedules the close instead of running it
-// immediately, so an instant reconnect (tab reload, y-websocket retry loop)
-// reattaches to the loaded doc instead of re-paying S3 download + materialization —
-// the amplification half of the 2026-08-04 reconnect spiral.
+// The last unsubscribe schedules the close instead of running it at once. A reconnect right after, such
+// as a tab reload or a y-websocket retry, then reattaches to the loaded document instead of downloading
+// and loading it again.
 
 type SpyConn = ServerWebSocket<undefined> & { readyState: number; sent: Uint8Array[] };
 
@@ -41,10 +40,13 @@ describe('CollabDocument close linger', () => {
         home = await getHome(ctx.alice.user.id);
     });
 
-    // A directly-constructed doc with a test-sized linger; close calls are counted on
-    // the drive seam the linger timer fires into (home-pin test precedent for the
-    // method patch).
-    async function openLingeringDoc(fileName: string, closeLingerMs: number) {
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    // A document built here, whose closes are counted on the drive call the linger timer makes. The
+    // timers are fake from the open on, so the test moves the clock past the linger itself.
+    async function openLingeringDoc(fileName: string) {
         const docPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -62,8 +64,8 @@ describe('CollabDocument close linger', () => {
         };
 
         const doc = new CollabDocument(home.drive, path);
-        (doc as unknown as { closeLingerMs: number }).closeLingerMs = closeLingerMs;
         await doc.init();
+        jest.useFakeTimers();
         return {
             doc,
             calls: () => closeCalls,
@@ -74,14 +76,15 @@ describe('CollabDocument close linger', () => {
     }
 
     test('the last unsubscribe schedules teardown instead of closing immediately', async () => {
-        const { doc, calls, restore } = await openLingeringDoc('linger-schedules', 60);
+        const { doc, calls, restore } = await openLingeringDoc('linger-schedules');
         try {
             const conn = makeSpyConn();
             doc.subscribe(home.user, conn);
             doc.unsubscribe(conn);
 
+            jest.advanceTimersByTime(CLOSE_LINGER_MS - 1);
             expect(calls()).toBe(0);
-            await Bun.sleep(150);
+            jest.advanceTimersByTime(1);
             expect(calls()).toBe(1);
         } finally {
             restore();
@@ -90,26 +93,26 @@ describe('CollabDocument close linger', () => {
     });
 
     test('a reconnect within the linger window cancels the teardown and reuses the doc', async () => {
-        const { doc, calls, restore } = await openLingeringDoc('linger-reuses', 80);
+        const { doc, calls, restore } = await openLingeringDoc('linger-reuses');
         try {
             const first = makeSpyConn();
             doc.subscribe(home.user, first);
             doc.unsubscribe(first);
             expect(calls()).toBe(0);
 
-            await Bun.sleep(20);
+            jest.advanceTimersByTime(CLOSE_LINGER_MS / 2);
             const second = makeSpyConn();
             doc.subscribe(home.user, second);
             // The reconnect attached to the live doc and got its sync-step-1.
             expect(doc.connectionCount).toBe(1);
             expect(second.sent.length).toBeGreaterThanOrEqual(1);
 
-            await Bun.sleep(200);
+            jest.advanceTimersByTime(CLOSE_LINGER_MS);
             expect(calls()).toBe(0);
 
             // The linger re-arms once the reused session ends.
             doc.unsubscribe(second);
-            await Bun.sleep(200);
+            jest.advanceTimersByTime(CLOSE_LINGER_MS);
             expect(calls()).toBe(1);
         } finally {
             restore();
@@ -118,14 +121,14 @@ describe('CollabDocument close linger', () => {
     });
 
     test('destruct cancels a pending linger teardown', async () => {
-        const { doc, calls, restore } = await openLingeringDoc('linger-destruct', 60);
+        const { doc, calls, restore } = await openLingeringDoc('linger-destruct');
         try {
             const conn = makeSpyConn();
             doc.subscribe(home.user, conn);
             doc.unsubscribe(conn);
             doc.destruct();
 
-            await Bun.sleep(150);
+            jest.advanceTimersByTime(CLOSE_LINGER_MS);
             expect(calls()).toBe(0);
         } finally {
             restore();

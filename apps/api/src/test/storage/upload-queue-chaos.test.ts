@@ -96,7 +96,7 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
         // Write {2}: its PUT parks (body captured, like a request on the wire) and stalls past the
@@ -157,7 +157,7 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
 
         // Retry with a healthy backend: same staged bytes re-PUT and ack.
         fault.parkWrites = false;
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
@@ -211,7 +211,7 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
         // Write {2}: its PUT parks and stalls past the ceiling — the orphan.
@@ -221,7 +221,7 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         await managed.flush();
         await parkedWithRows(fault, 2);
         restorePutTimeout(mount); // {3}'s PUT below parks mid-flight and must not time out
-        await mount.drainPendingUploads(); // returns once the ceiling fired and the row backed off
+        await mount.uploadQueue?.drain(); // returns once the ceiling fired and the row backed off
 
         // Write {3}: supersedes the row; its PUT parks mid-flight.
         managed.db.insert(docSchema.items).values({ id: 3, data: 'c' }).run();
@@ -253,7 +253,7 @@ describe('corrupted staged copy (integrity check between VACUUM INTO and PUT)', 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
         // Write {2}; the PUT fails once so the staged copy sits on disk, then corrupt it (local disk
@@ -261,14 +261,14 @@ describe('corrupted staged copy (integrity check between VACUUM INTO and PUT)', 
         fault.failNextWrites = 1;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await managed.flush();
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         const staged = mount.uploadQueue?.getPendingStagingPath(key);
         expect(staged).not.toBeNull();
         await Bun.write(staged!, 'CORRUPT-NOT-A-SQLITE-DB');
 
         // Retry refuses the garbage (SQLite magic check): the poison row + staged copy are dropped
         // loudly, and the good {1} object stays untouched in storage.
-        await mount.drainPendingUploads({ flushNow: true });
+        await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
