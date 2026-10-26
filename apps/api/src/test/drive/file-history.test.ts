@@ -27,6 +27,7 @@ import {
     drivePost,
     drivePut,
     driveUpload,
+    eventually,
     getTestContext,
 } from '../setup';
 
@@ -670,6 +671,14 @@ describe('file-event notifications carry the event details', () => {
         return home.notifications.list();
     }
 
+    // The watcher delivery runs after the request answers, so wait until the row has the title the test expects.
+    async function rowsWithTitle(userId: string, pathId: string, title: string): Promise<Notification[]> {
+        return eventually(async () => {
+            const rows = (await notificationsFor(userId)).filter((n) => n.tag === fileEventTag(pathId));
+            return rows.some((n) => n.title === title) ? rows : undefined;
+        }, `the "${title}" notification`);
+    }
+
     function fileEventTag(pathId: string): string {
         return `file-event:${aliceOwnerId}:${mountId}:${pathId}`;
     }
@@ -703,7 +712,7 @@ describe('file-event notifications carry the event details', () => {
         });
         expect(added.status).toBe(200);
 
-        const row = (await notificationsFor(ctx.bob.user.id)).find((n) => n.tag === fileEventTag(board.id));
+        const [row] = await rowsWithTitle(ctx.bob.user.id, board.id, 'Alice Test added a card to "DetailBoard"');
         expect(row).toBeDefined();
         expect(row!.title).toBe('Alice Test added a card to "DetailBoard"');
         expect(row!.body).toBe('Hello');
@@ -716,7 +725,7 @@ describe('file-event notifications carry the event details', () => {
         });
         expect(moved.status).toBe(200);
 
-        const rows = (await notificationsFor(ctx.bob.user.id)).filter((n) => n.tag === fileEventTag(board.id));
+        const rows = await rowsWithTitle(ctx.bob.user.id, board.id, 'Alice Test moved a card in "DetailBoard"');
         expect(rows).toHaveLength(1);
         expect(rows[0].title).toBe('Alice Test moved a card in "DetailBoard"');
         expect(rows[0].body).toBe('Hello → Done');
