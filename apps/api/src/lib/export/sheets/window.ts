@@ -311,7 +311,8 @@ function windowBorders(
 
 // Each merge cut to the window, without the ones that overlap an earlier one in reading order, as Excel forbids
 // overlapping merges. The sweep keeps, for each column, the last row a kept merge covers, so a merge overlaps a kept
-// one exactly when one of its columns is covered at its first row.
+// one exactly when one of its columns is covered at its first row. A merge as wide as the grid would make a scan of
+// its columns cost the window's width for each merge, so a segment tree answers for the whole span in log time.
 function windowMerges(merges: MergeCell[], range: GridRange): Record<string, MergeCell> {
     const [firstRow, lastRow, firstCol, lastCol] = range;
     const clipped: MergeCell[] = [];
@@ -323,12 +324,34 @@ function windowMerges(merges: MergeCell[], range: GridRange): Record<string, Mer
         if (r0 <= r1 && c0 <= c1) clipped.push({ r: r0, c: c0, rs: r1 - r0 + 1, cs: c1 - c0 + 1 });
     }
     clipped.sort((a, b) => a.r - b.r || a.c - b.c);
-    const coveredTo = new Int32Array(lastCol - firstCol + 1).fill(-1);
+    // A node holds the last row covered anywhere in its span, and the last row a kept merge covers all of its span to.
+    // A merge is kept only when its columns are covered above its first row, so its last row is past each of theirs.
+    const width = lastCol - firstCol + 1;
+    const below = new Int32Array(4 * width).fill(-1);
+    const whole = new Int32Array(4 * width).fill(-1);
+    const coveredTo = (node: number, lo: number, hi: number, from: number, to: number): number => {
+        if (to < lo || hi < from) return -1;
+        if (from <= lo && hi <= to) return below[node];
+        const mid = (lo + hi) >> 1;
+        const left = coveredTo(2 * node, lo, mid, from, to);
+        return Math.max(whole[node], left, coveredTo(2 * node + 1, mid + 1, hi, from, to));
+    };
+    const cover = (node: number, lo: number, hi: number, from: number, to: number, row: number) => {
+        if (to < lo || hi < from) return;
+        below[node] = Math.max(below[node], row);
+        if (from <= lo && hi <= to) {
+            whole[node] = row;
+            return;
+        }
+        const mid = (lo + hi) >> 1;
+        cover(2 * node, lo, mid, from, to, row);
+        cover(2 * node + 1, mid + 1, hi, from, to, row);
+    };
     const kept: Record<string, MergeCell> = {};
     for (const m of clipped) {
-        const columns = coveredTo.subarray(m.c - firstCol, m.c - firstCol + m.cs);
-        if (columns.some((row) => row >= m.r)) continue;
-        columns.fill(m.r + m.rs - 1);
+        const [from, to] = [m.c - firstCol, m.c - firstCol + m.cs - 1];
+        if (coveredTo(1, 0, width - 1, from, to) >= m.r) continue;
+        cover(1, 0, width - 1, from, to, m.r + m.rs - 1);
         kept[`${m.r}_${m.c}`] = m;
     }
     return kept;

@@ -1738,6 +1738,41 @@ describe('Sheets HTML export — the window over forged keys', () => {
         expect(out.html).toContain('rowspan="1302"');
     }, 30_000);
 
+    test('a hundred thousand merges across the full width cost no walk over the columns each one spans', () => {
+        const merge: Record<string, { r: number; c: number; rs: number; cs: number }> = {
+            first: { r: 0, c: REFERENCE_COLUMN_COUNT - 1, rs: 2, cs: 1 },
+        };
+        for (let i = 0; i < 100_000; i++) merge[`m${i}`] = { r: 1, c: 0, rs: 1, cs: REFERENCE_COLUMN_COUNT };
+        const { out, ms } = timed(() => renderSheetsHtml([topLeft({ merge })], NO_MEDIA));
+        expect(ms).toBeLessThan(1_000);
+        // Every full-width merge overlaps the first one's last column, so only that one is kept.
+        expect(out.html).toContain('<td rowspan="2" class=');
+        expect(out.html).not.toContain('colspan');
+        expect(tds(out.html)).toBe(2 * REFERENCE_COLUMN_COUNT - 1);
+    }, 30_000);
+
+    test('a merge that overlaps one kept before it in reading order is dropped, and one clear of them is kept', () => {
+        const sheet = topLeft({
+            merge: {
+                tall: { r: 0, c: 2, rs: 3, cs: 1 },
+                acrossTall: { r: 1, c: 0, rs: 1, cs: 5 },
+                beside: { r: 2, c: 0, rs: 1, cs: 2 },
+                below: { r: 3, c: 0, rs: 1, cs: 5 },
+                sameAnchor: { r: 3, c: 0, rs: 1, cs: 1 },
+            },
+        });
+        const rowsOf = (html: string) =>
+            html
+                .match(/<tr [^>]*>.*?<\/tr>/g)
+                ?.map((tr) => tr.match(/<td[^>]*>/g)?.map((td) => td.replace(/ class="s\d+"/, '')));
+        expect(rowsOf(renderSheetsHtml([sheet], NO_MEDIA).html)).toEqual([
+            ['<td>', '<td>', '<td rowspan="3">', '<td>', '<td>'],
+            ['<td>', '<td>', '<td>', '<td>'],
+            ['<td colspan="2">', '<td>', '<td>'],
+            ['<td colspan="5">'],
+        ]);
+    });
+
     test('merges right of the window cost nothing per rendered cell', () => {
         const merge: Record<string, { r: number; c: number; rs: number; cs: number }> = {};
         for (let i = 0; i < 10_000; i++) merge[`0_${1000 + i}`] = { r: 0, c: 1000 + i, rs: REFERENCE_ROW_COUNT, cs: 1 };
