@@ -133,10 +133,12 @@ export function readXlsx(
             }
             const rowlen: NonNullable<SheetConfig['rowlen']> = {};
             for (const [r, height] of tallest) rowlen[r] = Math.round(height);
-            // A row at the sheet's default height has none of its own.
+            // A row at the sheet's default height has none of its own. A non-custom one keeps the estimate, as Excel and
+            // LibreOffice refit it to its content; a custom one is the height the user set.
             for (const [r, points] of grid.heights) {
                 const pixels = Math.round(ptToPx(points));
                 if (pixels !== rowHeight) rowlen[r] = pixels;
+                else if (grid.customHeights.has(r)) delete rowlen[r];
             }
             const config: SheetConfig = { ...worksheet.config };
             if (Object.keys(rowlen).length > 0) config.rowlen = rowlen;

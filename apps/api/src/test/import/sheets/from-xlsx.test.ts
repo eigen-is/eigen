@@ -197,6 +197,20 @@ describe('the reader', () => {
         expect(sheet.config?.rowhidden).toEqual({ 2: 0, 4: 0 });
     });
 
+    // A non-custom height is one Excel or LibreOffice refits to the content, so a wrapped cell's estimate grows it. A
+    // custom one is the height the user set, so it wins, even at the sheet's default.
+    test("a custom row height wins over a wrapped cell's estimate, and a non-custom default one does not", () => {
+        const data = [
+            '<row r="1" ht="15" customHeight="1"><c r="A1" s="11" t="s"><v>5</v></c></row>',
+            '<row r="2" ht="15"><c r="A2" s="11" t="s"><v>5</v></c></row>',
+            '<row r="3" ht="30" customHeight="1"><c r="A3" s="11" t="s"><v>5</v></c></row>',
+        ].join('');
+        const [sheet] = xlsxToSheets(
+            xlsxFixture({ sheets: [{ data }], styles: STYLES, strings: STRINGS, colors: OFFICE_COLORS }),
+        );
+        expect(sheet.config?.rowlen).toEqual({ 1: 1590, 2: 40 });
+    });
+
     test("a row at the sheet's own default height stores none, and the sheet keeps the default", () => {
         const data =
             '<row r="1" ht="12.75"><c r="A1"><v>1</v></c></row><row r="2" ht="15"><c r="A2"><v>2</v></c></row>';
