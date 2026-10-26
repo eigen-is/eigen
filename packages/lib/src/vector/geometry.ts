@@ -7,9 +7,8 @@ import { elbowRoutingContext } from './elbow-route';
 import { isTransparentFill, parseFill } from './fill';
 import { getLineHeightPx } from './font-metrics';
 // The registry imports geometry's box primitives and geometry dispatches through the registry: one
-// deliberate cycle. Safe because every export on both sides is a hoisted `function` declaration and no
-// module body calls across the cycle while either is still evaluating (test/vector/kinds/cycle.test.ts
-// pins both entry orders).
+// deliberate cycle. It is safe only when the entry goes through the vector barrel, which loads geometry
+// before any kind. Importing a kind's own module first throws a TDZ ReferenceError.
 import { ELEMENT_KINDS, isBindable } from './kinds';
 import { clamp, distanceToSegment, nearestPoint, outlineHits, pointInPolygon, segSegIntersect } from './outline';
 import { DEG_TO_RAD, parsePoints, pointsBounds, round, serializePoints } from './points';

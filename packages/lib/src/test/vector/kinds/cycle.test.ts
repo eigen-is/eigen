@@ -2,6 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { ELEMENT_FIELDS } from '../../../vector/kinds';
 
+// Only an entry through the vector barrel, which loads geometry before any kind, is safe: a kind's own
+// module imported first throws a TDZ ReferenceError, so these tests pin the entries that must work.
+//
 // The runtime back-edges inside vector/: geometry ↔ kinds (kind.ts takes geometry's box primitives while
 // geometry dispatches through the registry), geometry ↔ elbow-pins, geometry ↔ elbow-route,
 // elbow-heading ↔ kinds (arrow.ts reads the heading helpers), and elbow-route → elbow-heading →
