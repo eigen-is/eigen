@@ -351,6 +351,11 @@ export function blipEmbeds(blip: XmlElement | undefined): [svg: string | undefin
 
 // ── Text and lines ──────────────────────────────────────────────────────────────────────────────────────────────
 
+// A run's sz in hundredths of a point, held to the 1 to 4000 pt that ST_TextFontSize allows.
+export function clampTextSize(hundredths: number): number {
+    return Math.min(400_000, Math.max(100, Math.round(hundredths)));
+}
+
 // A paragraph's a:pPr algn for each canvas alignment, and back. The reader takes every justified kind as justify.
 export const ALGN_BY_ALIGN: Record<TextAlign, string> = { left: 'l', center: 'ctr', right: 'r', justify: 'just' };
 export const ALIGN_BY_ALGN = new Map<string, TextAlign>([

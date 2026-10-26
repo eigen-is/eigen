@@ -8,7 +8,7 @@ import {
 } from '@workspace/lib/charts';
 import type { Cell, Sheet, SheetChart, SheetFloatingObject, SheetImage } from '@workspace/lib/sheets';
 import { floatingItems, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import { solidFill } from '@workspace/lib/vector';
+import { serializeFill, solidFill } from '@workspace/lib/vector';
 import type { XmlElement } from '../../../../lib/core/xml';
 import { hasXmlName, xmlElements, xmlTrimmedText } from '../../../../lib/core/xml';
 import type { CountedWarningCode, TransformWarning } from '../../../../lib/document/transform/protocol';
@@ -212,7 +212,7 @@ describe('drawingOf', () => {
         expect(lost).toEqual(['charts-dropped', 'charts-dropped']);
     });
 
-    test('a chart whose look no chart part paints is counted once, a flat one not', () => {
+    test('a chart whose look no chart part paints, or that Sheets turns, is counted once, a flat one not', () => {
         const hatched = solidFill('#ff0000', 'hachure');
         const lostFor = (look: Partial<SheetChart>) => {
             const lost: CountedWarningCode[] = [];
@@ -221,10 +221,19 @@ describe('drawingOf', () => {
             return lost;
         };
         expect(lostFor({})).toEqual([]);
-        for (const look of [{ roughness: 1 }, { fill: hatched }, { strokeStyle: 'dashed' as const }]) {
+        const gradient = serializeFill({ type: 'gradient', from: '#000000', to: '#ffffff', angle: 0, style: 'solid' });
+        for (const look of [
+            { roughness: 1 },
+            { fill: hatched },
+            { fill: gradient },
+            { strokeStyle: 'dashed' as const },
+            { angle: 30 },
+        ]) {
             expect(lostFor(look)).toEqual(['charts-simplified']);
         }
-        expect(lostFor({ roughness: 2, strokeStyle: 'dotted', fill: hatched })).toEqual(['charts-simplified']);
+        expect(lostFor({ roughness: 2, strokeStyle: 'dotted', fill: hatched, angle: 90 })).toEqual([
+            'charts-simplified',
+        ]);
     });
 
     // B2:B4 resolves to three slices; a whole column, an area and one point too many resolve to none.
@@ -349,7 +358,7 @@ describe('the workbook', () => {
         const summary: Sheet = { ...SUMMARY, charts: byId(INLINE, turned) };
         const warnings: TransformWarning[] = [];
         const bytes = exportXlsx([summary, stored], { warnings });
-        expect(warnings).toEqual([]);
+        expect(warnings).toEqual([{ code: 'charts-simplified', count: 1 }]);
         const zip = openZip(bytes);
         const part = (path: string) => new TextDecoder().decode(zip.read(path) ?? new Uint8Array());
         expect(part('xl/worksheets/sheet1.xml')).toContain('<drawing r:id="rId1"/></worksheet>');

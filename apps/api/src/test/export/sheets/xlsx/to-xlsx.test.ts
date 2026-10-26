@@ -278,9 +278,8 @@ describe('the export keeps what a plain writer loses', () => {
     });
 });
 
-// Re-recorded when the writer's bytes change on purpose. Last: the chart part writes its text sizes and the values'
-// format, and c:chart declares its own prefixes, so the drawing part no longer does.
-const GOLDEN_XLSX_SHA256 = '454922939086c8cf9906d9ed0622650c6a38ae5ffd8c8a06bee7ebcb554988dc';
+// Re-recorded when the writer's bytes change on purpose.
+const GOLDEN_XLSX_SHA256 = 'ab7e8cc9f3ff5522188653c810d5a541114642bb8807fba3e9be8d6a056e97a6';
 
 describe('the package', () => {
     test("declares Excel's parts and their types", async () => {

@@ -10,6 +10,7 @@ import {
     CHART_TITLE_SCALE,
     chartColor,
     chartFontSize,
+    chartPaintOf,
     chartPointColor,
     chartSeriesStyle,
     GRIDLINE_OPACITY,
@@ -28,10 +29,9 @@ import type {
 import { parseFill } from '@workspace/lib/vector';
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import { rangeToA1, sheetRefName } from '@workspace/sheet/engine/a1-notation';
-import { DEGREE, solidFillXml } from './drawingml';
+import { clampTextSize, DEGREE, solidFillXml } from './drawingml';
 import { A_NS, C_NS, EMU_PER_POINT, R_NS } from './ooxml';
-import { CHART_CONTENT_TYPE, LEGEND_BY_POSITION, PERCENT_AXIS_FORMAT, STACKING_BY_GROUPING } from './ooxml-chart';
-import type { PackagePart } from './opc';
+import { LEGEND_BY_POSITION, PERCENT_AXIS_FORMAT, STACKING_BY_GROUPING } from './ooxml-chart';
 
 // The chart's own box in px, which Eigen lays it out in, and how many EMU one of those px is in the file. Text sizes
 // and line widths scale by it, so a chart drawn smaller or larger than its box keeps Eigen's proportions.
@@ -53,15 +53,6 @@ export type ChartWriteOptions = {
 
 type Ranges = NonNullable<ChartWriteOptions['ranges']>;
 
-// Where an xlsx keeps its chart parts. `path` is the prefix of a part's path, before its number, and `target` the same
-// prefix as the relationships of the part that shows a chart name it.
-type ChartParts = {
-    parts: PackagePart[];
-    path: string;
-    target: string;
-    relate: (type: string, target: string) => string;
-};
-
 // The fixed c:axId of x, the category axis, and of y, the value axis.
 const CATEGORY_AXIS = 1;
 const VALUE_AXIS = 2;
@@ -80,26 +71,16 @@ export function chartGraphicXml(rId: string): string {
     return `<a:graphic><a:graphicData uri="${C_NS}"><c:chart xmlns:c="${C_NS}" xmlns:r="${R_NS}" r:id="${rId}"/></a:graphicData></a:graphic>`;
 }
 
-// Adds the chart's part, numbered after the chart parts already added, and returns the r:id the showing part relates
-// it by.
-export function addChartPart(
-    { parts, path, target, relate }: ChartParts,
-    spec: ChartSpec,
-    options: ChartWriteOptions,
-): string {
-    const name = `${parts.length + 1}.xml`;
-    parts.push([`${path}${name}`, writeChart(spec, options), CHART_CONTENT_TYPE]);
-    return relate('chart', `${target}${name}`);
-}
-
-// Whether the look holds anything a chart part can't paint: a sketch, a hatch, or a dashed or dotted stroke, which
-// writeChart draws plain. A host whose frame turns or fades the chart passes that as `layer`, since no chart part
-// carries either.
+// Whether the part draws the look plainer than Eigen does. writeChart paints a sketch, a hatch and a dashed or dotted
+// stroke plain, and a gradient background as one colour. A host whose frame turns or fades the chart passes that as
+// `layer`, since no chart part carries either.
 export function chartLookSimplified(look: ChartLook, layer?: { angle: number; opacity: number }): boolean {
+    const paint = chartPaintOf(look);
     return (
-        look.roughness > 0 ||
-        look.strokeStyle !== 'solid' ||
-        parseFill(look.fill).style !== 'solid' ||
+        paint.roughness > 0 ||
+        paint.strokeStyle !== 'solid' ||
+        paint.fillStyle !== 'solid' ||
+        parseFill(paint.background).type === 'gradient' ||
         (layer !== undefined && (layer.angle !== 0 || layer.opacity !== 100))
     );
 }
@@ -112,7 +93,7 @@ export function writeChart(
     const width = Math.round(look.strokeWidth * frame.emuPerPx);
     const text = textProperties(look.color, spec.chart.fontFamily, sizes.text);
     const embedded = workbook !== undefined && spec.data.source === 'inline';
-    const series = Math.round((look.seriesStrokeWidth ?? look.strokeWidth) * frame.emuPerPx);
+    const series = Math.round(chartPaintOf(look).seriesStrokeWidth * frame.emuPerPx);
     const group = groupXml(spec, series, sourcesOf(spec, ranges, cache, embedded));
     const plot = spec.chart.type === 'pie' ? group : `${group}${axesXml(spec, look, width, sizes.text)}`;
     const { position } = spec.legend;
@@ -139,12 +120,10 @@ export function writeChart(
     ].join('');
 }
 
-// Office's text sizes in hundredths of a point: Eigen's label and title sizes for the box, at the file's scale. They
-// stay within the 1 to 4000 pt that ST_TextFontSize allows.
+// Office's text sizes: Eigen's label and title sizes for the box, at the file's scale.
 function textSizes({ width, height, emuPerPx }: ChartFrame): { text: number; title: number } {
     const points = (chartFontSize(width, height) * emuPerPx) / EMU_PER_POINT;
-    const size = (scale: number) => Math.min(400_000, Math.max(100, Math.round(points * scale * 100)));
-    return { text: size(1), title: size(CHART_TITLE_SCALE) };
+    return { text: clampTextSize(points * 100), title: clampTextSize(points * CHART_TITLE_SCALE * 100) };
 }
 
 // Every label's colour and size, and the spec's font.

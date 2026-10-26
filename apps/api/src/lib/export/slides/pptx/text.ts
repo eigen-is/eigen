@@ -3,7 +3,7 @@ import { slidePxToPt } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
 import { canvasTextValue } from '../../../document/prose-css';
-import { ALGN_BY_ALIGN, ANCHOR_BY_ALIGN, solidFillXml } from '../../../ooxml/drawingml';
+import { ALGN_BY_ALIGN, ANCHOR_BY_ALIGN, clampTextSize, solidFillXml } from '../../../ooxml/drawingml';
 import { AHYP_NS } from '../../../ooxml/ooxml';
 import { uriReference } from '../../../ooxml/opc';
 import { MAX_SLIDE_EMU } from '../../../ooxml/presentationml';
@@ -119,10 +119,8 @@ const PARAGRAPH_GAP_EM = canvasTextLength('.eigen-canvas-text p + p', 'margin-to
 // The schema's ceilings, ST_TextSpacingPoint's and ST_TextMargin's (MAX_SLIDE_EMU), which a tall line or a deep
 // nesting passes.
 const MAX_SPACING = 158_400;
-// ST_TextIndentLevelType's deepest level, and ST_TextFontSize's range.
+// ST_TextIndentLevelType's deepest level.
 const MAX_LEVEL = 8;
-const MIN_FONT_SIZE = 100;
-const MAX_FONT_SIZE = 400_000;
 
 export function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): string {
     const em = (n: number) => toEmu(slide, n * box.fontSize);
@@ -180,7 +178,7 @@ function trimmed(runs: Run[]): Run[] {
 }
 
 function runPropsXml(slide: Slide, tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, marks: Marks, opacity: number): string {
-    const size = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, centipoints(slide, box.fontSize)));
+    const size = clampTextSize(centipoints(slide, box.fontSize));
     const spacing = centipoints(slide, box.letterSpacing);
     const attrs = [
         ` sz="${size}"`,

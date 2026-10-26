@@ -11,10 +11,11 @@ import { resolveRangeChartData } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import { anchoredBox, blipXml, DEGREE } from '../../../ooxml/drawingml';
 import { A_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../ooxml/ooxml';
-import { addChartPart, chartGraphicXml, chartLookSimplified } from '../../../ooxml/ooxml-chart-writer';
+import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf } from '../../../ooxml/opc';
 import { DRAWING_CONTENT_TYPE } from '../../../ooxml/spreadsheetml';
+import { addOfficeChart, officeCharts } from '../../office-chart';
 import type { OfficeImages } from '../../office-image';
 import { sheetsResolver } from '../cell-style';
 
@@ -22,12 +23,10 @@ import { sheetsResolver } from '../cell-style';
 // the drawing adds to the package (itself, its relationships and its charts).
 export type SheetDrawing = { path: string; parts: PackagePart[] };
 
-// The workbook's sheets resolve a chart's ranges, by the names they are written under; `number` names the sheet's
-// drawing and chart parts. Each chart and picture is a two-cell anchor over the cells its box covers, in paint order, so
-// the import (import/sheets/drawing.ts) lands it on the same pixels. A chart whose spec doesn't parse is left out and
-// counted; a rotated one is written upright, as Excel turns no chart. Its look goes as far as Excel draws one:
-// background, label colour and stroke; hatch, stroke style and sketch don't. A picture keeps its turn; one whose media
-// the transform has no raster for, missing or unreadable, is left out and counted. Undefined when the sheet floats
+// Each chart and picture is a two-cell anchor over the cells its box covers, in paint order, so the import lands it on
+// the same pixels. A chart's ranges name the workbook's sheets by the names they are written under, and `number` names
+// the sheet's drawing and chart parts. Excel turns no chart, so a turned one is written upright. A picture keeps its
+// turn. A picture whose media the transform has no raster for is left out and counted. Undefined when the sheet floats
 // nothing.
 export function drawingOf(
     sheet: Sheet,
@@ -42,7 +41,7 @@ export function drawingOf(
     let resolver: CellResolver | undefined;
     const anchors: string[] = [];
     const { relationships, relate } = partRelationships();
-    const charts: PackagePart[] = [];
+    const charts = officeCharts('xl', `chart${number}_`);
     for (const item of floatingItems(sheet)) {
         // Excel numbers a drawing's shapes from 2.
         const id = anchors.length + 2;
@@ -61,33 +60,34 @@ export function drawingOf(
         }
         const chart = item.object;
         const { spec } = readChartSpec(chart);
-        if (!spec) {
-            lost('charts-dropped');
-            continue;
-        }
-        resolver ??= sheetsResolver(sheets);
-        const data = spec.data.source === 'range' ? resolveRangeChartData(spec.data, resolver) : undefined;
+        const data =
+            spec?.data.source === 'range'
+                ? resolveRangeChartData(spec.data, (resolver ??= sheetsResolver(sheets)))
+                : undefined;
         const placed = placedBox({ ...chart, angle: 0 });
-        const look = readChartLook(chart);
-        if (chartLookSimplified(look)) lost('charts-simplified');
-        const rId = addChartPart(
-            { parts: charts, path: `xl/charts/chart${number}_`, target: `../charts/chart${number}_`, relate },
+        const rId = addOfficeChart(
+            charts,
             spec,
             {
                 ranges,
                 cache: typeof data === 'object' ? data : undefined,
-                look,
+                look: readChartLook(chart),
                 frame: { width: placed.width, height: placed.height, emuPerPx: EMU_PER_PX },
             },
+            { target: '../charts/', relate, lost, layer: { angle: sheetFloatingBox(chart).angle, opacity: 100 } },
         );
-        anchors.push(anchorXml(sheet, placed, chartFrameXml(id, rId)));
+        if (rId) anchors.push(anchorXml(sheet, placed, chartFrameXml(id, rId)));
     }
     if (anchors.length === 0) return undefined;
     const path = `xl/drawings/drawing${number}.xml`;
     const drawing = `<xdr:wsDr xmlns:xdr="${XDR_NS}" xmlns:a="${A_NS}" xmlns:r="${R_NS}">${anchors.join('')}</xdr:wsDr>`;
     return {
         path,
-        parts: [[path, drawing, DRAWING_CONTENT_TYPE], [relsPathOf(path), relationshipsXml(relationships)], ...charts],
+        parts: [
+            [path, drawing, DRAWING_CONTENT_TYPE],
+            [relsPathOf(path), relationshipsXml(relationships)],
+            ...charts.parts,
+        ],
     };
 }
 
