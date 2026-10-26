@@ -81,10 +81,10 @@ export function matchesACL(
     return false;
 }
 
-// Merges an add/remove delta onto the current ACL: removals first (matched on canonicalACLId),
-// then upserts — re-adding an existing id replaces its entry, which is how permission changes
-// travel. The server-side merge is what makes concurrent sharers safe: a full-array replace
-// built from a stale client cache silently reverts other people's entries.
+// Merges a change onto the ACL as it is now. The removals go first, matched by canonicalACLId. Then each
+// added entry goes in, and one for an id that is there already replaces it, which is how a permission
+// changes. The merge runs on the server, so two people who share at once keep each other's entries. A
+// whole ACL built from an old copy in a tab would drop them.
 export function mergeACLDelta(current: DriveACL[] | null, delta: DriveACLDelta): DriveACL[] {
     const removed = new Set((delta.remove ?? []).map(canonicalACLId));
     const merged = (current ?? []).filter((entry) => !removed.has(canonicalACLId(entry.id)));

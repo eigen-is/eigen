@@ -51,8 +51,9 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
                 const rename = mount.storage.rename.bind(mount.storage);
                 const trashKey = trashStorageKey(pathId, item.name);
                 const oldKey = await mount.getStorageKey(pathId);
-                // Bytes at the trash key alone are this item's, left by a crash or a failed move-back: finish
-                // that trash. Beside bytes at the old key they are an orphan only this row could have written.
+                // Bytes at the trash key alone are this item's, left by a crash or a failed move-back, so this
+                // finishes that trash. Beside bytes at the old key they are an orphan that only this row could
+                // have written.
                 const atTrashKey = onDisk(mount, trashKey);
                 if (atTrashKey && !onDisk(mount, oldKey)) {
                     await writeRow(trashKey);
@@ -102,8 +103,8 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
 
     return mount.withPathLock(pathId, () =>
         mount.withTreeExclusive(async () => {
-            // Read under the lock: a trash of the original folder while this waited would restore into it, and on
-            // `local` a create since a pre-lock name check owns the key a storage rename replaces.
+            // Read under the lock. A trash of the original folder while this waited would otherwise restore
+            // into it. On `local` a create since an earlier name check owns the key that a rename replaces.
             const row = await mount.db.select().from(paths).where(eq(paths.id, pathId)).get();
             if (!row) throw new ApiError(404, 'Path not found');
             if (!row.trashedFrom) throw new ApiError(400, 'Item is not in trash');
@@ -161,8 +162,9 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
                 const parentKey = await mount.getStorageKey(targetParentId);
                 const targetKey = parentKey ? `${parentKey}/${restoreName}` : restoreName;
                 const currentKey = await mount.getStorageKey(pathId);
-                // The mirror of trash: bytes at the target alone are this item's, left by a restore's lost row write;
-                // beside bytes still in trash they are a leftover, unless a live row's name aliases them on disk.
+                // The mirror of trash. Bytes at the target alone are this item's, left by a restore whose row
+                // write was lost. Beside bytes still in the trash they are a leftover, unless a live row's
+                // name points at them on disk.
                 const occupant = await renameTarget(mount, targetParentId, targetKey, currentKey);
                 if (occupant === 'live') {
                     throw new ApiError(
@@ -201,9 +203,11 @@ function onDisk(mount: Mount, key: string): boolean {
     return fs.existsSync(path.join(mount.dataDir, key));
 }
 
-// What a `local` disk rename of sourceKey onto targetKey, or a create at targetKey, would replace. `source`: the item
-// itself, as a case-only rename on a case-insensitive disk resolves. `live`: a live sibling's bytes, whose name the disk
-// folds onto the target though no name in the table matches (same inode). `leftover`: bytes no row owns.
+// What a `local` disk rename of sourceKey onto targetKey, or a create at targetKey, would replace.
+// - `source` is the item itself, which a rename that changes only the case finds on a case-insensitive disk.
+// - `live` is a live sibling's bytes, whose name the disk folds onto the target, though no name in the table
+//   matches. Both names lead to the same inode.
+// - `leftover` is bytes that no row owns.
 export async function renameTarget(
     mount: Mount,
     parentId: string,
@@ -224,7 +228,8 @@ export async function renameTarget(
     return siblings.some((s) => sameInode(stat(path.posix.join(parentKey, s.file)))) ? 'live' : 'leftover';
 }
 
-// Bytes no row owns. Kept in .trash/ for the operator, not deleted: they may hold versions or media the item lacks.
+// Moves aside bytes that no row owns. They stay in .trash/ for the operator instead of being deleted,
+// because they may hold versions or media that the item lacks.
 export async function moveAside(
     rename: (oldKey: string, newKey: string) => Promise<void>,
     key: string,
