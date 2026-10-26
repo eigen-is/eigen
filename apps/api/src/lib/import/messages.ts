@@ -66,7 +66,7 @@ const OUTCOMES = ['dropped', 'simplified', 'flattened', 'unshown'] as const;
 type Outcome = (typeof OUTCOMES)[number];
 
 // Each outcome said of one and of more.
-const PREDICATES: Record<Outcome, readonly [one: string, many: string]> = {
+const PREDICATES: Record<Outcome, Noun> = {
     dropped: ['was not imported', 'were not imported'],
     simplified: ['was simplified', 'were simplified'],
     flattened: ['lost its layout', 'lost their layout'],

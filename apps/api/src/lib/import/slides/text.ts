@@ -19,10 +19,10 @@ import { ALIGN_BY_ALGN, ALIGN_BY_ANCHOR, percent } from '../../ooxml/drawingml';
 import { A_NS, EMU_PER_POINT, emu, isOn, ooxmlElements, R_NS } from '../../ooxml/ooxml';
 import type { Relationship } from '../../ooxml/opc';
 import type { ShapeProperties, SlideTheme } from './inherit';
-import { colorOf, fillIn, paintOf } from './inherit';
 import { charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 import type { DeckWalk } from './package';
-import { alternative } from './package';
+import { presentationAlternative } from './package';
+import { fillIn, paintOf, resolvedColor } from './paint';
 
 // What a text body inherits from, nearest first.
 export type TextSource = {
@@ -59,7 +59,7 @@ const DEFAULT_SIZE = 1800;
 // a:bodyPr's left and right inset where no body states one: 0.1 inch.
 const DEFAULT_SIDE_INSET = 91_440;
 // PowerPoint's single line spacing, as a CSS line height.
-const SINGLE_LINE = DEFAULT_RICHTEXT_PROPS.lineHeight;
+const SINGLE_LINE_HEIGHT = DEFAULT_RICHTEXT_PROPS.lineHeight;
 
 const BULLETS = new Map<string, 'ul' | 'ol' | undefined>([
     ['buNone', undefined],
@@ -81,7 +81,7 @@ type Marks = { bold: boolean; italic: boolean; underline: boolean; strike: boole
 type RunStyle = Marks & { fontFamily: string; size: number; color: string; letterSpacing: number };
 // Escaped text, or a <br> (no style: it takes its neighbours' marks).
 type Run = { html: string; style?: RunStyle; href?: string };
-type Paragraph = { list: 'ul' | 'ol' | undefined; level: number; runs: Run[]; text: boolean; chain: XmlElement[] };
+type TextParagraph = { list: 'ul' | 'ol' | undefined; level: number; runs: Run[]; text: boolean; chain: XmlElement[] };
 
 // undefined when the body shows no text: an empty placeholder is not drawn. Each paragraph, its children and each run's
 // characters are charged to the read's work before they are read: a run costs however little it shows.
@@ -98,14 +98,14 @@ export function richTextOf(
     const bodyAttr = (name: string) => firstOf(bodyPrs, (bodyPr) => xmlAttr(bodyPr, '', name));
     const autofit = firstOf(bodyPrs, (bodyPr) => firstChildOf(bodyPr, isAutofit));
     const normal = autofit?.local === 'normAutofit' ? autofit : undefined;
-    const fontScale = share(normal && xmlAttr(normal, '', 'fontScale')) ?? 1;
-    const lineReduction = share(normal && xmlAttr(normal, '', 'lnSpcReduction')) ?? 0;
+    const fontScale = nonNegativePercent(normal && xmlAttr(normal, '', 'fontScale')) ?? 1;
+    const lineReduction = nonNegativePercent(normal && xmlAttr(normal, '', 'lnSpcReduction')) ?? 0;
     const fontRef = source.style && childOf(source.style, A_NS, 'fontRef');
     const context = { theme, pxPerEmu: pxPerEmu * fontScale, fontRef, rels: source.rels, lost };
 
     // Characters per run style, so the box takes the style most of its text is in.
     const covered = new Map<string, RunStyle & { chars: number }>();
-    const paragraphs: Paragraph[] = [];
+    const paragraphs: TextParagraph[] = [];
     // The runs' HTML so far in UTF-16 units, each at least a byte: past the cap the canvas keeps, it is cut anyway.
     let html = 0;
     for (const paragraph of childrenOf(source.body, A_NS, 'p')) {
@@ -126,7 +126,7 @@ export function richTextOf(
         const bullet = firstOf(chain, (entry) => firstChildOf(entry, isBullet));
         const runs: Run[] = [];
         let text = false;
-        const children = ooxmlElements(paragraph, alternative);
+        const children = ooxmlElements(paragraph, presentationAlternative);
         charge(1 + children.length);
         for (const child of children) {
             if (child.ns !== A_NS) continue;
@@ -167,7 +167,7 @@ export function richTextOf(
 
     const first = paragraphs.find((paragraph) => paragraph.text)?.chain ?? [];
     const lnSpc = firstOf(first, (pPr) => childOf(pPr, A_NS, 'lnSpc'));
-    const spacing = share(lnSpc && attrOf(childOf(lnSpc, A_NS, 'spcPct'), 'val'));
+    const spacing = nonNegativePercent(lnSpc && attrOf(childOf(lnSpc, A_NS, 'spcPct'), 'val'));
     const points = Number(lnSpc && attrOf(childOf(lnSpc, A_NS, 'spcPts'), 'val'));
     // Where the box takes it, the run's size is snapped: a 44 pt title shows 44 pt, not 44.000000001.
     const fontSize = snapSlideFontSize(box.size, deck.slideWidth);
@@ -190,7 +190,7 @@ export function richTextOf(
         lineHeight:
             Number.isFinite(points) && points > 0
                 ? ((points / 100) * EMU_PER_POINT * pxPerEmu) / fontSize
-                : SINGLE_LINE * Math.max(0, (spacing ?? 1) - lineReduction),
+                : SINGLE_LINE_HEIGHT * Math.max(0, (spacing ?? 1) - lineReduction),
         padding: ((inset('lIns') + inset('rIns')) / 2) * pxPerEmu,
     };
 }
@@ -228,7 +228,7 @@ function bodiesOf(source: TextSource): TextSource['inherited'] {
     return [own, ...source.inherited];
 }
 
-type RunContext = {
+type TextRunContext = {
     theme: SlideTheme;
     // Scaled by normAutofit's fontScale.
     pxPerEmu: number;
@@ -243,7 +243,7 @@ type Inherited = { shape: XmlElement[]; text: XmlElement[] };
 
 // The run's own properties, else what its level inherits. The shape style's fontRef colour comes beneath the shape's
 // list styles and its font beneath every one, as LibreOffice draws it.
-function runStyleOf(rPr: XmlElement | undefined, inherited: Inherited, context: RunContext): RunStyle {
+function runStyleOf(rPr: XmlElement | undefined, inherited: Inherited, context: TextRunContext): RunStyle {
     const { theme, fontRef } = context;
     const chain = [...(rPr ? [rPr] : []), ...inherited.shape, ...inherited.text];
     const attr = (name: string) => firstOf(chain, (element) => xmlAttr(element, '', name));
@@ -271,7 +271,7 @@ function runStyleOf(rPr: XmlElement | undefined, inherited: Inherited, context: 
         color:
             (rPr && colorIn(rPr)) ??
             firstOf(inherited.shape, colorIn) ??
-            colorOf(fontRef, theme.colors) ??
+            resolvedColor(fontRef, theme.colors) ??
             firstOf(inherited.text, colorIn) ??
             SLIDES_STYLE_DEFAULTS.color,
         letterSpacing: ((number('spc') ?? 0) / 100) * EMU_PER_POINT * context.pxPerEmu,
@@ -310,7 +310,7 @@ function htmlPrefix(html: string, bytes: number): string {
 
 // Bulleted paragraphs nest as lists by level, each list inside the item before it. Cut at a paragraph so the canvas
 // reader keeps it whole, and every list still closed.
-function htmlOf(paragraphs: Paragraph[], marks: Marks): string {
+function htmlOf(paragraphs: TextParagraph[], marks: Marks): string {
     const closing = (open: OpenList[]) =>
         open
             .map((list) => `</li></${list.tag}>`)
@@ -395,8 +395,8 @@ function attrOf(element: XmlElement | undefined, name: string): string | undefin
     return element && xmlAttr(element, '', name);
 }
 
-// A share no smaller than none: a font scale, a line spacing.
-function share(value: string | undefined): number | undefined {
+// A percentage as a fraction, no smaller than none: a font scale, a line spacing.
+function nonNegativePercent(value: string | undefined): number | undefined {
     const fraction = percent(value);
     return fraction !== undefined && fraction >= 0 ? fraction : undefined;
 }

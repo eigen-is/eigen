@@ -3,8 +3,8 @@ import type { NewVectorElement } from '@workspace/lib/vector';
 import { xmlChild, xmlElements } from '../../../lib/core/xml';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import type { SlideTheme } from '../../../lib/import/slides/inherit';
-import { paintOf } from '../../../lib/import/slides/inherit';
 import { withWorkBudget } from '../../../lib/import/slides/lookup';
+import { paintOf } from '../../../lib/import/slides/paint';
 import { A_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
 import type { PptxFixture } from '../../fixtures/pptx';
 import {

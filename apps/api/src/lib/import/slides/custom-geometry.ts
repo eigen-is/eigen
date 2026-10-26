@@ -1,3 +1,8 @@
+// Turns a shape's DrawingML geometry into what a canvas path element stores: absolute M/L/C/Q/Z in the shape's unit
+// box, filled nonzero. It winds each subpath by how deep it nests, so a contour inside another is a hole, concatenates
+// the paths that paint alike, and simplifies a path past the canvas's caps. A custGeom comes through it, and so does
+// every preset the preset reader expands.
+
 import {
     clamp,
     MAX_PATH_BYTES,
@@ -13,8 +18,6 @@ import { A_NS, emu, isOn } from '../../ooxml/ooxml';
 import type { GuideList, Guides } from './guides';
 import { evaluateGuides, guideListOf, guideValue, RADIANS_PER_UNIT } from './guides';
 import { affords, charge, childOf, spend } from './lookup';
-
-// A shape's a:custGeom → what a canvas path element stores: absolute M/L/C/Q/Z in the shape's unit box, nonzero.
 
 // The nodes of a custGeom's guide and path lists, its paths' and their commands' children, counted before any is read:
 // the corpus's most is 4,636.
@@ -46,7 +49,7 @@ const FULL_TURN = 360 * DEGREE;
 // `filled` follows the path's fill flag: PowerPoint fills an unclosed subpath as if closed, as SVG does, so the element
 // writer fills closedPath(path) and strokes the path as drawn; a filled path leaves room for those closes. `shade` is a
 // PATH_SHADES value, for a shaded fill.
-export type CustomGeometry = { path: string; closed: boolean; filled: boolean; stroked: boolean; shade?: number };
+export type GeometryPath = { path: string; closed: boolean; filled: boolean; stroked: boolean; shade?: number };
 
 // A path's fill drawn as the shape's fill shaded, as LibreOffice draws it (EnhancedCustomShape2d.cxx): each sRGB channel
 // blended toward white by a positive fraction, toward black by a negative one. ECMA-376 states no amounts.
@@ -61,7 +64,7 @@ type Point = { x: number; y: number };
 type Segment = { op: 'L' | 'C' | 'Q'; points: Point[] };
 type Subpath = { start: Point; segments: Segment[]; closed: boolean };
 
-type Painted = Omit<CustomGeometry, 'path' | 'closed'> & { subpaths: Subpath[]; boxes: Bounds[] };
+type Painted = Omit<GeometryPath, 'path' | 'closed'> & { subpaths: Subpath[]; boxes: Bounds[] };
 
 // One geometry for each way the paths paint, the paths painting alike and apart concatenated, in the order they first
 // draw but the filled before the lines, as LibreOffice and Apache POI stroke over every fill; each becomes its own element
@@ -74,7 +77,7 @@ export function customGeometry(
     height: number,
     mirrored = false,
     adjustments: GuideList = [],
-): CustomGeometry[] | undefined {
+): GeometryPath[] | undefined {
     const [avLst, gdLst, pathLst] = ['avLst', 'gdLst', 'pathLst'].map((local) => childOf(custGeom, A_NS, local));
     const nodes = nodesOf([avLst, gdLst], pathLst);
     if (nodes === undefined || !affords(nodes)) return undefined;
@@ -93,7 +96,7 @@ export function customGeometry(
         const drawn = subpathsOf(path, guides, { width, height, mirrored });
         if (!drawn || (filled && drawn.length > MAX_SUBPATHS)) return undefined;
         if (drawn.length === 0) continue;
-        const subpaths = filled ? nested(drawn) : drawn;
+        const subpaths = filled ? windByNesting(drawn) : drawn;
         if (!subpaths) return undefined;
         const box = boundsOf(subpaths.flatMap(pointsOf));
         const key = `${filled} ${stroked} ${shade}`;
@@ -111,16 +114,16 @@ export function customGeometry(
             lastPainted.set(key, started);
         }
     }
-    const geometries: CustomGeometry[] = [];
+    const geometries: GeometryPath[] = [];
     for (const { filled, stroked, shade, subpaths } of painted) {
-        let path = fitted(subpaths, filled);
+        let path = pathWithinCaps(subpaths, filled);
         const segments = subpaths.reduce((count, subpath) => count + subpath.segments.length, 0);
         for (const tolerance of SIMPLIFY_TOLERANCES) {
             if (path !== undefined) break;
             // The pass's own scan of the segments, then reduced's of each run's points at each depth it splits to.
             if (!affords(segments * (MAX_SIMPLIFY_DEPTH + 2))) return undefined;
             charge(segments);
-            path = fitted(
+            path = pathWithinCaps(
                 subpaths.map((subpath) => simplified(subpath, tolerance)),
                 filled,
             );
@@ -206,7 +209,7 @@ function subpathsOf(
 // how deep it lies among its path's others, the outermost clockwise, a hole in one the other way, an island in that
 // clockwise again. A contour inside another of its path is then a hole however the file wound it, and roughjs's even-odd
 // hatch agrees. Undefined where the read's budget can't cover the work, before it begins.
-function nested(subpaths: Subpath[]): Subpath[] | undefined {
+function windByNesting(subpaths: Subpath[]): Subpath[] | undefined {
     // Each subpath's probe against each other's bounds; then the outlines and the tests the probes take, before either.
     if (!spend(subpaths.length * (subpaths.length - 1))) return undefined;
     const bounds = subpaths.map((subpath) => boundsOf(pointsOf(subpath)));
@@ -368,7 +371,7 @@ function arcCurves(from: Point, radii: Point, startAngle: number, sweepAngle: nu
 }
 
 // The canonical spelling the canvas reader keeps, or undefined past its caps; a filled path's within them closed.
-function fitted(subpaths: Subpath[], filled: boolean): string | undefined {
+function pathWithinCaps(subpaths: Subpath[], filled: boolean): string | undefined {
     const closes = filled ? subpaths.filter((subpath) => !subpath.closed).length : 0;
     const commands = subpaths.reduce(
         (count, { segments, closed }) => count + 1 + segments.length + (closed ? 1 : 0),

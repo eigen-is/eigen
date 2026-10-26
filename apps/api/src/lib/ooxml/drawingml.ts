@@ -15,6 +15,9 @@ import { A_NS, ASVG_NS, emu, R_NS } from './ooxml';
 // The widest line ST_LineWidth allows, 1584 pt.
 const MAX_LINE_WIDTH = 20_116_800;
 
+// The width Office draws a line at when its a:ln states none: 0.75 pt.
+export const DEFAULT_LINE_WIDTH_EMU = 9525;
+
 // An a:ln width in EMU, or undefined when the file states none the schema allows. A crafted width such as 1e300
 // would otherwise reach the canvas as a stroke wider than any slide.
 export function lineWidthEmu(value: string | undefined): number | undefined {

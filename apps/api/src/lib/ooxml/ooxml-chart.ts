@@ -45,7 +45,7 @@ import {
     xmlTrimmedText,
 } from '../core/xml';
 import type { DrawingTheme } from './drawingml';
-import { drawingColor, drawingLines, lineWidthEmu, readColorMap } from './drawingml';
+import { DEFAULT_LINE_WIDTH_EMU, drawingColor, drawingLines, lineWidthEmu, readColorMap } from './drawingml';
 import { A_NS, alternativeFor, C_NS, C16_NS, isOn, isOnElement, ooxmlElements } from './ooxml';
 import type { OoxmlPackage, Relationship } from './opc';
 import { optional, relTarget } from './opc';
@@ -606,7 +606,6 @@ const AUTOMATIC_BACKGROUND: Record<ChartHost, XmlElement | undefined> = {
 const AUTOMATIC_LINE = automatic(
     '<a:solidFill><a:schemeClr val="tx1"><a:tint val="75000"/></a:schemeClr></a:solidFill>',
 );
-const AUTOMATIC_LINE_WIDTH = 9525;
 // A line series' own width where it states none, 2.25 pt, as Office draws it.
 const AUTOMATIC_SERIES_WIDTH = 28575;
 
@@ -651,7 +650,7 @@ export function readChartPartLook(
     const gridlines = child(child(plotArea, 'valAx'), 'majorGridlines');
     const axisLine = lineOf(axis);
     const line = gridlines && drawn(axisLine) === TRANSPARENT_COLOR ? lineOf(gridlines) : axisLine;
-    const strokeWidth = axis ? widthOf(line, AUTOMATIC_LINE_WIDTH) : FLAT_CHART_LOOK.strokeWidth;
+    const strokeWidth = axis ? widthOf(line, DEFAULT_LINE_WIDTH_EMU) : FLAT_CHART_LOOK.strokeWidth;
     const lineGroup = elements(plotArea).find((group) => group.ns === C_NS && LINE_GROUPS.has(group.local));
     const seriesWidth = lineGroup && widthOf(lineOf(child(lineGroup, 'ser')), AUTOMATIC_SERIES_WIDTH);
     return {

@@ -1,5 +1,5 @@
-// pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform
-// process; the import's transform step writes the result as a Yjs update.
+// Reads a pptx file into the slides of a deck: the frames, the elements on them and the pictures they show. It runs in
+// the transform process, whose pptx import step writes the result as a Yjs update.
 
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { NewVectorElement, SlidePage } from '@workspace/lib/vector';
@@ -13,10 +13,11 @@ import { MAX_SLIDE_EMU, MIN_SLIDE_EMU } from '../../ooxml/presentationml';
 import type { ImportedMedia } from '../image-types';
 import { importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError } from '../messages';
-import { backgroundOf, createInheritance } from './inherit';
+import { createInheritance } from './inherit';
 import { childOf, withWorkBudget } from './lookup';
 import type { DeckWalk } from './package';
-import { readPackage } from './package';
+import { readPptxPackage } from './package';
+import { backgroundOf } from './paint';
 import { MAX_ELEMENTS, MAX_PPTX_WEIGHT, readSlideShapes } from './shapes';
 
 export type PptxSlide = { name: string; background: BackgroundFill | null; elements: NewVectorElement[] };
@@ -35,10 +36,10 @@ export type PptxDeck = {
 // replace, whose deck takes the file's own.
 export type PptxOptions = { deck?: SlidePage; maxMediaBytes: number };
 
-// The read's work, charged through lookup.ts: children scanned where a lookup or a colour isn't known yet, colour
-// transforms applied, paragraph and run nodes and characters read, shapes walked, a chart part's elements and points
-// for each colour map it is painted with. Whatever a file repeats, or makes each cache key anew, the read does no more than
-// this. Over ten times the corpus's most, 260,005 in a 369-slide deck.
+// The read's work, charged through the lookups: children scanned where a lookup or a colour isn't known yet, colour
+// transforms applied, paragraph and run nodes and characters read, shapes walked, and a chart part's elements and
+// points for each colour map it is painted with. Whatever a file repeats, or makes each cache key anew, the read does
+// no more than this. It is over ten times the corpus's most, 260,005 in a 369-slide deck.
 export const MAX_PPTX_WORK = 3_000_000;
 
 // PowerPoint's 4:3, 10 by 7.5 in, where the file states none.
@@ -53,7 +54,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
 }
 
 function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
-    const pkg = readPackage(bytes);
+    const pkg = readPptxPackage(bytes);
     const sldSz = childOf(pkg.presentation.root, P_NS, 'sldSz');
     const side = (name: string, fallback: number) => {
         const value = Number(sldSz && xmlAttr(sldSz, '', name));
@@ -76,8 +77,7 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         ? Math.min(frame.width / cx, frame.height / cy)
         : frame.width / (page.slideWidth * EMU_PER_POINT);
 
-    // Named per import, so an Import into a deck that holds an earlier one's pictures overwrites none. The upload cap
-    // bounds the pictures' bytes, as an upload of each would be bounded.
+    // Named per import, so an Import into a deck that holds an earlier one's pictures overwrites none.
     const files = importMedia('pptx', pkg.readMedia, options.maxMediaBytes);
     const losses = lossCounter();
     const deck: DeckWalk = {

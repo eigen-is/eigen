@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_PATH_BYTES, MAX_PATH_COMMANDS, parsePathCommands } from '@workspace/lib/vector';
 import type { XmlElement } from '../../../lib/core/xml';
-import type { CustomGeometry } from '../../../lib/import/slides/custom-geometry';
+import type { GeometryPath } from '../../../lib/import/slides/custom-geometry';
 import {
     closedPath,
     customGeometry,
@@ -36,7 +36,7 @@ const SQUARE = moveTo(0, 0) + lnTo(100, 0) + lnTo(100, 100) + lnTo(0, 100) + CLO
 
 // In a 1000 × 1000 EMU shape.
 const geometry = (paths: string, guides = '') => customGeometry(custGeom(paths, guides), 1000, 1000);
-const only = (paths: string, guides = ''): CustomGeometry | undefined => {
+const only = (paths: string, guides = ''): GeometryPath | undefined => {
     const found = geometry(paths, guides);
     expect(found?.length).toBe(1);
     return found?.[0];

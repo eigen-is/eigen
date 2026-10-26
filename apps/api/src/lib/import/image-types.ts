@@ -16,10 +16,14 @@ export const IMAGE_TYPES: ReadonlySet<string> = new Set(IMAGE_EXTENSION_BY_MIME.
 export const UNSHOWN_IMAGE_TYPES: ReadonlySet<string> = new Set(['image/bmp', 'image/x-wmf', 'image/x-emf']);
 
 // A slide or a sheet draws its picture in the browser and exports it through sharp, so it keeps only the types both
-// draw, a type added to IMAGE_TYPES staying out until it is listed. No browser but Safari draws a TIFF.
-const PICTURE_TYPES: ReadonlySet<string> = new Set(
-    ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'].filter((type) => IMAGE_TYPES.has(type)),
-);
+// draw. A type added to IMAGE_TYPES stays out until it is listed here. No browser but Safari draws a TIFF.
+const PICTURE_TYPES: ReadonlySet<string> = new Set([
+    'image/png',
+    'image/jpeg',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+]);
 
 // What a picture left out leaves in its place: a slide's box, a document's line.
 export const PICTURE_NOT_IMPORTED = 'Picture not imported';
@@ -67,7 +71,8 @@ export type MediaFiles = { media: ImportedMedia[]; name(part: MediaPart): string
 
 // One media file per picture part, read as it is first named: its format, a prefix of its own per import and the
 // order of first use. A part past MAX_MEDIA_PARTS, past `maxBytes` of pictures, or whose bytes don't read has no name,
-// and the format leaves it out and counts it.
+// and the format leaves it out and counts it. `maxBytes` is the upload cap, which bounds the pictures' bytes as an
+// upload of each would be bounded.
 export function importMedia(
     format: 'docx' | 'pptx' | 'xlsx',
     read: (path: string) => Uint8Array | undefined,
@@ -86,7 +91,7 @@ export function importMedia(
             const data = read(part.path);
             const name = data && `${prefix}-image-${media.length + 1}.${part.extension}`;
             // A view of the bytes read, not a copy of them.
-            if (data && name)
+            if (name)
                 media.push({
                     name,
                     contentType: part.contentType,
