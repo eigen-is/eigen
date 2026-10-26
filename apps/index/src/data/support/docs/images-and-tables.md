@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, images, charts, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-10-25
+updated: 2026-10-26
 ---
 
 You can insert images, charts, and tables anywhere in a document. Images can come from your device or from Drive. Charts start with sample data you then edit. Tables start as a 3×3 grid and you can grow them from there.
@@ -82,7 +82,7 @@ You can copy a chart from Sheets, Slides, or Vector and paste it into a document
 
 Right-click a chart and choose **Download image** to save it as an SVG picture on a white background, named after its title. This works with view access too. The same menu has **Cut**, **Copy**, and **Delete**, and with view access **Copy**.
 
-A chart prints and downloads as a PDF or a web page in its look. In a Word file it is a Word chart with its numbers, kept the way Word keeps a chart's data, and a sketched, hatched, or dashed look is drawn plain. See [Export to Word, PDF, or HTML](/support/docs/export).
+A chart prints and downloads as a PDF or a web page in its look. In a Word file it is a Word chart with its numbers, kept the way Word keeps a chart's data. A sketched, hatched, or dashed look is drawn plain, and a gradient background becomes its middle color. See [Export to Word, PDF, or HTML](/support/docs/export).
 
 ## Insert a table
 

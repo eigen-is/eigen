@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, charts, graphs]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 147
-updated: 2026-10-23
+updated: 2026-10-26
 ---
 
 You can turn a table of numbers into a chart that floats over the grid. The chart reads its cells, so it changes as soon as you change a value.
@@ -74,6 +74,6 @@ A pasted chart keeps its look, and a chart copied from Docs, Slides, or Vector p
 
 <div class="eigen-callout">
 
-Charts appear in the PDF and web page downloads and in the preview of the file in Drive. When you download the spreadsheet as Excel, each chart comes along as a chart you can edit in Excel. A rotated chart sits upright there, and a sketched or hatched look is drawn plain.
+Charts appear in the PDF and web page downloads and in the preview of the file in Drive. When you download the spreadsheet as Excel, each chart comes along as a chart you can edit in Excel. A rotated chart sits upright there, a sketched or hatched look is drawn plain, and a gradient background becomes its middle color.
 
 </div>
