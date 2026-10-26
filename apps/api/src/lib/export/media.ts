@@ -1,3 +1,7 @@
+// An export's media, prepared on the main thread beside the Mount for the transform process, which has none: the screen
+// preview of each media file the document names, or a PNG or JPEG from the source for an Office format. What is sent
+// is held to an import source's cap.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { listDocumentMedia } from '../document/media';
@@ -15,19 +19,12 @@ const OFFICE_FORMATS = new Set<ExportTransformJob['format']>(['docx', 'pptx', 'x
 
 const TOO_LARGE = "This document's images are too large to export";
 
-// Main-thread media preparation for an export: the screen-res preview of each media file the
-// document names, as exact buffers the transform process gets a copy of (an SVG's sanitizing, base64
-// and the data: URIs happen there). All Mount I/O — and the globally capped thumbnail path behind
-// getScreenPreview — stays here: the transform never receives a Mount and never spawns thumbnail
-// Workers. A docx, pptx or xlsx takes PNG or JPEG from the source file instead, since Office for the web and
-// Google's editors show no WebP, with the thumbnail Worker's width and height for its extent.
-//
-// The bytes are held in the API's heap and copied over IPC, so what is sent is held to
-// MAX_DECOMPRESSED_BYTES, an import source's cap, as it is prepared. An SVG travels as its own bytes,
-// so the SVGs' declared sizes are charged before any read; a raster's preview is at most 2560 px,
-// and an Office format's source is read whole, one at a time, so only a source past the cap alone is
-// refused unread. One file at a time, so a docx holds at most one of the thumbnail slots uploads and
-// previews share, and none once the job ends.
+// The transform process gets exact buffers, and sanitizes an SVG and makes the data: URIs there. A docx, pptx or xlsx
+// takes a PNG or JPEG from the source, since Office for the web and Google's editors show no WebP. The bytes are held
+// in the API's heap and copied over IPC, so what is sent is held to MAX_DECOMPRESSED_BYTES as it is prepared. An SVG
+// travels as its own bytes, so the SVGs' declared sizes are charged before any read. An Office format's source is read
+// whole, so only a source past the cap alone is refused unread. One file at a time, so an export holds at most one of
+// the thumbnail slots uploads and previews share.
 export async function collectExportMedia(
     mount: Mount,
     drivePath: DrivePath,

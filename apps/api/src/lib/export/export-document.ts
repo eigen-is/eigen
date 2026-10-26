@@ -1,3 +1,7 @@
+// An export's main-thread entry, which the export route calls: the container's type and the format pick the job, the
+// transform process renders it, and a PDF is that document through WeasyPrint. The media the document names is
+// prepared here, beside the Mount.
+
 import { DOCX_MIME, PPTX_MIME, XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -16,7 +20,7 @@ import type { Mount } from '../mount';
 import { collectExportMedia } from './media';
 import { htmlToPdf } from './weasyprint';
 
-export type ExportResult = {
+type ExportResult = {
     data: Buffer;
     contentType: string;
     fileName: string;
@@ -37,7 +41,7 @@ type ExportEnvelope = (typeof EXPORT_ENVELOPES)[keyof typeof EXPORT_ENVELOPES];
 
 // What the Worker is asked to render. One arm per document type, so a format its route
 // rejects — a docx from a deck, a pptx from a document — does not compile.
-export type ExportJob =
+type ExportJob =
     | { documentType: 'eigensheets'; format: SheetExportFormat }
     | { documentType: 'eigendoc'; format: EigendocExportFormat }
     | { documentType: 'eigenslides'; format: SlidesExportFormat }

@@ -1,4 +1,6 @@
-// WeasyPrint draws no MathML, so a PDF draws each equation as the SVG MathJax makes of it.
+// WeasyPrint draws no MathML, so a PDF draws each equation as the SVG MathJax makes of it. MathJax loads on the first
+// equation, once per transform process.
+
 let converter: ReturnType<typeof loadConverter> | undefined;
 
 // Loaded on the first equation, once per Worker. Every glyph is a path of its own (fontCache 'none'): a cache would

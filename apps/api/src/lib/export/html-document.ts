@@ -1,3 +1,6 @@
+// The one HTML document every export builds, for each type's HTML download and the HTML WeasyPrint prints: the
+// doctype, the data-only policy, the title and the bundled fonts around a type's stylesheet and sanitized body.
+
 import { escapeHtml } from '@workspace/lib/html';
 import { allFontFaceCss, getFontFaceCSSForFamilies } from './fonts';
 import { EXPORT_CSP, KEEP_MATHML, sanitizeExportHtml } from './sanitize';
