@@ -26,7 +26,7 @@ export type StyleRegistry = {
     xml(): string;
 };
 
-// The cell's hex colours and the rgb(…) strings of the editor's CSS pipeline alike; undefined for one Office can't
+// The cell's hex colors and the rgb(…) strings of the editor's CSS pipeline alike; undefined for one Office can't
 // hold, which the caller leaves out.
 export function argbOf(color: string): string | undefined {
     const hex = cssColorToHex(color);
@@ -48,15 +48,20 @@ function fontXml(style: CellStyle, face: 'name' | 'rFont'): string {
         style.it === 1 ? '<i/>' : '',
         style.cl === 1 ? '<strike/>' : '',
         style.un === 1 ? '<u/>' : '',
-        `<sz val="${typeof style.fs === 'number' ? style.fs : SHEET_DEFAULT_FONT_SIZE}"/>`,
+        `<sz val="${fontSize(style.fs)}"/>`,
         argb ? `<color rgb="${argb}"/>` : '',
         `<${face} val="${escapeXml(name)}"/>`,
         category ? `<family val="${FONT_FAMILY_NUMBER[category]}"/>` : '',
     ].join('');
 }
 
-// The workbook's default font, the one a column width counts the digit of. No colour, so automatic: the import gives a
-// cell of any other format its font whole, and a colour would read as one the cell picked.
+// Excel's font sizes run from 1 to 409 points, and it repairs a file past them.
+function fontSize(fs: unknown): number {
+    return typeof fs === 'number' && Number.isFinite(fs) ? Math.min(409, Math.max(1, fs)) : SHEET_DEFAULT_FONT_SIZE;
+}
+
+// The workbook's default font, the one a column width counts the digit of. No color, so automatic: the import gives a
+// cell of any other format its font whole, and a color would read as one the cell picked.
 const DEFAULT_FONT = `<font><sz val="${SHEET_DEFAULT_FONT_SIZE}"/><name val="${escapeXml(SHEET_DEFAULT_FONT.name)}"/><family val="${FONT_FAMILY_NUMBER[SHEET_DEFAULT_FONT.category]}"/></font>`;
 const DEFAULT_FILLS = [
     '<fill><patternFill patternType="none"/></fill>',
