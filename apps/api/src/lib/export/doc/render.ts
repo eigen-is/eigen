@@ -1,3 +1,7 @@
+// A doc's body or band as HTML, the DOM the editor holds, for the HTML and PDF exports and the doc preview alike. Each
+// node the static renderer draws otherwise is mapped here, such as a code block, a figure, a note or a small-caps run
+// on paper. The docx writer shares its link rule.
+
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { domOutputSpecToHTMLString, renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
@@ -14,26 +18,74 @@ import {
     readPageNumberKind,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import type { MathRow } from '@workspace/math';
-import { writeMathml } from '@workspace/math';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
-import { readStoredEquation } from '../../document/equation';
 import { nodeLook, QUOTE_LOOK } from '../../document/looks';
-import { lowlight } from '../../document/lowlight';
+import { hastToHtml, highlightCode } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
-import { SVG_LIMIT } from '../math-svg';
+import { renderEquations } from './equations';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
 type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => string | null;
 
-function renderCodeBlockNode(node: {
-    attrs: { language?: string | null };
-    textContent?: string;
-    content?: unknown;
-}): string {
-    const language = node.attrs.language || '';
-    const code = node.textContent ?? '';
+// The export's and the preview's one render of a doc's body or band, unsanitized: the DOM the editor holds. On paper
+// (`print`) a heading that holds a note labels its own bookmark and a page number is a field the stylesheet fills in.
+// `smallCapsFont` fakes small caps where the font has none, and the screen lists the notes after the body unless
+// `pageFootnotes` floats them to their pages.
+export function renderDocHtml(
+    json: JSONContent,
+    resolveImgSrc: FigureImgSrcResolver,
+    options?: {
+        lazy?: boolean;
+        smallCapsFont?: string;
+        print?: boolean;
+        pageFootnotes?: boolean;
+        equations?: ({ node }: { node: Node }) => string;
+    },
+): string {
+    const content = inEditorMarkOrder(withTrailingBreaks(flattenNestedFootnotes(json)));
+    const footnotes = options?.pageFootnotes ? undefined : footnoteList();
+    const html = renderToHTMLString({
+        content,
+        extensions: docExtensions(),
+        options: {
+            nodeMapping: {
+                codeBlock: ({ node }) => renderCodeBlockNode(node),
+                taskItem: ({ node, children }) => renderTaskItemNode(node, children),
+                figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
+                chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
+                equation: options?.equations ?? renderEquations(),
+                footnote:
+                    footnotes?.reference ?? (({ node, renderElement }) => renderFootnoteSpans(node, renderElement)),
+                ...(options?.print && {
+                    heading: ({ node, children }) => renderBookmarkedHeading(node, children),
+                }),
+                ...(options?.smallCapsFont && {
+                    text: renderTextSynthesizingSmallCaps(content, options.smallCapsFont),
+                }),
+                ...(options?.print && {
+                    pageNumber: ({ node }) =>
+                        `<span data-type="page-number" data-kind="${readPageNumberKind(node.attrs['kind'])}"></span>`,
+                }),
+            },
+        },
+    });
+    return footnotes ? `${html}${footnotes.list()}` : html;
+}
+
+// ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
+// with a <br> that holds its last line, so the export writes that <br> too. renderCodeBlockNode writes a code block's.
+function withTrailingBreaks(node: JSONContent): JSONContent {
+    const content = node.content?.map(withTrailingBreaks);
+    if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) return content ? { ...node, content } : node;
+    const last = content?.at(-1);
+    if (last?.type === 'text' && !last.text?.endsWith('\n')) return { ...node, content };
+    return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
+}
+
+function renderCodeBlockNode(node: Node): string {
+    const language = node.attrs['language'] || '';
+    const code = node.textContent;
     const highlighted = hastToHtml(highlightCode(language, code));
     const langClass = language ? ` language-${escapeHtml(language)}` : '';
     // withTrailingBreaks' rule: a code block holds only text, so it ends open when empty or in a newline.
@@ -41,42 +93,9 @@ function renderCodeBlockNode(node: {
     return `<pre><code class="hljs${langClass}">${highlighted}${trailingBreak}</code></pre>`;
 }
 
-// The HTML and the docx code blocks highlight alike. Users rarely set a language, so highlightAuto is where nearly all
-// export highlighting comes from.
-export function highlightCode(language: string, code: string): HastNode {
-    return language && lowlight.registered(language)
-        ? lowlight.highlight(language, code)
-        : lowlight.highlightAuto(code);
-}
-
-export type HastNode = {
-    type: string;
-    children?: HastNode[];
-    value?: string;
-    tagName?: string;
-    properties?: { className?: string[] };
-};
-
-export function hastToHtml(tree: HastNode): string {
-    if (tree.type === 'text') return escapeHtml(tree.value || '');
-    if (tree.type === 'element' && tree.tagName) {
-        const cls = tree.properties?.className;
-        const classAttr = cls ? ` class="${cls.join(' ')}"` : '';
-        const children = (tree.children || []).map(hastToHtml).join('');
-        return `<${tree.tagName}${classAttr}>${children}</${tree.tagName}>`;
-    }
-    if (tree.type === 'root' && tree.children) {
-        return tree.children.map(hastToHtml).join('');
-    }
-    return '';
-}
-
 // The tiptap static renderer drops the `checked` attribute, so the checkbox is rendered here.
-function renderTaskItemNode(
-    node: { attrs: { checked?: boolean | null } },
-    children: string | string[] | undefined,
-): string {
-    const checked = node.attrs.checked === true;
+function renderTaskItemNode(node: Node, children: string | string[] | undefined): string {
+    const checked = node.attrs['checked'] === true;
     const checkedAttr = checked ? ' checked' : '';
     const dataChecked = checked ? 'true' : 'false';
     const content = Array.isArray(children) ? children.join('') : (children ?? '');
@@ -165,78 +184,6 @@ function renderBookmarkedHeading(node: Node, children: string | string[] | undef
     return noted ? html.replace(/^<h[1-6]/, (open) => `${open} data-bookmark="${escapeHtml(label)}"`) : html;
 }
 
-// Without the annotation, which no screen draws and the sanitizer would keep as text; the PDF's MathJax draws it too.
-export function equationMathml(row: MathRow, display: boolean): string {
-    const math = writeMathml(row);
-    return display ? math.replace('<math', '<math display="block"') : math;
-}
-
-// What a render's readers pay for an equation's drawing: the sanitizer's jsdom and WeasyPrint pay per element, and the
-// PDF's SVG adds bytes no stored string holds.
-type EquationCost = { elements: number; bytes: number };
-
-export type EquationDrawing = EquationCost & { html: string };
-
-export function equationDrawing(html: string): EquationDrawing {
-    return { html, elements: html.match(/<[a-z]/g)?.length ?? 0, bytes: Buffer.byteLength(html) };
-}
-
-// A copy draws as the stored string and display it repeats.
-export function equationKey(attrs: Record<string, unknown>): string {
-    return `${attrs['display'] === true}${typeof attrs['mathml'] === 'string' ? attrs['mathml'] : ''}`;
-}
-
-// Every copy spends, as each is read again. Once one does not fit, none does: the costs only grow.
-export function equationBudget(limit: EquationCost): (drawing: EquationCost) => boolean {
-    const spent = { elements: 0, bytes: 0 };
-    return (drawing) => {
-        spent.elements += drawing.elements;
-        spent.bytes += drawing.bytes;
-        return spent.elements <= limit.elements && spent.bytes <= limit.bytes;
-    };
-}
-
-// The sanitizer's jsdom pays 3 to 5 KB a MathML element in the Worker, beside the API; the bytes cost no more than text.
-export const MATHML_LIMIT = { elements: 50_000, bytes: Number.POSITIVE_INFINITY };
-
-// The render meets the equations in document order, each copy spending the budget and each distinct one drawn once,
-// so a subtree it skips, which the schema refuses but a Yjs update can hold, moves no drawing onto another equation.
-// From the first that does not fit, the rest print as their linear text, which costs no element.
-function renderBudgetedEquations(
-    draw: (attrs: Record<string, unknown>, key: string) => EquationDrawing | undefined,
-    limit: EquationCost,
-): ({ node }: { node: Node }) => string {
-    const fits = equationBudget(limit);
-    const drawings = new Map<string, EquationDrawing | undefined>();
-    const texts = new Map<string, string>();
-    let tail = false;
-    return ({ node }) => {
-        const key = equationKey(node.attrs);
-        if (!tail) {
-            if (!drawings.has(key)) drawings.set(key, draw(node.attrs, key));
-            const drawing = drawings.get(key);
-            if (drawing && fits(drawing)) return drawing.html;
-            tail = true;
-        }
-        let text = texts.get(key);
-        if (text === undefined) {
-            text = escapeHtml(readStoredEquation(node.attrs).text);
-            texts.set(key, text);
-        }
-        return text;
-    };
-}
-
-// ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
-// with a <br> that holds its last line, so the export writes that <br> too. renderCodeBlockNode writes a code block's.
-function withTrailingBreaks(node: JSONContent): JSONContent {
-    const content = node.content?.map(withTrailingBreaks);
-    if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) return content ? { ...node, content } : node;
-    const last = content?.at(-1);
-    if (last?.type === 'text' && !last.text?.endsWith('\n')) return { ...node, content };
-    return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
-}
-
 // The size Chromium and WebKit draw the small caps they synthesize at, so the PDF's match the editor's.
 const SYNTHESIZED_SMALL_CAPS_SIZE = '0.7em';
 
@@ -282,61 +229,6 @@ function renderTextSynthesizingSmallCaps(doc: Node, normalFont: string): ({ node
 
 function smaller(capitals: string): string {
     return capitals && `<span style="font-size: ${SYNTHESIZED_SMALL_CAPS_SIZE}">${escapeHtml(capitals)}</span>`;
-}
-
-// One export's equations, the body's and its bands' spending one budget: the PDF's SVG drawings, else the MathML in the
-// editor's span, whose rule lays a displayed one out on its line as the editor does.
-export function renderEquations(svgs?: ReadonlyMap<string, EquationDrawing>): ({ node }: { node: Node }) => string {
-    if (svgs) return renderBudgetedEquations((_attrs, key) => svgs.get(key), SVG_LIMIT);
-    return renderBudgetedEquations((attrs) => {
-        const { row, display } = readStoredEquation(attrs);
-        const data = display ? ' data-display="block"' : '';
-        return equationDrawing(`<span class="equation"${data}>${equationMathml(row, display)}</span>`);
-    }, MATHML_LIMIT);
-}
-
-// The export's and the preview's one render of a doc's body or band, unsanitized: the DOM the editor holds, but for the
-// PDF's small caps, synthesized where the font has none, its equations, its page numbers, which its stylesheet's
-// counter() fills in, and its notes, which the screen lists after the body.
-export function renderDocHtml(
-    json: JSONContent,
-    resolveImgSrc: FigureImgSrcResolver,
-    options?: {
-        lazy?: boolean;
-        smallCapsFont?: string;
-        pageCounters?: boolean;
-        pageFootnotes?: boolean;
-        equations?: ({ node }: { node: Node }) => string;
-    },
-): string {
-    const content = inEditorMarkOrder(withTrailingBreaks(flattenNestedFootnotes(json)));
-    const footnotes = options?.pageFootnotes ? undefined : footnoteList();
-    const html = renderToHTMLString({
-        content,
-        extensions: docExtensions(),
-        options: {
-            nodeMapping: {
-                codeBlock: ({ node }) => renderCodeBlockNode(node),
-                taskItem: ({ node, children }) => renderTaskItemNode(node, children),
-                figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
-                chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
-                equation: options?.equations ?? renderEquations(),
-                footnote:
-                    footnotes?.reference ?? (({ node, renderElement }) => renderFootnoteSpans(node, renderElement)),
-                ...(options?.pageCounters && {
-                    heading: ({ node, children }) => renderBookmarkedHeading(node, children),
-                }),
-                ...(options?.smallCapsFont && {
-                    text: renderTextSynthesizingSmallCaps(content, options.smallCapsFont),
-                }),
-                ...(options?.pageCounters && {
-                    pageNumber: ({ node }) =>
-                        `<span data-type="page-number" data-kind="${readPageNumberKind(node.attrs['kind'])}"></span>`,
-                }),
-            },
-        },
-    });
-    return footnotes ? `${html}${footnotes.list()}` : html;
 }
 
 // Outside Eigen a root-relative href means nothing, and a protocol-relative one would open as file:.

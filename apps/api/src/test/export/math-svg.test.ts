@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { MathRow } from '@workspace/math';
-import { equationMathml } from '../../lib/export/doc/render';
+import { equationMathml } from '../../lib/export/doc/equations';
 import { mathmlToSvg } from '../../lib/export/math-svg';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 

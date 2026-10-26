@@ -4,7 +4,7 @@ import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, PAGE_ROOT, STYLE_ROOT } from 
 import type { MathNode, MathRow } from '@workspace/math';
 import { writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
-import { MATHML_LIMIT } from '../../lib/export/doc/render';
+import { MATHML_LIMIT } from '../../lib/export/doc/equations';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { sampleChartParts } from '../fixtures/chart-parts';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedEigendoc } from '../fixtures/golden-documents';

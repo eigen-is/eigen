@@ -20,7 +20,6 @@ import type * as Y from 'yjs';
 import type { EigendocBands } from '../../document/doc';
 import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
 import { docSchema } from '../../document/doc-schema';
-import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { BODY, FOOTNOTE_LOOK } from '../../document/looks';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
@@ -33,27 +32,13 @@ import {
     toTransferableText,
 } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
-import { MAX_SVG_EQUATIONS, mathmlToSvg, SVG_LIMIT } from '../math-svg';
 import { withSvgFallbacks } from '../office-image';
-import type { EquationDrawing } from './render';
-import {
-    equationBudget,
-    equationDrawing,
-    equationKey,
-    equationMathml,
-    renderDocHtml,
-    renderEquations,
-    withAbsoluteLinks,
-} from './render';
+import { renderEquations, svgEquations } from './equations';
+import { renderDocHtml, withAbsoluteLinks } from './render';
 
-// Materialized doc + prepared media → export bytes. Runs inside the transform process
-// (child.ts owns execution; the main-thread orchestration lives in export-document.ts).
-// This module must not reach the Mount or the preview cache — the child imports it.
-//
-// HTML and PDF render the same document by design: WeasyPrint consumes what the HTML download
-// serves, but for the small caps the PDF fakes and the equations it draws as SVG (render.ts). The
-// docx is written from the JSON by docx/to-docx.ts, which loads lazily so an HTML export never evaluates
-// it, its styles or its fonts.
+// HTML and PDF render the same document: WeasyPrint prints what the HTML download serves, but for the small caps the
+// PDF fakes and the equations it draws as SVG. The docx writer loads lazily, so an HTML export never evaluates it, its
+// styles or its fonts.
 export async function renderEigendocExport(
     doc: Y.Doc,
     format: EigendocExportFormat,
@@ -99,7 +84,7 @@ export async function renderEigendocExport(
             const html = renderDocHtml(
                 withAbsoluteLinks(content, publicOrigin),
                 (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-                { ...(pdf && { smallCapsFont: style.font }), pageCounters: pdf, pageFootnotes: pageNotes, equations },
+                { ...(pdf && { smallCapsFont: style.font }), print: pdf, pageFootnotes: pageNotes, equations },
             );
             return part === 'body'
                 ? `<article class="eigen-prose tiptap ${DOC_PROSE_CLASS}">${html}</article>`
@@ -168,67 +153,6 @@ function printedBands(bands: EigendocBands): { printed: EigendocBands; cut: numb
     return { printed, cut };
 }
 
-// The bundled families a doc's export can draw in, as a face is up to 0.6 MB of base64 WeasyPrint reads per PDF: the
-// Normal's, in which eigen-prose.css draws the body and which names no other as its fallback, the monospace of code,
-// and each family a font mark's style or a chart's SVG names in the body. A body's text that names a family embeds it
-// for nothing, and misses none.
-function usedFamilies(body: string, style: NormalStyle): Set<string> {
-    const families = new Set([style.font]);
-    if (body.includes('<code')) families.add(getFontName(FONT_STACK_MONO));
-    for (const name of EIGEN_FONT_NAMES) if (body.includes(name)) families.add(name);
-    return families;
-}
-
-// WeasyPrint draws no MathML, so the PDF draws its equations as the SVGs MathJax makes of the MathML the screen draws,
-// keyed by stored string, each drawn once, in the order the render meets them, the bands' first. Every copy spends
-// SVG_LIMIT; MathJax stops at the first equation that does not fit, or past MAX_SVG_EQUATIONS drawings, and the render
-// prints the rest as text.
-async function svgEquations(roots: JSONContent[]): Promise<Map<string, EquationDrawing>> {
-    const drawings = new Map<string, EquationDrawing>();
-    const fits = equationBudget(SVG_LIMIT);
-    for (const attrs of equationAttrs(roots)) {
-        const key = equationKey(attrs);
-        let drawing = drawings.get(key);
-        if (drawing === undefined && drawings.size < MAX_SVG_EQUATIONS) {
-            const { row, display } = readStoredEquation(attrs);
-            const svg = await mathmlToSvg(equationMathml(row, display));
-            drawing = equationDrawing(`<span class="math-svg"${display ? ' data-display="block"' : ''}>${svg}</span>`);
-        }
-        if (drawing === undefined || !fits(drawing)) break;
-        drawings.set(key, drawing);
-    }
-    return drawings;
-}
-
-function* equationAttrs(nodes: JSONContent[]): Generator<Record<string, unknown>> {
-    for (const node of nodes) {
-        if (node.type === 'equation') yield node.attrs ?? {};
-        yield* equationAttrs(node.content ?? []);
-    }
-}
-
-// The bands are running elements placed before the body, as element() takes the one placed on the page or the last one
-// before it, and print in the margin boxes over the text column, their distance from the paper's edge. A band
-// taller than its margin gets the margin it needs from weasyprint-render.py, as a margin box pushes nothing. In the head,
-// which the sanitizer never sees: it strips element( from a body's CSS.
-function bandsCss(page: PageSetup): string {
-    return `
-${BAND_ROOTS.map((root) => `.band-${root} { position: running(${root}); }`).join('\n')}
-@page {
-    @top-center { content: element(header); vertical-align: top; padding-top: ${page.headerDistance}mm; width: 100%; }
-    @bottom-center { content: element(footer); vertical-align: bottom; padding-bottom: ${page.footerDistance}mm; width: 100%; }
-}
-${page.differentFirstPage ? '@page :first { @top-center { content: element(headerFirst); } @bottom-center { content: element(footerFirst); } }' : ''}
-`;
-}
-
-// WeasyPrint counts the pages in the body's flow as in a margin box, so a field prints its number wherever it stands, a
-// docx's NUMPAGES in the body of a doc with no bands too.
-const PAGE_NUMBER_CSS = `
-[data-type="page-number"][data-kind="page"]::after { content: counter(page); }
-[data-type="page-number"][data-kind="pages"]::after { content: counter(pages); }
-`;
-
 // A note floats whole to its reference's page, so one taller than the page's text loses what doesn't fit, and
 // WeasyPrint lays the notes out again for every page they fill: 4,000 one-line notes took 35 s and 10,000 ran past the
 // 60 s timeout. Past either, the PDF lists the notes after the body, as the download does.
@@ -261,6 +185,39 @@ function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
             ) <= pageLines,
     );
 }
+
+// The bundled families a doc's export can draw in, as a face is up to 0.6 MB of base64 WeasyPrint reads per PDF: the
+// Normal's, in which eigen-prose.css draws the body and which names no other as its fallback, the monospace of code,
+// and each family a font mark's style or a chart's SVG names in the body. A body's text that names a family embeds it
+// for nothing, and misses none.
+function usedFamilies(body: string, style: NormalStyle): Set<string> {
+    const families = new Set([style.font]);
+    if (body.includes('<code')) families.add(getFontName(FONT_STACK_MONO));
+    for (const name of EIGEN_FONT_NAMES) if (body.includes(name)) families.add(name);
+    return families;
+}
+
+// The bands are running elements placed before the body, as element() takes the one placed on the page or the last one
+// before it, and print in the margin boxes over the text column, their distance from the paper's edge. A band
+// taller than its margin gets the margin it needs from weasyprint-render.py, as a margin box pushes nothing. In the head,
+// which the sanitizer never sees: it strips element( from a body's CSS.
+function bandsCss(page: PageSetup): string {
+    return `
+${BAND_ROOTS.map((root) => `.band-${root} { position: running(${root}); }`).join('\n')}
+@page {
+    @top-center { content: element(header); vertical-align: top; padding-top: ${page.headerDistance}mm; width: 100%; }
+    @bottom-center { content: element(footer); vertical-align: bottom; padding-bottom: ${page.footerDistance}mm; width: 100%; }
+}
+${page.differentFirstPage ? '@page :first { @top-center { content: element(headerFirst); } @bottom-center { content: element(footerFirst); } }' : ''}
+`;
+}
+
+// WeasyPrint counts the pages in the body's flow as in a margin box, so a field prints its number wherever it stands, a
+// docx's NUMPAGES in the body of a doc with no bands too.
+const PAGE_NUMBER_CSS = `
+[data-type="page-number"][data-kind="page"]::after { content: counter(page); }
+[data-type="page-number"][data-kind="pages"]::after { content: counter(pages); }
+`;
 
 // A note floats to the foot of its reference's page, numbered in the text and at the note, under a short rule, as Google
 // prints it. The note inherits from its reference's paragraph, a heading's, a title's, a quote's or a list item's, and

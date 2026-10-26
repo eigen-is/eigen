@@ -79,7 +79,7 @@ export async function generateTextPreview(
 
     if (mode === 'code') {
         try {
-            const { hastToHtml, highlightCode } = await import('../export/doc/render');
+            const { hastToHtml, highlightCode } = await import('../document/lowlight');
             const highlighted = hastToHtml(highlightCode(getLanguageFromFileName(fileName) ?? '', content));
             return { body: `<pre><code>${highlighted}</code></pre>`, mode };
         } catch {

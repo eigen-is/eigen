@@ -20,12 +20,11 @@ import {
     twips,
     untypedListFormat,
 } from '../../../document/looks';
-import { lowlight } from '../../../document/lowlight';
+import type { HastNode } from '../../../document/lowlight';
+import { highlightCode, lowlight } from '../../../document/lowlight';
 import { proseValueIfSet } from '../../../document/prose-css';
 import type { StyleId } from '../../../ooxml/wordml';
 import { BORDER_SIDES, codeBlockStyle, JUSTIFICATION, LIST_FORMATS, LIST_LEVELS } from '../../../ooxml/wordml';
-import type { HastNode } from '../render';
-import { highlightCode } from '../render';
 import { figureOf } from './drawings';
 import { useFace } from './fonts';
 import { CLEAR_FLOATS, checkboxXml, itemOf, LIST_LEVEL, listOf } from './numbering';
