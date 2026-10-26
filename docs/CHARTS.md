@@ -116,7 +116,7 @@ The look is Google's defaults: text scaled to the box, title on top in bold, leg
 
 ## The painter draws each shape with its own kind and the labels as SVG text
 
-`renderChartSvg` (`vector/kinds/chart-render.ts`) wraps each shape in its own translate group and calls that kind's `render`, so a chart's bar and a drawn rectangle with the same fields are the same SVG by construction. It imports the four shape kinds one by one: the registry imports the chart kind, so reaching the shapes through `ELEMENT_KINDS` would be an import cycle.
+`renderChartSvg` (`vector/kinds/chart-render.ts`) wraps each shape in its own translate group and calls that kind's `render`, so a chart's bar and a drawn rectangle with the same fields are the same SVG by construction. It imports the four shape kinds one by one: the registry imports the chart kind, so reaching the shapes through `ELEMENT_KINDS` would be an import cycle. The charts modules reach `vector/` only through modules that import no kind, such as `vector/points.ts` for the stored point list, so the chart kind imports the charts barrel. Code outside `vector/` reaches the painter through `@workspace/lib/vector`, never its own module: a kind's module as the first way into the kinds evaluates the registry before that kind, and `test/vector/kinds/cycle.test.ts` pins the charts and eigendoc barrels as entries.
 
 The labels go through `svgTextLine` (`vector/kinds/render-utils.ts`), the one helper that turns a line of text into SVG `<text>`; an arrow's label draws through it too. Plain SVG text is what lets a chart print: WeasyPrint ignores `foreignObject`, so rich text would vanish from a PDF. A bold label is drawn at weight 600, the weight of Inter's and JetBrains Mono's bundled bold faces.
 

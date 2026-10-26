@@ -20,8 +20,9 @@ import {
 import { isRecord } from '../../../core/guards';
 import type { ChartLook, ChartSpec, ChartSpecPartKey, ChartType } from '../../../types/chart';
 import { CHART_LOOK_FIELDS, CHART_SPEC_PART_KEYS } from '../../../types/chart';
-import { renderChartSpecSvg } from '../../../vector/kinds/chart-render';
-import { randomSeed } from '../../../vector/write-vector';
+// The vector barrel, not the painter's module: a kind's module as the first way in evaluates the registry before
+// that kind, which the barrel avoids by loading geometry first.
+import { randomSeed, renderChartSpecSvg } from '../../../vector';
 import type { FigureFrameAttrs } from './figure-frame';
 import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
 

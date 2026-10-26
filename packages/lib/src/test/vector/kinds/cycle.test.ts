@@ -41,4 +41,9 @@ describe('the vector engine survives either entry order', () => {
     test('the charts barrel as the process entry builds the same table', async () => {
         expect(await elementFieldsFromEntry('../charts/index.ts')).toEqual([...ELEMENT_FIELDS]);
     });
+
+    // A doc's chart reaches the painter from outside vector/, so it must enter through the barrel.
+    test('the eigendoc barrel as the process entry builds the same table', async () => {
+        expect(await elementFieldsFromEntry('../docs/eigendoc/index.ts')).toEqual([...ELEMENT_FIELDS]);
+    });
 });
