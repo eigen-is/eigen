@@ -39,7 +39,13 @@ suite('sheets PDF — a rotated chart', () => {
             id: 's1',
             charts: { c1: { ...chart, ...newSheetChartSpecParts(sampleChartSpec('column')) } },
         };
-        const html = sheetsHtmlDocument({ title: 'Chart', sheets: [sheet], mediaUrls: NO_MEDIA, mode: 'pdf' });
+        const html = sheetsHtmlDocument({
+            title: 'Chart',
+            sheets: [sheet],
+            mediaUrls: NO_MEDIA,
+            mode: 'pdf',
+            lost: () => {},
+        });
         const page = await rasterize(await htmlToPdf(html));
         const ink = inkBox(page);
         const pt = (px: number) => (MARGIN + px) * PT_PER_PX;

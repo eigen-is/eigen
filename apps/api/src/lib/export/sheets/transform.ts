@@ -31,13 +31,15 @@ export async function renderEigensheetsExport(
         case 'pdf-html': {
             const { sheetsHtmlDocument } = await import('./render');
             const media = await loadMedia(mediaNamesIn(sheets.map((sheet) => sheet.images)));
+            const losses = lossCounter();
             const html = sheetsHtmlDocument({
                 title,
                 sheets,
                 mediaUrls: toDataUriMap(media),
                 mode: htmlExportMode(format),
+                lost: losses.lost,
             });
-            return { data: toTransferableText(html), warnings };
+            return { data: toTransferableText(html), warnings: [...warnings, ...losses.warnings()] };
         }
         case 'xlsx': {
             const { writeXlsx } = await import('./xlsx/to-xlsx');

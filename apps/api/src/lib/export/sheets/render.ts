@@ -40,7 +40,7 @@ import {
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
-import type { HtmlExportMode } from '../../document/transform/protocol';
+import type { HtmlExportMode, LossCounter } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, sheetsResolver, VERTICAL_ALIGN } from './cell-style';
@@ -59,6 +59,10 @@ type StyleRegistry = Map<string, string>;
 type SheetPreviewBudget = { maxRows: number; maxCols: number; maxCells: number };
 export const PREVIEW_SHEET_BUDGET: SheetPreviewBudget = { maxRows: 200, maxCols: 50, maxCells: 10_000 };
 
+// The most cells, rows times columns, an export walks of one sheet. A peer can write a merge or a border key at
+// XFD1048576, and the sanitizer and WeasyPrint pay for every cell the walk writes.
+export const MAX_EXPORT_CELLS = 250_000;
+
 // Every td's defaults: inline in the preview, whose embedders strip the <head>, and the shared td{} rule in the export.
 // There is no vertical-align here, because buildCellStyle always writes one.
 const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
@@ -67,19 +71,22 @@ const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
 
 // The workbook as one document. The screen's prints landscape. The PDF's page fits its widest and tallest sheet, so
-// WeasyPrint never clips a wide grid.
+// WeasyPrint never clips a wide grid. A sheet past MAX_EXPORT_CELLS is cut to that many, and counted.
 export function sheetsHtmlDocument({
     title,
     sheets,
     mediaUrls,
     mode,
+    lost,
 }: {
     title: string;
     sheets: Sheet[];
     mediaUrls: MediaUrls;
     mode: HtmlExportMode;
+    lost: LossCounter['lost'];
 }): string {
-    const { html, css } = renderSheetsHtml(sheets, mediaUrls);
+    const { html, css, cut } = renderSheetsHtml(sheets, mediaUrls);
+    for (const sheet of cut) lost('sheets-cut', sheet);
     const page = mode === 'pdf' ? pdfPageCss(shownSheets(sheets)) : '@page { size: landscape; margin: 1.5cm; }';
     return exportHtmlDocument({
         title,
@@ -102,16 +109,21 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
 }
 
 // One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
-// The resolver reads the stored values: only a rule's own formula is evaluated.
-export function renderSheetsHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; css: string } {
+// The resolver reads the stored values: only a rule's own formula is evaluated. `cut` holds the sheets cut to the cap.
+export function renderSheetsHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; css: string; cut: Sheet[] } {
     const engine = new FormulaEngine();
     const resolver = sheetsResolver(sheets);
     const styles: StyleRegistry = new Map();
     const shown = shownSheets(sheets);
+    const cut: Sheet[] = [];
     const html = shown
-        .map((sheet, i) => renderSheet(sheet, i === shown.length - 1, engine, resolver, { styles, mediaUrls }).html)
+        .map((sheet, i) => {
+            const rendered = renderSheet(sheet, i === shown.length - 1, engine, resolver, { styles, mediaUrls });
+            if (rendered.truncated) cut.push(sheet);
+            return rendered.html;
+        })
         .join('\n');
-    return { html, css: serializeStyleRules(styles) };
+    return { html, css: serializeStyleRules(styles), cut };
 }
 
 // The sheets the tabs show, as Excel prints them. The resolver still spans every sheet, the hidden ones too.
@@ -179,12 +191,15 @@ function renderSheet(
     }
 
     // The window comes first, so all that follows costs what is rendered, not what the sheet declares: a merge or a
-    // rule's range can name millions of cells.
+    // rule's range can name millions of cells. The export's window is every row and column that fits the cap.
+    const maxCells = budget?.maxCells ?? MAX_EXPORT_CELLS;
+    const maxCols = budget?.maxCols ?? MAX_EXPORT_CELLS;
+    const maxRows = budget?.maxRows ?? Number.POSITIVE_INFINITY;
     let truncated = false;
     const renderCols: number[] = [];
     for (let c = minCol; c <= maxCol; c++) {
         if (config.colhidden?.[c] != null) continue;
-        if (budget && renderCols.length >= budget.maxCols) {
+        if (renderCols.length >= maxCols) {
             truncated = true;
             break;
         }
@@ -195,7 +210,7 @@ function renderSheet(
     let cellCount = 0;
     for (let r = minRow; r <= maxRow; r++) {
         if (config.rowhidden?.[r] != null) continue;
-        if (budget && (renderRows.length >= budget.maxRows || cellCount + renderCols.length > budget.maxCells)) {
+        if (renderRows.length >= maxRows || cellCount + renderCols.length > maxCells) {
             truncated = true;
             break;
         }
@@ -204,13 +219,15 @@ function renderSheet(
     }
     const lastRow = renderRows.at(-1) ?? -1;
     const lastCol = renderCols.at(-1) ?? -1;
+    // Only a window that leaves cells out clips what reaches past it: the preview's, or an export cut to the cap.
+    const clipped = budget !== undefined || truncated;
 
     // A merge's outer borders sit on its first cell, the only one rendered for it.
     const borderMap = mergedBorderSides(config.borderInfo, config.merge, [minRow, lastRow, minCol, lastCol]);
 
     // The rules need the dense `data` matrix, and a sheet without it draws none, as the canvas does.
     const rules =
-        budget && sheet.conditionalFormatRules
+        clipped && sheet.conditionalFormatRules
             ? clipRulesToWindow(sheet.conditionalFormatRules, minRow, lastRow, minCol, lastCol)
             : sheet.conditionalFormatRules;
     const cfMap: ComputeMap | null =
@@ -260,9 +277,9 @@ function renderSheet(
 
             const attrs: string[] = [];
             if (merge) {
-                // A span past the window would claim table cells the preview never wrote.
-                const cs = budget ? Math.min(merge.cs, lastCol - c + 1) : merge.cs;
-                const rs = budget ? Math.min(merge.rs, lastRow - r + 1) : merge.rs;
+                // A span past the window would claim table cells the window never wrote.
+                const cs = clipped ? Math.min(merge.cs, lastCol - c + 1) : merge.cs;
+                const rs = clipped ? Math.min(merge.rs, lastRow - r + 1) : merge.rs;
                 if (cs !== merge.cs || rs !== merge.rs) truncated = true;
                 if (cs > 1) attrs.push(`colspan="${cs}"`);
                 if (rs > 1) attrs.push(`rowspan="${rs}"`);

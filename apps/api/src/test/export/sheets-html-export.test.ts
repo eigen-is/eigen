@@ -7,21 +7,26 @@ import {
 } from '@workspace/lib/charts';
 import type { Cell, ConditionalFormatRule, Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import {
+    encodeSheetsSnapshot,
     REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_COL_WIDTH,
     SHEET_DEFAULT_FONT_SIZE,
     SHEET_DEFAULT_ROW_HEIGHT,
 } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { serializeFill } from '@workspace/lib/vector';
+import * as Y from 'yjs';
 import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
     getSheetContentSize,
+    MAX_EXPORT_CELLS,
     renderSheetsHtml,
     renderSheetsPreviewHtml,
     sheetsHtmlDocument,
 } from '../../lib/export/sheets/render';
+import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { NO_MEDIA } from '../setup';
@@ -213,6 +218,7 @@ describe('Sheets HTML export — class-based styles', () => {
             sheets: [makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])],
             mediaUrls: NO_MEDIA,
             mode: 'screen',
+            lost: () => {},
         });
         // The generated rules survive sanitization into the final document.
         expect(doc).toContain('border:1px solid #d4d4d4');
@@ -226,6 +232,7 @@ describe('Sheets HTML export — class-based styles', () => {
             sheets: [makeSheet([{ r: 0, c: 0, v: { v: 'x', bg: 'url(http://evil.test/ssrf)' } }])],
             mediaUrls: NO_MEDIA,
             mode: 'screen',
+            lost: () => {},
         });
         expect(doc).not.toMatch(/url\(\s*['"]?https?:/i);
     });
@@ -236,7 +243,10 @@ describe('Sheets HTML export — class-based styles', () => {
         const bg = `red;mask:url(data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}#m)`;
         const sheets = [makeSheet([{ r: 0, c: 0, v: { v: 'x', bg } }])];
         const preview = sanitizeExportHtml(renderSheetsPreviewHtml(sheets, NO_MEDIA).html, { allowedRefs: new Set() });
-        for (const html of [sheetsHtmlDocument({ title: 'T', sheets, mediaUrls: NO_MEDIA, mode: 'screen' }), preview]) {
+        for (const html of [
+            sheetsHtmlDocument({ title: 'T', sheets, mediaUrls: NO_MEDIA, mode: 'screen', lost: () => {} }),
+            preview,
+        ]) {
             expect(html).not.toContain('mask:');
         }
     });
@@ -271,6 +281,7 @@ describe('Sheets HTML export — class-based styles', () => {
                     sheets: [makeSheet([{ r: 0, c: 0, v: cell }])],
                     mediaUrls: NO_MEDIA,
                     mode: 'screen',
+                    lost: () => {},
                 }),
             );
         }
@@ -282,7 +293,13 @@ describe('Sheets HTML export — class-based styles', () => {
             columnlen: { 0: BREAKOUT as unknown as number },
             rowlen: { 0: BREAKOUT as unknown as number },
         };
-        const doc = sheetsHtmlDocument({ title: 'T', sheets: [sheet], mediaUrls: NO_MEDIA, mode: 'screen' });
+        const doc = sheetsHtmlDocument({
+            title: 'T',
+            sheets: [sheet],
+            mediaUrls: NO_MEDIA,
+            mode: 'screen',
+            lost: () => {},
+        });
         expectNoBreakout(doc);
         // Non-numeric dimensions fall back to the defaults rather than concatenating —
         // the same coercion getSheetContentSize applies for the @page rule.
@@ -989,7 +1006,13 @@ describe('Sheets export — content size (@page)', () => {
     test('the PDF page of a huge sheet is capped at the PDF page limit', () => {
         const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'wide' } }]);
         sheet.config = { columnlen: { 0: 1e9 }, rowlen: { 0: 1e9 } };
-        const html = sheetsHtmlDocument({ title: 'Huge', sheets: [sheet], mediaUrls: NO_MEDIA, mode: 'pdf' });
+        const html = sheetsHtmlDocument({
+            title: 'Huge',
+            sheets: [sheet],
+            mediaUrls: NO_MEDIA,
+            mode: 'pdf',
+            lost: () => {},
+        });
         expect(html).toContain('@page { size: 19200px 19200px; margin: 40px; }');
     });
 
@@ -1143,6 +1166,7 @@ describe('Sheets HTML export — floating images', () => {
             sheets: [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10 }])],
             mediaUrls: MEDIA,
             mode: 'screen',
+            lost: () => {},
         });
         expect(doc).toContain(`src="${PIXEL}"`);
     });
@@ -1291,7 +1315,13 @@ describe('Sheets HTML export — charts', () => {
     });
 
     test('the chart survives the document sanitizer', () => {
-        const doc = sheetsHtmlDocument({ title: 'T', sheets: [sheetWithChart()], mediaUrls: NO_MEDIA, mode: 'pdf' });
+        const doc = sheetsHtmlDocument({
+            title: 'T',
+            sheets: [sheetWithChart()],
+            mediaUrls: NO_MEDIA,
+            mode: 'pdf',
+            lost: () => {},
+        });
         expect(svgOf(doc)).toContain('>Ajax<');
         expect(svgOf(doc)).toContain('<path d="M0 0 L');
     });
@@ -1302,10 +1332,67 @@ describe('Sheets HTML export — charts', () => {
             ...sheetWithChart(),
             charts: { c1: { ...chartOn('data'), fill, color: '#334455', roughness: 1, seed: 7 } },
         };
-        const doc = sheetsHtmlDocument({ title: 'T', sheets: [sheet], mediaUrls: NO_MEDIA, mode: 'pdf' });
+        const doc = sheetsHtmlDocument({
+            title: 'T',
+            sheets: [sheet],
+            mediaUrls: NO_MEDIA,
+            mode: 'pdf',
+            lost: () => {},
+        });
         expect(svgOf(doc)).toContain('<clipPath id="');
         expect(svgOf(doc)).toContain('<g clip-path="url(#');
         expect(svgOf(doc)).toContain('fill="#334455"');
         expect(svgOf(renderSheetsHtml([sheetWithChart()], NO_MEDIA).html)).not.toContain('<clipPath');
+    });
+});
+
+describe('Sheets HTML export — the cell cap', () => {
+    const tds = (html: string) => html.match(/<td/g)?.length ?? 0;
+
+    test('a border key at XFD1048576 cuts the walk to the cap, quickly', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: { v: 'top left' } }]),
+            config: {
+                borderInfo: {
+                    [`${REFERENCE_ROW_COUNT - 1}_${REFERENCE_COLUMN_COUNT - 1}`]: { b: { style: 1, color: '#000' } },
+                },
+            },
+        };
+        const started = performance.now();
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        expect(performance.now() - started).toBeLessThan(10_000);
+        expect(out.cut).toEqual([sheet]);
+        expect(out.html).toContain('>top left<');
+        expect(tds(out.html)).toBeLessThanOrEqual(MAX_EXPORT_CELLS);
+        expect(tds(out.html)).toBeGreaterThan(MAX_EXPORT_CELLS - REFERENCE_COLUMN_COUNT);
+    }, 30_000);
+
+    test("a merge to XFD1048576 exports cut to the cap, its span with it, and the export's warning says so", async () => {
+        const sheet: Sheet = {
+            id: 'sheet-1',
+            name: 'Sheet1',
+            order: 0,
+            celldata: [{ r: 0, c: 0, v: { v: 'merged', m: 'merged' } }],
+            config: { merge: { '0_0': { r: 0, c: 0, rs: REFERENCE_ROW_COUNT, cs: REFERENCE_COLUMN_COUNT } } },
+        };
+        const doc = new Y.Doc();
+        doc.getMap('state').set('snapshot', encodeSheetsSnapshot([sheet], { computed: true }));
+        const started = performance.now();
+        const exported = await renderEigensheetsExport(doc, 'html', 'Forged', async () => []);
+        expect(performance.now() - started).toBeLessThan(10_000);
+        expect(exported.warnings).toEqual([{ code: 'sheets-cut', count: 1 }]);
+        const html = new TextDecoder().decode(exported.data);
+        expect(html).toContain(`colspan="${REFERENCE_COLUMN_COUNT}"`);
+        const rows = Math.floor(MAX_EXPORT_CELLS / REFERENCE_COLUMN_COUNT);
+        expect(html).toContain(`rowspan="${rows}"`);
+        expect(tds(html)).toBe(1);
+    }, 30_000);
+
+    test('a sheet under the cap is not cut and carries no warning', async () => {
+        const sheet: Sheet = { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [{ r: 0, c: 0, v: { v: 'x' } }] };
+        expect(renderSheetsHtml([sheet], NO_MEDIA).cut).toEqual([]);
+        const doc = new Y.Doc();
+        doc.getMap('state').set('snapshot', encodeSheetsSnapshot([sheet], { computed: true }));
+        expect((await renderEigensheetsExport(doc, 'html', 'Small', async () => [])).warnings).toEqual([]);
     });
 });
