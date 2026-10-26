@@ -328,6 +328,7 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
             alignment: 'center',
             layout: 'wrap-left',
             commentCardId: null,
+            seriesStrokeWidth: null,
             ...LOOK,
         },
     };
