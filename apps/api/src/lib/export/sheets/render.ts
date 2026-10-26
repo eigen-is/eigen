@@ -1,3 +1,8 @@
+// A workbook as HTML: the export's one document, which the HTML download serves and WeasyPrint prints, and the
+// preview's body of the first sheet, cut to a budget. Each cell is a table cell drawn as the canvas draws it, with the
+// images and charts floating over the grid where the editor floats them. Runs in the transform process, so it reaches
+// no Mount: images arrive as URLs by media name.
+
 import { escapeHtml } from '@workspace/lib/html';
 import type {
     Cell,
@@ -40,77 +45,29 @@ import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, sheetsResolver, VERTICAL_ALIGN } from './cell-style';
 
-// Sheet[] -> HTML: the full-workbook export document, the budgeted preview body and
-// the fixed-size PDF document. Runs inside the transform process (child.ts owns
-// execution; the main-thread orchestration lives in export-document.ts). This
-// module must not reach the Mount or the main-thread transform seam - the Worker
-// imports it.
+// Image sources by media name: data: URIs for an export, the prepared preview URLs for a preview.
+type MediaUrls = Map<string, string>;
 
-// Defaults applied to every td: inline in the preview so the markup renders without the
-// document <head> CSS (preview embedders strip it), and as the shared td{} rule in the
-// class-based export stylesheet. Vertical-align is intentionally absent — buildCellStyle
-// always emits one (`middle`, `top`, `bottom`, …) so we never end up with two competing
-// declarations for one cell.
+// The export interns every cell's style into a class declared in one <style> element. A workbook repeats a few hundred
+// styles over hundreds of thousands of cells, and the sanitizer CSS-parses every style attribute but passes class
+// names and style text as plain strings. A key is the exact declarations the inline path would write. The preview
+// keeps inline styles, because its body embeds without a <head>.
+type StyleRegistry = Map<string, string>;
+
+// The preview renders from the top-left of the used range. maxCells is a bound of its own, so tuning the rows or the
+// columns can never remove it.
+type SheetPreviewBudget = { maxRows: number; maxCols: number; maxCells: number };
+export const PREVIEW_SHEET_BUDGET: SheetPreviewBudget = { maxRows: 200, maxCols: 50, maxCells: 10_000 };
+
+// Every td's defaults: inline in the preview, whose embedders strip the <head>, and the shared td{} rule in the export.
+// There is no vertical-align here, because buildCellStyle always writes one.
 const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
 
 const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
 
-// Floating-image sources by media name: data: URIs for an export, the prepared
-// /file/<id>/preview URLs for a preview. A workbook without floating images resolves
-// nothing and the grid renders alone.
-type MediaUrls = Map<string, string>;
-
-// Full exports intern every emitted style into a class ("s0", "s1", …) declared in a
-// body <style> element: a real workbook repeats a few hundred distinct styles across
-// hundreds of thousands of cells, and DOMPurify/jsdom CSS-parses every inline style
-// attribute it sanitizes (the 82MB/104s pathology) while class attributes and style-
-// element text pass through as plain strings. Keys are the exact declaration strings
-// the inline path would emit; values already went through escapeHtml at build time.
-// The preview keeps inline styles — its body fragment embeds without a <head>.
-type StyleRegistry = Map<string, string>;
-
-function internStyle(styles: StyleRegistry, declarations: string): string {
-    let cls = styles.get(declarations);
-    if (cls === undefined) {
-        cls = `s${styles.size}`;
-        styles.set(declarations, cls);
-    }
-    return cls;
-}
-
-function styleAttr(styles: StyleRegistry | undefined, declarations: string): string {
-    return styles ? `class="${internStyle(styles, declarations)}"` : `style="${declarations}"`;
-}
-
-// Cell values are schemaless CRDT strings, and in a stylesheet they sit in CSS text
-// rather than in an HTML attribute — a context where different characters are
-// structural and where HTML entities are never decoded. Every declaration reaches the
-// document through here, so the whole class is closed at this one seam instead of per
-// field: `<`/`>` end the <style> element (and DOMPurify keeps what follows — an
-// <svg><image href> is a fetch in the HTML download), `{`/`}` open and close
-// rule blocks, `\` starts a CSS escape (which also hides `url(`/`@import` from the
-// sanitizer's scan by spelling them `\75 rl(` / `@\69 mport`), and `/*` opens a comment
-// that swallows every later rule. None of them can appear in a legitimate declaration.
-const CSS_TEXT_STRUCTURAL = /[<>{}\\]|\/\*|\*\//g;
-
-function serializeStyleRules(styles: StyleRegistry): string {
-    const rules = [`td{${BASE_TD_STYLE}}`];
-    for (const [declarations, cls] of styles) {
-        rules.push(`.${cls}{${declarations.replace(CSS_TEXT_STRUCTURAL, '')}}`);
-    }
-    return rules.join('\n');
-}
-
-// A font-family quote must be a real `"` in stylesheet text and `&quot;` in a style
-// attribute, where a literal `"` would close the attribute early and silently drop every
-// later declaration. Both emitters ask here so the two never disagree.
-function fontQuote(forStylesheet: boolean): string {
-    return forStylesheet ? '"' : '&quot;';
-}
-
-// The workbook as one document: the screen's prints landscape, the PDF's on a page that fits its widest and tallest
-// sheet, so WeasyPrint never clips a wide grid.
+// The workbook as one document. The screen's prints landscape. The PDF's page fits its widest and tallest sheet, so
+// WeasyPrint never clips a wide grid.
 export function sheetsHtmlDocument({
     title,
     sheets,
@@ -131,6 +88,37 @@ export function sheetsHtmlDocument({
     });
 }
 
+// A preview is a glance, so it renders only the first shown sheet, cut to the budget. `truncated` is true when rows,
+// columns, cells or other sheets were left out, and the caller then adds the shared marker. The resolver spans every
+// sheet, so a rule's formula can read another sheet.
+export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
+    const shown = shownSheets(sheets);
+    if (shown.length === 0) return { html: '', truncated: false };
+    const first = renderSheet(shown[0], true, new FormulaEngine(), sheetsResolver(sheets), {
+        budget: PREVIEW_SHEET_BUDGET,
+        mediaUrls,
+    });
+    return { html: first.html, truncated: first.truncated || shown.length > 1 };
+}
+
+// One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
+// The resolver reads the stored values: only a rule's own formula is evaluated.
+export function renderSheetsHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; css: string } {
+    const engine = new FormulaEngine();
+    const resolver = sheetsResolver(sheets);
+    const styles: StyleRegistry = new Map();
+    const shown = shownSheets(sheets);
+    const html = shown
+        .map((sheet, i) => renderSheet(sheet, i === shown.length - 1, engine, resolver, { styles, mediaUrls }).html)
+        .join('\n');
+    return { html, css: serializeStyleRules(styles) };
+}
+
+// The sheets the tabs show, as Excel prints them. The resolver still spans every sheet, the hidden ones too.
+function shownSheets(sheets: Sheet[]): Sheet[] {
+    return sheets.filter((sheet) => sheet.hide !== 1);
+}
+
 function pdfPageCss(sheets: Sheet[]): string {
     let width = 0;
     let height = 0;
@@ -143,81 +131,13 @@ function pdfPageCss(sheets: Sheet[]): string {
     return `@page { size: ${side(width)}px ${side(height)}px; margin: ${PAGE_MARGIN}px; }`;
 }
 
-// Preview budget (docs/PREVIEWS.md § An Eigen document previews a slice, off the event loop): rendered from
-// the top-left of the used range. maxCells is an independent ceiling so tuning rows/columns
-// against fixtures can never silently remove the bound (at the defaults it never
-// binds: 200 × 50 = 10,000).
-export type SheetPreviewBudget = { maxRows: number; maxCols: number; maxCells: number };
-export const PREVIEW_SHEET_BUDGET: SheetPreviewBudget = { maxRows: 200, maxCols: 50, maxCells: 10_000 };
-
-// One engine + resolver per render, shared across sheets so cross-sheet refs in
-// formula CF rules (e.g. `=Sheet2!A1>10`) resolve correctly. The resolver reads
-// saved `cell.v` values from the snapshot — formulas are not recomputed, only the
-// CF rule's own formula is evaluated against existing cell values.
-function createRenderContext(sheets: Sheet[]): { engine: FormulaEngine; resolver: CellResolver } {
-    const engine = new FormulaEngine();
-    return { engine, resolver: sheetsResolver(sheets) };
-}
-
-// The sheets the tabs show, as Excel prints them; the resolver still spans every sheet, hidden ones too.
-function shownSheets(sheets: Sheet[]): Sheet[] {
-    return sheets.filter((sheet) => sheet.hide !== 1);
-}
-
-export function renderSheetsHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; css: string } {
-    const { engine, resolver } = createRenderContext(sheets);
-    const styles: StyleRegistry = new Map();
-    const shown = shownSheets(sheets);
-    const html = shown
-        .map((sheet, i) => renderSheet(sheet, i === shown.length - 1, engine, resolver, { styles, mediaUrls }).html)
-        .join('\n');
-    return { html, css: serializeStyleRules(styles) };
-}
-
-// Preview is a glance, not a document — render only the first shown sheet, clipped to
-// the hard row/column/cell budget, to keep the cached body small. The resolver
-// still spans every sheet so cross-sheet CF formula refs resolve correctly.
-// `truncated` is true whenever rows, columns, cells, or additional sheets were
-// omitted — the caller appends the shared truncated marker.
-export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
-    const shown = shownSheets(sheets);
-    if (shown.length === 0) return { html: '', truncated: false };
-    const { engine, resolver } = createRenderContext(sheets);
-    const first = renderSheet(shown[0], true, engine, resolver, { budget: PREVIEW_SHEET_BUDGET, mediaUrls });
-    return { html: first.html, truncated: first.truncated || shown.length > 1 };
-}
-
-// Preview only: a rule may name the whole sheet while the preview renders a small
-// window, and the evaluator visits every coordinate of every range — a formula rule
-// runs the engine once per visited cell. Clipping keeps that work proportional to
-// what is rendered; a rule that misses the window drops out entirely.
-function clipRulesToWindow(
-    rules: ConditionalFormatRule[],
-    firstRow: number,
-    lastRow: number,
-    firstCol: number,
-    lastCol: number,
-): ConditionalFormatRule[] {
-    const clipped: ConditionalFormatRule[] = [];
-    for (const rule of rules) {
-        const cellrange = rule.cellrange
-            .map((range) => ({
-                row: [Math.max(range.row[0], firstRow), Math.min(range.row[1], lastRow)],
-                column: [Math.max(range.column[0], firstCol), Math.min(range.column[1], lastCol)],
-            }))
-            .filter((range) => range.row[0] <= range.row[1] && range.column[0] <= range.column[1]);
-        if (cellrange.length > 0) clipped.push(withCfRanges(rule, cellrange));
-    }
-    return clipped;
-}
-
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
     const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     const blank = maxRow < 0 || maxCol < 0;
     const offset = blank ? { left: 0, top: 0 } : gridOffset(sheet, minRow, minCol);
-    // The overlay draws at the stored grid coordinate, so an image or chart parked past the used
-    // range is still on the page.
+    // The overlay draws at the stored grid coordinate, so an image or chart parked past the used range is still on the
+    // page.
     const extent = floatingExtent(sheet, offset);
     return {
         width: Math.max(blank ? 0 : sheetColumnsWidth(sheet, minCol, maxCol), extent.width),
@@ -225,7 +145,7 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     };
 }
 
-// The far corner of a sheet's images and charts as they turn, in the table's space, like the overlay positions them.
+// The far corner of a sheet's images and charts as they turn, in the table's space, as the overlay places them.
 function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { width: number; height: number } {
     let width = 0;
     let height = 0;
@@ -236,8 +156,7 @@ function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { 
     return { width, height };
 }
 
-// `styles` present is the full-document export (interned classes, stylesheet escaping);
-// absent is the preview fragment, which embeds without a <head> and stays inline-styled.
+// With `styles` this is the export, with interned classes. Without it this is the preview, inline-styled.
 function renderSheet(
     sheet: Sheet,
     isLast: boolean,
@@ -248,37 +167,19 @@ function renderSheet(
     const forStylesheet = styles !== undefined;
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
-
-    // The table in the overlay's positioning context, which reaches the farthest image or chart, so
-    // what follows in the flow (the next sheet, the preview's truncated notice) starts below them. The
-    // preview clips the overlay to its budget window, not to the table: an image parked outside it would
-    // stretch the fragment and collapse the thumbnail scaled by it. With no images or charts the table is
-    // emitted bare, so a workbook without them renders exactly the markup it always did.
-    const withOverlay = (table: string, tableWidth: number, minRow: number, minCol: number): string => {
-        const offset = gridOffset(sheet, minRow, minCol);
-        const clip = budget && {
-            width: sheetColumnsWidth(sheet, minCol, minCol + budget.maxCols - 1),
-            height: sheetRowsHeight(sheet, minRow, minRow + budget.maxRows - 1),
-        };
-        const overlay = renderFloatingObjects(sheet, mediaUrls, resolver, offset, styles, clip);
-        if (!overlay) return table;
-        const extent = floatingExtent(sheet, offset);
-        const width = Math.max(tableWidth, clip ? Math.min(extent.width, clip.width) : extent.width);
-        const height = clip ? Math.min(extent.height, clip.height) : extent.height;
-        const box = `position:relative;width:${width}px;min-height:${height}px${clip ? ';overflow:hidden' : ''}`;
-        return `<div ${styleAttr(styles, box)}>${table}${overlay}</div>`;
-    };
+    const overlay = { budget, styles, mediaUrls, resolver };
 
     const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     if (maxRow < 0 || maxCol < 0) {
-        // An image or chart on an otherwise blank sheet is all there is to render, clipped to the
-        // same budget window as the grid path below.
-        return { html: `<div class="sheet">${withOverlay('', 0, 0, 0)}</div>`, truncated: false };
+        // An image or chart on an otherwise blank sheet is all there is to render.
+        return {
+            html: `<div class="sheet">${withFloatingOverlay(sheet, '', 0, 0, 0, overlay)}</div>`,
+            truncated: false,
+        };
     }
 
-    // The render window comes first: everything below is bounded by what is actually
-    // rendered rather than by what the document declares (a merge or a CF range can
-    // name millions of cells).
+    // The window comes first, so all that follows costs what is rendered, not what the sheet declares: a merge or a
+    // rule's range can name millions of cells.
     let truncated = false;
     const renderCols: number[] = [];
     for (let c = minCol; c <= maxCol; c++) {
@@ -304,14 +205,10 @@ function renderSheet(
     const lastRow = renderRows.at(-1) ?? -1;
     const lastCol = renderCols.at(-1) ?? -1;
 
-    // A merge's perimeter sits on the master, the only cell this renderer emits for it. Bounded
-    // to the render window so a merge beyond it (in preview, past the budget) is never expanded.
+    // A merge's outer borders sit on its first cell, the only one rendered for it.
     const borderMap = mergedBorderSides(config.borderInfo, config.merge, [minRow, lastRow, minCol, lastCol]);
 
-    // Conditional formatting — engine produces a "r_c" -> { textColor, cellColor, dataBar } map.
-    // Evaluation needs the dense `data` matrix; loaded snapshots without it skip CF (the canvas
-    // painter does the same fallback). Formula-based rules get a resolver-backed evaluator so
-    // `=A1>10` style rules can fire server-side.
+    // The rules need the dense `data` matrix, and a sheet without it draws none, as the canvas does.
     const rules =
         budget && sheet.conditionalFormatRules
             ? clipRulesToWindow(sheet.conditionalFormatRules, minRow, lastRow, minCol, lastCol)
@@ -323,9 +220,8 @@ function renderSheet(
               })
             : null;
 
-    // Merge lookup. Anchors are one entry per merge, but coverage is tested per rendered
-    // row against the merge list: expanding every merge into a per-cell set first is an
-    // allocation bomb, since one legal merge can span a million rows.
+    // Each rendered row tests the merges for the cells they cover. A set of every covered cell would be an allocation
+    // bomb, as one merge can span a million rows.
     const merges = config.merge ? Object.values(config.merge) : [];
     const mergeAnchors = new Map<string, MergeCell>();
     for (const m of merges) mergeAnchors.set(`${m.r},${m.c}`, m);
@@ -364,8 +260,7 @@ function renderSheet(
 
             const attrs: string[] = [];
             if (merge) {
-                // A span reaching past the window would claim table cells the preview
-                // never emitted.
+                // A span past the window would claim table cells the preview never wrote.
                 const cs = budget ? Math.min(merge.cs, lastCol - c + 1) : merge.cs;
                 const rs = budget ? Math.min(merge.rs, lastRow - r + 1) : merge.rs;
                 if (cs !== merge.cs || rs !== merge.rs) truncated = true;
@@ -375,16 +270,14 @@ function renderSheet(
 
             const cellStyle = buildCellStyle(v, borderMap[`${r}_${c}`], showGrid, cfStyle, forStylesheet);
             if (forStylesheet) {
-                // The base td declarations live in the shared td{} rule; an unstyled
-                // cell needs no class at all.
+                // The shared td{} rule holds the base declarations, so an unstyled cell needs no class.
                 if (cellStyle) attrs.push(styleAttr(styles, cellStyle));
             } else {
                 attrs.push(`style="${cellStyle ? `${BASE_TD_STYLE};${cellStyle}` : BASE_TD_STYLE}"`);
             }
 
-            // Webpage links render as anchors gated by the same scheme allowlist as
-            // FE navigation; blocked schemes and internal sheet/cellrange links (no
-            // meaningful target in standalone HTML) stay plain text.
+            // A web link passes the editor's scheme gate. A link into the workbook means nothing in a standalone
+            // document, so it stays plain text.
             const link = sheet.hyperlink?.[`${r}_${c}`];
             const href = link?.linkType === 'webpage' ? resolveWebLink(link.linkAddress) : null;
             let display = getCellDisplay(v);
@@ -400,64 +293,155 @@ function renderSheet(
         rows.push(`<tr ${styleAttr(styles, `height:${h}px`)}>${cells.join('')}</tr>`);
     }
 
-    // The .sheet div already carries a class, so in stylesheet mode the page-break style
-    // joins it as a second class token rather than going through styleAttr.
+    // The .sheet div already has a class, so in the export its page break is a second class.
     const divClass = isLast || !forStylesheet ? 'sheet' : `sheet ${internStyle(styles, 'page-break-after:always')}`;
     const pageBreak = isLast || forStylesheet ? '' : ' style="page-break-after:always"';
     const q = fontQuote(forStylesheet);
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS.replaceAll('"', q)};font-size:${SHEET_DEFAULT_FONT_SIZE}pt;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>`;
     const html = `<div class="${divClass}"${pageBreak}>
-${withOverlay(table, tableWidth, minRow, minCol)}
+${withFloatingOverlay(sheet, table, tableWidth, minRow, minCol, overlay)}
 </div>`;
     return { html, truncated };
 }
 
-function getCellDisplay(v: Cell | null): string {
-    if (!v) return '';
-    const rich = richText(v);
-    if (rich !== undefined) return escapeHtml(rich);
-    if (v.m != null) return escapeHtml(String(v.m));
-    if (v.v == null) return '';
-    if (typeof v.v === 'boolean') return booleanDisplay(v.v);
-    return escapeHtml(String(v.v));
+// The table inside a box that reaches the farthest image or chart, so what follows in the flow, the next sheet or the
+// preview's marker, starts below them. The preview clips the overlay to its window: an image parked outside it would
+// stretch the body and shrink the thumbnail scaled from it. A sheet with no images or charts writes the bare table.
+function withFloatingOverlay(
+    sheet: Sheet,
+    table: string,
+    tableWidth: number,
+    minRow: number,
+    minCol: number,
+    {
+        budget,
+        styles,
+        mediaUrls,
+        resolver,
+    }: { budget?: SheetPreviewBudget; styles?: StyleRegistry; mediaUrls: MediaUrls; resolver: CellResolver },
+): string {
+    const offset = gridOffset(sheet, minRow, minCol);
+    const clip = budget && {
+        width: sheetColumnsWidth(sheet, minCol, minCol + budget.maxCols - 1),
+        height: sheetRowsHeight(sheet, minRow, minRow + budget.maxRows - 1),
+    };
+    const overlay = renderFloatingObjects(sheet, mediaUrls, resolver, offset, styles, clip);
+    if (!overlay) return table;
+    const extent = floatingExtent(sheet, offset);
+    const width = Math.max(tableWidth, clip ? Math.min(extent.width, clip.width) : extent.width);
+    const height = clip ? Math.min(extent.height, clip.height) : extent.height;
+    const box = `position:relative;width:${width}px;min-height:${height}px${clip ? ';overflow:hidden' : ''}`;
+    return `<div ${styleAttr(styles, box)}>${table}${overlay}</div>`;
 }
 
-// Mirrors the dataBar geometry + colors from the canvas painter
-// (packages/sheet/src/state/render/data-bar.ts). For a "minus" entry the bar fills
-// the negative half (left of the zero line); for "plus" it fills the positive half.
-// Colors match canvas exactly: positive bars use `format` (user-configurable), negative
-// bars use a hardcoded red — that's a long-standing canvas behavior, intentionally
-// inherited here for visual parity. Diverging would mean the export differs from what
-// users see on screen.
-function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): string {
-    const from = cssColor(bar.format[0]) ?? 'transparent';
-    const to = cssColor(bar.format[1]) ?? 'transparent';
-    let left: number;
-    let width: number;
-    let fill: string;
-    if (bar.valueType === 'minus') {
-        left = bar.minusLen * (1 - bar.valueLen) * 100;
-        width = bar.minusLen * bar.valueLen * 100;
-        fill = bar.format.length > 1 ? 'linear-gradient(to right, #ffffff, #ff0000)' : '#ff0000';
-    } else if (bar.plusLen === 1) {
-        left = 0;
-        width = bar.valueLen * 100;
-        fill = bar.format.length > 1 ? `linear-gradient(to right, ${from}, ${to})` : from;
-    } else {
-        // Mixed range, positive value: bar starts at the zero line (minusLen) and extends right.
-        left = bar.minusLen * 100;
-        width = bar.plusLen * bar.valueLen * 100;
-        fill = bar.format.length > 1 ? `linear-gradient(to right, ${from}, ${to})` : from;
+// A rule may name the whole sheet while the preview renders a small window, and the evaluator visits every cell of
+// every range, running a formula rule's engine once per cell. Clipping keeps that work to what is rendered. A rule
+// that misses the window drops out.
+function clipRulesToWindow(
+    rules: ConditionalFormatRule[],
+    firstRow: number,
+    lastRow: number,
+    firstCol: number,
+    lastCol: number,
+): ConditionalFormatRule[] {
+    const clipped: ConditionalFormatRule[] = [];
+    for (const rule of rules) {
+        const cellrange = rule.cellrange
+            .map((range) => ({
+                row: [Math.max(range.row[0], firstRow), Math.min(range.row[1], lastRow)],
+                column: [Math.max(range.column[0], firstCol), Math.min(range.column[1], lastCol)],
+            }))
+            .filter((range) => range.row[0] <= range.row[1] && range.column[0] <= range.column[1]);
+        if (cellrange.length > 0) clipped.push(withCfRanges(rule, cellrange));
+    }
+    return clipped;
+}
+
+// Images and charts are stored in grid pixels from A1, while the overlay places them against the window's first cell.
+// One anchored above or left of the used range would take a negative offset and fall off the page, so the window
+// starts at the row and column the earliest one, as it turns, starts in.
+function getRenderBounds(
+    sheet: Sheet,
+    config: SheetConfig,
+): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
+    const bounds = getGridBounds(sheet, config.borderInfo ?? {});
+    const floating = floatingObjects(sheet);
+    if (floating.length === 0 || bounds.maxRow < 0) return bounds;
+
+    let x = Number.MAX_SAFE_INTEGER;
+    let y = Number.MAX_SAFE_INTEGER;
+    for (const { bounds: turned } of floating) {
+        x = Math.min(x, turned.minX);
+        y = Math.min(y, turned.minY);
     }
 
-    const barStyle = `position:absolute;top:0;left:${left}%;width:${width}%;height:100%;background:${fill};z-index:0`;
-    return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, 'position:relative;z-index:1')}>${display}</span>`;
+    let minCol = 0;
+    let left = 0;
+    while (minCol < bounds.minCol && left + sheetColumnsWidth(sheet, minCol, minCol) <= x) {
+        left += sheetColumnsWidth(sheet, minCol, minCol);
+        minCol++;
+    }
+    let minRow = 0;
+    let top = 0;
+    while (minRow < bounds.minRow && top + sheetRowsHeight(sheet, minRow, minRow) <= y) {
+        top += sheetRowsHeight(sheet, minRow, minRow);
+        minRow++;
+    }
+    return { ...bounds, minRow, minCol };
 }
 
-// Floating images are stored in unzoomed grid pixels from A1's top-left (the editor's
-// FloatingObjectFrame reads the same fields), while the table starts at the used range —
-// so the overlay subtracts the rows and columns the window skipped.
+function getGridBounds(
+    sheet: Sheet,
+    borderInfo: Record<string, CellBorderSides>,
+): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
+    let minRow = Number.MAX_SAFE_INTEGER;
+    let minCol = Number.MAX_SAFE_INTEGER;
+    let maxRow = -1;
+    let maxCol = -1;
+
+    if (sheet.celldata) {
+        for (const { r, c, v } of sheet.celldata) {
+            if (!hasVisibleContent(v)) continue;
+            if (r < minRow) minRow = r;
+            if (c < minCol) minCol = c;
+            if (r > maxRow) maxRow = r;
+            if (c > maxCol) maxCol = c;
+        }
+    }
+
+    // The raw border keys: folding onto a merge's first cell only ever drops keys.
+    const be = borderInfoExtent(borderInfo);
+    if (be.minRow < minRow) minRow = be.minRow;
+    if (be.minCol < minCol) minCol = be.minCol;
+    if (be.maxRow > maxRow) maxRow = be.maxRow;
+    if (be.maxCol > maxCol) maxCol = be.maxCol;
+
+    if (sheet.config?.merge) {
+        for (const m of Object.values(sheet.config.merge)) {
+            if (m.r < minRow) minRow = m.r;
+            if (m.c < minCol) minCol = m.c;
+            const endRow = m.r + m.rs - 1;
+            const endCol = m.c + m.cs - 1;
+            if (endRow > maxRow) maxRow = endRow;
+            if (endCol > maxCol) maxCol = endCol;
+        }
+    }
+
+    if (maxRow < 0) return { minRow: 0, minCol: 0, maxRow: -1, maxCol: -1 };
+    return { minRow, minCol, maxRow, maxCol };
+}
+
+function hasVisibleContent(v: Cell | null): boolean {
+    if (!v) return false;
+    if (v.v != null || v.m != null || richText(v) !== undefined) return true;
+    if (v.bg || v.fc) return true;
+    if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1) return true;
+    if (v.mc && 'rs' in v.mc) return true; // merge anchor
+    return false;
+}
+
+// The rows and columns the window skips, in grid pixels from A1, which the overlay subtracts from each stored box.
 function gridOffset(sheet: Sheet, minRow: number, minCol: number): { left: number; top: number } {
     return { left: sheetColumnsWidth(sheet, 0, minCol - 1), top: sheetRowsHeight(sheet, 0, minRow - 1) };
 }
@@ -473,6 +457,152 @@ function floatingObjects(sheet: Sheet) {
         const box = { ...stored, x: stored.x - Math.min(0, turned.minX), y: stored.y - Math.min(0, turned.minY) };
         return { item, box, bounds: getElementBounds(box) };
     });
+}
+
+function buildCellStyle(
+    v: Cell | null,
+    borders: CellBorderSides | undefined,
+    showGrid: boolean,
+    cfStyle: CellFormatStyle | undefined,
+    forStylesheet: boolean,
+): string {
+    const parts: string[] = [];
+
+    const rotated = isNumericRotation(v);
+
+    if (v) {
+        const family = cellFontName(v.ff);
+        // In stylesheet text entities stay literal, so escapeHtml there would draw "Bell MT & Co" as "Bell MT &amp;
+        // Co". The quotes are all that could end the quoted name early, and the stylesheet seam strips the rest.
+        if (family) {
+            const name = forStylesheet ? family.replace(/["'\\]/g, '') : escapeHtml(family);
+            const q = fontQuote(forStylesheet);
+            parts.push(`font-family:${q}${name}${q},sans-serif`);
+        }
+        if (v.bl === 1) parts.push('font-weight:bold');
+        if (v.it === 1) parts.push('font-style:italic');
+        if (typeof v.fs === 'number') parts.push(`font-size:${v.fs}pt`);
+        // A rule's colors win over the cell's own, as on the canvas.
+        const textColor = cssColor(cfStyle?.textColor || v.fc);
+        if (textColor) parts.push(`color:${textColor}`);
+        const cellColor = cssColor(cfStyle?.cellColor || v.bg);
+        if (cellColor) parts.push(`background:${cellColor}`);
+        // A rotated cell's span is placed absolutely (wrapForRotation), so no alignment acts on it. Any other cell
+        // writes its own text-align, else Excel's General one as the canvas draws it, where left, the td's own, writes
+        // none. Its vertical-align defaults to middle.
+        if (!rotated) {
+            const general = generalAlign(v);
+            const ht = v.ht != null && v.ht in HORIZONTAL_ALIGN ? v.ht : general === '1' ? undefined : Number(general);
+            if (ht !== undefined) parts.push(`text-align:${HORIZONTAL_ALIGN[ht]}`);
+            const valign = v.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
+            parts.push(`vertical-align:${valign}`);
+        }
+        if (cellWrapsText(v)) parts.push('white-space:pre-wrap;word-wrap:break-word');
+        if (v.un === 1 && v.cl === 1) {
+            parts.push('text-decoration:underline line-through');
+        } else if (v.un === 1) {
+            parts.push('text-decoration:underline');
+        } else if (v.cl === 1) {
+            parts.push('text-decoration:line-through');
+        }
+    } else if (cfStyle) {
+        // Some rules color an empty cell too: only the rule's colors apply.
+        const textColor = cssColor(cfStyle.textColor);
+        if (textColor) parts.push(`color:${textColor}`);
+        const cellColor = cssColor(cfStyle.cellColor);
+        if (cellColor) parts.push(`background:${cellColor}`);
+    }
+
+    if (borders) {
+        // CSS has no diagonal border, so the slash side `s` is not rendered.
+        parts.push(...borderSidesToCss(borders, (color) => cssColor(color) ?? 'transparent'));
+    } else if (showGrid) {
+        parts.push('border:1px solid #d4d4d4');
+    }
+
+    // Both the data bar's layer and a rotated span are placed absolutely inside the cell.
+    if (rotated || cfStyle?.dataBar) {
+        parts.push('position:relative');
+    }
+
+    return parts.join(';');
+}
+
+// Cell, border and rule colors are schemaless strings a collaborator sets, so only one the color parser reads reaches the
+// CSS: `red;position:fixed;inset:0` would add declarations of its own to the export and the drive hero.
+// A bare keyword (a named color) can't add a declaration, so it passes as CSS reads it.
+function cssColor(color: string | null | undefined): string | undefined {
+    if (!color) return undefined;
+    return cssColorToHex(color) !== undefined || isTransparentCssColor(color) || /^[a-z]+$/i.test(color)
+        ? color
+        : undefined;
+}
+
+// A font name's quote is a real `"` in stylesheet text and `&quot;` in a style attribute, where a `"` would end the
+// attribute and drop every later declaration.
+function fontQuote(forStylesheet: boolean): string {
+    return forStylesheet ? '"' : '&quot;';
+}
+
+function getCellDisplay(v: Cell | null): string {
+    if (!v) return '';
+    const rich = richText(v);
+    if (rich !== undefined) return escapeHtml(rich);
+    if (v.m != null) return escapeHtml(String(v.m));
+    if (v.v == null) return '';
+    if (typeof v.v === 'boolean') return booleanDisplay(v.v);
+    return escapeHtml(String(v.v));
+}
+
+// The cell's content turned as the canvas turns it. The span is pinned to the corner the text turns around: left and
+// bottom for a positive rt, which turns up, and left and top for a negative one. CSS turns clockwise and rt
+// anticlockwise, as Excel does, so the angle is negated. Turned around a corner, the text would swing past the cell's
+// left edge and be clipped, so the span shifts right by sin(rt) em after it turns, as the canvas shifts its pivot by
+// the text's height. A 'vertical' rt stacks the characters with writing-mode instead.
+function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry): string {
+    if (!v || v.rt == null) return inner;
+    if (v.rt === 'vertical') {
+        return `<span ${styleAttr(styles, 'writing-mode:vertical-rl;text-orientation:upright')}>${inner}</span>`;
+    }
+    if (isNumericRotation(v)) {
+        const { rt } = v;
+        const cssAngle = -rt;
+        const yPin = rt > 0 ? 'bottom:0' : 'top:0';
+        const origin = rt > 0 ? 'left bottom' : 'left top';
+        const overhangEm = Math.abs(Math.sin((rt * Math.PI) / 180)).toFixed(3);
+        const decl =
+            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;` +
+            `transform-origin:${origin};transform:translateX(${overhangEm}em) rotate(${cssAngle}deg)`;
+        return `<span ${styleAttr(styles, decl)}>${inner}</span>`;
+    }
+    return inner;
+}
+
+// The data bar as the canvas paints it: a negative value fills the half left of the zero line, a positive one the half
+// right of it. The canvas paints a negative bar red whatever the rule's color, so the export does too.
+function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): string {
+    const from = cssColor(bar.format[0]) ?? 'transparent';
+    const to = cssColor(bar.format[1]) ?? 'transparent';
+    let left: number;
+    let width: number;
+    let fill: string;
+    if (bar.valueType === 'minus') {
+        left = bar.minusLen * (1 - bar.valueLen) * 100;
+        width = bar.minusLen * bar.valueLen * 100;
+        fill = bar.format.length > 1 ? 'linear-gradient(to right, #ffffff, #ff0000)' : '#ff0000';
+    } else if (bar.plusLen === 1) {
+        left = 0;
+        width = bar.valueLen * 100;
+        fill = bar.format.length > 1 ? `linear-gradient(to right, ${from}, ${to})` : from;
+    } else {
+        // A positive value in a range with negatives starts at the zero line.
+        left = bar.minusLen * 100;
+        width = bar.plusLen * bar.valueLen * 100;
+        fill = bar.format.length > 1 ? `linear-gradient(to right, ${from}, ${to})` : from;
+    }
+
+    const barStyle = `position:absolute;top:0;left:${left}%;width:${width}%;height:100%;background:${fill};z-index:0`;
+    return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, 'position:relative;z-index:1')}>${display}</span>`;
 }
 
 // Images and charts at their stored boxes, rotated about their centers, in the order the editor stacks them. An image
@@ -509,217 +639,32 @@ function renderFloatingObjects(
     return parts.join('');
 }
 
-// Cell, border and rule colors are schemaless strings a collaborator sets, so only one the color parser reads reaches the
-// CSS: `red;position:fixed;inset:0` would add declarations of its own to the export and the drive hero.
-// A bare keyword (a named color) can't add a declaration, so it passes as CSS reads it.
-function cssColor(color: string | null | undefined): string | undefined {
-    if (!color) return undefined;
-    return cssColorToHex(color) !== undefined || isTransparentCssColor(color) || /^[a-z]+$/i.test(color)
-        ? color
-        : undefined;
+function styleAttr(styles: StyleRegistry | undefined, declarations: string): string {
+    return styles ? `class="${internStyle(styles, declarations)}"` : `style="${declarations}"`;
 }
 
-function buildCellStyle(
-    v: Cell | null,
-    borders: CellBorderSides | undefined,
-    showGrid: boolean,
-    cfStyle: CellFormatStyle | undefined,
-    forStylesheet: boolean,
-): string {
-    const parts: string[] = [];
-
-    const rotated = isNumericRotation(v);
-
-    if (v) {
-        const family = cellFontName(v.ff);
-        // The name itself is escaped for its context too: entity-encoded in an attribute,
-        // but in stylesheet text entities stay literal, so escapeHtml there would render
-        // a font called "Bell MT & Co" as "Bell MT &amp; Co". Dropping the quote
-        // characters is what a stylesheet actually needs — they are all that could end
-        // the quoted value early, and the seam strips the CSS-structural rest.
-        if (family) {
-            const name = forStylesheet ? family.replace(/["'\\]/g, '') : escapeHtml(family);
-            const q = fontQuote(forStylesheet);
-            parts.push(`font-family:${q}${name}${q},sans-serif`);
-        }
-        if (v.bl === 1) parts.push('font-weight:bold');
-        if (v.it === 1) parts.push('font-style:italic');
-        if (typeof v.fs === 'number') parts.push(`font-size:${v.fs}pt`);
-        // CF colors override the static `fc`/`bg` fields, matching the canvas painter.
-        const textColor = cssColor(cfStyle?.textColor || v.fc);
-        if (textColor) parts.push(`color:${textColor}`);
-        const cellColor = cssColor(cfStyle?.cellColor || v.bg);
-        if (cellColor) parts.push(`background:${cellColor}`);
-        // Rotated cells skip ht/vt — the rotated span is absolutely-positioned in the
-        // cell (see wrapForRotation) so neither alignment property has anything to act
-        // on. Non-rotated cells emit the user's text-align, else Excel's General one as the canvas
-        // painter draws it (left, the td's own, emits none), plus a single vertical-align (default `middle`).
-        if (!rotated) {
-            const general = generalAlign(v);
-            const ht = v.ht != null && v.ht in HORIZONTAL_ALIGN ? v.ht : general === '1' ? undefined : Number(general);
-            if (ht !== undefined) parts.push(`text-align:${HORIZONTAL_ALIGN[ht]}`);
-            const valign = v.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
-            parts.push(`vertical-align:${valign}`);
-        }
-        if (cellWrapsText(v)) parts.push('white-space:pre-wrap;word-wrap:break-word');
-        if (v.un === 1 && v.cl === 1) {
-            parts.push('text-decoration:underline line-through');
-        } else if (v.un === 1) {
-            parts.push('text-decoration:underline');
-        } else if (v.cl === 1) {
-            parts.push('text-decoration:line-through');
-        }
-    } else if (cfStyle) {
-        // CF can land on a cell with no `v` (engine still emits an entry for empty cells in some
-        // rules); render its color overrides without dragging in the v-block defaults.
-        const textColor = cssColor(cfStyle.textColor);
-        if (textColor) parts.push(`color:${textColor}`);
-        const cellColor = cssColor(cfStyle.cellColor);
-        if (cellColor) parts.push(`background:${cellColor}`);
+function internStyle(styles: StyleRegistry, declarations: string): string {
+    let cls = styles.get(declarations);
+    if (cls === undefined) {
+        cls = `s${styles.size}`;
+        styles.set(declarations, cls);
     }
-
-    if (borders) {
-        // CSS has no diagonal border, so the slash side `s` is not rendered.
-        parts.push(...borderSidesToCss(borders, (color) => cssColor(color) ?? 'transparent'));
-    } else if (showGrid) {
-        parts.push('border:1px solid #d4d4d4');
-    }
-
-    // `position:relative` is the cell's contribution to two unrelated overlay patterns:
-    // the absolutely-positioned data-bar div from renderDataBar() and the rotated span
-    // from wrapForRotation(). One declaration covers both.
-    if (rotated || cfStyle?.dataBar) {
-        parts.push('position:relative');
-    }
-
-    return parts.join(';');
+    return cls;
 }
 
-// Render the cell's content with rotation applied. The td has `position:relative` (set in
-// buildCellStyle), so the span anchors itself absolutely at the cell corner the rotation
-// pivots around — no inline-flow / vertical-align gymnastics, no zero-height wrapper.
-//
-// Geometry mirrors the canvas painter — the rotation in state/render/cell-text.ts, the
-// pivot offsets getCellTextInfo computes in state/modules/text.ts. Three pieces:
-//
-//   1. Anchor: positive rt (CCW / "up") pins to left+bottom; negative rt (CW / "down")
-//      pins to left+top. transform-origin matches the same corner so the pivot stays
-//      exactly on the cell edge.
-//
-//   2. Rotation: CSS `rotate()` is CW-positive while our `rt` is CCW-positive (matching
-//      Excel/OOXML), so the emitted angle is negated.
-//
-//   3. Counter-translation: rotating around a corner makes the character tops (positive
-//      rt) or character bottoms (negative rt) swing past the cell's left edge — at
-//      rt = ±90 the whole rotated bbox sits OUTSIDE the cell and `overflow:hidden`
-//      eats it. Canvas adds a `textHeight * sin(rt)` rightward offset to the pivot for
-//      the same reason; in CSS we get the same effect with `translateX(|sin(rt)| em)`
-//      applied AFTER rotation (the transform reads right-to-left). 1em ≈ font-size ≈
-//      canvas's textHeight, so the offset scales naturally with the cell's font.
-//
-// `rt: 'vertical'` uses CSS writing-mode for stacked top-to-bottom characters; the span
-// flows naturally without absolute positioning since writing-mode handles the layout.
-function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry): string {
-    if (!v || v.rt == null) return inner;
-    if (v.rt === 'vertical') {
-        return `<span ${styleAttr(styles, 'writing-mode:vertical-rl;text-orientation:upright')}>${inner}</span>`;
+// A cell's values are schemaless strings, and in a stylesheet they sit in CSS text, where other characters are
+// structural and no HTML entity is decoded. Every declaration passes here, so the whole class is closed at one seam.
+// `<` and `>` end the <style> element, and the sanitizer keeps what follows. `{` and `}` open and close a rule. `\`
+// starts a CSS escape, which could spell `url(` past the sanitizer's scan. `/*` opens a comment that swallows every
+// later rule. None of them is in a real declaration.
+const CSS_TEXT_STRUCTURAL = /[<>{}\\]|\/\*|\*\//g;
+
+function serializeStyleRules(styles: StyleRegistry): string {
+    const rules = [`td{${BASE_TD_STYLE}}`];
+    for (const [declarations, cls] of styles) {
+        rules.push(`.${cls}{${declarations.replace(CSS_TEXT_STRUCTURAL, '')}}`);
     }
-    if (isNumericRotation(v)) {
-        const { rt } = v;
-        const cssAngle = -rt;
-        const yPin = rt > 0 ? 'bottom:0' : 'top:0';
-        const origin = rt > 0 ? 'left bottom' : 'left top';
-        const overhangEm = Math.abs(Math.sin((rt * Math.PI) / 180)).toFixed(3);
-        const decl =
-            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;` +
-            `transform-origin:${origin};transform:translateX(${overhangEm}em) rotate(${cssAngle}deg)`;
-        return `<span ${styleAttr(styles, decl)}>${inner}</span>`;
-    }
-    return inner;
-}
-
-function hasVisibleContent(v: Cell | null): boolean {
-    if (!v) return false;
-    if (v.v != null || v.m != null || richText(v) !== undefined) return true;
-    if (v.bg || v.fc) return true;
-    if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1) return true;
-    if (v.mc && 'rs' in v.mc) return true; // merge anchor
-    return false;
-}
-
-function getGridBounds(
-    sheet: Sheet,
-    borderInfo: Record<string, CellBorderSides>,
-): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
-    let minRow = Number.MAX_SAFE_INTEGER;
-    let minCol = Number.MAX_SAFE_INTEGER;
-    let maxRow = -1;
-    let maxCol = -1;
-
-    if (sheet.celldata) {
-        for (const { r, c, v } of sheet.celldata) {
-            if (!hasVisibleContent(v)) continue;
-            if (r < minRow) minRow = r;
-            if (c < minCol) minCol = c;
-            if (r > maxRow) maxRow = r;
-            if (c > maxCol) maxCol = c;
-        }
-    }
-
-    // Extend bounds to cover border cells (raw keys — folding only ever drops keys onto masters).
-    const be = borderInfoExtent(borderInfo);
-    if (be.minRow < minRow) minRow = be.minRow;
-    if (be.minCol < minCol) minCol = be.minCol;
-    if (be.maxRow > maxRow) maxRow = be.maxRow;
-    if (be.maxCol > maxCol) maxCol = be.maxCol;
-
-    // Extend bounds to cover merge ranges
-    if (sheet.config?.merge) {
-        for (const m of Object.values(sheet.config.merge)) {
-            if (m.r < minRow) minRow = m.r;
-            if (m.c < minCol) minCol = m.c;
-            const endRow = m.r + m.rs - 1;
-            const endCol = m.c + m.cs - 1;
-            if (endRow > maxRow) maxRow = endRow;
-            if (endCol > maxCol) maxCol = endCol;
-        }
-    }
-
-    if (maxRow < 0) return { minRow: 0, minCol: 0, maxRow: -1, maxCol: -1 };
-    return { minRow, minCol, maxRow, maxCol };
-}
-
-// Images and charts are stored in grid pixels from A1 while the overlay positions them against the
-// window's first cell, so one anchored above or left of the used range would take a negative offset
-// and fall off the page: the window drops to the track the earliest one, as it turns, starts in.
-function getRenderBounds(
-    sheet: Sheet,
-    config: SheetConfig,
-): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
-    const bounds = getGridBounds(sheet, config.borderInfo ?? {});
-    const floating = floatingObjects(sheet);
-    if (floating.length === 0 || bounds.maxRow < 0) return bounds;
-
-    let x = Number.MAX_SAFE_INTEGER;
-    let y = Number.MAX_SAFE_INTEGER;
-    for (const { bounds: turned } of floating) {
-        x = Math.min(x, turned.minX);
-        y = Math.min(y, turned.minY);
-    }
-
-    let minCol = 0;
-    let left = 0;
-    while (minCol < bounds.minCol && left + sheetColumnsWidth(sheet, minCol, minCol) <= x) {
-        left += sheetColumnsWidth(sheet, minCol, minCol);
-        minCol++;
-    }
-    let minRow = 0;
-    let top = 0;
-    while (minRow < bounds.minRow && top + sheetRowsHeight(sheet, minRow, minRow) <= y) {
-        top += sheetRowsHeight(sheet, minRow, minRow);
-        minRow++;
-    }
-    return { ...bounds, minRow, minCol };
+    return rules.join('\n');
 }
 
 const SHEET_CSS_BASE = `
