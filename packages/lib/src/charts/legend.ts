@@ -84,7 +84,7 @@ export function placeLegend(
     const room = (frame.right - frame.left) * LABEL_SHARE - indent;
     const fitted = items.map((item) => fit(ctx, item.name, room));
     const fits = Math.max(0, Math.floor((frame.bottom - frame.top) / lh));
-    const kept = items.length > fits ? items.slice(0, fits - 1) : items;
+    const kept = items.length > fits ? items.slice(0, Math.max(0, fits - 1)) : items;
     const more = kept.length < items.length && fits > 0 ? `+${items.length - kept.length}` : '';
     const columnWidth = indent + Math.max(measure(ctx, more), ...fitted.map((text) => measure(ctx, text)));
     const top = (frame.top + frame.bottom - (kept.length + (more === '' ? 0 : 1)) * lh) / 2;

@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { chartColor } from '../../charts';
+import { chartContext } from '../../charts/context';
+import { placeLegend } from '../../charts/legend';
 import type { ChartData } from '../../types/chart';
 import { solidFill } from '../../vector/fill';
 import { measureLabel } from '../../vector/text-width';
-import { labelBounds, layout, lines, rects, series, style } from './layout-fixtures';
+import { labelBounds, layout, lines, PAINT, rects, series, style } from './layout-fixtures';
 
 describe('legend', () => {
     test('top and bottom are a centered row of swatches, left and right a column', () => {
@@ -78,6 +80,18 @@ describe('legend', () => {
                 expect(bottom - top).toBeLessThanOrEqual(300 * 0.3);
                 expect(Math.min(...lines(out, 'gridline').map((line) => line.y))).toBeGreaterThan(bottom);
             }
+        }
+    });
+
+    // The layout never reaches this, since a frame this short draws "Chart too small" instead of a plot.
+    test('a side legend in a frame shorter than one line keeps no entry', () => {
+        const ctx = chartContext({ id: 'c', width: 400, height: 300, paint: PAINT }, 'Inter');
+        const items = [0, 1, 2].map((i) => ({ name: `S${i}`, color: chartColor(i) }));
+        const frame = { left: 0, top: 0, right: 400, bottom: ctx.lineHeight / 2 };
+        for (const position of ['left', 'right'] as const) {
+            ctx.labels = [];
+            expect(placeLegend(ctx, position, items, frame).shapes).toEqual([]);
+            expect(ctx.labels).toEqual([]);
         }
     });
 });
