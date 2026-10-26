@@ -231,6 +231,7 @@ Budgets and charts:
 
 - `budget()` is the counter every reader uses for its own caps: `charge` for work a file can't be read without, `spend` for work that may be left out, such as a chart.
 - A reader charges `chartCost(root)` before `readChart`. `readChart` checks the series count against `MAX_CHART_SERIES` (32) and each cache's point count against `MAX_CHART_POINTS` (2,000) before it builds anything.
+- A chart's line width outside ST_LineWidth's 0 to 20,116,800 EMU reads as the automatic width.
 - `chartPart` reads a chart only through a chart relationship, under the format's charts folder, and only when it has the chart content type.
 
 Past all of these, the transform process's memory limit is the backstop. Inflating and parsing are synchronous, so the readers run in that process rather than on the server's main thread.

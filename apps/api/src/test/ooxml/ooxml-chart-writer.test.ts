@@ -570,6 +570,18 @@ describe('readChartPartLook', () => {
         expect(look(stated)).toMatchObject({ strokeWidth: 1, seriesStrokeWidth: 1.33 });
     });
 
+    test('a line width outside the schema range of 0 to 1584 pt, or no number at all, draws the automatic width', () => {
+        const axisWidth = (w: string) =>
+            look(part(`<c:barChart/><c:catAx><c:spPr><a:ln w="${w}"/></c:spPr></c:catAx><c:valAx/>`)).strokeWidth;
+        for (const w of ['', ' ', 'wide', '-9525', '20116801', '1e300']) expect([w, axisWidth(w)]).toEqual([w, 1]);
+        expect(axisWidth('0')).toBe(0);
+        expect(axisWidth('20116800')).toBe(2112);
+        const series = part(
+            '<c:lineChart><c:ser><c:spPr><a:ln w="1e300"/></c:spPr></c:ser></c:lineChart><c:catAx/><c:valAx/>',
+        );
+        expect(look(series)).toMatchObject({ strokeWidth: 1, seriesStrokeWidth: 3 });
+    });
+
     test('an axis drawn without a line keeps its gridlines, which the stroke draws then', () => {
         const hidden = '<c:catAx><c:spPr><a:ln><a:noFill/></a:ln></c:spPr></c:catAx>';
         const gridlines = (shape: string) =>
