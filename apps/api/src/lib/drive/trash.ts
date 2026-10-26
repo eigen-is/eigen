@@ -27,6 +27,15 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     }
 
     const trashedItem = await mount.trashPath(item.id);
+    // A document can move into the folder after Drive.deletePath read the paths it guards. trashPath
+    // closed its database with the rest, so the document closes now, before the slow steps below, and
+    // stops taking edits it can't save. The trash is in, so a close that fails is only logged.
+    for (const id of [item.id, ...mount.collectDescendantIds(item.id)]) {
+        if (!drive.hasCollabDocument(mount.id, id)) continue;
+        await drive
+            .closeCollabDocument(mount.id, id, { skipFinalSnapshot: true })
+            .catch((error) => console.error(`Failed to close collab document ${id}:`, error));
+    }
     drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
     if (user) {
         mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });

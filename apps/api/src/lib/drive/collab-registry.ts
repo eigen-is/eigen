@@ -80,17 +80,13 @@ export class CollabRegistry {
     }
 
     // Runs a trash of the path and refuses every open at or below it until the trash is done. The
-    // refused socket tries again, and by then the path is in the trash, so it gets a 404.
+    // refused socket tries again, and by then the path is in the trash, so it gets a 404. A document
+    // that moves in after the keys are read isn't refused, so the trash closes it itself.
     public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {
         const keys = [pathId, ...mount.collectDescendantIds(pathId)].map((id) => this.key(mount.id, id));
         for (const key of keys) this.trashing.set(key, (this.trashing.get(key) ?? 0) + 1);
         try {
             await trash();
-            // A document can move into the folder after the keys above were read. The trash closed its
-            // database with the rest, so the document closes now and stops taking edits it can't save.
-            for (const id of [pathId, ...mount.collectDescendantIds(pathId)]) {
-                if (this.has(mount.id, id)) await this.close(mount, id, { skipFinalSnapshot: true });
-            }
         } finally {
             for (const key of keys) {
                 const count = this.trashing.get(key) ?? 0;

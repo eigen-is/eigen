@@ -126,6 +126,42 @@ describe('trash closes open collab documents', () => {
         expect(fresh.doc.getMap('state').toJSON()).toEqual({ before: 'kept', afterRestore: 'typed' });
     });
 
+    // The trash is in once trashPath returns. A document that moved in and then fails to close only
+    // logs, and the DELETE still answers that the folder is in the trash.
+    test('a close that fails after the trash still answers the DELETE with success', async () => {
+        const folder = await home.drive.createFolder(mountId, rootId, 'trash-close-fails');
+        const doc = await createDoc('trash-close-fails-doc');
+        await home.drive.getCollabDocument(mountId, doc.id);
+        const { mount } = await home.drive.resolveFile(mountId, doc.id);
+        const trashPath = mount.trashPath.bind(mount);
+        const trashSpy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
+            await mount.updatePath(doc.id, { parentId: folder.id });
+            return trashPath(pathId);
+        });
+        const closeSpy = spyOn(mount, 'closeDatabase').mockImplementation(async () => {
+            throw new ApiError(503, 'storage unavailable');
+        });
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        let res: Response;
+        let logged: unknown[][];
+        try {
+            res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/path/${folder.id}`,
+                { method: 'DELETE' },
+            );
+        } finally {
+            logged = errors.mock.calls;
+            errors.mockRestore();
+            closeSpy.mockRestore();
+            trashSpy.mockRestore();
+        }
+        expect(res.status).toBe(200);
+        expect((await mount.getPath(folder.id))?.trashedAt).not.toBeNull();
+        expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+        expect(logged.some((call) => String(call[0]).includes(doc.id))).toBe(true);
+    });
+
     // Each trash refuses the opens below its own path. When a trash of a document inside the folder
     // fails, the folder's trash still refuses an open of that document.
     test('a failed trash inside a folder that is being trashed keeps the folder refusing opens', async () => {
