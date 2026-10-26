@@ -1,10 +1,12 @@
-// Audits the pptx writer on a corpus. roundtrip is its gate (office-audit.ts): each file the reader imports becomes a
-// deck as an import makes one, is written by the writer (`--writer`, writePptx's signature) with its pictures prepared
-// as an export prepares them, and imported again; the two decks are compared slide by slide and element by element in
-// z-order, each length in the EMU the writer writes it in, a picture by its type and pixel size.
+// Audits the pptx writer on a corpus. roundtrip is its gate, on the round-trip gate the Office audits share. Each file
+// the reader imports becomes a deck as an import makes one. The writer (`--writer`, writePptx's signature) writes it
+// with its pictures prepared as an export prepares them, and it is imported again. The two decks are compared slide by
+// slide and element by element in z-order, each length in the EMU the writer writes it in, a picture by its type and
+// pixel size.
 //
 // Usage:
 //   bun apps/api/src/scripts/pptx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]
+
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { gradientStops } from '@workspace/lib/background';

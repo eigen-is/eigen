@@ -66,6 +66,8 @@ export type ChartHost = 'docx' | 'xlsx' | 'pptx';
 export const CHART_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
 
 export const CHART_NOT_IMPORTED = 'Chart not imported';
+// What follows the kind's name on the line a chart of a kind Eigen can't draw leaves.
+export const KIND_NOT_IMPORTED = 'chart not imported';
 
 // ── Tables the writer shares ────────────────────────────────────────────────────────────────────────────────────
 
@@ -508,7 +510,7 @@ function chartFont(root: XmlElement): string {
 
 // What a format shows in place of a chart readChart can't draw: which kind it was, and its title.
 export function droppedChart({ title, name }: { title: string; name: string }): string[] {
-    const label = name ? `${name} chart not imported` : CHART_NOT_IMPORTED;
+    const label = name ? `${name} ${KIND_NOT_IMPORTED}` : CHART_NOT_IMPORTED;
     return title ? [label, title] : [label];
 }
 

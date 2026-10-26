@@ -6,13 +6,14 @@
 //   bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>
 //   bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]
 //
-// The importer module exports `docxToPmJson` with from-docx.ts's signature. It runs in a Worker, and the source is read
-// in another, so a hang is cut at the time cap and a crash is a result; every importer is measured by the same code.
-// The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
+// The importer module exports `docxToPmJson` with that function's signature. It runs in a Worker, and the source is
+// read in another, so a hang is cut at the time cap and a crash is a result. Every importer is measured by the same
+// code. The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
 //
-// roundtrip is the docx writer's gate (office-audit.ts): each file the reader imports is written by the writer
-// (`--writer`, writeDocx's signature) and imported again, and the two eigendoc JSON documents, their bands, page and
-// Normal compared node by node, a picture by its type and pixel size.
+// roundtrip is the docx writer's gate, on the round-trip gate the Office audits share. Each file the reader imports is
+// written by the writer (`--writer`, writeDocx's signature) and imported again. The two eigendoc JSON documents, their
+// bands, page and Normal are compared node by node, a picture by its type and pixel size.
+
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';

@@ -13,7 +13,7 @@ import { toTransferableBuffer } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/office-image';
 import type { ImportedMedia } from '../lib/import/image-types';
-import { CHART_NOT_IMPORTED } from '../lib/ooxml/ooxml-chart';
+import { CHART_NOT_IMPORTED, KIND_NOT_IMPORTED } from '../lib/ooxml/ooxml-chart';
 
 export const MB = 1024 * 1024;
 
@@ -186,7 +186,7 @@ export type ChartsNotImported = { count: number; kinds: Record<string, number> }
 
 const NO_KIND = '(none named)';
 const NO_PLACEHOLDER = '(no placeholder)';
-const PLACEHOLDER = new RegExp(`(?:^|>)([^<>]*?) chart not imported(?=<|$)|(?:^|>)${CHART_NOT_IMPORTED}(?=<|$)`, 'g');
+const PLACEHOLDER = new RegExp(`(?:^|>)([^<>]*?) ${KIND_NOT_IMPORTED}(?=<|$)|(?:^|>)${CHART_NOT_IMPORTED}(?=<|$)`, 'g');
 
 // The writer's counted losses as the round trip reports them: each code with its count.
 export function lossCounts(warnings: TransformWarning[]): Map<string, number> {
