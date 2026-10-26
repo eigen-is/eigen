@@ -15,10 +15,10 @@ export const IMAGE_TYPES: ReadonlySet<string> = new Set(IMAGE_EXTENSION_BY_MIME.
 // docx figure of one of these shows as a broken image.
 export const UNSHOWN_IMAGE_TYPES: ReadonlySet<string> = new Set(['image/bmp', 'image/x-wmf', 'image/x-emf']);
 
-// A slide or a sheet draws its picture in the browser and exports it through sharp, so it keeps the types both draw.
-// No browser but Safari draws a TIFF.
+// A slide or a sheet draws its picture in the browser and exports it through sharp, so it keeps only the types both
+// draw, a type added to IMAGE_TYPES staying out until it is listed. No browser but Safari draws a TIFF.
 const PICTURE_TYPES: ReadonlySet<string> = new Set(
-    [...IMAGE_TYPES].filter((type) => !UNSHOWN_IMAGE_TYPES.has(type) && type !== 'image/tiff'),
+    ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'].filter((type) => IMAGE_TYPES.has(type)),
 );
 
 // What a picture left out leaves in its place: a slide's box, a document's line.
