@@ -87,15 +87,23 @@ describe('collectExportMedia', () => {
             ],
             ['lossless.webp', await gradient(320, 200).webp({ lossless: true }).toBuffer()],
             ['lossy.webp', await gradient(320, 200).webp({ quality: 80 }).toBuffer()],
+            // VP8X: a lossy WebP whose EXIF takes the extended header, no alpha.
             [
                 'tagged.webp',
                 await gradient(320, 200)
                     .webp({ quality: 80 })
+                    .withExif({ IFD0: { Copyright: 'Eigen' } })
+                    .toBuffer(),
+            ],
+            // VP8X: a lossless WebP whose ICC profile and EXIF take the extended header, its VP8L chunk after them.
+            [
+                'tagged-lossless.webp',
+                await gradient(320, 200)
+                    .webp({ lossless: true })
                     .withIccProfile('p3')
                     .withExif({ IFD0: { Copyright: 'Eigen' } })
                     .toBuffer(),
             ],
-            ['wide.webp', await gradient(3000, 1000).webp({ quality: 80 }).toBuffer()],
             ['photo.avif', await gradient(320, 200).avif().toBuffer()],
             ['drawing.svg', Buffer.from(SVG)],
             // Past the inliner's cap, which binds only what it builds: nothing here is inlined.
@@ -112,6 +120,7 @@ describe('collectExportMedia', () => {
                     '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><text>a&nbsp;b</text></svg>',
                 ),
             ],
+            // VP8X: a lossy WebP with alpha.
             ['clear.webp', await clear().webp({ quality: 80 }).toBuffer()],
             ['clear.tiff', await clear().tiff({ compression: 'lzw' }).toBuffer()],
             // A PNG whose stored type says JPEG.
@@ -228,30 +237,12 @@ describe('collectExportMedia', () => {
         };
         expect(kinds('chart.png')).toEqual(['image/png', PNG_SIGNATURE, 800, 500]);
         expect(kinds('still.gif')).toEqual(['image/png', PNG_SIGNATURE, 60, 40]);
+        expect(kinds('lossless.webp')).toEqual(['image/png', PNG_SIGNATURE, 320, 200]);
+        expect(kinds('tagged-lossless.webp')).toEqual(['image/png', PNG_SIGNATURE, 320, 200]);
         expect(kinds('photo.jpg')).toEqual(['image/jpeg', JPEG_SIGNATURE, 600, 400]);
+        expect(kinds('lossy.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
+        expect(kinds('tagged.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
         expect(kinds('photo.avif')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
-    }, 60_000);
-
-    test('a WebP is its source, byte for byte, lossless, lossy, tagged or transparent, with the Worker size', async () => {
-        const media = await collect('docx');
-        for (const name of ['lossless.webp', 'lossy.webp', 'tagged.webp', 'clear.webp']) {
-            const { contentType, data, width, height } = find(media, name);
-            const { width: sourceWidth, height: sourceHeight } = await sharp(sources.get(name)).metadata();
-            expect([
-                name,
-                contentType,
-                Buffer.from(data).equals(sources.get(name) ?? Buffer.alloc(0)),
-                width,
-                height,
-            ]).toEqual([name, 'image/webp', true, sourceWidth, sourceHeight]);
-        }
-    }, 60_000);
-
-    test('a WebP past 2560 px shrinks to it as a WebP, and reports its own size', async () => {
-        const wide = find(await collect('docx'), 'wide.webp');
-        const { format, width, height } = await sharp(Buffer.from(wide.data)).metadata();
-        expect([wide.contentType, format, width, height]).toEqual(['image/webp', 'webp', 2560, 853]);
-        expect([wide.width, wide.height]).toEqual([3000, 1000]);
     }, 60_000);
 
     test('a pptx and an xlsx take what a docx takes: each image from its source, with the Worker size', async () => {
@@ -262,9 +253,18 @@ describe('collectExportMedia', () => {
         expect(summary(await collect('xlsx'))).toEqual(docx);
     }, 60_000);
 
+    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with ICC, EXIF or alpha', () => {
+        const chunk = (name: string) => sources.get(name)?.toString('latin1', 12, 16);
+        expect(['lossless.webp', 'lossy.webp', 'tagged.webp', 'tagged-lossless.webp', 'clear.webp'].map(chunk)).toEqual(
+            ['VP8L', 'VP8 ', 'VP8X', 'VP8X', 'VP8X'],
+        );
+        const tagged = sources.get('tagged-lossless.webp')?.toString('latin1') ?? '';
+        expect(tagged.indexOf('ICCP')).toBeLessThan(tagged.indexOf('VP8L'));
+    });
+
     test('a transparent image stays a transparent PNG, whatever its type or stored MIME says', async () => {
         const media = await collect('docx');
-        for (const name of ['clear.tiff', 'clear.jpg']) {
+        for (const name of ['clear.webp', 'clear.tiff', 'clear.jpg']) {
             const { contentType, data, width, height } = find(media, name);
             const alpha = (await sharp(Buffer.from(data)).ensureAlpha().raw().toBuffer())[3];
             expect([name, contentType, signatureOf(data), width, height, alpha]).toEqual([
@@ -340,12 +340,12 @@ describe('collectExportMedia', () => {
                     ['huge.svg', 'image/svg+xml'],
                     ['lossless.webp', 'image/webp'],
                     ['lossy.webp', 'image/webp'],
+                    ['tagged-lossless.webp', 'image/webp'],
                     ['photo.avif', 'image/webp'],
                     ['photo.jpg', 'image/webp'],
                     ['still.gif', 'image/webp'],
                     ['tagged.webp', 'image/webp'],
                     ['wide.png', 'image/webp'],
-                    ['wide.webp', 'image/webp'],
                 ].sort(),
             );
             for (const item of media) {
