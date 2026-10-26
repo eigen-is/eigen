@@ -211,6 +211,16 @@ describe('Sheets HTML export — class-based styles', () => {
         expect(out.html).toContain('<div class="sheet">');
     });
 
+    test('a sheet of only an image ends its page too', () => {
+        const pictured: Sheet = {
+            ...makeSheet([]),
+            images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10 }),
+        };
+        const out = renderSheetsHtml([pictured, makeSheet([{ r: 0, c: 0, v: { v: 'two' } }])], NO_MEDIA);
+        const brk = classesFor(out, 'page-break-after:always');
+        expect(out.html.startsWith(`<div class="sheet ${brk[0]}">`)).toBe(true);
+    });
+
     test('the export document embeds the class rules in a body style element', () => {
         const doc = sheetsHtmlDocument({
             title: 'T',
@@ -1522,7 +1532,7 @@ describe('Sheets HTML export — the cell cap', () => {
         });
     }, 30_000);
 
-    test('the cap is spent across the sheets in tab order, and a sheet with nothing left is cut to nothing', async () => {
+    test('the cap is spent across the sheets in tab order, and a sheet with too little left is left out', async () => {
         const forged = (id: string): Sheet => ({
             id,
             name: id,
@@ -1536,14 +1546,51 @@ describe('Sheets HTML export — the cell cap', () => {
         });
         const sheets = [forged('s0'), forged('s1'), forged('s2')];
         const out = renderSheetsHtml(sheets, NO_MEDIA);
-        expect(out.cut).toEqual(sheets);
+        // The first sheet leaves 16 cells, too few for one row of the next.
+        expect(out.cut).toEqual([sheets[0]]);
+        expect(out.leftOut).toEqual([sheets[1], sheets[2]]);
+        expect(out.html.split('<div class="sheet')).toHaveLength(2);
+        expect(classesFor(out, 'page-break-after:always')).toEqual([]);
         expect(tds(out.html)).toBe(192 * 1302);
         expect(out.html).toContain('>s0<');
         expect(out.html).not.toContain('>s1<');
         const doc = new Y.Doc();
         doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: true }));
         const exported = await renderEigensheetsExport(doc, 'html', 'Forged', async () => []);
-        expect(exported.warnings).toEqual([{ code: 'sheets-cut', count: 3 }]);
+        expect(exported.warnings).toEqual([
+            { code: 'sheets-cut', count: 1 },
+            { code: 'sheets-left-out', count: 2 },
+        ]);
+    }, 30_000);
+
+    test('the PDF page fits the sheets the export keeps, not one it left out', () => {
+        const tall: Sheet = {
+            id: 'tall',
+            name: 'Tall',
+            order: 0,
+            celldata: [
+                { r: 0, c: 0, v: { v: 'top' } },
+                { r: MAX_EXPORT_CELLS - 1, c: 0, v: { v: 'bottom' } },
+            ],
+        };
+        const wide: Sheet = {
+            id: 'wide',
+            name: 'Wide',
+            order: 1,
+            celldata: [{ r: 0, c: 0, v: { v: 'wide' } }],
+            config: { columnlen: { 0: 5000 } },
+        };
+        const lost: string[] = [];
+        const html = sheetsHtmlDocument({
+            title: 'Two',
+            sheets: [tall, wide],
+            mediaUrls: NO_MEDIA,
+            mode: 'pdf',
+            lost: (code) => lost.push(code),
+        });
+        expect(lost).toEqual(['sheets-left-out']);
+        expect(html).toContain('@page { size: 200px 19200px; margin: 40px; }');
+        expect(html).not.toContain('>wide<');
     }, 30_000);
 
     test('a later sheet gets what the earlier ones left, columns first', () => {

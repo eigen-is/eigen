@@ -157,6 +157,7 @@ export const COUNTED_WARNING_CODES = [
     'band-content-dropped',
     'band-blocks-cut',
     'sheets-cut',
+    'sheets-left-out',
     'conditional-formats-dropped',
     'validations-dropped',
     'validation-prompts-cut',

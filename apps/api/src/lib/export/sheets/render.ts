@@ -80,7 +80,7 @@ const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
 
 // The workbook as one document. The screen's prints landscape. The PDF's page fits its widest and tallest sheet as
-// rendered, so WeasyPrint never clips a wide grid. A sheet cut to MAX_EXPORT_CELLS is counted.
+// rendered, so WeasyPrint never clips a wide grid. A sheet cut to MAX_EXPORT_CELLS, or left out for it, is counted.
 export function sheetsHtmlDocument({
     title,
     sheets,
@@ -94,8 +94,9 @@ export function sheetsHtmlDocument({
     mode: HtmlExportMode;
     lost: LossCounter['lost'];
 }): string {
-    const { html, css, cut, size } = renderSheetsHtml(sheets, mediaUrls);
+    const { html, css, cut, leftOut, size } = renderSheetsHtml(sheets, mediaUrls);
     for (const sheet of cut) lost('sheets-cut', sheet);
+    for (const sheet of leftOut) lost('sheets-left-out', sheet);
     const page = mode === 'pdf' ? pdfPageCss(size) : '@page { size: landscape; margin: 1.5cm; }';
     return exportHtmlDocument({
         title,
@@ -110,40 +111,51 @@ export function sheetsHtmlDocument({
 export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
     const shown = shownSheets(sheets);
     if (shown.length === 0) return { html: '', truncated: false };
-    const first = renderSheet(shown[0], true, new FormulaEngine(), sheetsResolver(sheets), {
+    const first = renderSheet(shown[0], new FormulaEngine(), sheetsResolver(sheets), {
         budget: PREVIEW_SHEET_BUDGET,
         mediaUrls,
     });
-    return { html: first.html, truncated: first.truncated || shown.length > 1 };
+    if (!first) return { html: '', truncated: true };
+    return { html: `<div class="sheet">\n${first.html}\n</div>`, truncated: first.truncated || shown.length > 1 };
 }
 
 // One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
 // The resolver reads the stored values: only a rule's own formula is evaluated. The sheets spend one MAX_EXPORT_CELLS
-// in tab order, so a sheet gets the cells the ones before it left. `cut` holds the sheets cut to it, and `size` is the
-// widest and tallest sheet as rendered.
+// in tab order, so a sheet gets the cells the ones before it left. `cut` holds the sheets cut to it, `leftOut` the
+// sheets it left no row of, and `size` is the widest and tallest sheet as rendered.
 export function renderSheetsHtml(
     sheets: Sheet[],
     mediaUrls: MediaUrls,
-): { html: string; css: string; cut: Sheet[]; size: ContentSize } {
+): { html: string; css: string; cut: Sheet[]; leftOut: Sheet[]; size: ContentSize } {
     const engine = new FormulaEngine();
     const resolver = sheetsResolver(sheets);
     const styles: StyleRegistry = new Map();
-    const shown = shownSheets(sheets);
     const cut: Sheet[] = [];
+    const leftOut: Sheet[] = [];
     const size = { width: 0, height: 0 };
+    const bodies: string[] = [];
     let cellsLeft = MAX_EXPORT_CELLS;
-    const html = shown
-        .map((sheet, i) => {
-            const isLast = i === shown.length - 1;
-            const rendered = renderSheet(sheet, isLast, engine, resolver, { cellsLeft, styles, mediaUrls });
-            cellsLeft -= rendered.cells;
-            if (rendered.truncated) cut.push(sheet);
-            size.width = Math.max(size.width, rendered.size.width);
-            size.height = Math.max(size.height, rendered.size.height);
-            return rendered.html;
+    for (const sheet of shownSheets(sheets)) {
+        const rendered = renderSheet(sheet, engine, resolver, { cellsLeft, styles, mediaUrls });
+        if (!rendered) {
+            leftOut.push(sheet);
+            continue;
+        }
+        cellsLeft -= rendered.cells;
+        if (rendered.truncated) cut.push(sheet);
+        size.width = Math.max(size.width, rendered.size.width);
+        size.height = Math.max(size.height, rendered.size.height);
+        bodies.push(rendered.html);
+    }
+    // Each sheet but the last ends its page. The .sheet div already has a class, so its page break is a second class.
+    const html = bodies
+        .map((body, i) => {
+            const divClass =
+                i === bodies.length - 1 ? 'sheet' : `sheet ${internStyle(styles, 'page-break-after:always')}`;
+            return `<div class="${divClass}">\n${body}\n</div>`;
         })
         .join('\n');
-    return { html, css: serializeStyleRules(styles), cut, size };
+    return { html, css: serializeStyleRules(styles), cut, leftOut, size };
 }
 
 // The sheets the tabs show, as Excel prints them. The resolver still spans every sheet, the hidden ones too.
@@ -167,12 +179,13 @@ function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { 
     return { width, height };
 }
 
-// With `styles` this is the export, with interned classes, in a window of `cellsLeft`. Without it this is the preview,
-// inline-styled, in its budget. `cells` is what the window cost, and `size` the table and its overlay as rendered: the
-// overlay draws at the stored grid coordinate, so an image or chart parked past the used range is still on the page.
+// The sheet's table and overlay, for the caller to wrap in its .sheet div. With `styles` this is the export, with
+// interned classes, in a window of `cellsLeft`, and null when those cells hold none of its rows. Without it this is the
+// preview, inline-styled, in its budget. `cells` is what the window cost, and `size` the table and its overlay as
+// rendered: the overlay draws at the stored grid coordinate, so an image or chart parked past the used range is still
+// on the page.
 function renderSheet(
     sheet: Sheet,
-    isLast: boolean,
     engine: FormulaEngine,
     resolver: CellResolver,
     {
@@ -181,7 +194,7 @@ function renderSheet(
         styles,
         mediaUrls,
     }: { budget?: SheetBudget; cellsLeft?: number; styles?: StyleRegistry; mediaUrls: MediaUrls },
-): { html: string; truncated: boolean; cells: number; size: ContentSize } {
+): { html: string; truncated: boolean; cells: number; size: ContentSize } | null {
     const forStylesheet = styles !== undefined;
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
@@ -191,7 +204,7 @@ function renderSheet(
     if (maxRow < 0 || maxCol < 0) {
         // An image or chart on an otherwise blank sheet is all there is to render.
         return {
-            html: `<div class="sheet">${withFloatingOverlay(sheet, '', 0, 0, 0, overlay)}</div>`,
+            html: withFloatingOverlay(sheet, '', 0, 0, 0, overlay),
             truncated: false,
             cells: 0,
             size: floatingExtent(sheet, { left: 0, top: 0 }),
@@ -200,13 +213,10 @@ function renderSheet(
 
     // The window comes first, so all that follows costs what is rendered, not what the sheet declares: a merge or a
     // rule's range can name millions of cells.
+    const shownRows = shownCount(minRow, maxRow, config.rowhidden);
     const { maxRows, maxCols, maxCells } =
-        budget ??
-        exportWindow(
-            cellsLeft,
-            shownCount(minRow, maxRow, config.rowhidden),
-            shownCount(minCol, maxCol, config.colhidden),
-        );
+        budget ?? exportWindow(cellsLeft, shownRows, shownCount(minCol, maxCol, config.colhidden));
+    if (maxRows === 0 && shownRows > 0) return null;
     let truncated = false;
     const renderCols: number[] = [];
     for (let c = minCol; c <= maxCol; c++) {
@@ -330,15 +340,10 @@ function renderSheet(
         rows.push(`<tr ${styleAttr(styles, `height:${h}px`)}>${cells.join('')}</tr>`);
     }
 
-    // The .sheet div already has a class, so in the export its page break is a second class.
-    const divClass = isLast || !forStylesheet ? 'sheet' : `sheet ${internStyle(styles, 'page-break-after:always')}`;
-    const pageBreak = isLast || forStylesheet ? '' : ' style="page-break-after:always"';
     const q = fontQuote(forStylesheet);
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS.replaceAll('"', q)};font-size:${SHEET_DEFAULT_FONT_SIZE}pt;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>`;
-    const html = `<div class="${divClass}"${pageBreak}>
-${withFloatingOverlay(sheet, table, tableWidth, minRow, minCol, overlay)}
-</div>`;
+    const html = withFloatingOverlay(sheet, table, tableWidth, minRow, minCol, overlay);
     const extent = floatingExtent(sheet, gridOffset(sheet, minRow, minCol));
     const size = { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) };
     return { html, truncated, cells: cellCount, size };
