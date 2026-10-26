@@ -71,6 +71,11 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 - **Trash** — when you trash a document while someone opens it, every edit made before the trash is there after you restore it
 - **Trash** — a chat in the trash restores with all its messages, even after someone tried to open it there
 - **Sharing** — an item in the trash is closed to everyone you shared it with, and nobody can share it on from there. Restoring it gives them the same access again
+- **Trash** — a file you upload or create in a folder while someone trashes it is refused as not found. It no longer stays live inside the trashed folder
+- **Trash** — a document moved into a folder while the folder goes to the trash keeps every edit you make after you restore it
+- **Trash** — deleting a folder for good also takes the items you trashed from inside it off every open Trash view, and tells the people who watched them
+- **Sharing** — a trash that fails, such as when storage is down, leaves the item in your collaborators' **Shared with me**
+- **Sharing** — someone you remove from an item while it is renamed or restored stays removed from their **Shared with me**
 - **Sharing** — moving a file needs edit access to the folder it leaves, as renaming it does. Someone who can edit only the file can't take it out of your folder
 - **WebDAV** — a file or folder you have no access to answers the same as one that doesn't exist, so nobody can guess the names in your drive
 - **Guests** — a guest can't send mail to a file's collaborators, as a guest can't share. The File menu and Drive don't offer them **Email collaborators**
