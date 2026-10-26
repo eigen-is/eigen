@@ -1,112 +1,12 @@
 # Proposal: Docker-only installation, with a Synology DSM preset
 
-> **Status: milestone 1, the `eigen` command that needs only Docker on the host, and milestone 2, the published release images, are built, and v0.3.0 is the first published release. Milestone 3, the Synology DSM preset, is not started.** [SELF-HOSTING.md](../SELF-HOSTING.md) and the help center's [Self-hosting](https://eigen.is/support/self-hosting/get-started) section describe what exists, and what remains is in the [ROADMAP.md](../ROADMAP.md) row. "DSM" means Synology DiskStation Manager. No Synology hardware was exercised.
->
-> Where the build differs from the text below:
->
-> - The launcher, not the CLI, resolves a release to digests, and the pins live in `.env.production`. There is no bundle manifest: the breaking marker is `(breaking)` in a `CHANGELOG.md` version section.
-> - The control socket lives in the container's `/run/eigen/`, not under `data/`. Offline commands run with `docker run --rm --init`, not `docker compose run`.
-> - Whole-server backups replaced the snapshot engine. `eigen backup` runs inside the running API and writes to `backups/`, `eigen update` backs up before the stop, and `eigen restore` stages while Eigen runs and swaps with it stopped ([BACKUP.md](../BACKUP.md)).
-> - `.env.production` is mode 0640, group 1000, so the API can put it in a backup. The API's `stop_grace_period` is 90 s.
-> - The old scripts (`setup.ts`, `generate-env.sh`, `update.sh`, `backup.sh`, `restore.sh`) and the host-api and host-certs overlays are deleted, not wrapped. The configurator is `apps/api/src/cli/configure.ts`, which `./eigen setup` runs. A host port is a three-line `docker-compose.override.yml`, and a certbot deploy hook copies host certificates into `data/certs`.
-> - The resolver is our own unbound image, and every image is published for amd64 and arm64. A push to `main` publishes the images as `:main`, a channel a release install follows with `./eigen update main`.
-> - Source mode is deleted: a clone builds at setup, and `update` and `rollback` refuse there.
-> - The release gate (`docker/test-release.sh`) updates the previous published release to the new release's amd64 images and rolls it back, while an arm64 runner installs the arm64 images (`docker/test-boot.sh`) and only checks health. The gate installs mail off, so its seed holds no mail, and the new release waits in a registry of the gate's own, which the install names as its mirror. Its fresh installs on amd64 are of its own builds of the tree. A breaking release fails the gate unless the publish workflow runs with `breaking: true`.
+> **Status:** the `eigen` command that needs only Docker on the host, the published release images and setup's mail question are built. [SELF-HOSTING.md](../SELF-HOSTING.md) and the help center's [Self-hosting](https://eigen.is/support/self-hosting/get-started) section describe them. This page designs what remains, the Synology DSM preset (milestone 3), which no Synology hardware has exercised yet. "DSM" means Synology DiskStation Manager.
 
-> **TLDR**: Eigen can install without Bun on the host, and it should. Three changes, in order. (1) One command, `eigen`: a POSIX `sh` launcher that hands every subcommand to a Bun CLI inside the API image, while the frontend build moves into a Docker build stage, so a host needs only Docker and Compose. (2) CI publishes versioned images, the API image carries the install bundle, so the ordinary self-hoster builds nothing, and before every release CI updates the previous release to those very images and rolls it back on amd64, and boots them on arm64. (3) DSM becomes a documented preset: today's `static` profile behind DSM's own reverse proxy, installed through Container Manager. Docker removes host dependencies, not NAS hardware limits or the networking a mail server needs, so full mail is a question setup asks, and the answer "no" produces a working mail-off install.
-
-## Why
-
-A self-hoster should need only Docker on the host. Host-side Bun, `bun install` and a full frontend build on every install and update are fine for a developer on a VPS. On a NAS they are the wrong shape: Container Manager is the supported way to run software there, and compiling the whole monorepo on the target machine runs a 2 to 4 GB machine out of memory.
-
-Two improvements with different payoffs:
-
-| Approach | What runs on the host | Benefit |
-|---|---|---|
-| Build inside Docker | Docker, temporary build containers, the Eigen services | No host Bun, Node, or compiler. Still burns local CPU, RAM, disk, and bandwidth on a build. |
-| Pull prebuilt images | Docker and the Eigen services | No build, no dependency install. This should become the normal self-hosting path. |
-
-Neither needs Docker-in-Docker, a privileged container, or the Docker socket mounted into anything. The host engine builds or pulls; Compose starts sibling containers.
-
-## What milestone 1 started from
-
-| Surface | Current behavior | Consequence for this proposal |
-|---|---|---|
-| `scripts/setup.ts` (deleted) | Node built-ins plus `Bun.spawn`, no third-party imports. Spawns host `docker network ls/inspect` for subnet detection and `chown -R 1000:1000 data`. Its "next steps" print a host `bun install` and frontend build. | Runs unchanged inside any Bun container, without `bun install`. Only the two spawns and the printed steps need a seam. |
-| `setup.ts`, deployment shape | Always writes `COMPOSE_PROFILES=edge,mail` or `static,mail`. It never asks whether to host mail, never writes `MAIL_ENABLED`, and never writes the API's `SMTP_*` relay keys. | A mail-off install is hand-edited today ([SELF-HOSTING.md](../SELF-HOSTING.md)). With the `mail` profile off and nothing else set, `SMTP_HOST` still defaults to `postfix`, a host that does not exist, so share notifications and invites fail. Setup has to own this choice (§ 5). |
-| `scripts/generate-env.sh` (deleted) | A second, Bash-only generator of `.env.production`, listing every `VITE_APP_*_URL` again. | Two copies of the deployment rules that must be edited together. Do not add a third; make this a thin wrapper. |
-| [`docker/api/Dockerfile`](../../docker/api/Dockerfile) | `FROM oven/bun:1.3.14-slim`, `COPY . .`, `bun install --frozen-lockfile --ignore-scripts` in the image, `CMD bun run --env-file=../../.env.production src/index.ts`. | The backend never needed host Bun. The image bakes `.env.production` (allowed by `.dockerignore`), so every API image contains the deployment's relay password and cannot be shared between installs. The Bun pin is a third copy of `.bun-version` (CI reads the file; the Dockerfile repeats it). |
-| `docker/static/Dockerfile` (deleted) and the `caddy` service in [`docker-compose.yml`](../../docker-compose.yml) | Static image copies a host-built `dist/`; edge Caddy bind-mounts host `./dist`, `./Caddyfile`, and `docker/caddy/*`. | Both web modes depend on a host build. Changing only the static Dockerfile leaves the default edge mode broken. |
-| API volumes in `docker-compose.yml` | Bind-mounts `./data` and `./backups`; the API runs as `1000:1000`. Docker creates a missing mount point as root. | The launcher prepares both folders, not only `data/`. |
-| [`.dockerignore`](../../.dockerignore) | Excludes root `*.md` except `README.md`. Ignores `node_modules` at the root only, and does not ignore `dist/`. | A frontend builder stage needs `CHANGELOG.md`; [`build-changelog.ts`](../../apps/index/scripts/build-changelog.ts) reads it. Once nothing copies a host `dist/`, ignore it, and ignore `**/node_modules` so a developer's workspace installs never enter the context. |
-| [`packages/lib/src/core/api.ts`](../../packages/lib/src/core/api.ts) | `VITE_API_HOST` and every `VITE_APP_*_URL` are relative and resolved against `window.location.origin`. | One frontend bundle serves any hostname. Per-domain JavaScript builds are unnecessary. |
-| [`vite.security-headers.ts`](../../vite.security-headers.ts) | The Content-Security-Policy is a `<meta>` in every app shell, computed at build time; in a production build everything is `'self'`. | The policy travels inside the bundle and names no hostname, so it is portable too. |
-| [`apps/index/scripts/prerender.tsx`](../../apps/index/scripts/prerender.tsx) | Reads build-time `DOMAIN` for canonical, Open Graph, JSON-LD, and `sitemap.xml`; omits all of them when unset. | A domain-neutral release build is already supported by the prerenderer; it just loses SEO metadata. |
-| API runtime env in [`docker-compose.yml`](../../docker-compose.yml) | Compose passes `DOMAIN`, `MAIL_DOMAIN`, `MAIL_ENABLED`, `SMTP_*`, `TRUSTED_NETWORKS`, and a few more explicitly. `API_URL` and the `VITE_APP_*_URL`s that [`mail-template.ts`](../../apps/api/src/lib/core/mail-template.ts) uses for absolute links in outbound email come only from the baked file. | Removing the baked file needs `env_file: .env.production` on `eigen-api`, the same wiring the `caddy` service already has. |
-| `scripts/update.sh` (deleted) | Bash. `git pull`, re-exec of the freshly pulled script, `add_var_if_missing` backfills into `.env.production`, creates `backups/`, wipes every `node_modules`, host `bun install`, host frontend build, `compose up --build`, a Caddy config reload, a fail2ban filter refresh and jail reload, then `docker builder prune` and `docker image prune`. | A Bun-free install is pointless if the first update needs Bun again. The env backfills are a third copy of the env rules. The global image prune would also delete a NAS user's unrelated dangling images. The re-exec and the fail2ban reload are worth keeping. |
-| [`docker/static/Caddyfile`](../../docker/static/Caddyfile) | Trusts `X-Real-IP` from private-range peers (`trusted_proxies` + `client_ip_headers`) and forwards `{client_ip}`, so [`clientIpKey`](../../apps/api/src/lib/core/access.ts) sees the real visitor behind a host proxy. `X-Forwarded-For` alone is not trusted; the generated nginx, Apache and Caddy snippets all set `X-Real-IP`. | A host proxy that sets only `X-Forwarded-For` degrades to one shared rate-limit bucket. Not a blocker here. |
-| Mail off | `MAIL_ENABLED=0` hides the Mail app and every entry point to it ([SERVER-SETTINGS.md § Hosted mail and the relay are environment, not settings](../SERVER-SETTINGS.md#hosted-mail-and-the-relay-are-environment-not-settings)). [`mailer.ts`](../../apps/api/src/lib/core/mailer.ts) authenticates to an external relay when `SMTP_USER` and `SMTP_PASSWORD` are set, with mandatory STARTTLS and a verified certificate. `SMTP_RELAY_*` is a separate pair read by [the bundled Postfix](../../docker/postfix/entrypoint.sh). | The app side of a mail-off install exists. What is missing is setup asking for it and one audit of what degrades without inbound mail (emailed calendar invitations and RSVPs). |
-| `docker-compose.host-certs.yml` (deleted) | Used `!override`, which [needs Compose 2.24.4+](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md#replace-value). | The launcher must check the minimum of the files it actually passes. |
-| [`docker/test-deployments.sh`](../../docker/test-deployments.sh) | Needs host Bun: `ensure_dist` runs `bun install` and the frontend build when `dist/` is missing, then builds `eigen-static` from it. | The harness moves with the change: it builds through the same Dockerfiles and loses its Bun prerequisite. |
-| [`routes/setup.ts`](../../apps/api/src/routes/setup.ts) | `/admin` runs the setup wizard for the first visitor, with no token. Before setup, `/setup/s3check` and `/setup/s3harden` are open to anyone and make the server call any S3 endpoint. | The first admin needs a one-time setup link that gates all three `/setup/*` routes (§ 1). |
-| Resolver image (replaced by `docker/unbound`) | `mvance/unbound:latest`; `docker manifest inspect` on 2026-09-06 lists `linux/amd64` only. | The full mail stack is not arm64-ready as shipped. |
-| Release automation | [`check.yml`](../../.github/workflows/check.yml) runs checks with a read-only token; [`release.ts`](../../scripts/release.ts) creates a GitHub release with notes and no assets. No image publishing. | Milestone 2 is new CI, not a documentation change. |
+> **TLDR**: DSM becomes a documented preset: the `static` profile behind DSM's own reverse proxy, installed through Container Manager. Docker removes host dependencies, not NAS hardware limits or the networking a mail server needs, so full mail is a question setup asks, and the answer "no" produces a working mail-off install.
 
 ## Design
 
-### 1. The launcher: `eigen`
-
-The operator learns one command, `eigen`: `setup`, `update`, `rollback`, `backup`, `restore <archive>`, `reset-password <email>`, `status` and `logs`. It has two layers. On the host, a thin POSIX `sh` launcher does the preflight and hands the command to the API image. Everything else is a Bun CLI in `apps/api/src/cli/`, next to the code it reuses, so backup, restore and password reset call the API's own code instead of repeating it in shell. Setup is that CLI's `configure` (`apps/api/src/cli/configure.ts`). There is no separate setup image: the API image already contains Bun and the CLI.
-
-The launcher is plain `sh`, tested under `dash` and BusyBox `sh`: no Bash, no GNU-only flags, no `sudo`, `apt`, `curl` or `git` assumed. It stays thin, so an update can re-exec the new copy safely.
-
-**Online and offline commands.** The backup job map lives in memory in the API process, with the 409 guard, the restore's offline gate and the shutdown drain. A second process running the API's code would bypass all of it. So online commands (`status`, `reset-password` and `backup`) run through `docker compose exec eigen-api` and talk to the running API over a Unix socket in the container's `/run/eigen/`. No token and no TCP port. Offline commands (the first `setup`, before the stack exists, and the swap of `restore`, with the stack stopped) run in one-off containers with `docker run --rm --init`. `reset-password` also revokes the user's sessions.
-
-**The setup link.** `eigen setup` generates a one-time token, stores only its hash under `data/server/`, and prints `https://<host>/admin/#setup=<token>`. The web wizard keeps its job: organization, administrator, storage type, and the S3 check and harden. The token gates `/setup/complete`, `/setup/s3check` and `/setup/s3harden`, so nobody who merely finds a fresh server can claim it or point it at an S3 endpoint. While setup is pending, `eigen setup` prints a fresh link.
-
-**Terminal UI.** Setup, update, rollback, restore and reset-password are linear flows built with `@clack/prompts`. `eigen status` is a one-shot report, not a full-screen interface: version and pending update, health per service, disk use, the newest backup and its age, certificate expiry, and the mail queue. The `sh` layer prints only the `eigen|<command>>` wordmark and the preflight lines, so the operator sees one program. The look is clack's style with one accent color and no emoji. Long steps are spinners that hide their output unless the step fails, and then show its last lines. Each flow ends with a summary holding the URL and the next steps, and every error says what to do next. Every command also takes flags for a non-interactive run, and a flag-driven or non-TTY run never touches clack. Every interactive `docker run` gets `--init` (Bun as PID 1 ignores Ctrl-C), passes `TERM` and `NO_COLOR`, adds `-t` only when stdin is a terminal, and sets `HOME=/tmp` under an arbitrary `--user`.
-
-**Local builds.** A folder with the build overlay, `docker-compose.build.yml`, such as a clone of the repository, is a local build. There the launcher and Compose files come from the folder, not from the image, and `eigen setup` builds the images through the overlay with no host Bun and pins none. It is for developing Eigen: `eigen update` and `eigen rollback` refuse, and a rerun of `eigen setup` builds new code.
-
-**Backups.** `eigen backup` and the backup `eigen update` makes are whole-server backups run by the API over the control socket, so the job map's guards hold for them. `eigen restore` stages the archive while Eigen runs and swaps it in with Eigen stopped. The archive records the Eigen version, and a restore refuses an archive newer than the install. [BACKUP.md](../BACKUP.md) has the design.
-
-`eigen setup` runs these steps:
-
-1. **Preflight.** `docker info` (daemon reachable and the user may talk to it; membership of the `docker` group is a printed prerequisite, never fixed by loosening socket permissions), `docker compose version` against the minimum of the files about to be used, and prints the daemon's architecture, gating nothing on it. In a local build the API image is built first with `docker compose build eigen-api`; in release mode the release's images are pulled first.
-2. **Network snapshot.** The launcher writes `docker network inspect $(docker network ls -q)` to `.eigen/networks.json` in the install folder. The configurator reads that file (`EIGEN_DOCKER_NETWORKS`) and picks a subnet only then; without it, configure writes 172.20.0.0/24. Subnet selection stays in TypeScript, including the rerun rule that never shifts a live deployment's subnet. A failed inspect aborts; it is not "no networks".
-3. **Run the configurator.** The CLI's setup runs in the API image with the install folder mounted at `/install` and `--user "$(id -u):$(id -g)"`, adding `-t` only when stdin is a terminal. Piped and flag-driven runs need no TTY. The written `.env.production` is owned by the invoking user, and the launcher gives it mode 0640 with group 1000, so the API can read it for a backup. Nothing else from the host is mounted; the Docker socket never is.
-4. **Data and backup directories.** `mkdir -p data backups`. For each one that is empty, one root container from the API image sets its ownership: `docker run --rm --user 0 --entrypoint chown -v "$PWD/data:/data" <api image> 1000:1000 /data`, one directory, not recursive. Then a write test as `--user 1000:1000`. An existing, non-empty folder is never touched. Ownership is set here and not in the configurator, since a chown cannot succeed inside a non-root container. Never `chmod 777`, never recurse through a Synology shared folder.
-5. **Start.** `docker compose --env-file .env.production up -d`, with the build overlay in a local build, then wait for `eigen-api` to report healthy with a bounded timeout. Print the one-time setup link and the remaining proxy and DNS steps. On failure keep the configuration and print the failing service's logs without echoing secrets.
-
-The configurator prints no build commands: the launcher owns the next steps.
-
-A run without questions is `./eigen setup` with flags (`--domain`, `--proxy`, `--no-mail`, and friends; piped stdin works too, flags are sturdier). Reruns keep existing profiles, domains, relay credentials, subnet, and unknown advanced keys, which the configurator does by reading the previous file rather than sourcing it as shell. That rerun is also how an update backfills new keys (§ Updates and recovery), so the key list lives in `apps/api/src/cli/configure.ts` and nowhere else.
-
-### 2. Build in Docker
-
-**Frontend.** A new `docker/frontend/Dockerfile` with two stages. The builder is a pinned `oven/bun` image: `bun install --frozen-lockfile`, then `bun run --sequential --filter './apps/*' build`, which keeps the index app's prebuild and postbuild steps (content, licenses, changelog, prerender, search index). The relative `VITE_API_HOST` and `VITE_APP_*_URL` values become `ARG` defaults in that Dockerfile, the one place that owns them for the frontend; the `VITE_` lines in `.env.production` stop mattering to the frontend and remain only because the API reads them for email links. The runtime stage is `caddy:2-alpine` with `COPY --from=builder /app/dist /www`, both Caddyfiles, `autoconfig.xml`, and `export-certs.sh`. One image serves both web modes: the `caddy` and `eigen-static` services differ only in `command`, ports, and volumes. The `./dist`, `./Caddyfile`, and `docker/caddy/*` bind mounts go away; `caddy-data` and `data/certs` stay. An admin who edited the bind-mounted `Caddyfile` loses that edit, so the guide names the supported route: a Compose override that mounts their own file.
-
-A build inside a fresh layer always installs from an empty `node_modules`, so there is no host tree to wipe.
-
-**API.** Runtime unchanged: Sharp/libvips, ExifTool, FFmpeg, WeasyPrint, the worker entry points, running from source. Two edits: drop `--env-file=../../.env.production` from the `CMD` and `!.env.production` from `.dockerignore`, and add `env_file: .env.production` to `eigen-api` in Compose. Secrets leave the image layers, one API image serves every install, and changing a domain or relay is a restart rather than a rebuild. `env_file` hands the API every key in the file, including Postfix's `SMTP_RELAY_PASSWORD`, which the API does not read; the `caddy` service has the same exposure today, and the alternative is re-listing fourteen `VITE_APP_*_URL` keys under `environment:`. Accept it. Do not switch to `buildfordocker` output or prune dependencies as part of this change.
-
-**One Bun pin.** Both Dockerfiles take `ARG BUN_VERSION` with no default. The build overlay passes `${BUN_VERSION}`, which the launcher, the test harness, and CI read from `.bun-version`. The file stays the single source.
-
-**Build context.** `.dockerignore` keeps excluding `data/`, `caddy-data/`, backups, and every private env file, starts excluding `dist/` and `**/node_modules`, and starts including `CHANGELOG.md`. Both Dockerfiles copy `package.json`, the workspace manifests and `bun.lock` before the source, so the install layer stays cached when dependencies did not change. Only public build settings are passed as build args; never a production env or an SMTP password.
-
-**Domain-neutral builds.** Release images build without `DOMAIN`, so the landing page ships without canonical, Open Graph, JSON-LD, and `sitemap.xml`. That is the documented tradeoff for a portable image; a local build with `DOMAIN` set keeps them. If runtime SEO ever matters, generate those few tags at container start rather than rewriting compiled JavaScript.
-
-### 3. Release images, with the install bundle inside
-
-A tag-triggered workflow, separate from `check.yml` so the check job keeps its read-only token, builds with Buildx and pushes `ghcr.io/eigen-is/eigen/api`, `/frontend`, `/postfix`, and `/dovecot` to GitHub Container Registry under the release version (a local build tags the same names `:local`, which is never published) (`packages: write` on that job only; the packages are made public once, by hand). Unbound is the fifth image, built the same way. Each image carries the release version and source revision as OCI labels; the API already exposes `EIGEN_COMMIT` and `EIGEN_BUILT_AT` in the About dialog, so pass them as build args.
-
-The Compose model inverts: `docker-compose.yml` references images, and a `docker-compose.build.yml` overlay adds the `build:` blocks for local builds. The API image carries the install bundle, which `bootstrap` writes: the `eigen` launcher, the Compose files, `docker/fail2ban/`, `scripts/` (the demo reset and its systemd units), `.env.example`, and a starter `.env.production` that names the release. Whether a release breaks a persisted format is read from the `CHANGELOG.md` in the new image. A release install starts in an empty folder with one line, `curl -fsSL https://eigen.is/install | sh`, which fetches the launcher and runs `./eigen setup`; setup beside the launcher alone runs `bootstrap`, which writes the bundle. It needs no Git, no Buildx, no registry login and no source checkout. Digest pinning carries integrity: every image runs by digest, and nothing deploys a moving `latest`. The host never downloads a tarball or computes a checksum, because SHA-256 tools differ across Linux, macOS and BusyBox. `release.ts` may attach the same files to the GitHub release for reading; nothing installs from them.
-
-**The release gate.** Before a version is published as a release, a CI job runs on a clean runner with Docker and no Bun: bootstrap the previous release non-interactively, seed it with a document, a sheet, a calendar event, a contact and a chat, run `eigen update` to the new version, and assert the stack is healthy and every item is intact. Then `eigen rollback`, and the same assertions. Then a fresh install of the new version alone. An update that breaks is worse for a self-hoster than a missing feature, and the env-backfill breakages show the class recurs; this is the test that would have caught them.
-
-Every image is built for `linux/amd64` and `linux/arm64`, each on a runner of its own architecture. A multi-arch manifest is not evidence that a given Synology model can run it.
-
-### 4. DSM is a preset, not a fork
+### DSM is a preset, not a fork
 
 Install Synology's Container Manager from Package Center; its [package page](https://www.synology.com/en-global/dsm/packages/ContainerManager) and [release notes](https://www.synology.com/en-global/releaseNote/ContainerManager) define the model and DSM requirements. Never run the VPS guide's `get.docker.com` script on DSM or install a second daemon over Synology's.
 
@@ -121,18 +21,7 @@ The API stays private on the Docker network. DSM proxies to `eigen-static`, neve
 
 A Container Manager Project (GUI) path is worth offering, but only after it has been exercised in the real DSM interface: `env_file` interpolation and the ownership step must be verified there, not assumed. The shell path is the supported contract in the first release.
 
-### 5. Mail is a choice, not a surprise
-
-Public email hosting must not be a hidden prerequisite for someone who wants Drive, Docs, Sheets, Calendar, Contacts, and Chat on a NAS or behind a home connection.
-
-| Preset | Services | Intended use |
-|---|---|---|
-| Mail off, behind an existing HTTPS proxy (DSM included) | API + static frontend | Simple NAS mode. |
-| Mail off, standalone | API + edge Caddy | A VPS whose owner keeps their mail elsewhere. |
-| Full workspace behind an existing proxy | API + static frontend + Postfix + Dovecot + Unbound | Users who deliberately operate Eigen mail behind their own proxy. |
-| Standalone VPS | API + edge Caddy + Postfix + Dovecot + Unbound | Today's default, unchanged. |
-
-Setup asks "Host email on this server?" with today's behavior as the default. On "no" it writes the profile without `mail`, writes `MAIL_ENABLED=0`, skips the mail-domain and DNS-record output that only a mail host needs, and asks for an outbound relay (`SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER`, `SMTP_RELAY_PASSWORD`) that the API authenticates to directly. Without it, two-factor codes sent by email, guest sign-in codes, share and access-request notifications, waitlist invitations, and calendar invitations and RSVP replies do not go out; skipping the relay is allowed and setup lists exactly that. On "yes" setup asks for a relay too, in the same `SMTP_RELAY_*` keys, for the bundled Postfix to forward through, because many VPS providers block outbound port 25 and receivers distrust a fresh IP. Only hosted mail can receive replies from outside attendees to calendar invitations; no relay fixes that. The one open piece on the app side is an audit for anything else a mail-off server loses, so the guide states it instead of a user finding it.
+### Full mail on a NAS
 
 Full mail on a NAS additionally needs inbound port 25, a PTR record, submission and IMAP ports that a Synology Mail Server package may already own, and valid certificates for the hostname mail clients use. Without edge Caddy the certificate exporter does not run, and DSM's certificate store is not `/etc/letsencrypt/live`, so the setup guide's certbot deploy hook is a starting point rather than a DSM answer. An HTTP reverse proxy or tunnel carries none of this.
 
@@ -148,29 +37,13 @@ Ports 80 and 443 belong to DSM's own web services ([Synology's port list](https:
 
 Runtime memory is measured: about 200 MB idle and 850 MB at peak during exports, so 2 GB minimum and 4 GB recommended ([requirements](../../apps/index/src/data/support/self-hosting/requirements.md)). That is for running the stack, not a promise that a NAS can compile it, which is the strongest argument for prebuilt images.
 
-## Updates and recovery
-
-`eigen update` resolves the target to digests and pulls it while Eigen runs, then backs up the running server before it writes any file of the new version, and only then stops Eigen, writes the new launcher, Compose files and pins, and starts the new version ([BACKUP.md § ./eigen update backs up before it writes a file](../BACKUP.md#eigen-update-backs-up-before-it-writes-a-file)). New upgrade logic therefore runs on the update that ships it. No `git pull`, no `bun install`, no host build. A failed pull or backup leaves the running stack untouched. The API's 90 s `stop_grace_period` and upload drain stay as they are.
-
-What happens to today's other steps: the Caddy reload goes away, because the Caddyfile lives in the image and a new image recreates the container. The fail2ban filter refresh and jail reload stay, fed from the `docker/fail2ban/` that `bootstrap` or a clone provides. Pruning narrows to Eigen's own superseded images, selected by their OCI source label.
-
-**Rollback.** `eigen rollback` restores the previous release's image digests, its Compose files and the pre-update backup together, because rolling images back after a schema change is not safe on its own. What it brings back depends on the backup's level: a Light one puts the databases back and leaves the files on disk ([BACKUP.md § A Full restore swaps data/ whole, a Light one merges](../BACKUP.md#a-full-restore-swaps-data-whole-a-light-one-merges)).
-
-**Breaking releases.** Before 1.0 a release may drop or convert a persisted format ([ROADMAP.md](../ROADMAP.md) states the policy). A `(breaking)` line in the new image's `CHANGELOG.md` flags such a release; `eigen update` prints the release note and asks for confirmation before it touches anything, and refuses in a non-interactive run without `--accept-breaking`. A self-hoster must never learn this from missing data.
-
-**Moving an existing install.** eigen.is and demo.eigen.is move by hand to release installs on the main channel, since no shim replaces the deleted scripts.
-
-The backup is the whole-server backup of [BACKUP.md](../BACKUP.md). `caddy-data` and the `postfix-queue` volume are outside it.
-
 ## Delivery plan
 
 | Milestone | Deliverable | Done when |
 |---|---|---|
-| 1. No host Bun | The `eigen` launcher and CLI with `setup`, `backup`, `restore`, `reset-password`, `status` and `logs`; the one-time setup link for the first admin; the control socket for online commands; the network and ownership seams in the configurator, the mail question with its relay prompts, the frontend Dockerfile for both web modes, runtime-only `.env.production`, the single Bun pin, the cached install layer, local builds through the build overlay, the harness off host Bun | A fresh install and an update succeed on a host with Docker and Compose but no Bun, Node, or `dist/`. Every profile combination, the two mail-off ones included, passes `docker/test-deployments.sh`. eigen.is has made the move. |
-| 2. No local build | The publish workflow, image-based Compose with the build overlay, domain-neutral frontend build, the bundle and manifest inside the API image with `bootstrap`, `eigen update` release mode, `eigen rollback`, the breaking-release confirmation, the release gate | Install and update from `bootstrap` without Git, a compiler, or `docker build`. The same image digests serve two differently configured hostnames. The release gate passes in CI on the previous-to-new upgrade and the rollback. |
 | 3. DSM supported | Compatibility matrix, DSM proxy instructions, tested Project path, certificate guidance for full mail on DSM | A real, listed Synology model completes setup, reboot, update, and restore; the documented proxy and mail choices behave as described. |
 
-Milestone 1 answers the Bun objection. Milestone 2 is the real simplification. Milestone 3 turns "probably works in Docker" into a support claim, and waits for hardware.
+Milestone 3 turns "probably works in Docker" into a support claim, and waits for hardware.
 
 ## Acceptance checks
 
@@ -178,24 +51,11 @@ Extend [`test-deployments.sh`](../../docker/test-deployments.sh), [`test-host-pr
 
 | Area | Evidence |
 |---|---|
-| Clean build | From a clean checkout with no `node_modules`, `dist/`, or `.env.production`: every app serves its own bundle, index content and search work, native tools and workers run. A release install performs no build. |
-| Configuration | Interactive, piped, and flag-driven runs; aborted input; rerun preserves everything and backfills a key the old file lacks; custom subnets and ports; paths with spaces; credentials with quotes and `$`; file mode 0640, group 1000; no container sees the Docker socket. |
-| Portable artifacts | One image digest on two hostnames: auth cookies, API, WebSocket, SSE, the CSP, and app links all work; SEO metadata is absent by design; no secret or private file in any layer or bundle (`docker history` and a layer scan for `.env`). |
 | DSM | Listed hardware, real Compose version, bind mounts writable as 1000:1000 under Synology ACLs, survives reboot, port and network collisions detected, unsupported device fails before any data is written. |
-| Real use | Admin enrollment through the setup link, which alone opens all three `/setup/*` routes; `reset-password` revokes sessions; sign-in, upload and download, two-browser collaborative editing, notifications, previews and exports, DAV through the proxy. |
-| Mail | A mail-off install shows no Mail entry point and delivers a share notification through the configured relay; without a relay it says so at setup. The full preset passes inbound, outbound, IMAP, submission, TLS, and a renewal reload. |
-| Operations | A failed pull leaves the running stack intact; a half-finished setup reruns cleanly; upgrade from the previous release keeps data and config; a release flagged breaking stops for confirmation; rollback brings back the previous release and its data; restore brings back a known document and, where enabled, mail, and refuses an archive newer than the install. |
 
 Run `bun run check` for the implementation changes and publish the hardware results with the release. CI on a current Linux VM cannot stand in for an older DSM kernel.
 
 ## Out of scope
 
 - Mail that lives at another provider ([PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)). Mail off plus a relay is this proposal's whole answer.
-- Whole-server backup, which is [BACKUP.md](../BACKUP.md).
 - A GUI-only DSM install; the shell launcher is the first contract.
-- Runtime SEO metadata for domain-neutral images.
-- Slimming the API image (build tools, dev dependencies). It works; measure first.
-
-## Recommendation
-
-Do it, in the stated order. Milestones 1 and 2 are moderate effort, mostly Dockerfile and shell work over code that already runs from source, and they benefit every self-hoster, not just Synology owners. Keep one set of services and one Compose model; DSM is a preset on top. Treat the NAS's proxy, its hardware, and mail hosting as explicit choices made during setup, never as assumptions.

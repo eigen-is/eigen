@@ -2,9 +2,9 @@
 
 This proposal lets a user bring a calendar from outside Eigen into Eigen's Calendar, either once from an `.ics` file or as a live, read-only subscription to a feed URL such as a holiday calendar or a conference schedule. The hard part, reading iCalendar with its repeats and time zones, already works for invitations and CalDAV, so a feed is mostly the same parser behind a different transport.
 
-**Status:** file import is built, and [CALENDAR.md § Import replays each series through putResource, as a device sync does](../CALENDAR.md#import-replays-each-series-through-putresource-as-a-device-sync-does) describes it; § File import below is the design it came from. Subscriptions are not built: the `subscription` column, the fetch policy, the refresh mechanism, the read-only rules and the subscribe dialog are all still to do, and [ROADMAP.md](../ROADMAP.md) keeps their row.
+**Status:** file import is built, and [CALENDAR.md § Import replays each series through putResource, as a device sync does](../CALENDAR.md#import-replays-each-series-through-putresource-as-a-device-sync-does) describes it. This page designs subscriptions: the `subscription` column, the fetch policy, the refresh, the read-only rules and the subscribe dialog, none of them built.
 
-> **TLDR**: Let users add external calendars in two flavors — a one-time `.ics` file import and a
+> **TLDR**: Let users add external calendars as a
 > live URL subscription (Google public calendars, holiday feeds, conference schedules, sports
 > calendars, etc.). Treat a subscription as a flavor of `Calendar`, not a separate entity: a row in
 > the `calendars` table is either *owned* (writable, current behavior) or *subscribed* (read-only,
@@ -27,13 +27,11 @@ This proposal lets a user bring a calendar from outside Eigen into Eigen's Calen
 
 1. Users can paste a `webcal://` or `https://…/feed.ics` URL and have the events appear in their
    calendar app, kept in sync automatically.
-2. Users can upload an `.ics` file as a one-time import, either into an existing calendar or into a
-   new one seeded from the file.
-3. Subscribed calendars are presented as first-class items in the existing calendar sidebar — same
+2. Subscribed calendars are presented as first-class items in the existing calendar sidebar — same
    color, visibility, sharing, and CalDAV exposure as any other calendar.
-4. CalDAV clients (Apple Calendar, Thunderbird, etc.) see subscribed calendars and their events,
+3. CalDAV clients (Apple Calendar, Thunderbird, etc.) see subscribed calendars and their events,
    marked read-only.
-5. Reuse the existing iCal pipeline where reuse is *safe*: `parseIcs()` (parsing, RRULE DoS guards,
+4. Reuse the existing iCal pipeline where reuse is *safe*: `parseIcs()` (parsing, RRULE DoS guards,
    TZID normalization, EXDATE synthesis), `computeEtag` (`../../apps/api/src/lib/calendar/mappers.ts`),
    the ctag/eventCtag/tombstone sync conventions, and the existing SSE event types. Do not
    introduce a parallel "imported event" *data model* — imported events are ordinary `events` rows.
@@ -93,15 +91,9 @@ subscription: {
 → subscribed calendar, read-only, events refreshed from `url`. The row *is* the calendar; the
 subscription metadata is part of it. No `calendar_subscriptions` join table.
 
-The same model covers file-import-into-new-calendar (the calendar is created with `subscription =
-null` and seeded from the parsed file). File-import-into-existing-calendar is a bulk insert into an
-existing owned calendar.
-
 | Origin | `subscription` | Writable | Refresh |
 |---|---|---|---|
 | User-created (today) | `null` | yes | n/a |
-| File import → new calendar | `null` | yes | n/a |
-| File import → existing calendar | `null` | yes | n/a |
 | URL subscription | `{ url, … }` | no | on access + manual |
 
 ### Migration
@@ -254,27 +246,12 @@ There is no reusable SSRF guard elsewhere in the codebase to import (the PDF-exp
 in `lib/export/` is weasyprint-specific), so this small policy lives in
 `calendar/subscription.ts` next to its only caller.
 
-## File import
-
-**Through the file-action registry (2026-09-20).** A `.ics` reaches a user as a Drive file, a mail attachment or a chat attachment far more often than as a file on their disk, so the entry point is the `import-calendar` row in `FILE_ACTIONS` (`packages/lib/src/core/file-actions.ts`), beside `import-contacts`, and every menu and the quick-look footer pick it up. The routes mirror contacts (`routes/contacts.ts`): a raw-body `POST /calendar/:ownerId/import` for bytes the browser already holds (a mail part, a picked file) and `POST /calendar/:ownerId/import-from-drive`, which reads the Drive subject server-side through `getSharedDrive` so the bytes never round-trip through the browser. Both carry the target described in step 1 below and a shared FE/BE byte ceiling, checked before the bytes are read. There is no sidebar import dialog: a file on disk reaches the same picker, which `useFileActionRunner` opens for the registry row, and the bytes the browser holds post to the raw-body route. The `.ics` quick look, the mail-reader chip for a calendar part and the shared event card are described in [PREVIEWS.md](../PREVIEWS.md#an-ics-preview-lists-masters-only). The numbered steps below describe the import itself and hold for both routes; read "multipart upload" as the raw body.
-
-Both routes:
-
-1. Take the target as a `calendarId` — a query parameter on the raw-body route, a body field beside the Drive source on the other. It names a calendar the caller may write in: their own Home's, or a team home's where they hold `write`. A calendar shared out of another *user's* home is refused, because the write would run in that Home and only the relay crosses Homes ([ROADMAP.md](../ROADMAP.md)). "New calendar" in the picker is `useCreateCalendar` followed by the import, so there is no multipart body and no `mode` union. A subscribed target will be rejected by the read-only guard once subscriptions exist.
-2. Group the file's VEVENTs by UID and write one resource per series through `putResource`, as a CalDAV PUT does, under one batched SSE broadcast. The import moves components rather than projecting them, so every line the author wrote lands as written — alarms, `ATTACH`, `CATEGORIES`, unknown `X-` properties. **Scheduling is the one thing taken out**: every `ATTENDEE` line is dropped (a `VALARM`'s own `ATTENDEE` stays, since that is the alarm's recipient) and `ORGANIZER` is removed and kept as one inert `X-EIGEN-IMPORTED-ORGANIZER`, which the inbound-REQUEST rule later matches a verified sender against, so a genuine invitation for the same UID is adopted in place rather than twinned. `METHOD` is ignored and no invitation propagation runs.
-3. Answer the three counts (`ImportCountsResult`), as a vCard import does. A UID the Home already holds anywhere is `skipped`, which is what makes a partial import retryable; an unstorable UID, an override group with no master, and a series the put seam refuses are `failed`, and the file continues past each one.
-
-Ceilings: `ICS_MAX_BYTES` (5 MiB, shared FE/BE so a surface refuses an oversize file before uploading it), `ICS_IMPORT_MAX_EVENTS` (10 000 VEVENTs per file, counted on the text before the parse and again after it) and `ICS_IMPORT_MAX_WRITTEN_BYTES`, past which the run stops the way a quota stop does.
-
-Once imported, events are normal owned events — no `subscription`, fully editable, identical to hand-created ones.
-
 ## Frontend UX
 
 The "+" button in `../../apps/calendar/src/components/calendar-sidebar.tsx` becomes a small dropdown:
 
 - **New calendar** (existing flow)
 - **Subscribe to URL…** (new dialog)
-- **Import from file…** (opens the import picker below)
 
 ### Subscribe dialog
 
@@ -288,11 +265,7 @@ The "+" button in `../../apps/calendar/src/components/calendar-sidebar.tsx` beco
   populated, runs the initial sync inline, returns the calendar. The sidebar updates via the
   existing `CALENDAR_CREATED` invalidation.
 
-### Import dialog
-
-Built as `ImportToCalendarPicker` (`packages/ui/src/components/calendar/import-to-calendar-picker.tsx`), which `useFileActionRunner` opens for the registry row: the viewer's own calendars under **My Calendars**, the team calendars they may write in under **Team Calendars**, and **New calendar** with a name defaulting to the file name without its extension. No preview parse: the `.ics` quick look already answers what is in the file.
-
-Both dialogs follow the shared Dialog components used by
+The dialog follows the shared Dialog components used by
 `../../apps/calendar/src/components/calendar-config-dialog.tsx`.
 
 ### Sidebar treatment of subscribed calendars
@@ -340,8 +313,9 @@ invitation events — when `existing.data?.organizer` is set, the input is rewri
 subscribed and the input touches only `data.color`/`data.reminders`, rewrite-and-allow instead of
 throwing.
 
-Internal writers bypass the guard by construction: `applyFeedSnapshot` and the import bulk insert
-write through their own transaction, not through `createEvent`.
+Internal writers bypass the guard by construction: `applyFeedSnapshot` writes through its own
+transaction, not through `createEvent`. A file import, which writes through `putResource`, refuses a
+subscribed target.
 
 A `SharedDrive`-style wrapper class would be over-engineering: the gradient is binary
 (writable / not), there is no permission tier per method, and no method needs different behavior
@@ -426,15 +400,15 @@ Thunderbird. Users coming from any of those products will have correct expectati
 | Schema | `../../apps/api/src/lib/calendar/schema.ts` | Nullable `subscription` JSON column on `calendars`. |
 | Migration | `../../apps/api/src/lib/calendar/db-config.ts` | `currentVersion` 2 → 3; `ALTER TABLE calendars ADD COLUMN subscription TEXT`. |
 | Domain | `../../apps/api/src/lib/calendar/calendar.ts` | `assertWritableCalendar` + calls in `createEvent`/`updateEvent`/`deleteEvent` (with the local-override carve-out in `updateEvent`); `checkPermission` clamp; `refreshDueSubscriptions` entry point + in-flight `Set`. |
-| Subscription core | `apps/api/src/lib/calendar/subscription.ts` *(new)* | Fetch policy (SSRF §), conditional-header fetch, redirect loop, `applyFeedSnapshot` diff (single transaction, one ctag bump, tombstones), preview, import bulk insert. Plain functions over `Calendar`, like `share-propagation.ts`. |
-| Routes | `../../apps/api/src/routes/calendar.ts` | `POST /calendar/:ownerId/subscriptions`, `…/subscriptions/preview`, `…/subscriptions/:calId/refresh`, `POST /calendar/:ownerId/imports`; fire-and-forget refresh hook in the event-range GET. |
+| Subscription core | `apps/api/src/lib/calendar/subscription.ts` *(new)* | Fetch policy (SSRF §), conditional-header fetch, redirect loop, `applyFeedSnapshot` diff (single transaction, one ctag bump, tombstones), preview. Plain functions over `Calendar`, like `share-propagation.ts`. |
+| Routes | `../../apps/api/src/routes/calendar.ts` | `POST /calendar/:ownerId/subscriptions`, `…/subscriptions/preview`, `…/subscriptions/:calId/refresh`, fire-and-forget refresh hook in the event-range GET. |
 | CalDAV | `../../apps/api/src/lib/caldav/caldav-router.ts` | `current-user-privilege-set` on subscribed collections; fire-and-forget refresh hook on calendar-collection reads. |
 | Server settings | `../../apps/api/src/lib/config/server-settings.ts` | `calendar.allowPrivateFeedUrls` (default `true`). |
 | Types | `../../packages/lib/src/types/calendar.ts` | `CalendarSubscription`; `subscription?` on `CalendarItem`. |
-| Hooks | `../../packages/lib/src/core/calendar/hooks/use-calendar.ts` | `useCreateSubscription`, `usePreviewSubscription`, `useRefreshSubscription`, `useImportIcs`; errors via `onMutationError`. |
+| Hooks | `../../packages/lib/src/core/calendar/hooks/use-calendar.ts` | `useCreateSubscription`, `usePreviewSubscription`, `useRefreshSubscription`; errors via `onMutationError`. |
 | SSE | — | **No new event type**; existing `CALENDAR_*` events + handlers suffice. |
 | Sidebar UI | `../../apps/calendar/src/components/calendar-sidebar.tsx` | "+" dropdown; Globe icon + error dot; context-menu items. |
-| Dialogs | `apps/calendar/src/components/subscribe-dialog.tsx`, `import-dialog.tsx` *(new)* | Shared Dialog system, modeled on `calendar-config-dialog.tsx`. |
+| Dialogs | `apps/calendar/src/components/subscribe-dialog.tsx` *(new)* | Shared Dialog system, modeled on `calendar-config-dialog.tsx`. |
 | Event detail | `../../apps/calendar/src/components/event-detail-dialog.tsx`, `edit-event-dialog.tsx` | Read-only rendering for subscribed events; color/reminders stay editable. |
 
 ## What's deferred
@@ -462,8 +436,7 @@ Extend `../../apps/api/src/test/calendar/calendar.test.ts` using `getTestContext
   cancellation propagation (no relay sends, no mails).
 - Mutations on a subscribed calendar → 403; `data.color`/`data.reminders`-only update succeeds and
   survives the next refresh.
-- File import into a new calendar → writable events, `data.organizer` stripped; import into a
-  subscribed calendar → 403.
+- File import into a subscribed calendar → 403.
 - Share a subscribed calendar with `write` → recipient's resolved permission is `read`; recipient
   event mutation → 403.
 - Fetch policy: `webcal://` canonicalized; userinfo URL rejected; with `allowPrivateFeedUrls =
