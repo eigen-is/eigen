@@ -5,7 +5,7 @@ type: how-to
 tags: [drive, trash, delete, restore]
 related: [drive/get-started]
 order: 110
-updated: 2026-09-13
+updated: 2026-10-26
 ---
 
 Deleting a file in Drive doesn't remove it straight away. It goes to the Trash, where it stays until you empty the Trash or it is cleaned up automatically. This means you can always recover something you've deleted by mistake.
@@ -18,6 +18,8 @@ Deleting a file in Drive doesn't remove it straight away. It goes to the Trash, 
 You can also select the item in the list and press **Delete** or **Backspace**.
 
 The item disappears from your files and moves to the Trash. If you delete a folder, everything inside it moves to the Trash as well.
+
+The people you shared the item with can't open it while it's in the Trash, and it leaves their **Shared with me**. When you restore it, they get the same access back without a new invitation.
 
 ## Restore something from the Trash
 

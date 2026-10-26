@@ -202,6 +202,38 @@ describe('ACL Bubbling', () => {
             const body = await assertJson<InviteResult>(res);
             expect(body.alreadyHasAccess).toBe(true);
         });
+
+        // A move that lands between the check and the share must not make the invite share a document
+        // nobody checked. The spy stands in for that move: every lookup after the first finds the other doc.
+        test('an invite shares the container it checked, even if the chat moves meanwhile', async () => {
+            const { getHome } = await import('../../lib/home');
+            const { drive } = await getHome(ctx.alice.user.id);
+            const other = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/create/doc`,
+                { fileName: `acl-bubble-other-${randomUUID()}` },
+            );
+            const findContainerPath = drive.findContainerPath.bind(drive);
+            let lookups = 0;
+            const spy = spyOn(drive, 'findContainerPath').mockImplementation(async (mountId, pathId) => {
+                lookups++;
+                return lookups === 1 ? findContainerPath(mountId, pathId) : drive.getPath(mountId, other.id);
+            });
+            const res = await invite(
+                ctx.bob.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                chatId,
+                'moved-invite@test.eigen.is',
+            );
+            spy.mockRestore();
+
+            expect((await assertJson<InviteResult>(res)).targetPathId).toBe(docId);
+            const otherPath = await drive.getPath(aliceMountId, other.id);
+            expect(otherPath?.acl ?? []).toEqual([]);
+        });
     });
 
     describe('chat inside folder inside eigendoc (nested)', () => {

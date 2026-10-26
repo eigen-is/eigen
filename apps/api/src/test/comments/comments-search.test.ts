@@ -169,7 +169,7 @@ describe('Comment search', () => {
         expect(key.some((m) => m.id === 'thread-emote.eigenchat')).toBe(false);
     });
 
-    // The 403 comes from getCommentIndex → SharedDrive.getPath → withReadPermission,
+    // The 403 comes from getCommentIndex → SharedDrive.getPath → requireRead,
     // not from the route handler — the sibling-route ACL pattern.
     describe('permissions (SharedDrive read ACL)', () => {
         test('non-member gets 403', async () => {

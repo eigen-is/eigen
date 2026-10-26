@@ -47,7 +47,9 @@ Before any column changes, `Drive.deletePath` closes every collab document under
 
 ## Trash revokes every share, and restore re-shares without an email
 
-The `acl` column survives trashing. Trash calls `propagateSharedPathChange(path, acl, null)` for the item and every descendant with an ACL: collaborators lose access at once and their `shared.db` rows go, but the owner's `acl` stays. Restore calls it with `(acl, acl)`. The added set is then empty, so collaborators get their access back without a second invite email. Permanent delete skips the call, since trash already revoked everything.
+A trashed item, and everything under a trashed folder, lets in only its owner and the members of the owning team, the people who can restore or delete it. The access check skips the ACL and the visibility of any chain that holds a trashed row (`canFromAncestors` in `apps/api/src/lib/drive/acl.ts`). So a collaborator gets the same 403 as for an item they were never given, and learns nothing about it. They can't read it, write it, list its members, share it on or leave it.
+
+The `acl` column survives trashing, and nobody can change it in the trash: `Drive.updateACL` answers 404 there. So restore gives back exactly the shares the item had. Trash calls `propagateSharedPathChange(path, acl, null)` for the item and every descendant with an ACL, which drops it from each collaborator's **Shared with me**. Restore calls it with `(acl, acl)`. The added set is then empty, so collaborators get their access back without a second invite email. Permanent delete skips the call, since trash already revoked everything. Its watcher notification checks the item as it was before the trash, so a collaborator who watched it still hears that it is gone.
 
 ## Restore goes back to the original folder when it still can
 
@@ -59,7 +61,7 @@ A folder's permanent delete first removes every trash root whose `trashedFrom` l
 
 ## Only the drive owner sees and manages trash
 
-`SharedDrive` lets the effective owner alone (`isEffectiveOwnerSync`: the owner, or a member of the owning team) list, restore, permanently delete and empty. `listTrash` has its own check, so a collaborator cannot enumerate what the owner deleted. Trashing needs write access. A path shared directly with the caller is left instead of trashed ([ACL.md](ACL.md)).
+`SharedDrive` lets the effective owner alone (`requireDriveOwner`: the owner, or a member of the owning team) list, restore, permanently delete and empty, so a collaborator cannot enumerate what the owner deleted. Trashing needs write access. A path shared directly with the caller is left instead of trashed ([ACL.md](ACL.md)).
 
 `Drive.emptyTrash` loops `permanentlyDelete` per item, so every item gets the same sharing, SSE and history handling. An item that is gone or no longer in trash by its turn is skipped: a folder's delete took it with it, or a restore got its lock first. A single permanent delete of such an item is a 404. Trashing the mount root is a 400.
 

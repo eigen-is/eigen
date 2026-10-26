@@ -69,6 +69,11 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 - **Trash** — a file you restore while the Trash is being emptied either comes back or is reported gone. It is never reported restored and then deleted
 - **Trash** — a drive that closes while it clears out expired trash leaves no deleted files behind in its S3 bucket
 - **Trash** — when you trash a document while someone opens it, every edit made before the trash is there after you restore it
+- **Trash** — a chat in the trash restores with all its messages, even after someone tried to open it there
+- **Sharing** — an item in the trash is closed to everyone you shared it with, and nobody can share it on from there. Restoring it gives them the same access again
+- **Sharing** — moving a file needs edit access to the folder it leaves, as renaming it does. Someone who can edit only the file can't take it out of your folder
+- **WebDAV** — a file or folder you have no access to answers the same as one that doesn't exist, so nobody can guess the names in your drive
+- **Guests** — a guest can't send mail to a file's collaborators, as a guest can't share. The File menu and Drive don't offer them **Email collaborators**
 - **Copying documents** — opening a copy of a document before the copy is done waits for it. The copy then finishes with all of its content, instead of stopping halfway with an empty document
 - **Uploads** — two uploads of one name into one folder at the same moment keep the first file's contents on local storage. The second is refused as a duplicate
 - **Uploads** — a file added to a folder someone deletes at that moment is refused as not found, and leaves nothing behind in storage
