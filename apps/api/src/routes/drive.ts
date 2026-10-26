@@ -1,3 +1,7 @@
+// The Drive HTTP routes, for example listing a folder, reading and writing files, sharing, trash and
+// previews. Each route checks who is asking and then goes through SharedDrive, which applies the
+// access rules before the Drive underneath does the work.
+
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import type { DriveAccessCheckResult, DrivePath, ImportResult } from '@workspace/lib/types/drive';
 import { isConvertTarget } from '@workspace/lib/types/drive';
