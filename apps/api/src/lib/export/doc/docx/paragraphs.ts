@@ -1,3 +1,7 @@
+// The docx writer's blocks: each eigendoc block as Word paragraphs and tables, with the spacing between them that
+// Eigen draws. A paragraph's properties are written in the ECMA-376 sequence, since Word reports a child out of order
+// as unreadable content. The document, a table cell and a note all write their blocks through blocksOf.
+
 import type { JSONContent } from '@tiptap/core';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import { isFigureFrameNode, readParagraphFormat } from '@workspace/lib/docs/eigendoc';
@@ -31,9 +35,6 @@ import { INLINES, LINE_BREAK, rPrXml, runsXml, textXml } from './runs';
 import type { Styles } from './styles';
 import { HAIRLINE_TWIPS, proseTwips } from './styles';
 import { TABLE_LOOK, tableOf } from './tables';
-
-// Each block as paragraphs and tables, a paragraph's properties written in the ECMA-376 sequence: Word reports a
-// child out of order as unreadable content.
 
 type Spacing = { before?: number; after?: number; line?: number; exact?: true };
 

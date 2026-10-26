@@ -1,3 +1,7 @@
+// The docx writer's inline content: one run per text node, with its marks as run properties written in the ECMA-376
+// sequence, as a paragraph's are. Links, breaks, equations, page numbers and note references are runs too. A
+// paragraph writes its runs through runsXml.
+
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, getFontName, readFontSize } from '@workspace/lib/constants/fonts';
@@ -15,8 +19,6 @@ import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../../ooxml/wordml';
 import { absoluteHref } from '../render';
 import { useFace } from './fonts';
 import type { Context } from './package';
-
-// Inline content: one run per text node, its properties written in the ECMA-376 sequence, as a paragraph's are.
 
 // size in half-points, spacing in twips, colors as RRGGBB.
 export type RunProps = {

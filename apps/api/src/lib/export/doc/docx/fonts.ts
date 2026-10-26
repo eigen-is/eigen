@@ -1,3 +1,6 @@
+// The docx writer's fonts. The font table lists each family the doc draws in, and each face it uses is embedded whole,
+// so Word draws the doc in Eigen's fonts. useFace records the face a run draws in, which its line's height follows.
+
 import * as fs from 'node:fs';
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { escapeXml } from '@workspace/lib/xml';
@@ -14,9 +17,6 @@ import { CHECKBOX_FONT } from './numbering';
 import type { Package } from './package';
 import type { RunProps } from './runs';
 import type { Styles } from './styles';
-
-// The font table, each face the doc draws in embedded whole, and the face a run draws in, which a line's height
-// follows.
 
 // The ECMA-376 order of a font's embed elements.
 const FONT_SLOTS = ['Regular', 'Bold', 'Italic', 'BoldItalic'] as const satisfies readonly (keyof DocxFontFiles)[];

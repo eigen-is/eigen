@@ -1,3 +1,7 @@
+// The docx writer's styles part. styleDefinitions builds the styles a doc uses, such as the Normal, the headings and
+// the title, with their values from eigen-prose.css. stylesXml writes them once per export, and the paragraphs name
+// them by id.
+
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { cssColorToHex } from '../../../document/colors';
 import {
@@ -32,8 +36,6 @@ import type { ParagraphProps } from './paragraphs';
 import { pPrXml, TITLE_STYLES } from './paragraphs';
 import type { RunProps } from './runs';
 import { rPrXml } from './runs';
-
-// Styles, every value from eigen-prose.css.
 
 // A length an element in the body text takes, in twips.
 export function proseTwips(selector: string, property: string): number {
