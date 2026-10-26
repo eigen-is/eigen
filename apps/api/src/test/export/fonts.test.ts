@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, FONT_FACES } from '@workspace/lib/constants/fonts';
-import { DOCX_FONT_FILES, getFontCSS, getFontFaceCSSForFamilies, sfntTables } from '../../lib/export/fonts';
+import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/doc/docx/fonts';
+import { allFontFaceCss, getFontFaceCSSForFamilies } from '../../lib/export/fonts';
 
 const UI_STYLES_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/styles');
 
@@ -27,7 +28,7 @@ test('the export fonts are the faces the apps load', () => {
     const appFaces = faces(appCSS, (src) => fs.readFileSync(path.join(UI_STYLES_DIR, src))).filter(
         (face) => !face.startsWith('"STIX Two Math"'),
     );
-    const exportFaces = faces(getFontCSS(), (src) => Buffer.from(src.slice(src.indexOf(',') + 1), 'base64'));
+    const exportFaces = faces(allFontFaceCss(), (src) => Buffer.from(src.slice(src.indexOf(',') + 1), 'base64'));
     expect(appFaces).toHaveLength(6);
     expect(exportFaces).toEqual(appFaces);
 });
@@ -35,7 +36,7 @@ test('the export fonts are the faces the apps load', () => {
 // The faces are the registry's, which the browser's image writer embeds too, in its order.
 test('the export embeds the registry faces, and only those of the families asked for', () => {
     const families = (css: string) => [...css.matchAll(/font-family: "([^"]+)"/g)].map((m) => m[1]);
-    expect(families(getFontCSS())).toEqual(FONT_FACES.map((face) => face.family));
+    expect(families(allFontFaceCss())).toEqual(FONT_FACES.map((face) => face.family));
     expect(families(getFontFaceCSSForFamilies(['Inter', 'Unknown']))).toEqual(['Inter', 'Inter']);
 });
 

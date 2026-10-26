@@ -1,5 +1,5 @@
 import { escapeHtml } from '@workspace/lib/html';
-import { getFontCSS, getFontFaceCSSForFamilies } from './fonts';
+import { allFontFaceCss, getFontFaceCSSForFamilies } from './fonts';
 import { EXPORT_CSP, KEEP_MATHML, sanitizeExportHtml } from './sanitize';
 
 // The data-only rule as a <meta>, so it still holds once a download is saved and opened.
@@ -33,7 +33,7 @@ export function exportHtmlDocument({
     <meta charset="utf-8">
     ${EXPORT_CSP_META}${viewport ? `\n    ${VIEWPORT_META}` : ''}
     <title>${escapeHtml(title)}</title>
-    <style>${fonts ? getFontFaceCSSForFamilies(fonts) : getFontCSS()}${css}</style>
+    <style>${fonts ? getFontFaceCSSForFamilies(fonts) : allFontFaceCss()}${css}</style>
 </head>
 <body>
     ${sanitizeExportHtml(body, { ...KEEP_LINK_TARGETS, ...KEEP_MATHML })}
