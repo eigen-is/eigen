@@ -10,6 +10,7 @@ import {
     chartSpecTexts,
     chartSpecWrites,
     exceedsChartSpecBytes,
+    isCellRangeShape,
     isChartSpecKey,
     MAX_CHART_POINTS,
     readChartLook,
@@ -173,7 +174,9 @@ export function mapChartRefs(
     if (!moved) return chart;
     const change: ChartSpecChange = [{ op: 'set', path: ['data'], value: data }];
     const series = Array.isArray(before['series']) ? before['series'] : [];
-    const along = [before['categories'], ...series.map((s) => (isRecord(s) ? s['values'] : null))].find(isRef);
+    const along = [before['categories'], ...series.map((s) => (isRecord(s) ? s['values'] : null))].find(
+        isCellRangeShape,
+    );
     const target = along && points?.(along);
     if (target) change.push(...chartPointMoves(stored, target));
     return withSheetChartSpecWrites(chart, sheetChartSpecWrites(stored, change));
@@ -222,19 +225,13 @@ export function copySheetChartSpec(chart: SheetChart): SheetChartSpecParts {
     return copy;
 }
 
-// A record shaped as a CellRangeRef. A key beside its three is accepted, as the reader accepts it.
-function isRef(value: unknown): value is CellRangeRef {
-    const bounds = (v: unknown) => Array.isArray(v) && v.length === 2 && v.every(Number.isInteger);
-    return isRecord(value) && typeof value['sheetId'] === 'string' && bounds(value['row']) && bounds(value['column']);
-}
-
 // Stored data with every ref passed through `map`, which is told the key it sits under; undefined leaves it out. A ref
 // sits on the data or on one of its series, so nothing deeper is walked.
 function walkRefs(data: unknown, map: (ref: CellRangeRef, key: string) => unknown): unknown {
     const walk = (record: Record<string, unknown>) =>
         Object.fromEntries(
             Object.entries(record).flatMap(([key, value]) => {
-                const next = isRef(value) ? map(value, key) : value;
+                const next = isCellRangeShape(value) ? map(value, key) : value;
                 return next === undefined ? [] : [[key, next]];
             }),
         );
