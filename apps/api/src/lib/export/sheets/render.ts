@@ -9,7 +9,7 @@ import type { Cell, CellBorderSides, CellWithRowAndCol, MergeCell, Sheet } from 
 import {
     borderSidesToCss,
     cellFontName,
-    mergedBorderSides,
+    mergeEdgeSides,
     parseCellKey,
     SHEET_DEFAULT_COL_WIDTH,
     SHEET_DEFAULT_FONT_SIZE,
@@ -194,34 +194,57 @@ function renderSheet(
     }
 
     // Each merge is one td on the first rendered cell it covers, spanning the rendered rows and columns it covers, so
-    // a hidden row or column inside it adds no span and the table matches its colgroup. The border fold reads the
-    // same rendered positions, so a merge over many hidden rows expands over the rows that show.
+    // a hidden row or column inside it adds no span and the table matches its colgroup.
     const width = cols.length;
-    const spans = new Map<number, { anchor: MergeCell; span: MergeCell }>();
-    const covered = new Uint8Array(rows.length * width);
-    const renderedMerges: Record<string, MergeCell> = {};
-    for (const anchor of Object.values(config.merge ?? {})) {
+    const merges = Object.values(config.merge ?? {});
+    const spans: MergeCell[] = [];
+    // The merge each rendered cell lies in, by its index in `merges`, else -1.
+    const mergeAt = new Int32Array(rows.length * width).fill(-1);
+    for (const [k, anchor] of merges.entries()) {
         const r0 = firstAtOrAfter(rows, anchor.r);
         const r1 = firstAtOrAfter(rows, anchor.r + anchor.rs) - 1;
         const c0 = firstAtOrAfter(cols, anchor.c);
         const c1 = firstAtOrAfter(cols, anchor.c + anchor.cs) - 1;
-        if (r0 > r1 || c0 > c1) continue;
-        const span = { r: r0, c: c0, rs: r1 - r0 + 1, cs: c1 - c0 + 1 };
-        renderedMerges[`${r0}_${c0}`] = span;
-        spans.set(r0 * width + c0, { anchor, span });
-        for (let i = r0; i <= r1; i++) covered.fill(1, i * width + c0, i * width + c1 + 1);
+        spans.push({ r: r0, c: c0, rs: r1 - r0 + 1, cs: c1 - c0 + 1 });
+        for (let i = r0; i <= r1; i++) mergeAt.fill(k, i * width + c0, i * width + c1 + 1);
     }
+    // The merge a stored cell lies in, else -1. A merge that renders has a shown row next to each of its hidden ones,
+    // before or after it, and the same for its columns, so the rendered cells nearest the stored one find it.
+    const mergeOf = (r: number, c: number): number => {
+        const i = firstAtOrAfter(rows, r);
+        const j = firstAtOrAfter(cols, c);
+        for (const near of [i, i - 1]) {
+            for (const nearCol of [j, j - 1]) {
+                if (near < 0 || near >= rows.length || nearCol < 0 || nearCol >= width) continue;
+                const k = mergeAt[near * width + nearCol];
+                const m = merges[k];
+                if (k >= 0 && r >= m.r && r < m.r + m.rs && c >= m.c && c < m.c + m.cs) return k;
+            }
+        }
+        return -1;
+    };
+    // A merge's outer borders sit on its first rendered cell, the only one drawn for it. They fold from the stored
+    // keys in reading order, as the editor folds them, so a side stored on a hidden edge row or column still draws.
     const rowAt = new Map(rows.map((r, i) => [r, i]));
     const colAt = new Map(cols.map((c, j) => [c, j]));
-    const renderedBorders: Record<string, CellBorderSides> = {};
+    const borderMap: Record<string, CellBorderSides> = {};
+    const inMerges: { sides: CellBorderSides; r: number; c: number; k: number }[] = [];
     for (const key in config.borderInfo) {
         const [r, c] = parseCellKey(key);
+        const k = mergeOf(r, c);
+        if (k >= 0) {
+            inMerges.push({ sides: config.borderInfo[key], r, c, k });
+            continue;
+        }
         const i = rowAt.get(r);
         const j = colAt.get(c);
-        if (i !== undefined && j !== undefined) renderedBorders[`${i}_${j}`] = config.borderInfo[key];
+        if (i !== undefined && j !== undefined) borderMap[`${i}_${j}`] = config.borderInfo[key];
     }
-    // A merge's outer borders sit on its first cell, the only one rendered for it.
-    const borderMap = mergedBorderSides(renderedBorders, renderedMerges, [0, rows.length - 1, 0, width - 1]);
+    inMerges.sort((a, b) => a.r - b.r || a.c - b.c);
+    for (const { sides, r, c, k } of inMerges) {
+        const edge = mergeEdgeSides(sides, merges[k], r, c);
+        if (edge) Object.assign((borderMap[`${spans[k].r}_${spans[k].c}`] ??= {}), edge);
+    }
 
     // The rules need the dense `data` matrix, and a sheet without it draws none, as the canvas does.
     const rules = sheet.conditionalFormatRules;
@@ -251,16 +274,17 @@ function renderSheet(
         tableHeight += h;
         const cells: string[] = [];
         for (let j = 0; j < width; j++) {
-            const merge = spans.get(i * width + j);
-            if (!merge && covered[i * width + j]) continue;
+            const k = mergeAt[i * width + j];
+            const span = k >= 0 ? spans[k] : undefined;
+            if (span && (span.r !== i || span.c !== j)) continue;
             // A merge draws its first cell, even when that cell's row or column is hidden.
-            const [r, c] = merge ? [merge.anchor.r, merge.anchor.c] : [rows[i], cols[j]];
+            const [r, c] = k >= 0 ? [merges[k].r, merges[k].c] : [rows[i], cols[j]];
             const v = cellMap.get(`${r},${c}`)?.v ?? null;
             const cfStyle = cfMap ? cfMap[`${r}_${c}`] : undefined;
 
             const attrs: string[] = [];
-            if (merge && merge.span.cs > 1) attrs.push(`colspan="${merge.span.cs}"`);
-            if (merge && merge.span.rs > 1) attrs.push(`rowspan="${merge.span.rs}"`);
+            if (span && span.cs > 1) attrs.push(`colspan="${span.cs}"`);
+            if (span && span.rs > 1) attrs.push(`rowspan="${span.rs}"`);
 
             const cellStyle = buildCellStyle(v, borderMap[`${i}_${j}`], showGrid, cfStyle, forStylesheet);
             if (forStylesheet) {

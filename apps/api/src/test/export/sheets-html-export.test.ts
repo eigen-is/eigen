@@ -5,7 +5,15 @@ import {
     newSheetChartSpecParts,
     sampleChartSpec,
 } from '@workspace/lib/charts';
-import type { Cell, ConditionalFormatRule, Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
+import type {
+    Cell,
+    CellBorderSides,
+    ConditionalFormatRule,
+    Sheet,
+    SheetChart,
+    SheetImage,
+} from '@workspace/lib/sheets';
+
 import {
     encodeSheetsSnapshot,
     REFERENCE_COLUMN_COUNT,
@@ -1772,6 +1780,48 @@ describe('Sheets HTML export — the window over forged keys', () => {
             ['<td colspan="2">', '<td>', '<td>'],
             ['<td colspan="5">'],
         ]);
+    });
+
+    test('a merge whose edge row or column is hidden still draws its four outer borders', () => {
+        const side = { style: 1, color: '#000000' };
+        const borderInfo: Record<string, CellBorderSides> = {};
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 2; c++) {
+                borderInfo[`${r}_${c}`] = {
+                    ...(r === 0 && { t: side }),
+                    ...(r === 2 && { b: side }),
+                    ...(c === 0 && { l: side }),
+                    ...(c === 1 && { r: side }),
+                };
+            }
+        }
+        const box = (hidden: Sheet['config']): Sheet => ({
+            id: 'box',
+            name: 'Box',
+            order: 0,
+            celldata: [
+                { r: 0, c: 0, v: { v: 'm', m: 'm' } },
+                { r: 4, c: 3, v: { v: 'z', m: 'z' } },
+            ],
+            config: { merge: { '0_0': { r: 0, c: 0, rs: 3, cs: 2 } }, borderInfo, ...hidden },
+        });
+        const hiddens: Sheet['config'][] = [
+            {},
+            { rowhidden: { 2: 0 } },
+            { colhidden: { 1: 0 } },
+            { rowhidden: { 0: 0 } },
+        ];
+        for (const hidden of hiddens) {
+            const out = renderSheetsHtml([box(hidden)], NO_MEDIA);
+            const cls = out.html.match(/<td[^>]*class="(s\d+)"[^>]*>m</)?.[1];
+            const declarations = out.css.match(new RegExp(`\\.${cls}\\{([^}]*)\\}`))?.[1].split(';');
+            expect(declarations?.filter((d) => d.startsWith('border-')).sort()).toEqual([
+                'border-bottom:1px solid #000000',
+                'border-left:1px solid #000000',
+                'border-right:1px solid #000000',
+                'border-top:1px solid #000000',
+            ]);
+        }
     });
 
     test('an empty tab between two others adds no page', () => {
