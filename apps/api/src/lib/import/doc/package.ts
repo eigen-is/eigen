@@ -9,7 +9,7 @@ import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import type { Lost } from '../../document/transform/protocol';
 import type { Budget } from '../../ooxml/budget';
-import { budget } from '../../ooxml/budget';
+import { budget, CHARS_PER_UNIT } from '../../ooxml/budget';
 import { alternativeFor, isAlternateContent, isOnElement, measure, R_NS, W_NS } from '../../ooxml/ooxml';
 import type { OoxmlPackage, Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType } from '../../ooxml/opc';
@@ -28,9 +28,6 @@ export const MAX_DOCX_WEIGHT = 150_000;
 // readChart builds every point a cache declares before the spec's cap refuses them, a few tags each up to 68,000 slots,
 // so a file of many small chart parts is bounded by their cost (chartCost) together. The corpus's most is 1,740.
 export const MAX_DOCX_CHART_WORK = 1_000_000;
-
-// A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
-export const CHARS_PER_UNIT = 512;
 
 export type DocxPackage = {
     zip: ZipReader;
@@ -61,7 +58,7 @@ export type DocxPackage = {
 
 // Counts in `lost` the bands the file names that no doc holds: an even page's, which Word draws only with
 // evenAndOddHeaders, and one in a part that is missing or damaged.
-export function readPackage(bytes: Uint8Array, lost: Lost): DocxPackage {
+export function readDocxPackage(bytes: Uint8Array, lost: Lost): DocxPackage {
     const pkg = openPackage(bytes, IMPORT_MESSAGES.docx);
     const { tooLarge } = IMPORT_MESSAGES.docx;
     const documentPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'word/document.xml';
@@ -151,7 +148,7 @@ const WORD_PREFIXES = new Set([
     'r',
 ]);
 
-export const alternative = alternativeFor(WORD_PREFIXES);
+export const wordAlternative = alternativeFor(WORD_PREFIXES);
 
 // ── WordprocessingML attributes ─────────────────────────────────────────────────────────────────────────────────
 
@@ -167,7 +164,8 @@ export function onOff(element: XmlElement | undefined): boolean | undefined {
     return isOnElement(element, W_NS);
 }
 
-export function int(value: string | undefined): number | undefined {
+// A number attribute rounded to a whole one. Word writes integers, but a generator may write a fraction.
+export function roundedInt(value: string | undefined): number | undefined {
     if (value === undefined) return undefined;
     const number = Number.parseFloat(value);
     return Number.isFinite(number) ? Math.round(number) : undefined;
@@ -189,7 +187,7 @@ export function descendants(root: XmlElement, ns: string, local: string): XmlEle
     for (let element = stack.pop(); element; element = stack.pop()) {
         if (hasXmlName(element, ns, local)) found.push(element);
         else if (!hasXmlName(element, W_NS, 'txbxContent')) {
-            const children = isAlternateContent(element) ? alternative(element) : xmlElements(element);
+            const children = isAlternateContent(element) ? wordAlternative(element) : xmlElements(element);
             for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
         }
     }

@@ -1,4 +1,6 @@
-// docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform process.
+// Reads a docx file into an Eigen doc, straight from the WordprocessingML with no HTML between, with its bands, page,
+// Normal style, pictures and the warnings for what it left out. It runs in the transform process, which a docx import
+// or convert hands the file to.
 
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
@@ -9,15 +11,15 @@ import { docSchema } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
 import type { TransformWarning } from '../../document/transform/protocol';
 import { lossCounter } from '../../document/transform/protocol';
+import { CHARS_PER_UNIT } from '../../ooxml/budget';
 import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
 import type { ImportedMedia } from '../image-types';
 import { importMedia, UNSHOWN_IMAGE_TYPES } from '../image-types';
 import { IMPORT_MESSAGES, importError } from '../messages';
-import { CHARS_PER_UNIT, MAX_DOCX_WEIGHT, readPackage } from './package';
+import { MAX_DOCX_WEIGHT, readDocxPackage } from './package';
 import { createReader, readBand, readDocument } from './paragraphs';
 
-// The upload cap, which bounds the pictures' bytes as an upload of each would be bounded; links into this instance
-// come back root-relative with the public origin.
+// Links into this instance come back root-relative through the public origin.
 export type DocxOptions = { publicOrigin: string | undefined; maxMediaBytes: number };
 
 // The update holds every character, a string attribute's too (a link's href is spelled out for every text node it
@@ -27,27 +29,6 @@ export const MAX_DOCX_TEXT = 16_000_000;
 
 // A TableMap slot, a column of a row however spanned or padded, costs about 16 bytes, a unit 1.3 KB and more.
 const SLOTS_PER_UNIT = 64;
-
-// The doc as JSON, for the audit and the tests, its pictures bounded by the zip cap alone; the import encodes the doc
-// itself, with no copy between.
-export function docxToPmJson(
-    buffer: Buffer,
-    { publicOrigin }: { publicOrigin?: string } = {},
-): {
-    json: JSONContent;
-    bands: Partial<Record<BandRoot, JSONContent>>;
-    page: PageSetup;
-    style: NormalStyle;
-    media: ImportedMedia[];
-    warnings: TransformWarning[];
-} {
-    const { doc, bands, page, style, media, warnings } = readDocx(buffer, {
-        publicOrigin,
-        maxMediaBytes: MAX_DECOMPRESSED_BYTES,
-    });
-    const json = Object.fromEntries(Object.entries(bands).map(([root, band]) => [root, band.toJSON()]));
-    return { json: doc.toJSON(), bands: json, page, style, media, warnings };
-}
 
 export function readDocx(
     buffer: Buffer,
@@ -62,7 +43,7 @@ export function readDocx(
 } {
     try {
         const losses = lossCounter();
-        const pkg = readPackage(buffer, losses.lost);
+        const pkg = readDocxPackage(buffer, losses.lost);
         const files = importMedia('docx', pkg.readMedia, options.maxMediaBytes);
         const reader = createReader(pkg, files, losses.lost, options.publicOrigin);
         const content = readDocument(reader);
@@ -122,6 +103,27 @@ export function readDocx(
     } catch (error) {
         throw importError(error, 'docx');
     }
+}
+
+// The doc as JSON, for the audit and the tests, its pictures bounded by the zip cap alone; the import encodes the doc
+// itself, with no copy between.
+export function docxToPmJson(
+    buffer: Buffer,
+    { publicOrigin }: { publicOrigin?: string } = {},
+): {
+    json: JSONContent;
+    bands: Partial<Record<BandRoot, JSONContent>>;
+    page: PageSetup;
+    style: NormalStyle;
+    media: ImportedMedia[];
+    warnings: TransformWarning[];
+} {
+    const { doc, bands, page, style, media, warnings } = readDocx(buffer, {
+        publicOrigin,
+        maxMediaBytes: MAX_DECOMPRESSED_BYTES,
+    });
+    const json = Object.fromEntries(Object.entries(bands).map(([root, band]) => [root, band.toJSON()]));
+    return { json: doc.toJSON(), bands: json, page, style, media, warnings };
 }
 
 // The weight is every node and mark, and every table's area; the text every character, string attributes' included.

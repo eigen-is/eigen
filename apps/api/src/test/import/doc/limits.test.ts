@@ -10,10 +10,11 @@ import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-t
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson, MAX_DOCX_TEXT } from '../../../lib/import/doc/from-docx';
-import { CHARS_PER_UNIT, MAX_DOCX_CHART_WORK, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
+import { MAX_DOCX_CHART_WORK, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import { PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
+import { CHARS_PER_UNIT } from '../../../lib/ooxml/budget';
 import { C_NS, M_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
 import { CHART_NOT_IMPORTED, chartCost } from '../../../lib/ooxml/ooxml-chart';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';

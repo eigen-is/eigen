@@ -24,6 +24,7 @@ import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode, Lost } from '../../document/transform/protocol';
+import { CHARS_PER_UNIT } from '../../ooxml/budget';
 import {
     ARROWHEAD_BY_LINE_END,
     DEGREE,
@@ -85,7 +86,6 @@ export const MAX_GROUP_DEPTH = 32;
 // the update is built, and so the update the main thread reads back. The corpus's heaviest weighs 3,307 (a 2.4 MB
 // update); at the cap a text-heavy update is about 25 MB and commits in 135 ms.
 export const MAX_PPTX_WEIGHT = 50_000;
-const CHARS_PER_UNIT = 512;
 
 // How an imported element looks where the file says nothing: crisp, unframed, unfilled, never the editor's rounding.
 export const PPTX_STYLE: StyleDefaults = {
