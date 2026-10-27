@@ -461,19 +461,75 @@ test('a press on the text over a behind image is the text’s, and Alt takes the
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
 });
 
-test('the body grows under the lowest positioned image, and only while one is there', async () => {
+// The test harness runs a frame at once. These frames wait until the test runs them, as a browser runs them after a
+// task's changes.
+function holdFrames() {
+    const frames: FrameRequestCallback[] = [];
+    const inline = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = (callback) => frames.push(callback);
+    const unmountEditor = unmount;
+    unmount = async () => {
+        globalThis.requestAnimationFrame = inline;
+        await unmountEditor();
+    };
+    return () =>
+        act(async () => {
+            for (const frame of frames.splice(0)) frame(0);
+        });
+}
+
+test('the body grows under the lowest positioned image once a frame, and only while one is there', async () => {
     const editor = await mount([paragraph(front(), text('abc'))]);
+    const nextFrame = holdFrames();
     place(editor.view.dom, 100, 100, 600, 50);
-    place(editor.view.dom.querySelector('.figure'), 110, 120, 200, 400);
+    const box = editor.view.dom.querySelector('.figure');
+    place(box, 110, 120, 200, 400);
+    let reads = 0;
+    const measure = box?.getBoundingClientRect;
+    if (box && measure)
+        box.getBoundingClientRect = () => {
+            reads++;
+            return measure();
+        };
     await act(async () => {
         editor.commands.insertContentAt(3, 'd');
+        editor.commands.insertContentAt(3, 'e');
     });
+    expect(reads).toBe(0);
+    await nextFrame();
+    expect(reads).toBe(1);
     expect(editor.view.dom.style.minHeight).toBe('420px');
     await act(async () => {
         editor.commands.setNodeSelection(1);
         editor.commands.deleteSelection();
     });
+    await nextFrame();
     expect(editor.view.dom.style.minHeight).toBe('');
+});
+
+test('a width a collaborator stored as no number is read as unset, so a switch to in front takes the drawn width', async () => {
+    const editor = await mount([paragraph(text('ab'), image({ width: 'wide' }))]);
+    place(editor.view.dom, 100, 100, 600, 300);
+    place(blockDom(editor, 0), 100, 100, 600, 120);
+    place(figureBox(editor, 3), 650, 130);
+    await act(async () => {
+        editor.commands.setNodeSelection(3);
+    });
+    await act(async () => {
+        editor.commands.positionFigure('front');
+    });
+    // The 200 px drawn box stops at the 800 px paper's right edge: x 600, 500 from the paragraph's left.
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ offsetX: 500, offsetY: 30 });
+});
+
+test('one transaction that inserts positioned images in paragraphs far apart leads each in its paragraph', async () => {
+    const editor = await mount([paragraph(text('abc')), paragraph(text('mid')), paragraph(text('xyz'))]);
+    await act(async () => {
+        const { state, schema } = editor;
+        const tr = state.tr.insert(13, schema.nodeFromJSON(front())).insert(2, schema.nodeFromJSON(front()));
+        editor.view.dispatch(tr);
+    });
+    expect(blocks(editor)).toEqual([['figure:front', 'abc'], ['mid'], ['figure:front', 'xyz']]);
 });
 
 test('a re-anchor and a Backspace join are one undo step each', async () => {

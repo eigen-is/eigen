@@ -43,6 +43,11 @@ export type FigureFrameAttrs = {
     commentCardId?: string | null;
 };
 
+// A figure's or a chart's stored width, which a collaborator can write as anything. One that isn't a positive number
+// reads as unset, and one wider than the largest paper as that paper.
+export const readFrameWidth = (value: unknown): number | null =>
+    typeof value === 'number' && value > 0 ? Math.min(MAX_POSITION_PX, value) : null;
+
 const readOffset = (value: unknown) =>
     typeof value === 'number' && Number.isFinite(value)
         ? Math.min(MAX_POSITION_PX, Math.max(-MAX_POSITION_PX, value))

@@ -33,6 +33,7 @@ export {
     isFigureFrameNode,
     isPositioned,
     readFigureFrameAttrs,
+    readFrameWidth,
     setFigureAttributes,
 } from './nodes/figure-frame';
 export { selectionFontSizes } from './nodes/font-size';
