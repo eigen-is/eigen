@@ -277,6 +277,166 @@ describe('cell fill', () => {
     });
 });
 
+describe('cell borders', () => {
+    // Each row as its cells' sides, top, right, bottom and left, null where the cell draws Eigen's own.
+    const sidesOf = async (body: string, styles = '') =>
+        nodesOfType((await importDocxBody(body, { styles })).json, 'tableRow').map((tableRow: JSONContent) =>
+            (tableRow.content ?? []).map((node) =>
+                ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'].map((name) => node.attrs?.[name] ?? null),
+            ),
+        );
+    const side = (name: string, val = 'single', sz = 4, color = '000000') =>
+        `<w:${name} w:val="${val}" w:sz="${sz}" w:space="0" w:color="${color}"/>`;
+    const tcBorders = (...sides: string[]) => `<w:tcBorders>${sides.join('')}</w:tcBorders>`;
+    const tblBorders = (...sides: string[]) => `<w:tblBorders>${sides.join('')}</w:tblBorders>`;
+    const grid = (tblPr = '') => table([row([cell('a'), cell('b')]), row([cell('c'), cell('d')])], tblPr);
+    const THIN = '0.67px solid #000000';
+    const RED = '1px solid #ff0000';
+    const ALL = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'];
+
+    test("a table with no borders of its own or its style's draws none on every side", async () => {
+        expect(await sidesOf(grid())).toEqual([
+            [
+                ['none', 'none', 'none', 'none'],
+                ['none', 'none', 'none', 'none'],
+            ],
+            [
+                ['none', 'none', 'none', 'none'],
+                ['none', 'none', 'none', 'none'],
+            ],
+        ]);
+    });
+
+    // An outer side takes the table's side, an inner one insideH or insideV.
+    test("the table's borders draw by position, outside and inside", async () => {
+        const borders = tblBorders(
+            side('top', 'single', 12),
+            side('left'),
+            side('bottom', 'double', 6),
+            side('right', 'dotted'),
+            side('insideH', 'nil'),
+            side('insideV', 'dashed', 6, 'FF0000'),
+        );
+        expect(await sidesOf(grid(borders))).toEqual([
+            [
+                ['2px solid #000000', '1px dashed #ff0000', 'none', THIN],
+                ['2px solid #000000', '0.67px dotted #000000', 'none', '1px dashed #ff0000'],
+            ],
+            [
+                ['none', '1px dashed #ff0000', '1px double #000000', THIN],
+                ['none', '0.67px dotted #000000', '1px double #000000', '1px dashed #ff0000'],
+            ],
+        ]);
+    });
+
+    // start and end are left and right; nil is none, beside a side drawn.
+    test("a cell's own sides win over the table's, start and end read as left and right", async () => {
+        const body = table(
+            [
+                row([
+                    cell('a', tcBorders(side('top', 'nil'), side('start', 'single', 6, 'FF0000'))),
+                    cell('b', tcBorders(side('end', 'nil'), side('bottom', 'single', 6, 'FF0000'))),
+                ]),
+            ],
+            tblBorders(...ALL.map((name) => side(name))),
+        );
+        expect(await sidesOf(body)).toEqual([
+            [
+                ['none', THIN, THIN, RED],
+                [THIN, 'none', RED, THIN],
+            ],
+        ]);
+    });
+
+    const STYLES = [
+        `<w:style w:type="table" w:styleId="Base"><w:name w:val="Base"/><w:tblPr>${tblBorders(...ALL.map((name) => side(name, 'single', 6, 'FF0000')))}</w:tblPr></w:style>`,
+        `<w:style w:type="table" w:styleId="Grid"><w:name w:val="Grid"/><w:basedOn w:val="Base"/><w:tblPr>${tblBorders(side('insideH', 'nil'))}</w:tblPr><w:tblStylePr w:type="firstRow"><w:tcPr>${tcBorders(side('bottom', 'single', 12), side('insideV', 'nil'))}</w:tcPr></w:tblStylePr></w:style>`,
+    ].join('');
+
+    // The style's sides come through its basedOn chain, each side from the nearest style that sets it.
+    test("a table style's borders draw where the table sets none, through its basedOn", async () => {
+        expect(await sidesOf(grid('<w:tblStyle w:val="Grid"/><w:tblLook w:firstRow="0"/>'), STYLES)).toEqual([
+            [
+                [RED, RED, 'none', RED],
+                [RED, RED, 'none', RED],
+            ],
+            [
+                ['none', RED, RED, RED],
+                ['none', RED, RED, RED],
+            ],
+        ]);
+    });
+
+    // Word's order: the cell, the style's first row, the table, the style.
+    test("the style's first row wins over the table's borders, and the table's over the style's", async () => {
+        const body = grid(
+            `<w:tblStyle w:val="Grid"/>${tblBorders(side('top'), side('bottom'), side('insideH'))}<w:tblLook w:firstRow="1"/>`,
+        );
+        expect(await sidesOf(body, STYLES)).toEqual([
+            [
+                [THIN, 'none', '2px solid #000000', RED],
+                [THIN, RED, '2px solid #000000', 'none'],
+            ],
+            [
+                [THIN, RED, THIN, RED],
+                [THIN, RED, THIN, RED],
+            ],
+        ]);
+    });
+
+    test("Word's styles become the four the editor draws, and auto is black", async () => {
+        const styled = (val: string) =>
+            table([
+                row([
+                    cell(
+                        'a',
+                        tcBorders(...['top', 'left', 'bottom', 'right'].map((name) => side(name, val, 4, 'auto'))),
+                    ),
+                ]),
+            ]);
+        const firstSide = async (val: string) => (await sidesOf(styled(val)))[0]?.[0]?.[0];
+        expect(await firstSide('dashSmallGap')).toBe('0.67px dashed #000000');
+        expect(await firstSide('dashDotStroked')).toBe('0.67px dashed #000000');
+        expect(await firstSide('dotted')).toBe('0.67px dotted #000000');
+        expect(await firstSide('thinThickSmallGap')).toBe('0.67px double #000000');
+        expect(await firstSide('threeDEmboss')).toBe('0.67px solid #000000');
+        expect(await firstSide('outset')).toBe('0.67px solid #000000');
+        expect(await firstSide('none')).toBe('none');
+    });
+
+    test('a width past what the editor draws is held to it', async () => {
+        const sized = (sz: number) => table([row([cell('a', tcBorders(side('top', 'single', sz)))])]);
+        expect((await sidesOf(sized(2)))[0]?.[0]?.[0]).toBe('0.5px solid #000000');
+        expect((await sidesOf(sized(96)))[0]?.[0]?.[0]).toBe('8px solid #000000');
+    });
+
+    // Eigen's own grey is the look a cell draws without sides of its own, so the writer's table reads back as unset.
+    test("a side in Eigen's own grey reads as unset", async () => {
+        const grey = tblBorders(...ALL.map((name) => side(name, 'single', 6, 'D1D5DB')));
+        expect(await sidesOf(grid(grey))).toEqual([
+            [
+                [null, null, null, null],
+                [null, null, null, null],
+            ],
+            [
+                [null, null, null, null],
+                [null, null, null, null],
+            ],
+        ]);
+    });
+
+    test('a vertically merged cell takes its bottom from its last row', async () => {
+        const body = table(
+            [
+                row([cell('A', '<w:vMerge w:val="restart"/>'), cell('b')]),
+                row([cell('', `<w:vMerge/>${tcBorders(side('bottom', 'single', 6, 'FF0000'))}`), cell('c')]),
+            ],
+            tblBorders(...ALL.map((name) => side(name))),
+        );
+        expect((await sidesOf(body))[0]?.[0]).toEqual([THIN, THIN, RED, THIN]);
+    });
+});
+
 describe('merges', () => {
     test('gridSpan and vMerge are colspan and rowspan', async () => {
         const body = table([

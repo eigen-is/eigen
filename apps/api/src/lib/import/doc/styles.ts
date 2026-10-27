@@ -2,11 +2,14 @@
 // its basedOn parents, docDefaults and the table's conditional looks. Readers such as the paragraph and run readers
 // read their properties through it.
 
+import type { CellBorder } from '@workspace/lib/docs/eigendoc';
+import { MAX_CELL_BORDER_PX, MIN_CELL_BORDER_PX } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
 import { isOn, W_NS } from '../../ooxml/ooxml';
 import {
+    BORDER_EIGHTHS_PER_PX,
     BORDER_SIDES,
     codeBlockLanguage,
     headingLevel,
@@ -14,7 +17,7 @@ import {
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
 } from '../../ooxml/wordml';
-import { hexColor } from './colors';
+import { hexColor, markColor } from './colors';
 import type { Fonts, Script, Theme } from './docx-fonts';
 import { FONT_SLOTS } from './docx-fonts';
 import { halfPointsOf, onOff, roundedInt, twipsOf, w, wChild } from './package';
@@ -109,6 +112,53 @@ export function shadingOf(shd: XmlElement | undefined): string | undefined {
     // Solid paints the pattern color. An auto one is black, with Word's auto text white on it; the fill stands in for
     // it, so auto text stays legible in the body color.
     return (val === 'solid' && hexColor(w(shd, 'color'))) || (hexColor(w(shd, 'fill')) ?? '');
+}
+
+type TableBorderSide = 'top' | 'left' | 'bottom' | 'right' | 'insideH' | 'insideV';
+
+// A table's or a cell's sides as the editor stores them, by the side of a table each holds.
+export type TableBorders = Partial<Record<TableBorderSide, CellBorder>>;
+
+// start and end are the strict names of left and right.
+const TABLE_BORDER_SIDE = new Map<string, TableBorderSide>([
+    ['top', 'top'],
+    ['left', 'left'],
+    ['start', 'left'],
+    ['bottom', 'bottom'],
+    ['right', 'right'],
+    ['end', 'right'],
+    ['insideH', 'insideH'],
+    ['insideV', 'insideV'],
+]);
+
+const DASHED_BORDERS = new Set(['dashed', 'dashSmallGap', 'dashDotStroked', 'dotDash', 'dotDotDash']);
+
+export function tableBordersOf(borders: XmlElement | undefined): TableBorders {
+    const sides: TableBorders = {};
+    for (const border of borders ? xmlElements(borders) : []) {
+        const side = border.ns === W_NS ? TABLE_BORDER_SIDE.get(border.local) : undefined;
+        if (side) sides[side] ??= cellBorderOf(border);
+    }
+    return sides;
+}
+
+// The editor draws four styles: a 3-D or an art border draws solid, and Word's double lines double.
+function cellBorderOf(border: XmlElement): CellBorder {
+    const val = w(border, 'val');
+    if (!val || val === 'nil' || val === 'none') return 'none';
+    const px = (roundedInt(w(border, 'sz')) ?? 0) / BORDER_EIGHTHS_PER_PX;
+    return {
+        width: Number(Math.min(Math.max(px, MIN_CELL_BORDER_PX), MAX_CELL_BORDER_PX).toFixed(2)),
+        style:
+            val === 'dotted'
+                ? 'dotted'
+                : DASHED_BORDERS.has(val)
+                  ? 'dashed'
+                  : /^(double|triple|thinThick|thickThin)/.test(val)
+                    ? 'double'
+                    : 'solid',
+        color: markColor(hexColor(w(border, 'color')) || '000000'),
+    };
 }
 
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): DocxRunProps {
@@ -332,9 +382,11 @@ type Style = {
     pPr: ParaProps;
     rPr: DocxRunProps;
     firstRowRun?: DocxRunProps;
-    // A table style's cell fill, whole and in its first row.
+    // A table style's cell fill and borders, whole and in its first row.
     fill?: string;
     firstRowFill?: string;
+    borders: TableBorders;
+    firstRowBorders: TableBorders;
 };
 
 // What a paragraph style means in eigendoc. Its look is the node's, so the props it absorbs are no marks.
@@ -393,8 +445,14 @@ export const ABSORBED: Record<Role['kind'], (keyof DocxRunProps)[] | 'all'> = {
 // How far a basedOn or numStyleLink chain is followed: deeper than any a person builds, and each walk stays short.
 export const MAX_CHAIN = 32;
 
-// A table style's looks: its cells' fill, and its first row's run props and fill.
-type TableLook = { fill?: string; firstRowRun: DocxRunProps; firstRowFill?: string };
+// A table style's looks: its cells' fill and borders, and its first row's run props, fill and borders.
+type TableLook = {
+    fill?: string;
+    borders: TableBorders;
+    firstRowRun: DocxRunProps;
+    firstRowFill?: string;
+    firstRowBorders: TableBorders;
+};
 
 // What a style answers once its basedOn chain is merged.
 type Resolved = { run: DocxRunProps; para: ParaProps; role: Role | undefined; code: boolean; table: TableLook };
@@ -433,6 +491,8 @@ export class Styles {
                     shadingOf(wChild(wChild(element, 'tcPr'), 'shd')) ??
                     shadingOf(wChild(wChild(element, 'tblPr'), 'shd')),
                 firstRowFill: shadingOf(wChild(wChild(firstRow, 'tcPr'), 'shd')),
+                borders: tableBordersOf(wChild(wChild(element, 'tblPr'), 'tblBorders')),
+                firstRowBorders: tableBordersOf(wChild(wChild(firstRow, 'tcPr'), 'tcBorders')),
             });
             if (type === 'paragraph' && isOn(w(element, 'default'))) defaultParagraph ??= id;
         }
@@ -464,8 +524,11 @@ export class Styles {
             code: chain.some((style) => CODE_CHARACTER_NAMES.has(style.name)),
             table: {
                 fill: chain.find((style) => style.fill !== undefined)?.fill,
+                // Each side from the nearest style that sets it.
+                borders: Object.assign({}, ...rootFirst.map((style) => style.borders)),
                 firstRowRun: mergeRun(...rootFirst.flatMap((style) => style.firstRowRun ?? [])),
                 firstRowFill: chain.find((style) => style.firstRowFill !== undefined)?.firstRowFill,
+                firstRowBorders: Object.assign({}, ...rootFirst.map((style) => style.firstRowBorders)),
             },
         };
         this.resolved.set(id, resolved);

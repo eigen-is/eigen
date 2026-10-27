@@ -927,6 +927,38 @@ describe('doc export — table column widths', () => {
     });
 });
 
+describe('doc export — cell borders', () => {
+    const bordered = () =>
+        seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'table',
+                    content: [
+                        {
+                            type: 'tableRow',
+                            content: [
+                                {
+                                    type: 'tableCell',
+                                    attrs: { borderTop: '2px dashed #ff0000', borderLeft: 'none', borderRight: 'red' },
+                                    content: [paragraph('a')],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        });
+
+    // The sanitizer keeps a cell's style, so its own sides draw over eigen-prose.css's grey; a forged side draws the grey.
+    test.each(['html', 'pdf-html'] as const)('%s draws a cell its own sides', async (format) => {
+        const { data } = await renderEigendocExport(bordered(), format, 'Report.eigendoc', async () => [], undefined);
+        const { document } = new JSDOM(new TextDecoder().decode(data)).window;
+        const cell = document.querySelector<HTMLTableCellElement>('td');
+        expect(cell?.getAttribute('style')).toBe('border-top: 2px dashed #ff0000; border-left: none');
+    });
+});
+
 describe('doc export — whitespace', () => {
     test.each(['html', 'pdf-html'] as const)(
         '%s keeps repeated spaces and prints no whitespace around the body',

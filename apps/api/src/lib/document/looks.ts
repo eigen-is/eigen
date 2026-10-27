@@ -266,6 +266,9 @@ export function sizedTextLook(selector: string, normal: NormalStyle): OwnLook & 
 
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };
 
+// The side a cell draws when it stores none of its own.
+export const CELL_BORDER = proseBorder('.eigen-prose td', 'border');
+
 const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
 
 // A cell's padding in twips: a table nested in a cell fits inside it.

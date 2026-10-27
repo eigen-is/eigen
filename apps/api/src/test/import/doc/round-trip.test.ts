@@ -871,6 +871,34 @@ describe("a cell's fill and header", () => {
     });
 });
 
+// A side left unset is written in Eigen's grey, which reads back as unset.
+test("a cell's sides come back as written, each style, none and unset, a merge's too", async () => {
+    const cell = (attrs: Record<string, unknown>, text: string) => ({ type: 'tableCell', attrs, content: [p(text)] });
+    const table = {
+        type: 'table',
+        content: [
+            {
+                type: 'tableRow',
+                content: [
+                    cell(
+                        {
+                            rowspan: 2,
+                            borderTop: '0.67px solid #000000',
+                            borderRight: 'none',
+                            borderBottom: '8px double #1f3864',
+                        },
+                        'Merged',
+                    ),
+                    cell({ borderLeft: 'none', borderTop: '1.33px dashed #ff0000' }, 'A'),
+                ],
+            },
+            { type: 'tableRow', content: [cell({ borderBottom: '0.5px dotted #cfe2f3' }, 'B')] },
+        ],
+    };
+    const { source, json } = await roundTrip([table]);
+    expect(stored(json)).toEqual(stored(expected(source, json)));
+});
+
 // Under a table the writer adds a space before to the table's margin, so an explicit none under a spaced Normal stays.
 test('no space before under a table, beside a Normal with one, comes back as set', async () => {
     const style = { ...DEFAULT_NORMAL_STYLE, spaceBefore: 6 };

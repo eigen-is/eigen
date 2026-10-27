@@ -190,6 +190,9 @@ export const NOTE_SEPARATORS = ['separator', 'continuationSeparator', 'continuat
 
 export const TWIPS_PER_PX = ptToTwips(pxToPt(1));
 
+// A border's w:sz counts in eighths of a point.
+export const BORDER_EIGHTHS_PER_PX = pxToPt(1) * 8;
+
 export const EMU_PER_TWIP = 635;
 
 // An auto w:line counts in 240ths of a single line.
