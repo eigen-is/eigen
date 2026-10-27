@@ -80,7 +80,7 @@ export function FileMenu({
     const [renameOpen, setRenameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [emailOpen, setEmailOpen] = useState(false);
-    // Lifted out of VersionHistoryMenu so the dialog survives the dropdown's unmount-on-close.
+    // Lifted out of VersionHistoryMenu so the dialog survives the menu's unmount-on-close.
     const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
     const openConfig = OPEN_LABELS[createType];
     const downloadFormats = exportFormatsFor(createType);
