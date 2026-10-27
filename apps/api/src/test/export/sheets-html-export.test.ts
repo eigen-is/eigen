@@ -1492,6 +1492,46 @@ describe('Sheets HTML export — charts', () => {
         expect(svgOf(doc)).toContain('fill="#334455"');
         expect(svgOf(renderSheetsHtml([sheetWithChart()], NO_MEDIA, 'screen').html)).not.toContain('<clipPath');
     });
+
+    test('charts spend the cell cap with the points they draw, and one the cap leaves out is counted', () => {
+        const points = 2000;
+        const numbers = Array.from({ length: points }, (_, r) => ({ r, c: 0, v: { v: r, m: String(r) } }));
+        const charts: Record<string, SheetChart> = {};
+        for (let i = 0; i < 200; i++) {
+            const chart = chartOn('data', { x: 0, y: 0, width: 200, height: 100 });
+            const spec = sampleChartSpec('line');
+            charts[`c${i}`] = {
+                ...chart,
+                id: `c${i}`,
+                index: `a${String(i).padStart(3, '0')}`,
+                ...newSheetChartSpecParts({
+                    ...spec,
+                    data: {
+                        source: 'range',
+                        categories: null,
+                        series: [{ id: 's-1', name: 'n', values: ref('data', [0, points - 1], [0, 0]) }],
+                    },
+                }),
+            };
+        }
+        const sheet: Sheet = { ...makeSheet(numbers), id: 'data', charts };
+        const lost: string[] = [];
+        const html = sheetsHtmlDocument({
+            title: 'Charts',
+            sheets: [sheet],
+            mediaUrls: NO_MEDIA,
+            mode: 'screen',
+            lost: (code) => lost.push(code),
+        });
+        const drawn = html.match(/<svg /g)?.length ?? 0;
+        expect(drawn).toBeGreaterThan(0);
+        expect(drawn).toBeLessThan(200);
+        expect(lost).toEqual(Array(200 - drawn).fill('charts-dropped'));
+        // The preview spends the same cap on its one sheet, and says it left something out.
+        const preview = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(preview.html.match(/<svg /g)).toHaveLength(drawn);
+        expect(preview.truncated).toBe(true);
+    }, 60_000);
 });
 
 describe('Sheets HTML export — the cell cap', () => {

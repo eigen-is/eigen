@@ -5,7 +5,7 @@
 // name.
 
 import { escapeHtml } from '@workspace/lib/html';
-import type { Cell, CellBorderSides, CellWithRowAndCol, MergeCell, Sheet } from '@workspace/lib/sheets';
+import type { Cell, CellBorderSides, CellWithRowAndCol, MergeCell, Sheet, SheetChart } from '@workspace/lib/sheets';
 import {
     borderSidesToCss,
     cellFontName,
@@ -27,6 +27,7 @@ import {
     generalAlign,
     renderSheetChartSvg,
     richText,
+    sheetChartPoints,
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
@@ -35,8 +36,8 @@ import { cellFontSize } from '../../ooxml/spreadsheetml';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, sheetsResolver, VERTICAL_ALIGN } from './cell-style';
-import type { SheetBudget, WindowedSheet } from './window';
-import { floatingObjects, windowedSheet } from './window';
+import type { FloatingObject, SheetBudget, WindowedSheet } from './window';
+import { windowedSheet } from './window';
 
 // Image sources by media name: data: URIs for an export, the prepared preview URLs for a preview.
 type MediaUrls = Map<string, string>;
@@ -61,6 +62,10 @@ export const MAX_EXPORT_CELLS = 250_000;
 // reached WeasyPrint's 60 s timeout. A sheet of 4,000 rows each a page tall reached it too.
 const PDF_PAGE_CELLS = 125;
 
+// What a chart costs the cap besides its points: its axes, title and legend cost the render about what 500 cells do.
+// 1,000 one-point charts drew in 0.65 s, where 250,000 cells draw in 0.33 s. A chart draws at most MAX_CHART_POINTS.
+const CHART_CELLS = 500;
+
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.
 const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
 
@@ -75,8 +80,8 @@ const PAGE_SLACK = 20;
 const PAGE_CONTENT_HEIGHT = MAX_PDF_PAGE_PX - 2 * PAGE_MARGIN;
 
 // The workbook as one document. The screen's prints landscape. The PDF's page fits its widest and tallest sheet as
-// rendered, so WeasyPrint never clips a wide grid. A sheet cut to MAX_EXPORT_CELLS, or left out for it, is counted.
-// Only the PDF charges a sheet its page.
+// rendered, so WeasyPrint never clips a wide grid. A sheet cut to MAX_EXPORT_CELLS, or a sheet or chart left out for
+// it, is counted. Only the PDF charges a sheet its pages.
 export function sheetsHtmlDocument({
     title,
     sheets,
@@ -90,9 +95,10 @@ export function sheetsHtmlDocument({
     mode: HtmlExportMode;
     lost: LossCounter['lost'];
 }): string {
-    const { html, css, cut, leftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode);
+    const { html, css, cut, leftOut, chartsLeftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode);
     for (const sheet of cut) lost('sheets-cut', sheet);
     for (const sheet of leftOut) lost('sheets-left-out', sheet);
+    for (const chart of chartsLeftOut) lost('charts-dropped', chart);
     const page = mode === 'pdf' ? pdfPageCss(size) : '@page { size: landscape; margin: 1.5cm; }';
     return exportHtmlDocument({
         title,
@@ -101,36 +107,48 @@ export function sheetsHtmlDocument({
     });
 }
 
-// A preview is a glance, so it renders only the first shown sheet, cut to the budget. `truncated` is true when rows,
-// columns, cells or other sheets were left out, and the caller then adds the shared marker. The resolver spans every
-// sheet, so a rule's formula can read another sheet.
+// A preview is a glance, so it renders only the first shown sheet, cut to the budget. Its charts spend what is left of
+// the export's MAX_EXPORT_CELLS. `truncated` is true when rows, columns, cells, charts or other sheets were left out,
+// and the caller then adds the shared marker. The resolver spans every sheet, so a rule's formula can read another
+// sheet.
 export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
     const shown = shownSheets(sheets);
     if (shown.length === 0) return { html: '', truncated: false };
     const windowed = windowedSheet(shown[0], () => PREVIEW_SHEET_BUDGET);
     if (!windowed) return { html: '', truncated: true };
-    const first = renderSheet(windowed, new FormulaEngine(), sheetsResolver(sheets), {
+    const charts = chargeCharts(windowed.floating, MAX_EXPORT_CELLS - windowed.cells);
+    const first = renderSheet({ ...windowed, floating: charts.kept }, new FormulaEngine(), sheetsResolver(sheets), {
         budget: PREVIEW_SHEET_BUDGET,
         mediaUrls,
     });
-    return { html: `<div class="sheet">\n${first.html}\n</div>`, truncated: windowed.truncated || shown.length > 1 };
+    const truncated = windowed.truncated || charts.leftOut.length > 0 || shown.length > 1;
+    return { html: `<div class="sheet">\n${first.html}\n</div>`, truncated };
 }
 
 // One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
 // The resolver reads the stored values: only a rule's own formula is evaluated. The sheets spend one MAX_EXPORT_CELLS
 // in tab order, so a sheet gets the cells the ones before it left, and in a PDF one that draws costs at least a page.
-// `cut` holds the sheets cut to it, `leftOut` the sheets it left no row or page of, and `size` is the widest and
-// tallest sheet as rendered.
+// A sheet's charts spend what its cells left. `cut` holds the sheets cut to the cap, `leftOut` the sheets it left no
+// row or page of, `chartsLeftOut` the charts it left no room for, and `size` is the widest and tallest sheet as
+// rendered.
 export function renderSheetsHtml(
     sheets: Sheet[],
     mediaUrls: MediaUrls,
     mode: HtmlExportMode,
-): { html: string; css: string; cut: Sheet[]; leftOut: Sheet[]; size: ContentSize } {
+): {
+    html: string;
+    css: string;
+    cut: Sheet[];
+    leftOut: Sheet[];
+    chartsLeftOut: SheetChart[];
+    size: ContentSize;
+} {
     const engine = new FormulaEngine();
     const resolver = sheetsResolver(sheets);
     const styles: StyleRegistry = new Map();
     const cut: Sheet[] = [];
     const leftOut: Sheet[] = [];
+    const chartsLeftOut: SheetChart[] = [];
     const size = { width: 0, height: 0 };
     const bodies: string[] = [];
     let cellsLeft = MAX_EXPORT_CELLS;
@@ -138,7 +156,7 @@ export function renderSheetsHtml(
         const budget = (rows: number, cols: number) => exportWindow(mode, cellsLeft, rows, cols);
         let windowed = windowedSheet(sheet, budget);
         // A sheet with cells, images or charts prints a page of its own. A blank one takes no page.
-        const draws = windowed !== null && (windowed.range !== null || floatingObjects(windowed.sheet).length > 0);
+        const draws = windowed !== null && (windowed.range !== null || windowed.floating.length > 0);
         let pages = 0;
         if (windowed && draws && mode === 'pdf') {
             const printed = printedPages(windowed, Math.floor(cellsLeft / PDF_PAGE_CELLS));
@@ -160,7 +178,10 @@ export function renderSheetsHtml(
         }
         cellsLeft -= cells;
         if (windowed.truncated) cut.push(sheet);
-        const rendered = renderSheet(windowed, engine, resolver, { styles, mediaUrls });
+        const charts = chargeCharts(windowed.floating, cellsLeft);
+        cellsLeft -= charts.cells;
+        chartsLeftOut.push(...charts.leftOut);
+        const rendered = renderSheet({ ...windowed, floating: charts.kept }, engine, resolver, { styles, mediaUrls });
         size.width = Math.max(size.width, rendered.size.width);
         size.height = Math.max(size.height, rendered.size.height);
         // A blank sheet draws nothing, so it takes no page.
@@ -174,7 +195,7 @@ export function renderSheetsHtml(
             return `<div class="${divClass}">\n${body}\n</div>`;
         })
         .join('\n');
-    return { html, css: serializeStyleRules(styles), cut, leftOut, size };
+    return { html, css: serializeStyleRules(styles), cut, leftOut, chartsLeftOut, size };
 }
 
 // The sheets the tabs show, as Excel prints them. The resolver still spans every sheet, the hidden ones too.
@@ -191,8 +212,8 @@ function pdfPageCss({ width, height }: ContentSize): string {
 // what is left of a page starts the next one, as WeasyPrint breaks a table between rows, so rows taller than half a
 // page print a page each. The overlay's box stretches the sheet to its farthest image or chart. A sheet whose overlay
 // alone takes more than `most` pages has no row to keep.
-function printedPages({ sheet, rows, offset }: WindowedSheet, most: number): { pages: number; rows: number } {
-    const overlay = Math.ceil(floatingExtent(sheet, offset).height / PAGE_CONTENT_HEIGHT);
+function printedPages({ sheet, rows, offset, floating }: WindowedSheet, most: number): { pages: number; rows: number } {
+    const overlay = Math.ceil(floatingExtent(floating, offset).height / PAGE_CONTENT_HEIGHT);
     if (overlay > most) return { pages: overlay, rows: 0 };
     let pages = 1;
     let filled = 0;
@@ -208,11 +229,33 @@ function printedPages({ sheet, rows, offset }: WindowedSheet, most: number): { p
     return { pages: Math.max(pages, overlay), rows: rows.length };
 }
 
+// The images and charts that fit `cellsLeft`, in paint order, and the charts left out. A chart costs CHART_CELLS and
+// the points it draws. An image costs no more than its tag.
+function chargeCharts(
+    floating: FloatingObject[],
+    cellsLeft: number,
+): { kept: FloatingObject[]; cells: number; leftOut: SheetChart[] } {
+    const kept: FloatingObject[] = [];
+    const leftOut: SheetChart[] = [];
+    let cells = 0;
+    for (const object of floating) {
+        const { item } = object;
+        const cost = item.kind === 'chart' ? CHART_CELLS + sheetChartPoints(item.object) : 0;
+        if (item.kind === 'chart' && cells + cost > cellsLeft) {
+            leftOut.push(item.object);
+            continue;
+        }
+        cells += cost;
+        kept.push(object);
+    }
+    return { kept, cells, leftOut };
+}
+
 // The far corner of a sheet's images and charts as they turn, in the table's space, as the overlay places them.
-function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { width: number; height: number } {
+function floatingExtent(floating: FloatingObject[], offset: { left: number; top: number }): ContentSize {
     let width = 0;
     let height = 0;
-    for (const { bounds } of floatingObjects(sheet)) {
+    for (const { bounds } of floating) {
         width = Math.max(width, bounds.maxX - offset.left);
         height = Math.max(height, bounds.maxY - offset.top);
     }
@@ -224,7 +267,7 @@ function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { 
 // the table and its overlay as rendered: the overlay draws at the stored grid coordinate, so an image or chart parked
 // past the used range is still on the page.
 function renderSheet(
-    { sheet, rows, cols, range, offset }: WindowedSheet,
+    { sheet, rows, cols, range, offset, floating }: WindowedSheet,
     engine: FormulaEngine,
     resolver: CellResolver,
     { budget, styles, mediaUrls }: { budget?: SheetBudget; styles?: StyleRegistry; mediaUrls: MediaUrls },
@@ -237,10 +280,11 @@ function renderSheet(
         width: sheetColumnsWidth(sheet, firstCol, firstCol + budget.maxCols - 1),
         height: sheetRowsHeight(sheet, firstRow, firstRow + budget.maxRows - 1),
     };
-    const overlay = { styles, mediaUrls, resolver };
+    const extent = floatingExtent(floating, offset);
+    const overlay = { floating, extent, styles, mediaUrls, resolver };
     if (!range) {
         // An image or chart on an otherwise blank sheet is all there is to render.
-        return { html: withFloatingOverlay(sheet, '', 0, offset, clip, overlay), size: floatingExtent(sheet, offset) };
+        return { html: withFloatingOverlay('', 0, offset, clip, overlay), size: extent };
     }
 
     // Each merge is one td on the first rendered cell it covers, spanning the rendered rows and columns it covers, so
@@ -364,8 +408,7 @@ function renderSheet(
     const q = fontQuote(forStylesheet);
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS.replaceAll('"', q)};font-size:${SHEET_DEFAULT_FONT_SIZE}pt;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rowTags.join('')}</tbody></table>`;
-    const html = withFloatingOverlay(sheet, table, tableWidth, offset, clip, overlay);
-    const extent = floatingExtent(sheet, offset);
+    const html = withFloatingOverlay(table, tableWidth, offset, clip, overlay);
     return { html, size: { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) } };
 }
 
@@ -396,16 +439,26 @@ function exportWindow(mode: HtmlExportMode, cellsLeft: number, rows: number, col
 // would stretch the body and shrink the thumbnail scaled from it. A sheet with no images or charts writes the bare
 // table.
 function withFloatingOverlay(
-    sheet: Sheet,
     table: string,
     tableWidth: number,
     offset: { left: number; top: number },
-    clip: { width: number; height: number } | undefined,
-    { styles, mediaUrls, resolver }: { styles?: StyleRegistry; mediaUrls: MediaUrls; resolver: CellResolver },
+    clip: ContentSize | undefined,
+    {
+        floating,
+        extent,
+        styles,
+        mediaUrls,
+        resolver,
+    }: {
+        floating: FloatingObject[];
+        extent: ContentSize;
+        styles?: StyleRegistry;
+        mediaUrls: MediaUrls;
+        resolver: CellResolver;
+    },
 ): string {
-    const overlay = renderFloatingObjects(sheet, mediaUrls, resolver, offset, styles, clip);
+    const overlay = renderFloatingObjects(floating, mediaUrls, resolver, offset, styles, clip);
     if (!overlay) return table;
-    const extent = floatingExtent(sheet, offset);
     const width = Math.max(tableWidth, clip ? Math.min(extent.width, clip.width) : extent.width);
     const height = clip ? Math.min(extent.height, clip.height) : extent.height;
     const box = `position:relative;width:${width}px;min-height:${height}px${clip ? ';overflow:hidden' : ''}`;
@@ -563,15 +616,15 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
 // file deleted under the reference. A chart draws as the painter's inline SVG on white like the editor's chart box,
 // so the gridlines stop at it, its ranges read from the materialized sheets.
 function renderFloatingObjects(
-    sheet: Sheet,
+    floating: FloatingObject[],
     mediaUrls: MediaUrls,
     resolver: CellResolver,
     offset: { left: number; top: number },
     styles?: StyleRegistry,
-    clip?: { width: number; height: number },
+    clip?: ContentSize,
 ): string {
     const parts: string[] = [];
-    for (const { item, box, bounds } of floatingObjects(sheet)) {
+    for (const { item, box, bounds } of floating) {
         const [minX, minY] = [bounds.minX - offset.left, bounds.minY - offset.top];
         const [maxX, maxY] = [bounds.maxX - offset.left, bounds.maxY - offset.top];
         if (clip && (minX >= clip.width || minY >= clip.height || maxX <= 0 || maxY <= 0)) continue;

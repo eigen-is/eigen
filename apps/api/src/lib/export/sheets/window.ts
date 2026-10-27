@@ -11,6 +11,7 @@ import type {
     MergeCell,
     Sheet,
     SheetConfig,
+    SheetFloatingItem,
 } from '@workspace/lib/sheets';
 import {
     borderInfoExtent,
@@ -22,6 +23,7 @@ import {
     SHEET_DEFAULT_ROW_HEIGHT,
     sheetFloatingBox,
 } from '@workspace/lib/sheets';
+import type { Bounds, Box } from '@workspace/lib/vector';
 import { getElementBounds } from '@workspace/lib/vector';
 import { isWellFormedCfRule, richText, withCfRanges } from '@workspace/sheet/engine';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
@@ -33,15 +35,21 @@ export type SheetBudget = { maxRows: number; maxCols: number; maxCells: number }
 
 type GridRange = [firstRow: number, lastRow: number, firstCol: number, lastCol: number];
 
+// An image or chart as the overlay draws it: its box clamped as stored and moved onto the page, and the box it covers
+// as it turns.
+export type FloatingObject = { item: SheetFloatingItem; box: Box; bounds: Bounds };
+
 // `rows` and `cols` are the shown tracks the window renders, in order. `range` is the rectangle they span, the hidden
 // tracks inside it included, and null for a sheet with nothing but images or charts. `offset` is the pixels from A1 to
-// the window's first cell, which the overlay subtracts from each stored box. `cells` is what the window costs.
+// the window's first cell, which the overlay subtracts from each stored box. `floating` is the sheet's images and charts
+// in paint order. `cells` is what the window costs.
 export type WindowedSheet = {
     sheet: Sheet;
     rows: number[];
     cols: number[];
     range: GridRange | null;
     offset: { left: number; top: number };
+    floating: FloatingObject[];
     truncated: boolean;
     cells: number;
 };
@@ -80,6 +88,7 @@ export function windowedSheet(
     });
     const merges = gridMerges(config.merge);
     const bounds = usedBounds(sheet, merges);
+    const floating = floatingObjects(sheet);
     const empty = budgetFor(0, 0);
     if (!bounds) {
         const { maxRows, maxCols } = empty;
@@ -90,6 +99,7 @@ export function windowedSheet(
             cols: [],
             range: null,
             offset: { left: 0, top: 0 },
+            floating,
             truncated: false,
             cells: 0,
         };
@@ -101,7 +111,7 @@ export function windowedSheet(
     // take a negative offset and fall off the page, so the window starts at the track the earliest one starts in.
     let x = Number.POSITIVE_INFINITY;
     let y = Number.POSITIVE_INFINITY;
-    for (const { bounds: turned } of floatingObjects(sheet)) {
+    for (const { bounds: turned } of floating) {
         x = Math.min(x, turned.minX);
         y = Math.min(y, turned.minY);
     }
@@ -147,16 +157,17 @@ export function windowedSheet(
         cols,
         range,
         offset: { left: left.start, top: top.start },
+        floating,
         truncated: keptRows < shownRows || keptCols < shownCols,
         cells: Math.max(1, keptRows) * rowCells,
     };
 }
 
-// Every image and chart in their one paint order, each with its box clamped as the editor's writers store it
-// (sheetFloatingBox), which also turns a string a peer stored into its number, and the box it covers as it turns,
-// which the page size, the window's origin and the preview's clip count. One turned past A1 tucks under the
-// editor's headers, but a page has none, so it moves right or down until it starts on the page.
-export function floatingObjects(sheet: Sheet) {
+// Every image and chart in their one paint order. sheetFloatingBox clamps each box as the editor's writers store it,
+// and turns a string a peer stored into its number. The box it covers as it turns sizes the page, places the window's
+// origin and meets the preview's clip. One turned past A1 tucks under the editor's headers, but a page has none, so
+// it moves right or down until it starts on the page.
+function floatingObjects(sheet: Sheet): FloatingObject[] {
     return floatingItems(sheet).map((item) => {
         const stored = sheetFloatingBox(item.object);
         const turned = getElementBounds(stored);

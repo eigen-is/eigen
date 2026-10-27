@@ -16,7 +16,7 @@ export {
     unquoteSheetName,
 } from './a1-notation';
 export { createArrayResolver } from './cell-resolver';
-export { mapChartRefs, renderSheetChartSvg, resolveRangeChartData } from './chart-data';
+export { mapChartRefs, renderSheetChartSvg, resolveRangeChartData, sheetChartPoints } from './chart-data';
 export type {
     CellFormatStyle,
     ComputeMap,
