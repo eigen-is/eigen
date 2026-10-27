@@ -792,16 +792,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // expose APIs
         useImperativeHandle(
             ref,
-            () =>
-                generateAPIs(
-                    context,
-                    setContextWithProduce,
-                    handleUndo,
-                    handleRedo,
-                    mergedSettings,
-                    globalCache.current,
-                ),
-            [context, setContextWithProduce, handleUndo, handleRedo, mergedSettings],
+            () => generateAPIs(context, setContextWithProduce, handleUndo, handleRedo, globalCache.current),
+            [context, setContextWithProduce, handleUndo, handleRedo],
         );
 
         const i = getSheetIndex(context, context.currentSheetId);

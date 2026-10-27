@@ -50,8 +50,6 @@ export function author(base: Context, recipe: (ctx: Context) => void, options?: 
 // A peer applies a batch through the Workbook's own applyOp, which drops a batch that fails to apply.
 export function receive(ctx: Context, ops: Op[]): Context {
     let next = ctx;
-    // biome-ignore lint/suspicious/noExplicitAny: applyOp reads settings only on the addSheet branch
-    const settings = {} as any;
     const setContext = (recipe: (draft: Context) => void) => {
         next = produce(next, recipe);
     };
@@ -60,7 +58,6 @@ export function receive(ctx: Context, ops: Op[]): Context {
         setContext,
         () => {},
         () => {},
-        settings,
         { undoList: [], redoList: [] },
     ).applyOp(ops);
     return next;

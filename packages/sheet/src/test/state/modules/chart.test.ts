@@ -201,14 +201,11 @@ describe("the Workbook's insertChart", () => {
         const setContext = (recipe: (draft: Context) => void) => {
             next = produce(next, recipe);
         };
-        // biome-ignore lint/suspicious/noExplicitAny: insertChart reads no settings
-        const settings = {} as any;
         const api = generateAPIs(
             base,
             setContext,
             () => {},
             () => {},
-            settings,
             { undoList: [], redoList: [] },
         );
         const id = api.insertChart(BOX, sampleChartSpec('bar'));

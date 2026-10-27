@@ -1,5 +1,6 @@
 export * from '../../engine/format';
 export { functionCopy } from '../../engine/formula-shift';
+export * from './apply-ops';
 export * from './border';
 export * from './cell';
 export * from './cell-glyph';
