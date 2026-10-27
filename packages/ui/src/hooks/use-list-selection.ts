@@ -1,8 +1,15 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+// The selection of a list of rows, such as files, emails or people: a click selects one row, a
+// Shift-click a range from the anchor and a Cmd- or Ctrl-click toggles one. The list draws the
+// selected rows and its context menu, drag and keyboard act on them.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type UseListSelectionOptions<T> = {
     items: T[];
     getId: (item: T) => string;
+    // The row whose detail the page has open, for a list where a click opens a row. Closing it
+    // drops a selection of that row alone, which the click made, so no closed row stays washed.
+    openId?: string;
 };
 
 export type UseListSelectionReturn<T> = {
@@ -21,10 +28,19 @@ export type UseListSelectionReturn<T> = {
     anchorId: string | null;
 };
 
-export function useListSelection<T>({ items, getId }: UseListSelectionOptions<T>): UseListSelectionReturn<T> {
+export function useListSelection<T>({ items, getId, openId }: UseListSelectionOptions<T>): UseListSelectionReturn<T> {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [anchorId, setAnchorId] = useState<string | null>(null);
     const anchorRef = useRef<string | null>(null);
+
+    // A selection the user built with Shift or Cmd stays when the detail closes.
+    const lastOpenId = useRef(openId);
+    useEffect(() => {
+        const closedId = lastOpenId.current;
+        lastOpenId.current = openId;
+        if (!closedId || openId) return;
+        setSelectedIds((prev) => (prev.size === 1 && prev.has(closedId) ? new Set() : prev));
+    }, [openId]);
 
     const setAnchor = useCallback((id: string | null) => {
         anchorRef.current = id;

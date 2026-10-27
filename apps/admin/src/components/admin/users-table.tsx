@@ -187,7 +187,7 @@ export function AdminUsersTable({
         () => (guests ? [] : visible.filter((u) => u.memberId !== null)),
         [visible, guests],
     );
-    const selection = useListSelection({ items: selectableUsers, getId: (u) => u.id });
+    const selection = useListSelection({ items: selectableUsers, getId: (u) => u.id, openId: activeUserId });
     const { contextMenu, handleContextMenu, openAt } = useSelectableContextMenu({ selection, getId: (u) => u.id });
     const longPress = useLongPress(openAt);
 
