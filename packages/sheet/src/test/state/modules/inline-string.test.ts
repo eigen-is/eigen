@@ -111,6 +111,22 @@ describe('a format on selected characters', () => {
         expect(getFontStyleByCell({ ff: 'Source Serif 4' })).toEqual({ fontFamily: "'Source Serif 4', sans-serif" });
     });
 
+    // A conditional format colors the cell's text, and its underline is drawn in the same color.
+    test("a rule's text color reaches the underline", () => {
+        expect(getFontStyleByCell({ un: 1, fc: '#ff0000' }, { textColor: '#0000ff' })).toEqual({
+            color: '#0000ff',
+            borderBottom: '1px solid #0000ff',
+        });
+    });
+
+    // A rule's fill shows in the editor box and the copied HTML on a cell without a fill of its own.
+    test("a rule's fill reaches a cell without its own fill", () => {
+        const data = [[{ v: 'x' }]];
+        expect(getStyleByCell(workbookContextFactory(), data, 0, 0, { '0_0': { cellColor: '#00ff00' } })).toEqual({
+            background: '#00ff00',
+        });
+    });
+
     // An older or imported cell may hold a flag as a string and a color as rgba().
     test("a legacy cell's string flags and rgba color read as the values they mean", () => {
         const legacy: Cell = JSON.parse('{"bl":"0","it":"0","cl":"0","un":"0","fc":"rgba(255, 0, 0, 1)"}');

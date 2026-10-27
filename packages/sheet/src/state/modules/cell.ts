@@ -912,7 +912,7 @@ export function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: Cel
     if (color !== DEFAULT_TEXT_COLOR) style.color = color;
     if (cl) style.textDecoration = 'line-through';
     const underline = Number(cell.un);
-    if (underline === 1 || underline === 3) style.borderBottom = `${Math.floor(fs / 9)}px solid ${fc}`;
+    if (underline === 1 || underline === 3) style.borderBottom = `${Math.floor(fs / 9)}px solid ${color}`;
     return style;
 }
 
@@ -926,10 +926,8 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
     const cell = d?.[r]?.[c];
     if (!cell) return {};
 
-    if ('bg' in cell) {
-        const background = hexColor(checksCF?.cellColor) ?? hexColor(cell.bg);
-        if (background) style.background = background;
-    }
+    const background = hexColor(checksCF?.cellColor) ?? hexColor(cell.bg);
+    if (background) style.background = background;
     if ('ht' in cell) {
         const value = normalizedCellAttr(cell, 'ht');
         if (Number(value) === 0) {
