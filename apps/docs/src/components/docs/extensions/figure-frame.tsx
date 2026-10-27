@@ -72,10 +72,11 @@ export const setImageLayout = (editor: Editor, attributes: FigureFrameAttrs) =>
         editor.commands.updateFigure(written),
     );
 
-// A positioned box's place as custom properties beside its inline left and width. A page-less doc draws the box clamped
-// into its text column and the strip beside it from these, so the stored place, which only the page map clamps,
-// draws again on pages.
-const placeProperties = (left: number, width: number | undefined): Record<string, string> => ({
+// A positioned box's place: its top inline, and its left and width as custom properties, which one prose rule draws.
+// A page-less doc's rule draws the box clamped into its text column and the strip beside it from them instead, so the
+// stored place, which only the page map clamps, draws again on pages. The export writes the place inline.
+const placeStyle = (top: number, left: number, width: number | undefined): Record<string, string | number> => ({
+    top,
     '--figure-left': `${left}px`,
     ...(width !== undefined && { '--figure-width': `${width}px` }),
 });
@@ -352,9 +353,7 @@ export function FigureFrame({
                 data-drag-handle={place ? undefined : ''}
                 draggable={!place && isEditable}
                 style={
-                    place
-                        ? { ...place, ...placeProperties(place.left, place.width) }
-                        : { cursor: isEditable ? 'grab' : undefined }
+                    place ? placeStyle(place.top, place.left, place.width) : { cursor: isEditable ? 'grab' : undefined }
                 }
                 onPointerDown={place ? startMove : undefined}
                 // ProseMirror never sees a node view's right-click (stopEvent), so the figure asks here.
@@ -383,16 +382,14 @@ export function FigureFrame({
             </NodeViewWrapper>
             {chrome && (
                 // Why: the grips sit above the front layer's 1, the Docs figure layer of the z-index scale. The
-                // paragraph makes no stacking context, so both stack in the page's.
+                // paragraph makes no stacking context, so both stack in the page's. Its height follows the width it
+                // draws at, as the figure's does, where a page-less column draws it narrower.
                 <span
                     className="absolute z-2 cursor-move touch-none"
                     data-figure-chrome=""
                     style={{
-                        left: place.left,
-                        top: place.top,
-                        width: box.width,
-                        height: box.height,
-                        ...placeProperties(place.left, box.width),
+                        ...placeStyle(place.top, place.left, box.width),
+                        aspectRatio: `${box.width} / ${box.height}`,
                     }}
                     onPointerDownCapture={measureScale}
                     onPointerDown={startMove}

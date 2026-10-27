@@ -594,7 +594,8 @@
 
     /* A figure in front of or behind the text is placed from its paragraph's padding box. That box holds the indent
        and the space before. The paragraph makes no stacking context, so the two layers stack in the page's. The
-       renderers write the offsets and the width inline, through figureLayoutStyle. Within a layer, document order
+       renderers write the offsets and the width inline, through figureLayoutStyle; the editor's node view writes the
+       left and the width as custom properties instead, which the second rule draws. Within a layer, document order
        breaks the tie. The two layouts are lib's POSITIONED_LAYOUTS, written out here as CSS can't import that list. */
     p,
     h1,
@@ -611,6 +612,14 @@
         position: absolute;
         margin: 0;
         display: block;
+    }
+
+    /* An inline place, the renderers', wins over this rule; the page-less rule below clamps the editor's. */
+    .figure[data-layout="front"],
+    .figure[data-layout="behind"],
+    [data-figure-chrome] {
+        left: var(--figure-left);
+        width: var(--figure-width, auto);
     }
 
     .figure[data-layout="front"] {
@@ -656,16 +665,14 @@
         }
 
         /* A figure in front of or behind the text draws clamped into the column and the strip, from the place its
-           node view writes as custom properties beside the inline place the pages draw. */
-        .figure[data-layout="front"],
-        .figure[data-layout="behind"],
-        [data-figure-chrome] {
+           node view writes as custom properties. The .ProseMirror makes this rule outweigh the one that draws them. */
+        .ProseMirror .figure[data-layout="front"],
+        .ProseMirror .figure[data-layout="behind"],
+        .ProseMirror [data-figure-chrome] {
             /* The widest left that keeps the box's right edge in the strip, resolved where left is. */
             --figure-max-left: calc(100% + var(--breakout, 0px) - var(--figure-width, 0px));
-            /* biome-ignore lint/complexity/noImportantStyles: must beat the node view's inline left */
-            left: clamp(0px, var(--figure-left), var(--figure-max-left)) !important;
-            /* biome-ignore lint/complexity/noImportantStyles: must beat the node view's inline width */
-            width: min(var(--figure-width, auto), calc(100% + var(--breakout, 0px))) !important;
+            left: clamp(0px, var(--figure-left), var(--figure-max-left));
+            width: min(var(--figure-width, auto), calc(100% + var(--breakout, 0px)));
         }
 
         /* No pages, so a page break draws nothing; the PDF still breaks there. */
