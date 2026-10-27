@@ -54,6 +54,7 @@ export async function convertToDocument(
     sourcePath: DrivePath,
     targetType: ConvertTarget,
     user: User,
+    maxBytes: number,
 ): Promise<DrivePath> {
     const { parentId } = sourcePath;
     if (!parentId) throw new ApiError(400, 'Cannot convert a root file');
@@ -68,11 +69,14 @@ export async function convertToDocument(
     // is refused before it.
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(sourcePath.size, format);
+    // The upload limit may have been higher when the file was stored, so it applies here too.
+    if (sourcePath.size > maxBytes) throw new ApiError(413, 'Source file too large');
 
-    // The row's size is only a claim, so the read stops one byte past the cap, and the byte-cap check before the
-    // transform refuses what it read without the rest ever being buffered.
-    const bytes = await mount.readBytes(sourcePath.id, MAX_DECOMPRESSED_BYTES + 1);
+    // The row's size is only a claim, so the read stops one byte past the lower cap and refuses what passes it, without
+    // the rest ever being buffered. Past the byte cap, the check before the transform refuses it.
+    const bytes = await mount.readBytes(sourcePath.id, Math.min(maxBytes, MAX_DECOMPRESSED_BYTES) + 1);
     if (!bytes) throw new ApiError(404, 'File not found');
+    if (bytes.byteLength > maxBytes) throw new ApiError(413, 'Source file too large');
     const buffer = Buffer.from(bytes);
     const name = sourcePath.name.slice(0, -`.${format}`.length);
 

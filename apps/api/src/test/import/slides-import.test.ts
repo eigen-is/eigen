@@ -246,30 +246,32 @@ describe('Convert to Slides', () => {
         const failure = new ApiError(409, 'media/taken.png is not a file');
         const createSpy = spyOn(drive, 'createFileFromData').mockRejectedValue(failure);
         try {
-            await expect(convertToDocument(drive, mount, path, 'eigenslides', alice)).rejects.toBe(failure);
+            await expect(convertToDocument(drive, mount, path, 'eigenslides', alice, Infinity)).rejects.toBe(failure);
         } finally {
             createSpy.mockRestore();
         }
         expect(await listing(parent.id)).toEqual(['pictures.pptx']);
     }, 60_000);
 
-    test("a source larger than its row's size claim is read no further than the cap and refused", async () => {
+    test("a source larger than its row's size claim is read no further than the upload limit and refused", async () => {
         const parent = await folder('convert-understated');
         const uploaded = await upload(PPTX, 'understated.pptx', parent.id);
         const alice = await getUserById(ctx.alice.user.id);
         if (!alice) throw new Error('alice missing');
         const drive = await getSharedDrive(ctx.alice.user.id, alice);
         const { mount, path } = await drive.resolveFile(mountId, uploaded.id);
-        // The stored object grew past the cap out of band; the row still claims its upload's size.
+        // The stored object grew past the upload limit out of band; the row still claims its upload's size.
+        const maxBytes = path.size + 1024;
         const readSpy = spyOn(mount, 'readBytes').mockImplementation(
             async (_id, limit) =>
                 new ArrayBuffer(Math.min(limit ?? Number.MAX_SAFE_INTEGER, MAX_DECOMPRESSED_BYTES + 1)),
         );
         try {
-            await expect(convertToDocument(drive, mount, path, 'eigenslides', alice)).rejects.toMatchObject({
+            await expect(convertToDocument(drive, mount, path, 'eigenslides', alice, maxBytes)).rejects.toMatchObject({
                 status: 413,
+                message: 'Source file too large',
             });
-            expect(readSpy).toHaveBeenCalledWith(path.id, MAX_DECOMPRESSED_BYTES + 1);
+            expect(readSpy).toHaveBeenCalledWith(path.id, maxBytes + 1);
         } finally {
             readSpy.mockRestore();
         }

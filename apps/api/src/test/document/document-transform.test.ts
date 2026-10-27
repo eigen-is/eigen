@@ -1784,9 +1784,14 @@ describe('document transform (input bound)', () => {
                 },
             } as unknown as Mount;
             const path = { id: 'too-large', parentId: 'parent', name, size: MAX_DECOMPRESSED_BYTES + 1 } as DrivePath;
-            const error = await convertToDocument(WRITABLE_DRIVE, mount, path, target, {} as unknown as User).catch(
-                (reason: unknown) => reason,
-            );
+            const error = await convertToDocument(
+                WRITABLE_DRIVE,
+                mount,
+                path,
+                target,
+                {} as unknown as User,
+                Infinity,
+            ).catch((reason: unknown) => reason);
             expect(error).toMatchObject({ status: 413, message });
         },
     );
@@ -1804,6 +1809,7 @@ describe('document transform (input bound)', () => {
             path,
             'eigensheets',
             {} as unknown as User,
+            Infinity,
         ).catch((reason: unknown) => reason);
         expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to Sheets' });
     });
@@ -1907,7 +1913,7 @@ describe('document transform (admission)', () => {
         const refuse = refuseAdmissionOnce();
         let error: unknown;
         try {
-            await convertToDocument(WRITABLE_DRIVE, mount, path, 'eigensheets', user);
+            await convertToDocument(WRITABLE_DRIVE, mount, path, 'eigensheets', user, Infinity);
         } catch (err) {
             error = err;
         } finally {

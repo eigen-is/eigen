@@ -258,15 +258,11 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            // The parser reads the whole file into memory. The upload limit may have been higher when the
-            // file was stored, so the limit applies here too.
-            if (path.size > (await getUploadMaxSize(params.ownerId, params.mountId))) {
-                throw new ApiError(413, 'Source file too large');
-            }
+            const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
             // No abort signal on purpose. A page reload aborts every fetch, and a large workbook takes a
-            // minute of Worker time. So the conversion finishes anyway, and the new file shows up through
+            // minute of transform time. So the conversion finishes anyway, and the new file shows up through
             // the drive's SSE refresh. The previews take no signal for the same reason.
-            return await convertToDocument(drive, mount, path, params.targetType, user);
+            return await convertToDocument(drive, mount, path, params.targetType, user, maxSize);
         },
         { auth: true },
     )
