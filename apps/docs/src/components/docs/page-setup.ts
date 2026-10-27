@@ -13,12 +13,12 @@ const PAGE_SETUP_ORIGIN = Symbol('page setup');
 
 // Google Docs' text widths, measured on its page-less doc and rounded to the quarter inch: the column a page-less doc
 // draws its text in, whatever its paper. Full is the editor's width less a gutter on each side.
-export const TEXT_WIDTHS: { value: DocsTextWidth; label: string; px: number | null }[] = [
-    { value: 'narrow', label: 'Narrow', px: 696 },
-    { value: 'medium', label: 'Medium', px: 888 },
-    { value: 'wide', label: 'Wide', px: 1056 },
-    { value: 'full', label: 'Full', px: null },
-];
+export const TEXT_WIDTHS: Record<DocsTextWidth, { label: string; px: number | null }> = {
+    narrow: { label: 'Narrow', px: 696 },
+    medium: { label: 'Medium', px: 888 },
+    wide: { label: 'Wide', px: 1056 },
+    full: { label: 'Full', px: null },
+};
 
 // y-tiptap's own undo manager over the page and style maps too, so ⌘Z takes back a page setup change and an update of
 // Normal text. yUndoPlugin applies these defaults only to a manager it builds, so they are copied here; its plugin view

@@ -607,8 +607,7 @@ const TiptapEditor = ({
     // room right of it, to the scroll box's edge or the panel's, is the breakout strip a wide table scrolls in and a
     // wide image grows into (--breakout).
     const room = scrollSize.width;
-    const textWidthPx = TEXT_WIDTHS.find(({ value }) => value === textWidth)?.px ?? null;
-    const widest = isMobile ? room : (textWidthPx ?? room - 2 * FULL_WIDTH_GUTTER_PX);
+    const widest = isMobile ? room : (TEXT_WIDTHS[textWidth].px ?? room - 2 * FULL_WIDTH_GUTTER_PX);
     const roomStart = outlineOverlayShown ? OUTLINE_INTRUSION_PX : 0;
     const roomEdge = showSidebar ? room - PANEL_INTRUSION_PX : room;
     const centredWidth = Math.min(widest, room);

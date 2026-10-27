@@ -13,6 +13,7 @@ import {
     readPageSetup,
 } from '@workspace/lib/docs/eigendoc';
 import type { DocsTextWidth } from '@workspace/lib/types/settings';
+import { DOCS_TEXT_WIDTHS } from '@workspace/lib/types/settings';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -48,7 +49,7 @@ const CUSTOM = 'Custom';
 // The cm fields step by 0.01 and show that many decimals while nobody types in them, as Google's 2.00 cm; the browser
 // writes the decimal separator of the reader's locale. What is typed stays as typed until the field is left.
 const CM_STEP = '0.01';
-const CM_DECIMALS = CM_STEP.length - CM_STEP.indexOf('.') - 1;
+const CM_DECIMALS = 2;
 
 type CmInputProps = { id: string; value: string; onValueChange: (value: string) => void; disabled?: boolean };
 
@@ -74,7 +75,7 @@ function CmInput({ id, value, onValueChange, disabled }: CmInputProps) {
 }
 
 // Margins to 0.01 cm, as Google shows 0.75 in as 1.91 cm.
-const marginText = (mm: number) => cmText(mm, 2);
+const marginText = (mm: number) => cmText(mm, CM_DECIMALS);
 // Portrait first, as Google lists every paper.
 const paperLabel = (name: string, width: number, height: number) =>
     `${name} (${(Math.min(width, height) / 10).toFixed(1)} cm × ${(Math.max(width, height) / 10).toFixed(1)} cm)`;
@@ -267,14 +268,12 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone, textWidth, onTextWid
                             </FieldDescription>
                             <RadioGroup
                                 value={width}
-                                onValueChange={(value) =>
-                                    setWidth(TEXT_WIDTHS.find((w) => w.value === value)?.value ?? width)
-                                }
+                                onValueChange={(value) => setWidth(DOCS_TEXT_WIDTHS.find((w) => w === value) ?? width)}
                             >
-                                {TEXT_WIDTHS.map(({ value, label }) => (
+                                {DOCS_TEXT_WIDTHS.map((value) => (
                                     <div key={value} className="flex items-center gap-2">
                                         <RadioGroupItem value={value} id={`page-setup-width-${value}`} />
-                                        <Label htmlFor={`page-setup-width-${value}`}>{label}</Label>
+                                        <Label htmlFor={`page-setup-width-${value}`}>{TEXT_WIDTHS[value].label}</Label>
                                     </div>
                                 ))}
                             </RadioGroup>
