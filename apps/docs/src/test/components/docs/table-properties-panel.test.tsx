@@ -1,6 +1,6 @@
 // The Cells buttons mirror Format → Table: Merge and Unmerge are disabled unless the selection can run them, and follow it.
 // Distribute columns gives every column one width, the Fill row paints the selected cells, and the Borders row and
-// Border color set their sides and the facing side of each cell beside them. A new row or column takes its neighbour's
+// Border color set their sides and the facing side of each cell beside them. A new row or column takes its neighbor's
 // fill and sides.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -179,7 +179,7 @@ test("All draws the selection's sides in its pen, and without one in Eigen's own
     expect(sides(editor)).toEqual([UNSET, UNSET]);
 });
 
-test("a row or a column added takes its neighbour's fill and sides", async () => {
+test("a row or a column added takes its neighbor's fill and sides", async () => {
     const look = { backgroundColor: '#cfe2f3', borderTop: 'none', borderBottom: '2px double #000000' };
     const editor = await mount([cell('a', null, look), cell('b')]);
     const looks = () => {

@@ -1,7 +1,7 @@
 // The look a docs table's cells keep of their own, their fill and border sides, as the editor sets it. The Borders row
 // and Border color of the table panel and Format › Table set the selected cells' sides, and the facing side of each
 // cell beside the selection, since the editor draws a shared edge from both cells. A row or column the table grows by
-// takes its neighbour's look. EditorTable registers these as its commands.
+// takes its neighbor's look. EditorTable registers these as its commands.
 
 import type { Command, EditorState, Transaction } from '@tiptap/pm/state';
 import type { Rect } from '@tiptap/pm/tables';
@@ -124,7 +124,7 @@ export function addRowWithLook(at: 'before' | 'after'): Command {
             const rect = selectedRect(state);
             const row = at === 'before' ? rect.top : rect.bottom;
             const tr = addRow(state.tr, rect, row);
-            dispatch(withNeighbourLook(tr, rect.tableStart, 'row', row, at === 'before' ? row + 1 : row - 1));
+            dispatch(withNeighborLook(tr, rect.tableStart, 'row', row, at === 'before' ? row + 1 : row - 1));
         }
         return true;
     };
@@ -138,7 +138,7 @@ export function addColumnWithLook(at: 'before' | 'after'): Command {
             const column = at === 'before' ? rect.left : rect.right;
             const tr = addColumn(state.tr, rect, column);
             dispatch(
-                withNeighbourLook(tr, rect.tableStart, 'column', column, at === 'before' ? column + 1 : column - 1),
+                withNeighborLook(tr, rect.tableStart, 'column', column, at === 'before' ? column + 1 : column - 1),
             );
         }
         return true;
@@ -146,7 +146,7 @@ export function addColumnWithLook(at: 'before' | 'after'): Command {
 }
 
 // A cell over the new row or column alone is new; a merge it widened keeps its own look.
-function withNeighbourLook(
+function withNeighborLook(
     tr: Transaction,
     tableStart: number,
     axis: 'row' | 'column',

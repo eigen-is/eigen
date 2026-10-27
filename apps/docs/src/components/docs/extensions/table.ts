@@ -217,7 +217,7 @@ function columnDrag(cellMinWidth: number) {
 
 // The docs editor's table. prosemirror-tables' own TableView, not TipTap's, because TipTap's leaves a column's dragged
 // width drawn when an undo takes its colwidth back to none. `resizable` is off for a coarse pointer (editor.tsx). A row
-// or column it adds takes its neighbour's look.
+// or column it adds takes its neighbor's look.
 export const EditorTable = Table.extend({
     addCommands() {
         return {
