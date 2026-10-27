@@ -8,9 +8,8 @@ const { createRoot } = await import('react-dom/client');
 const { Workbook } = await import('../../../components/Workbook');
 const { insertRowCol } = await import('../../../state/modules/rowcol');
 const { author } = await import('../../state/factories/collab');
-const { contextFactory } = await import('../../state/factories/context');
+const { workbookContextFactory } = await import('../../state/factories/context');
 type Op = import('../../../state').Op;
-type Context = import('../../../state').Context;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -66,7 +65,7 @@ test("undo after a peer's row insert lands on the moved cell in both tabs", asyn
 
     await step(() => a().setCellFormat(9, 1, 'bl', 1));
     const op = { type: 'row', index: 2, count: 2, direction: 'lefttop', id: 's1' } as const;
-    const base = contextFactory({ sheets: a().getAllSheets(), currentSheetId: 's1' }) as Context;
+    const base = workbookContextFactory({ sheets: a().getAllSheets(), currentSheetId: 's1' });
     const { ops } = author(base, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
     await step(() => {
         a().applyOp(ops);

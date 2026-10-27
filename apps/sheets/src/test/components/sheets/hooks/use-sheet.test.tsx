@@ -119,7 +119,7 @@ async function open(cells: Record<string, string> = {}) {
 }
 
 const peerSends = (ops: Op[]) => peer.getArray('ops').push([ops]);
-const stored = () => decodeSheetsSnapshot(doc.getMap('state').get('snapshot') as string)[0].celldata;
+const stored = () => decodeSheetsSnapshot(String(doc.getMap('state').get('snapshot')))[0].celldata;
 
 test("a peer's batch that arrives before the grid mounts is in the grid", async () => {
     afterSync = () => peerSends(typed(0, 0, 'early'));

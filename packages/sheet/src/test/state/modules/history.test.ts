@@ -20,7 +20,7 @@ import { defaultSettings } from '../../../state/settings';
 import type { History, Op, Sheet } from '../../../state/types';
 import type { Tab } from '../factories/collab';
 import { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
-import { contextFactory } from '../factories/context';
+import { workbookContextFactory } from '../factories/context';
 import { typed } from '../factories/edit-cycle';
 
 const ONE = 's1';
@@ -45,10 +45,10 @@ function sheet(id: string, name: string, order: number, cells: Record<string, Ce
 }
 
 function workbook(one: Record<string, Cell> = {}, two: Record<string, Cell> = {}, three: Record<string, Cell> = {}) {
-    const ctx = contextFactory({
+    const ctx = workbookContextFactory({
         currentSheetId: ONE,
         sheets: [sheet(ONE, 'One', 0, one), sheet(TWO, 'Two', 1, two), sheet(THREE, 'Three', 2, three)],
-    }) as Context;
+    });
     for (const s of ctx.sheets) normalizeSheetConfig(s);
     return ctx;
 }
@@ -334,12 +334,11 @@ describe('a structural undo or redo applies exactly what it sends', () => {
 
     test('undoing a delete of merged rows brings the merge back everywhere', () => {
         const merge = { r: 4, c: 0, rs: 2, cs: 2 };
+        const corner = { mc: { r: 4, c: 0 } };
         const base = produce(
-            workbook({ A5: { v: 'm', m: 'm', mc: merge }, B5: { mc: { r: 4, c: 0 } } }),
+            workbook({ A5: { v: 'm', m: 'm', mc: merge }, B5: corner, A6: corner, B6: corner }),
             (ctx: Context) => {
-                ctx.sheets[0].data![5][0] = { mc: { r: 4, c: 0 } };
-                ctx.sheets[0].data![5][1] = { mc: { r: 4, c: 0 } };
-                ctx.sheets[0].config!.merge = { '4_0': merge };
+                ctx.sheets[0].config = { ...ctx.sheets[0].config, merge: { '4_0': merge } };
             },
         );
         const s = session(base);
@@ -400,7 +399,7 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
         const copy = s.a.ctx.sheets[3];
         expect(copy.data).toBeUndefined();
-        s.edit(s.a, ...removeSheet(copy.id as string));
+        s.edit(s.a, ...removeSheet(String(copy.id)));
         s.undo(s.a);
         expect(view(s.a.ctx.sheets)[3].cells).toEqual([{ r: 0, c: 0, v: text('two') }]);
         expectAgree(s);
