@@ -7,6 +7,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Slides on a phone** — a row of slide thumbnails sits under the slide. Tap one to jump straight to it
+- **SmartArt in PowerPoint files** — a SmartArt graphic comes into Slides as the shapes and text PowerPoint shows, each one a shape you can move, resize and edit. Editing its text doesn't rearrange the others
+- **SmartArt saved without its shapes** — a graphic saved that way, as LibreOffice saves one, leaves its **SmartArt not imported** box with the graphic's text listed in it
 
 ### Changed
 

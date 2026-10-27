@@ -100,6 +100,7 @@ const LOSSES: { code: CountedWarningCode; noun: OneAndMany; what: Outcome }[] = 
         noun: ['header or footer picture', 'header or footer pictures'],
         what: 'simplified',
     },
+    { code: 'diagrams-flattened', noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'flattened' },
     { code: 'blocks-flattened', noun: ['part of the document', 'parts of the document'], what: 'flattened' },
     { code: 'images-unshown', noun: ['picture', 'pictures'], what: 'unshown' },
 ];

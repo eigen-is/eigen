@@ -23,7 +23,7 @@ import { writePptx } from '../../../lib/export/slides/pptx/to-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { seriesIdsByPlace } from '../../../scripts/office-audit';
 import { axesOf, sampleChartParts } from '../../fixtures/chart-parts';
-import { box, buildPptx, PIXEL_PNG, solid, sp } from '../../fixtures/pptx';
+import { box, buildPptx, dspSp, PIXEL_PNG, para, scheme, smartArt, solid, sp, textBox } from '../../fixtures/pptx';
 
 // A deck exported to .pptx and read back: what the writer states, the reader reads the same.
 
@@ -435,6 +435,42 @@ describe("a shape's overlapping paths imported, exported and read back", () => {
         ]);
         for (const found of back)
             expect(parseFill(String(found.fill))).toMatchObject({ type: 'solid', color: '#993300' });
+    });
+});
+
+// The pptx writes a SmartArt graphic as the plain shapes it came in as.
+describe('a SmartArt graphic imported, exported and read back', () => {
+    test('comes back as the same shapes, at the same boxes', () => {
+        const drawing = [
+            dspSp({
+                xfrm: box(20, 10, 200, 100),
+                geom: 'roundRect',
+                spPr: scheme('accent1'),
+                text: para('President'),
+                txXfrm: textBox(30, 20, 180, 80),
+            }),
+            dspSp({ xfrm: box(300, 10, 200, 100), geom: 'hexagon', spPr: scheme('accent2') }),
+        ].join('');
+        const diagram = smartArt([100, 50, 600, 400], { drawing });
+        const imported = readPptx(
+            buildPptx({
+                slides: [{ shapes: diagram.shapes, rels: diagram.rels }],
+                types: diagram.types,
+                files: diagram.files,
+            }),
+            { maxMediaBytes: 1024 * 1024 },
+        ).slides[0].elements;
+        const back = roundTrip(imported).deck.slides[0].elements;
+        const shape = (found: NewVectorElement) => [
+            found.type,
+            found.html,
+            found.x,
+            found.y,
+            found.width,
+            found.height,
+        ];
+        expect(imported.map((found) => found.type)).toEqual(['rectangle', 'richtext', 'path']);
+        expect(back.map(shape)).toEqual(imported.map(shape));
     });
 });
 

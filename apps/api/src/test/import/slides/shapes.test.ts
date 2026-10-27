@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { NewVectorElement, SlidePage } from '@workspace/lib/vector';
-import { MAX_PATH_BYTES } from '@workspace/lib/vector';
+import { MAX_PATH_BYTES, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import * as customGeometryModule from '../../../lib/import/slides/custom-geometry';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
@@ -11,6 +11,7 @@ import {
     buildPptx,
     buildPptxWithBadPictures,
     cxn,
+    dspSp,
     graphicFrame,
     groupXfrm,
     grp,
@@ -19,11 +20,15 @@ import {
     para,
     pic,
     rel,
+    run,
+    scheme,
+    smartArt,
     solid,
     sp,
     styleRef,
     styleRefs,
     THEME,
+    textBox,
     xfrm,
 } from '../../fixtures/pptx';
 
@@ -990,5 +995,141 @@ describe('losses', () => {
         const shown = deckOf({ slides: [{ shapes: group(filled + filled) }] });
         expect(JSON.parse(String(shown.slides[0].elements[0].fill))).toMatchObject({ color: '#00ff00' });
         expect(shown.warnings).toEqual([{ code: 'fills-simplified', count: 2 }]);
+    });
+});
+
+// A SmartArt graphic is drawn from the drawing PowerPoint caches of it: its shapes at the frame's offset, each text in
+// the box the drawing gives it.
+describe('SmartArt', () => {
+    const LINE = `<a:ln w="12700">${scheme('lt1')}</a:ln>`;
+    const ORG_CHART = [
+        dspSp({
+            xfrm: box(20, 10, 200, 100),
+            geom: 'roundRect',
+            spPr: `${scheme('accent1')}${LINE}`,
+            text: para('President', ' sz="3100"'),
+            txXfrm: textBox(30, 20, 180, 80),
+        }),
+        dspSp({
+            xfrm: box(300, 10, 200, 100),
+            spPr: `${scheme('accent1')}${LINE}`,
+            text: para('Vice President'),
+            txXfrm: textBox(300, 10, 200, 100),
+        }),
+    ].join('');
+    const deckWith = (diagram: ReturnType<typeof smartArt>) =>
+        deckOf({
+            slides: [{ shapes: diagram.shapes, rels: diagram.rels }],
+            types: diagram.types,
+            files: diagram.files,
+        });
+    const fillOf = (found: NewVectorElement | undefined) => JSON.parse(String(found?.fill));
+
+    test('its shapes come in at the frame offset plus their own, painted, with their text in the txXfrm box', () => {
+        const deck = deckWith(smartArt([100, 50, 600, 400], { nodes: ['President'], drawing: ORG_CHART }));
+        const [node, text, rectangle, rectangleText] = deck.slides[0].elements;
+        expect(deck.slides[0].elements.map((found) => found.type)).toEqual([
+            'rectangle',
+            'richtext',
+            'rectangle',
+            'richtext',
+        ]);
+        expect(node).toMatchObject({ corners: 'curved', strokeColor: '#ffffff' });
+        expect(fillOf(node)).toMatchObject({ color: '#4f81bd' });
+        expectBox(node, 120, 60, 200, 100);
+        expect(text).toMatchObject({ html: '<p>President</p>', color: '#ffffff' });
+        expect(fillOf(text).color).toBe(TRANSPARENT_COLOR);
+        expectBox(text, 130, 70, 180, 80);
+        // A straight rectangle splits too: a painted rectangle, its text on top.
+        expect(rectangle).toMatchObject({ corners: 'straight' });
+        expect(fillOf(rectangle)).toMatchObject({ color: '#4f81bd' });
+        expectBox(rectangle, 400, 60, 200, 100);
+        expect(rectangleText?.html).toBe('<p>Vice President</p>');
+        expectBox(rectangleText, 400, 60, 200, 100);
+    });
+
+    test("a scheme color shows through the slide's color map, and a dsp:style fillRef paints", () => {
+        const remapped =
+            '<p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent3" accent2="accent2" accent3="accent3" accent4="accent1" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr>';
+        const drawing =
+            dspSp({ xfrm: box(0, 0, 100, 100), spPr: scheme('accent1') }) +
+            dspSp({ xfrm: box(200, 0, 100, 100), style: styleRefs(1, 0) });
+        const diagram = smartArt([0, 0, 400, 200], { drawing });
+        const deck = deckOf({
+            slides: [{ shapes: diagram.shapes, rels: diagram.rels, after: remapped }],
+            types: diagram.types,
+            files: diagram.files,
+        });
+        expect(deck.slides[0].elements.map((found) => fillOf(found).color)).toEqual(['#9bbb59', '#c0504d']);
+    });
+
+    test("its text turns with its shape, by the txXfrm's own turn: a hexagon turned upright keeps its text level", () => {
+        const drawing =
+            dspSp({
+                xfrm: box(0, 0, 100, 80, ' rot="5400000"'),
+                geom: 'hexagon',
+                spPr: scheme('accent1'),
+                text: para('upright'),
+                txXfrm: textBox(20, 10, 60, 60, ' rot="-5400000"'),
+            }) +
+            dspSp({
+                xfrm: box(200, 0, 100, 50, ' rot="1800000"'),
+                spPr: scheme('accent1'),
+                text: para('turned'),
+                txXfrm: textBox(200, 0, 100, 50),
+            });
+        const elements = deckWith(smartArt([0, 0, 400, 200], { drawing })).slides[0].elements;
+        const texts = elements.filter((found) => found.type === 'richtext');
+        expect(texts.map((found) => [found.html, Math.round(Number(found.angle))])).toEqual([
+            ['<p>upright</p>', 0],
+            ['<p>turned</p>', 30],
+        ]);
+        expectBox(texts[0], 20, 10, 60, 60);
+    });
+
+    test("a link in its text resolves through the drawing's own relationships", () => {
+        const drawing = dspSp({
+            xfrm: box(0, 0, 100, 100),
+            text: `<a:p>${run('site', '', '<a:hlinkClick r:id="rId1"/>')}</a:p>`,
+            txXfrm: textBox(0, 0, 100, 100),
+        });
+        const diagram = smartArt([0, 0, 400, 200], {
+            drawing,
+            drawingRels: rel('rId1', 'hyperlink', 'https://eigen.is/', true),
+        });
+        const text = deckWith(diagram).slides[0].elements.find((found) => found.type === 'richtext');
+        expect(text?.html).toBe('<p><a href="https://eigen.is/">site</a></p>');
+    });
+
+    test('a drawn one counts as a graphic that lost its layout, once however many slides show it', () => {
+        const diagram = smartArt([0, 0, 400, 200], { drawing: ORG_CHART });
+        const deck = deckOf({
+            layouts: [{ shapes: diagram.shapes, rels: diagram.rels }],
+            slides: [{}, {}],
+            types: diagram.types,
+            files: diagram.files,
+        });
+        expect(deck.slides.map((slide) => slide.elements.length)).toEqual([4, 4]);
+        expect(deck.warnings).toEqual([{ code: 'diagrams-flattened', count: 1 }]);
+    });
+
+    test('without a cached drawing, the dashed box shows its node text and counts as dropped', () => {
+        const deck = deckWith(smartArt([100, 50, 400, 200], { nodes: ['Plan', 'Build'] }));
+        const [placeholder] = deck.slides[0].elements;
+        expect(deck.slides[0].elements).toHaveLength(1);
+        expect(placeholder).toMatchObject({
+            type: 'richtext',
+            strokeStyle: 'dashed',
+            html: '<p>SmartArt not imported</p><p>Plan</p><p>Build</p>',
+        });
+        expectBox(placeholder, 100, 50, 400, 200);
+        expect(deck.warnings).toEqual([{ code: 'diagrams-dropped', count: 1 }]);
+    });
+
+    // As a govuk deck's alternating hexagons are cached: a spTree with no shape in it.
+    test('a cached drawing with no shapes shows the dashed box with the node text too', () => {
+        const deck = deckWith(smartArt([100, 50, 400, 200], { nodes: ['Plan'], drawing: '' }));
+        expect(deck.slides[0].elements.map((found) => found.html)).toEqual(['<p>SmartArt not imported</p><p>Plan</p>']);
+        expect(deck.warnings).toEqual([{ code: 'diagrams-dropped', count: 1 }]);
     });
 });
