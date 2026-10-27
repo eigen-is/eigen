@@ -36,7 +36,7 @@ export function CreateTeamDialog({ open, onOpenChange, organizationId }: CreateT
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Create Team</DialogTitle>
+                    <DialogTitle>Create team</DialogTitle>
                     <DialogDescription className="sr-only">Name the new team.</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">

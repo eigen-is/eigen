@@ -32,7 +32,7 @@ export function AdminTeamsToolbar({ searchQuery, onSearchChange, organizationId 
             />
             <TooltipButton
                 icon={Plus}
-                tooltipText="Create Team"
+                tooltipText="Create team"
                 className="shrink-0"
                 onClick={() => setShowCreateDialog(true)}
             />

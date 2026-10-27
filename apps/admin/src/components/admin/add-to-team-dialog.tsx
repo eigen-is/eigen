@@ -46,7 +46,7 @@ export function AddToTeamDialog({ open, onOpenChange, users, organizationId }: A
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent size="sm">
                 <DialogHeader>
-                    <DialogTitle>Add to Team</DialogTitle>
+                    <DialogTitle>Add to team</DialogTitle>
                     <DialogDescription>
                         {users.length === 1
                             ? `Choose a team for ${users[0].name}.`

@@ -14,8 +14,8 @@ Teams let you group members together so you can share files, folders, and calend
 
 1. Open the [Admin app](/admin/teams).
 2. The **Teams** page lists every team in your organization. From another Admin page, click **Teams** in the sidebar to get there.
-3. Click the **+** button (**Create Team**) next to the search bar at the top of the list.
-4. In the **Create Team** dialog, type a name for the team.
+3. Click the **+** button (**Create team**) next to the search bar at the top of the list.
+4. In the **Create team** dialog, type a name for the team.
 5. Click **Create**.
 
 The new team appears in the list. Click it to open its detail panel on the right. To go back to the full list, click **Close** (the **X**) in the toolbar above the detail panel.
@@ -33,7 +33,7 @@ The new team appears in the list. Click it to open its detail panel on the right
 1. Open the **Users** page from the sidebar.
 2. Select the people. Hold Shift and click to select a range, or hold Ctrl (Command on a Mac) and click to add people one by one.
 3. Right-click the selection and choose **Add to team…**. On a phone or tablet, press and hold a person's row to add that one person.
-4. In the **Add to Team** dialog, search for the team and click it.
+4. In the **Add to team** dialog, search for the team and click it.
 
 Everyone you selected joins that team. An account marked **no organization** can't be selected, because only members of your organization can join a team.
 
