@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Added
+
+- **Slides on a phone** — a row of slide thumbnails sits under the slide. Tap one to jump straight to it
+
 ### Changed
 
 - **Forwarding email** — a forward brings the original's attachments along, pictures in the message included. Take one off with the **X** on its chip before you send

@@ -1,5 +1,6 @@
 // The slide rail: one FrameThumbnail per frame, in stored order, reordered by a drag that rewrites a
-// single fractional index. Desktop-only — a phone pages the deck with a swipe (spec D8).
+// single fractional index. A phone gets SlideStrip instead: the same thumbnails in one row under the
+// deck, which only jumps to a slide, since a phone never edits a deck.
 
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { closestCenter, DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -17,6 +18,12 @@ import { useMemo } from 'react';
 // A stable empty list, so a slide with no elements does not hand the thumbnail's memo a fresh array.
 const EMPTY_ELEMENTS: VectorElement[] = [];
 const noop = () => {};
+
+// A swipe on the deck can page past the strip's visible part. A ref only the current slide's row holds
+// runs each time another row becomes current, so the strip follows the deck.
+const scrollIntoStrip = (row: HTMLDivElement | null) => {
+    row?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+};
 
 type SlidePanelProps = {
     frames: VectorFrame[];
@@ -51,15 +58,7 @@ export function SlidePanel({
     const slideLongPress = useLongPress(slideMenu?.openAt ?? noop, { disabled: !!dragActiveId || !slideMenu });
 
     const dragged = frames.find((frame) => frame.id === dragActiveId);
-
-    // One pass over the scene per render, not one per slide. An element homed to a frame that is gone
-    // never appears (the reader re-homes it on read, so this is only a within-tick concern).
-    const elementsByFrame = useMemo(() => {
-        const byFrame = new Map<string, VectorElement[]>();
-        for (const frame of frames) byFrame.set(frame.id, []);
-        for (const element of elements) byFrame.get(element.frameId)?.push(element);
-        return byFrame;
-    }, [frames, elements]);
+    const elementsByFrame = useElementsByFrame(frames, elements);
 
     return (
         <div className="w-52 flex-shrink-0 border-r bg-muted/30 flex flex-col h-full">
@@ -105,6 +104,52 @@ export function SlidePanel({
             </div>
         </div>
     );
+}
+
+type SlideStripProps = {
+    frames: VectorFrame[];
+    elements: VectorElement[];
+    activeFrameId: string;
+    onSelectFrame: (frameId: string) => void;
+    matchedFrameIds?: ReadonlySet<string>;
+};
+
+export function SlideStrip({ frames, elements, activeFrameId, onSelectFrame, matchedFrameIds }: SlideStripProps) {
+    const elementsByFrame = useElementsByFrame(frames, elements);
+
+    return (
+        <div className="flex-shrink-0 overflow-x-auto border-t bg-muted/30">
+            <div className="flex gap-1 p-2">
+                {frames.map((frame, index) => (
+                    <div
+                        key={frame.id}
+                        ref={frame.id === activeFrameId ? scrollIntoStrip : undefined}
+                        className="w-32 flex-shrink-0"
+                    >
+                        <FrameThumbnail
+                            frame={frame}
+                            elements={elementsByFrame.get(frame.id) ?? EMPTY_ELEMENTS}
+                            index={index}
+                            active={frame.id === activeFrameId}
+                            matched={matchedFrameIds?.has(frame.id)}
+                            onSelect={onSelectFrame}
+                        />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// One pass over the scene per render, not one per slide. An element homed to a frame that is gone
+// never appears (the reader re-homes it on read, so this is only a within-tick concern).
+function useElementsByFrame(frames: VectorFrame[], elements: VectorElement[]) {
+    return useMemo(() => {
+        const byFrame = new Map<string, VectorElement[]>();
+        for (const frame of frames) byFrame.set(frame.id, []);
+        for (const element of elements) byFrame.get(element.frameId)?.push(element);
+        return byFrame;
+    }, [frames, elements]);
 }
 
 function SortableSlide({

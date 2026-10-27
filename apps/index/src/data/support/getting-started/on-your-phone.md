@@ -6,7 +6,7 @@ category: Basics
 tags: [mobile, phone, getting-started, layout]
 related: [getting-started/your-first-steps, getting-started/search-and-command-palette]
 order: 6
-updated: 2026-10-23
+updated: 2026-10-27
 ---
 
 Eigen runs in the browser on your phone, with the same account and the same files as on your computer. The apps rearrange themselves for the smaller screen rather than shrinking. This page covers what moves where, and the few things a phone cannot do.
@@ -33,7 +33,7 @@ Presentations and drawings are view-only on a phone, for everyone, including peo
 
 ## Presentations on a phone
 
-A deck fills the screen one slide at a time. Swipe left or right to move between slides, and the counter along the bottom tells you where you are, for example **Slide 3 of 12**. You can still present, read and write comments, and use the file menu. The strip of slide thumbnails is a computer-only panel, so there is no way to jump straight to slide nine.
+A deck fills the screen one slide at a time. Swipe left or right to move between slides, and the counter along the bottom tells you where you are, for example **Slide 3 of 12**. You can still present, read and write comments, and use the file menu. To jump straight to slide nine, tap it in the row of slide thumbnails under the slide. You can't add, move or delete slides on a phone.
 
 ## Spreadsheets on a phone
 

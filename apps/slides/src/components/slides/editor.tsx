@@ -1,3 +1,7 @@
+// The slides editor: a deck drawn by the shared canvas engine in frame mode, one slide at a time.
+// The slide route mounts it for an open deck. It adds what the engine has no word for, such as the
+// slide rail, the phone's slide strip, present mode, page setup and the slide background panel.
+
 import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -35,7 +39,7 @@ import { PageSetupDialog } from './page-setup-dialog';
 import { PresentMode, presentStep } from './present-mode';
 import { seedDeck } from './seed-deck';
 import { SlideBackgroundPanel } from './slide-background-panel';
-import { SlidePanel } from './slide-panel';
+import { SlidePanel, SlideStrip } from './slide-panel';
 
 type SlideEditorProps = {
     ownerId: string;
@@ -413,8 +417,8 @@ function SlideEditorInner({
                 />
             }
         >
-            {/* The rail is desktop-only: a phone pages with a swipe, and a 52-wide column
-                would take a third of the screen. */}
+            {/* The rail is desktop-only: a 52-wide column would take half a phone, so a phone gets
+                the strip under the deck instead. */}
             {!isMobile && (
                 <SlidePanel
                     frames={doc.frames}
@@ -462,6 +466,15 @@ function SlideEditorInner({
                             onSwipeFrame={canEdit ? undefined : stepFrame}
                         />
                     </div>
+                    {isMobile && (
+                        <SlideStrip
+                            frames={doc.frames}
+                            elements={doc.elements}
+                            activeFrameId={frameId}
+                            onSelectFrame={setFrameId}
+                            matchedFrameIds={matchedFrameIds}
+                        />
+                    )}
                     <div className="h-8 bg-muted border-t flex items-center justify-between app-gutter-x text-xs text-muted-foreground">
                         <span>
                             Slide {frameIndex + 1} of {doc.frames.length}
