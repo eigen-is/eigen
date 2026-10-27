@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+// The vector barrel loads geometry before any kind. Without it, the imports below reach a kind's module first, and the
+// file throws a TDZ ReferenceError when it runs alone.
+import '../../../vector';
 import {
     CHART_MESSAGES,
     chartColor,
