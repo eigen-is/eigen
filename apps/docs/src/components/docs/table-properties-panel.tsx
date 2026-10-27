@@ -9,13 +9,7 @@ import { Button } from '@workspace/ui/components/button';
 import { ColorRow, PropertiesPanel, PropertyRow, PropertySection } from '@workspace/ui/components/properties-panel';
 import { cellBorderPen } from './extensions/table-look';
 import { cellBackground, selectCellCommands } from './hooks/use-toolbar-state';
-import { TABLE_ACTION_ICONS } from './table-action-icons';
-
-const BORDER_SETS = [
-    ['all', 'All'],
-    ['outer', 'Outer'],
-    ['none', 'None'],
-] as const;
+import { BORDER_SET_LOOKS, TABLE_ACTION_ICONS } from './table-action-icons';
 
 type TablePropertiesPanelProps = {
     editor: Editor;
@@ -142,7 +136,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                 />
                 <PropertyRow label="Borders">
                     <div className="grid grid-cols-3 gap-1.5">
-                        {BORDER_SETS.map(([set, label]) => (
+                        {BORDER_SET_LOOKS.map(({ set, short }) => (
                             <Button
                                 key={set}
                                 variant="outline"
@@ -150,12 +144,12 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                                 className="text-xs"
                                 onClick={() => editor.chain().focus().setCellBorders(set).run()}
                             >
-                                {label}
+                                {short}
                             </Button>
                         ))}
                     </div>
                 </PropertyRow>
-                {/* Without a color of their own the sides draw Eigen's default grey. */}
+                {/* Without a color of their own the sides draw Eigen's default gray. */}
                 <ColorRow
                     label="Border"
                     value={borderColor}

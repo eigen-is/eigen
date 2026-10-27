@@ -1,7 +1,7 @@
-// The box an image and a chart share in the Docs editor: the node view's wrapper the page's figure rules lay out, its
-// selection ring, its grips and comment mark, and the plugins for a click beside it and a drag out of its paragraph. A
-// figure in front of or behind the text is that wrapper placed at its offsets, with its chrome in a sibling above every
-// layer, where a press drags it. The image and chart node views draw their content inside it.
+// The box a Docs figure draws in inside the editor, such as an image's or a chart's: the node view's wrapper that the
+// page's figure rules lay out, its selection ring, its grips and its comment mark. It also holds the plugins for a
+// click beside the box and a drag out of its paragraph. A figure in front of or behind the text is that wrapper placed
+// at its offsets, with its grips in a sibling above every layer, where a press drags it. Each node view draws inside.
 
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
@@ -17,6 +17,7 @@ import {
     pxToMm,
     readFigureAttrs,
     readFigureFrameAttrs,
+    readFrameWidth,
 } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui';
@@ -292,7 +293,7 @@ export function FigureFrame({
         ...frame,
         offsetX: (frame.offsetX ?? 0) + (shift?.dx ?? 0) + (travel?.dx ?? 0),
         offsetY: (frame.offsetY ?? 0) + (shift?.dy ?? 0) + (travel?.dy ?? 0),
-        width: box?.width ?? node.attrs.width,
+        width: box?.width ?? readFrameWidth(node.attrs.width),
     });
     const chrome = place && box;
 
@@ -362,7 +363,8 @@ export function FigureFrame({
                 {caption && <span className="figcaption">{caption}</span>}
             </NodeViewWrapper>
             {chrome && (
-                // z-index 2: above the front layer's 1, in the page's stacking context, as the paragraph makes none.
+                // Why: the grips sit above the front layer's 1, the Docs figure layer of the z-index scale. The
+                // paragraph makes no stacking context, so both stack in the page's.
                 <span
                     className="absolute z-2 cursor-move touch-none"
                     style={{ left: place.left, top: place.top, width: box.width, height: box.height }}

@@ -179,6 +179,7 @@ Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDis
 | Layer | z-index | Examples |
 |---|---|---|
 | Document content | auto | everything that flows |
+| Docs figure layers | -1 to 2 | a figure behind the text (-1) or in front of it (1), and its grips above both (2), in the page's stacking context |
 | In-content floating UI | 10 | inline autocompletes, suggestion lists |
 | Sheet canvas overlays | 8 to 30 | selection, freeze handles, scrollbars, all under `cellArea` |
 | Portaled UI | 50 | shadcn and Radix dropdowns, popovers, dialogs |

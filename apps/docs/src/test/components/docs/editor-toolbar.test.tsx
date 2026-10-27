@@ -28,10 +28,10 @@ const editor = new Editor({
     extensions: [...getDocExtensions(), PositionedFigures],
 });
 
-// A band's editor, which draws every figure in line, as a note's does.
-const bandExtensions = () => [
+// A band's editor and a note's, which draw every figure in line.
+const rootExtensions = (root: { band?: boolean; note?: boolean }) => [
     ...getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }),
-    PositionedFigures.configure({ blockOnly: true }),
+    PositionedFigures.configure(root),
 ];
 
 const onReplaceImage = mock(() => {});
@@ -759,7 +759,7 @@ test('Format › Image › In front of text places the selected image and checks
 
 // The menu offers what the band's and the note's Image panels offer.
 test('in a band, Format › Image offers no layout, as a band holds no float', async () => {
-    const band = new Editor({ extensions: bandExtensions(), content: TABLE_AND_FIGURE });
+    const band = new Editor({ extensions: rootExtensions({ band: true }), content: TABLE_AND_FIGURE });
     band.commands.setNodeSelection(2);
     await render(1920, true, { active: band });
     await openMenu('Format');
@@ -769,7 +769,7 @@ test('in a band, Format › Image offers no layout, as a band holds no float', a
 });
 
 test('in a note, Format › Image offers no place in front of or behind the text', async () => {
-    const note = new Editor({ extensions: bandExtensions(), content: TABLE_AND_FIGURE });
+    const note = new Editor({ extensions: rootExtensions({ note: true }), content: TABLE_AND_FIGURE });
     note.commands.setNodeSelection(2);
     await render(1920, true, { active: note, inNote: true });
     await openMenu('Format');
@@ -855,7 +855,7 @@ test('a page number preset goes to the editor, and Page count goes in at the car
 
 // A command the schema lacks is a TypeError, so the menus ask the editor they act on what it holds.
 test("in a band, Insert, Format and the style picker offer only what the band's schema holds", async () => {
-    const band = new Editor({ extensions: bandExtensions() });
+    const band = new Editor({ extensions: rootExtensions({ band: true }) });
     await render(1920, true, { active: band });
     await openMenu('Insert');
     const disabled = [...document.querySelectorAll('[role="menuitem"][aria-disabled="true"]')].map((item) =>
@@ -889,7 +889,7 @@ test("in a band, Insert, Format and the style picker offer only what the band's 
 test("in a band, Line & paragraph spacing and Increase indent act on the band's paragraph", async () => {
     const band = new Editor({
         element: document.body.appendChild(document.createElement('div')),
-        extensions: bandExtensions(),
+        extensions: rootExtensions({ band: true }),
         content: formatted({}),
     });
     band.commands.setTextSelection(1);
@@ -1443,7 +1443,7 @@ test.each([
     ['in a band', true, false],
     ['in a note', false, true],
 ])('Insert › Page elements › Footnote is off %s', async (_, inBand, inNote) => {
-    const band = new Editor({ extensions: bandExtensions() });
+    const band = new Editor({ extensions: rootExtensions({ band: true }) });
     editor.commands.setContent(ONE_PARAGRAPH);
     editor.commands.setTextSelection(2);
     await render(1920, true, { onInsertFootnote: () => {}, inNote, active: inBand ? band : editor });

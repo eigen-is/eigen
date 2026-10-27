@@ -1,6 +1,7 @@
-// The frame an image and a chart share in Docs: where the box sits (in line, wrapped, or in front of or behind the
-// text at an offset from its paragraph), its caption and its comment card. The figure and chart nodes take its
-// attributes and HTML, the editor's node view and the export's renderer its box style, so every surface draws one box.
+// The frame a Docs figure sits in, such as an image or a chart: where its box sits (in line, wrapped, or in front of or
+// behind the text at an offset from its paragraph), its caption and its comment card. Each figure node takes its
+// attributes and HTML from here. Every surface that draws one, such as the editor or the export, takes its box style,
+// so they all draw the same box.
 
 import type { CommandProps } from '@tiptap/core';
 import type { DOMOutputSpec } from '@tiptap/pm/model';
@@ -14,9 +15,13 @@ export type FigureFrameNode = (typeof FIGURE_FRAME_NODES)[number];
 export const isFigureFrameNode = (name: string | undefined): name is FigureFrameNode =>
     FIGURE_FRAME_NODES.some((node) => node === name);
 
-// In front of and behind the text are out of the flow: the box sits at its offsets from its anchor paragraph.
+// In front of and behind the text are out of the flow: the box sits at its offsets from its anchor paragraph. The
+// prose stylesheet spells the two out again, as CSS can't import this list.
 const POSITIONED_LAYOUTS = ['front', 'behind'] as const;
 export type PositionedLayout = (typeof POSITIONED_LAYOUTS)[number];
+
+// A positioned figure's or chart's box, in the editor or in pasted HTML.
+export const POSITIONED_SELECTOR = POSITIONED_LAYOUTS.map((layout) => `[data-layout="${layout}"]`).join(', ');
 const FIGURE_LAYOUTS = ['block', 'wrap-left', 'wrap-right', ...POSITIONED_LAYOUTS] as const;
 export type FigureLayout = (typeof FIGURE_LAYOUTS)[number];
 const FIGURE_ALIGNMENTS = ['left', 'center', 'right'] as const;
@@ -42,6 +47,11 @@ export type FigureFrameAttrs = {
     offsetY?: number | null;
     commentCardId?: string | null;
 };
+
+// A figure's or a chart's stored width, which a collaborator can write as anything. One that isn't a positive number
+// reads as unset, and one wider than the largest paper as that paper.
+export const readFrameWidth = (value: unknown): number | null =>
+    typeof value === 'number' && value > 0 ? Math.min(MAX_POSITION_PX, value) : null;
 
 const readOffset = (value: unknown) =>
     typeof value === 'number' && Number.isFinite(value)
@@ -79,6 +89,19 @@ export function figureLayoutStyle({
     if (!isPositioned(layout)) return undefined;
     const place = { left: offsetX ?? 0, top: offsetY ?? 0 };
     return width ? { ...place, width: Math.min(MAX_POSITION_PX, width) } : place;
+}
+
+// A positioned box's offsets from its paragraph, kept on the paper: between the paper's left and right edges, and below
+// its top. `anchor` is where the paragraph starts on the paper, and every length is in page px.
+export function keepOnPaper(
+    box: { x: number; y: number; width: number },
+    anchor: { left: number; top: number },
+    paperWidth: number,
+): { offsetX: number; offsetY: number } {
+    return {
+        offsetX: Math.round(Math.max(-anchor.left, Math.min(paperWidth - box.width - anchor.left, box.x))),
+        offsetY: Math.round(Math.max(-anchor.top, box.y)),
+    };
 }
 
 export function figureFrameAttributes() {

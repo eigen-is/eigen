@@ -1,10 +1,7 @@
-// A figure in front of or behind the text draws at an offset from its paragraph and takes no room on its line, so this
-// extension keeps the keyboard off it. Such figures always lead their paragraph, the caret rests after them and a
-// selection ends on either side of them, while ArrowLeft, Backspace, Delete and Enter there act as at a plain
-// paragraph's start. It also places them: a drop re-anchors one on the paragraph under it, a switch to front or behind
-// keeps it where it is drawn, a press where text doesn't cover a behind one selects it, and the body grows under the
-// lowest. A band's and a note's editor draw every figure in line, as a table cell and a note in the body do. Every docs
-// editor registers it.
+// A figure in front of or behind the text draws at an offset from its paragraph and takes no room on its line. This
+// extension keeps the caret and the keys off such a figure, which always leads its paragraph. Its commands place the
+// figure on the paper when it is switched, dragged or resized, and the body grows under the lowest one. A band's or a
+// note's editor draws every figure in line. Every docs editor registers it.
 
 import type { Editor } from '@tiptap/core';
 import { Extension } from '@tiptap/core';
@@ -21,8 +18,11 @@ import {
     DEFAULT_PAGE_SETUP,
     isFigureFrameNode,
     isPositioned,
+    keepOnPaper,
+    POSITIONED_SELECTOR,
     pagePx,
     readFigureFrameAttrs,
+    readFrameWidth,
     setFigureAttributes,
 } from '@workspace/lib/docs/eigendoc';
 import { pageScale } from './text-column';
@@ -54,8 +54,9 @@ export type PaperRoom = { west: number; east: number; north: number };
 type PositionedFiguresOptions = {
     // The page map in px: the paper a positioned figure stays on, never the column a screen lays out.
     page: () => PageSetup;
-    // A band's or a note's editor, where every figure draws in line.
-    blockOnly: boolean;
+    // A band's editor and a note's draw every figure in line.
+    band: boolean;
+    note: boolean;
 };
 
 const positionedFiguresKey = new PluginKey('positionedFigures');
@@ -65,15 +66,14 @@ const REWIND = 'rewind';
 
 const LIST_ITEMS = ['listItem', 'taskItem'];
 
-const POSITIONED_BOXES = '.figure[data-layout="front"], .figure[data-layout="behind"]';
-
-const isPositionedFigure = (node: PMNode | null | undefined): boolean =>
-    !!node && isFigureFrameNode(node.type.name) && isPositioned(node.attrs.layout);
+const isPositionedFigure = (node: PMNode | null): node is PMNode =>
+    node !== null && isFigureFrameNode(node.type.name) && isPositioned(node.attrs.layout);
 
 // A figure at `$pos` draws in line whatever its layout in a band's or a note's editor, and in a table cell or a note.
-function drawsInLine($pos: ResolvedPos, blockOnly: boolean): boolean {
+function drawsInLine($pos: ResolvedPos, { band, note }: PositionedFiguresOptions): boolean {
     return (
-        blockOnly ||
+        band ||
+        note ||
         Array.from({ length: $pos.depth + 1 }, (_, depth) => $pos.node(depth).type.name).some((name) =>
             BLOCK_ONLY_FIGURE_PARENTS.includes(name),
         )
@@ -82,7 +82,11 @@ function drawsInLine($pos: ResolvedPos, blockOnly: boolean): boolean {
 
 // Where the selected figure draws in line, its panel and Format › Image offer no place in front of or behind the text.
 export const selectionDrawsInLine = (editor: Editor): boolean =>
-    drawsInLine(editor.state.selection.$from, editor.storage.positionedFigures.blockOnly);
+    drawsInLine(editor.state.selection.$from, editor.storage.positionedFigures);
+
+// A band holds no float, as a docx import reads a header's anchored picture as one in its own line. So a figure in a
+// band's editor offers its alignment alone, in its panel and in Format › Image.
+export const inBand = (editor: Editor): boolean => editor.storage.positionedFigures.band;
 
 // How many positioned figures a textblock starts with. Each is one position long.
 function leadingRun(textblock: PMNode): number {
@@ -99,11 +103,11 @@ function caretAfterRun(state: EditorState): ResolvedPos | null {
     return run > 0 && selection.$cursor.parentOffset === run ? selection.$cursor : null;
 }
 
-// A text selection with an end inside a leading run, or one that reaches into a textblock only up to the end of its
-// run, as Shift+Home, Shift+Up or a pointer can make it: the same selection without the runs. The caret rests after a
-// run, and a selection that reaches into a later textblock no further than its run ends before it, so Backspace never
-// deletes an image drawn elsewhere. Both ends are fixed at once, because ProseMirror never hands a plugin's own
-// appended transaction back to it. Null when it holds no run.
+// Shift+Home, Shift+Up or a pointer can make a text selection that holds part of a leading run. This returns the same
+// selection without the run, or null when it holds none. An end inside a run moves to just after it. A selection that
+// reaches into a later textblock no further than its run ends before that textblock instead, so Backspace never
+// deletes an image that is drawn elsewhere. Both ends are fixed at once, because ProseMirror never hands a plugin's own
+// appended transaction back to it.
 function selectionOutsideRuns(selection: Selection): TextSelection | null {
     if (!(selection instanceof TextSelection)) return null;
     const { $from, $to } = selection;
@@ -142,8 +146,7 @@ function anchorOnPaper(view: EditorView, page: PageSetup, anchor: DOMRect): { le
     };
 }
 
-// A box's offsets from its anchor paragraph's drawn rect, kept on the paper of the page map: between its edges, and
-// below the page's top.
+// A box's offsets from its anchor paragraph's drawn rect, kept on the paper of the page map.
 function offsetsOnPaper(
     view: EditorView,
     page: PageSetup,
@@ -151,13 +154,9 @@ function offsetsOnPaper(
     anchor: DOMRect,
 ): { offsetX: number; offsetY: number } {
     const scale = pageScale(view.dom);
-    const { left, top } = anchorOnPaper(view, page, anchor);
     const x = (box.left - anchor.left) / scale;
     const y = (box.top - anchor.top) / scale;
-    return {
-        offsetX: Math.round(Math.max(-left, Math.min(page.width - box.width - left, x))),
-        offsetY: Math.round(Math.max(-top, y)),
-    };
+    return keepOnPaper({ x, y, width: box.width }, anchorOnPaper(view, page, anchor), page.width);
 }
 
 // The room on the paper around the positioned figure at `pos`, drawn `width` page px wide, which a grip grows it into
@@ -165,7 +164,7 @@ function offsetsOnPaper(
 export function roomOnPaper(editor: Editor, pos: number, width: number): PaperRoom | null {
     const { view } = editor;
     const node = view.state.doc.nodeAt(pos);
-    if (!node || !isPositionedFigure(node)) return null;
+    if (!isPositionedFigure(node)) return null;
     const anchor = rectAt(view, view.state.doc.resolve(pos).before());
     if (!anchor) return null;
     const page = editor.storage.positionedFigures.page();
@@ -204,8 +203,7 @@ function anchorUnder(view: EditorView, top: number, type: NodeType): number | nu
 // Moves every positioned figure of the textblock at `pos` that sits after its text to the end of its leading run, in
 // order. The textblock keeps its size.
 function leadFigures(tr: Transaction, pos: number) {
-    const textblock = tr.doc.nodeAt(pos);
-    if (!textblock) return;
+    const textblock = tr.doc.resolve(pos + 1).parent;
     const run = leadingRun(textblock);
     const strays: { node: PMNode; at: number }[] = [];
     textblock.forEach((child, offset, index) => {
@@ -219,33 +217,41 @@ function leadFigures(tr: Transaction, pos: number) {
     );
 }
 
-// The textblocks the transactions changed, as positions in the last one's doc. An attribute step counts its node.
-function changedTextblocks(transactions: readonly Transaction[], doc: PMNode): Set<number> {
-    let ranges: [number, number][] = [];
+// The textblocks the transactions changed, as positions in the last one's doc. One span covers every step, so a
+// transaction of thousands of steps, such as a replace-all, maps two positions per step. A textblock inside the span
+// that no step changed has nothing to fix. An attribute step counts its node.
+function changedTextblocks(transactions: readonly Transaction[], doc: PMNode): number[] {
+    let from = Number.POSITIVE_INFINITY;
+    let to = Number.NEGATIVE_INFINITY;
     for (const tr of transactions) {
-        tr.steps.forEach((step, index) => {
+        for (const [index, step] of tr.steps.entries()) {
             const map = tr.mapping.maps[index];
-            ranges = ranges.map(([from, to]) => [map.map(from, -1), map.map(to, 1)]);
-            if (step instanceof AttrStep) ranges.push([step.pos, step.pos + 1]);
-            else
-                map.forEach((_oldFrom, _oldTo, from, to) => {
-                    ranges.push([from, to]);
+            if (from <= to) {
+                from = map.map(from, -1);
+                to = map.map(to, 1);
+            }
+            if (step instanceof AttrStep) {
+                from = Math.min(from, step.pos);
+                to = Math.max(to, step.pos + 1);
+            } else
+                map.forEach((_oldFrom, _oldTo, start, end) => {
+                    from = Math.min(from, start);
+                    to = Math.max(to, end);
                 });
-        });
+        }
     }
-    const textblocks = new Set<number>();
-    for (const [from, to] of ranges) {
-        // A note's paragraphs are inside its reference, an inline node of a textblock.
-        doc.nodesBetween(Math.max(0, from - 1), Math.min(doc.content.size, to + 1), (node, pos) => {
-            if (node.isTextblock) textblocks.add(pos);
-        });
-    }
+    const textblocks: number[] = [];
+    if (from > to) return textblocks;
+    // A note's paragraphs are inside its reference, an inline node of a textblock.
+    doc.nodesBetween(Math.max(0, from - 1), Math.min(doc.content.size, to + 1), (node, pos) => {
+        if (node.isTextblock) textblocks.push(pos);
+    });
     return textblocks;
 }
 
-// Joins the way `join` does at a plain textblock's edge, from `selection`, and keeps each figure of `figures` that the
-// join carries into the textblock at `into` where it is drawn: its offsets are measured against that textblock before
-// the dispatch, and it leads it. With nothing to join, at the doc's start, the figures stay too.
+// Runs `join` from `selection`, as at a plain textblock's edge. Each figure of `figures` that the join carries into the
+// textblock at `into` keeps the place where it is drawn. Its offsets are measured against that textblock before the
+// dispatch, and it leads the joined textblock. At the doc's start there is nothing to join, and the figures stay put.
 function joinKeepingPlace(
     view: EditorView,
     selection: Selection,
@@ -332,9 +338,9 @@ function overText(textblock: Element, x: number, y: number): boolean {
 }
 
 // The body's min-height reaches the lowest positioned box, so the notes and the footer band draw below it. A doc with
-// none reads no layout.
+// none reads no layout. It runs at most once a frame, as each run lays out the page.
 function growBody(view: EditorView) {
-    const boxes = view.dom.querySelectorAll(POSITIONED_BOXES);
+    const boxes = view.dom.querySelectorAll(POSITIONED_SELECTOR);
     if (boxes.length === 0) {
         view.dom.style.minHeight = '';
         return;
@@ -352,11 +358,11 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
     priority: 1000,
 
     addOptions() {
-        return { page: () => pagePx(DEFAULT_PAGE_SETUP), blockOnly: false };
+        return { page: () => pagePx(DEFAULT_PAGE_SETUP), band: false, note: false };
     },
 
     addStorage() {
-        return { page: this.options.page, blockOnly: this.options.blockOnly };
+        return { ...this.options };
     },
 
     addCommands() {
@@ -377,13 +383,14 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     const paper = page();
                     const box = figureBoxAt(view, pos);
                     const anchor = rectAt(view, $from.before());
-                    const width = Math.min(paper.width, node.attrs.width ?? (box?.width ?? 0) / pageScale(view.dom));
+                    const stored = readFrameWidth(node.attrs.width);
+                    const width = Math.min(paper.width, stored ?? (box?.width ?? 0) / pageScale(view.dom));
                     setFigureAttributes(tr, pos, {
                         layout,
                         ...(box && anchor
                             ? offsetsOnPaper(view, paper, { left: box.left, top: box.top, width }, anchor)
                             : { offsetX: 0, offsetY: 0 }),
-                        ...(node.attrs.width > paper.width && { width: paper.width }),
+                        ...(stored !== null && stored > paper.width && { width: paper.width }),
                     });
                     const run = leadingRun($from.parent);
                     if ($from.index() > run) {
@@ -396,7 +403,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                 (pos, { dx, dy }) =>
                 ({ tr, view, dispatch }) => {
                     const node = tr.doc.nodeAt(pos);
-                    if (!node || !isPositionedFigure(node)) return false;
+                    if (!isPositionedFigure(node)) return false;
                     const $pos = tr.doc.resolve(pos);
                     const own = rectAt(view, $pos.before());
                     const box = figureBoxAt(view, pos);
@@ -413,7 +420,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     const rect = rectAt(view, anchor);
                     if (!rect) return false;
                     if (!dispatch) return true;
-                    const width = node.attrs.width ?? box.width / scale;
+                    const width = readFrameWidth(node.attrs.width) ?? box.width / scale;
                     const offsets = offsetsOnPaper(view, page(), { ...at, width }, rect);
                     if (anchor === $pos.before()) {
                         setFigureAttributes(tr, pos, offsets);
@@ -443,7 +450,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     const box = {
                         left: anchor.left + (offsetX ?? 0) * scale,
                         top: anchor.top + (offsetY ?? 0) * scale,
-                        width: attributes.width ?? node.attrs.width ?? 0,
+                        width: attributes.width ?? readFrameWidth(node.attrs.width) ?? 0,
                     };
                     setFigureAttributes(tr, pos, { ...attributes, ...offsetsOnPaper(view, page(), box, anchor) });
                     return true;
@@ -543,7 +550,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
 
     addProseMirrorPlugins() {
         const editor = this.editor;
-        const { blockOnly } = this.options;
+        const { options } = this;
         return [
             new Plugin({
                 key: positionedFiguresKey,
@@ -557,7 +564,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     if (fixes) {
                         for (const pos of changedTextblocks(transactions, newState.doc)) {
                             const $inside = tr.doc.resolve(pos + 1);
-                            if (!drawsInLine($inside, blockOnly)) leadFigures(tr, pos);
+                            if (!drawsInLine($inside, options)) leadFigures(tr, pos);
                             else
                                 $inside.parent.forEach((child, offset) => {
                                     if (isPositionedFigure(child))
@@ -589,14 +596,23 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     },
                 },
                 view(view) {
+                    let frame = 0;
+                    const grow = () => {
+                        frame ||= requestAnimationFrame(() => {
+                            frame = 0;
+                            growBody(view);
+                        });
+                    };
                     // An image's height is known once it loads, which changes no doc.
-                    const onLoad = () => growBody(view);
-                    view.dom.addEventListener('load', onLoad, true);
+                    view.dom.addEventListener('load', grow, true);
                     return {
                         update(updated, previous) {
-                            if (updated.state.doc !== previous.doc) growBody(updated);
+                            if (updated.state.doc !== previous.doc) grow();
                         },
-                        destroy: () => view.dom.removeEventListener('load', onLoad, true),
+                        destroy() {
+                            cancelAnimationFrame(frame);
+                            view.dom.removeEventListener('load', grow, true);
+                        },
                     };
                 },
             }),

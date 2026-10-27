@@ -20,7 +20,7 @@ import type { LucideIcon } from 'lucide-react';
 import { BringToFront, ImagePlus, PanelLeft, PanelRight, Rows3, SendToBack } from 'lucide-react';
 import { useState } from 'react';
 import { clampFigureWidth, figureMaxWidth, setImageLayout } from './extensions/figure-frame';
-import { selectionDrawsInLine } from './extensions/positioned-figure';
+import { inBand, selectionDrawsInLine } from './extensions/positioned-figure';
 
 // Alt, Cap or Width. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
 // from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit writes
@@ -72,29 +72,28 @@ const FIGURE_LAYOUT_LOOK: { layout: FigureLayout; label: string; icon: LucideIco
 export const figureLayoutLooks = (inFlowOnly: boolean) =>
     FIGURE_LAYOUT_LOOK.filter(({ layout }) => !inFlowOnly || !isPositioned(layout));
 
-// Where a figure sits: in its own line, aligned, wrapped by the text on one side, or behind or in front of the text,
-// and its caption, which one behind or in front of the text doesn't draw. A band holds no float, as a docx import reads
-// a header's anchored picture as one in its own line, so a band's offers the alignment alone, which puts a pasted wrap
-// in its own line. A figure in a note or a table cell draws in line, so there it offers no place behind or in front of
-// the text (inFlowOnly).
+// Where a figure sits: in its own line, aligned, wrapped by the text on one side, or behind or in front of the text.
+// The section also holds its caption, which a figure behind or in front of the text doesn't draw. A figure in a band
+// offers the alignment alone, so a pasted wrap goes back to its own line. A figure in a note or a table cell draws in
+// line, so there the section offers no place behind or in front of the text.
 export function FigureLayoutSection({
     layout,
     alignment,
     caption,
-    blockOnly = false,
+    inBand = false,
     inFlowOnly,
     onChange,
 }: {
     layout: FigureLayout;
     alignment: FigureAlignment;
     caption: string;
-    blockOnly?: boolean;
+    inBand?: boolean;
     inFlowOnly: boolean;
     onChange: (attributes: FigureFrameAttrs) => void;
 }) {
     return (
         <PropertySection title="Layout">
-            {!blockOnly && (
+            {!inBand && (
                 <PropertyRow label="Style">
                     <div className="flex items-center gap-1">
                         {figureLayoutLooks(inFlowOnly).map(({ layout: option, label, icon: Icon }) => (
@@ -111,7 +110,7 @@ export function FigureLayoutSection({
                     </div>
                 </PropertyRow>
             )}
-            {(blockOnly || layout === 'block') && (
+            {(inBand || layout === 'block') && (
                 <PropertyRow label="Align">
                     <AlignmentPicker
                         value={layout === 'block' ? alignment : undefined}
@@ -136,11 +135,10 @@ export function FigureLayoutSection({
 
 type FigurePropertiesPanelProps = {
     editor: Editor;
-    blockOnly?: boolean;
     onReplaceImage: () => void;
 };
 
-export function FigurePropertiesPanel({ editor, blockOnly, onReplaceImage }: FigurePropertiesPanelProps) {
+export function FigurePropertiesPanel({ editor, onReplaceImage }: FigurePropertiesPanelProps) {
     const { resolveMediaUrl } = useMediaResolver();
     // useEditor re-renders on no transaction, and a write that keeps the figure selected fires no selectionUpdate.
     const { width, layout, alignment, alt, caption, mediaName, inFlowOnly } = useEditorState({
@@ -193,7 +191,7 @@ export function FigurePropertiesPanel({ editor, blockOnly, onReplaceImage }: Fig
                 layout={layout}
                 alignment={alignment}
                 caption={caption}
-                blockOnly={blockOnly}
+                inBand={inBand(editor)}
                 inFlowOnly={inFlowOnly}
                 onChange={(attributes) => setImageLayout(editor, attributes)}
             />
