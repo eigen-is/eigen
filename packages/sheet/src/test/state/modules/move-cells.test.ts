@@ -17,12 +17,16 @@ function grid(): (Cell | null)[][] {
 
 // Drops the single selected cell at (0,0) onto (2,0); the grid factory's header offsets put
 // pageX 50 / pageY 70 inside that cell.
-function moveTopLeftToRowTwo(seed: (data: (Cell | null)[][]) => void, config: Context['sheets'][0]['config']) {
+function moveTopLeftToRowTwo(
+    seed: (data: (Cell | null)[][]) => void,
+    config: Context['sheets'][0]['config'],
+    hyperlink?: Context['sheets'][0]['hyperlink'],
+) {
     const data = grid();
     seed(data);
     const ctx = withGridGeometry(
         contextFactory({
-            sheets: [{ name: 'sheet', id: 'id_1', order: 0, data, config }],
+            sheets: [{ name: 'sheet', id: 'id_1', order: 0, data, config, hyperlink }],
             selections: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
             visibledatarow: [20, 40, 60, 80, 100, 120],
             visibledatacolumn: [74, 148, 222, 296, 370, 444],
@@ -56,5 +60,19 @@ describe('onCellsMoveEnd carries borders', () => {
             { borderInfo: { '2_0': { b: SIDE } } },
         );
         expect(ctx.sheets[0].config!.borderInfo).toEqual({});
+    });
+});
+
+describe('onCellsMoveEnd carries links', () => {
+    test('a linked source moves its link to the destination', () => {
+        const link = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
+        const ctx = moveTopLeftToRowTwo(
+            (data) => {
+                data[0][0] = { v: 'site', m: 'site' };
+            },
+            {},
+            { '0_0': link },
+        );
+        expect(ctx.sheets[0].hyperlink).toEqual({ '2_0': link });
     });
 });
