@@ -15,6 +15,7 @@ import type {
 } from '../types/chart';
 import { isTransparentFill, parseFill, serializeFill, TRANSPARENT_COLOR } from '../vector/fill';
 import { getLineHeightPx } from '../vector/font-metrics';
+import type { PaintedSeries } from './cartesian';
 import { layoutCartesian } from './cartesian';
 import type { Context, Frame } from './context';
 import { CHART_TITLE_SCALE, chartContext } from './context';
@@ -86,15 +87,16 @@ export function layoutChart({ spec, data, sourceFormat, ...box }: ChartLayoutInp
             : series.map(({ name, color }) => ({ name, color }));
     const legend = placeLegend(ctx, spec.legend.position, items, placeTitle(ctx, spec.title.text));
     const frame = legend.frame;
-    // The values' own format, which their ticks and data labels read in.
-    const valuesFormat = spec.axes.y.labels.format ?? sourceFormat ?? null;
 
     // Past MAX_SKETCH_POINTS the data marks draw unsketched and solid, their labels still the chart's.
     const marks: Context = capped ? { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } } : ctx;
+    const cartesian = (painted: PaintedSeries[]) =>
+        layoutCartesian(ctx, marks, spec, categories, painted, values, frame, sourceFormat ?? null);
+    // Data labels are the first thing to give: a plot too small with them is laid out again without.
     const plot =
         type === 'pie'
             ? layoutPie(marks, spec, pieId, categories, values[0], frame)
-            : layoutCartesian(ctx, marks, spec, categories, series, values, frame, valuesFormat);
+            : (cartesian(series) ?? cartesian(series.map((s) => ({ ...s, labelled: false }))));
     if (!plot) return message(CHART_MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
 }

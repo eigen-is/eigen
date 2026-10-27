@@ -197,10 +197,10 @@ export type ChartPaint = {
 // One line of chart text, turned 0, -45 or -90 degrees; Convert to shapes takes its y as a rich-text box's top.
 export type ChartLabel = TextLine;
 
-// A value-axis label for a tick and the step between ticks.
 // The chart's box is width × height from (0, 0); every shape and label is in those local coordinates. A tick and a
 // data label read in the value axis's own format, else in sourceFormat, the values' own format, which a sheet reads
-// from its cells. Without either a tick takes as many decimals as the step, and a data label reads as General.
+// from its cells. Without either a tick takes as many decimals as the step, and a data label reads as General. A 100%
+// stack's ticks read as percents, and its data labels skip the axis format, which reads shares.
 export type ChartLayoutInput = {
     id: string;
     spec: ChartSpec;

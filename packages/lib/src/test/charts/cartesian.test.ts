@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { chartFontSize, layoutChart, sampleChartSpec } from '../../charts';
+import { CHART_MESSAGES, chartFontSize, layoutChart, sampleChartSpec } from '../../charts';
 import * as tickModule from '../../charts/ticks';
 import type { ChartData, ChartLabel, ChartLayout, ChartSeriesStyle, ChartSpec } from '../../types/chart';
 import { CHART_TYPES } from '../../types/chart';
@@ -944,6 +944,35 @@ describe('data labels', () => {
         );
         const pie = sampleData('pie');
         expect(layout('pie', { series: labelled(pie) }, { data: pie })).toEqual(layout('pie', {}, { data: pie }));
+    });
+
+    test('a chart too small for its labels draws without them rather than give way to the message', () => {
+        const wide: ChartData = { categories: ['Revenue', 'Costs'], series: [series('S', [1234567, -987654])] };
+        for (const [format, width, height] of [
+            ['#,##0', 160, 120],
+            ['#,##0.00 "EUR"', 200, 180],
+        ] as const) {
+            const patch: SpecPatch = { axes: { x: {}, y: { labels: { format } } } };
+            const options = { data: wide, width, height };
+            const off = layout('bar', patch, options);
+            expect(has(off, CHART_MESSAGES.tooSmall)).toBe(false);
+            expect(layout('bar', { ...patch, series: labelled(wide) }, options)).toEqual(off);
+        }
+    });
+
+    test("a 100% stack labels each value in the values' own format, never the axis format, which formats shares", () => {
+        const stack: ChartData = { categories: ['A'], series: [series('S1', [1234]), series('S2', [766])] };
+        const patch: SpecPatch = {
+            ...bare,
+            plots: plots('percent'),
+            series: labelled(stack),
+            axes: { x: {}, y: { labels: { format: '0.0%' } } },
+        };
+        for (const type of ['column', 'bar'] as const) {
+            const general = layout(type, patch, { ...big, data: stack });
+            expect([has(general, '1234'), has(general, '123400.0%')]).toEqual([true, false]);
+            expect(has(layout(type, patch, { ...big, data: stack, sourceFormat: '#,##0' }), '1,234')).toBe(true);
+        }
     });
 
     test('200 labelled points draw labels and 201 draw none', () => {

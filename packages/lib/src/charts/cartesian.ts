@@ -40,8 +40,8 @@ type ValueLabel = { label: ChartLabel; box: Frame; area: number };
 // labels' room to the plot. Its title and the gridlines stay. The baseline is the category axis's line, so a hidden
 // category axis draws none. A 100% stack plots shares and labels its ticks as percents, whatever the source cells'
 // format. Its min and max are shares too, as Excel's c:min and c:max are, where 1 is 100%. A data label reads the raw
-// value, in `format` or else General, the axis's or the source cells' format. Null when the frame is too small for a
-// plot.
+// value in the values' own format: the axis's, else the source cells', else General. A 100% stack's axis format reads
+// shares, so its labels skip it. Null when the frame is too small for a plot.
 export function layoutCartesian(
     ctx: Context,
     marks: Context,
@@ -50,7 +50,7 @@ export function layoutCartesian(
     series: PaintedSeries[],
     raw: (number | null)[][],
     frame: Frame,
-    format: string | null,
+    sourceFormat: string | null,
 ): ChartShape[] | null {
     const { lineHeight: lh, gap, fontSize } = ctx;
     const { type, blanks } = spec.chart;
@@ -60,12 +60,13 @@ export function layoutCartesian(
     const stacked = stacking !== 'none' && isStackingChartType(type);
     const percent = stacked && stacking === 'percent';
     const values = percent ? shares(raw) : raw;
+    const format = y.labels.format ?? sourceFormat;
     const formatTick: ChartTickFormat = percent
         ? formatPercentTick
         : format === null
           ? formatTickValue
           : (value) => numberDisplay(value, format);
-    const valueText = (value: number) => numberDisplay(value, format ?? 'General');
+    const valueText = (value: number) => numberDisplay(value, (percent ? sourceFormat : format) ?? 'General');
     const texts = series.map((s, si) =>
         raw[si].map((value): ValueText | null => {
             if (!s.labelled || value === null) return null;

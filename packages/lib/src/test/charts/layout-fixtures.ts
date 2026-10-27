@@ -75,7 +75,13 @@ function axisOver(axis: ChartAxis, patch: AxisPatch): ChartAxis {
 // The sample without its axis titles, for tests that measure the room left to the plot and its labels.
 export const UNTITLED: SpecPatch = { axes: { x: {}, y: {} } };
 
-type Options = { data?: ChartData; width?: number; height?: number; paint?: Partial<ChartPaint> };
+type Options = {
+    data?: ChartData;
+    width?: number;
+    height?: number;
+    paint?: Partial<ChartPaint>;
+    sourceFormat?: string;
+};
 
 export function sampleData(type: ChartType): ChartData {
     const { data } = sampleChartSpec(type);
@@ -96,6 +102,7 @@ export function layout(type: ChartType, patch: SpecPatch = {}, options: Options 
         width: options.width ?? 640,
         height: options.height ?? 400,
         paint: { ...PAINT, ...options.paint },
+        sourceFormat: options.sourceFormat,
     });
 }
 
