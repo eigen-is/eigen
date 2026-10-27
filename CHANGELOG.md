@@ -8,6 +8,13 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Excel files** — a row Excel shows at normal height comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
 - **Spreadsheet PDF** — a spreadsheet with thousands of small sheets prints its first 2,000 sheets instead of failing
+- **Sheets undo** — undo lands on your own cell after someone else inserts or deletes rows or columns, or deletes another sheet. Before, it could change the wrong cell or the wrong sheet
+- **Sheets undo** — undo leaves a cell alone when someone else changed it after you, so it never wipes their edit. A formula still undoes when someone changed a cell it reads
+- **Sheets undo** — undoing your own row or column insert or delete keeps the edits others made since, and everyone sees the same result. Undoing a delete brings back the formulas it broke, on every sheet
+- **Sheets undo** — redoing a sheet delete keeps what others changed on the other sheets, and someone else's edit to a sheet you brought back with undo shows up for you
+- **Sheets undo** — deleting a copied sheet you never opened and then undoing brings the copy back with its cells
+- **Sheets** — closing a spreadsheet no longer resets the open view and the undo history of everyone else who has it open
+- **Sheets** — an edit someone makes while your spreadsheet is still opening, or while it reloads, shows up instead of going missing until you reload
 
 ## [0.4.0] - 2026-10-26
 
