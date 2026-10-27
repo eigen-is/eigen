@@ -1,5 +1,5 @@
-// Builds the site-plan drawing straight into a vector container's Y.Doc from the typed SITE_PLAN spec (content.ts) —
-// the stickies-board approach without a fixture. Every element is built typed, because the docking math runs on the
+// Builds a demo drawing, such as the site plan, straight into a vector container's Y.Doc from its typed spec
+// (content.ts) — the stickies-board approach without a fixture. Every element is built typed, because the docking math runs on the
 // shapes before anything is written, then goes through the editor's own writer (write-vector.ts), so the doc reads back
 // through read-vector unchanged. Text is sized with measureLabel because the seeder has no DOM to measure with.
 // Deterministic ids + seeds: a reseed renders identical jitter.
@@ -44,20 +44,20 @@ import {
 import type * as Y from 'yjs';
 import type {
     CanvasSide,
-    SITE_PLAN,
-    SitePlanArrow,
-    SitePlanEnd,
-    SitePlanImage,
-    SitePlanLine,
-    SitePlanShape,
-    SitePlanText,
+    Drawing,
+    DrawingArrow,
+    DrawingEnd,
+    DrawingImage,
+    DrawingLine,
+    DrawingShape,
+    DrawingText,
 } from './content';
 
 // Fixed PRNG salt so every reseed of the demo world draws the same roughjs seeds (identical jitter).
 const SEED_SALT = 0x5170_2e73;
 const FONT = 'Excalifont';
 // The vector app's own style table, with the drawing's font — what an editor-authored element inherits.
-const SITE_PLAN_STYLE: StyleDefaults = { ...VECTOR_STYLE_DEFAULTS, fontFamily: FONT };
+const DRAWING_STYLE: StyleDefaults = { ...VECTOR_STYLE_DEFAULTS, fontFamily: FONT };
 const DEFAULT_LABEL_SIZE = 16;
 const DEFAULT_ARROW_LABEL_SIZE = 13;
 
@@ -85,7 +85,7 @@ const SIDE_INDEX: Record<CanvasSide, number> = { right: 0, bottom: 1, left: 2, t
 // normalizeLinear rebases a route onto its own bounds, so the box it starts from is empty.
 const ZERO_BOX = { x: 0, y: 0, width: 0, height: 0, angle: 0 } as const;
 
-export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
+export function buildVectorDoc(doc: Y.Doc, plan: Drawing): void {
     const shapes: VectorShapeElement[] = plan.shapes.map(buildShape);
     const byKey = new Map(plan.shapes.map((s, i) => [s.key, shapes[i]]));
     const byId = new Map<string, VectorElement>(shapes.map((s) => [s.id, s]));
@@ -124,14 +124,14 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     }
 
     doc.transact(() => {
-        for (const el of ordered) writeElementInDoc(doc, el, el.index, SITE_PLAN_STYLE, el.id);
+        for (const el of ordered) writeElementInDoc(doc, el, el.index, DRAWING_STYLE, el.id);
         doc.getMap('meta').set('background', plan.background);
     });
 }
 
-function buildShape(s: SitePlanShape): VectorShapeElement {
+function buildShape(s: DrawingShape): VectorShapeElement {
     const box = {
-        ...baseElement(s.kind, `el-${s.key}`, SITE_PLAN_STYLE),
+        ...baseElement(s.kind, `el-${s.key}`, DRAWING_STYLE),
         x: s.x,
         y: s.y,
         width: s.width,
@@ -149,11 +149,11 @@ function buildShape(s: SitePlanShape): VectorShapeElement {
     return { ...box, type: 'rectangle', corners };
 }
 
-function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
+function buildLine(l: DrawingLine, i: number): VectorLinearElement {
     const points = l.points.map(([x, y]) => ({ x, y }));
     const norm = normalizeLinear(ZERO_BOX, points);
     return {
-        ...baseElement(l.freedraw ? 'freedraw' : 'line', `el-line-${i}`, SITE_PLAN_STYLE),
+        ...baseElement(l.freedraw ? 'freedraw' : 'line', `el-line-${i}`, DRAWING_STYLE),
         type: l.freedraw ? 'freedraw' : 'line',
         x: norm.x,
         y: norm.y,
@@ -171,9 +171,9 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
     };
 }
 
-function buildImage(im: SitePlanImage, i: number): VectorImageElement {
+function buildImage(im: DrawingImage, i: number): VectorImageElement {
     return {
-        ...kindDefaults('image', SITE_PLAN_STYLE),
+        ...kindDefaults('image', DRAWING_STYLE),
         id: `el-image-${i}`,
         index: '',
         type: 'image',
@@ -187,7 +187,7 @@ function buildImage(im: SitePlanImage, i: number): VectorImageElement {
 }
 
 function buildArrow(
-    a: SitePlanArrow,
+    a: DrawingArrow,
     i: number,
     byKey: Map<string, VectorShapeElement>,
     byId: Map<string, VectorElement>,
@@ -198,7 +198,7 @@ function buildArrow(
     const fontSize = a.labelSize ?? DEFAULT_ARROW_LABEL_SIZE;
     const label = a.label ?? '';
     const arrow: VectorArrowElement = {
-        ...baseElement('arrow', `el-arrow-${i}`, SITE_PLAN_STYLE),
+        ...baseElement('arrow', `el-arrow-${i}`, DRAWING_STYLE),
         type: 'arrow',
         x: norm.x,
         y: norm.y,
@@ -207,6 +207,7 @@ function buildArrow(
         angle: 0,
         strokeColor: a.stroke ?? DEFAULT_ELEMENT_PROPS.strokeColor,
         strokeStyle: a.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
+        strokeWidth: a.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         roundness: DEFAULT_ARROW_PROPS.roundness,
         points: norm.points,
         elbow: a.elbow ?? false,
@@ -234,13 +235,13 @@ function buildArrow(
 
 // An arrow end: a real binding to a named shape's side midpoint, or a free scene point.
 function resolveEnd(
-    end: SitePlanEnd,
+    end: DrawingEnd,
     elbow: boolean,
     byKey: Map<string, VectorShapeElement>,
 ): { point: Point; binding: string } {
     if ('at' in end) return { point: { x: end.at[0], y: end.at[1] }, binding: '' };
     const shape = byKey.get(end.shape);
-    if (!shape) throw new Error(`site plan arrow binds to unknown shape ${end.shape}`);
+    if (!shape) throw new Error(`drawing arrow binds to unknown shape ${end.shape}`);
     const dock = end.along === undefined ? shapeAnchorPoints(shape)[SIDE_INDEX[end.side]] : sidePoint(shape, end);
     const fixedPoint = elbow ? elbowBindPoint(shape, dock).fixedPoint : bindingAnchor(shape, dock);
     return { point: dock, binding: serializeBinding({ elementId: shape.id, fixedPoint }) };
@@ -261,7 +262,7 @@ function sidePoint(shape: VectorShapeElement, end: { side: CanvasSide; along?: n
     }
 }
 
-function buildLabel(s: SitePlanShape, shape: VectorShapeElement): VectorRichTextElement {
+function buildLabel(s: DrawingShape, shape: VectorShapeElement): VectorRichTextElement {
     const fontSize = s.fontSize ?? DEFAULT_LABEL_SIZE;
     const { width, height } = measureRichTextBox(s.label, fontSize);
     return buildRichText(`el-${s.key}-label`, s.label, {
@@ -271,13 +272,13 @@ function buildLabel(s: SitePlanShape, shape: VectorShapeElement): VectorRichText
         height,
         angle: shape.angle,
         fontSize,
-        color: SITE_PLAN_STYLE.color,
+        color: DRAWING_STYLE.color,
         textAlign: 'center',
         verticalAlign: 'center',
     });
 }
 
-function buildText(t: SitePlanText, i: number): VectorRichTextElement {
+function buildText(t: DrawingText, i: number): VectorRichTextElement {
     const { width, height } = measureRichTextBox(t.text, t.fontSize);
     return buildRichText(`el-text-${i}`, t.text, {
         x: t.x,
@@ -286,7 +287,7 @@ function buildText(t: SitePlanText, i: number): VectorRichTextElement {
         height,
         angle: 0,
         fontSize: t.fontSize,
-        color: t.color ?? SITE_PLAN_STYLE.color,
+        color: t.color ?? DRAWING_STYLE.color,
         textAlign: 'left',
         verticalAlign: 'top',
     });
@@ -302,14 +303,14 @@ type RichTextSpec = Pick<
 // sceneBounds measures it before the write.
 function buildRichText(id: string, text: string, box: RichTextSpec): VectorRichTextElement {
     return {
-        ...kindDefaults('richtext', SITE_PLAN_STYLE),
+        ...kindDefaults('richtext', DRAWING_STYLE),
         id,
         index: '',
         type: 'richtext',
         ...box,
         html: textToParagraphHtml(text),
         // The line height measureExcalifont sized the box with, so the text fills exactly that box.
-        lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,
+        lineHeight: getFontMetrics(DRAWING_STYLE.fontFamily).lineHeight,
     };
 }
 

@@ -5,8 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { readChartSpec } from '@workspace/lib/charts';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import { isCalendarPart } from '@workspace/lib/types/mail';
 import {
     elementsInFrame,
     orderByFractionalIndex,
@@ -16,19 +19,25 @@ import {
     sceneBounds,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
+import { summarizeCalendarInvite } from '../../lib/calendar/imip';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../../lib/core';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
+import { parseMail } from '../../lib/mail/mail-parser/parse';
 import {
     BRANDING,
     BUDGET,
+    EIGENVECTORS,
     KANBAN,
+    MAILS,
     PHOTOS,
     personaByRole,
+    SHIFTS,
     SITE_PLAN,
     SPONSOR_DECK,
     TEAM_NAME,
+    TRYING_EIGEN,
     VCARD_FILES,
 } from '../../scripts/demo/content';
 
@@ -60,6 +69,26 @@ async function loadCollabDoc(dataDbPath: string) {
     const tmp = join(mkdtempSync(join(tmpdir(), 'seed-demo-ydoc-')), 'data.db');
     cpSync(dataDbPath, tmp);
     return loadYjsState(await openLocalDatabase(COLLAB_DB_CONFIG, tmp)).doc;
+}
+
+// Every node of a doc's JSON, depth first, footnotes' paragraphs and table cells included.
+function docNodes(json: JSONContent): JSONContent[] {
+    return [json, ...(json.content ?? []).flatMap(docNodes)];
+}
+
+// A seeded message's raw bytes: the mail.db row names its file, which sits in a mailbox folder of the store.
+function readMessage(personaHome: string, subject: string): Buffer {
+    const mailDir = join(personaHome, 'eigen.mail');
+    const rows = query<{ filename: string }>(
+        join(mailDir, 'mail.db'),
+        `SELECT filename FROM emails WHERE subject = '${subject}'`,
+    );
+    expect(rows.length).toBe(1);
+    const file = readdirSync(mailDir, { recursive: true, encoding: 'utf8' }).find((rel) =>
+        rel.endsWith(rows[0].filename),
+    );
+    if (!file) throw new Error(`message file for '${subject}' missing`);
+    return readFileSync(join(mailDir, file));
 }
 
 function collectCommentMarkIds(json: JSONContent, out: Set<string>): void {
@@ -261,14 +290,66 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             );
             expect(notesDoc[0].n).toBe(1);
 
-            // Budget sheet: hand-maintained fixture placed onto the team drive with real data.db bytes.
-            // Decoded through the shipped reader, not just size-checked — the fixture bytes predate
-            // every stored-shape change, so a rename that skips them has to fail here.
+            // ...and a "trying eigen" scratch doc whose equations are equation nodes holding MathML and the LaTeX.
+            const tryingDoc = await loadCollabDoc(
+                findContainerDataDb(
+                    personaMetaDb,
+                    join(personaHome, 'mounts'),
+                    'default',
+                    `${TRYING_EIGEN.name}.eigendoc`,
+                ),
+            );
+            const equations = docNodes(yXmlFragmentToProsemirrorJSON(tryingDoc.getXmlFragment('default'))).filter(
+                (node) => node.type === 'equation',
+            );
+            expect(equations.length).toBe(2);
+            for (const equation of equations) {
+                expect(equation.attrs?.['display']).toBe(true);
+                expect(equation.attrs?.['mathml']).toContain('<annotation encoding="application/x-tex">');
+            }
+
+            // A persona's own calendar holds their shift, beside the team calendar's events.
+            const financeKey = personaByRole('finance').key;
+            const financeShift = SHIFTS.find((shift) => shift.persona === financeKey);
+            if (!financeShift) throw new Error('the finance lead has no shift');
+            const finance = query<{ id: string }>(
+                usersDb,
+                `SELECT id FROM user WHERE email = '${financeKey}@${MAIL_DOMAIN}'`,
+            );
+            expect(finance.length).toBe(1);
+            const financeHome = join(root, 'home', finance[0].id);
+            const financeCalendarDb = join(financeHome, 'eigen.calendar', 'calendar.db');
+            const financeEvents = query<{ title: string }>(financeCalendarDb, 'SELECT title FROM events').map(
+                (row) => row.title,
+            );
+            expect(financeEvents).toContain(financeShift.title);
+
+            // Budget sheet: built from BUDGET (demo/sheet-build.ts) and decoded through the shipped reader. The
+            // formulas hold their computed values; the amounts carry data bars, the margin a red rule below zero and
+            // the status cells a dropdown; and the second tab's charts read the first tab by its id.
             const sheetDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, `${BUDGET.name}.eigensheets`);
-            expect(statSync(sheetDataDb).size).toBeGreaterThan(0);
-            const { sheets } = readSheetsFromDoc(await loadCollabDoc(sheetDataDb));
-            expect(sheets.length).toBeGreaterThanOrEqual(1);
-            expect(sheets[0].celldata?.length ?? 0).toBeGreaterThan(0);
+            const { sheets } = readSheetsFromDoc(await loadCollabDoc(sheetDataDb), { recalc: false });
+            expect(sheets.map((sheet) => sheet.name)).toEqual(BUDGET.sheets.map((sheet) => sheet.name));
+            const [budgetSheet, chartsSheet] = sheets;
+            const margin = budgetSheet.celldata?.find((cell) => cell.v?.f === '=B8-B17');
+            expect(margin?.v?.v).toBe(16000);
+            const rules = budgetSheet.conditionalFormatRules ?? [];
+            expect(rules.filter((rule) => rule.type === 'dataBar').length).toBe(2);
+            expect(
+                rules.some(
+                    (rule) =>
+                        rule.type === 'default' && rule.conditionName === 'lessThan' && rule.conditionValue[0] === 0,
+                ),
+            ).toBe(true);
+            const dropdowns = Object.values(budgetSheet.dataVerification ?? {});
+            expect(dropdowns.length).toBe(10);
+            for (const rule of dropdowns) expect(rule.type).toBe('dropdown');
+            const charts = Object.values(chartsSheet.charts ?? {}).map((chart) => readChartSpec(chart).spec);
+            expect(charts.map((spec) => spec?.chart.type).sort()).toEqual(['column', 'pie']);
+            for (const spec of charts) {
+                if (spec?.data.source !== 'range') throw new Error('a budget chart holds no range data');
+                expect(spec.data.series[0].values?.sheetId).toBe(budgetSheet.id);
+            }
 
             // Sponsor deck: built from code out of SPONSOR_DECK (no fixture bytes; see demo/deck-build.ts).
             // Its images are uploaded into the container's media/ folder, which the deck references by name.
@@ -362,6 +443,22 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             // only cards anchored by a comment mark in the text. Assert both for the seeded doc.
             const docDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, 'production plan.eigendoc');
             const ydoc = await loadCollabDoc(docDataDb);
+
+            // The production plan holds a table, a footnote, and a figure whose photo landed in the doc's media/.
+            const planNodes = docNodes(yXmlFragmentToProsemirrorJSON(ydoc.getXmlFragment('default')));
+            expect(planNodes.some((node) => node.type === 'table')).toBe(true);
+            expect(planNodes.some((node) => node.type === 'footnote')).toBe(true);
+            const figures = planNodes.filter((node) => node.type === 'figure');
+            expect(figures.length).toBe(1);
+            const planId = query<{ id: string }>(
+                metadataDb,
+                "SELECT id FROM paths WHERE name = 'production plan.eigendoc' AND trashedAt IS NULL",
+            )[0].id;
+            const planMedia = query<{ name: string }>(
+                metadataDb,
+                `SELECT p.name FROM paths p JOIN paths m ON p.parentId = m.id WHERE m.parentId = '${planId}' AND m.name = 'media'`,
+            ).map((row) => row.name);
+            expect(planMedia).toContain(figures[0].attrs?.['mediaName']);
             const cards = [...ydoc.getMap<Y.Map<unknown>>('comments').values()].map((card) => ({
                 id: card.get('id') as string,
                 color: card.get('color') as string,
@@ -510,6 +607,44 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(vectorMediaNames.has(el.mediaName)).toBe(true);
             }
             expect(imageCount).toBeGreaterThanOrEqual(1);
+
+            // The eigenvectors sketch reads back through the shipped reader, its two eigenvectors drawn bold.
+            const eigenScene = readVectorFromDoc(
+                await loadCollabDoc(
+                    findContainerDataDb(metadataDb, mountsDir, mountId, `${EIGENVECTORS.name}.eigenvector`),
+                ),
+            );
+            const eigenArrows = eigenScene.elements.filter((el) => el.type === 'arrow');
+            expect(eigenArrows.length).toBe(EIGENVECTORS.arrows.length);
+            expect(eigenArrows.filter((arrow) => arrow.strokeWidth > 2).length).toBe(2);
+
+            // An outside sender's iMIP invitation reaches the finance lead's inbox as a card, while their calendar is
+            // left alone: seeded mail carries no DKIM verdict, the path an unverified sender takes.
+            const inviteMail = MAILS.find((mail) => mail.messages.some((message) => message.invite));
+            const invite = inviteMail?.messages.find((message) => message.invite)?.invite;
+            if (!inviteMail || !invite) throw new Error('no seeded mail carries an invitation');
+            const inviteParts = parseMail(readMessage(financeHome, inviteMail.subject)).attachments.filter(
+                isCalendarPart,
+            );
+            expect(inviteParts.length).toBe(1);
+            const card = summarizeCalendarInvite(inviteParts[0]);
+            expect(card?.method).toBe('REQUEST');
+            expect(card?.summary).toBe(invite.title);
+            expect(financeEvents).not.toContain(invite.title);
+
+            // The generator quote arrives as a real xlsx attachment.
+            const quoteMail = MAILS.find((mail) =>
+                mail.messages.some((message) => message.attachments?.some((a) => 'workbook' in a)),
+            );
+            if (!quoteMail) throw new Error('no seeded mail attaches a workbook');
+            const production = query<{ id: string }>(
+                usersDb,
+                `SELECT id FROM user WHERE email = '${personaByRole('production').key}@${MAIL_DOMAIN}'`,
+            );
+            const quoteParts = parseMail(
+                readMessage(join(root, 'home', production[0].id), quoteMail.subject),
+            ).attachments;
+            expect(quoteParts.some((part) => part.contentType === XLSX_MIME && part.size > 1000)).toBe(true);
 
             // Assignment: the volunteer coordinator got the bell notification the assign route persists.
             const assignees = query<{ id: string }>(

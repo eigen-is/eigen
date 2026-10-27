@@ -1,8 +1,6 @@
 // Builds the stickies board Y.Doc structure for the committed fixture container. Kept separate from
 // the authoring script so the exact Yjs shapes (which the shipped editors and readers depend on) live
 // in one place. The frontend readers require `taskIds`/`columnOrder` to be real Y.Array instances.
-// (The slides deck and budget sheet fixtures are hand-maintained — edited in a live demo and copied
-// back — so they have no builder here.)
 import { getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import * as Y from 'yjs';
 import type { CardSpec } from './content';
