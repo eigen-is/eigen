@@ -7,8 +7,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 type UseListSelectionOptions<T> = {
     items: T[];
     getId: (item: T) => string;
-    // The row whose detail the page has open, for a list where a click opens a row. Closing it
-    // drops a selection of that row alone, which the click made, so no closed row stays washed.
+    // The row whose detail the page has open, for a list where a click opens a row. The click also
+    // selected that row. So when the detail closes and that row is the whole selection, the selection
+    // is dropped, and the closed row no longer looks selected.
     openId?: string;
 };
 

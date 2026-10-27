@@ -39,7 +39,7 @@ export function SidebarItem({
     const { setSidebarOpen } = useLayout();
     const baseStyles = cn(
         'flex items-center rounded-md px-2.5 py-1.5 text-sm font-normal select-none',
-        // A Button centres its content, which a list of labels starts at the left edge as a link does.
+        // A Button centers its content. A list of labels reads better from the left edge, as links do.
         condensed ? 'justify-center' : 'justify-start gap-2.5 text-left',
         isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
         className,
