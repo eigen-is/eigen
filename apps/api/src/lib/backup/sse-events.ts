@@ -1,8 +1,10 @@
+// Builds the poke a backup job sends when it starts and when it ends, so an open admin pane refetches its
+// job and artifact lists. It names the job and its home and carries no state: the job map on the server
+// is the truth, so a poke that lands out of order costs nothing.
+
 import type { SSEventBackup } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 
-// The poke a job sends on every state change: a home job's to every admin, a server job's to the owner. The payload names the job and the home
-// so the admin pane can refetch both lists; the job map on the server is the truth.
 export function buildBackupJobEvent(jobId: string, ownerId: string): SSEventBackup {
     return { type: SSEventType.BACKUP_JOB_UPDATED, jobId, ownerId };
 }

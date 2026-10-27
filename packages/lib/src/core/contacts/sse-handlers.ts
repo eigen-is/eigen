@@ -1,11 +1,13 @@
+// Handles the contact and label events from the stream. Any card change refetches the owner's whole
+// contact list once per burst; a label change refetches the labels, and a rename or delete the cards too.
+
 import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { debouncePerOwner } from '../debounce-per-owner';
 import { invalidateContactList, invalidateLabelChanged, invalidateLabelCreated } from './hooks/keys';
 
-// A whole-file import sends the one batched contacts:changed instead. The importing tab's own onSuccess
-// invalidation is untouched, so a single write still lands immediately.
+// Debounced for a burst of card events. The writing tab's own onSuccess still refetches at once.
 const invalidateListSoon = debouncePerOwner(invalidateContactList, 250);
 
 export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
