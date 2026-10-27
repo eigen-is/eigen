@@ -360,6 +360,9 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
             caption: 'Share',
             alignment: 'center',
             layout: 'wrap-left',
+            // Kept beside a wrap, so a switch back to in front of the text restores the place.
+            offsetX: 40,
+            offsetY: -12,
             commentCardId: null,
             seriesStrokeWidth: null,
             ...LOOK,

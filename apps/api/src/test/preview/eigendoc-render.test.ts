@@ -75,6 +75,42 @@ describe('renderEigendocPreviewBody', () => {
         expect(body).toMatch(/<text[^>]*>300–400<\/text>/);
     });
 
+    // The sanitizer keeps the box's inline place, so quick look draws the layers as the editor does.
+    test('a figure behind the text and a chart in front of it keep their place through the sanitizer', () => {
+        const parts = sampleChartParts('column');
+        const body = previewOf({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        {
+                            type: 'figure',
+                            attrs: {
+                                mediaName: GOLDEN_MEDIA_NAME,
+                                width: 300,
+                                layout: 'behind',
+                                offsetX: 12,
+                                offsetY: 8,
+                            },
+                        },
+                        {
+                            type: 'chart',
+                            attrs: { ...parts, width: 480, height: 300, layout: 'front', offsetX: 0, offsetY: -40 },
+                        },
+                        { type: 'text', text: 'Anchor' },
+                    ],
+                },
+            ],
+        });
+        expect(body).toContain(
+            '<span class="figure" data-layout="behind" data-alignment="center" style="left: 12px; top: 8px; width: 300px"><img',
+        );
+        expect(body).toContain(
+            '<span class="figure" data-layout="front" data-alignment="center" style="left: 0px; top: -40px; width: 480px"><svg',
+        );
+    });
+
     test('the golden document keeps its media and its hyperlink', () => {
         const body = previewOf(buildGoldenDocJson());
         expect(body).toContain(MEDIA_URL);

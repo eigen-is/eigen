@@ -420,6 +420,71 @@ describe('doc export — figures', () => {
     });
 });
 
+describe('doc export — figures in front of and behind the text', () => {
+    const media = [{ name: 'chart.png', contentType: 'image/png', data: new ArrayBuffer(1) }];
+    const placed = (layout: string) => ({
+        type: 'figure',
+        attrs: { mediaName: 'chart.png', width: 320, layout, offsetX: -24, offsetY: 130.5, caption: 'Hidden' },
+    });
+    const anchored = (layout: string): JSONContent => ({
+        type: 'paragraph',
+        content: [placed(layout), { type: 'text', text: 'Anchor' }],
+    });
+
+    async function exportHtml(json: JSONContent, doc = seededDoc(json)): Promise<string> {
+        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', async () => media, undefined);
+        return new TextDecoder().decode(data);
+    }
+
+    // The sanitized download carries the box's place and width inline; the stylesheet gives it its layer.
+    test.each(['front', 'behind'])('a %s figure is a box at its offsets from its paragraph', async (layout) => {
+        const html = await exportHtml({ type: 'doc', content: [anchored(layout)] });
+        expect(html).toContain(
+            `<p><span class="figure" data-layout="${layout}" data-alignment="center" style="left: -24px; top: 130.5px; width: 320px"><img`,
+        );
+    });
+
+    // The paper is the layers' stacking context, in a browser and in WeasyPrint, which reads no `isolation`.
+    test.each(['html', 'pdf-html'] as const)('%s stacks the layers on the page', async (format) => {
+        expect(await exportStyle(format)).toMatch(/\.page \{[^}]*position: relative;[^}]*z-index: 0;/);
+    });
+
+    // A cell, a note and a band have no body paragraph to anchor on, so a forged one draws in line.
+    test('a positioned figure in a table cell, a note or a band draws in line', async () => {
+        const cell = (type: string) => ({ type, content: [anchored('front')] });
+        const json: JSONContent = {
+            type: 'doc',
+            content: [
+                { type: 'table', content: [{ type: 'tableRow', content: [cell('tableHeader'), cell('tableCell')] }] },
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Noted' },
+                        { type: 'footnote', content: [anchored('behind')] },
+                    ],
+                },
+            ],
+        };
+        const doc = seededDoc(json);
+        seedBand(doc, 'header', { type: 'doc', content: [anchored('behind')] });
+        const body = (await exportHtml(json, doc)).split('<body')[1];
+        expect(body?.match(/data-layout="block"/g)).toHaveLength(4);
+        expect(body).not.toMatch(/data-layout="(front|behind)"|style="left/);
+    });
+
+    test('the body anchors a positioned figure in a list item or a quote', async () => {
+        const html = await exportHtml({
+            type: 'doc',
+            content: [
+                { type: 'bulletList', content: [{ type: 'listItem', content: [anchored('front')] }] },
+                { type: 'blockquote', content: [anchored('behind')] },
+            ],
+        });
+        expect(html).toContain('data-layout="front" data-alignment="center" style="left: -24px');
+        expect(html).toContain('data-layout="behind" data-alignment="center" style="left: -24px');
+    });
+});
+
 describe('doc export — charts', () => {
     const PARTS = sampleChartParts('column');
     const chartDoc = (attrs: Record<string, unknown>, spec = sampleChartSpec('column')): JSONContent => ({
@@ -1334,6 +1399,42 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 `;
     return (await pythonOutput(['-c', script], html)).trim().split('\n');
 }
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — positioned figures (WeasyPrint)', () => {
+    // WeasyPrint draws an absolute box from its paragraph's padding box, in front of the text or behind it.
+    test.each(['front', 'behind'])(
+        'a %s image prints at its offsets from its paragraph',
+        async (layout) => {
+            const png = await sharp({ create: { width: 200, height: 100, channels: 3, background: '#888' } })
+                .png()
+                .toBuffer();
+            const figure = {
+                type: 'figure',
+                attrs: {
+                    src: `data:image/png;base64,${png.toString('base64')}`,
+                    width: 200,
+                    layout,
+                    offsetX: -30,
+                    offsetY: 24,
+                },
+            };
+            const html = await pdfHtml(
+                { type: 'paragraph', content: [{ type: 'text', text: 'Before' }] },
+                { type: 'paragraph', content: [figure, { type: 'text', text: 'Anchor' }] },
+            );
+            const boxes = await laidOut(
+                html,
+                "if tag == 'img' or tag == 'p' and type(box).__name__ == 'BlockBox': print(tag, box.padding_box_x(), box.padding_box_y(), box.width)",
+            );
+            const [, anchor, image] = boxes.map((line) => line.split(' '));
+            expect(image?.[0]).toBe('img');
+            expect(Number(image?.[1])).toBeCloseTo(Number(anchor?.[1]) - 30, 3);
+            expect(Number(image?.[2])).toBeCloseTo(Number(anchor?.[2]) + 24, 3);
+            expect(Number(image?.[3])).toBeCloseTo(200, 3);
+        },
+        60_000,
+    );
+});
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — ordered list numbers (WeasyPrint)', () => {
     test('a start, a nested start and the letter and roman types are drawn', async () => {

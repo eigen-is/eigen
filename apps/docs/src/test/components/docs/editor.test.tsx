@@ -816,6 +816,13 @@ test("Update 'Normal text' to match is offered in a paragraph of the body only",
     expect(updateNormal()?.getAttribute('aria-disabled')).toBe('true');
 });
 
+// The page owns the paper's background, so it is the layers' stacking context: a figure behind the text draws on the
+// paper, under the header band's text as under the body's.
+test('the page stacks the figures in front of and behind the text', async () => {
+    await render(WRITER);
+    expect(document.querySelector('[data-document]')?.classList.contains('isolate')).toBe(true);
+});
+
 test('a viewer sees the Normal the doc stores', async () => {
     doc.getMap(STYLE_ROOT).set('size', 12);
     await render({ canWrite: false, isMobile: false });

@@ -1,3 +1,7 @@
+// The Docs image node: an inline atom that names its image by media name, in the frame it shares with the chart. It
+// reads an image back from Eigen's own span, a <figure> or a bare <img>, so a copy, an export and another app's HTML
+// paste as one.
+
 import type { CommandProps } from '@tiptap/core';
 import { Node } from '@tiptap/core';
 import type { FigureFrameAttrs } from './figure-frame';
@@ -59,7 +63,7 @@ export const FigureNode = Node.create({
     draggable: true,
 
     addAttributes() {
-        const { caption, commentCardId, alignment, layout } = figureFrameAttributes();
+        const { caption, commentCardId, alignment, layout, offsetX, offsetY } = figureFrameAttributes();
         return {
             mediaName: { default: null },
             src: { default: null },
@@ -79,6 +83,8 @@ export const FigureNode = Node.create({
             },
             alignment,
             layout,
+            offsetX,
+            offsetY,
         };
     },
 

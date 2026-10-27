@@ -100,6 +100,15 @@ test.each([
     }
 });
 
+// A figure behind the text draws on the paper, not under it, and one placed past the paper's edge is cut there.
+test("quick look's paper stacks the layers and clips at its edge", async () => {
+    const { container, unmount } = await renderQuickLook();
+    const paper = container.querySelector<HTMLElement>('.eigen-prose')?.parentElement;
+    expect(paper?.classList.contains('isolate')).toBe(true);
+    expect(paper?.classList.contains('overflow-hidden')).toBe(true);
+    await unmount();
+});
+
 test('the Drive thumbnail draws an eigendoc on the docs page', async () => {
     const { container, unmount } = await renderInDocument(createElement(DrivePreview, { path }));
     expectPageBox(container.querySelector<HTMLElement>('.eigen-prose'), '793.700787px');

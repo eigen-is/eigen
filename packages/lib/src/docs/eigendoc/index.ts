@@ -21,8 +21,11 @@ export type { FigureAttrs } from './nodes/figure';
 export { FigureNode, readFigureAttrs } from './nodes/figure';
 export type { FigureAlignment, FigureFrameAttrs, FigureFrameNode, FigureLayout } from './nodes/figure-frame';
 export {
+    BLOCK_ONLY_FIGURE_PARENTS,
     FIGURE_FRAME_NODES,
+    figureLayoutStyle,
     isFigureFrameNode,
+    isPositioned,
     readFigureFrameAttrs,
     setFigureAttributes,
 } from './nodes/figure-frame';
@@ -48,6 +51,7 @@ export type { PageMargin, PageSetup, PaperSizeName } from './page';
 export {
     cmText,
     DEFAULT_PAGE_SETUP,
+    MAX_PAPER_MM,
     MIN_TEXT_MM,
     matchPaperSize,
     mmToPt,

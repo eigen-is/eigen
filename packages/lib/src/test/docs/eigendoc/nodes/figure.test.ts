@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { createDocument, generateHTML, getSchema } from '@tiptap/core';
-import { getDocExtensions, readFigureAttrs } from '../../../../docs/eigendoc';
+import type { FigureLayout } from '../../../../docs/eigendoc';
+import {
+    figureLayoutStyle,
+    getDocExtensions,
+    isPositioned,
+    MAX_PAPER_MM,
+    mmToPx,
+    readFigureAttrs,
+} from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 
 // generateHTML serializes through `document`, createDocument parses with DOMParser.
@@ -68,13 +76,93 @@ describe('figure parse', () => {
     test('a layout or an alignment it does not know parses as the default', () => {
         expect(
             figuresIn(
-                '<p><span class="figure" data-layout="behind" data-alignment="middle"><img src="a.png"></span></p>' +
-                    '<figure data-layout="front"><img src="b.png"></figure>',
+                '<p><span class="figure" data-layout="float" data-alignment="middle"><img src="a.png"></span></p>',
+            ),
+        ).toMatchObject([{ layout: 'block', alignment: 'center' }]);
+    });
+});
+
+describe('a figure in front of or behind the text', () => {
+    const figuresIn = (html: string) => {
+        const figures: Record<string, unknown>[] = [];
+        createDocument(html, getSchema(extensions)).descendants((node) => {
+            if (node.type.name === 'figure') figures.push(node.attrs);
+        });
+        return figures;
+    };
+    const MAX_OFFSET = mmToPx(MAX_PAPER_MM);
+
+    // A docs-to-docs paste keeps the place, and the offsets a block or a wrap keeps for a later switch back.
+    test.each(['block', 'wrap-left', 'wrap-right', 'front', 'behind'])(
+        'a %s figure survives the HTML round-trip with its offsets',
+        (layout) => {
+            const attrs = { mediaName: 'a.png', width: 320, layout, offsetX: -24.5, offsetY: 130 };
+            expect(figuresIn(generateHTML(figureDoc(attrs), extensions))).toMatchObject([attrs]);
+        },
+    );
+
+    test('a figure that was never placed writes no offsets', () => {
+        const html = generateHTML(figureDoc({ mediaName: 'a.png', layout: 'front' }), extensions);
+        expect(html).toContain('data-layout="front"');
+        expect(html).not.toContain('data-offset');
+        expect(figuresIn(html)).toMatchObject([{ layout: 'front', offsetX: null, offsetY: null }]);
+    });
+
+    // A peer or a paste writes anything; a forged offset must not stall the layout.
+    test('an offset that is no finite number parses as unset, and a far one at the largest paper', () => {
+        const span = (x: string, y: string) =>
+            `<p><span class="figure" data-layout="behind" data-offset-x="${x}" data-offset-y="${y}"><img src="a.png"></span></p>`;
+        expect(figuresIn(span('NaN', 'ten') + span('1e9', '-1e9') + span('Infinity', ''))).toMatchObject([
+            { layout: 'behind', offsetX: null, offsetY: null },
+            { offsetX: MAX_OFFSET, offsetY: -MAX_OFFSET },
+            { offsetX: null, offsetY: null },
+        ]);
+    });
+
+    // Only Eigen's own span places a figure: another app's markup has no anchor paragraph to count from.
+    test("another app's figure or absolutely placed image parses in line", () => {
+        expect(
+            figuresIn(
+                '<figure data-layout="front" data-offset-x="10"><img src="b.png"></figure>' +
+                    '<p><img src="c.png" style="position: absolute; left: 40px; top: 10px"></p>',
             ),
         ).toMatchObject([
-            { layout: 'block', alignment: 'center' },
-            { layout: 'block', alignment: 'center' },
+            { layout: 'block', offsetX: null },
+            { layout: 'block', offsetX: null },
         ]);
+    });
+
+    test('isPositioned names the two layouts out of the flow', () => {
+        const layouts: (FigureLayout | null)[] = ['block', 'wrap-left', 'wrap-right', 'front', 'behind', null];
+        expect(layouts.map((layout) => isPositioned(layout))).toEqual([false, false, false, true, true, false]);
+    });
+});
+
+describe('figureLayoutStyle', () => {
+    test('places a positioned figure at its offsets, its width on the box', () => {
+        expect(figureLayoutStyle({ layout: 'front', offsetX: -12, offsetY: 40, width: 320 })).toEqual({
+            left: -12,
+            top: 40,
+            width: 320,
+        });
+    });
+
+    test("an unplaced figure sits at its paragraph's corner, and one with no width takes its own", () => {
+        expect(figureLayoutStyle({ layout: 'behind', offsetX: null, offsetY: null, width: null })).toEqual({
+            left: 0,
+            top: 0,
+        });
+    });
+
+    // The box carries the width: the image's max-width of 100% inside a shrink-to-fit box would be cyclic.
+    test('a width past the largest paper draws at it', () => {
+        expect(figureLayoutStyle({ layout: 'front', width: 1e9 })?.width).toBe(mmToPx(MAX_PAPER_MM));
+    });
+
+    test('a figure in the flow takes no style, whatever offsets it keeps', () => {
+        for (const layout of ['block', 'wrap-left', 'wrap-right', null] as const) {
+            expect(figureLayoutStyle({ layout, offsetX: 10, offsetY: 10, width: 320 })).toBeUndefined();
+        }
     });
 });
 
@@ -88,16 +176,30 @@ describe('readFigureAttrs', () => {
             width: 320,
             alignment: 'right',
             layout: 'wrap-left',
+            offsetX: null,
+            offsetY: null,
             commentCardId: null,
         });
     });
 
     test('reads a value of the wrong type as unset', () => {
-        expect(readFigureAttrs({ caption: 7, width: '320', alignment: 'middle', layout: 'float' })).toMatchObject({
-            caption: null,
-            width: null,
-            alignment: null,
-            layout: null,
+        expect(
+            readFigureAttrs({
+                caption: 7,
+                width: '320',
+                alignment: 'middle',
+                layout: 'float',
+                offsetX: '12',
+                offsetY: Number.NaN,
+            }),
+        ).toMatchObject({ caption: null, width: null, alignment: null, layout: null, offsetX: null, offsetY: null });
+    });
+
+    test('reads a positioned figure, its far offsets at the largest paper', () => {
+        expect(readFigureAttrs({ layout: 'behind', offsetX: -1e9, offsetY: 64 })).toMatchObject({
+            layout: 'behind',
+            offsetX: -mmToPx(MAX_PAPER_MM),
+            offsetY: 64,
         });
     });
 });

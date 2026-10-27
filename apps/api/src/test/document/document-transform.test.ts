@@ -860,8 +860,9 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '5cb21d5397765e68a4c13d2274e99d1606d7dbc725d16f3a1627141108059f05';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'ae55c6039177891ead1c5977dfaeebc124627658dd346940818423882d36625f';
+// Both last moved with the stylesheet's rules for figures in front of and behind the text; the preview body stayed.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '4d285c9d065e10041f712a2b52a750a18701753ca966003d87c926a75de41bfb';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '5d76bc00328ff873886f50f266d52a710b0e2b75272231dc664eb128e45fbfdc';
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
 // libdeflate.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'bd883985e840cef1ce64fb32910275793ad0ec43b10d20f87e9849ee90f9a491';
@@ -1645,8 +1646,9 @@ describe('document transform (eigenvector)', () => {
 // dropped, as each import draws its own.
 // The JSON hash moved when prose textblocks gained the six paragraph format attributes: each null on every paragraph,
 // heading, title and subtitle, as the golden docx sets no spacing or indent apart from its Normal, and nothing else (the
-// old hash comes back with them stripped).
-const GOLDEN_DOCX_PM_JSON_SHA256 = '424f0c917b7b20413cec0cb9df2ee633d55680c912f481a732fda37b43bf665d';
+// old hash comes back with them stripped). It moved again when the figure gained its offsets for in front of and behind
+// the text: both null on the golden image, which the Yjs commit drops, so the document's hash stayed.
+const GOLDEN_DOCX_PM_JSON_SHA256 = 'd19a97d53e86c73f54981e3a10ab5bf0dadd5bc953e5577529594e02c562741e';
 const GOLDEN_DOCX_DOCUMENT_SHA256 = '9f8f4cf82dfe57e683d68d449cf1cf65158ee2bfde59984c3f50bfb836136c70';
 
 describe('document transform (docx import)', () => {
