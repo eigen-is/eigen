@@ -94,8 +94,11 @@ const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
 // Every td's defaults: inline in the preview, whose embedders strip the <head>, and the shared td{} rule in the export.
 const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
 
-// A line of text is about 1.2 times its font size. With its padding and gridline, a line that fits its rows with a
-// pixel to spare grows them by two pixels at most, as a thick border does.
+// A line of text in Inter is about 1.2 times its font size. With its padding and gridline, such a line that fits its
+// rows with a pixel to spare grows them by two pixels at most, as a thick border does. A character Inter lacks takes a
+// fallback font's line, which can be taller. Noto Sans CJK's is 1.45 times, so a plain 10 to 11.5 pt line grows a
+// default row by 2 to 5 pixels, and a sheet of such rows prints up to a quarter more pages than printedPages charged.
+// That stays bounded, because a larger font is clipped.
 const LINE_HEIGHT = 1.2;
 
 // Where a cell's text sits in its rows, as the canvas places the text's ink: in the middle, or 2 px from the top or
@@ -265,7 +268,7 @@ function pdfPageCss({ width, height }: ContentSize): string {
 
 // The pages the PDF prints a sheet on, and how many of its rows the first `most` pages hold. Each row prints about its
 // stored height, since content that could grow it is clipped (canPassRows), and a plain line or a border thicker than
-// a pixel adds two pixels at most. A row that doesn't fit what is left of a page starts the next one, as WeasyPrint
+// a pixel adds a few pixels at most (LINE_HEIGHT). A row that doesn't fit what is left of a page starts the next one, as WeasyPrint
 // breaks a table between rows, so rows taller than half a page print a page each. The overlay's box stretches the
 // sheet to its farthest image or chart. A sheet whose overlay alone takes more than `most` pages has no row to keep.
 function printedPages({ sheet, rows, offset, floating }: WindowedSheet, most: number): { pages: number; rows: number } {
