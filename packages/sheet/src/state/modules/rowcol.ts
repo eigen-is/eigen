@@ -11,6 +11,8 @@ import {
     applySheetsInsertRowCol,
     shiftCellKeyedForDelete,
     shiftCellKeyedForInsert,
+    shiftKeyedMapForDelete,
+    shiftKeyedMapForInsert,
     shiftRangeForDelete,
     shiftRangeForInsert,
 } from '../../engine/rowcol';
@@ -471,38 +473,20 @@ export function insertRowCol(
     const file = ctx.sheets[curOrder];
     if (!file) return;
 
-    const cfg = file.config || {};
-
-    // rowReadOnly/colReadOnly shift (state-only; engine handles rowlen/columnlen/rowhidden/colhidden)
-    if (type === 'row') {
-        const rowReadOnly_new: Record<string, number> = {};
-        forEach(cfg.rowReadOnly, (readOnly, rstr) => {
-            const r = parseFloat(rstr);
-            if (r < index) {
-                rowReadOnly_new[r] = readOnly;
-            } else if (r > index) {
-                rowReadOnly_new[r + count] = readOnly;
-            }
-        });
-        cfg.rowReadOnly = rowReadOnly_new;
-    } else {
-        const columnReadOnly_new: Record<string, number> = {};
-        forEach(cfg.colReadOnly, (readOnly, cstr) => {
-            const c = parseFloat(cstr);
-            if (c < index) {
-                columnReadOnly_new[c] = readOnly;
-            } else if (c > index) {
-                columnReadOnly_new[c + count] = readOnly;
-            }
-        });
-        cfg.colReadOnly = columnReadOnly_new;
+    // The engine refuses an op on a read-only row or column but does not move them.
+    // They shift here, by the same rule as hidden rows and columns.
+    const { config } = file;
+    if (type === 'row' && config?.rowReadOnly) {
+        config.rowReadOnly = shiftKeyedMapForInsert(config.rowReadOnly, index, count, op.direction);
+    }
+    if (type === 'column' && config?.colReadOnly) {
+        config.colReadOnly = shiftKeyedMapForInsert(config.colReadOnly, index, count, op.direction);
     }
 
     file.alternateFormatRules = (file.alternateFormatRules ?? []).map((af) => ({
         ...af,
         cellrange: shiftRangeForInsert(af.cellrange, op),
     }));
-    file.config = cfg;
 
     shiftStateOnlyFieldsForInsert(ctx, { ...op, id });
     if (changeSelection) adjustSelectionForInsert(ctx, { ...op, id });
@@ -530,7 +514,6 @@ export function deleteRowCol(
     if (typeof id !== 'string') return;
 
     const { type, start, end } = op;
-    const slen = end - start + 1;
 
     writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, { ...op, id }));
 
@@ -540,31 +523,14 @@ export function deleteRowCol(
     const file = ctx.sheets[curOrder];
     if (!file) return;
 
-    const cfg = file.config || {};
-
-    // rowReadOnly/colReadOnly shift (state-only; engine handles rowlen/columnlen/rowhidden/colhidden)
-    if (type === 'row') {
-        const rowReadOnly_new: Record<string, number> = {};
-        forEach(cfg.rowReadOnly, (readOnly, rstr) => {
-            const r = parseFloat(rstr);
-            if (r < start) {
-                rowReadOnly_new[r] = readOnly;
-            } else if (r > end) {
-                rowReadOnly_new[r - slen] = readOnly;
-            }
-        });
-        cfg.rowReadOnly = rowReadOnly_new;
-    } else {
-        const columnReadOnly_new: Record<string, number> = {};
-        forEach(cfg.colReadOnly, (readOnly, cstr) => {
-            const c = parseFloat(cstr);
-            if (c < start) {
-                columnReadOnly_new[c] = readOnly;
-            } else if (c > end) {
-                columnReadOnly_new[c - slen] = readOnly;
-            }
-        });
-        cfg.colReadOnly = columnReadOnly_new;
+    // The engine refuses an op on a read-only row or column but does not move them.
+    // They shift here, by the same rule as hidden rows and columns.
+    const { config } = file;
+    if (type === 'row' && config?.rowReadOnly) {
+        config.rowReadOnly = shiftKeyedMapForDelete(config.rowReadOnly, start, end);
+    }
+    if (type === 'column' && config?.colReadOnly) {
+        config.colReadOnly = shiftKeyedMapForDelete(config.colReadOnly, start, end);
     }
 
     const alternateFormats = [];
@@ -573,7 +539,6 @@ export function deleteRowCol(
         if (cellrange) alternateFormats.push({ ...af, cellrange });
     }
     file.alternateFormatRules = alternateFormats;
-    file.config = cfg;
 
     shiftStateOnlyFieldsForDelete(ctx, { ...op, id });
     ctx.selections = undefined;
