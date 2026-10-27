@@ -32,6 +32,7 @@ import {
     moveHighlightCell,
     moveToEnd,
     rememberEditorSelection,
+    SHEET_HOTKEYS,
     typeStyledText,
     valueShowEs,
 } from '../../state';
@@ -41,9 +42,9 @@ import { FormulaSearch } from './FormulaSearch';
 import { cycleReferenceInEditor } from './reference-cycle';
 
 const FORMAT_SHORTCUTS = [
-    ['Mod+B', handleBold],
-    ['Mod+I', handleItalic],
-    ['Mod+U', handleUnderline],
+    [SHEET_HOTKEYS.bold, handleBold],
+    [SHEET_HOTKEYS.italic, handleItalic],
+    [SHEET_HOTKEYS.underline, handleUnderline],
 ] as const;
 
 export const InputBox: React.FC = () => {

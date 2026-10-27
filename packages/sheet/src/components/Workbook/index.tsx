@@ -2,7 +2,7 @@
 // recipe through setContextWithProduce, which records the tab's undo entry and sends the edit's ops through onOp. It
 // also owns undo and redo, the clipboard listeners and the imperative API a host reaches through its ref.
 
-import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
+import { formatWithLabels, matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { isSketchCapped, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import {
     buildImageClipboardItem,
@@ -55,6 +55,7 @@ import {
     recordEntry,
     redoEntry,
     runStyleOf,
+    SHEET_HOTKEYS,
     selectionCache,
     sheetChartClipboardItem,
     undoEntry,
@@ -448,17 +449,17 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // handling undo and redo ahead because handleUndo and handleRedo
                 // themselves are calling setContext, and should not be nested
                 // in setContextWithProduce.
-                if (matchesKeyboardEvent(nativeEvent, 'Mod+Z')) {
+                if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.undo)) {
                     handleUndo();
                     e.stopPropagation();
                     return;
                 }
-                if (matchesKeyboardEvent(nativeEvent, 'Mod+Shift+Z')) {
+                if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.redo)) {
                     handleRedo();
                     e.stopPropagation();
                     return;
                 }
-                if (matchesKeyboardEvent(nativeEvent, 'Mod+Y')) {
+                if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.redoAlt)) {
                     handleRedo();
                     e.stopPropagation();
                     e.preventDefault();
@@ -726,15 +727,18 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         >
                             <h2 id="shortcuts-heading">Keyboard Shortcuts</h2>
                             <ul>
-                                <li>Toggle sheet focus lock: Shift, Control, F.</li>
+                                <li>Toggle sheet focus lock: {formatWithLabels(SHEET_HOTKEYS.focusLock)}.</li>
                                 <li>Select range: Shift, arrow keys.</li>
-                                <li>Auto-fill selection down from first cell: Control or Meta key, D.</li>
-                                <li>Auto-fill selection right from first cell: Control or Meta key, R.</li>
-                                <li>Bold text: Control or Meta key, B.</li>
-                                <li>Copy: Control or Meta key, C.</li>
-                                <li>Paste: Control or Meta key, V.</li>
-                                <li>Undo: Control or Meta key, Z.</li>
-                                <li>Redo: Control or Meta key, Shift, Z.</li>
+                                <li>Fill down from the first cell: {formatWithLabels(SHEET_HOTKEYS.fillDown)}.</li>
+                                <li>Fill right from the first cell: {formatWithLabels(SHEET_HOTKEYS.fillRight)}.</li>
+                                <li>Bold text: {formatWithLabels(SHEET_HOTKEYS.bold)}.</li>
+                                <li>Italic text: {formatWithLabels(SHEET_HOTKEYS.italic)}.</li>
+                                <li>Underline text: {formatWithLabels(SHEET_HOTKEYS.underline)}.</li>
+                                <li>Cut: {formatWithLabels(SHEET_HOTKEYS.cut)}.</li>
+                                <li>Copy: {formatWithLabels(SHEET_HOTKEYS.copy)}.</li>
+                                <li>Paste: {formatWithLabels(SHEET_HOTKEYS.paste)}.</li>
+                                <li>Undo: {formatWithLabels(SHEET_HOTKEYS.undo)}.</li>
+                                <li>Redo: {formatWithLabels(SHEET_HOTKEYS.redo)}.</li>
                                 <li>Delete cell content: Delete or Backspace.</li>
                                 <li>Confirm cell edit and move down: Enter.</li>
                                 <li>Move right: Tab.</li>

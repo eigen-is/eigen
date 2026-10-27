@@ -1,11 +1,13 @@
 // The menu bar's Format menu, such as number formats, text styles, alignment, borders, merging and
 // conditional formats. Its items run the same toolbar handlers as the format toolbar.
 
+import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { BorderType } from '@workspace/lib/sheets';
 import {
     ChoiceMenuItems,
     DropdownMenuItem,
     DropdownMenuSeparator,
+    DropdownMenuShortcut,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
@@ -37,6 +39,7 @@ import {
     handleUnderline,
     handleVerticalAlign,
     numberMenuPresets,
+    SHEET_HOTKEYS,
     updateFormat,
 } from '../../state';
 import type { ConditionRuleType } from '../ConditionFormat/ConditionRules';
@@ -118,7 +121,8 @@ function TextSubmenu({ caretColor }: { caretColor: string | undefined }) {
                         });
                     }}
                 >
-                    Bold (Ctrl+B)
+                    Bold
+                    <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.bold)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -128,7 +132,8 @@ function TextSubmenu({ caretColor }: { caretColor: string | undefined }) {
                         });
                     }}
                 >
-                    Italic (Ctrl+I)
+                    Italic
+                    <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.italic)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -139,6 +144,7 @@ function TextSubmenu({ caretColor }: { caretColor: string | undefined }) {
                     }}
                 >
                     Underline
+                    <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.underline)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -148,7 +154,7 @@ function TextSubmenu({ caretColor }: { caretColor: string | undefined }) {
                         });
                     }}
                 >
-                    Strikethrough (Alt+Shift+5)
+                    Strikethrough
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
