@@ -63,7 +63,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const extent = xmlChild(frame, WP_NS, 'extent');
         const pictures = descendants(frame, PIC_NS, 'pic');
         const charts = chartsIn(frame, extent);
-        const layout = anchored ? anchorPlacement(frame, reader, context, pictures.length + charts.length === 1) : {};
+        const layout = anchored ? anchorPlacement(frame, reader, context, isLoneGraphic(frame)) : {};
         // A picture in front of or behind the text may span the paper.
         const room = layout.offsetX === undefined ? reader.columnPx : Math.floor(mmToPx(reader.page.width));
         const docPr = xmlChild(frame, WP_NS, 'docPr');
@@ -306,11 +306,20 @@ function onShapeFill(scope: Scope): Scope {
     return { ...scope, onFill: true };
 }
 
+// An anchor whose graphic is one picture or one chart. One anchor has one place, so a group or a canvas can't take it:
+// its pictures would stack there, and its text boxes and shapes would draw elsewhere.
+function isLoneGraphic(anchor: XmlElement): boolean {
+    const graphic = xmlChild(anchor, A_NS, 'graphic');
+    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
+    const [only, ...others] = data ? xmlElements(data) : [];
+    return !!only && others.length === 0 && (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart'));
+}
+
 // Where Word places an anchor, as the doc holds it. Wrapped beside the text, it sits on the side its alignment or its
 // offset puts it. Over or under the text, alone in its anchor and in the body outside a table, it is in front of or
 // behind the text, at its offsets from the text column and from the paragraph's first line, which placeAnchors counts
 // from the paragraph's box. Any other is a block, aligned if Word aligns it.
-function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext, single: boolean): FigureFrameAttrs {
+function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext, lone: boolean): FigureFrameAttrs {
     const { story, tables } = context.scope;
     const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
@@ -321,7 +330,7 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     const area = areaOf(reader, positionH && xmlAttr(positionH, '', 'relativeFrom'));
     const placed = align ? alignedIn(xmlText(align).trim(), area.width, cx) : roundedInt(offset && xmlText(offset));
     const x = onPaper(reader, area.start + (placed ?? 0), cx);
-    if (xmlChild(anchor, WP_NS, 'wrapNone') && single && story === 'body' && tables === 0) {
+    if (xmlChild(anchor, WP_NS, 'wrapNone') && lone && story === 'body' && tables === 0) {
         const layout = isOn(xmlAttr(anchor, '', 'behindDoc')) ? 'behind' : 'front';
         return { layout, offsetX: x / EMU_PER_PX, offsetY: lineOffset(anchor, context) };
     }

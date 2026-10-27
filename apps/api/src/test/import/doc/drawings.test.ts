@@ -377,6 +377,18 @@ describe('placement', () => {
             ]);
         });
 
+        // GOV.UK's Shigellosis form: its one picture would take the group's extent, the text box beside it included.
+        test('a group of one picture and a text box is a block too', async () => {
+            const WPG = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+            const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+            const pic = `<pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="p"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4"/></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="381000" cy="381000"/></a:xfrm></pic:spPr></pic:pic>`;
+            const box =
+                '<wps:wsp><wps:txbx><w:txbxContent><w:p><w:r><w:t>Beside it</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp>';
+            const group = `<w:r><w:drawing><wp:anchor>${at(10, 10)}<wp:extent cx="6000000" cy="381000"/><wp:wrapNone/><wp:docPr id="9" name="Group"/><a:graphic><a:graphicData uri="${WPG}"><wpg:wgp xmlns:wpg="${WPG}" xmlns:wps="${WPS}">${pic}${box}</wpg:wgp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+            const { json } = await importDocxBody(paragraph(group));
+            expect(placesOf(json)).toEqual([['block', null, null]]);
+        });
+
         // Eigen's box holds the list's indent, which is its own, not Word's: Word's 720 twips go, Eigen's level counts.
         test("X in a list item counts from the item's box, past Eigen's own list indent", async () => {
             const { json } = await importDocxBody(
