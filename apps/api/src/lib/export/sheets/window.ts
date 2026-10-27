@@ -188,7 +188,8 @@ function trackLength(value: unknown): number | undefined {
 // first cell at the far end of the grid costs what the map holds, not the tracks before it.
 function tracksIn(map: Record<string, number> | undefined, first: number, last: number): number[] {
     const tracks: number[] = [];
-    if (!map) return tracks;
+    // A WeakMap refuses a key that is no object, and a peer can store a number or a string as the map.
+    if (!isRecord(map)) return tracks;
     let keys = keyCounts.get(map);
     if (keys === undefined) {
         keys = Object.keys(map).length;
@@ -307,11 +308,12 @@ function trackAt(
     return { index, start };
 }
 
-// The first `count` shown tracks from `first`, which costs those and the hidden ones between them.
+// The first `count` shown tracks from `first`, which costs those and the hidden ones between them. A string stored as
+// the map would hide a track by each of its characters.
 function shownTracks(first: number, last: number, count: number, hidden: Record<string, number> | undefined): number[] {
     const tracks: number[] = [];
     for (let track = first; track <= last && tracks.length < count; track++) {
-        if (hidden?.[track] == null) tracks.push(track);
+        if (!isRecord(hidden) || hidden[track] == null) tracks.push(track);
     }
     return tracks;
 }
