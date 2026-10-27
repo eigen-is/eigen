@@ -2115,8 +2115,13 @@ describe('Sheets HTML export — the window over forged keys', () => {
             { ...valid, cellrange: [{ row: null, column: [0, 0] }] },
             { ...valid, cellrange: [null] },
         ];
-        const sheet = makeSheet([{ r: 0, c: 0, v: cell }], [...forged, valid] as never);
-        const out = renderSheetsHtml([{ ...sheet, config: { merge: { '0_0': null as never } } }], NO_MEDIA, 'screen');
+        // A peer's values reach the export untyped, as JSON.parse returns them.
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: cell }]),
+            conditionalFormatRules: JSON.parse(JSON.stringify([...forged, valid])),
+        };
+        const nullMerge: Sheet = JSON.parse(JSON.stringify({ ...sheet, config: { merge: { '0_0': null } } }));
+        const out = renderSheetsHtml([nullMerge], NO_MEDIA, 'screen');
         expect(classesFor(out, 'background:#00ff00')).toHaveLength(1);
         expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('background:#00ff00');
     });
