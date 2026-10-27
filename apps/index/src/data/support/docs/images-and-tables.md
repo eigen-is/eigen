@@ -42,7 +42,7 @@ Click an image to select it. Resize handles appear at its corners. Drag a handle
 
 On a wide screen, selecting an image also opens the **Image** panel on the right side of the editor. From there you can:
 
-- **Width** and **Height**: type the image's width or height in centimeters and press Enter. While **Keep aspect ratio** is checked, the other side follows. Uncheck it to stretch the image. Each side you type is at least 2.65 cm, and the image is no wider than the text (half of it for a floating image, the width of the paper for an image behind or in front of the text); a wider size shrinks to fit, keeping its shape.
+- **Width** and **Height**: type the image's width or height in centimeters and press Enter. While **Keep aspect ratio** is checked, the other side follows. Uncheck it to stretch the image. The width is at least 2.65 cm, and the image is no wider than the text (half of it for a floating image, the width of the paper for an image behind or in front of the text); a wider size shrinks to fit, keeping its shape.
 - **Keep aspect ratio**: checked for an image when you select it. Unchecking it lasts while the image stays selected.
 - **Style**: set the image to sit on its own line (the default), float to the left, or float to the right with text wrapping around it, or place it behind or in front of the text (see below). An image wider than half the text shrinks to half when it starts to float, so the text has room beside it.
 - **Align**: when the image is on its own line, choose left, center, or right alignment.
