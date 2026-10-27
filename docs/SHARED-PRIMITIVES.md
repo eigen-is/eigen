@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2007 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2015 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -537,7 +537,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (455)
+## Types (458)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -571,6 +571,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BandEdge` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `BandRoot` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `Caps` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/caps.ts |
+| `CellBorder` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `CellBorderAttribute` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `CellSide` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `ChartAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `Equation` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
 | `FigureAlignment` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
@@ -997,7 +1000,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1046)
+## Utilities & constants (1051)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1382,6 +1385,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BAND_ROOTS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `bandEdge` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `bandHasContent` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
+| `CELL_BORDER_SIDES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `cellBorderValue` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `chartSvg` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `cmText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `DEFAULT_NORMAL_STYLE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
@@ -1404,6 +1409,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `listTypeOfStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/ordered-list.ts |
 | `matchPaperSize` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mathAsText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
+| `MAX_CELL_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `MIN_CELL_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `MIN_TEXT_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mmToPt` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -1431,6 +1438,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `pxToMm` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pxToPt` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `readCellBackground` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `readCellBorder` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `readChartAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `readCm` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `readEquation` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |
