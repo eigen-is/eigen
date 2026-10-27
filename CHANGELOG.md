@@ -8,6 +8,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Excel files** — a row Excel shows at normal height comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
 - **Spreadsheet PDF** — a spreadsheet with thousands of small sheets prints its first 2,000 sheets instead of failing
+- **Copied charts** — a chart you copy from Sheets into Docs, Slides or Vector keeps the number format of its axis, so a column of percentages reads 25%, not 0.25
 
 ## [0.4.0] - 2026-10-26
 
