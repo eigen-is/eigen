@@ -1,3 +1,7 @@
+// The grid's cell selection: normalizing a range around its merges, moving the highlight with the keyboard,
+// select all, the status bar's sum and count, and the format painter's paste. It also builds what a copy puts
+// on the clipboard: an HTML table of the cells' values and styles, and the same cells as TSV.
+
 import { cellsToTsv } from '@workspace/lib/clipboard';
 import { escapeHtml } from '@workspace/lib/html';
 import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
@@ -21,16 +25,23 @@ import {
 } from './cell';
 import { setPendingCopy } from './clipboard';
 import { getComputeMap } from './condition-format';
+import { hexColor } from './inline-string';
 import { hasPartMC } from './validation';
 
 export const selectionCache = {
     isPasteAction: false,
 };
 
+// A border's color comes from a collaborator or an xlsx, so only a plain color reaches the copied HTML.
 function cellBorderCss(border: CellBorderSides): string {
     let css = '';
-    for (const decl of borderSidesToCss(border)) css += `${decl};`;
+    for (const decl of borderSidesToCss(border, (color) => hexColor(color) ?? 'transparent')) css += `${decl};`;
     return css;
+}
+
+// A stored row height, column width or merge span can be any value a collaborator wrote.
+function finiteOr(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
@@ -1271,31 +1282,14 @@ export function rangeValueToClipboard(
             // biome-ignore lint/suspicious/noTemplateCurlyInString: replaceHtml template
             let column = '<td ${span} style="${style}">';
 
+            if (r === rowIndexArr[0]) {
+                colgroup += `<colgroup width="${finiteOr(sheet.config?.columnlen?.[c], 72)}px"></colgroup>`;
+            }
+            let style = c === colIndexArr[0] ? `height:${finiteOr(sheet.config?.rowlen?.[r], 19)}px;` : '';
+            let span = '';
+
             const cell = d[r]?.[c];
             if (cell != null) {
-                let style = '';
-                let span = '';
-
-                if (r === rowIndexArr[0]) {
-                    if (
-                        isNil(sheet.config) ||
-                        isNil(sheet.config.columnlen) ||
-                        isNil(sheet.config.columnlen[c.toString()])
-                    ) {
-                        colgroup += '<colgroup width="72px"></colgroup>';
-                    } else {
-                        colgroup += `<colgroup width="${sheet.config.columnlen[c.toString()]}px"></colgroup>`;
-                    }
-                }
-
-                if (c === colIndexArr[0]) {
-                    if (isNil(sheet.config) || isNil(sheet.config.rowlen) || isNil(sheet.config.rowlen[r.toString()])) {
-                        style += 'height:19px;';
-                    } else {
-                        style += `height:${sheet.config.rowlen[r.toString()]}px;`;
-                    }
-                }
-
                 const reg = /^(w|W)((0?)|(0\.0+))$/;
                 // getCellValue returns `cell.v` (string | number | boolean) when the
                 // format ID matches the `w` width pattern, otherwise the rendered
@@ -1307,22 +1301,21 @@ export function rangeValueToClipboard(
                     c_value = copiedNumberText(cell) ?? getCellValue(r, c, d, 'm');
                 }
 
-                // Same escaping as the rich-text runs in modules/cell.ts: the values come
-                // from the cell and this lands inside a `style="..."` attribute, which the
-                // HTML parser decodes before CSS sees it.
-                style += escapeHtml(styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute)));
+                style += styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute));
 
                 if (cell.mc) {
                     if (!('rs' in cell.mc)) {
                         textRow.push('');
                         continue;
                     }
-                    span = `rowspan="${cell.mc.rs}" colspan="${cell.mc.cs}"`;
+                    span = `rowspan="${finiteOr(cell.mc.rs, 1)}" colspan="${finiteOr(cell.mc.cs, 1)}"`;
                 }
                 const cellBorder = borderInfoCompute[`${r}_${c}`];
                 if (cellBorder) style += cellBorderCss(cellBorder);
 
-                column = replaceHtml(column, { style, span });
+                // The style comes from the cell and lands inside a `style="..."` attribute, which the HTML
+                // parser decodes before CSS sees it.
+                column = replaceHtml(column, { style: escapeHtml(style), span });
 
                 if (isNil(c_value)) {
                     c_value = getCellValue(r, c, d);
@@ -1335,32 +1328,10 @@ export function rangeValueToClipboard(
                 textRow.push(String(c_value));
                 column += escapeHtml(String(c_value));
             } else {
-                let style = '';
-
                 const cellBorder = borderInfoCompute[`${r}_${c}`];
                 if (cellBorder) style += cellBorderCss(cellBorder);
 
-                if (r === rowIndexArr[0]) {
-                    if (
-                        isNil(sheet.config) ||
-                        isNil(sheet.config.columnlen) ||
-                        isNil(sheet.config.columnlen[c.toString()])
-                    ) {
-                        colgroup += '<colgroup width="72px"></colgroup>';
-                    } else {
-                        colgroup += `<colgroup width="${sheet.config.columnlen[c.toString()]}px"></colgroup>`;
-                    }
-                }
-
-                if (c === colIndexArr[0]) {
-                    if (isNil(sheet.config) || isNil(sheet.config.rowlen) || isNil(sheet.config.rowlen[r.toString()])) {
-                        style += 'height:19px;';
-                    } else {
-                        style += `height:${sheet.config.rowlen[r.toString()]}px;`;
-                    }
-                }
-
-                column = replaceHtml(column, { style, span: '' });
+                column = replaceHtml(column, { style: escapeHtml(style), span });
                 textRow.push('');
             }
 

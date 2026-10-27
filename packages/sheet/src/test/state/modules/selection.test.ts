@@ -31,6 +31,45 @@ describe('state/modules/selection — rangeValueToClipboard', () => {
         const html = rangeValueToClipboard(styledContext('#ff0000'), 'id_1', [{ row: [0, 0], column: [0, 0] }])?.html;
         expect(html).toContain('color:#ff0000;');
     });
+
+    // A collaborator can store any value in a border's color, a row's height, a column's width or a merge's
+    // span, and a paste into another app would load what the copied HTML says.
+    test('forged borders, track sizes and spans give the copied HTML no extra CSS or attributes', () => {
+        const forged = ['#000;background-image:url(//tracker)', '#000" onmouseover="alert(1)'];
+        for (const color of forged) {
+            const ctx = contextFactory() as Context;
+            ctx.sheets[0].data = [
+                [{ v: 'x', m: 'x', mc: JSON.parse('{"r":0,"c":0,"rs":"1\\" onclick=\\"alert(1)","cs":1}') }, null],
+            ];
+            ctx.sheets[0].config = JSON.parse(
+                JSON.stringify({
+                    borderInfo: { '0_0': { b: { style: 1, color } }, '0_1': { t: { style: 1, color } } },
+                    rowlen: { 0: '20px;background:url(//tracker)' },
+                    columnlen: { 0: '50" onclick="alert(1)', 1: '60px;background:url(//tracker)' },
+                }),
+            );
+            const html = rangeValueToClipboard(ctx, 'id_1', [{ row: [0, 0], column: [0, 1] }])?.html ?? '';
+            expect(html).not.toMatch(/url|onmouseover|onclick/);
+            expect(html).toContain('border-bottom:1px solid transparent;');
+            expect(html).toContain('height:19px;');
+            expect(html).toContain('<colgroup width="72px"></colgroup><colgroup width="72px"></colgroup>');
+        }
+    });
+
+    test('plain borders, track sizes and spans still serialise', () => {
+        const ctx = contextFactory() as Context;
+        ctx.sheets[0].data = [[{ v: 'x', m: 'x', mc: { r: 0, c: 0, rs: 1, cs: 2 } }, { mc: { r: 0, c: 0 } }]];
+        ctx.sheets[0].config = {
+            borderInfo: { '0_0': { b: { style: 8, color: 'rgb(255, 0, 0)' } } },
+            rowlen: { 0: 30 },
+            columnlen: { 0: 50, 1: 60 },
+        };
+        const html = rangeValueToClipboard(ctx, 'id_1', [{ row: [0, 0], column: [0, 1] }])?.html ?? '';
+        expect(html).toContain('<colgroup width="50px"></colgroup><colgroup width="60px"></colgroup>');
+        expect(html).toContain('rowspan="1" colspan="2"');
+        expect(html).toContain('height:30px;');
+        expect(html).toContain('border-bottom:2px solid #ff0000;');
+    });
 });
 
 // text/plain is what a paste outside a spreadsheet reads (a chart's Edit data grid, a text editor),
