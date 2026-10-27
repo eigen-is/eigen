@@ -1,9 +1,13 @@
 // The docx reader's tables: readTable turns a w:tbl into the editor's table, its grid as Word lays it out from the
-// grid and the cells' widths, scaled into the room the editor gives it, with merged cells, header rows and fills.
-// A table nested in a cell fits inside the cell's padding. The paragraph reader calls it for each table it meets.
+// grid and the cells' widths, scaled into the room the editor gives it, with merged cells, header rows, fills and
+// borders. A table nested in a cell fits inside the cell's padding. The paragraph reader calls it for each table it
+// meets.
 
 import type { JSONContent } from '@tiptap/core';
+import type { CellBorderAttribute, CellSide } from '@workspace/lib/docs/eigendoc';
 import {
+    CELL_BORDER_SIDES,
+    cellBorderValue,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
     PROSE_TEXTBLOCKS,
@@ -11,16 +15,22 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
-import { HEADER_CELL_LOOK, TABLE_CELL_PADDING } from '../../document/looks';
+import { CELL_BORDER, HEADER_CELL_LOOK, TABLE_CELL_PADDING } from '../../document/looks';
 import { isOn, W_NS } from '../../ooxml/ooxml';
-import { MAX_TABLE_COLUMNS, NO_STORED_WIDTH, STYLE_NAMES, TWIPS_PER_PX } from '../../ooxml/wordml';
+import {
+    BORDER_EIGHTHS_PER_PX,
+    MAX_TABLE_COLUMNS,
+    NO_STORED_WIDTH,
+    STYLE_NAMES,
+    TWIPS_PER_PX,
+} from '../../ooxml/wordml';
 import type { Item, ParagraphItem } from './assemble';
 import { buildBlocks, inlineText, isWhitespace } from './assemble';
-import { isFill } from './colors';
+import { isFill, markColor } from './colors';
 import { onOff, roundedInt, twipsOf, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks, WRAPPERS } from './paragraphs';
-import { mergeRun, shadingOf } from './styles';
+import { mergeRun, shadingOf, tableBordersOf } from './styles';
 
 type Row = { trPr?: XmlElement; cells: XmlElement[] };
 
@@ -29,6 +39,18 @@ export const MAX_MERGED_ROWS = 2000;
 
 // Each table nests three nodes deep, and deep nesting overflows the transform process's stack.
 export const MAX_TABLE_DEPTH = 8;
+
+// A side in Eigen's own look is the side a cell draws without one, so the writer's tables read back with none stored.
+const EIGEN_SIDE = cellBorderValue({
+    width: CELL_BORDER.sz / BORDER_EIGHTHS_PER_PX,
+    style: 'solid',
+    color: markColor(CELL_BORDER.color),
+});
+
+const INSIDE = { top: 'insideH', bottom: 'insideH', left: 'insideV', right: 'insideV' } as const;
+
+// Word draws no cell over the columns a row skips.
+const NO_SIDES = Object.fromEntries(CELL_BORDER_SIDES.map(([name]) => [name, 'none']));
 
 export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item[] {
     const rows = tableRows(table);
@@ -51,6 +73,21 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const tableRun = tableStyle ? reader.styles.run(tableStyle.id) : undefined;
     const tableLook = tableStyle ? reader.styles.table(tableStyle.id) : undefined;
     const tableFill = shadingOf(wChild(tblPr, 'shd')) ?? tableLook?.fill;
+    const tableBorders = tableBordersOf(wChild(tblPr, 'tblBorders'));
+    // A side a cell draws: its own, else its table style's first row's, else the table's, else its style's, else none.
+    // An outer side takes the table's side there, an inner one insideH or insideV.
+    const sideOf = (cell: XmlElement, rowIndex: number, side: CellSide, outer: boolean): string | undefined => {
+        const at = outer ? side : INSIDE[side];
+        const firstRow = rowIndex === 0 && firstRowOn ? tableLook?.firstRowBorders : undefined;
+        const border =
+            tableBordersOf(wChild(wChild(cell, 'tcPr'), 'tcBorders'))[side] ??
+            firstRow?.[side === 'top' || side === 'bottom' ? side : at] ??
+            tableBorders[at] ??
+            tableLook?.borders[at] ??
+            'none';
+        const value = cellBorderValue(border);
+        return value === EIGEN_SIDE ? undefined : value;
+    };
     // The fill a cell draws: its own, else its table style's first row's, else the table's.
     const fillOf = (cell: XmlElement, rowIndex: number) =>
         shadingOf(wChild(wChild(cell, 'tcPr'), 'shd')) ??
@@ -121,6 +158,10 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             const above = vMerge && w(vMerge, 'val') !== 'restart' ? open.get(column) : undefined;
             // Into the last column with cells after it, a cell of its own: it holds their text.
             if (above && (column + above.colspan < MAX_TABLE_COLUMNS || index === row.cells.length - 1)) {
+                // A merge draws the bottom of its last row.
+                const bottom = sideOf(cell, rowIndex, 'bottom', rowIndex === rows.length - 1);
+                if (bottom) above.borderBottom = bottom;
+                else delete above.borderBottom;
                 extended.push(above);
                 next.set(column, above);
                 column += above.colspan;
@@ -150,6 +191,12 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                 isFill(fill) && !(type === 'tableHeader' && fill === HEADER_CELL_LOOK.fill)
                     ? readCellBackground(`#${fill}`)
                     : null;
+            const outer = {
+                top: rowIndex === 0,
+                right: index === row.cells.length - 1 || column + colspan >= columns,
+                bottom: rowIndex === rows.length - 1,
+                left: index === 0,
+            };
             const attrs: CellAttrs = {
                 colspan: column + colspan - start,
                 rowspan: 1,
@@ -157,6 +204,10 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                 ...hoistAlignment(content),
                 ...(backgroundColor && { backgroundColor }),
             };
+            for (const [name, side] of CELL_BORDER_SIDES) {
+                const border = sideOf(cell, rowIndex, side, outer[side]);
+                if (border) attrs[name] = border;
+            }
             cells.push({
                 type,
                 attrs,
@@ -205,13 +256,13 @@ type CellAttrs = {
     colwidth: number[] | null;
     align?: string;
     backgroundColor?: string;
-};
+} & Partial<Record<CellBorderAttribute, string>>;
 
 // The columns a row skips before or after its cells: one empty cell, as the editor would pad them on open.
 function gridFiller(columnPx: number[], column: number, colspan: number, type = 'tableCell'): JSONContent {
     return {
         type,
-        attrs: { colspan, colwidth: widths(columnPx, column, colspan) },
+        attrs: { colspan, colwidth: widths(columnPx, column, colspan), ...NO_SIDES },
         content: [{ type: 'paragraph' }],
     };
 }

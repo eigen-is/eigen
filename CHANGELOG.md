@@ -13,6 +13,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Images behind or in front of the text** — in Docs, put an image or a chart behind the text or in front of it and drag it anywhere on the page. It moves with its paragraph when you type above it
 - **Image layouts on a phone** — **Format → Image** has every way to place an image: in line, wrapped left or right, behind or in front of the text
 - **Word files** — an image or a chart behind or in front of the text stays there when you import a Word file or download a document as Word
+- **Table borders in Docs** — give the selected cells all borders, a box around them, or none, and pick the border color, in the **Table** panel or under **Format › Table**. A row or column you add takes the borders and fill of the one beside it
+- **Table borders in Word files** — a Word table keeps its borders, their colors, widths and dashes, when it comes in and when you download a document as Word. A table without borders in Word has none in Docs
 
 ### Changed
 

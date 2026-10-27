@@ -1,10 +1,21 @@
+// The table's properties panel, which opens beside the page while the selection is in a table: its columns, rows and
+// cells, the selected cells' fill and borders, and Delete table. Every control runs a command of the editor that holds
+// the table, as Format › Table does.
+
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
 import { readCellBackground } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
-import { ColorRow, PropertiesPanel, PropertySection } from '@workspace/ui/components/properties-panel';
+import { ColorRow, PropertiesPanel, PropertyRow, PropertySection } from '@workspace/ui/components/properties-panel';
+import { cellBorderPen } from './extensions/table-look';
 import { cellBackground, selectCellCommands } from './hooks/use-toolbar-state';
 import { TABLE_ACTION_ICONS } from './table-action-icons';
+
+const BORDER_SETS = [
+    ['all', 'All'],
+    ['outer', 'Outer'],
+    ['none', 'None'],
+] as const;
 
 type TablePropertiesPanelProps = {
     editor: Editor;
@@ -12,11 +23,15 @@ type TablePropertiesPanelProps = {
 
 export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
     // The panel stays mounted through its exit, so a caret that has left the table reads no cell command.
-    const { canMergeCells, canSplitCell, fill } = useEditorState({
+    const { canMergeCells, canSplitCell, fill, borderColor } = useEditorState({
         editor,
         selector: ({ editor: e }) => {
             const inTable = e.isActive('table');
-            return { ...selectCellCommands(e, inTable), fill: inTable ? cellBackground(e.state) : '' };
+            return {
+                ...selectCellCommands(e, inTable),
+                fill: inTable ? cellBackground(e.state) : '',
+                borderColor: cellBorderPen(e.state)?.color ?? '',
+            };
         },
     });
     return (
@@ -124,6 +139,28 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                     onChange={(color) =>
                         editor.chain().focus().setCellAttribute('backgroundColor', readCellBackground(color)).run()
                     }
+                />
+                <PropertyRow label="Borders">
+                    <div className="grid grid-cols-3 gap-1.5">
+                        {BORDER_SETS.map(([set, label]) => (
+                            <Button
+                                key={set}
+                                variant="outline"
+                                size="sm"
+                                className="text-xs"
+                                onClick={() => editor.chain().focus().setCellBorders(set).run()}
+                            >
+                                {label}
+                            </Button>
+                        ))}
+                    </div>
+                </PropertyRow>
+                {/* Without a color of their own the sides draw Eigen's default grey. */}
+                <ColorRow
+                    label="Border"
+                    value={borderColor}
+                    noneLabel="Default"
+                    onChange={(color) => editor.chain().focus().setCellBorderColor(color).run()}
                 />
             </PropertySection>
 

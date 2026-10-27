@@ -1,9 +1,16 @@
-// The docx writer's tables: a doc's table as a Word table, its grid laid out as the editor lays it out.
+// The docx writer's tables: a doc's table as a Word table, its grid laid out as the editor lays it out, each cell
+// with its fill and, in a table where any cell stores sides of its own, all four of its sides.
 
 import type { JSONContent } from '@tiptap/core';
-import { MIN_TABLE_COLUMN_PX, readCellBackground } from '@workspace/lib/docs/eigendoc';
-import { HEADER_CELL_LOOK, proseBorder, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
 import {
+    CELL_BORDER_SIDES,
+    MIN_TABLE_COLUMN_PX,
+    readCellBackground,
+    readCellBorder,
+} from '@workspace/lib/docs/eigendoc';
+import { CELL_BORDER, HEADER_CELL_LOOK, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
+import {
+    BORDER_EIGHTHS_PER_PX,
     BORDER_SIDES,
     JUSTIFICATION,
     MAX_TABLE_COLUMNS,
@@ -35,7 +42,7 @@ const TABLE_HEADER_STYLE: StyleDef = {
 };
 
 export const TABLE_LOOK = {
-    border: { ...proseBorder('.eigen-prose td', 'border'), space: 0 },
+    border: { ...CELL_BORDER, space: 0 },
     padding: TABLE_CELL_PADDING,
     margin: TABLE_MARGIN,
 };
@@ -87,6 +94,10 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     });
     if (widths.length === 0) return [];
     if (cut) context.pkg.lost('tables-simplified');
+    // Word resolves a cell's own side against the table's, so a table whose cells store sides writes every cell's.
+    const ownSides = grid.some((cells) =>
+        cells.some((cell) => CELL_BORDER_SIDES.some(([name]) => readCellBorder(cell.node.attrs?.[name]))),
+    );
 
     const { dxa, fixed } = gridWidths(widths, columnPx);
     const spanWidth = (column: number, colspan: number) =>
@@ -118,8 +129,10 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             const tcW = widths.slice(column, column + colspan).every((known) => known === undefined)
                 ? `<w:tcW w:w="0" w:type="${NO_STORED_WIDTH}"/>`
                 : `<w:tcW w:w="${width}" w:type="dxa"/>`;
+            // A merge's covered cells draw its sides too, as Word reads the bottom of its last.
+            const sides = ownSides && owner ? tcBorders(owner.node) : '';
             const tcPr = (merge: string) =>
-                `<w:tcPr>${tcW}${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}</w:tcPr>`;
+                `<w:tcPr>${tcW}${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${sides}${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}</w:tcPr>`;
             if (cell) {
                 const merge = cell.rowspan > 1 ? '<w:vMerge w:val="restart"/>' : '';
                 const marked = !header && cell.node.type === 'tableHeader';
@@ -137,7 +150,9 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     const tblPr = [
         `<w:tblW w:w="${spanWidth(0, dxa.length)}" w:type="dxa"/>`,
         `<w:tblInd w:w="${context.indent}" w:type="dxa"/>`,
-        `<w:tblBorders>${bordersXml(TABLE_BORDER_SIDES, { top: border, left: border, bottom: border, right: border, insideH: border, insideV: border })}</w:tblBorders>`,
+        ownSides
+            ? ''
+            : `<w:tblBorders>${bordersXml(TABLE_BORDER_SIDES, { top: border, left: border, bottom: border, right: border, insideH: border, insideV: border })}</w:tblBorders>`,
         fixed ? '<w:tblLayout w:type="fixed"/>' : '',
         `<w:tblCellMar>${margin('top', TABLE_LOOK.padding.vertical)}${margin('left', TABLE_LOOK.padding.horizontal)}${margin('bottom', TABLE_LOOK.padding.vertical)}${margin('right', TABLE_LOOK.padding.horizontal)}</w:tblCellMar>`,
     ].join('');
@@ -145,6 +160,20 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     return [
         { table: `<w:tbl><w:tblPr>${tblPr}</w:tblPr><w:tblGrid>${tblGrid}</w:tblGrid>${rowsXml.join('')}</w:tbl>` },
     ];
+}
+
+// A cell's four sides, in tcBorders' order: a side it stores none of is Eigen's grey, and none is nil.
+function tcBorders(node: JSONContent): string {
+    const sideXml = (side: (typeof BORDER_SIDES)[number], value: unknown) => {
+        const border = readCellBorder(value);
+        if (border === 'none') return `<w:${side} w:val="nil"/>`;
+        if (!border) return bordersXml([side], { [side]: TABLE_LOOK.border });
+        const val = border.style === 'solid' ? 'single' : border.style;
+        const sz = Math.round(border.width * BORDER_EIGHTHS_PER_PX);
+        return `<w:${side} w:val="${val}" w:sz="${sz}" w:space="0" w:color="${border.color.slice(1).toUpperCase()}"/>`;
+    };
+    const attrs = node.attrs ?? {};
+    return `<w:tcBorders>${sideXml('top', attrs['borderTop'])}${sideXml('left', attrs['borderLeft'])}${sideXml('bottom', attrs['borderBottom'])}${sideXml('right', attrs['borderRight'])}</w:tcBorders>`;
 }
 
 // As TableWidthClamp: known columns scale down to the column, floored; unknown ones share the rest, as width: 100%.

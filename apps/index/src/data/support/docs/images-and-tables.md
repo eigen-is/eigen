@@ -112,7 +112,7 @@ A chart prints and downloads as a PDF or a web page in its look. In a Word file 
 
 Click inside the table. The **Table** panel opens on the right side of the editor (on a wide screen).
 
-The same actions are under **Format → Table**, which works on any screen, a phone included: **Insert row above**, **Insert row below**, **Insert column left**, **Insert column right**, **Delete row**, **Delete column**, **Delete table**, **Distribute columns**, **Merge cells**, **Unmerge cells**, **Toggle header row**, and **Cell background color**. The **Table** item is greyed out until your cursor is in a table.
+The same actions are under **Format → Table**, which works on any screen, a phone included: **Insert row above**, **Insert row below**, **Insert column left**, **Insert column right**, **Delete row**, **Delete column**, **Delete table**, **Distribute columns**, **Merge cells**, **Unmerge cells**, **Toggle header row**, **Cell background color**, **All borders**, **Outer borders**, and **No borders**. The **Table** item is greyed out until your cursor is in a table.
 
 Right-click a cell for the same actions in one menu. It starts with **Cut**, **Copy**, and **Paste**, offers **Add comment** when you have text selected, and ends with **Delete row**, **Delete column**, and **Delete table** in red. The first time you choose **Paste**, your browser may ask to let the page see your clipboard. This menu needs edit access, and works in a header or footer while you edit it.
 
@@ -137,6 +137,18 @@ Select two or more cells, then click **Merge** under **Cells** to join them into
 **Color cells**
 
 Select one or more cells, then click the **Fill** row under **Cells** and pick a color. Choose **None** to take the color away. **Format → Table → Cell background color** does the same.
+
+**Set cell borders**
+
+Select one or more cells, then use the **Borders** row under **Cells**:
+
+- **All** draws every border of the selected cells.
+- **Outer** draws a box around the selection, with no lines inside it.
+- **None** takes every border of the selected cells away.
+
+To change the color, click the **Border** row and pick a color. The borders of the selected cells take it, and **All** and **Outer** draw in it. **Border** reads **Default** while the cells have the standard gray borders. Choosing **All** after **None** brings the gray borders back. **Format → Table** has **All borders**, **Outer borders**, and **No borders** too.
+
+A row or column you add takes the borders and the color of the one beside it.
 
 **Toggle the header row**
 
