@@ -4,12 +4,12 @@
 // paint through it.
 
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
-import { normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@workspace/lib/vector';
+import { DEG_TO_RAD, normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
 import type { Lost } from '../../document/transform/protocol';
 import type { DrawingTheme } from '../../ooxml/drawingml';
-import { DEGREE, drawingColor, percent } from '../../ooxml/drawingml';
+import { DEGREE, drawingColor, isColorChoice, percent } from '../../ooxml/drawingml';
 import { A_NS, isOn, P_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
 import type { SlideInheritance, SlideTheme } from './inherit';
@@ -26,13 +26,6 @@ export function fillIn(parent: XmlElement | undefined): XmlElement | undefined {
 
 function isFill(child: XmlElement): boolean {
     return child.ns === A_NS && FILLS.has(child.local);
-}
-
-// EG_ColorChoice: the colour elements drawingColor takes the first of.
-const COLOR_CHOICES = new Set(['scrgbClr', 'srgbClr', 'hslClr', 'sysClr', 'schemeClr', 'prstClr']);
-
-function isColorChoice(child: XmlElement): boolean {
-    return child.ns === A_NS && COLOR_CHOICES.has(child.local);
 }
 
 // A colour element reduced to what drawingColor reads: its colour child with the transforms it applies, and whether
@@ -80,13 +73,14 @@ export function textColorOf(colors: DrawingTheme): string {
     return (slot && colors.scheme.get(slot)) ?? SLIDES_STYLE_DEFAULTS.color;
 }
 
-// Their axes and outlines: the text's colour faded, as PowerPoint's chart axes are.
+// A text color at 60% opacity, for the dashed outline of the box that marks a dropped object.
 export function mutedColor(color: string): string {
     return `${color.slice(0, 7)}99`;
 }
 
 const placeholderColors = new WeakMap<DrawingTheme, Map<string | undefined, DrawingTheme>>();
-// Each phClr's colours back to the slide's, which any colour but phClr resolves the same with.
+// Maps each slide's colors with a phClr back to the slide's own colors. A color other than phClr resolves the same
+// through either, so resolvedColor caches it once, under the slide's colors.
 const unplaced = new WeakMap<DrawingTheme, DrawingTheme>();
 
 // A slide's colours with a reference's phClr, one object for each, as resolvedColor keeps its answers by the object.
@@ -200,24 +194,22 @@ function quarterTurn(degrees: number): number {
     return degrees + 90;
 }
 
-const RADIANS = Math.PI / 180;
-
 // An element's gradient, which the canvas lays along its box's units (objectBoundingBox): a scaled angle is already in
 // them, a true one is the box-unit angle whose isolines the box stretches onto the true ones.
 export function elementGradientAngle(width: number, height: number): GradientAngle {
     return (degrees, scaled) => {
         if (scaled) return quarterTurn(degrees);
-        const r = degrees * RADIANS;
-        return Math.atan2(width * Math.cos(r), -height * Math.sin(r)) / RADIANS;
+        const r = degrees * DEG_TO_RAD;
+        return Math.atan2(width * Math.cos(r), -height * Math.sin(r)) / DEG_TO_RAD;
     };
 }
 
 // A background's gradient, which CSS draws at a true angle: a scaled one turns with the slide's proportions.
-export function backgroundGradientAngle(width: number, height: number): GradientAngle {
+function backgroundGradientAngle(width: number, height: number): GradientAngle {
     return (degrees, scaled) => {
         if (!scaled) return quarterTurn(degrees);
-        const r = degrees * RADIANS;
-        return quarterTurn(Math.atan2(width * Math.sin(r), height * Math.cos(r)) / RADIANS);
+        const r = degrees * DEG_TO_RAD;
+        return quarterTurn(Math.atan2(width * Math.sin(r), height * Math.cos(r)) / DEG_TO_RAD);
     };
 }
 

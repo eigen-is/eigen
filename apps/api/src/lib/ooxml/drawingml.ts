@@ -110,28 +110,30 @@ export function readColorMap(element: XmlElement): ColorMap {
 // sRGB components and alpha, each 0–1.
 type Rgba = [r: number, g: number, b: number, a: number];
 
-// The colour a fill holds, such as an a:solidFill, a scheme slot or a gradient stop. It is '#rrggbb', or '#rrggbbaa'
-// when not opaque.
-export function drawingColor(fill: XmlElement | undefined, theme: DrawingTheme): string | undefined {
-    for (const element of fill ? xmlElements(fill) : []) {
-        if (element.ns !== A_NS) continue;
-        const base = baseColor(element, theme);
-        if (base === null) continue;
-        if (base === undefined) return undefined;
-        let rgba = base;
-        for (const transform of xmlElements(element)) {
-            const value = transform.ns === A_NS ? percent(xmlAttr(transform, '', 'val')) : undefined;
-            if (value !== undefined) rgba = transformed(rgba, transform.local, value);
-        }
-        const bytes = rgba.map((component) => Math.round(clamp(component) * 255));
-        const hex = bytes.map((byte) => byte.toString(16).padStart(2, '0'));
-        return `#${hex.slice(0, 3).join('')}${bytes[3] === 255 ? '' : hex[3]}`;
-    }
-    return undefined;
+// EG_ColorChoice: the color elements a fill can hold.
+const COLOR_CHOICES = new Set(['scrgbClr', 'srgbClr', 'hslClr', 'sysClr', 'schemeClr', 'prstClr']);
+
+export function isColorChoice(element: XmlElement): boolean {
+    return element.ns === A_NS && COLOR_CHOICES.has(element.local);
 }
 
-// null when the element is no colour element. undefined when it is one but names nothing this theme holds.
-function baseColor(element: XmlElement, theme: DrawingTheme): Rgba | null | undefined {
+// The color a fill holds, such as an a:solidFill, a scheme slot or a gradient stop: its first color element, with
+// that element's transforms. It is '#rrggbb', or '#rrggbbaa' when not opaque.
+export function drawingColor(fill: XmlElement | undefined, theme: DrawingTheme): string | undefined {
+    const element = fill && xmlElements(fill).find(isColorChoice);
+    let rgba = element && baseColor(element, theme);
+    if (!element || !rgba) return undefined;
+    for (const transform of xmlElements(element)) {
+        const value = transform.ns === A_NS ? percent(xmlAttr(transform, '', 'val')) : undefined;
+        if (value !== undefined) rgba = transformed(rgba, transform.local, value);
+    }
+    const bytes = rgba.map((component) => Math.round(clamp(component) * 255));
+    const hex = bytes.map((byte) => byte.toString(16).padStart(2, '0'));
+    return `#${hex.slice(0, 3).join('')}${bytes[3] === 255 ? '' : hex[3]}`;
+}
+
+// undefined when the color element names nothing this theme holds.
+function baseColor(element: XmlElement, theme: DrawingTheme): Rgba | undefined {
     const attr = (name: string) => xmlAttr(element, '', name);
     switch (element.local) {
         case 'srgbClr':
@@ -160,7 +162,7 @@ function baseColor(element: XmlElement, theme: DrawingTheme): Rgba | null | unde
                 : undefined;
         }
         default:
-            return null;
+            return undefined;
     }
 }
 
