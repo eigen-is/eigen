@@ -1,7 +1,7 @@
 // Builds the drive events that tell open tabs a file or folder changed, so they refetch it. An event
 // names the path by its ids and nothing more, so the path's name and ACL never travel on the stream.
-// Drive.emit sends one to the owner's own tabs; a change to a file's history also goes to everyone the
-// file is shared with.
+// Most go to the owner's own tabs. A change to a file's history also goes to everyone the file is
+// shared with.
 
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import type { SSEventDrive } from '@workspace/lib/types/sse';

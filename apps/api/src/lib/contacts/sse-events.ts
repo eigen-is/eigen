@@ -1,3 +1,6 @@
+// Builds the contact and label events, which name the changed card or label. A bulk write, such as a
+// whole-file import, sends the one contacts:changed instead of an event per card.
+
 import type { SSEventContact, SSEventContactsChanged, SSEventLabel } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 
