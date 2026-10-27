@@ -1,6 +1,10 @@
-import { apps } from '@workspace/lib/apps';
+// The help center's sections and how each one looks. Pages such as the landing grid and a section
+// page look a section up here. A section about one app wears that app's color and icon; the rest
+// wear the help center's teal.
+
+import { adminApp, apps } from '@workspace/lib/apps';
 import type { LucideIcon } from 'lucide-react';
-import { MonitorSmartphone, Rocket, Server, Settings, Shield } from 'lucide-react';
+import { MonitorSmartphone, Rocket, Server, Settings } from 'lucide-react';
 
 export type SectionConfig = {
     id: string;
@@ -12,7 +16,7 @@ export type SectionConfig = {
 
 // App-backed sections take their icon and brand color from the shared app
 // registry, so the help center stays in sync with the rest of Eigen.
-const appsByName = new Map(apps.map((a) => [a.name, a]));
+const appsByName = new Map([...apps, adminApp].map((a) => [a.name, a]));
 function app(name: string): Pick<SectionConfig, 'icon' | 'color'> {
     const entry = appsByName.get(name);
     if (!entry) throw new Error(`Help section references unknown app: ${name}`);
@@ -61,8 +65,7 @@ export const SECTIONS: SectionConfig[] = [
         id: 'admin',
         title: 'Admin',
         description: 'Organizations, teams, the server.',
-        icon: Shield,
-        color: INDEX,
+        ...app('Admin'),
     },
     {
         id: 'self-hosting',
