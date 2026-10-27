@@ -85,9 +85,9 @@ export const FigureNode = Node.create({
                 parseHTML: (element: HTMLElement) => {
                     const img = element.querySelector<HTMLElement>('img') ?? element;
                     const attr = img.getAttribute('width');
-                    if (attr) return parseInt(attr, 10) || null;
+                    if (attr) return Number.parseFloat(attr) || null;
                     const styleWidth = img.style?.width;
-                    if (styleWidth?.endsWith('px')) return parseInt(styleWidth, 10) || null;
+                    if (styleWidth?.endsWith('px')) return Number.parseFloat(styleWidth) || null;
                     return null;
                 },
             },
@@ -97,7 +97,7 @@ export const FigureNode = Node.create({
                 default: null,
                 parseHTML: (element: HTMLElement) =>
                     isOwnSpan(element)
-                        ? readFrameSide(Number.parseInt(element.querySelector('img')?.getAttribute('height') ?? '', 10))
+                        ? readFrameSide(Number.parseFloat(element.querySelector('img')?.getAttribute('height') ?? ''))
                         : null,
             },
             alignment,

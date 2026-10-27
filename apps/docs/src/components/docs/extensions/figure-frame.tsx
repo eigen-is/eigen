@@ -35,8 +35,8 @@ import type { PaperRoom } from './positioned-figure';
 import { roomOnPaper } from './positioned-figure';
 import { pageScale, textColumnWidth } from './text-column';
 
-// The resize floor of a figure's side (px).
-export const FIGURE_MIN_SIZE = 100;
+// The resize floor of a figure's width (px). A height has none but a pixel, so a thin divider keeps its shape.
+const FIGURE_MIN_WIDTH = 100;
 
 // The widest a resize makes a figure: the text column, half of it for a wrapped figure, and the paper of the page map
 // for one in front of or behind the text.
@@ -46,31 +46,32 @@ export function figureMaxWidth(editor: Editor, layout: FigureLayout | null | und
     return layout === 'wrap-left' || layout === 'wrap-right' ? fullWidth * 0.5 : fullWidth;
 }
 
-// The width a grip, Shift and an arrow, or the panel's Width field writes.
+// The whole width a resize writes, such as a grip's or Shift and an arrow's.
 export function clampFigureWidth(width: number, maxWidth: number) {
-    return Math.round(Math.max(FIGURE_MIN_SIZE, Math.min(maxWidth, width)));
+    return Math.round(Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width)));
 }
 
 // What a size edit writes: a side it leaves out stays as stored.
 export type FigureSizeEdit = { width?: number; height?: number };
 
 // A size the panel asks for, fitted to `maxWidth`: the width within the floor and the cap, and a height that comes with
-// it scaled alongside, so the figure keeps the shape it was given.
+// it scaled alongside, so the figure keeps the shape it was given. Unlike a grip's, it stays unrounded, as a typed cm
+// gives a fraction of a px.
 export function fitFigureSize(size: FigureSizeEdit, maxWidth: number): FigureSizeEdit {
     const { width, height } = size;
     if (width === undefined) return height === undefined ? {} : { height };
-    const fitted = clampFigureWidth(width, maxWidth);
+    const fitted = Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width));
     if (height === undefined) return { width: fitted };
-    return { width: fitted, height: Math.max(1, Math.round((height * fitted) / width)) };
+    return { width: fitted, height: Math.max(1, (height * fitted) / width) };
 }
 
 // A dragged box fitted to the column. With a ratio, the width is the one the box allows at that ratio and the height
-// follows it, so a box whose top stopped at the paper's caps the width too. Without one, each side keeps to the floor.
+// follows it, so a box whose top stopped at the paper's caps the width too. Without one, the width keeps to its floor.
 export function fitFigureBox(next: Box, maxWidth: number, ratio: number | null): FigureSize {
     if (ratio === null) {
         return {
             width: clampFigureWidth(next.width, maxWidth),
-            height: Math.round(Math.max(FIGURE_MIN_SIZE, next.height)),
+            height: Math.round(Math.max(1, next.height)),
         };
     }
     const width = clampFigureWidth(Math.min(next.width, next.height * ratio), maxWidth);
@@ -429,8 +430,10 @@ export const setAspectLocked = (editor: Editor, name: FigureFrameNode, locked: b
     editor.view.dispatch(editor.state.tr.setMeta(ASPECT_LOCK_KEYS[name], locked));
 
 // The lock a node view's grips follow, which the selected figure carries as a decoration.
-export const aspectLockedIn = (decorations: readonly PMDecoration[], name: FigureFrameNode): boolean =>
-    decorations.find((d) => 'aspectLocked' in d.spec)?.spec.aspectLocked ?? ASPECT_LOCKED_BY_DEFAULT[name];
+export function aspectLockedIn(decorations: readonly PMDecoration[], name: FigureFrameNode): boolean {
+    const lock = decorations.find((d) => 'aspectLocked' in d.spec);
+    return lock ? lock.spec.aspectLocked === true : ASPECT_LOCKED_BY_DEFAULT[name];
+}
 
 // The choice follows its figure through an edit around it. A peer's change replaces the whole doc, which maps every
 // position away, while the selection survives it, so the choice survives it too.

@@ -193,8 +193,9 @@ function drawnFigure(node: JSONContent, pkg: Package, cap: number, room: number)
     if (!image && node.type !== 'chart' && (attrs.mediaName || attrs.src)) pkg.lost('images-dropped');
     if (!image) return undefined;
     const cx = extent(image.width);
-    // A stretched picture draws at its stored box, which Word stretches it to as well.
-    const ratio = attrs.height && set > 0 ? attrs.height / set : image.height / image.width;
+    // A stretched picture draws at its stored box, which Word stretches it to as well. The ratio is the stored one, as
+    // a width typed in cm keeps a fraction of a px that the extent rounds.
+    const ratio = attrs.height && attrs.width ? attrs.height / attrs.width : image.height / image.width;
     return {
         image,
         cx,

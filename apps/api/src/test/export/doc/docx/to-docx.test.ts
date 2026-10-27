@@ -2189,6 +2189,8 @@ describe('docx writer — figures', () => {
             ]);
         expect(await extents(doc(p(figure({ ...CHART, width: 320, height: 80 }))))).toEqual([[320, 80]]);
         expect(await extents(doc(p(figure({ ...CHART, width: 1284, height: 200 }))))).toEqual([[COLUMN_PX, 100]]);
+        // 8 x 4 cm, typed in the panel, is 302.36 x 151.18 px, which keeps its ratio at the whole px Word draws.
+        expect(await extents(doc(p(figure({ ...CHART, width: 302.3622, height: 151.1811 }))))).toEqual([[302, 151]]);
     });
 
     test('a caption follows in the Caption style, both aligned as the figure, and takes the margin below', async () => {

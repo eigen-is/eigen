@@ -14,7 +14,7 @@ const { act, createElement } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
 const { DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { Figure } = await import('../../../../components/docs/extensions/figure');
-const { setAspectLocked } = await import('../../../../components/docs/extensions/figure-frame');
+const { fitFigureBox, setAspectLocked } = await import('../../../../components/docs/extensions/figure-frame');
 const { PositionedFigures } = await import('../../../../components/docs/extensions/positioned-figure');
 
 let unmount = async () => {};
@@ -238,6 +238,15 @@ test('an unlocked grip stretches a picture and stores its height', async () => {
         document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: 150 }));
     });
     expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ width: 250, height: 100 });
+});
+
+// A height has no floor but a pixel, so a grip can draw a thin divider, as a docx brings one.
+test('an unlocked grip keeps a width to its floor and a height to a pixel', () => {
+    expect(fitFigureBox({ x: 0, y: 0, width: 40, height: 4.4, angle: 0 }, 600, null)).toEqual({
+        width: 100,
+        height: 4,
+    });
+    expect(fitFigureBox({ x: 0, y: 0, width: 300, height: 0, angle: 0 }, 600, null)).toEqual({ width: 300, height: 1 });
 });
 
 test('a stored height draws the picture stretched to its box', async () => {

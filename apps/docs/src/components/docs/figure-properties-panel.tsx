@@ -24,7 +24,6 @@ import { useState } from 'react';
 import { pictureRatio } from './extensions/figure';
 import type { FigureSizeEdit } from './extensions/figure-frame';
 import {
-    FIGURE_MIN_SIZE,
     figureMaxWidth,
     fitFigureSize,
     isAspectLocked,
@@ -33,11 +32,11 @@ import {
 } from './extensions/figure-frame';
 import { inBand, selectionDrawsInLine } from './extensions/positioned-figure';
 
-// Alt, Cap, Width or Height. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
-// from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit writes
-// nothing back, and an unchanged Width keeps the stored px its cm rounds. A number field shows as many decimals as its
-// step has, and a draft as typed. A draft stays through a transaction that moves the figure, a collaborator typing
-// above it.
+// Alt, Cap, Width or Height. A keystroke starts a draft. Enter or a blur writes it if it differs from the value it
+// started from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit
+// writes nothing back, and an untouched Width keeps the stored px its cm rounds. A number field shows as many decimals
+// as its step has, and a draft as typed. A draft stays through a transaction that moves the figure, such as a
+// collaborator typing above it.
 export function FigureField({
     value,
     placeholder,
@@ -76,7 +75,8 @@ export function FigureField({
     );
 }
 
-// A side in cm to 0.01, written in whole px. An edit below the resize floor is raised to it.
+// A side in cm to 0.01, written in px with the fraction the cm gives, so a typed 8 cm reads back as 8.00. A side is at
+// least a pixel, and the host floors a width further.
 function CmField({ px, onCommit }: { px: number | undefined; onCommit: (px: number) => void }) {
     return (
         <div className="flex items-center gap-1.5">
@@ -86,7 +86,7 @@ function CmField({ px, onCommit }: { px: number | undefined; onCommit: (px: numb
                 value={px === undefined ? '' : cmText(pxToMm(px), 2)}
                 onCommit={(value) => {
                     const mm = readCm(value);
-                    if (Number.isFinite(mm)) onCommit(Math.round(Math.max(FIGURE_MIN_SIZE, mmToPx(mm))));
+                    if (Number.isFinite(mm)) onCommit(Math.max(1, mmToPx(mm)));
                 }}
             />
             <span className="text-xs text-muted-foreground">cm</span>
@@ -252,6 +252,9 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
                         locked && !stretched
                             ? { width: size.width }
                             : { width: size.width ?? width, height: size.height ?? height };
+                    // With no width stored, the picture draws at the width its <img> takes, which a height alone would
+                    // stretch once a width is stored.
+                    if (asked.width === undefined) return;
                     editor.commands.updateFigure(fitFigureSize(asked, figureMaxWidth(editor, layout)));
                 }}
             />

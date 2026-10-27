@@ -86,6 +86,13 @@ describe('figure parse', () => {
         expect(figuresIn(html)).toMatchObject([{ mediaName: 'a.png', width: 320, height: 90 }]);
     });
 
+    // A size typed in cm stores px with a fraction, 8 x 4 cm here, which a Docs-to-Docs paste keeps.
+    test('a figure sized in fractional px survives the HTML round-trip', () => {
+        const size = { width: mmToPx(80), height: mmToPx(40) };
+        const html = generateHTML(figureDoc({ mediaName: 'a.png', ...size }), extensions);
+        expect(figuresIn(html)).toMatchObject([size]);
+    });
+
     test('a figure without a height writes none and comes back without one', () => {
         const html = generateHTML(figureDoc({ mediaName: 'a.png', width: 320 }), extensions);
         expect(html).not.toContain('height');

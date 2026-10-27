@@ -14,7 +14,7 @@ const { default: Collaboration } = await import('@tiptap/extension-collaboration
 const { chartSeriesStyle, mapChartSpecParts, readChartSpec, sampleChartSpec } = await import('@workspace/lib/charts');
 const { parseFill } = await import('@workspace/lib/vector');
 const { getFontFamily } = await import('@workspace/lib/constants/fonts');
-const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { getDocExtensions, mmToPx } = await import('@workspace/lib/docs/eigendoc');
 const { Chart } = await import('../../../components/docs/extensions/chart');
 const { PositionedFigures } = await import('../../../components/docs/extensions/positioned-figure');
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
@@ -211,12 +211,12 @@ const commitSize = async (index: number, value: string) => {
     await press(sizeField(index), { key: 'Enter' });
 };
 
-// 10 cm is 378 px. The sample is 600 x 371 px.
+// 10 cm is 377.95 px, stored as typed. The sample is 600 x 371 px.
 test('a W edit of an unlocked chart writes the width alone, in one undo step', async () => {
     const { editor, undoManager } = await mount();
     expect([sizeField(0)?.value, sizeField(1)?.value]).toEqual(['15.88', '9.82']);
     await commitSize(0, '10');
-    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: 378, height: 371 });
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: mmToPx(100), height: 371 });
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
 
     undoManager.undo();
@@ -229,7 +229,7 @@ test('with Keep aspect ratio checked, a W edit writes both sides in one undo ste
     if (!box) throw new Error('no Keep aspect ratio box');
     await click(box);
     await commitSize(0, '10');
-    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: 378, height: 234 });
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: mmToPx(100), height: 234 });
 
     undoManager.undo();
     expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: 600, height: 371 });

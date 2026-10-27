@@ -100,6 +100,8 @@ function FigureView(props: NodeViewProps) {
         // Intrinsic dimensions need no layout, so the resize handles get their ratio even from a load
         // that happens while the editor is hidden.
         if (hasIntrinsicSize) setAspectRatio(nw / nh);
+        // The Image panel reads the picture's own ratio off this <img>, and a load is no transaction that tells it.
+        if (selected && !height) editor.view.dispatch(editor.state.tr);
 
         const maxWidth = getMaxWidth();
         // A hidden editor measures 0 while the padding subtracts, and that negative width would land in
@@ -126,7 +128,7 @@ function FigureView(props: NodeViewProps) {
             const h = imageRef.current.clientHeight;
             if (w > 0 && h > 0) setAspectRatio(w / h);
         });
-    }, [getMaxWidth, setAttributes, width]);
+    }, [getMaxWidth, setAttributes, width, selected, height, editor]);
 
     const drawn = resize.preview?.size;
     const displayWidth = drawn?.width ?? width;
