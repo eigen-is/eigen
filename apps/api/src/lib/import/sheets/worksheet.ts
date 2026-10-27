@@ -1,4 +1,4 @@
-// A worksheet past its grid: the default column width and row height, the tab colour, the column widths and hidden
+// A worksheet past its grid: the default column width and row height, the tab color, the column widths and hidden
 // columns, the merges, the frozen panes and gridlines, the filter's span and the hyperlinks. A merge's cells and a
 // link's cell are placed before the grid is read, so the grid's cell there takes them, and a place the grid holds no
 // cell for still gets one. Only what the file holds is walked: a merge's cells after its area is charged, a column

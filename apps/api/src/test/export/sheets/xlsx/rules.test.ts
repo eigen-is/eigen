@@ -157,7 +157,7 @@ describe('a conditional format', () => {
         expect(conditionalFormatRules).toEqual(rules);
     });
 
-    test('equal looks share a dxf through the registry, and a rule without colours names none', () => {
+    test('equal looks share a dxf through the registry, and a rule without colors names none', () => {
         const { xml, looks, conditionalFormatRules } = roundTrip({
             conditionalFormatRules: [
                 condition('greaterThan', ['1']),

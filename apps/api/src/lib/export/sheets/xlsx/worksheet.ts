@@ -142,7 +142,7 @@ function mergesXml(sheet: Sheet): string {
 }
 
 // A link is independent of its cell's value: a web address is an external relationship, a place in the workbook a
-// location, labelled by the cell's text as Excel and Google label one. A sheet the workbook renamed is named as written;
+// location, labeled by the cell's text as Excel and Google label one. A sheet the workbook renamed is named as written;
 // a `sheet` link to a name no sheet holds is a defined name's, as the import reads a location without a cell.
 function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relationship[]): string {
     const entries = Object.entries(sheet.hyperlink ?? {});

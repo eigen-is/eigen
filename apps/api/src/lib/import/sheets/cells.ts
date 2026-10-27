@@ -50,7 +50,7 @@ export type Grid = {
     // The rows of a height the file marks customHeight, which Excel draws at that height and never fits to their content.
     custom: Set<number>;
     rowhidden: Record<string, number>;
-    // The rows and columns the cells reach; recalc materialises at least a default grid's.
+    // The rows and columns the cells reach; recalc materializes at least a default grid's.
     rows: number;
     columns: number;
     // A 1904 workbook's date cells, by cellKey, whose serials the reader moved to the 1900 system.

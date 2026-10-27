@@ -41,7 +41,7 @@ export const MAX_TEXT = 250_000_000;
 // A shared formula's copy is translated before it is weighed, at about 3M characters a second. The corpus translates
 // at most 3.1M characters, in a GOV.UK inspections workbook of 24,706 copies. Five times that is about 5 s.
 export const MAX_SHARED_FORMULA_TEXT = 16_000_000;
-// Recalc materialises a sheet's rows by its columns, each at least a default grid's, at about 13 bytes a slot, so a
+// Recalc materializes a sheet's rows by its columns, each at least a default grid's, at about 13 bytes a slot, so a
 // narrow sheet's span is far smaller than its grid. The corpus builds at most 27.3M, in docling's inflated test file of
 // one sheet of a million rows. Four times that recalcs in about a second at 1.4 GB.
 export const MAX_GRID_SLOTS = 110_000_000;
@@ -52,7 +52,7 @@ export type XlsxOptions = {
 
 // Every worksheet's grid and what lies past it, charged against the output budget as it is read. The cells count what
 // they emit, a value, a rich string's run, a border, a row's height or hidden flag, a merged or linked cell, a column's
-// width, a rule's range or a validated cell, and the grids recalc materialises; the text counts every value, display,
+// width, a rule's range or a validated cell, and the grids recalc materializes; the text counts every value, display,
 // run, formula, link and rule text, each shared string and shared formula once per copy. A chart sheet is a sheet
 // without a grid. The pictures come back beside the sheets as the media files their images name, and what was left out
 // as warnings that count it.
@@ -116,7 +116,7 @@ export function readXlsx(
                 chargeCopy: emitted.translated.charge,
                 placed: worksheet.placed,
             });
-            // The cells' span, at least a default grid's so empty sheets add up; and the grid recalc materialises from it,
+            // The cells' span, at least a default grid's so empty sheets add up; and the grid recalc materializes from it,
             // at least a default grid deep and wide, so a narrow sheet builds far more slots than it spans.
             emitted.span.charge(
                 Math.max(grid.rows * grid.columns, DEFAULT_SHEET_ROW_COUNT * DEFAULT_SHEET_COLUMN_COUNT),

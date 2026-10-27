@@ -713,7 +713,7 @@ describe('Sheets HTML export — cell styling', () => {
         expect(out.css).toContain('transform:translateX(1.000em) rotate(90deg)');
     });
 
-    test('rotated cells skip ht/vt in favour of position:relative', () => {
+    test('rotated cells skip ht/vt in favor of position:relative', () => {
         // The rotated span is absolutely-positioned in the cell, so emitting text-align
         // or vertical-align on the td has nothing to act on. Confirms we don't drag the
         // user's ht=center / vt=middle into a now-meaningless td-level declaration.
@@ -728,7 +728,7 @@ describe('Sheets HTML export — cell styling', () => {
         expect(out.css).not.toContain('text-align:left');
     });
 
-    test("a cell without an alignment of its own takes Excel's General, as the editor draws it: a number or date right, a boolean or error centred; text and a picked one keep theirs", () => {
+    test("a cell without an alignment of its own takes Excel's General, as the editor draws it: a number or date right, a boolean or error centered; text and a picked one keep theirs", () => {
         const css = (v: Cell) => renderSheetsHtml([makeSheet([{ r: 0, c: 0, v }])], NO_MEDIA, 'screen').css;
         expect(css({ v: 42, m: '42', ct: { fa: 'General', t: 'n' } })).toContain('text-align:right');
         expect(css({ v: 45000, m: '3/15/2023', ct: { fa: 'General', t: 'd' } })).toContain('text-align:right');

@@ -59,7 +59,7 @@ const extension = (inner: string) =>
     `<extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" xmlns:x14="${X14}" xmlns:xm="${XM}">${inner}</ext></extLst>`;
 
 describe('a dxf', () => {
-    test('names its fill in bgColor, or fgColor first where both are, and its font colour from the theme', () => {
+    test('names its fill in bgColor, or fgColor first where both are, and its font color from the theme', () => {
         expect(DXFS).toEqual([
             { textColor: '#9C0006', cellColor: '#FFC7CE' },
             { textColor: null, cellColor: '#00FF00' },
@@ -205,7 +205,7 @@ describe('a conditional format', () => {
         ]);
     });
 
-    test('a colour scale lists its stops from the maximum; a data bar is one solid colour', () => {
+    test('a color scale lists its stops from the maximum; a data bar is one solid color', () => {
         const { conditionalFormatRules } = read(
             cf(
                 'C1:C3',

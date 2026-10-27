@@ -1,5 +1,5 @@
-// A workbook's preview body: the first rows and columns of its sheets, drawn by the sheet export's renderer and
-// sanitized. It runs in the transform process, so it reaches neither the Mount nor the transform seam, and its
+// A workbook's preview body: the first rows and columns of its first shown sheet, drawn by the sheet export's renderer
+// and sanitized. It runs in the transform process, so it reaches neither the Mount nor the transform seam, and its
 // floating images resolve through the URL map the main thread prepared. The renderer stays out of the main process.
 
 import type * as Y from 'yjs';
