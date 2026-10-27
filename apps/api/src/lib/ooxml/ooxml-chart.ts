@@ -237,13 +237,14 @@ function chartSpec(
     };
     // A series shows its values as its own c:dLbls says, else as its group's. A point's own c:dLbl is not read, and a
     // pie keeps the labels it always draws.
+    const shows = (labels: XmlElement | undefined) =>
+        type !== 'pie' &&
+        isOnElement(child(labels, 'delete')) !== true &&
+        isOnElement(child(labels, 'showVal')) === true;
+    const groupShows = shows(child(group, 'dLbls'));
     const labelled = (ser: XmlElement) => {
-        const labels = child(ser, 'dLbls') ?? child(group, 'dLbls');
-        return (
-            type !== 'pie' &&
-            isOnElement(child(labels, 'delete')) !== true &&
-            isOnElement(child(labels, 'showVal')) === true
-        );
+        const own = child(ser, 'dLbls');
+        return own ? shows(own) : groupShows;
     };
     const style = (ser: XmlElement, index: number): ChartSeriesStyle => ({
         ...DEFAULT_CHART_SERIES_STYLE,
