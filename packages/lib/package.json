@@ -65,6 +65,7 @@
     "./comments": "./src/core/comments/index.ts",
     "./contacts": "./src/core/contacts/index.ts",
     "./drive": "./src/core/drive/index.ts",
+    "./docs": "./src/core/docs/index.ts",
     "./editor": "./src/core/editor/index.ts",
     "./home": "./src/core/home/index.ts",
     "./mail": "./src/core/mail/index.ts",

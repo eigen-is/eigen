@@ -56,6 +56,13 @@ export const spaceRouter = new Elysia({ name: 'space' })
                     }),
                 ),
                 celebrations: t.Optional(t.Boolean()),
+                docsView: t.Optional(
+                    t.Object({
+                        textWidth: t.Optional(
+                            t.Union([t.Literal('narrow'), t.Literal('medium'), t.Literal('wide'), t.Literal('full')]),
+                        ),
+                    }),
+                ),
             }),
             auth: true,
         },
