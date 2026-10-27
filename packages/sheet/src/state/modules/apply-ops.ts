@@ -33,10 +33,14 @@ export function applyOpBatch(ctx: Context, ops: Op[]): Context | null {
                 materialized.push(id);
             }
             for (const op of ops) {
+                const { id } = op;
                 // force: a peer's op lands for a read-only viewer too, or the grid and the metadata patches part ways.
-                if (op.op === 'insertRowCol') skipRowColError(() => insertRowCol(draft, op.value, false, true));
-                else if (op.op === 'deleteRowCol') skipRowColError(() => deleteRowCol(draft, op.value, true));
-                else if (op.op === 'addSheet' && op.value?.id) {
+                // The op names its sheet, as the replay reads it, whatever its value carries.
+                if (op.op === 'insertRowCol' && id) {
+                    skipRowColError(() => insertRowCol(draft, { ...op.value, id }, false, true));
+                } else if (op.op === 'deleteRowCol' && id) {
+                    skipRowColError(() => deleteRowCol(draft, { ...op.value, id }, true));
+                } else if (op.op === 'addSheet' && op.value?.id) {
                     // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
                     const value = cloneDeep(op.value);
                     addSheet(draft, undefined, value.id, false, undefined, value, true);
@@ -44,7 +48,7 @@ export function applyOpBatch(ctx: Context, ops: Op[]): Context | null {
                     if (index == null) continue;
                     initSheetData(draft, index, value);
                     materialized.push(value.id);
-                } else if (op.op === 'deleteSheet' && op.id) deleteSheet(draft, op.id, true);
+                } else if (op.op === 'deleteSheet' && id) deleteSheet(draft, id, true);
             }
             [patches] = opToPatch(draft, ops);
             if (ops[0]?.path?.[0] === 'filterRange') draft.filterRange = ops[0].value;

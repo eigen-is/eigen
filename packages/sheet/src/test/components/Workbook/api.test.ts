@@ -242,6 +242,20 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         expect(dataToCelldata(applyPeerOps(ctx, ops).sheets[1].data)).toEqual(dataToCelldata(joiner.data));
     });
 
+    it("inserts on the op's own sheet, as the replay does, whatever sheet is current", () => {
+        const ops: Op[] = [
+            {
+                op: 'insertRowCol',
+                id: 'id_2',
+                path: [],
+                value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+            },
+        ];
+        const ctx = makeCtx({ v: 1, m: '1' });
+        const next = applyPeerOps(ctx, ops);
+        expect(next.sheets.map((s) => s.data?.length)).toEqual(join(ctx, [ops]).map((s) => s.data?.length));
+    });
+
     it('skips an insert into a read-only row and applies the rest, as the replay does', () => {
         const ops: Op[] = [
             {
