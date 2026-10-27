@@ -53,7 +53,7 @@ const REWIND = 'rewind';
 
 const POSITIONED_BOXES = '.figure[data-layout="front"], .figure[data-layout="behind"]';
 
-export const isPositionedFigure = (node: PMNode | null | undefined): boolean =>
+const isPositionedFigure = (node: PMNode | null | undefined): boolean =>
     !!node && isFigureFrameNode(node.type.name) && isPositioned(node.attrs.layout);
 
 // How many positioned figures a textblock starts with. Each is one position long.
