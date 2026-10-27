@@ -40,6 +40,7 @@ import {
     CHECKBOX_GLYPHS,
     DEFAULT_RUN_SIZE,
     LIST_LEVELS,
+    NO_TOC_ENTRIES,
     NOTE_SEPARATORS,
     SINGLE_LINE,
     STYLE_NAMES,
@@ -58,7 +59,7 @@ import type { Numbering } from './numbering';
 import { readNumbering } from './numbering';
 import type { DocxPackage } from './package';
 import { descendants, twipsOf, w, wChild, wordAlternative } from './package';
-import type { Field, Piece, RunContext } from './runs';
+import type { Contents, Field, Piece, RunContext } from './runs';
 import { walkInline } from './runs';
 import type { DocxRunProps, ParaProps, Role } from './styles';
 import { mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
@@ -85,6 +86,9 @@ export type Reader = {
     notes: Map<string, { content: JSONContent[]; weight: number }>;
     openNotes: string[];
     fields: Field[];
+    // The table of contents whose result the walk is in, and each one read, in document order.
+    contents: Contents | undefined;
+    tocs: Contents[];
     // The parts of a SmartArt's or a band's chart read: each is read once.
     graphicParts: Set<string>;
     // The theme's colours a chart's series take, and each chart part as read.
@@ -156,6 +160,8 @@ export function createReader(
         notes: new Map(),
         openNotes: [],
         fields: [],
+        contents: undefined,
+        tocs: [],
         graphicParts: new Set(),
         colors: drawingTheme(pkg.theme),
         charts: new Map(),
@@ -206,7 +212,12 @@ export function readDocument(reader: Reader): JSONContent[] {
     const body = wChild(reader.pkg.document.root, 'body');
     if (!body) return [];
     const scope: Scope = { part: reader.pkg.document, story: 'body', tables: 0 };
-    return placeAnchors(buildBlocks(readBlocks(reader, xmlElements(body), scope)), reader.normal);
+    const items = readBlocks(reader, xmlElements(body), scope);
+    // A table of contents the file never ends would take the rest of the doc with it, so what it cut is read again.
+    const unended = reader.contents;
+    reader.contents = undefined;
+    for (const { p, scope } of unended?.paragraphs ?? []) items.push(...readParagraph(reader, p, scope));
+    return placeAnchors(buildBlocks(items), reader.normal);
 }
 
 // A header or footer part's blocks, read as the body's are, through the part's own relationships, its lists counting
@@ -214,6 +225,7 @@ export function readDocument(reader: Reader): JSONContent[] {
 // there isn't kept.
 export function readBand(reader: Reader, part: Part): JSONContent[] {
     reader.fields.length = 0;
+    reader.contents = undefined;
     const { numbering } = reader;
     reader.numbering = numbering.restarted();
     const blocks = buildBlocks(readBlocks(reader, xmlElements(part.root), { part, story: 'band', tables: 0 }));
@@ -258,9 +270,11 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     }
     const found = reader.noteElements.get(note);
     if (!found || reader.openNotes.length > 1 || reader.openNotes.includes(note)) return undefined;
-    // A field open in the body around the reference stays open there, and so do the body's list counters.
-    const { fields, numbering } = reader;
+    // A field open in the body around the reference stays open there, a table of contents too, and so do the body's
+    // list counters.
+    const { fields, contents, numbering } = reader;
     reader.fields = [];
+    reader.contents = undefined;
     reader.numbering = numbering.restarted();
     reader.openNotes.push(note);
     const blocks = buildBlocks(
@@ -268,6 +282,7 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     );
     reader.openNotes.pop();
     reader.fields = fields;
+    reader.contents = contents;
     reader.numbering = numbering;
     const paragraphs = blocks.flatMap(noteParagraphs);
     trimStart(paragraphs[0]?.content ?? []);
@@ -345,6 +360,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         pieces: [],
         pending: [],
         leftOut: [],
+        contents: reader.contents && { toc: reader.contents, from: 0, opened: false },
     };
     walkInline(
         reader,
@@ -352,6 +368,20 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         context,
     );
     const { pieces } = context;
+    // A table of contents' result is cut: Word's saved entry, its text up to the tab before its page number, is kept to
+    // compare. The node stands after what this paragraph keeps, where the field began.
+    const cut = context.contents;
+    const toc: Item[] = cut?.opened
+        ? [{ kind: 'block', node: { type: 'tableOfContents', attrs: { levels: cut.toc.levels } } }]
+        : [];
+    if (cut) {
+        const result = pieces.splice(cut.from, (cut.to ?? pieces.length) - cut.from);
+        const text = result.map((piece) => (piece.kind === 'node' ? (piece.node.text ?? '') : '')).join('');
+        const saved = text.includes('\t') ? text.slice(0, text.lastIndexOf('\t')) : text;
+        if (saved.trim() && saved.trim() !== NO_TOC_ENTRIES) cut.toc.saved.push(saved);
+        if (cut.to === undefined && !cut.opened) cut.toc.paragraphs.push({ p, scope });
+        if (!isShown(pieces)) return toc;
+    }
     const task = taskOf(pieces);
     if (task?.checked && role.kind === 'paragraph') role = { kind: 'taskDone' };
     for (const [index, piece] of pieces.entries())
@@ -598,7 +628,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     }
     for (const leftOut of context.leftOut) leftOut.textAlign = textAlign;
     if (props.sectionBreak && scope.story === 'body') items.push({ kind: 'break' });
-    return items;
+    return [...items, ...toc];
 }
 
 // Each run's text in the faces Word draws it in, beside the run's own properties. A run's text box is not searched.

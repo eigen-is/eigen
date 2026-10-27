@@ -956,14 +956,15 @@ describe("the all-features doc's Google Docs re-save", () => {
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
-        // The recording predates the title, the subtitle, the note's paragraph, the equations' paragraph, the page
-        // number and the figures in front of and behind the text, so it holds none of them, and its export wrote no
-        // chart.
+        // The recording predates the title, the subtitle, the table of contents, the note's paragraph, the equations'
+        // paragraph, the page number and the figures in front of and behind the text, so it holds none of them, and its
+        // export wrote no chart.
         source.content = source.content
             .filter(
                 (block: JSONContent) =>
                     block.type !== 'title' &&
                     block.type !== 'subtitle' &&
+                    block.type !== 'tableOfContents' &&
                     !block.content?.some(
                         (inline: JSONContent) =>
                             ['pageNumber', 'equation', 'footnote'].includes(inline.type ?? '') ||

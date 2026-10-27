@@ -170,6 +170,7 @@ export const COUNTED_WARNING_CODES = [
     'number-formats-dropped',
     'cell-formats-dropped',
     'links-dropped',
+    'toc-entries-changed',
 ] as const;
 export type CountedWarningCode = (typeof COUNTED_WARNING_CODES)[number];
 
