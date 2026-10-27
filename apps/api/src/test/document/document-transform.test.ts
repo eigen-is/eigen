@@ -1276,15 +1276,17 @@ describe('document transform (eigendoc)', () => {
         120_000,
     );
 
-    // The prep runs inside the job, under its deadline, dialed down here so no test waits out 120 s.
+    // The prep runs inside the job, under its deadline, dialed down here so no test waits out 120 s. The first encode is
+    // held until the job has timed out, so a loaded machine that is slow to start the child cannot reorder the two.
     test("a docx's media prep spends from the export's deadline, and once it is spent queues no more media and times out", async () => {
         const doc = await seedFigureDoc('deadline-doc', ['a.png', 'b.png']);
         for (const name of ['a.png', 'b.png']) await seedDocumentMedia(doc.mount, doc.path, name, TEST_PNG_BYTES);
         const limits = TRANSFORM_LIMITS.export;
         const { deadlineMs } = limits;
-        limits.deadlineMs = 4_000;
+        limits.deadlineMs = 15_000;
+        const timedOut = Promise.withResolvers<void>();
         const encode = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
-            await Bun.sleep(4_500);
+            await timedOut.promise;
             return null;
         });
         let failure: unknown;
@@ -1293,6 +1295,7 @@ describe('document transform (eigendoc)', () => {
             failure = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, doc.mount, doc.path).catch(
                 (err: unknown) => err,
             );
+            timedOut.resolve();
             await Bun.sleep(600);
             calls = encode.mock.calls.length;
         } finally {

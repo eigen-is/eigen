@@ -6,6 +6,7 @@ import { exportDocument, runDocumentExport } from '../../lib/export/export-docum
 import { sanitizeSceneHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
+import { cpuClock } from '../cpu-time';
 import {
     buildGoldenVectorScene,
     GOLDEN_MEDIA_NAME,
@@ -167,9 +168,9 @@ describe('Eigenvector export — rich-text nesting', () => {
 
     // jsdom walks every ancestor of each node it inserts, so this body took seconds per parse uncapped.
     test('a list a peer nested 3,000 deep reaches the sanitizer flattened, every x kept', () => {
-        const start = performance.now();
+        const cpuMs = cpuClock();
         const html = sanitizeRead(`${'<ul><li>x'.repeat(3_000)}${'</li></ul>'.repeat(3_000)}`);
-        expect(performance.now() - start).toBeLessThan(1_000);
+        expect(cpuMs()).toBeLessThan(1_000);
         expect(html).toBe(`<p>${'x'.repeat(3_000)}</p>`);
     });
 
@@ -181,10 +182,10 @@ describe('Eigenvector export — rich-text nesting', () => {
         ['an <li> in an open <li>', fill(`<ul><li>${ems}<li>x</li>`, '<li>x</li>')],
         ['empty paragraphs with a <br>', fill(`<p>${marks}</p>`, '<p><br></p>')],
     ])('%s sanitizes in linear time, its text kept', (_, body) => {
-        const start = performance.now();
+        const cpuMs = cpuClock();
         const html = sanitizeRead(body);
         // 8,000 flattened paragraphs parse in about 0.5 s; the drift held jsdom 8–17 s.
-        expect(performance.now() - start).toBeLessThan(2_000);
+        expect(cpuMs()).toBeLessThan(2_000);
         expect(html).not.toContain('<em');
         expect(html.replace(/<[^>]*>/g, '')).toBe(body.replace(/<[^>]*>/g, ''));
     });
