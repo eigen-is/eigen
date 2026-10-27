@@ -96,6 +96,15 @@ function select(input: HTMLElement, start: number, end = start) {
     document.getSelection()?.addRange(range);
 }
 
+function selectWord(word: Node | null | undefined) {
+    if (!word?.textContent) throw new Error('no word to select');
+    const range = document.createRange();
+    range.setStart(word, 0);
+    range.setEnd(word, word.textContent.length);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+}
+
 function press(input: HTMLElement, code: string) {
     const key = new KeyboardEvent('keydown', {
         code,
@@ -134,6 +143,21 @@ test('⌘B on a caret bolds what is typed next', async () => {
         ['hello ', 0],
         ['big ', 1],
         ['world', 0],
+    ]);
+});
+
+test('text typed over a selected bold word is bold', async () => {
+    const { input } = await openEditor('hello <span style="font-weight: bold">big</span> world');
+    selectWord(input.querySelector('span')?.firstChild);
+    const typing = new InputEvent('beforeinput', { inputType: 'insertText', data: 'Z', cancelable: true });
+    act(() => {
+        input.dispatchEvent(typing);
+    });
+    expect(typing.defaultPrevented).toBe(true);
+    expect(committedRuns(input, null).map(({ v, bl }) => [v, bl])).toEqual([
+        ['hello ', 0],
+        ['Z', 1],
+        [' world', 0],
     ]);
 });
 
@@ -201,6 +225,18 @@ describe('paste while a cell is open', () => {
         select(input, 6);
         expect(paste(input, '<div><font color="red"><b>big</b></font><br></div>', 'big').defaultPrevented).toBe(true);
         expect(inserted).toEqual(['big']);
+    });
+
+    test('over a selected bold word is bold', async () => {
+        const { input } = await openEditor('hello <span style="font-weight: bold">big</span> world');
+        selectWord(input.querySelector('span')?.firstChild);
+        paste(input, '<i>Z</i>', 'Z');
+        expect(inserted).toEqual([]);
+        expect(committedRuns(input, null).map(({ v, bl }) => [v, bl])).toEqual([
+            ['hello ', 0],
+            ['Z', 1],
+            [' world', 0],
+        ]);
     });
 
     test('types in a caret format waiting at the caret', async () => {

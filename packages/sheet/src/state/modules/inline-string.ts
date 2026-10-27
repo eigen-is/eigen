@@ -22,7 +22,7 @@ type TextRun = RunStyle & { v: string };
 type InlineStringCell = Cell & { ct: { t: 'inlineStr'; s: InlineStringSegment[] } };
 
 // A format on a bare caret, waiting for the text typed there next, as in Google Sheets and Excel.
-type PendingStyle = { at: number; base: RunStyle; style: Partial<RunStyle> };
+type PendingStyle = { at: number; style: Partial<RunStyle> };
 
 const DEFAULT_COLOR = '#000000';
 
@@ -133,13 +133,13 @@ export function formatEditorSelection(
     const offsets = selectionOffsets(input) ?? savedSelections.get(input);
     if (!offsets) return;
     const [start, end] = offsets;
-    const base = runStyleOf(cell);
     const style = styleValue(key, value);
     if (start === end) {
         const pending = pendingStyles.get(input);
         const earlier = pending?.at === start ? pending.style : {};
-        pendingStyles.set(input, { at: start, base, style: { ...earlier, ...style } });
+        pendingStyles.set(input, { at: start, style: { ...earlier, ...style } });
     } else {
+        const base = runStyleOf(cell);
         input.innerHTML = runsHtml(applyRunStyle(readRuns(input, base), start, end, style), base);
     }
     setSelectionOffsets(input, start, end);
@@ -167,19 +167,32 @@ export function editorSelectionStyle(input: HTMLElement, cell: Cell | null | und
     return style;
 }
 
-// Types `text` at the caret in the pending style, if a format left one there. False leaves the typing to
-// the browser.
-export function typeWithPendingStyle(input: HTMLElement, text: string): boolean {
+// Types `text` where the browser can't keep the style Google Sheets and Docs give it: at a caret in the
+// pending style a format left there, and over selected characters in the style of the first one, which
+// the browser drops when the selection holds all of a styled span. False leaves the typing to the browser.
+export function typeStyledText(input: HTMLElement, cell: Cell | null | undefined, text: string): boolean {
     const pending = pendingStyles.get(input);
     pendingStyles.delete(input);
     const offsets = selectionOffsets(input);
-    if (!pending || !offsets || offsets[0] !== pending.at || offsets[1] !== pending.at) return false;
-    const runs = readRuns(input, pending.base);
-    const at = splitAt(runs, pending.at);
-    const left = runs[at - 1] ?? runs[at] ?? pending.base;
-    runs.splice(at, 0, { ...runStyleOf(left), ...pending.style, v: text });
-    input.innerHTML = runsHtml(mergeRuns(runs), pending.base);
-    setSelectionOffsets(input, pending.at + text.length, pending.at + text.length);
+    if (!offsets) return false;
+    const [start, end] = offsets;
+    const base = runStyleOf(cell);
+    const runs = readRuns(input, base);
+    const at = splitAt(runs, start);
+    let typed: TextRun;
+    if (start === end) {
+        if (pending?.at !== start) return false;
+        typed = { ...runStyleOf(runs[at - 1] ?? runs[at] ?? base), ...pending.style, v: text };
+    } else {
+        // Plain text replaced types as the browser types it, and a formula's colored references are no runs.
+        const first = runs[at];
+        if (!first || sameRunStyle(first, base) || input.textContent?.startsWith('=')) return false;
+        typed = { ...first, v: text };
+        runs.splice(at, splitAt(runs, end) - at);
+    }
+    runs.splice(at, 0, typed);
+    input.innerHTML = runsHtml(mergeRuns(runs), base);
+    setSelectionOffsets(input, start + text.length, start + text.length);
     return true;
 }
 

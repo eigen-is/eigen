@@ -14,7 +14,7 @@ import {
     forgetEditorSelection,
     rememberEditorSelection,
     runStyleOf,
-    typeWithPendingStyle,
+    typeStyledText,
 } from '../../../state/modules/inline-string';
 import {
     handleBold,
@@ -283,12 +283,30 @@ describe('the style at the caret', () => {
         select(edit.input, 6);
         handleBold(edit.ctx, edit.input);
         expect(editorSelectionStyle(edit.input, null)?.bl).toBe(1);
-        expect(typeWithPendingStyle(edit.input, 'big ')).toBe(true);
+        expect(typeStyledText(edit.input, null, 'big ')).toBe(true);
         expect(runs(commit(edit))).toEqual([
             ['hello ', 0],
             ['big ', 1],
             ['world', 0],
         ]);
+    });
+
+    // As in Google Sheets and Docs: text typed over selected characters takes the style of the first one.
+    test('text typed over a selected styled word takes its style', () => {
+        const edit = editing('hello <span style="font-family: &quot;Source Serif 4&quot;">big</span> world');
+        select(edit.input, 6, 9);
+        expect(typeStyledText(edit.input, null, 'Z')).toBe(true);
+        expect(runs(commit(edit), 'ff')).toEqual([
+            ['hello ', 'Inter'],
+            ['Z', 'Source Serif 4'],
+            [' world', 'Inter'],
+        ]);
+    });
+
+    test('text typed over a selection that starts in the plain text is left to the browser', () => {
+        const edit = editing('hello <b>big</b> world');
+        select(edit.input, 4, 8);
+        expect(typeStyledText(edit.input, null, 'Z')).toBe(false);
     });
 
     test('a caret after a line break the browser wrote as <br> keeps its place', () => {
@@ -300,7 +318,7 @@ describe('the style at the caret', () => {
         document.getSelection()?.removeAllRanges();
         document.getSelection()?.addRange(range);
         handleBold(edit.ctx, edit.input);
-        expect(typeWithPendingStyle(edit.input, 'X')).toBe(true);
+        expect(typeStyledText(edit.input, null, 'X')).toBe(true);
         expect(runs(commit(edit))).toEqual([
             ['ab\r\nc', 0],
             ['X', 1],
@@ -316,7 +334,7 @@ describe('the style at the caret', () => {
         document.getSelection()?.removeAllRanges();
         expect(editorSelectionStyle(edit.input, null)).toBeNull();
         select(edit.input, 6);
-        expect(typeWithPendingStyle(edit.input, 'x')).toBe(false);
+        expect(typeStyledText(edit.input, null, 'x')).toBe(false);
     });
 
     test('a caret moved away drops the pending style', () => {
@@ -325,6 +343,6 @@ describe('the style at the caret', () => {
         handleBold(edit.ctx, edit.input);
         select(edit.input, 2);
         rememberEditorSelection(edit.input);
-        expect(typeWithPendingStyle(edit.input, 'x')).toBe(false);
+        expect(typeStyledText(edit.input, null, 'x')).toBe(false);
     });
 });

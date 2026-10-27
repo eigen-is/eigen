@@ -1,7 +1,8 @@
 // The in-cell editor: a contenteditable over the cell being edited. It opens with the cell's text, its
 // formula as colored references or its rich-text runs as spans, and the grid's keyboard handlers commit
 // it. While it is open on text, ⌘B, ⌘I and ⌘U format its selected characters, a format on a bare caret
-// styles the text typed there next, and a paste inserts plain text.
+// styles the text typed there next, text typed over a selection takes the style of its first character,
+// and a paste inserts plain text.
 
 import { escapeHtml } from '@workspace/lib/html';
 import { isEqual } from 'es-toolkit/compat';
@@ -31,7 +32,7 @@ import {
     moveHighlightCell,
     moveToEnd,
     rememberEditorSelection,
-    typeWithPendingStyle,
+    typeStyledText,
     valueShowEs,
 } from '../../state';
 import { ContentEditable } from './ContentEditable';
@@ -144,25 +145,30 @@ export const InputBox: React.FC = () => {
         setIsHidenRC(isShowHidenCR(context));
     }, [context.selections]);
 
-    // The selection is kept for a toolbar control that takes the focus, such as the size box. Text typed
-    // where a format left a pending style is inserted in that style, so the browser's own insert is
-    // replaced by one that goes through the same input event.
+    // The selection is kept for a toolbar control that takes the focus, such as the size box.
     useEffect(() => {
         const input = inputRef.current;
         if (!input) return;
         const remember = () => rememberEditorSelection(input);
-        const typePending = (e: InputEvent) => {
-            if (e.inputType !== 'insertText' || !e.data || !typeWithPendingStyle(input, e.data)) return;
+        input.ownerDocument.addEventListener('selectionchange', remember);
+        return () => input.ownerDocument.removeEventListener('selectionchange', remember);
+    }, []);
+
+    // Text typed where a format left a pending style, or over a styled selection, is inserted in its style,
+    // so the browser's own insert is replaced by one that goes through the same input event.
+    const [editingRow, editingColumn] = context.editingCellPosition;
+    const editingCell = getFlowdata(context)?.[editingRow]?.[editingColumn];
+    useEffect(() => {
+        const input = inputRef.current;
+        if (!input) return;
+        const typeStyled = (e: InputEvent) => {
+            if (e.inputType !== 'insertText' || !e.data || !typeStyledText(input, editingCell, e.data)) return;
             e.preventDefault();
             input.dispatchEvent(new Event('input', { bubbles: true }));
         };
-        input.ownerDocument.addEventListener('selectionchange', remember);
-        input.addEventListener('beforeinput', typePending);
-        return () => {
-            input.ownerDocument.removeEventListener('selectionchange', remember);
-            input.removeEventListener('beforeinput', typePending);
-        };
-    }, []);
+        input.addEventListener('beforeinput', typeStyled);
+        return () => input.removeEventListener('beforeinput', typeStyled);
+    }, [editingCell]);
 
     const [inputFocused, setInputFocused] = useState(false);
     const formulaAutocomplete = useFormulaAutocomplete({ targetRef: inputRef, enabled: inputFocused });
@@ -259,7 +265,7 @@ export const InputBox: React.FC = () => {
         [refs.cellInput, refs.fxInput, setContext],
     );
 
-    // A paste into the open editor is its plain text, as in Google Sheets: the style at the caret types it,
+    // A paste into the open editor is its plain text, as in Google Sheets: it types as typed text would,
     // and the browser's undo keeps it. The grid pastes a closed cell.
     const onPaste = useCallback(
         (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -267,10 +273,10 @@ export const InputBox: React.FC = () => {
             const input = inputRef.current;
             if (context.editingCellPosition.length === 0 || !input) return;
             const text = e.clipboardData.getData('text/plain');
-            if (typeWithPendingStyle(input, text)) input.dispatchEvent(new Event('input', { bubbles: true }));
+            if (typeStyledText(input, editingCell, text)) input.dispatchEvent(new Event('input', { bubbles: true }));
             else document.execCommand('insertText', false, text);
         },
-        [context.editingCellPosition],
+        [context.editingCellPosition, editingCell],
     );
 
     const cfg = getSheetConfig(context);
