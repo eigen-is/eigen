@@ -75,27 +75,23 @@ jobs:
 
       # The production image's PDF engine: Pango from the distro, WeasyPrint pinned by hash in a venv, as docker/api/Dockerfile
       # installs them, so the WeasyPrint tests run here instead of skipping; poppler-utils gives the PDF pixel tests pdftoppm.
-      # The venv and the packages the runner image lacks are cached per image and requirements, since the Ubuntu mirror
-      # took anything from 1 to 50 s to serve them. A change to this file starts a fresh cache.
-      - name: Runner image
-        id: image
-        run: echo "version=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
-
+      # The venv and the packages the runner image lacks are cached per Ubuntu release and requirements, since the Ubuntu
+      # mirror took anything from 1 to 50 s to serve them. Not per image version: two of them serve runs at once while a
+      # new one rolls out. A cached copy that no longer installs is built again. A change to this file starts a fresh cache.
       - uses: actions/cache@v4
         id: pdf-engine
         with:
           path: |
             ~/weasyprint
             ~/pdf-debs
-          key: pdf-engine-${{ steps.image.outputs.version }}-${{ hashFiles('docker/api/weasyprint-requirements.txt', '.github/workflows/check.yml') }}
+          key: pdf-engine-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('docker/api/weasyprint-requirements.txt', '.github/workflows/check.yml') }}
 
       - name: WeasyPrint
         env:
           CACHED: ${{ steps.pdf-engine.outputs.cache-hit }}
         run: |
-          if [ "$CACHED" = true ]; then
-            sudo dpkg -i ~/pdf-debs/*.deb
-          else
+          if [ "$CACHED" != true ] || ! sudo dpkg -i ~/pdf-debs/*.deb || ! ~/weasyprint/bin/weasyprint --version; then
+            rm -rf ~/pdf-debs ~/weasyprint
             sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-venv libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 poppler-utils
             mkdir -p ~/pdf-debs && cp /var/cache/apt/archives/*.deb ~/pdf-debs/
             python3 -m venv ~/weasyprint
