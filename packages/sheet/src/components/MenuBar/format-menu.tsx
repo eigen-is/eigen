@@ -1,3 +1,6 @@
+// The menu bar's Format menu, such as number formats, text styles, alignment, borders, merging and
+// conditional formats. Its items run the same toolbar handlers as the format toolbar.
+
 import type { BorderType } from '@workspace/lib/sheets';
 import {
     ChoiceMenuItems,
@@ -11,6 +14,7 @@ import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { Fragment, useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
+import { useEditorSelectionStyle } from '../../hooks/useEditorSelectionStyle';
 import {
     applyColorScalePreset,
     applyDataBarPreset,
@@ -98,7 +102,8 @@ function NumberFormatSubmenu() {
 
 function TextSubmenu() {
     const { setContext, refs } = useContext(WorkbookContext);
-    const textColor = useAnchorCell()?.fc ?? '';
+    const anchorColor = useAnchorCell()?.fc;
+    const textColor = useEditorSelectionStyle()?.fc ?? anchorColor ?? '';
 
     return (
         <DropdownMenuSub>

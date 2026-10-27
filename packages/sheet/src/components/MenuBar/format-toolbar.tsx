@@ -1,3 +1,7 @@
+// Quick-format controls mirrored from the docs toolbar, driving the same handlers as the Format menu:
+// an extra surface, not a replacement. The menu bar's 1fr·auto·1fr grid centers it on the bar. The
+// bar's 1360px container query hides it, as read-only does, below the width where it still sits centered.
+
 import { nextFontSize } from '@workspace/lib/constants/fonts';
 import { cellFontName, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
@@ -6,6 +10,7 @@ import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
+import { useEditorSelectionStyle } from '../../hooks/useEditorSelectionStyle';
 import {
     handleBold,
     handleFont,
@@ -17,27 +22,24 @@ import {
 } from '../../state';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 
-// Quick-format controls mirrored from the docs toolbar, driving the exact same
-// handlers as the Format menu — an extra surface, not a replacement. The menu bar's
-// 1fr·auto·1fr grid centers this on the bar; the bar's 1360px container query hides it
-// (as read-only does) below the width where the side blocks still leave room to sit centered.
 export function FormatToolbar() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
-    // Reflect the anchor cell so the swatches + active alignment track the selection,
-    // the way the docs toolbar follows the caret.
+    // Reflect the anchor cell so the swatches + active alignment track the selection, and while a cell
+    // is open the run at its caret, the way the docs toolbar follows the caret.
     const cell = useAnchorCell();
+    const caret = useEditorSelectionStyle();
 
     if (!context.allowEdit) return null;
 
     // `ht` is stored as '1'/'0'/'2' by the align handler but as a number on
     // defaults/imports — coerce before comparing.
-    const textColor = cell?.fc ?? '';
+    const textColor = caret?.fc ?? cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
     const align = cell?.ht == null ? undefined : Number(cell.ht); // 0 = center, 1 = left, 2 = right
-    const fontName = cellFontName(cell?.ff) ?? SHEET_DEFAULT_FONT.name;
-    const fontSize = Number(cell?.fs) || settings.defaultFontSize;
-    const bold = Number(cell?.bl) === 1;
-    const italic = Number(cell?.it) === 1;
+    const fontName = caret?.ff ?? cellFontName(cell?.ff) ?? SHEET_DEFAULT_FONT.name;
+    const fontSize = caret?.fs ?? (Number(cell?.fs) || settings.defaultFontSize);
+    const bold = (caret?.bl ?? Number(cell?.bl)) === 1;
+    const italic = (caret?.it ?? Number(cell?.it)) === 1;
     const setFontSize = (size: number) => {
         setContext((ctx) => {
             handleTextSize(ctx, refs.cellInput.current!, size);

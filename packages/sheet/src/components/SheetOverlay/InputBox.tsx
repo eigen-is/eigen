@@ -1,3 +1,8 @@
+// The in-cell editor: a contenteditable over the cell being edited. It opens with the cell's text, its
+// formula as colored references or its rich-text runs as spans, and the grid's keyboard handlers commit
+// it. While it is open on text, ⌘B, ⌘I and ⌘U format its selected characters, and a format on a bare
+// caret styles the text typed there next.
+
 import { escapeHtml } from '@workspace/lib/html';
 import { isEqual } from 'es-toolkit/compat';
 import type React from 'react';
@@ -5,6 +10,7 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, u
 import { WorkbookContext } from '../../context';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
 import { usePrevious } from '../../hooks/usePrevious';
+import type { Context } from '../../state';
 import {
     cancelNormalSelected,
     createRangeHightlight,
@@ -13,19 +19,30 @@ import {
     getInlineStringHTML,
     getSheetConfig,
     getStyleByCell,
+    handleBold,
     handleFormulaInput,
+    handleItalic,
+    handleUnderline,
     isAllowEdit,
     isInlineStringCell,
     israngeseleciton,
     isShowHidenCR,
     moveHighlightCell,
     moveToEnd,
+    rememberEditorSelection,
+    typeWithPendingStyle,
     valueShowEs,
 } from '../../state';
 import { ContentEditable } from './ContentEditable';
 import { FormulaHint } from './FormulaHint';
 import { FormulaSearch } from './FormulaSearch';
 import { cycleReferenceInEditor } from './reference-cycle';
+
+const FORMAT_SHORTCUTS: Record<string, (ctx: Context, cellInput: HTMLDivElement) => void> = {
+    KeyB: handleBold,
+    KeyI: handleItalic,
+    KeyU: handleUnderline,
+};
 
 export const InputBox: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
@@ -35,16 +52,16 @@ export const InputBox: React.FC = () => {
     const prevSheetId = usePrevious<string>(context.currentSheetId);
     const [isHidenRC, setIsHidenRC] = useState<boolean>(false);
     const firstSelection = context.selections?.[0];
-    const row_index = firstSelection?.row_focus as number;
-    const col_index = firstSelection?.column_focus as number;
+    const row_index = firstSelection?.row_focus;
+    const col_index = firstSelection?.column_focus;
     const preText = useRef('');
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: cell-style memo keyed on sheet/file/cellUpdate; reads helpers off `context` directly
     const inputBoxStyle = useMemo(() => {
-        if (firstSelection && context.editingCellPosition.length > 0) {
+        if (row_index != null && col_index != null && context.editingCellPosition.length > 0) {
             const flowdata = getFlowdata(context);
             if (!flowdata) return {};
-            return getStyleByCell(context, flowdata, firstSelection.row_focus!, firstSelection.column_focus!);
+            return getStyleByCell(context, flowdata, row_index, col_index);
         }
         return {};
     }, [context.sheets, context.currentSheetId, context.editingCellPosition, firstSelection]);
@@ -54,13 +71,13 @@ export const InputBox: React.FC = () => {
         if (!context.allowEdit) {
             setContext((ctx) => {
                 const flowdata = getFlowdata(ctx);
-                if (flowdata != null && ctx.forceFormulaRef) {
+                if (flowdata != null && ctx.forceFormulaRef && row_index != null && col_index != null) {
                     const formulaHtml = getFormulaHtml(row_index, col_index, flowdata);
                     if (formulaHtml) createRangeHightlight(ctx, formulaHtml);
                 }
             });
         }
-        if (firstSelection && context.editingCellPosition.length > 0) {
+        if (row_index != null && col_index != null && context.editingCellPosition.length > 0) {
             if (refs.globalCache.doNotUpdateCell) {
                 delete refs.globalCache.doNotUpdateCell;
                 return;
@@ -96,18 +113,17 @@ export const InputBox: React.FC = () => {
                 }
             }
             refs.globalCache.overwriteCell = false;
-            if (!refs.globalCache.ignoreWriteCell)
-                inputRef.current!.innerHTML = isGeneratedHtml ? value : escapeHtml(value);
+            const input = inputRef.current;
+            if (input && !refs.globalCache.ignoreWriteCell)
+                input.innerHTML = isGeneratedHtml ? value : escapeHtml(value);
             refs.globalCache.ignoreWriteCell = false;
-            if (!refs.globalCache.doNotFocus) {
+            if (input && !refs.globalCache.doNotFocus) {
                 // Synchronously too: the innerHTML write leaves the caret at 0, and
                 // fast typing can land before the timeout below — the keystrokes
                 // would insert mid-value. The deferred pass still runs after the
                 // click handler's focus-follow timeout settles focus on the input.
-                moveToEnd(inputRef.current!);
-                setTimeout(() => {
-                    moveToEnd(inputRef.current!);
-                });
+                moveToEnd(input);
+                setTimeout(() => moveToEnd(input));
             }
             delete refs.globalCache.doNotFocus;
         }
@@ -127,6 +143,26 @@ export const InputBox: React.FC = () => {
         setIsHidenRC(isShowHidenCR(context));
     }, [context.selections]);
 
+    // The selection is kept for a toolbar control that takes the focus, such as the size box. Text typed
+    // where a format left a pending style is inserted in that style, so the browser's own insert is
+    // replaced by one that goes through the same input event.
+    useEffect(() => {
+        const input = inputRef.current;
+        if (!input) return;
+        const remember = () => rememberEditorSelection(input);
+        const typePending = (e: InputEvent) => {
+            if (e.inputType !== 'insertText' || !e.data || !typeWithPendingStyle(input, e.data)) return;
+            e.preventDefault();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        input.ownerDocument.addEventListener('selectionchange', remember);
+        input.addEventListener('beforeinput', typePending);
+        return () => {
+            input.ownerDocument.removeEventListener('selectionchange', remember);
+            input.removeEventListener('beforeinput', typePending);
+        };
+    }, []);
+
     const [inputFocused, setInputFocused] = useState(false);
     const formulaAutocomplete = useFormulaAutocomplete({ targetRef: inputRef, enabled: inputFocused });
 
@@ -140,6 +176,21 @@ export const InputBox: React.FC = () => {
                 document.execCommand('insertHTML', false, '\n '); // Trailing space forces a line break; removed by the subsequent delete
                 document.execCommand('delete', false);
                 e.stopPropagation();
+                return;
+            }
+
+            const formatShortcut = FORMAT_SHORTCUTS[e.code];
+            const input = inputRef.current;
+            if (
+                formatShortcut &&
+                input &&
+                (e.metaKey || e.ctrlKey) &&
+                !e.altKey &&
+                !e.shiftKey &&
+                context.editingCellPosition.length > 0
+            ) {
+                e.preventDefault();
+                setContext((draftCtx) => formatShortcut(draftCtx, input));
                 return;
             }
 
@@ -220,7 +271,8 @@ export const InputBox: React.FC = () => {
     const rowReadOnly: Record<string, number> = cfg?.rowReadOnly || {};
     const colReadOnly: Record<string, number> = cfg?.colReadOnly || {};
 
-    const edit = !((colReadOnly[col_index] || rowReadOnly[row_index]) && context.allowEdit === true);
+    const isReadOnly = (col_index != null && colReadOnly[col_index]) || (row_index != null && rowReadOnly[row_index]);
+    const edit = !(isReadOnly && context.allowEdit === true);
 
     return (
         <div
