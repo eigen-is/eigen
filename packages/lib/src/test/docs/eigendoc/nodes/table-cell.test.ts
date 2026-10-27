@@ -33,6 +33,8 @@ describe('readCellBackground', () => {
         ['#cfe2f3', '#cfe2f3'],
         ['#CFE2F3', '#cfe2f3'],
         ['#fff', null],
+        ['#cfe2f3ff', null],
+        ['rgb(207, 226, 243)', null],
         ['red', null],
         ['#cfe2f3; background-image: url(x)', null],
         ['transparent', null],
@@ -63,6 +65,15 @@ describe('cell background HTML', () => {
                 '<table><tr><td style="background-color: rgb(207, 226, 243)">a</td><th style="background-color:#B6D7A8">b</th><td style="background-color: blue">c</td><td>d</td></tr></table>',
             ),
         ).toEqual(['#cfe2f3', '#b6d7a8', null, null]);
+    });
+
+    // A see-through fill is no fill: its rgb() alone would paint it opaque.
+    test('a pasted fill with an alpha or a channel past 255 draws none', () => {
+        expect(
+            cellsIn(
+                '<table><tr><td style="background-color: rgba(207, 226, 243, 0.5)">a</td><td style="background-color: rgba(0, 0, 0, 0)">b</td><td style="background-color: rgb(300, 0, 0)">c</td></tr></table>',
+            ),
+        ).toEqual([null, null, null]);
     });
 });
 
@@ -147,5 +158,13 @@ describe('cell border HTML', () => {
             },
             unset,
         ]);
+    });
+
+    test('a pasted side in a see-through rgba() keeps Eigen’s own look', () => {
+        expect(
+            bordersIn(
+                '<table><tr><td style="border-top:solid rgba(0, 0, 0, 0) 1pt;border-left:solid rgba(31, 56, 100, 0.5) 1pt">a</td></tr></table>',
+            ),
+        ).toEqual([unset]);
     });
 });

@@ -94,4 +94,15 @@ describe('isColorToken', () => {
         expect(isColorToken('rgb(1,2,3)')).toBe(false);
         expect(isColorToken(3)).toBe(false);
     });
+
+    test.each(['#abc', '#ABC', '#aabbcc', '#AABBCC', '#aabbccdd'])('%p is a color token', (color) => {
+        expect(isColorToken(color)).toBe(true);
+    });
+
+    test.each(['#abcd', '#aabbccd', 'aabbcc', 'Transparent', 'url(#x)', '#abc;fill:url(#x)'])(
+        '%p is no color token',
+        (color) => {
+            expect(isColorToken(color)).toBe(false);
+        },
+    );
 });

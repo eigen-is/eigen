@@ -11,6 +11,11 @@ describe('cssColorToHex', () => {
         ['rgba(255, 0, 0, 0.5)', 'FF0000'],
         ['rgb(0 128 255 / 50%)', '0080FF'],
         [' #1a1a2e ', '1A1A2E'],
+        ['RGB(0, 128, 255)', '0080FF'],
+        ['rgb(0,128,255)', '0080FF'],
+        ['rgba(0, 128, 255, 50%)', '0080FF'],
+        ['rgb( 0, 128, 255 )', '0080FF'],
+        ['rgb(0.4, 127.6, 255)', '0080FF'],
     ])('%s is %s', (color, hex) => {
         expect(cssColorToHex(color)).toBe(hex);
     });
@@ -19,7 +24,10 @@ describe('cssColorToHex', () => {
         'red',
         'transparent',
         '#12345',
+        '#abcd',
         '#ff000080',
+        'rgb(1, 2)',
+        'rgb(1, 2, 3);color:red',
         'rgb(300, 0, 0)',
         'var(--color-primary)',
         '',
@@ -46,6 +54,9 @@ describe('cssColorToHex', () => {
         ['#00000080', false],
         ['#000f', false],
         ['rgba(255, 0, 0, 0.5)', false],
+        ['RGBA(0, 0, 0, 0)', true],
+        ['rgba(0.5, 0, 0, 0)', true],
+        ['rgba(300, 0, 0, 0)', false],
         ['yellow', false],
         ['#000', false],
         ['', false],

@@ -4,7 +4,7 @@
 // graphic's cached drawing and text, and anchors a turned picture over a spreadsheet's cells.
 
 import type { Arrowhead, StrokeStyle, TextAlign, VerticalAlign } from '@workspace/lib/vector';
-import { isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
+import { isColorToken, isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import type { XmlElement } from '../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../core/xml';
@@ -275,8 +275,8 @@ export function fromHsl(hue: number, sat: number, lum: number): [number, number,
 // A stored color token (#rgb, #rrggbb or #rrggbbaa) as an a:srgbClr. Its alpha, times `opacity`, goes inside as an
 // a:alpha. Transparent and anything else is null.
 export function colorXml(color: string, opacity = 1): string | null {
-    const digits = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1];
-    if (!digits || isTransparentColor(color)) return null;
+    if (!isColorToken(color) || isTransparentColor(color)) return null;
+    const digits = color.slice(1);
     const rgb = digits.length === 3 ? [...digits].map((digit) => digit + digit).join('') : digits.slice(0, 6);
     const alpha = (digits.length === 8 ? Number.parseInt(digits.slice(6), 16) / 255 : 1) * opacity;
     const share = alpha < 1 ? `<a:alpha val="${drawingShare(alpha)}"/>` : '';
