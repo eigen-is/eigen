@@ -142,6 +142,10 @@ Observed in Word's render on 2026-10-08: a 1204×4 px divider drew 466.5 pt wide
 
 The editor draws a list beside a wrapped figure, narrowed to the room the float leaves ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)), because the list is its own formatting context. WeasyPrint lays such a box out at its containing block's whole width and then moves it down past every float it doesn't fit beside (`avoid_collisions` in its `layout/float.py`); only a line box narrows. So the PDF starts the list below the figure. As a plain block the list would run beside the float, but with its markers under the image and every level at the float's edge. `doc-export.test.ts` pins the PDF's list below the figure, an open [ROADMAP](ROADMAP.md) gap.
 
+## The PDF splits a table between its rows
+
+A table taller than what is left of a page starts on that page and goes on over the next, as Word and Google Docs print one: the print CSS keeps a row whole (`tr { page-break-inside: avoid }`, `printExtras` in `export/doc/transform.ts`), not the table, which jumped whole to the next page and left the one before half empty. A row that holds a page break may split, as a quote that holds one may. No header row repeats on the next page yet, where the docx marks a leading row of header cells to repeat (`w:tblHeader`), an open [ROADMAP](ROADMAP.md) row. `doc-export.test.ts` pins a 60-row table after half a page starting on page 1.
+
 ## A wrapped figure is a floating one-cell table
 
 A figure wrapped left or right becomes a borderless floating table of one cell holding the image and its caption, placed before its paragraph, its distances from the text the figure's float margin in `eigen-prose.css`. It is the one wrap that keeps the caption under the image in every reader, and its row cannot split, or Google Docs moves the caption to the next page. In a list or quote a left float starts at the container's text edge, clear of the bullet and the bar.

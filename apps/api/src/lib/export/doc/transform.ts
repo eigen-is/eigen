@@ -289,9 +289,11 @@ h1, h2, h3, h4, h5, h6 { font-size: inherit; }
     z-index: 0;
 }
 
-/* A block holding a page break must split: avoid pushes it whole to a new page and breaks inside it anyway */
-.figure, table, pre, blockquote { page-break-inside: avoid; }
-table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
+/* A block holding a page break must split: avoid pushes it whole to a new page and breaks inside it anyway. A table
+   splits between its rows, as Word and Google Docs print one, rather than leaving a page half empty */
+.figure, pre, blockquote { page-break-inside: avoid; }
+tr { page-break-inside: avoid; }
+tr:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
 
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 

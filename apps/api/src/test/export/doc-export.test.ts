@@ -232,11 +232,12 @@ describe('doc export — the stylesheet', () => {
         expect(await exportStyle('pdf-html')).toContain('break-after: page');
     });
 
-    test('a table or quote holding a page break may split, and the figure box stays whole', async () => {
+    test('a table splits between its rows, a row or quote holding a page break may split, and the figure box stays whole', async () => {
         const css = await exportStyle('pdf-html');
 
-        expect(css).toContain('.figure, table, pre, blockquote { page-break-inside: avoid; }');
-        expect(css).toContain('table:has(.page-break), blockquote:has(.page-break) { page-break-inside: auto; }');
+        expect(css).toContain('.figure, pre, blockquote { page-break-inside: avoid; }');
+        expect(css).toContain('tr { page-break-inside: avoid; }');
+        expect(css).toContain('tr:has(.page-break), blockquote:has(.page-break) { page-break-inside: auto; }');
     });
 });
 
@@ -1541,6 +1542,22 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         },
         60_000,
     );
+});
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — tables across pages (WeasyPrint)', () => {
+    // As Word and Google Docs print one, a table taller than what is left of the page starts there and goes on over the
+    // next, rather than leaving the page half empty.
+    test('a 60-row table after half a page starts on the first page', async () => {
+        const intro = Array.from({ length: 10 }, (_, i) => paragraph(`Intro ${i + 1}`));
+        const cell = (text: string) => ({ type: 'tableCell', content: [paragraph(text)] });
+        const rows = Array.from({ length: 60 }, (_, i) => ({ type: 'tableRow', content: [cell(`Row ${i + 1}`)] }));
+        const html = await pdfHtml(...intro, { type: 'table', content: rows });
+        const texts = await laidOut(html, "if type(box).__name__ == 'TextBox': print(id(page), box.text)");
+        const firstPage = texts[0]?.split(' ')[0];
+        const onFirstPage = texts.filter((line) => line.startsWith(`${firstPage} `)).map((line) => line.split(' ')[1]);
+        expect(onFirstPage).toContain('Intro');
+        expect(texts).toContain(`${firstPage} Row 1`);
+    }, 60_000);
 });
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — ordered list numbers (WeasyPrint)', () => {

@@ -35,6 +35,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Long tables in Docs PDFs** — a table too tall for what is left of a page starts there and continues on the next page, instead of jumping whole to the next page and leaving a gap
 - **Pasted photos in Docs downloads** — a web page or PDF download draws a pasted image without the camera details and location it carried, as the Word download already did. An animated GIF pasted that way shows its first frame
 - **Merged cells in spreadsheet previews** — a merged cell too wide or too tall for the Drive preview, or for a download cut to fit, shows no border where the preview cuts it off
 - **Spreadsheet previews** — an image or chart on a sheet with hidden columns shows in the Drive preview when it sits within the preview's first 50 visible columns
