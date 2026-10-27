@@ -1,4 +1,6 @@
-// Based on Tailwind Colors. The pink column's accent row is Eigen's accent color.
+// Eigen's color palette, based on Tailwind's colors, with the pink column's accent row as Eigen's accent, and the
+// one reader of a written color. Readers such as a sheet cell's fill, a doc's text color and the Office exports
+// check a hex with isHexColor and read an rgb() with parseRgb, so they agree on what a color is.
 
 export type EigenColor = {
     label: string;
@@ -320,4 +322,25 @@ export function lightenColor(hex: string, amount: number): string {
                 .padStart(2, '0'),
         )
         .join('')}`;
+}
+
+// A hex color: `#` and then one of the digit counts the caller takes, in either case. Each reader names its own
+// counts, such as six for a doc's text color, so a stored value reads as it always has.
+export function isHexColor(value: string, digits: readonly (3 | 4 | 6 | 8)[]): boolean {
+    return /^#[0-9a-f]+$/i.test(value) && digits.some((count) => value.length === count + 1);
+}
+
+const RGB_COLOR = /^rgba?\(\s*(\d*\.?\d+)[\s,]+(\d*\.?\d+)[\s,]+(\d*\.?\d+)(?:\s*[,/]\s*(\d*\.?\d+)(%?))?\s*\)$/i;
+
+// An rgb() or rgba() color, as a browser computes it or a stylesheet writes it: commas or spaces, channels
+// rounded to whole numbers, and an alpha as a number or a percent. It reads as #rrggbb and an alpha from 0 to 1.
+// A channel past 255 is no color.
+export function parseRgb(color: string): { hex: string; alpha: number } | undefined {
+    const [, red, green, blue, alpha, percent] = RGB_COLOR.exec(color) ?? [];
+    const channels = [red, green, blue].map((channel) => Math.round(Number(channel)));
+    if (red === undefined || channels.some((channel) => channel > 255)) return undefined;
+    return {
+        hex: `#${channels.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`,
+        alpha: alpha === undefined ? 1 : Math.min(Number(alpha) / (percent ? 100 : 1), 1),
+    };
 }

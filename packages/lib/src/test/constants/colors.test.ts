@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { EIGEN_ACCENT_COLORS, EIGEN_ACCENT_COLORS_SHUFFLED } from '../../constants/colors';
+import { EIGEN_ACCENT_COLORS, EIGEN_ACCENT_COLORS_SHUFFLED, isHexColor, parseRgb } from '../../constants/colors';
 
 const ORDER = EIGEN_ACCENT_COLORS_SHUFFLED;
 
@@ -121,5 +121,63 @@ describe('accent order', () => {
 
     test('none of the first eight is under 2:1 on white', () => {
         for (const { value } of ORDER.slice(0, 8)) expect(contrastOnWhite(value)).toBeGreaterThanOrEqual(2);
+    });
+});
+
+describe('isHexColor', () => {
+    test.each([
+        ['#abc', [3]],
+        ['#ABC', [3]],
+        ['#abcd', [3, 4, 6, 8]],
+        ['#aabbcc', [6]],
+        ['#AaBbCc', [6]],
+        ['#aabbccdd', [3, 6, 8]],
+    ] as const)('%s has one of the digit counts %p', (value, digits) => {
+        expect(isHexColor(value, digits)).toBe(true);
+    });
+
+    test.each([
+        ['#abcd', [3, 6, 8]],
+        ['#abc', [6]],
+        ['#aabbccdd', [6]],
+        ['aabbcc', [6]],
+        ['#ggg', [3]],
+        ['#12345', [3, 4, 6, 8]],
+        ['#abc;color:red', [3]],
+        ['#abc\n', [3]],
+        ['', [3]],
+    ] as const)('%p is not a hex color of %p digits', (value, digits) => {
+        expect(isHexColor(value, digits)).toBe(false);
+    });
+});
+
+describe('parseRgb', () => {
+    test.each([
+        ['rgb(0, 128, 255)', '#0080ff', 1],
+        ['rgb(0,128,255)', '#0080ff', 1],
+        ['rgb(0 128 255)', '#0080ff', 1],
+        ['RGB( 0, 128, 255 )', '#0080ff', 1],
+        ['rgba(1, 2, 3, 0.5)', '#010203', 0.5],
+        ['rgb(1 2 3 / 50%)', '#010203', 0.5],
+        ['rgba(0, 0, 0, 0)', '#000000', 0],
+        ['rgb(1.4, 2.6, 3)', '#010303', 1],
+        ['rgba(1, 2, 3, 2)', '#010203', 1],
+    ])('%s is %s at alpha %p', (color, hex, alpha) => {
+        expect(parseRgb(color)).toEqual({ hex, alpha });
+    });
+
+    test.each([
+        'rgb(300, 0, 0)',
+        'rgb(-1, 0, 0)',
+        'rgb(1, 2)',
+        'rgb(1.2.3, 0, 0)',
+        'rgb(50%, 0, 0)',
+        'rgb(1, 2, 3);background:url(x)',
+        'hsl(0, 0%, 0%)',
+        '#010203',
+        'red',
+        '',
+    ])('%p is no rgb() color', (color) => {
+        expect(parseRgb(color)).toBeUndefined();
     });
 });

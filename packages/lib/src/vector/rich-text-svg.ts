@@ -3,6 +3,7 @@
 // draws, so a downloaded image writes this instead, which Illustrator, Inkscape, Figma, Office and Preview read.
 // The measuring is DOM work (packages/ui's canvas image writer reads Range.getClientRects); this half is pure.
 
+import { parseRgb } from '../constants/colors';
 import { escapeXml } from '../core/xml';
 import { round } from './points';
 
@@ -13,7 +14,7 @@ export type MeasuredTextStyle = {
     fontWeight: string;
     fontStyle: string;
     fontVariantNumeric: string;
-    // A computed CSS colour, rgb() or rgba().
+    // A computed CSS color, rgb() or rgba().
     color: string;
     // Its ancestors' opacity inside the box, multiplied.
     opacity: number;
@@ -52,15 +53,9 @@ function adjoins(a: MeasuredChar, b: MeasuredChar): boolean {
 
 // An SVG 1.1 reader takes no rgba(), so the alpha rides in fill-opacity with the rest of the opacity.
 function fillAttrs(color: string, opacity: number): string {
-    const match = color.match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+)(%?))?\s*\)$/);
-    const fill = match
-        ? `#${match
-              .slice(1, 4)
-              .map((channel) => Math.round(Number(channel)).toString(16).padStart(2, '0'))
-              .join('')}`
-        : color;
-    const alpha = (match?.[4] === undefined ? 1 : Number(match[4]) / (match[5] ? 100 : 1)) * opacity;
-    return ` fill="${escapeXml(fill)}"${alpha < 1 ? ` fill-opacity="${round(alpha)}"` : ''}`;
+    const rgb = parseRgb(color);
+    const alpha = (rgb?.alpha ?? 1) * opacity;
+    return ` fill="${escapeXml(rgb?.hex ?? color)}"${alpha < 1 ? ` fill-opacity="${round(alpha)}"` : ''}`;
 }
 
 function tspan(chars: MeasuredChar[], { style, ascent }: MeasuredText): string {
