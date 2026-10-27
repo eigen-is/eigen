@@ -268,6 +268,24 @@ describe('the page', () => {
         expect(read.differentFirstPage).toBe(false);
     });
 
+    test('a page-less doc comes back page-less, its wide table at its own widths', async () => {
+        const cell = (width: number) => ({ type: 'tableCell', attrs: { colwidth: [width] }, content: [p('x')] });
+        const json = {
+            type: 'doc',
+            content: [{ type: 'table', content: [{ type: 'tableRow', content: [cell(667), cell(667)] }] }],
+        };
+        const { json: back, page } = docxToPmJson(
+            Buffer.from(
+                writeDocx(
+                    { json, bands: {}, page: { ...DEFAULT_PAGE_SETUP, pageless: true }, style: DEFAULT_NORMAL_STYLE },
+                    { title: 'Wide', media: [], lost: () => {} },
+                ),
+            ),
+        );
+        expect(page.pageless).toBe(true);
+        expect(nodesOfType(back, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([[667], [667]]);
+    });
+
     // Each band comes back where it was, page numbers as fields and an equation as Word's; page 1's footer is the empty
     // part the writer stands in.
     test("the header, the footer and page 1's own header come back as they were written", async () => {

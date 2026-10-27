@@ -1,7 +1,7 @@
 // The docx reader's tables: readTable turns a w:tbl into the editor's table, its grid as Word lays it out from the
 // grid and the cells' widths, scaled into the room the editor gives it, with merged cells, header rows, fills and
-// borders. A table nested in a cell fits inside the cell's padding. The paragraph reader calls it for each table it
-// meets.
+// borders. A table nested in a cell fits inside the cell's padding, and a page-less doc's table in the body keeps its
+// widths. The paragraph reader calls it for each table it meets.
 
 import type { JSONContent } from '@tiptap/core';
 import type { CellBorderAttribute, CellSide } from '@workspace/lib/docs/eigendoc';
@@ -10,6 +10,7 @@ import {
     cellBorderValue,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
+    mmToPx,
     PROSE_TEXTBLOCKS,
     readCellBackground,
 } from '@workspace/lib/docs/eigendoc';
@@ -64,7 +65,14 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const columns = declared.length || MAX_TABLE_COLUMNS;
     const unsized = unsizedColumns(rows);
     const grid = withCellWidths(declared, rows).map((width, column) => (unsized.has(column) ? 0 : width));
-    const columnPx = scaled(grid, scope.room ?? reader.columnPx);
+    // A page-less doc's table in the body keeps its widths past the text column, as the editor draws it, each column
+    // within the paper; any other fits the room it has.
+    const columnPx =
+        reader.page.pageless && scope.story === 'body' && scope.tables === 0
+            ? scaled(grid, Number.POSITIVE_INFINITY).map((width) =>
+                  Math.min(width, Math.floor(mmToPx(reader.page.width))),
+              )
+            : scaled(grid, scope.room ?? reader.columnPx);
     const tableStyle = reader.styles.get(w(wChild(tblPr, 'tblStyle'), 'val'));
     const look = wChild(tblPr, 'tblLook');
     const firstRowOn = look
