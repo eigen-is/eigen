@@ -81,6 +81,8 @@ export type Context = {
     // In the body or a list or quote in it, where a figure keeps its place in front of or behind the text. A table cell,
     // a note and a band draw one in line.
     positions?: true;
+    // An item's first paragraph, which takes the item's number and Word's list indent in place of its own.
+    numbered?: true;
 };
 
 export function sectionXml(

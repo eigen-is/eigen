@@ -311,6 +311,7 @@ export function blocksOf(
         const written = write(node, {
             ...context,
             firstInFlow: !textblock && index === 0,
+            numbered: !textblock && index === 0 && node.type === 'paragraph' ? context.numbered : undefined,
             next: nodes[index + 1]?.type,
             blockPt: undefined,
             upright: undefined,

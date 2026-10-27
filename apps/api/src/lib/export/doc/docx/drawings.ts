@@ -170,9 +170,9 @@ export function anchoredFigure(node: JSONContent, textblock: JSONContent, contex
     const paperPx = Math.floor(pkg.paper / TWIPS_PER_PX);
     const drawn = drawnFigure(node, pkg, paperPx, paperPx);
     if (!drawn) return '';
-    const contained = context.quotes > 0 || context.after !== undefined;
-    const x = (offsetX ?? 0) + anchorIndentPx(context.indent, textblock);
-    const y = (offsetY ?? 0) - anchorPaddingPx(textblock, contained, pkg.normal);
+    // A numbered paragraph's own indent isn't in the file, so it isn't in X either, as the reader reads it back.
+    const x = (offsetX ?? 0) + anchorIndentPx(context.indent, context.numbered ? undefined : textblock);
+    const y = (offsetY ?? 0) - anchorPaddingPx(textblock, context.depth > 0 || context.quotes > 0, pkg.normal);
     return drawingXml(drawn, pkg, {
         x: Math.round(x * EMU_PER_PX),
         y: Math.round(y * EMU_PER_PX),

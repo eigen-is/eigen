@@ -1425,6 +1425,16 @@ describe('a figure in front of or behind the text', () => {
             spaced,
         ],
         [
+            'an indented list paragraph',
+            [
+                {
+                    type: 'bulletList',
+                    content: [{ type: 'listItem', content: [p({ indentLeft: 36 }, front, text('Indented item'))] }],
+                },
+            ],
+            DEFAULT_NORMAL_STYLE,
+        ],
+        [
             'a quote, under a Normal with space before',
             [{ type: 'blockquote', content: [p({}, text('Quoted')), p({}, behind, text('On'))] }],
             spaced,

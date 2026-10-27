@@ -61,12 +61,13 @@ export function itemOf(
     after: number,
     open: (first: Paragraph, inner: Context) => Paragraph,
 ): Block[] {
-    const inner = {
+    const inner: Context = {
         ...context,
         indent: itemIndent(context),
         depth: context.depth + 1,
         after,
         list: undefined,
+        numbered: true,
     };
     const props = textProps({}, inner);
     const blocks = blocksOf(node.content ?? [], props, inner);

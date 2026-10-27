@@ -301,9 +301,9 @@ export const LIST_LEVEL = proseTwips('.eigen-prose ul', 'padding-left');
 // the paragraph's space before. The writer converts one way with these and the reader the other.
 
 // How far right of the text column the paragraph's box starts, in px: its container's indent, a list's or a quote's,
-// in twips, and its own left indent.
-export function anchorIndentPx(container: number, textblock: JSONContent): number {
-    const { indentLeft } = readParagraphFormat(textblock.attrs ?? {});
+// in twips, and its own left indent, if it has one.
+export function anchorIndentPx(container: number, textblock: JSONContent | undefined): number {
+    const { indentLeft } = readParagraphFormat(textblock?.attrs ?? {});
     return container / TWIPS_PER_PX + ptToPx(indentLeft ?? 0);
 }
 
