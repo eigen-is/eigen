@@ -59,8 +59,8 @@ export function generateAPIs(
             // call order, so an undo called before this batch keeps the entry it was called with.
             for (const op of ops) {
                 if (op.op !== 'insertRowCol' && op.op !== 'deleteRowCol') continue;
-                history.undoList = shiftEntries(history.undoList, op, context.sheets);
-                history.redoList = shiftEntries(history.redoList, op, context.sheets);
+                history.undoList = shiftEntries(history.undoList, op, context.sheets, 'undo');
+                history.redoList = shiftEntries(history.redoList, op, context.sheets, 'redo');
             }
             setContext(
                 (ctx_) => {

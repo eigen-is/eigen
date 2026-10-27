@@ -167,6 +167,45 @@ describe("undo after a peer's row, column or sheet change lands on your cell", (
         expectAgree(s);
     });
 
+    // Your entries below your own row op were recorded without it. A peer's row op on its sheet drops that op's
+    // entry, so they take the op's move first.
+    test("a peer's row op that drops your row insert leaves your older undo on its cells", () => {
+        const old = (r: number) => text(`old${r}`);
+        const s = session(workbook({ B10: old(10), B11: old(11), B12: old(12), B13: old(13), B14: old(14) }));
+        s.edit(s.a, (ctx) => {
+            for (let r = 9; r <= 13; r += 1) typedAt(`B${r + 1}`, 'x')(ctx);
+        });
+        s.edit(s.a, ...insertRows(2, 2));
+        s.edit(s.b, ...insertRows(0, 1));
+        expect(s.a.history.undoList).toHaveLength(1);
+        s.undo(s.a);
+        expect([13, 14, 15, 16, 17].map((r) => cellAt(s.a, `B${r}`)?.v)).toEqual([
+            'old10',
+            'old11',
+            'old12',
+            'old13',
+            'old14',
+        ]);
+        expectAgree(s);
+    });
+
+    test("a peer's row op that drops your undone row insert leaves your later redo on its cells", () => {
+        const old = (r: number) => text(`old${r}`);
+        const s = session(workbook({ B8: old(8), B9: old(9), B10: old(10), B11: old(11), B12: old(12) }));
+        s.edit(s.a, ...insertRows(2, 2));
+        s.edit(s.a, (ctx) => {
+            for (let r = 9; r <= 13; r += 1) typedAt(`B${r + 1}`, 'x')(ctx);
+        });
+        s.undo(s.a);
+        s.undo(s.a);
+        s.edit(s.b, ...insertRows(0, 1));
+        expect(s.a.history.redoList).toHaveLength(1);
+        s.redo(s.a);
+        expect([9, 10, 11, 12, 13].map((r) => cellAt(s.a, `B${r}`)?.v)).toEqual(['x', 'x', 'x', 'x', 'x']);
+        expect(cellAt(s.a, 'B14')).toBeNull();
+        expectAgree(s);
+    });
+
     test("a peer's later value survives your undo", () => {
         const s = session(workbook({ B10: text('old') }));
         s.edit(s.a, typedAt('B10', 'new'));
@@ -736,7 +775,7 @@ describe('shiftEntries', () => {
         ],
         ['the name stays', rows(2, 2), replace(at('name'), 'Uno'), replace(at('name'), 'Uno')],
     ])('%s', (_, marker, patch, expected) => {
-        const [shifted] = shiftEntries([{ patches: [patch], inversePatches: [] }], marker, sheets);
+        const [shifted] = shiftEntries([{ patches: [patch], inversePatches: [] }], marker, sheets, 'undo');
         expect<Patch | null>(shifted?.patches[0] ?? null).toEqual(expected);
     });
 
@@ -746,11 +785,11 @@ describe('shiftEntries', () => {
             inversePatches: [],
             options: { insertRowColOp: { type: 'row', index: 0, count: 1, direction: 'lefttop', id } },
         });
-        expect(shiftEntries([own(ONE), own(TWO)], rows(2, 2), sheets)).toEqual([own(TWO)]);
+        expect(shiftEntries([own(ONE), own(TWO)], rows(2, 2), sheets, 'undo')).toEqual([own(TWO)]);
     });
 
     test('returns an entry the marker does not touch as it is', () => {
         const entry: History = { patches: [replace(at('data', 1, 1), { v: 1 })], inversePatches: [] };
-        expect(shiftEntries([entry], rows(2, 2), sheets)[0]).toBe(entry);
+        expect(shiftEntries([entry], rows(2, 2), sheets, 'undo')[0]).toBe(entry);
     });
 });
