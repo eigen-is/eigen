@@ -1,3 +1,7 @@
+// Drive's inline view of a text file, such as a .txt, a .md or source code: a rendered preview with the
+// file's crumbs and details, and an Edit button that swaps in the Markdown or code editor. The edit
+// route mounts it for any file Drive edits in place, whichever list or link opened it.
+
 import { useQueryClient } from '@tanstack/react-query';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
 import { downloadDriveFile } from '@workspace/lib/download';
@@ -61,9 +65,7 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     );
 
     if (!editing) {
-        const viewToolbar = (
-            <ViewToolbar path={path} canWrite={canWrite && !!data} onEdit={() => setEditing(true)} onClose={onClose} />
-        );
+        const viewToolbar = <ViewToolbar path={path} canWrite={canWrite && !!data} onEdit={() => setEditing(true)} />;
         return (
             <ColumnLayout>
                 <Column id="list" width="flex" onBack={onClose} toolbar={viewToolbar}>

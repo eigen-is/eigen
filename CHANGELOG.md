@@ -22,6 +22,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Shared with me in Drive** — a text file or folder someone shared with you shows its full path at the top, starting with Shared with me, then the shared folder and every folder below it
+- **Text files on a team drive** — the path above the file starts with the team drive's name, as its folder does, and each folder in it opens that folder
 - **Excel files** — a row whose height is set to normal in Excel comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
 - **Spreadsheet PDF** — a spreadsheet with thousands of small sheets prints its first 2,000 sheets instead of failing
 - **Long code blocks** — a Docs document with many long code blocks and no language set downloads and previews at once. Past about 65,000 characters of such code in all, the rest comes without syntax colors
