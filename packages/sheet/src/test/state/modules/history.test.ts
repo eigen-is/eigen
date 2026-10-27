@@ -10,6 +10,7 @@ import { generateAPIs } from '../../../components/Workbook/api';
 import { dataToCelldata } from '../../../engine/celldata';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell } from '../../../engine/types';
+import { setColumnWidth } from '../../../state/api/rowcol';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { shiftEntries } from '../../../state/modules/history-shift';
@@ -559,6 +560,59 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         s.edit(s.b, typedAt('C1', '=A4'));
         s.undo(s.a);
         expect(cellAt(s.a, 'C1')?.f).toBe('=A4');
+        expectAgree(s);
+    });
+
+    // The step ships the sheet's fields whole, so they must be the live ones with the marker applied, not the ones the
+    // entry recorded at the op.
+    test("undoing your row insert keeps a peer's later column width", () => {
+        const s = session(workbook());
+        s.edit(s.a, ...insertRows(4, 1));
+        s.edit(s.b, (ctx) => setColumnWidth(ctx, { 2: 250 }, { id: ONE }));
+        s.undo(s.a);
+        for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
+            expect(sheets[0].config?.columnlen).toEqual({ 2: 250 });
+        }
+    });
+
+    test("undoing your row insert keeps a peer's later merge, and the joiner agrees on its cells", () => {
+        const s = session(workbook({ A1: text('x') }));
+        s.edit(s.a, ...insertRows(4, 1));
+        s.edit(
+            s.b,
+            on(ONE, (ctx) => mergeCells(ctx, ONE, [{ row: [20, 21], column: [0, 1] }], 'merge-all')),
+        );
+        s.undo(s.a);
+        expect(s.a.ctx.sheets[0].config?.merge).toEqual({ '19_0': { r: 19, c: 0, rs: 2, cs: 2 } });
+        expect(cellAt(s.a, 'B21')?.mc).toEqual({ r: 19, c: 0 });
+        expectAgree(s);
+    });
+
+    test("undoing your row delete keeps a peer's later formula recalculating", () => {
+        const s = session(workbook({ A1: { v: 1, m: '1', ct: { fa: 'General', t: 'n' } }, A5: text('gone') }));
+        s.edit(s.a, ...deleteRows(4, 5));
+        s.edit(s.b, typedAt('D20', '=A1*2'));
+        s.undo(s.a);
+        for (const t of [s.a, s.b]) expect(t.ctx.sheets[0].calcChain).toContainEqual({ r: 21, c: 3, id: ONE });
+        s.edit(s.b, typedAt('A1', '7'));
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'D22')?.v).toBe(14);
+        expectAgree(s);
+    });
+
+    test("undoing your row delete brings back the deleted rows' height and link, and keeps a peer's later width", () => {
+        const base = produce(workbook({ B5: text('link') }), (ctx: Context) => {
+            ctx.sheets[0].config = { ...ctx.sheets[0].config, rowlen: { 4: 40 } };
+            ctx.sheets[0].hyperlink = { '4_1': { linkType: 'webpage', linkAddress: 'https://eigen.is' } };
+        });
+        const s = session(base);
+        s.edit(s.a, ...deleteRows(4, 5));
+        s.edit(s.b, (ctx) => setColumnWidth(ctx, { 2: 250 }, { id: ONE }));
+        s.undo(s.a);
+        for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
+            expect(sheets[0].config?.rowlen).toEqual({ 4: 40 });
+            expect(sheets[0].config?.columnlen).toEqual({ 2: 250 });
+            expect(sheets[0].hyperlink).toEqual(base.sheets[0].hyperlink);
+        }
         expectAgree(s);
     });
 

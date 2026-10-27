@@ -125,49 +125,28 @@ function additionalCellOps(
     return cellOps;
 }
 
-// `Sheet` fields that are per-client UI state and must never reach a peer. Both places that
-// decide what goes on the wire — filterPatch and sheetMetadataOps — read this one list, so a
-// new per-client field is a single decision rather than a leak through whichever of the two
-// was not updated. Typed against `keyof Sheet` so a field that is renamed or deleted fails
-// the build instead of silently no longer matching.
+// `Sheet` fields that are per-client UI state and must never reach a peer. Both places that decide what goes on the
+// wire, filterPatch and sheetMetadataOps, read this one list, so a new per-client field is a single decision. Typed
+// against `keyof Sheet`, so a field that is renamed or deleted fails the build instead of silently no longer matching.
 const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['selections']);
 
-// The row/col reducers write each sheet back field by field (writeBackSheets in rowcol.ts), so immer hands us a
-// replace per changed field, `data` above all. Shipping those copies the sheet's whole matrix into every collab
-// update — multi-MB on large sheets and the dominant cost of inserting a row — so patchToOp drops them
-// (writesOneFloatingObject). The paired insertRowCol/deleteRowCol special op lets every consumer (client applyOp and
-// the BE replay both run the engine) re-derive the `data` shift instead of receiving it. The engine only rebuilds
-// `data` and the few config fields it owns, so we still have to ship the rest of the edited sheet's metadata
-// authoritatively: the reducer also shifts calcChain, filter, hyperlink, dataVerification,
-// borderInfo/rowReadOnly (inside config) and more, and a delete-undo restores config that isn't derivable at all.
-//
-// Rather than enumerate the shifted fields here — a list that silently drifts from
-// the reducer the moment a field is added — we emit every top-level field except
-// the ones that must not be sent: `data` (re-derived by the engine), `selections`
-// (per-client cursor, also dropped by filterPatch), `calcChain` (a derived
-// cache that scales with formula count — receivers shift their own copy in the
-// reducer, the BE replay never reads it, and a fresh mount re-seeds it from
-// `cell.f`), and `images` and `charts`, which ship per object: a whole map would
-// overwrite a peer's insert, delete or move. A row op moves no image, and each chart
-// it moves, on any sheet, has immer's own patch of its spec, last writer wins, since a
-// receiver's shift can differ from the author's write-back: an undone delete never
-// grows a ref back. Everything else is small, and shipping an unchanged field as an
-// authoritative replace is a no-op.
-//
-// Undoing a delete also ships `calcChain`, which the restoring insert can't re-derive: the
-// delete dropped the removed rows' entries from every peer's calcChain, and without the
-// authoritative copy formulas in restored rows would stop recalculating on peers.
+// The row and column reducers write each sheet back field by field (writeBackSheets in rowcol.ts), so immer hands us a
+// replace per changed field, `data` above all. Shipping those would copy the sheet's whole matrix into every collab
+// update, so patchToOp drops them (writesOneFloatingObject) and ships the op itself, which every consumer, the editor
+// and the server's replay, runs through the engine. The engine rebuilds `data` and the few config fields it owns, but
+// the reducer also shifts the editor-only fields, such as the filter, links and validation, so the rest of the edited
+// sheet's fields ship whole. sheetMetadataOps ships every field but `data`, the per-client ones, and `images` and
+// `charts`, which ship per object: a whole map would overwrite a peer's insert, delete or move. A row op moves no
+// image, and each chart it moves has immer's own patch of its spec, last writer wins, since a receiver's shift can
+// differ from the author's write-back. The edit's own op leaves `calcChain` off too: it scales with formula count, and
+// every receiver shifts its own.
 const PER_OBJECT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['images', 'charts']);
 
-function sheetMetadataOps(ctx: Context, id: string, restoringDelete: boolean): Op[] {
-    const index = getSheetIndex(ctx, id);
-    if (typeof index !== 'number') return [];
-    const sheet = ctx.sheets[index];
+function sheetMetadataOps(fields: Record<string, unknown>, id: string): Op[] {
     const metaOps: Op[] = [];
-    for (const field of Object.keys(sheet) as (keyof Sheet)[]) {
+    for (const [field, value] of Object.entries(fields)) {
         if (field === 'data' || PER_CLIENT_SHEET_FIELDS.has(field) || PER_OBJECT_SHEET_FIELDS.has(field)) continue;
-        if (field === 'calcChain' && !restoringDelete) continue;
-        metaOps.push({ op: 'replace', id, path: [field], value: sheet[field] });
+        metaOps.push({ op: 'replace', id, path: [field], value });
     }
     return metaOps;
 }
@@ -185,15 +164,20 @@ export function filterPatch(patches: Patch[]) {
     return patches.filter((p) => p.path[0] === 'sheets' && !PER_CLIENT_SHEET_FIELDS.has(p.path[2]));
 }
 
+// An undo or redo of a row or column op, as history builds it: the edited sheet's fields as the step leaves them, which
+// ship whole, its recalc list included, and the cells the marker alone would leave different from what it restores.
+export type RowColStep = { fields: Record<string, unknown>; repair: Op[] };
+
+// The op a row or column edit ships in place of the matrices it rewrote.
+export function rowColMarker({ insertRowColOp, deleteRowColOp }: PatchOptions): Op | undefined {
+    if (insertRowColOp) return { op: 'insertRowCol', id: insertRowColOp.id, path: [], value: insertRowColOp };
+    if (deleteRowColOp) return { op: 'deleteRowCol', id: deleteRowColOp.id, path: [], value: deleteRowColOp };
+    return undefined;
+}
+
 // The batch an edit sends. A row or column op ships its marker instead of the matrices it rewrote; an undo or redo of
-// one passes `undo` and the repair cells history computes, which land before the merge stamps that need them.
-export function patchToOp(
-    ctx: Context,
-    patches: Patch[],
-    options?: PatchOptions,
-    undo: boolean = false,
-    repair: Op[] = [],
-): Op[] {
+// one passes the step history built.
+export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions = {}, step?: RowColStep): Op[] {
     let ops = patches.map((p) => {
         const op: Op = {
             op: p.op,
@@ -220,36 +204,28 @@ export function patchToOp(
         const sheet = ctx.sheets.find((s) => s.id === op.id);
         ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: sheet?.hyperlink?.[key] });
     }
-    if (options?.insertRowColOp) {
-        ops = ops.filter(writesOneFloatingObject);
-        ops.push({
-            op: 'insertRowCol',
-            id: options.insertRowColOp.id,
-            path: [],
-            value: options.insertRowColOp,
-        });
-        // An insert that undoes a delete brings back the deleted rows' cells through `repair`.
-        ops = [...ops, ...sheetMetadataOps(ctx, options.insertRowColOp.id, undo)];
-        if (!undo) ops = [...ops, ...additionalCellOps(ctx, options.insertRowColOp)];
+    const marker = rowColMarker(options);
+    if (marker?.id != null) {
+        const { id } = marker;
+        ops = [...ops.filter(writesOneFloatingObject), marker];
+        if (step) ops.push(...sheetMetadataOps(step.fields, id), ...step.repair);
+        else {
+            const index = getSheetIndex(ctx, id);
+            if (index != null) {
+                const { calcChain: _calcChain, ...fields } = ctx.sheets[index];
+                ops.push(...sheetMetadataOps(fields, id));
+            }
+            if (options.insertRowColOp) ops.push(...additionalCellOps(ctx, options.insertRowColOp));
+        }
         // The engine fills inserted rows with nulls, and a ['data', r, c, 'mc'] patch can't be applied to a cell that
         // doesn't exist yet, so the cells go before the merge stamps.
-        ops = [...ops, ...repair, ...addtionalMergeOps(ops, options.insertRowColOp.id)];
-    } else if (options?.deleteRowColOp) {
-        ops = ops.filter(writesOneFloatingObject);
-        ops.push({
-            op: 'deleteRowCol',
-            id: options.deleteRowColOp.id,
-            path: [],
-            value: options.deleteRowColOp,
-        });
-        ops = [...ops, ...sheetMetadataOps(ctx, options.deleteRowColOp.id, false), ...repair];
-        ops = [...ops, ...addtionalMergeOps(ops, options.deleteRowColOp.id)];
-    } else if (options?.addSheetOp) {
+        ops.push(...addtionalMergeOps(ops, id));
+    } else if (options.addSheetOp) {
         // A copy moves the sheets after it, and the batch carries their orders.
         const [[added], rest] = partition(ops, (op) => op.op === 'add' && op.path.length === 0);
         ops = rest.filter((op) => op.path[0] !== 'order');
         if (added) ops.push(...addSheetOps(added.value, ctx.sheets));
-    } else if (options?.deletedSheet) {
+    } else if (options.deletedSheet) {
         ops = deleteSheetOps(options.deletedSheet, ctx.sheets);
     }
     return ops;
