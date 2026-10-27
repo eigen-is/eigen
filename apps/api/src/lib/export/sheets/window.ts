@@ -41,8 +41,8 @@ export type FloatingObject = { item: SheetFloatingItem; box: Box; bounds: Bounds
 
 // `rows` and `cols` are the shown tracks the window renders, in order. `range` is the rectangle they span, the hidden
 // tracks inside it included, and null for a sheet with nothing but images or charts. `offset` is the pixels from A1 to
-// the window's first cell, which the overlay subtracts from each stored box. `floating` is the sheet's images and charts
-// in paint order. `cells` is what the window costs.
+// the window's first cell, which the overlay subtracts from each stored box. `floating` is the sheet's images and
+// charts in paint order. `cells` is what the window costs.
 export type WindowedSheet = {
     sheet: Sheet;
     rows: number[];
@@ -267,7 +267,8 @@ function usedBounds(
     return minRow <= maxRow && minCol <= maxCol ? { minRow, minCol, maxRow, maxCol } : null;
 }
 
-// A merge's first cell holds its size in `mc`. A peer can store any value there, and `in` throws on one that is no object.
+// Whether a cell shows anything: a value, a color, a font look, or the first cell of a merge, which holds its size in
+// `mc`. A peer can store any value there, and `in` throws on one that is no object.
 function hasVisibleContent(v: Cell | null): boolean {
     if (!v) return false;
     if (v.v != null || v.m != null || richText(v) !== undefined) return true;

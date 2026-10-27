@@ -658,7 +658,8 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
     }
 
     const barStyle = `position:absolute;top:0;left:${left}%;width:${width}%;height:100%;background:${fill};z-index:0`;
-    return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, 'position:relative;z-index:1;text-decoration:inherit')}>${display}</span>`;
+    const textStyle = 'position:relative;z-index:1;text-decoration:inherit';
+    return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, textStyle)}>${display}</span>`;
 }
 
 // Images and charts at their stored boxes, rotated about their centers, in the order the editor stacks them. An image
