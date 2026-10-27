@@ -2,6 +2,8 @@
 import './test-env';
 import { afterAll } from 'bun:test';
 import { clearSucroseCache } from 'elysia/sucrose';
+// Eager on purpose: it also enters the app's module cycles in an order that works. Made lazy, 30 test files whose own
+// first import reaches Home or a DAV store first throw a TDZ ReferenceError at load.
 import { shutdownAllHomes } from '../lib/home';
 import { setRetryWaitsMs } from '../lib/storage/deadline';
 import { SHRUNK_RETRY_WAITS_MS } from './fault-storage-helpers';

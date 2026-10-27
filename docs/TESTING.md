@@ -65,7 +65,7 @@ A native Worker that outlives its test file crashes the parallel suite with `pan
 
 `--parallel=N` implies `--isolate`, so every file gets its own `EIGEN_DATA_ROOT` and its own server. No two files share a Home singleton or a SQLite file, which is what makes running them concurrently safe.
 
-A plain local run stays sequential in one process. The per-file server boot (about 1 s) is the price of `--isolate`, and on a laptop with few spare cores it eats the parallel gain, because many files spawn their own transform processes and thumbnail Worker threads on top of the test worker. CI runs `--parallel=4`, the runner's core count, for the isolation, not the speed. One sequential process holds every Home of the run and stalls on what ran before, and bun's file order differs per run on Linux. So a test that leans on what an earlier file left behind, such as a file written without waiting or a setting another test changed, passes the local run and fails CI: run the `--parallel=4` command below before main gets a push.
+A plain local run stays sequential in one process. The per-file server boot (about 1 s) is the price of `--isolate`, and on a laptop with few spare cores it eats the parallel gain, because many files spawn their own transform processes and thumbnail Worker threads on top of the test worker. CI runs `--parallel=4`, the runner's core count, in each of its three shards, for the isolation as much as the speed. One sequential process holds every Home of the run and stalls on what ran before, and bun's file order differs per run on Linux. So a test that leans on what an earlier file left behind, such as a file written without waiting or a setting another test changed, passes the local run and fails CI: run the `--parallel=4` command below before main gets a push.
 
 That one process also shares one data root, so a file that passes alone can fail a later one locally while CI stays green. Leave behind nothing a later file reads: server settings, archives in the backups folder, a socket file at a fixed path, a home no backup can verify (a corrupted document, a control character in a path) or a stray home with an s3 mount. A server backup test verifies every home in the data root and lists every archive, so it is the usual victim.
 
@@ -79,7 +79,7 @@ The same goes for globals. A file restores, never deletes, a global it didn't cr
 
 ## Resource bounds measure the child, and scale rather than time
 
-A test that bounds memory runs the work in a child process and reads the child's peak with `peakRss()` (`apps/api/src/lib/core/peak-rss.ts`, which the transform process reports with too): on Linux a child's `maxRSS` starts at the high-water mark of the process that spawned it, so CI's worker would read its own 1 GB, and `VmHWM` in `/proc/self/status` is the child's alone. A test that guards against a quadratic compares CPU at n with CPU at a fraction of n instead of holding an absolute bound, because a CI runner spends two to four times this Mac's CPU and the old quadratic was only a few times slower at test sizes. A Bun Worker sees `TMPDIR` as it was when its process started, so a test that needs a private temp dir runs the work in a child process with its own `TMPDIR` and working directory. A child that hands back more than 64 KB on stdout writes it with `await Bun.write(Bun.stdout, …)`: once any module reads `process.stdout` (lib0 does at import, so anything that reaches yjs), Bun cuts a `console.log` into the pipe at 64 KB when the process exits.
+A test that bounds memory runs the work in a child process and reads the child's peak with `peakRss()` (`apps/api/src/lib/core/peak-rss.ts`, which the transform process reports with too): on Linux a child's `maxRSS` starts at the high-water mark of the process that spawned it, so CI's worker would read its own 1 GB, and `VmHWM` in `/proc/self/status` is the child's alone. A test that guards against a quadratic compares CPU at n with CPU at a fraction of n instead of holding an absolute bound, because a CI runner spends two to four times this Mac's CPU and the old quadratic was only a few times slower at test sizes. A test that bounds what a hostile input costs, such as a forged key at a sheet's far corner, reads `cpuClock()` (`apps/api/src/test/cpu-time.ts`), the CPU time the process spent, never the wall clock, which grows with every other process on a loaded runner. A Bun Worker sees `TMPDIR` as it was when its process started, so a test that needs a private temp dir runs the work in a child process with its own `TMPDIR` and working directory. A child that hands back more than 64 KB on stdout writes it with `await Bun.write(Bun.stdout, …)`: once any module reads `process.stdout` (lib0 does at import, so anything that reaches yjs), Bun cuts a `console.log` into the pipe at 64 KB when the process exits.
 
 ## The transform's memory limit is tested on Linux only
 
@@ -87,7 +87,7 @@ macOS refuses `setrlimit` for the data segment, so the transform process runs wi
 
 ## Slow end-to-end suites run on CI only
 
-A suite that takes tens of seconds skips unless `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1` is set. The demo seeder contract test, `server/seed-demo.test.ts`, spawns the whole seeder in about 30 s. Run it with `EIGEN_SLOW_TESTS=1 bun run test:api` after you touch `apps/api/src/scripts/demo/` or a reader it decodes with.
+A suite that takes tens of seconds skips unless `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1` is set. The demo seeder contract test, `server/seed-demo.test.ts`, spawns the whole seeder in about 30 s. Run it with `EIGEN_SLOW_TESTS=1 bun run test:api` after you touch `apps/api/src/scripts/demo/` or a reader it decodes with. The doc round trip's random documents (`import/doc/round-trip.test.ts`) run 300 seeds locally and all 5,000 with `EIGEN_SLOW_TESTS`; CI runs 1,000 of them, the next 1,000 on each run by its run number.
 
 ## Each Office writer has a corpus round-trip gate
 
@@ -150,18 +150,27 @@ The release gate's check that `./eigen update` waits out a running backup makes 
 
 ## CI
 
-`.github/workflows/check.yml` runs on every push to `main`, `develop` or a `release-*` branch and on every pull request to `main` or `develop`. Its `check` job installs with `--frozen-lockfile`, then runs `bun dedupe --check`, `bun run lint`, `bun run typecheck` (each workspace runs `bun check --no-script`) and `bun run primitives:check`, then the tests:
+`.github/workflows/check.yml` runs on every push to `main`, `develop`, a `release-*` or a `ci-*` branch, and on every pull request to `main` or `develop`. A `ci-*` branch is for work on the workflow itself, which then runs without a pull request. Its jobs run side by side, each on its own runner after a `bun install --frozen-lockfile`:
 
-- `bun --filter '!@apps/api' test --timeout 30000`: the package suites, one sequential process each. They still depend on file order, which a [ROADMAP.md](ROADMAP.md) row tracks.
-- `bun --filter '@apps/api' test --parallel=4 --timeout 30000`: the API suite on four isolated workers.
+- `checks` runs the gates of `bun run check` but the API suite, in the same order: `bun dedupe --check`, `bun run lint`, `bun run typecheck` (each workspace runs `bun check --no-script`), `bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, `bun scripts/check-docs-links.ts`, `bun run standards`, `bun run primitives:check`. Then `bun --filter '!@apps/api' test --timeout 30000` runs the package suites, one sequential process each, in dependency order. Run all at once on the four cores, they finished 15 s sooner and the tests that time a run against a tenth of it failed. They still depend on file order, which a [ROADMAP.md](ROADMAP.md) row tracks.
+- `api 1/3`, `api 2/3` and `api 3/3` run the API suite in three shards, each on four isolated workers: from `apps/api`, `bun run test --parallel=4 --timeout 30000 --shard=<i>/3 --timings=src/test/timings.json --update-timings`. Bun splits the files by the per-file times in `apps/api/src/test/timings.json`, so the shards take about as long, and starts each shard's slowest files first. A file the timings don't list still runs, in one shard. Only these jobs install the PDF engine, from a cache kept per runner image, WeasyPrint requirements and workflow file.
+- `api-files` adds up the files each shard ran, from Bun's `Ran N tests across M files`, and fails unless they make every API test file in the tree. A file no shard ran would fail no run.
+- `launcher` runs `docker/test-launcher.sh`. It needs no stack and no Bun.
+
+Refresh the timings after a batch of new API test files, or when one shard runs much longer than the others. Each shard uploads the times it measured as the artifact `api-shard-<i>`; merge the three and commit the file:
+
+```bash
+gh run download <run id> -p 'api-shard-*' -D /tmp/api-shards
+jq -s '{version: 1, files: (map(.files) | add | to_entries | sort_by(.key) | from_entries)}' /tmp/api-shards/*/timings-*.json > apps/api/src/test/timings.json
+```
+
+Locally, `bun --filter '@apps/api' test --parallel=4 --timeout 30000` runs the whole API suite the way each shard runs its part.
 
 `bun dedupe --check` fails when `bun.lock` holds two versions of a package that one version could satisfy. Two copies of `@codemirror/language` or of Radix's dismissable layer break at runtime without an error, and a dependency bump or `bun add` can bring a copy back. Run `bun dedupe` and commit the lockfile it writes.
 
-The 30 s per-test timeout is for CI. The runner is slower than a laptop, and bun's 5 s default fails a slow file there. Locally the default stays, so a slow test is caught where it is written. The tests that wait on a mail folder watcher are the exception: on a loaded Mac an `fs.watch` event alone can take longer than 5 s ([IMAP.md § A watcher checks that its directory is still the same one](IMAP.md#a-watcher-checks-that-its-directory-is-still-the-same-one)). Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file, so a worker's growth shows next to the file that caused it. Exit code 143 is an out-of-memory kill, and `bun --filter` buffers a child's output, so the last test in the log is not the culprit.
+The 30 s per-test timeout is for CI. The runner is slower than a laptop, and bun's 5 s default fails a slow file there. Locally the default stays, so a slow test is caught where it is written. The tests that wait on a mail folder watcher are the exception: on a loaded Mac an `fs.watch` event alone can take longer than 5 s ([IMAP.md § A watcher checks that its directory is still the same one](IMAP.md#a-watcher-checks-that-its-directory-is-still-the-same-one)). Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file, so a worker's growth shows next to the file that caused it. Exit code 143 is an out-of-memory kill. `bun --filter` buffers a child's output, so in the package step the last test in the log is not the culprit.
 
-A second job, `launcher`, runs `docker/test-launcher.sh`. It needs no stack and no Bun, so it runs on a plain runner beside the check job.
-
-Locally, `bun run check` runs the check job's set plus four scripts, in this order: dedupe check, lint, typecheck, `bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, `bun scripts/check-docs-links.ts`, `bun scripts/check-standards.ts`, `primitives:check`, test. The docs-link check fails on a relative markdown link or a backtick'd `apps/`, `packages/`, `docker/` or `scripts/` path that does not resolve on disk. The standards check is the ratcheting code-standards gate ([CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)).
+`bun run check` runs the same gates locally, the API suite included, in this order: dedupe check, lint, typecheck, `bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, `bun scripts/check-docs-links.ts`, `bun scripts/check-standards.ts`, `primitives:check`, test. The docs-link check fails on a relative markdown link or a backtick'd `apps/`, `packages/`, `docker/` or `scripts/` path that does not resolve on disk. The standards check is the ratcheting code-standards gate ([CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)).
 
 ## Work lands on develop, and main moves only for a release
 
