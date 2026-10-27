@@ -71,6 +71,7 @@ export function AdminUsersPage({ users, isLoading, userId, usage, guests }: Admi
                 searchQuery={searchQuery}
                 activeUserId={userId}
                 onRowClick={(id) => navigate({ to, search: { userId: id } })}
+                organizationId={config?.orgId}
                 guests={guests}
             />
         </ListDetailLayout>
