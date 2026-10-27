@@ -689,6 +689,67 @@ describe('the axes, legend and blanks', () => {
     });
 });
 
+describe('data labels', () => {
+    const flags = (shown: Record<string, number>) =>
+        Object.entries(shown)
+            .map(([flag, on]) => `<c:${flag} val="${on}"/>`)
+            .join('');
+    const dLbls = (shown: Record<string, number>, inner = '') => `<c:dLbls>${inner}${flags(shown)}</c:dLbls>`;
+    const shownBy = (read: ChartSpec) => read.data.series.map(({ id }) => read.series[id].labels.visible);
+    // A bar group whose series carry `own` labels each, and the group `group` labels.
+    const labelled = (own: string[], group = '', grouping = 'clustered') =>
+        `<c:barChart><c:barDir val="col"/><c:grouping val="${grouping}"/><c:varyColors val="0"/>${own
+            .map((extra, idx) => ser({ idx, name: `S${idx}`, values: [1, 2, 3], extra }))
+            .join('')}${group}<c:axId val="1"/><c:axId val="2"/></c:barChart>`;
+
+    test("a series shows its values when its own c:dLbls has c:showVal on, else as its group's say", () => {
+        expect(shownBy(spec(space(labelled([dLbls({ showVal: 1 }), '']) + AXES)))).toEqual([true, false]);
+        expect(shownBy(spec(space(labelled(['', ''], dLbls({ showVal: 1 })) + AXES)))).toEqual([true, true]);
+        const deleted = '<c:dLbls><c:delete val="1"/></c:dLbls>';
+        expect(shownBy(spec(space(labelled([deleted, ''], dLbls({ showVal: 1 })) + AXES)))).toEqual([false, true]);
+        expect(shownBy(spec(space(labelled([dLbls({ showVal: 0 })], dLbls({ showVal: 1 })) + AXES)))).toEqual([false]);
+    });
+
+    test('c:dLbls without c:showVal, or with only a percent, a name or a category, shows no values', () => {
+        const shows: Record<string, number>[] = [{}, { showPercent: 1 }, { showCatName: 1, showSerName: 1 }];
+        for (const shown of shows) {
+            expect(shownBy(spec(space(labelled([dLbls(shown)]) + AXES)))).toEqual([false]);
+        }
+        expect(shownBy(spec(space(labelled(['<c:dLbls><c:showVal/></c:dLbls>']) + AXES)))).toEqual([true]);
+    });
+
+    test("a point's own c:dLbl is ignored, whether it shows a value or deletes one", () => {
+        const point = (inner: string) => `<c:dLbl><c:idx val="1"/>${inner}</c:dLbl>`;
+        const shows = dLbls({ showVal: 0 }, point(flags({ showVal: 1 })));
+        const deletes = dLbls({ showVal: 1 }, point('<c:delete val="1"/>'));
+        expect(shownBy(spec(space(labelled([shows, deletes]) + AXES)))).toEqual([false, true]);
+    });
+
+    test('a line series reads its labels as a bar series does, and a pie reads none', () => {
+        const line = `<c:lineChart><c:grouping val="standard"/>${ser({ idx: 0, name: 'T', values: [1, 2], extra: dLbls({ showVal: 1 }) })}<c:axId val="1"/><c:axId val="2"/></c:lineChart>`;
+        expect(shownBy(spec(space(line + AXES)))).toEqual([true]);
+        const pie = `<c:pieChart><c:varyColors val="1"/>${ser({ idx: 0, name: 'P', values: [1, 2], extra: dLbls({ showVal: 1 }) })}</c:pieChart>`;
+        expect(shownBy(spec(space(pie)))).toEqual([false]);
+    });
+
+    test("a 100% stack's labels take the values' format, which in a docx or pptx is the value cache's, whatever its axis says", () => {
+        const cached = (format: string, axis: string) =>
+            space(
+                labelled([dLbls({ showVal: 1 })], '', 'percentStacked').replace(
+                    '<c:formatCode>General',
+                    `<c:formatCode>${format}`,
+                ) + AXES.replace('<c:numFmt formatCode="General" sourceLinked="1"/>', axis),
+            );
+        const linked = '<c:numFmt formatCode="0%" sourceLinked="1"/>';
+        const own = '<c:numFmt formatCode="0%" sourceLinked="0"/>';
+        expect(spec(cached('0%', linked)).axes.y.labels.format).toBe('0%');
+        expect(spec(cached('#,##0', own)).axes.y.labels.format).toBe('#,##0');
+        expect(
+            spec(cached('General', '<c:numFmt formatCode="0.0%" sourceLinked="0"/>')).axes.y.labels.format,
+        ).toBeNull();
+    });
+});
+
 describe('markup compatibility, Strict and colour maps', () => {
     test("the Fallback of a choice the reader doesn't know is read", () => {
         const style = `<mc:AlternateContent><mc:Choice Requires="c14" xmlns:c14="http://schemas.microsoft.com/office/drawing/2007/8/2/chart"><c14:style val="102"/></mc:Choice><mc:Fallback><c:style val="2"/></mc:Fallback></mc:AlternateContent>`;

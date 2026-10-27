@@ -50,9 +50,8 @@ export function fit(ctx: Context, text: string, maxWidth: number, fontSize = ctx
     return head === '' ? '' : head + ELLIPSIS;
 }
 
-// An upright label's line box at the chart's text size.
-export function labelBox(ctx: Context, { text, x, y, anchor }: ChartLabel): Frame {
-    const width = measure(ctx, text);
+// An upright label's line box at the chart's text size. A caller that measured the text already passes its width.
+export function labelBox(ctx: Context, { text, x, y, anchor }: ChartLabel, width = measure(ctx, text)): Frame {
     const left = anchor === 'start' ? x : anchor === 'middle' ? x - width / 2 : x - width;
     return { left, top: y, right: left + width, bottom: y + ctx.lineHeight };
 }
@@ -60,6 +59,19 @@ export function labelBox(ctx: Context, { text, x, y, anchor }: ChartLabel): Fram
 // Side by side two labels keep a gap apart, as the bar chart's ticks are spaced; stacked lines may meet.
 export function touches(ctx: Context, a: Frame, b: Frame): boolean {
     return a.left < b.right + ctx.gap && b.left < a.right + ctx.gap && a.top < b.bottom && b.top < a.bottom;
+}
+
+// Each label in turn is kept when its box touches none kept before it, so of two that collide the first keeps its
+// place. Callers rank their labels first, as Highcharts ranks its data labels.
+export function keepUntouched(ctx: Context, ranked: { label: ChartLabel; box: Frame }[]): ChartLabel[] {
+    const boxes: Frame[] = [];
+    const kept: ChartLabel[] = [];
+    for (const { label: placed, box } of ranked) {
+        if (boxes.some((other) => touches(ctx, other, box))) continue;
+        boxes.push(box);
+        kept.push(placed);
+    }
+    return kept;
 }
 
 // Every other label hides until none touch, Vega's parity rule, keeping the one at `keep` (zero's, when the axis

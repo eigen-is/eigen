@@ -55,7 +55,7 @@ The import reads every sheet in the workbook and preserves:
 - Conditional formatting rules, data validation rules, and hyperlinks
 - Named ranges used in formulas and dropdown lists. Sheets puts the cells a name stands for in its place, so `=SUM(Sales)` comes in as `=SUM(Data!$A$1:$A$9)` and still adds up those cells after you edit them. The name itself isn't kept.
 - Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are not carried over)
-- Column, bar, line, and pie charts, with their colors, title, background, and text and line colors, over the same cells as in Excel. A 3-D chart comes in flat. See [Add a chart to a spreadsheet](/support/sheets/add-a-chart).
+- Column, bar, line, and pie charts, with their colors, title, background, text and line colors, and data labels, over the same cells as in Excel. A 3-D chart comes in flat. See [Add a chart to a spreadsheet](/support/sheets/add-a-chart).
 - Chart sheets, each as a sheet of its own with its chart in the top-left corner
 - Images floating over the cells, at the same size and angle, in front of or behind the charts as in Excel. An image in a format Sheets can't show, such as EMF, WMF, or TIFF, is left out. So is every image after the first 1,000, or once the images add up to more than the largest file you can upload (35 MB unless your administrator changed it).
 

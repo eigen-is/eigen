@@ -60,13 +60,15 @@ export type ChartPlot = { stacking: ChartStacking };
 
 // A series' style, by its id. plot null draws in the chart's type, and yAxis names the axis it plots against; this build
 // draws every series in the chart's type on y. A null color is the palette's at the series' index (chartColor), so a
-// palette change reaches it and deleting a series shifts the ones after it. line and marker apply to line charts only.
+// palette change reaches it and deleting a series shifts the ones after it. line and marker apply to line charts only, and
+// labels, the value on each bar or point, to column, bar and line charts: a pie keeps its own labels.
 export type ChartSeriesStyle = {
     plot: ChartType | null;
     yAxis: string;
     color: string | null;
     line: { smooth: boolean };
     marker: { visible: boolean };
+    labels: { visible: boolean };
 };
 
 // One point's style over its series', by the point's index. A pie's slices are its first series' points, and a null
@@ -195,12 +197,10 @@ export type ChartPaint = {
 // One line of chart text, turned 0, -45 or -90 degrees; Convert to shapes takes its y as a rich-text box's top.
 export type ChartLabel = TextLine;
 
-// A value-axis label for a tick and the step between ticks.
-export type ChartTickFormat = (value: number, step: number) => string;
-
-// The chart's box is width × height from (0, 0); every shape and label is in those local coordinates.
-// Without a formatTick, a tick reads in the value axis's own format, or with as many decimals as the step when the
-// axis has none.
+// The chart's box is width × height from (0, 0); every shape and label is in those local coordinates. A tick and a
+// data label read in the value axis's own format, else in sourceFormat, the values' own format, which a sheet reads
+// from its cells. Without either a tick takes as many decimals as the step, and a data label reads as General. A 100%
+// stack's ticks read as percents, and its data labels skip the axis format, which reads shares.
 export type ChartLayoutInput = {
     id: string;
     spec: ChartSpec;
@@ -208,7 +208,7 @@ export type ChartLayoutInput = {
     width: number;
     height: number;
     paint: ChartPaint;
-    formatTick?: ChartTickFormat;
+    sourceFormat?: string;
 };
 
 // The box and paint every layout starts from, a message's included.
@@ -223,7 +223,7 @@ export type ChartSpecSvgInput = {
     width: number;
     height: number;
     look?: ChartLook;
-    formatTick?: ChartTickFormat;
+    sourceFormat?: string;
 };
 
 // The elements a chart draws with: rectangles, lines, marker ellipses and pie slices.

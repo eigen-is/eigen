@@ -18,7 +18,7 @@ import type { ImportedMedia } from '../../../lib/import/image-types';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
 import { seriesIdsByPlace } from '../../../scripts/office-audit';
-import { axesOf, sampleChartParts } from '../../fixtures/chart-parts';
+import { axesOf, sampleChartParts, withDataLabels } from '../../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 import type { DocxParts } from '../../fixtures/golden-docx';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
@@ -189,16 +189,18 @@ describe('a chart', () => {
         const { spec } = readChartSpec(attrs ?? {});
         return spec && seriesIdsByPlace(spec);
     };
-    const stacked = (type: 'column' | 'bar', stacking: ChartStacking) => {
+    const stacked = (type: 'column' | 'bar', stacking: ChartStacking, labelled: string[] = []) => {
         const spec = sampleChartSpec(type);
-        return newChartSpecParts({ ...spec, plots: { ...spec.plots, [type]: { stacking } } });
+        return newChartSpecParts(withDataLabels({ ...spec, plots: { ...spec.plots, [type]: { stacking } } }, labelled));
     };
 
     test.each([
         ['column', sampleChartParts('column')],
         ['stacked bar', stacked('bar', 'stacked')],
         ['100% stacked column', stacked('column', 'percent')],
+        ['100% stacked column with labels on one series', stacked('column', 'percent', ['s-2'])],
         ['line', sampleChartParts('line')],
+        ['line with labels on two series', newChartSpecParts(withDataLabels(sampleChartSpec('line'), ['s-1', 's-3']))],
         ['pie', sampleChartParts('pie')],
         ['column in Source Serif', sampleChartParts('column', 'Source Serif 4')],
     ])('a %s comes back as the same chart, at its size, its caption and layout kept', async (_, parts) => {

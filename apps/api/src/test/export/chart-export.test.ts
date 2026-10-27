@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { StyleDefaults, VectorChartElement, VectorScene } from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
@@ -83,6 +83,27 @@ describe('a chart in the canvas exports', () => {
         // WeasyPrint draws SVG text and ignores a foreignObject (the stylesheet's comments name one).
         expect(bodies[0]).toContain('Q1 &lt;draft&gt; &amp; more</text>');
         expect(bodies[0]).not.toContain('foreignObject');
+    });
+
+    test("a series' data labels print as SVG text, in the PDF and a deck's HTML", async () => {
+        const spec = sampleChartSpec('column', VECTOR_STYLE_DEFAULTS.fontFamily);
+        const series = { ...spec.series, 's-2': { ...DEFAULT_CHART_SERIES_STYLE, labels: { visible: true } } };
+        const labelled = chartElement(VECTOR_STYLE_DEFAULTS, newChartSpecParts({ ...spec, series }));
+        const pdf = decode(
+            (await renderEigenvectorExport(docOf({ ...scene, elements: [labelled] }), 'Drawing', async () => [])).data,
+        );
+        expect(pdf).toContain('>28.7</text>');
+        const slide = { ...labelled, frameId: 'frame-1' };
+        const deck: VectorScene = {
+            elements: [slide],
+            frames: [{ id: 'frame-1', index: 'a0', name: '', background: '', ...SLIDE_SIZES['16:9'] }],
+            meta: DEFAULT_SCENE_META,
+        };
+        const html = decode((await renderEigenslidesHtml(docOf(deck), 'html', 'Deck', async () => [])).data);
+        expect(html).toContain('>28.7</text>');
+        expect(decode((await renderEigenvectorExport(docOf(scene), 'Drawing', async () => [])).data)).not.toContain(
+            '>28.7</text>',
+        );
     });
 
     test('a deck prints its chart the same way', async () => {

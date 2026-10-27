@@ -1,10 +1,4 @@
-import {
-    DEFAULT_CHART_SERIES_STYLE,
-    defaultChartSpec,
-    formatTickValue,
-    layoutChart,
-    sampleChartSpec,
-} from '../../charts';
+import { DEFAULT_CHART_SERIES_STYLE, defaultChartSpec, layoutChart, sampleChartSpec } from '../../charts';
 import type {
     ChartAxis,
     ChartData,
@@ -48,6 +42,11 @@ export function marked(data: ChartData): ChartSpec['series'] {
     return Object.fromEntries(data.series.map(({ id }) => [id, style({ marker: { visible: true } })]));
 }
 
+// Data labels on the series the ids name, every series of the data by default.
+export function labelled(data: ChartData, ids = data.series.map(({ id }) => id)): ChartSpec['series'] {
+    return Object.fromEntries(ids.map((id) => [id, style({ labels: { visible: true } })]));
+}
+
 // One stacking for every plot type, as the type a test draws reads its own.
 export function plots(stacking: ChartStacking): ChartSpec['plots'] {
     return { column: { stacking }, bar: { stacking }, line: { stacking }, pie: { stacking } };
@@ -76,7 +75,13 @@ function axisOver(axis: ChartAxis, patch: AxisPatch): ChartAxis {
 // The sample without its axis titles, for tests that measure the room left to the plot and its labels.
 export const UNTITLED: SpecPatch = { axes: { x: {}, y: {} } };
 
-type Options = { data?: ChartData; width?: number; height?: number; paint?: Partial<ChartPaint> };
+type Options = {
+    data?: ChartData;
+    width?: number;
+    height?: number;
+    paint?: Partial<ChartPaint>;
+    sourceFormat?: string;
+};
 
 export function sampleData(type: ChartType): ChartData {
     const { data } = sampleChartSpec(type);
@@ -97,7 +102,7 @@ export function layout(type: ChartType, patch: SpecPatch = {}, options: Options 
         width: options.width ?? 640,
         height: options.height ?? 400,
         paint: { ...PAINT, ...options.paint },
-        formatTick: formatTickValue,
+        sourceFormat: options.sourceFormat,
     });
 }
 

@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
     chartColor,
-    formatTickValue,
     layoutChart,
     MAX_CHART_SPEC_BYTES,
     newChartSpecParts,
@@ -74,7 +73,6 @@ function layoutOf(el: VectorChartElement, spec: ChartSpec): ChartLayout {
             seed: el.seed,
             fillStyle: fill.style,
         },
-        formatTick: formatTickValue,
     });
 }
 
