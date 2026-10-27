@@ -79,6 +79,17 @@ describe('importSummary', () => {
         ).toBe('396 fills and 1 text box were simplified.');
     });
 
+    // A deck's SmartArt drawn from its cached drawing comes in as loose shapes.
+    test('a SmartArt graphic drawn as shapes lost its layout', () => {
+        expect(importSummary([{ code: 'diagrams-flattened', count: 1 }])).toBe('1 SmartArt graphic lost its layout.');
+        expect(
+            importSummary([
+                { code: 'diagrams-flattened', count: 2 },
+                { code: 'diagrams-dropped', count: 1 },
+            ]),
+        ).toBe('1 SmartArt graphic was not imported; 2 SmartArt graphics lost their layout.');
+    });
+
     // A flipped picture comes in, unflipped.
     test("a picture's flip is said to be what was not imported", () => {
         expect(importSummary([{ code: 'mirrors-dropped', count: 1 }])).toBe("1 picture's flip was not imported.");

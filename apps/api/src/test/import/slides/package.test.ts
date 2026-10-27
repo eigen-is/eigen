@@ -5,6 +5,8 @@ import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/
 import {
     box,
     buildPptx,
+    DIAGRAM_DATA_TYPE,
+    dspSp,
     graphicFrame,
     NS,
     PIXEL_PNG,
@@ -14,7 +16,9 @@ import {
     pptxParts,
     REL,
     rel,
+    smartArt,
     sp,
+    textBox,
     zipParts,
 } from '../../fixtures/pptx';
 
@@ -199,6 +203,54 @@ describe('a pptx package', () => {
             },
         });
         expect(refusal(chart)).toEqual(tooLarge);
+    });
+
+    test('a part a relationship names as the wrong kind is still read as its own kind for another', () => {
+        const deck = buildPptx({
+            masters: [{ shapes: text('master') }],
+            slides: [{ layout: 0, rels: rel('rId1', 'slideLayout', '../slideMasters/slideMaster1.xml') }, {}],
+        });
+        expect(htmlOf(deck)).toEqual(['', '<p>master</p>']);
+    });
+
+    test("SmartArt's parts are parsed only through their relationship and content type", () => {
+        const drawing = dspSp({ xfrm: box(0, 0, 100, 100), text: para('drawn'), txXfrm: textBox(0, 0, 100, 100) });
+        const read = (diagram: ReturnType<typeof smartArt>) =>
+            htmlOf(
+                buildPptx({
+                    slides: [{ shapes: diagram.shapes, rels: diagram.rels }],
+                    types: diagram.types,
+                    files: diagram.files,
+                }),
+            );
+        const drawn = smartArt([0, 0, 400, 200], { nodes: ['node'], drawing });
+        expect(read(drawn)).toEqual(['<p>drawn</p>']);
+        // A drawing of another content type is no drawing: the box keeps the data model's text.
+        expect(read(smartArt([0, 0, 400, 200], { nodes: ['node'], drawing, drawingType: 'application/xml' }))).toEqual([
+            '<p>SmartArt not imported</p><p>node</p>',
+        ]);
+        // A data part of another content type is no data model.
+        const untyped = { ...drawn, types: drawn.types.replace(DIAGRAM_DATA_TYPE, 'application/xml') };
+        expect(read(untyped)).toEqual(['<p>SmartArt not imported</p>']);
+        // A data model without its dataModelExt names no drawing, though the slide relates one.
+        const data = String(drawn.files['ppt/diagrams/data1.xml']).replace(/<dgm:extLst>.*<\/dgm:extLst>/, '');
+        expect(read({ ...drawn, files: { ...drawn.files, 'ppt/diagrams/data1.xml': data } })).toEqual([
+            '<p>SmartArt not imported</p><p>node</p>',
+        ]);
+        // A damaged drawing costs only its shapes.
+        expect(read({ ...drawn, files: { ...drawn.files, 'ppt/diagrams/drawing1.xml': '<dsp:drawing' } })).toEqual([
+            '<p>SmartArt not imported</p><p>node</p>',
+        ]);
+    });
+
+    test('a SmartArt drawing past the parse budget refuses the deck', () => {
+        const diagram = smartArt([0, 0, 400, 200], { drawing: ' '.repeat(MAX_PACKAGE_XML_BYTES) });
+        const bytes = buildPptx({
+            slides: [{ shapes: diagram.shapes, rels: diagram.rels }],
+            types: diagram.types,
+            files: diagram.files,
+        });
+        expect(refusal(bytes)).toEqual({ status: 413, message: 'This presentation is too large to import' });
     });
 
     test('the relationship types match by their last segment, as a Strict package spells them', () => {

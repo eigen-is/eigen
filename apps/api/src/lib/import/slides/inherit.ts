@@ -6,7 +6,7 @@ import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { DEGREE, NO_DRAWING_THEME, readColorMap, readColorScheme } from '../../ooxml/drawingml';
-import { A_NS, emu, isOn, P_NS } from '../../ooxml/ooxml';
+import { A_NS, DSP_NS, emu, isOn, P_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
 import { childOf, firstChildOf } from './lookup';
 import type { PptxPackage } from './package';
@@ -158,13 +158,14 @@ export function spTreeOf(root: XmlElement): XmlElement | undefined {
     return cSld && childOf(cSld, P_NS, 'spTree');
 }
 
-// p:nvSpPr, p:nvPicPr, p:nvGrpSpPr…: whichever non-visual properties the shape's kind has.
+// p:nvSpPr, p:nvPicPr, p:nvGrpSpPr, a SmartArt drawing's dsp:nvSpPr…: whichever non-visual properties the shape's kind
+// has.
 export function nonVisualOf(shape: XmlElement): XmlElement | undefined {
     return firstChildOf(shape, isNonVisual);
 }
 
 function isNonVisual(child: XmlElement): boolean {
-    return child.ns === P_NS && child.local.startsWith('nv');
+    return (child.ns === P_NS || child.ns === DSP_NS) && child.local.startsWith('nv');
 }
 
 export function placeholderOf(shape: XmlElement): PlaceholderKey | undefined {
@@ -174,19 +175,20 @@ export function placeholderOf(shape: XmlElement): PlaceholderKey | undefined {
     return ph && { type: xmlAttr(ph, '', 'type'), idx: xmlAttr(ph, '', 'idx') };
 }
 
+// A slide's shape and a SmartArt drawing's name their children alike, each in its own namespace.
 export function propertiesOf(shape: XmlElement): ShapeProperties {
-    const spPr = childOf(shape, P_NS, 'spPr');
-    const body = childOf(shape, P_NS, 'txBody');
+    const spPr = childOf(shape, shape.ns, 'spPr');
+    const body = childOf(shape, shape.ns, 'txBody');
     const preset = spPr && childOf(spPr, A_NS, 'prstGeom');
     const custom = !preset && spPr ? childOf(spPr, A_NS, 'custGeom') : undefined;
     return {
         // spPr's a:xfrm, or a graphic frame's own p:xfrm.
-        xfrm: readXfrm(spPr ? childOf(spPr, A_NS, 'xfrm') : childOf(shape, P_NS, 'xfrm')),
+        xfrm: readXfrm(spPr ? childOf(spPr, A_NS, 'xfrm') : childOf(shape, shape.ns, 'xfrm')),
         geometry: preset ? xmlAttr(preset, '', 'prst') : custom && 'custGeom',
         geom: preset ?? custom,
         fill: fillIn(spPr),
         ln: spPr && childOf(spPr, A_NS, 'ln'),
-        style: childOf(shape, P_NS, 'style'),
+        style: childOf(shape, shape.ns, 'style'),
         bodyPr: body && childOf(body, A_NS, 'bodyPr'),
         listStyle: body && childOf(body, A_NS, 'lstStyle'),
     };

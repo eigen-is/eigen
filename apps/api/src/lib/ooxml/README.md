@@ -9,7 +9,7 @@ ooxml is the Office Open XML core that Eigen's docx, xlsx and pptx readers and w
 | Zip | Stored and deflated entries, ZIP64, one disk | Stored and deflated entries, no ZIP64 |
 | Package | `[Content_Types].xml`, relationships, parts, media | `[Content_Types].xml`, `_rels/.rels`, `docProps/core.xml`, a part's relationships |
 | XML | Transitional and Strict OOXML, `mc:AlternateContent` | Nothing: writers build their XML as strings |
-| DrawingML | Colours with their transforms, themes, colour maps, blips, text bodies | Colours, fills, a plain theme, blips |
+| DrawingML | Colours with their transforms, themes, colour maps, blips, text bodies, a SmartArt graphic's drawing and text | Colours, fills, a plain theme, blips |
 | Charts | A `c:chartSpace` as a `ChartSpec` and its look | A `ChartSpec` as a `c:chartSpace`, and the sheet of its embedded workbook |
 
 ## Layering

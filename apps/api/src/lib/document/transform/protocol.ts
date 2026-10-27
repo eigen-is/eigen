@@ -147,6 +147,7 @@ export const COUNTED_WARNING_CODES = [
     'charts-dropped',
     'charts-simplified',
     'diagrams-dropped',
+    'diagrams-flattened',
     'objects-dropped',
     'shapes-simplified',
     'fills-simplified',

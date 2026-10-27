@@ -137,6 +137,72 @@ export function graphicFrame(uri: string, x: number, y: number, cx: number, cy: 
     return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Frame ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></p:xfrm><a:graphic><a:graphicData uri="${uri}">${data}</a:graphicData></a:graphic></p:graphicFrame>`;
 }
 
+export const DGM = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
+const DSP = 'http://schemas.microsoft.com/office/drawing/2008/diagram';
+export const DIAGRAM_DATA_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml';
+export const DIAGRAM_DRAWING_TYPE = 'application/vnd.ms-office.drawingml.diagramDrawing+xml';
+
+// A shape of the drawing PowerPoint caches of a SmartArt graphic, as the corpus's org charts write one: its
+// dsp:style's references paint black, and its text sits in a dsp:txXfrm of its own. `xfrm` is relative to the
+// graphic's frame.
+export function dspSp(options: {
+    xfrm: string;
+    geom?: string;
+    spPr?: string;
+    style?: string;
+    text?: string;
+    txXfrm?: string;
+}): string {
+    const style =
+        options.style ??
+        '<a:lnRef idx="2"><a:scrgbClr r="0" g="0" b="0"/></a:lnRef><a:fillRef idx="1"><a:scrgbClr r="0" g="0" b="0"/></a:fillRef><a:effectRef idx="0"><a:scrgbClr r="0" g="0" b="0"/></a:effectRef><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef>';
+    const body =
+        options.text === undefined
+            ? ''
+            : `<dsp:txBody><a:bodyPr spcFirstLastPara="0" vert="horz" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"><a:noAutofit/></a:bodyPr><a:lstStyle/>${options.text}</dsp:txBody>`;
+    return `<dsp:sp modelId="{${ids++}}"><dsp:nvSpPr><dsp:cNvPr id="0" name=""/><dsp:cNvSpPr/></dsp:nvSpPr><dsp:spPr>${options.xfrm}<a:prstGeom prst="${options.geom ?? 'rect'}"><a:avLst/></a:prstGeom>${options.spPr ?? ''}</dsp:spPr><dsp:style>${style}</dsp:style>${body}${options.txXfrm ?? ''}</dsp:sp>`;
+}
+
+// A dsp:txXfrm at a box in frame px, relative to the graphic's frame.
+export const textBox = (x: number, y: number, width: number, height: number, attributes = '') =>
+    `<dsp:txXfrm${attributes}><a:off x="${x * PX}" y="${y * PX}"/><a:ext cx="${width * PX}" cy="${height * PX}"/></dsp:txXfrm>`;
+
+// A SmartArt graphic at a box in frame px: its frame on the slide, its data model's node texts, and the drawing Office
+// cached of it, its shapes as given, unless a file such as LibreOffice's own writes none. The slide names the data part
+// rId20 and the drawing rId21, as PowerPoint names the drawing by a relationship of the slide.
+export function smartArt(
+    at: [x: number, y: number, width: number, height: number],
+    options: { nodes?: string[]; drawing?: string; drawingRels?: string; drawingType?: string },
+): Required<Pick<SlideFixture, 'shapes' | 'rels'>> & Required<Pick<PptxFixture, 'types' | 'files'>> {
+    const [x, y, width, height] = at.map((px) => px * PX);
+    const relIds = `<dgm:relIds xmlns:dgm="${DGM}" r:dm="rId20" r:lo="rId22" r:qs="rId23" r:cs="rId24"/>`;
+    const point = (text: string, i: number) =>
+        `<dgm:pt modelId="{${i}}"><dgm:prSet phldrT="[Text]"/><dgm:spPr/><dgm:t><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US"/><a:t>${text}</a:t></a:r></a:p></dgm:t></dgm:pt>`;
+    const transition = `<dgm:pt modelId="{t}" type="parTrans" cxnId="{c}"><dgm:prSet/><dgm:spPr/><dgm:t><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>transition</a:t></a:r></a:p></dgm:t></dgm:pt>`;
+    const extension =
+        options.drawing === undefined
+            ? ''
+            : `<dgm:extLst><a:ext uri="${DSP}"><dsp:dataModelExt xmlns:dsp="${DSP}" relId="rId21" minVer="${DGM}"/></a:ext></dgm:extLst>`;
+    const files: Record<string, string> = {
+        'ppt/diagrams/data1.xml': `<dgm:dataModel xmlns:dgm="${DGM}" xmlns:a="${A}"><dgm:ptLst><dgm:pt modelId="{doc}" type="doc"><dgm:prSet/><dgm:spPr/><dgm:t><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>document</a:t></a:r></a:p></dgm:t></dgm:pt>${(options.nodes ?? []).map(point).join('')}${transition}</dgm:ptLst><dgm:cxnLst/><dgm:bg/><dgm:whole/>${extension}</dgm:dataModel>`,
+    };
+    let types = `<Override PartName="/ppt/diagrams/data1.xml" ContentType="${DIAGRAM_DATA_TYPE}"/>`;
+    if (options.drawing !== undefined) {
+        files['ppt/diagrams/drawing1.xml'] =
+            `<dsp:drawing xmlns:dgm="${DGM}" xmlns:dsp="${DSP}" xmlns:a="${A}" xmlns:r="${R}"><dsp:spTree><dsp:nvGrpSpPr><dsp:cNvPr id="0" name=""/><dsp:cNvGrpSpPr/></dsp:nvGrpSpPr><dsp:grpSpPr/>${options.drawing}</dsp:spTree></dsp:drawing>`;
+        if (options.drawingRels) files['ppt/diagrams/_rels/drawing1.xml.rels'] = rels(options.drawingRels);
+        types += `<Override PartName="/ppt/diagrams/drawing1.xml" ContentType="${options.drawingType ?? DIAGRAM_DRAWING_TYPE}"/>`;
+    }
+    return {
+        shapes: graphicFrame(DGM, x, y, width, height, relIds),
+        rels:
+            rel('rId20', 'diagramData', '../diagrams/data1.xml') +
+            `<Relationship Id="rId21" Type="http://schemas.microsoft.com/office/2007/relationships/diagramDrawing" Target="../diagrams/drawing1.xml"/>`,
+        types,
+        files,
+    };
+}
+
 export const solid = (hex: string) => `<a:solidFill><a:srgbClr val="${hex}"/></a:solidFill>`;
 export const scheme = (slot: string, transforms = '') =>
     `<a:solidFill><a:schemeClr val="${slot}">${transforms}</a:schemeClr></a:solidFill>`;

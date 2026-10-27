@@ -8,7 +8,7 @@ import { isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigend
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
-import { blipEmbeds, IMAGE_MIME_BY_EXTENSION } from '../../ooxml/drawingml';
+import { blipEmbeds, diagramDrawingId, diagramTextBodies, IMAGE_MIME_BY_EXTENSION } from '../../ooxml/drawingml';
 import {
     A_NS,
     C_NS,
@@ -263,20 +263,13 @@ function graphicText(reader: Reader, frame: XmlElement, scope: Scope): Item[] {
         reader.lost('diagrams-dropped');
         const data = readOnce(reader, partPath(xmlAttr(diagram, R_NS, 'dm'), scope));
         if (!data) continue;
-        const [ext] = descendants(data, DSP_NS, 'dataModelExt');
-        const drawing = readOnce(reader, partPath(ext && xmlAttr(ext, '', 'relId'), scope));
-        const paragraphs = drawing
-            ? descendants(drawing, DSP_NS, 'txBody').flatMap((body) => xmlChildren(body, A_NS, 'p'))
-            : descendants(data, DGM_NS, 'pt')
-                  .filter((point) => SMARTART_TEXT_POINTS.has(xmlAttr(point, '', 'type') ?? 'node'))
-                  .flatMap((point) => descendants(point, A_NS, 'p'));
-        for (const paragraph of paragraphs) lines.push(drawingLine(paragraph));
+        const drawing = readOnce(reader, partPath(diagramDrawingId(data), scope));
+        const bodies = drawing ? descendants(drawing, DSP_NS, 'txBody') : diagramTextBodies(data);
+        for (const body of bodies)
+            for (const paragraph of xmlChildren(body, A_NS, 'p')) lines.push(drawingLine(paragraph));
     }
     return lines.filter((line) => line.some((node) => node.type === 'text')).map(paraOf);
 }
-
-// The points a SmartArt draws text for; transitions and presentation points hold none of the document's.
-const SMARTART_TEXT_POINTS = new Set(['node', 'asst']);
 
 // A part a second graphic names adds nothing, so no file multiplies one part's text.
 function readOnce(reader: Reader, path: string | undefined): XmlElement | undefined {

@@ -1,12 +1,13 @@
-// A pptx as the deck reader opens it: the presentation, its slides in order and the layouts, masters, themes, charts and
-// pictures they name, each read only through its relationships; and what one walk over the deck shares.
+// A pptx as the deck reader opens it: the presentation, its slides in order and the layouts, masters, themes, charts,
+// SmartArt drawings and pictures they name, each read only through its relationships; and what one walk over the deck
+// shares.
 
 import type { NewVectorElement } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import type { Budget } from '../../ooxml/budget';
-import { THEME_TYPE } from '../../ooxml/drawingml';
+import { DIAGRAM_DATA_TYPE, DIAGRAM_DRAWING_TYPE, diagramDrawingId, THEME_TYPE } from '../../ooxml/drawingml';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../ooxml/ooxml';
 import { chartPart } from '../../ooxml/ooxml-chart';
 import type { OoxmlPackage, Part } from '../../ooxml/opc';
@@ -29,13 +30,15 @@ const NOT_A_PRESENTATION = new Set([
 ]);
 
 // The content parts the reader parses, by relationship type: a part is parsed only when its content type agrees, so
-// a relationship can't hand the reader notes, a diagram or a part of another kind. contentTypeOf answers in lower
-// case.
+// a relationship can't hand the reader notes, a SmartArt graphic's layout or a part of another kind. contentTypeOf
+// answers in lower case.
 const PART_TYPES = {
     slide: SLIDE_TYPE.toLowerCase(),
     slideLayout: SLIDE_LAYOUT_TYPE.toLowerCase(),
     slideMaster: SLIDE_MASTER_TYPE.toLowerCase(),
     theme: THEME_TYPE,
+    diagramData: DIAGRAM_DATA_TYPE.toLowerCase(),
+    diagramDrawing: DIAGRAM_DRAWING_TYPE.toLowerCase(),
 };
 export type PartKind = keyof typeof PART_TYPES;
 
@@ -44,14 +47,19 @@ export type PptxPackage = {
     // In p:sldIdLst order, each once; a slide whose relationship names no slide part is left out.
     slides: string[];
     // The part a relationship of this kind names, parsed once; a damaged layout, master or theme is none.
-    related(from: Part, kind: Exclude<PartKind, 'slide'>): Part | undefined;
+    related(from: Part, kind: 'slideLayout' | 'slideMaster' | 'theme'): Part | undefined;
     slide(path: string): Part | undefined;
+    // The SmartArt graphic a dgm:relIds names: its data model, and the drawing Office cached of it, which a relationship
+    // of the showing part names. A missing or damaged one is none.
+    diagram(from: Part, relIds: XmlElement): Diagram;
     // The c:chartSpace an r:id names, parsed once; a missing or damaged one is none.
     chart(from: Part, id: string | undefined): XmlElement | undefined;
     // The picture an r:embed names, when it is one the deck can show.
     media(from: Part, id: string | undefined): MediaPart | undefined;
     readMedia: OoxmlPackage['readMedia'];
 };
+
+export type Diagram = { data: XmlElement | undefined; drawing: Part | undefined };
 
 export type Frame = { width: number; height: number };
 
@@ -107,27 +115,37 @@ export function readPptxPackage(bytes: Uint8Array): PptxPackage {
     });
     const slides = [...new Set(listed)];
 
+    // By kind too, so a part named as one kind is never handed out as another.
     const parts = new Map<string, Part | undefined>();
-    const related = (from: Part, kind: Exclude<PartKind, 'slide'>): Part | undefined => {
-        const path = relOfType(from.rels, kind);
+    const parsed = (path: string | undefined, kind: Exclude<PartKind, 'slide'>): Part | undefined => {
         if (!path) return undefined;
-        if (!parts.has(path))
+        const key = `${kind} ${path}`;
+        if (!parts.has(key))
             parts.set(
-                path,
+                key,
                 optional(() => read(path, kind)),
             );
-        return parts.get(path);
+        return parts.get(key);
+    };
+    const diagram = (from: Part, relIds: XmlElement): Diagram => {
+        const data = parsed(relTarget(from.rels, prefixedAttrOf(relIds, R_NS, 'dm'), 'diagramData'), 'diagramData');
+        const id = data && drawingIds(data.root, null, () => diagramDrawingId(data.root));
+        return { data: data?.root, drawing: parsed(relTarget(from.rels, id, 'diagramDrawing'), 'diagramDrawing') };
     };
     return {
         presentation,
         slides,
-        related,
+        related: (from, kind) => parsed(relOfType(from.rels, kind), kind),
         slide: (path) => read(path, 'slide'),
+        diagram,
         chart: (from, id) => chartPart(pkg, from.rels, id, 'ppt/charts/'),
         media: (from, id) => pictureMediaPart(pkg, from.rels, id, 'ppt/'),
         readMedia: pkg.readMedia,
     };
 }
+
+// A data model's drawing is looked up once, however many frames show it.
+const drawingIds = cachedBy<null, string | undefined>();
 
 function isSvgExtension(extension: XmlElement): boolean {
     return extension.ns === A_NS && extension.local === 'ext' && childOf(extension, ASVG_NS, 'svgBlip') !== undefined;

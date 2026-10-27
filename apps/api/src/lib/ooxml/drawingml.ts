@@ -1,14 +1,14 @@
 // DrawingML, the drawing vocabulary docx, xlsx and pptx share, both ways. It resolves a color element and its
 // transforms through a theme's colors, and writes a color and a plain theme. It names a picture's parts in its blip,
-// maps text alignment, line ends and dashes onto the canvas's own, reads a text body's plain text, and anchors a
-// turned picture over a spreadsheet's cells.
+// maps text alignment, line ends and dashes onto the canvas's own, reads a text body's plain text, finds a SmartArt
+// graphic's cached drawing and text, and anchors a turned picture over a spreadsheet's cells.
 
 import type { Arrowhead, StrokeStyle, TextAlign, VerticalAlign } from '@workspace/lib/vector';
 import { isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import type { XmlElement } from '../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../core/xml';
-import { A_NS, ASVG_NS, emu, R_NS } from './ooxml';
+import { A_NS, ASVG_NS, DGM_NS, DSP_NS, emu, R_NS } from './ooxml';
 
 // ── Lines ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -442,6 +442,37 @@ export function drawingLines(body: XmlElement): string[] {
         lines.push(line);
     }
     return lines;
+}
+
+// ── SmartArt ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// A SmartArt graphic's data model, and the drawing Office caches of its layout. A reader draws that drawing's shapes
+// instead of laying the graphic out itself.
+export const DIAGRAM_DATA_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml';
+export const DIAGRAM_DRAWING_TYPE = 'application/vnd.ms-office.drawingml.diagramDrawing+xml';
+
+// The relationship id of a SmartArt graphic's cached drawing. It names a relationship of the part that shows the
+// graphic, a slide or a document, not one of the data part. A file that cached no drawing, as LibreOffice writes one,
+// has none.
+export function diagramDrawingId(data: XmlElement): string | undefined {
+    const extensions = xmlChild(data, DGM_NS, 'extLst');
+    for (const extension of extensions ? xmlChildren(extensions, A_NS, 'ext') : []) {
+        const model = xmlChild(extension, DSP_NS, 'dataModelExt');
+        if (model) return xmlAttr(model, '', 'relId');
+    }
+    return undefined;
+}
+
+// The points a SmartArt graphic draws text for. Its document point and its transitions hold none of the user's text.
+const TEXT_POINTS = new Set(['node', 'asst']);
+
+// The text bodies of a SmartArt graphic's data model, in its order: what a reader shows of a graphic it can't draw.
+export function diagramTextBodies(data: XmlElement): XmlElement[] {
+    const points = xmlChild(data, DGM_NS, 'ptLst');
+    return (points ? xmlChildren(points, DGM_NS, 'pt') : []).flatMap((point) => {
+        const body = TEXT_POINTS.has(xmlAttr(point, '', 'type') ?? 'node') && xmlChild(point, DGM_NS, 't');
+        return body ? [body] : [];
+    });
 }
 
 // ── Spreadsheet anchors ─────────────────────────────────────────────────────────────────────────────────────────

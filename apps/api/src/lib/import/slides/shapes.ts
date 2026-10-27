@@ -1,6 +1,7 @@
 // The pptx reader's shapes: readSlideShapes turns a slide's shape tree into canvas elements, the layout's and the
-// master's shapes beneath the slide's own, groups flattened into their children. A shape takes what it leaves out
-// from its placeholder and the theme, and anything past the caps is refused. The deck reader calls it once per slide.
+// master's shapes beneath the slide's own, groups flattened into their children, and a SmartArt graphic into the shapes
+// of the drawing PowerPoint cached of it. A shape takes what it leaves out from its placeholder and the theme, and
+// anything past the caps is refused. The deck reader calls it once per slide.
 
 import { escapeHtml } from '@workspace/lib/html';
 import type {
@@ -29,6 +30,7 @@ import {
     ARROWHEAD_BY_LINE_END,
     DEFAULT_LINE_WIDTH_EMU,
     DEGREE,
+    diagramTextBodies,
     drawingLines,
     isSideways,
     lineWidthEmu,
@@ -38,6 +40,7 @@ import {
     A_NS,
     C_NS,
     DGM_NS,
+    DSP_NS,
     isAlternateContent,
     isOn,
     OLE_NS,
@@ -171,11 +174,11 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
             readTree(walk, presentationAlternative(shape), placeIn, depth + 1, group);
             continue;
         }
-        if (shape.ns !== P_NS || !DRAWN.has(shape.local)) continue;
-        const cNvPr = childOf(nonVisualOf(shape) ?? shape, P_NS, 'cNvPr');
+        if (!DRAWN.get(shape.ns)?.has(shape.local)) continue;
+        const cNvPr = childOf(nonVisualOf(shape) ?? shape, shape.ns, 'cNvPr');
         if (cNvPr && isOn(xmlAttr(cNvPr, '', 'hidden'))) continue;
         if (shape.local === 'grpSp') {
-            const grpSpPr = childOf(shape, P_NS, 'grpSpPr');
+            const grpSpPr = childOf(shape, shape.ns, 'grpSpPr');
             const xfrm = readXfrm(grpSpPr && childOf(grpSpPr, A_NS, 'xfrm'));
             const fill = fillIn(grpSpPr);
             const size = fill && xfrm ? place(placeIn, xfrm).box : { width: 1, height: 1 };
@@ -199,13 +202,22 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
         if (!onSlide(placed.box, walk.deck)) continue;
         // The p:style the shape paints by: a placeholder with none of its own takes its layout's or master's.
         const style = chain.find((link) => link.style)?.style;
-        if (shape.local === 'graphicFrame') readGraphicFrame(walk, shape, placed.box);
+        if (shape.local === 'graphicFrame') readGraphicFrame(walk, shape, placed, placeIn, depth);
         else if (shape.local === 'pic') readPicture(walk, shape, chain, linesOf(chain, walk, style), placed);
-        else readShape(walk, { shape, own, chain, style, placed, group });
+        else {
+            // A SmartArt drawing's shape sets its text in a box of its own, turned by the shape's turn and its own.
+            const text = readXfrm(childOf(shape, DSP_NS, 'txXfrm'));
+            const textBox = text && place(placeIn, { ...text, rot: xfrm.rot + text.rot }).box;
+            readShape(walk, { shape, own, chain, style, placed, textBox, group });
+        }
     }
 }
 
-const DRAWN = new Set(['sp', 'pic', 'cxnSp', 'grpSp', 'graphicFrame', 'contentPart']);
+// The shapes a slide's tree holds, and those of the drawing PowerPoint caches of a SmartArt graphic.
+const DRAWN = new Map([
+    [P_NS, new Set(['sp', 'pic', 'cxnSp', 'grpSp', 'graphicFrame', 'contentPart'])],
+    [DSP_NS, new Set(['sp', 'grpSp'])],
+]);
 
 function push(walk: Walk, element: NewVectorElement): void {
     walk.deck.elements.charge(1);
@@ -225,11 +237,13 @@ type Leaf = {
     // The p:style its paint and text take.
     style: XmlElement | undefined;
     placed: Placed;
+    // Where its text goes, when not in the shape's own box.
+    textBox?: Box;
     group: GroupFill | undefined;
 };
 
 function readShape(walk: Walk, leaf: Leaf): void {
-    const { shape, own, chain, style, placed, group } = leaf;
+    const { shape, own, chain, style, placed, textBox: textAt, group } = leaf;
     const { theme } = walk.inheritance;
     const shaped = chain.find((link) => link.geometry !== undefined);
     const geometry = shaped?.geometry ?? 'rect';
@@ -237,7 +251,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const native = kind !== undefined || geometry === 'pie';
     const linear = LINES.has(geometry);
     const outline = native || linear ? undefined : outlineOf(shaped?.geom, geometry, placed);
-    const body = childOf(shape, P_NS, 'txBody');
+    const body = childOf(shape, shape.ns, 'txBody');
     const lines = linesOf(chain, walk, style);
     const source = body && {
         body,
@@ -251,7 +265,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const text = source && richTextOf(source, theme, walk.deck, lost);
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
     const { box } = placed;
-    const textBox = text && source ? turned(box, verticalTurnOf(source, lost)) : box;
+    const textBox = text && source ? turned(textAt ?? box, verticalTurnOf(source, lost)) : box;
     // What the canvas never draws loses nothing: a line's fill, a dropped outline's paint, a path's unpainted part.
     const lostIf = (drawn: boolean) => (drawn ? lost : UNDRAWN);
     const paint = {
@@ -274,7 +288,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
         if (painted) push(walk, { ...box, ...paint, ...drawn });
         textOnTop();
     };
-    if (kind?.type === 'rectangle' && kind.corners === 'straight') {
+    if (kind?.type === 'rectangle' && kind.corners === 'straight' && !textAt) {
         if (text) {
             // The canvas insets a bordered box's text past its border too, where PowerPoint's inset runs from the edge.
             const padding = isBordered(paint) ? Math.max(0, text.padding - paint.strokeWidth) : text.padding;
@@ -307,7 +321,7 @@ function readPicture(
     lines: Lines,
     { box, mirrored }: Placed,
 ): void {
-    const blipFill = ooxmlChild(shape, P_NS, 'blipFill', presentationAlternative);
+    const blipFill = ooxmlChild(shape, shape.ns, 'blipFill', presentationAlternative);
     const blip = blipFill && childOf(blipFill, A_NS, 'blip');
     const part = blipMedia(walk.deck.pkg, walk.part, blip);
     const mediaName = part && walk.deck.mediaName(part);
@@ -331,15 +345,48 @@ function readPicture(
     });
 }
 
-// A chart the reader draws becomes a chart; any other graphic, and a chart it can't, a box saying what was there.
-function readGraphicFrame(walk: Walk, shape: XmlElement, box: Box): void {
+// A chart the reader draws becomes a chart, and a SmartArt graphic the shapes of the drawing PowerPoint cached of it.
+// Any other graphic, and one it can't draw, leaves a box saying what was there.
+function readGraphicFrame(walk: Walk, shape: XmlElement, { box, xfrm }: Placed, placeIn: Place, depth: number): void {
     const graphic = childOf(shape, A_NS, 'graphic');
     const data = graphic && childOf(graphic, A_NS, 'graphicData');
     const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
+    if (kind === 'diagram') {
+        const relIds = data && childOf(data, DGM_NS, 'relIds');
+        const diagram = relIds && walk.deck.pkg.diagram(walk.part, relIds);
+        const drawing = diagram?.drawing;
+        const tree = drawing && childOf(drawing.root, DSP_NS, 'spTree');
+        const before = walk.out.elements.length;
+        if (drawing && tree) {
+            const inDrawing: Walk = { ...walk, part: drawing };
+            readTree(inDrawing, xmlElements(tree), inFrame(placeIn, xfrm), depth + 1, undefined);
+            walk.walked = inDrawing.walked;
+        }
+        // The drawing's shapes are loose on the slide: the canvas has no groups, and nothing lays them out again. A
+        // drawing PowerPoint cached empty shows nothing, so the box stands in for it with the graphic's text.
+        if (walk.out.elements.length > before) walk.deck.lost('diagrams-flattened', shape);
+        else droppedBox(walk, shape, kind, box, [DROPPED.diagram.label, ...diagramLines(diagram?.data)]);
+        return;
+    }
     const chart =
         kind === 'chart' && data ? frameChart(walk.deck, walk.part, data, walk.inheritance.theme.colors) : undefined;
     if (chart && 'parts' in chart) push(walk, { type: 'chart', ...box, ...chart.look, ...chart.parts });
     else droppedBox(walk, shape, kind, box, chart && droppedChart(chart.unsupported));
+}
+
+const diagramTexts = cachedBy<null, string[]>();
+
+// A SmartArt graphic's text, a line each, for the box that stands in for a graphic without a drawing.
+function diagramLines(data: XmlElement | undefined): string[] {
+    if (!data) return [];
+    return diagramTexts(data, null, () => {
+        const bodies = diagramTextBodies(data);
+        charge(bodies.length);
+        return bodies
+            .flatMap(drawingLines)
+            .map((line) => line.trim())
+            .filter(Boolean);
+    });
 }
 
 // A loss the user can see on the slide, saying what was there.
@@ -592,6 +639,11 @@ function inGroup(outer: Place, xfrm: Xfrm): Place {
             flipV: shape.flipV !== xfrm.flipV,
         });
     };
+}
+
+// A SmartArt drawing is laid out from its graphic frame's corner, at the frame's own scale.
+function inFrame(outer: Place, xfrm: Xfrm): Place {
+    return inGroup(outer, { ...xfrm, child: { x: 0, y: 0, cx: xfrm.cx, cy: xfrm.cy } });
 }
 
 type Box = { x: number; y: number; width: number; height: number; angle: number };
