@@ -188,6 +188,16 @@ A range copy writes three flavors: the HTML table with the cells' styles, the Ei
 
 While a cell is open, Enter commits it and moves down, and Tab commits and moves right, Shift+Tab left, as in Google Sheets. Both go through `commitEdit` (`state/events/keyboard.ts`), which writes the cell and collapses the selection to it before the move. A visible formula suggestion takes Tab first and stops it, so Tab picks the function instead of committing.
 
+## The cell editor edits rich text as runs
+
+A rich-text cell keeps its text as runs in `ct.s`, each a piece of text with its own weight, slant, decoration, color, size and font. While the cell is open, the in-cell editor shows the same runs as spans, and `state/modules/inline-string.ts` is the one model between the two. `editorRuns` reads the editor's DOM into runs, a toolbar format applies to the selected characters (`formatEditorSelection`), the runs go back as spans (`runsHtml`) and the selection comes back by character offset. `updateCell` commits what `committedRuns` reads, so the cell gets what the editor shows. The reader takes whatever markup the editor holds: our spans, a pasted `<b>` or styled span, and bare text typed beside a span. Offsets count text, not HTML, so an `&` or a `<` can't shift a format. A run it reads is whole, all seven style keys, with the color as hex and the font as a name, as the xlsx import stores runs.
+
+Text outside any styled element has the cell's own style, which the editor box shows: `getStyleByCell` styles the box for a rich cell too. A span states only where its run differs from the cell, so a word un-bolded in a bold cell reads back as not bold. Text all in the cell's style commits plain, so a format undone before Enter leaves no runs. A format while the editor holds a formula goes to the cell, as before.
+
+⌘B, ⌘I and ⌘U while the editor is open on text go to the toolbar's handlers (`InputBox`), so the browser never writes its own `<b>`. A format on a bare caret waits for the next `beforeinput` and types that text in its style, as Google and Excel do, and a caret that moves drops it. A toolbar control that takes the focus, such as the size box or the color popover, formats the selection the editor last had: `InputBox` keeps it on every `selectionchange` (`rememberEditorSelection`). While a cell is open, the format toolbar shows the run at the caret (`useEditorSelectionStyle`).
+
+The canvas wraps a rich cell between words, inside a run too, and the runs on one line share its baseline (`getCellTextInfo`, `state/modules/text.ts`). The HTML, PDF and preview export still draw a rich cell in its own style ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)). `packages/sheet/src/test/state/modules/inline-string.test.ts` pins the editor model through the toolbar handlers and the commit.
+
 ## Conditional formats evaluate headless
 
 `evaluateConditionalFormat(rules, data, options?)` (`engine/conditional-format.ts`) returns the `"r_c"`-keyed style map the canvas paints, and the HTML export calls it too ([§ The export paints conditional formats with the grid's evaluator](#the-export-paints-conditional-formats-with-the-grids-evaluator)). Without an evaluator, formula rules are skipped. Both callers pass the same one, `createCfFormulaEvaluator`.

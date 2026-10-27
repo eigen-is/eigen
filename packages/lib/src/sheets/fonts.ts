@@ -11,8 +11,8 @@ export const SHEET_DEFAULT_FONT: EigenFont = EIGEN_FONTS[0];
 const { digitWidth, unitsPerEm } = getFontMetrics(SHEET_DEFAULT_FONT.name);
 export const SHEET_DEFAULT_DIGIT_WIDTH = Math.round((digitWidth / unitsPerEm) * ((SHEET_DEFAULT_FONT_SIZE * 96) / 72));
 
-// A cell's `ff` is an index into EIGEN_FONTS or a family name; a rich-text run edited in the cell
-// stores its lowercased CSS stack. Undefined means the sheet default.
+// A cell's `ff` is an index into EIGEN_FONTS or a family name. A rich-text run may hold a CSS stack,
+// such as one an older editor commit stored. Undefined means the sheet default.
 export function cellFontName(ff: number | string | undefined): string | undefined {
     if (typeof ff === 'number') return EIGEN_FONTS[ff]?.name;
     const family = ff?.split(',')[0].replace(/['"]/g, '').trim();
