@@ -8,8 +8,9 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 installHappyDom();
 
 // The dialog's two hooks, stubbed: their own test covers the calls to better-auth and the toast of a
-// refused add.
-const realAdmin = await import('@workspace/lib/admin');
+// refused add. Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts
+// the originals back.
+const realAdmin = { ...(await import('@workspace/lib/admin')) };
 const teamLoads: (string | undefined)[] = [];
 const added: { teamId: string; userIds: string[] }[] = [];
 const teams = {
@@ -34,7 +35,7 @@ mock.module('@workspace/lib/admin', () => ({
     useAddTeamMembers: () => addMembers,
 }));
 // The public config names the default team, which the picker never offers.
-const realPublic = await import('@workspace/lib/public');
+const realPublic = { ...(await import('@workspace/lib/public')) };
 mock.module('@workspace/lib/public', () => ({
     ...realPublic,
     usePublicConfig: () => ({ data: { orgId: 'org-1', defaultTeamId: 'team-0' } }),

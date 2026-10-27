@@ -94,10 +94,9 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
 
     if (!data) return <LoadingState />;
 
-    const updatedAt = data.updatedAt;
     const editorProps = {
         content: data.content,
-        updatedAt,
+        etag: data.etag,
         ownerId: path.ownerId,
         mountId: path.mountId,
         pathId: path.id,

@@ -65,7 +65,6 @@ describe('Container write guard', () => {
 
             const res = await editorPut(ctx.bob.user.sessionToken, aliceId(), dataDb!.id, {
                 content: 'malicious overwrite',
-                expectedUpdatedAt: before.updatedAt,
                 force: true,
             });
             expect(res.status).toBe(400);
@@ -92,7 +91,6 @@ describe('Container write guard', () => {
             );
             const res = await editorPut(ctx.alice.user.sessionToken, aliceId(), uploaded.id, {
                 content: 'text into a png',
-                expectedUpdatedAt: uploaded.updatedAt,
                 force: true,
             });
             expect(res.status).toBe(400);
@@ -107,17 +105,12 @@ describe('Container write guard', () => {
                 rootId,
                 file,
             );
-            const current = await driveGet<DrivePath>(
-                ctx.alice.user.sessionToken,
-                aliceId(),
-                mountId,
-                `path/${uploaded.id}`,
-            );
             const res = await editorPut(ctx.alice.user.sessionToken, aliceId(), uploaded.id, {
                 content: '# hi there',
-                expectedUpdatedAt: current.updatedAt,
+                expectedEtag: `"${uploaded.hash}"`,
             });
             expect(res.status).toBe(200);
+            expect((await res.json()).conflict).toBe(false);
         });
     });
 });

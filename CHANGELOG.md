@@ -40,6 +40,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Trash in Drive** — a file or folder deleted for good disappears from the Trash open in your other tabs too
 - **Unread counts in Mail** — a message you read in another mail app clears its unread count in Eigen's sidebar at once
+- **Saving a text file in Drive** — when someone else changed the file since you opened it, even within the same second, Drive shows **File conflict** instead of overwriting their change
+- **Recent activity in Drive** — saving a text file in Drive's editor shows as edited, not as an upload
 - **Shared with me in Drive** — a text file or folder someone shared with you shows its full path at the top, starting with Shared with me, then the shared folder and every folder below it. Click Shared with me to go back to the list
 - **Public files in Drive** — a public file or folder that nobody shared with you shows its path from the first folder you can open, without Shared with me
 - **Closing a shared text file** — closing a text file that was shared with you on its own takes you back to Shared with me instead of a page asking for access to its folder
