@@ -7,7 +7,7 @@ import { ReactNodeViewRenderer } from '@tiptap/react';
 import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
 import { ChartNode, chartSvg, readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { FigureFrameOptions } from './figure-frame';
 import {
     clampFigureWidth,
@@ -37,7 +37,6 @@ const storedSize = (size: ChartSize) => size;
 function ChartView(props: NodeViewProps) {
     const { node, selected, editor, extension, getPos } = props;
     const { onEditData }: ChartOptions = extension.options;
-    const containerRef = useRef<HTMLSpanElement>(null);
     // node.attrs is a new object only when an attribute changes, a part's and the look's among them.
     const attrs = useMemo(() => readChartAttrs(node.attrs), [node.attrs]);
     const { width, height, layout } = attrs;
@@ -58,7 +57,6 @@ function ChartView(props: NodeViewProps) {
     return (
         <FigureFrame
             {...props}
-            containerRef={containerRef}
             box={box}
             shift={resize.preview?.shift}
             resizeMode="free"

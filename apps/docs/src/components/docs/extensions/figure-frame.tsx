@@ -24,9 +24,9 @@ import { ObjectTransform } from '@workspace/ui';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import type { ReactNode, RefObject } from 'react';
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { textColumnWidth } from './text-column';
+import { pageScale, textColumnWidth } from './text-column';
 
 // The resize floor of a figure's side (px).
 export const FIGURE_MIN_SIZE = 100;
@@ -153,8 +153,71 @@ export function useFigureResize<T extends FigureSize>({
     return { preview, onTransform, onCommit, onGestureEnd };
 }
 
+// A drag of a figure in front of or behind the text previews its travel in page px and writes once, at the release,
+// moving the figure by that travel from where it draws then. A press on an unselected figure selects it and drags it in
+// the same gesture; a finger on one scrolls the page instead.
+function useFigureMove({ editor, getPos, selected }: Pick<NodeViewProps, 'editor' | 'getPos' | 'selected'>): {
+    travel: FigureShift | null;
+    startMove: (e: React.PointerEvent) => void;
+} {
+    const [travel, setTravel] = useState<FigureShift | null>(null);
+    // The gesture's document listeners end with it, or with the view.
+    const gesture = useRef<AbortController | null>(null);
+    useEffect(() => () => gesture.current?.abort(), []);
+
+    const startMove = (e: React.PointerEvent) => {
+        const pos = getPos();
+        if (e.button !== 0 || !editor.isEditable || pos === undefined) return;
+        // A finger on an image that isn't selected scrolls the page, and the comment mark is a button of its own.
+        if ((e.pointerType === 'touch' && !selected) || (e.target instanceof Element && e.target.closest('button')))
+            return;
+        // ProseMirror then sees no mousedown, so it neither selects text nor starts the browser's drag.
+        e.preventDefault();
+        if (!selected) {
+            editor.view.focus();
+            editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
+        }
+        const scale = pageScale(editor.view.dom);
+        const { clientX, clientY, pointerId } = e;
+        let moved: FigureShift | null = null;
+        gesture.current?.abort();
+        const controller = new AbortController();
+        gesture.current = controller;
+        const end = (commit: boolean) => {
+            controller.abort();
+            setTravel(null);
+            const at = getPos();
+            if (commit && moved && at !== undefined) editor.commands.moveFigure(at, moved);
+        };
+        const { signal } = controller;
+        document.addEventListener(
+            'pointermove',
+            (me) => {
+                if (me.pointerId !== pointerId) return;
+                moved = { dx: (me.clientX - clientX) / scale, dy: (me.clientY - clientY) / scale };
+                setTravel(moved);
+            },
+            { signal },
+        );
+        document.addEventListener('pointerup', (pe) => pe.pointerId === pointerId && end(true), { signal });
+        document.addEventListener('pointercancel', (pe) => pe.pointerId === pointerId && end(false), { signal });
+        // Ahead of the editor's keymap, whose Escape would put the caret beside the figure mid-drag.
+        document.addEventListener(
+            'keydown',
+            (ke) => {
+                if (ke.key !== 'Escape') return;
+                ke.preventDefault();
+                ke.stopPropagation();
+                end(false);
+            },
+            { signal, capture: true },
+        );
+    };
+
+    return { travel, startMove };
+}
+
 type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'extension' | 'getPos' | 'decorations'> & {
-    containerRef: RefObject<HTMLSpanElement | null>;
     // The box the transform chrome resizes; none shows the plain ring on a selected figure.
     box: Box | null;
     // The edges a grip has moved so far, which a positioned box draws at.
@@ -172,7 +235,7 @@ type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'ex
 // The figure box the node view draws: the wrapper the page's .figure rules lay out, the selection ring and the
 // transform chrome over the content, the comment mark and the caption. A positioned figure's wrapper is its absolute
 // box, and while it is selected its chrome is a sibling at the same place above both layers, so text over a behind
-// image never covers its grips. A press there, or on a front image, drags it, and the drop writes once.
+// image never covers its grips. A press there, or on a front image, drags it.
 export function FigureFrame({
     node,
     selected,
@@ -180,7 +243,6 @@ export function FigureFrame({
     extension,
     getPos,
     decorations,
-    containerRef,
     box,
     shift,
     resizeMode,
@@ -199,84 +261,26 @@ export function FigureFrame({
     const isEditable = editor.isEditable;
     const frame = readFigureFrameAttrs(node.attrs);
     // The ring insets over the content, shrink-wrapped by the relative wrapper. A figure's size is in the page's pixels,
-    // and the page draws scaled below its width, so a pointer delta divides by the scale, measured as a grip is pressed.
+    // and the page draws scaled below its width, so a grip's delta divides by the scale, measured as it is pressed.
     const boxToStyle = useCallback((): React.CSSProperties => ({ inset: 0 }), []);
-    const pageScale = useRef(1);
+    const scale = useRef(1);
     const screenDeltaToScene = useCallback(
-        (dx: number, dy: number) => ({ dx: dx / pageScale.current, dy: dy / pageScale.current }),
+        (dx: number, dy: number) => ({ dx: dx / scale.current, dy: dy / scale.current }),
         [],
     );
-    const measurePageScale = () => {
-        const figure = containerRef.current;
-        if (figure && figure.offsetWidth > 0)
-            pageScale.current = figure.getBoundingClientRect().width / figure.offsetWidth;
+    const measureScale = () => {
+        scale.current = pageScale(editor.view.dom);
     };
 
-    // A drag previews its offsets locally; its document listeners end with the gesture, or with the view.
-    const [move, setMove] = useState<FigureShift | null>(null);
-    const moveGesture = useRef<AbortController | null>(null);
-    useEffect(() => () => moveGesture.current?.abort(), []);
+    const { travel, startMove } = useFigureMove({ editor, getPos, selected });
     // Where a positioned box draws; none for a figure in the flow.
     const place = figureLayoutStyle({
         ...frame,
-        offsetX: (frame.offsetX ?? 0) + (shift?.dx ?? 0) + (move?.dx ?? 0),
-        offsetY: (frame.offsetY ?? 0) + (shift?.dy ?? 0) + (move?.dy ?? 0),
+        offsetX: (frame.offsetX ?? 0) + (shift?.dx ?? 0) + (travel?.dx ?? 0),
+        offsetY: (frame.offsetY ?? 0) + (shift?.dy ?? 0) + (travel?.dy ?? 0),
         width: box?.width ?? node.attrs.width,
     });
     const chrome = place && box;
-
-    const startMove = (e: React.PointerEvent) => {
-        const pos = getPos();
-        const figure = containerRef.current;
-        if (e.button !== 0 || !isEditable || pos === undefined || !figure) return;
-        // A finger on an image that isn't selected scrolls the page, and the comment mark is a button of its own.
-        if ((e.pointerType === 'touch' && !selected) || (e.target instanceof Element && e.target.closest('button')))
-            return;
-        // ProseMirror then sees no mousedown, so it neither selects text nor starts the browser's drag.
-        e.preventDefault();
-        if (!selected) {
-            editor.view.focus();
-            editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
-        }
-        measurePageScale();
-        const scale = pageScale.current;
-        const start = figure.getBoundingClientRect();
-        const { clientX, clientY, pointerId } = e;
-        let delta: { x: number; y: number } | null = null;
-        moveGesture.current?.abort();
-        const gesture = new AbortController();
-        moveGesture.current = gesture;
-        const end = (commit: boolean) => {
-            gesture.abort();
-            setMove(null);
-            const at = getPos();
-            if (commit && delta && at !== undefined)
-                editor.commands.moveFigure(at, { left: start.left + delta.x, top: start.top + delta.y });
-        };
-        const { signal } = gesture;
-        document.addEventListener(
-            'pointermove',
-            (me) => {
-                if (me.pointerId !== pointerId) return;
-                delta = { x: me.clientX - clientX, y: me.clientY - clientY };
-                setMove({ dx: delta.x / scale, dy: delta.y / scale });
-            },
-            { signal },
-        );
-        document.addEventListener('pointerup', (pe) => pe.pointerId === pointerId && end(true), { signal });
-        document.addEventListener('pointercancel', (pe) => pe.pointerId === pointerId && end(false), { signal });
-        // Ahead of the editor's keymap, whose Escape would put the caret beside the figure mid-drag.
-        document.addEventListener(
-            'keydown',
-            (ke) => {
-                if (ke.key !== 'Escape') return;
-                ke.preventDefault();
-                ke.stopPropagation();
-                end(false);
-            },
-            { signal, capture: true },
-        );
-    };
 
     const transform = box && (
         <ObjectTransform
@@ -312,7 +316,6 @@ export function FigureFrame({
         <>
             <NodeViewWrapper
                 as="span"
-                ref={containerRef}
                 className={cn('figure', className)}
                 data-layout={frame.layout ?? 'block'}
                 data-alignment={frame.alignment ?? 'center'}
@@ -333,7 +336,7 @@ export function FigureFrame({
                     drag. */}
                 <div
                     className={cn('relative', className, selected && !box && 'eigen-selection-ring')}
-                    onPointerDownCapture={measurePageScale}
+                    onPointerDownCapture={measureScale}
                     role={selected && isEditable ? 'group' : undefined}
                     aria-label={selected && isEditable ? label : undefined}
                     aria-keyshortcuts={selected && isEditable ? keyShortcuts : undefined}
@@ -349,7 +352,7 @@ export function FigureFrame({
                 <span
                     className="absolute z-2 cursor-move touch-none"
                     style={{ left: place.left, top: place.top, width: box.width, height: box.height }}
-                    onPointerDownCapture={measurePageScale}
+                    onPointerDownCapture={measureScale}
                     onPointerDown={startMove}
                 >
                     {transform}

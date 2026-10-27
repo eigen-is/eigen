@@ -22,16 +22,19 @@ import {
     isFigureFrameNode,
     isPositioned,
     pagePx,
+    readFigureFrameAttrs,
     setFigureAttributes,
 } from '@workspace/lib/docs/eigendoc';
+import { pageScale } from './text-column';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         positionedFigures: {
             // The selected figure or chart in front of or behind the text, where it is drawn now.
             positionFigure: (layout: PositionedLayout) => ReturnType;
-            // The positioned figure at `pos` with its box's top left at `at`, in screen px: on the paragraph under it.
-            moveFigure: (pos: number, at: { left: number; top: number }) => ReturnType;
+            // The positioned figure at `pos` moved by `dx` and `dy` page px from where it draws now, on the paragraph
+            // under it.
+            moveFigure: (pos: number, travel: { dx: number; dy: number }) => ReturnType;
         };
     }
 
@@ -93,12 +96,6 @@ function selectionOutsideRuns(selection: Selection): TextSelection | null {
     return null;
 }
 
-// The page draws scaled below its width, and a page px is a screen px divided by that scale.
-function pageScale(view: EditorView): number {
-    const { offsetWidth } = view.dom;
-    return offsetWidth > 0 ? view.dom.getBoundingClientRect().width / offsetWidth : 1;
-}
-
 function rectAt(view: EditorView, pos: number): DOMRect | null {
     const dom = view.nodeDOM(pos);
     return dom instanceof Element ? dom.getBoundingClientRect() : null;
@@ -120,7 +117,7 @@ function offsetsOnPaper(
     box: { left: number; top: number; width: number },
     anchor: DOMRect,
 ): { offsetX: number; offsetY: number } {
-    const scale = pageScale(view);
+    const scale = pageScale(view.dom);
     const column = view.dom.getBoundingClientRect();
     const left = page.margin.left + (anchor.left - column.left) / scale;
     const top = page.margin.top + (anchor.top - column.top) / scale;
@@ -208,7 +205,7 @@ const positionedIn = (doc: PMNode, from: number, to: number) => {
 // that the join carries into the textblock at `into` where it is drawn: its offsets are measured against that
 // textblock before the dispatch, and it leads it. With nothing to join, at the doc's start, the figures stay too.
 function joinKeepingPlace(view: EditorView, caret: number, figures: number[], into: number, join: Command): boolean {
-    const scale = pageScale(view);
+    const scale = pageScale(view.dom);
     const target = rectAt(view, into);
     const boxes = figures.map((pos) => figureBoxAt(view, pos));
     const state = view.state.apply(
@@ -280,7 +277,7 @@ function growBody(view: EditorView) {
     const top = view.dom.getBoundingClientRect().top;
     let bottom = top;
     for (const box of boxes) bottom = Math.max(bottom, box.getBoundingClientRect().bottom);
-    view.dom.style.minHeight = `${Math.ceil((bottom - top) / pageScale(view))}px`;
+    view.dom.style.minHeight = `${Math.ceil((bottom - top) / pageScale(view.dom))}px`;
 }
 
 export const PositionedFigures = Extension.create<PositionedFiguresOptions, PositionedFiguresOptions>({
@@ -315,7 +312,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     const paper = page();
                     const box = figureBoxAt(view, pos);
                     const anchor = rectAt(view, $from.before());
-                    const width = Math.min(paper.width, node.attrs.width ?? (box?.width ?? 0) / pageScale(view));
+                    const width = Math.min(paper.width, node.attrs.width ?? (box?.width ?? 0) / pageScale(view.dom));
                     setFigureAttributes(tr, pos, {
                         layout,
                         ...(box && anchor
@@ -331,17 +328,27 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     return true;
                 },
             moveFigure:
-                (pos, at) =>
+                (pos, { dx, dy }) =>
                 ({ tr, view, dispatch }) => {
                     const node = tr.doc.nodeAt(pos);
                     if (!node || !isPositionedFigure(node)) return false;
                     const $pos = tr.doc.resolve(pos);
+                    const own = rectAt(view, $pos.before());
+                    const box = figureBoxAt(view, pos);
+                    if (!own || !box) return false;
+                    // Its paragraph's place now, so a scroll or a peer's typing above it since the drag began moves
+                    // nothing the drag didn't.
+                    const scale = pageScale(view.dom);
+                    const { offsetX, offsetY } = readFigureFrameAttrs(node.attrs);
+                    const at = {
+                        left: own.left + ((offsetX ?? 0) + dx) * scale,
+                        top: own.top + ((offsetY ?? 0) + dy) * scale,
+                    };
                     const anchor = anchorUnder(view, at.top, node.type) ?? $pos.before();
                     const rect = rectAt(view, anchor);
-                    const box = figureBoxAt(view, pos);
-                    if (!rect || !box) return false;
+                    if (!rect) return false;
                     if (!dispatch) return true;
-                    const width = node.attrs.width ?? box.width / pageScale(view);
+                    const width = node.attrs.width ?? box.width / scale;
                     const offsets = offsetsOnPaper(view, page(), { ...at, width }, rect);
                     if (anchor === $pos.before()) {
                         setFigureAttributes(tr, pos, offsets);

@@ -320,7 +320,8 @@ test('a switch between front and behind moves nothing', async () => {
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 5 });
 });
 
-// The text column at x 100 holds the first paragraph from y 100 to 120 and the second from y 120 to 140.
+// The text column at x 100 holds the first paragraph from y 100 to 120 and the second from y 120 to 140, whose image
+// draws at its offsets, 10 and 20.
 async function twoLaidOut(page = PAGE, column = { x: 100, width: 600 }) {
     const editor = await mount(
         [paragraph(text('xy')), paragraph(front({ commentCardId: 'card' }), text('abc')), paragraph(text('z'))],
@@ -339,7 +340,7 @@ async function twoLaidOut(page = PAGE, column = { x: 100, width: 600 }) {
 test('a drop under another paragraph anchors the image there, kept selected with its comment', async () => {
     const editor = await twoLaidOut();
     await act(async () => {
-        editor.commands.moveFigure(5, { left: 150, top: 150 });
+        editor.commands.moveFigure(5, { dx: 40, dy: 10 });
     });
     expect(blocks(editor)).toEqual([['xy'], ['abc'], ['figure:front', 'z']]);
     expect(editor.state.doc.nodeAt(10)?.attrs).toMatchObject({ offsetX: 50, offsetY: 10, commentCardId: 'card' });
@@ -350,7 +351,7 @@ test('a drop within its own paragraph writes the offsets alone', async () => {
     const editor = await twoLaidOut();
     const before = editor.state.doc.nodeAt(5);
     await act(async () => {
-        editor.commands.moveFigure(5, { left: 130, top: 125 });
+        editor.commands.moveFigure(5, { dx: 20, dy: -15 });
     });
     expect(blocks(editor)).toEqual([['xy'], ['figure:front', 'abc'], ['z']]);
     expect(editor.state.doc.nodeAt(5)?.attrs).toMatchObject({ offsetX: 30, offsetY: 5 });
@@ -362,11 +363,11 @@ test("a drop keeps the image on the paper: within its edges, and below the page'
     const editor = await twoLaidOut();
     // The paragraph's left edge is the paper's x 100; a 200 px image fits up to the paper's x 600.
     await act(async () => {
-        editor.commands.moveFigure(5, { left: 2000, top: 125 });
+        editor.commands.moveFigure(5, { dx: 1890, dy: -15 });
     });
     expect(editor.state.doc.nodeAt(5)?.attrs).toMatchObject({ offsetX: 500 });
     await act(async () => {
-        editor.commands.moveFigure(5, { left: -500, top: -500 });
+        editor.commands.moveFigure(5, { dx: -1100, dy: -625 });
     });
     // Above the first paragraph it anchors there, on the page's top.
     expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ offsetX: -100, offsetY: -100 });
@@ -377,7 +378,7 @@ test("on an A4 page map with the column laid out 360 px wide, a drop clamps at t
     const a4 = pagePx(DEFAULT_PAGE_SETUP);
     const editor = await twoLaidOut(a4, { x: 0, width: 360 });
     await act(async () => {
-        editor.commands.moveFigure(5, { left: 5000, top: 125 });
+        editor.commands.moveFigure(5, { dx: 4990, dy: -15 });
     });
     expect(editor.state.doc.nodeAt(5)?.attrs['offsetX']).toBe(Math.round(a4.width - 200 - a4.margin.left));
 });
@@ -461,7 +462,7 @@ test('a re-anchor and a Backspace join are one undo step each', async () => {
     place(figureBox(editor, 5), 110, 140);
 
     await act(async () => {
-        editor.commands.moveFigure(5, { left: 110, top: 105 });
+        editor.commands.moveFigure(5, { dx: 0, dy: -35 });
     });
     expect(blocks(editor)).toEqual([['figure:front', 'xy'], ['abc']]);
     expect(undoManager.undoStack.length).toBe(1);

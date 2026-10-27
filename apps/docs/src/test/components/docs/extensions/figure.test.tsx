@@ -196,8 +196,9 @@ test.each([
     await act(async () => {
         img.dispatchEvent(new Event('load'));
     });
-    Object.defineProperty(box, 'offsetWidth', { value: 600 });
-    box.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 0, width: 600 * scale, height: 100 * scale });
+    Object.defineProperty(editor.view.dom, 'offsetWidth', { value: 600 });
+    editor.view.dom.getBoundingClientRect = () =>
+        DOMRect.fromRect({ x: 0, y: 0, width: 600 * scale, height: 100 * scale });
 
     const grip = box.querySelectorAll('.eigen-selection-handle')[3];
     if (!grip) throw new Error('no south-east grip');
@@ -317,7 +318,6 @@ async function mountPositioned(scale = 1, attrs: object = {}) {
         if (element) element.getBoundingClientRect = () => DOMRect.fromRect({ x, y, width, height });
     };
     Object.defineProperty(editor.view.dom, 'offsetWidth', { value: 600 });
-    Object.defineProperty(box, 'offsetWidth', { value: 200 });
     at(editor.view.dom, 100, 100, 600 * scale, 300 * scale);
     const first = editor.view.nodeDOM(0);
     at(first instanceof Element ? first : null, 100, 100, 600 * scale, 20 * scale);
@@ -381,6 +381,25 @@ test.each([
     await pointer(document, 'pointerup', 250, 220);
     expect(editor.state.doc.nodeAt(4)?.attrs).toMatchObject({ offsetX, offsetY });
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 4 });
+});
+
+// The page scrolls 100 px under the pointer mid-drag: the preview moves with its paragraph, and so does the drop.
+test('a drop lands where the preview draws it, though the page scrolled during the drag', async () => {
+    const { editor, box } = await mountPositioned();
+    await act(async () => {
+        editor.commands.setNodeSelection(4);
+    });
+    const chrome = box.nextElementSibling;
+    if (!chrome) throw new Error('no chrome');
+    await pointer(chrome, 'pointerdown', 200, 200);
+    await pointer(document, 'pointermove', 250, 220);
+    for (const element of [editor.view.dom, editor.view.nodeDOM(0), editor.view.nodeDOM(3), box, box.firstElementChild])
+        if (element instanceof Element) {
+            const { x, y, width, height } = element.getBoundingClientRect();
+            element.getBoundingClientRect = () => DOMRect.fromRect({ x, y: y - 100, width, height });
+        }
+    await pointer(document, 'pointerup', 250, 220);
+    expect(editor.state.doc.nodeAt(4)?.attrs).toMatchObject({ offsetX: 80, offsetY: 60 });
 });
 
 test('a press on a front figure that is not selected selects it, and the same gesture drags it', async () => {

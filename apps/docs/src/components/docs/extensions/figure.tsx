@@ -29,7 +29,6 @@ const storedWidth = ({ width }: { width: number }) => ({ width });
 function FigureView(props: NodeViewProps) {
     const { node, selected, editor, getPos } = props;
     const imageRef = useRef<HTMLImageElement>(null);
-    const containerRef = useRef<HTMLSpanElement>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
     const [failedSrc, setFailedSrc] = useState<string | null>(null);
     const imageProcessed = useRef(false);
@@ -125,7 +124,6 @@ function FigureView(props: NodeViewProps) {
     return (
         <FigureFrame
             {...props}
-            containerRef={containerRef}
             box={box}
             shift={resize.preview?.shift}
             resizeMode="aspect"
