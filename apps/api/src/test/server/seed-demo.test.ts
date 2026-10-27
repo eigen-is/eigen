@@ -28,7 +28,6 @@ import { parseMail } from '../../lib/mail/mail-parser/parse';
 import {
     BRANDING,
     BUDGET,
-    EIGENVECTORS,
     KANBAN,
     MAILS,
     PHOTOS,
@@ -607,16 +606,6 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(vectorMediaNames.has(el.mediaName)).toBe(true);
             }
             expect(imageCount).toBeGreaterThanOrEqual(1);
-
-            // The eigenvectors sketch reads back through the shipped reader, its two eigenvectors drawn bold.
-            const eigenScene = readVectorFromDoc(
-                await loadCollabDoc(
-                    findContainerDataDb(metadataDb, mountsDir, mountId, `${EIGENVECTORS.name}.eigenvector`),
-                ),
-            );
-            const eigenArrows = eigenScene.elements.filter((el) => el.type === 'arrow');
-            expect(eigenArrows.length).toBe(EIGENVECTORS.arrows.length);
-            expect(eigenArrows.filter((arrow) => arrow.strokeWidth > 2).length).toBe(2);
 
             // An outside sender's iMIP invitation reaches the finance lead's inbox as a card, while their calendar is
             // left alone: seeded mail carries no DKIM verdict, the path an unverified sender takes.

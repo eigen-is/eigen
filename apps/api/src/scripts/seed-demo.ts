@@ -2,11 +2,11 @@
 //
 // Offline, in-process seeder. Boots the API in the same process (as the test harness does),
 // runs first-run setup, creates a ~20-persona crew in one org + its default team, and fills a lived-in
-// workspace — team drive, docs, a budget sheet, a slides deck, a stickies board and drawings, mail,
+// workspace — team drive, docs, a budget sheet, a slides deck, a stickies board and a site plan, mail,
 // calendar, chat and contacts — driving the REAL product surfaces as the personas so activity panels,
 // file history and notifications populate for free. Docs are written as HTML and parsed by the editor's
 // schema straight into their Y.Docs; the stickies board is a byte-copied fixture container; the budget,
-// the sponsor deck and the drawings are built into their Y.Docs from typed specs (demo/sheet-build.ts,
+// the sponsor deck and the site plan are built into their Y.Docs from typed specs (demo/sheet-build.ts,
 // deck-build.ts, vector-build.ts).
 //
 // A host-level reset script wipes the data root hourly and re-runs this, so every timestamp
@@ -56,7 +56,6 @@ import {
     CHATS,
     CONTACTS,
     DOCS,
-    EIGENVECTORS,
     EVENTS,
     KANBAN,
     MAILS,
@@ -603,7 +602,7 @@ async function main(): Promise<void> {
     }
 
     // --- The containers built straight into their Y.Doc from a typed spec (no fixture bytes; see
-    // demo/vector-build.ts, deck-build.ts and sheet-build.ts): the drawings, the sponsor deck as slides and the
+    // demo/vector-build.ts, deck-build.ts and sheet-build.ts): the site plan, the sponsor deck as slides and the
     // budget as a sheet. The images a spec names are uploaded into the container's media/ subfolder first. ---
     const seedBuiltContainer = async (
         spec: { folder: string; name: string; author: LeadRole },
@@ -620,17 +619,15 @@ async function main(): Promise<void> {
         return container;
     };
 
-    for (const drawing of [SITE_PLAN, EIGENVECTORS]) {
-        teamDocs.set(
-            drawing.name,
-            await seedBuiltContainer(
-                drawing,
-                'vector',
-                drawing.images.map((image) => image.file),
-                (doc) => buildVectorDoc(doc, drawing),
-            ),
-        );
-    }
+    teamDocs.set(
+        SITE_PLAN.name,
+        await seedBuiltContainer(
+            SITE_PLAN,
+            'vector',
+            SITE_PLAN.images.map((image) => image.file),
+            (doc) => buildVectorDoc(doc, SITE_PLAN),
+        ),
+    );
     teamDocs.set(
         SPONSOR_DECK.name,
         await seedBuiltContainer(

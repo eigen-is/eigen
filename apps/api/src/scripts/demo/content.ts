@@ -656,17 +656,17 @@ export const VCARD_FILES: SeededVCardFile[] = [
     },
 ];
 
-// --- Drawings: the site plan and the eigenvectors sketch (vector drawings the seeder builds straight into the
-// container's Y.Doc from these specs — no fixture bytes; see vector-build.ts). Scene units are pixels, y down; every
-// shape's label is centered inside it. Shape keys are stable so arrows can bind to them by name. ---
+// --- Site plan (a vector drawing the seeder builds straight into the container's Y.Doc from this
+// spec — no fixture bytes; see vector-build.ts). Scene units are pixels, y down; every shape's
+// label is centered inside it. Shape keys are stable so arrows can bind to them by name. ---
 
 export type CanvasSide = 'top' | 'right' | 'bottom' | 'left';
 
 // An arrow end: docked on a named shape's side (a real binding) or a free scene point.
 // `along` (0..1) docks off-center on a rectangle side; default is the side midpoint.
-export type DrawingEnd = { shape: string; side: CanvasSide; along?: number } | { at: [number, number] };
+export type SitePlanEnd = { shape: string; side: CanvasSide; along?: number } | { at: [number, number] };
 
-export type DrawingShape = {
+export type SitePlanShape = {
     key: string;
     kind: 'rectangle' | 'ellipse' | 'diamond';
     label: string; // '' for an unlabelled outline; '\n' for a second line
@@ -685,20 +685,19 @@ export type DrawingShape = {
     ground?: boolean; // drawn beneath the lines too, for an outline that must never catch a click meant for what it encloses
 };
 
-export type DrawingArrow = {
-    from: DrawingEnd;
-    to: DrawingEnd;
+export type SitePlanArrow = {
+    from: SitePlanEnd;
+    to: SitePlanEnd;
     elbow?: boolean;
     label?: string;
     labelSize?: number; // default 13
     stroke?: string;
     strokeStyle?: StrokeStyle;
-    strokeWidth?: number;
     startHead?: Arrowhead; // default none
     endHead?: Arrowhead; // default arrow
 };
 
-export type DrawingText = {
+export type SitePlanText = {
     text: string;
     x: number;
     y: number;
@@ -707,7 +706,7 @@ export type DrawingText = {
 };
 
 // A (poly)line in absolute scene points; `round` curves through the vertices.
-export type DrawingLine = {
+export type SitePlanLine = {
     points: [number, number][];
     freedraw?: boolean; // a pen stroke instead of a line (roundness ignored)
     stroke?: string;
@@ -716,7 +715,7 @@ export type DrawingLine = {
     roundness?: Roundness; // default round
 };
 
-export type DrawingImage = {
+export type SitePlanImage = {
     file: string; // fixture path under fixtures/, copied into the container's media/ folder
     x: number;
     y: number;
@@ -724,28 +723,16 @@ export type DrawingImage = {
     height: number;
 };
 
-// Drawn bottom-up: ground outlines, lines, shapes, images, arrows, then every text on top.
-export type Drawing = {
-    folder: TeamFolder;
-    name: string; // lowercase, no extension
-    author: LeadRole;
-    background: string; // the scene's paper
-    lines: DrawingLine[];
-    shapes: DrawingShape[];
-    images: DrawingImage[];
-    arrows: DrawingArrow[];
-    texts: DrawingText[];
-};
-
 const STAGE = { fill: '#ffd8a8', fillStyle: 'hachure', stroke: '#e8590c' } as const;
 const BUILDING = { fill: '#e9ecef' } as const;
 const NOTE = '#495057';
 
-export const SITE_PLAN: Drawing = {
-    folder: 'production',
-    name: 'site plan',
-    author: 'production',
-    background: '#fffbeb', // the fence fill is the meadow on it
+export const SITE_PLAN = {
+    folder: 'production' as TeamFolder,
+    name: 'site plan', // lowercase, no extension
+    author: 'production' as LeadRole,
+    background: '#fffbeb', // the scene's paper; the fence fill is the meadow on it
+    // Drawn bottom-up: lines (ground), shapes, images, arrows, then every text on top.
     lines: [
         // The dune ridge west of the field, the sea just behind it. It sits a walk away from the fence:
         // that western margin balances the photo-and-legend column hanging off the east side, which is
@@ -805,7 +792,7 @@ export const SITE_PLAN: Drawing = {
             stroke: '#9c36b5',
             strokeStyle: 'dotted',
         },
-    ],
+    ] satisfies SitePlanLine[],
     shapes: [
         {
             key: 'fence',
@@ -1149,11 +1136,11 @@ export const SITE_PLAN: Drawing = {
             stroke: '#e03131',
             strokeWidth: 1,
         },
-    ],
+    ] satisfies SitePlanShape[],
     images: [
         { file: 'branding/logo.svg', x: 20, y: 940, width: 96, height: 63 },
         { file: 'images/camping-field.webp', x: 1340, y: 550, width: 200, height: 150 },
-    ],
+    ] satisfies SitePlanImage[],
     arrows: [
         // Power runs from the generators; the backup can carry the second stage on its own.
         { from: { shape: 'g1', side: 'bottom' }, to: { shape: 'main-stage', side: 'top', along: 0.87 }, elbow: true },
@@ -1186,7 +1173,7 @@ export const SITE_PLAN: Drawing = {
         { from: { shape: 'polaroid', side: 'left' }, to: { shape: 'camping', side: 'right', along: 0.37 } },
         // North.
         { from: { at: [1307, 126] }, to: { at: [1293, 72] }, endHead: 'triangle' },
-    ],
+    ] satisfies SitePlanArrow[],
     texts: [
         { text: 'Tuimel Festival site plan', x: 120, y: 40, fontSize: 36 },
         {
@@ -1222,85 +1209,7 @@ export const SITE_PLAN: Drawing = {
         { text: 'drinks & water', x: 1352, y: 823, fontSize: 12, color: NOTE },
         { text: 'camping, gate & meadow', x: 1352, y: 843, fontSize: 12, color: NOTE },
         { text: 'first aid', x: 1352, y: 863, fontSize: 12, color: NOTE },
-    ],
-};
-
-// The eigenvectors sketch: the matrix A = (3 1; 1 3) acting on four arrows v. A turns most arrows off their line;
-// the two along (1, 1) and (-1, 1) only stretch, by 4 and by 2, and are drawn bold. One grid step is UNIT pixels,
-// and the math's y runs up, so a point (x, y) sits at (x, -y) steps on the scene.
-const UNIT = 50;
-const GRID = '#dee2e6';
-const TURNED = '#1c7ed6';
-const STRETCHED = '#e8590c';
-const GRAY = '#868e96';
-const gridLine = (from: [number, number], to: [number, number], stroke = GRID): DrawingLine => ({
-    points: [
-        [from[0] * UNIT, -from[1] * UNIT],
-        [to[0] * UNIT, -to[1] * UNIT],
-    ],
-    stroke,
-    strokeWidth: 1,
-    roundness: 'sharp',
-});
-const fromOrigin = (to: [number, number], style: Omit<DrawingArrow, 'from' | 'to'>): DrawingArrow => ({
-    from: { at: [0, 0] },
-    to: { at: [to[0] * UNIT, -to[1] * UNIT] },
-    ...style,
-});
-
-export const EIGENVECTORS: Drawing = {
-    folder: 'marketing',
-    name: 'eigenvectors',
-    author: 'comms',
-    background: '#ffffff',
-    lines: [
-        ...[-3, -2, -1, 1, 2, 3, 4, 5].map((x) => gridLine([x, -1], [x, 5])),
-        ...[-1, 1, 2, 3, 4, 5].map((y) => gridLine([-3, y], [5, y])),
-        gridLine([-3, 0], [5, 0], GRAY),
-        gridLine([0, -1], [0, 5], GRAY),
-        // The matrix's brackets.
-        {
-            points: [
-                [343, -195],
-                [335, -195],
-                [335, -132],
-                [343, -132],
-            ],
-            roundness: 'sharp',
-        },
-        {
-            points: [
-                [404, -195],
-                [412, -195],
-                [412, -132],
-                [404, -132],
-            ],
-            roundness: 'sharp',
-        },
-    ],
-    shapes: [],
-    images: [],
-    // A v first, then each v on top of it, so an eigenvector's v shows along its bold A v.
-    arrows: [
-        fromOrigin([3, 1], { stroke: TURNED }),
-        fromOrigin([1, 3], { stroke: TURNED }),
-        fromOrigin([4, 4], { stroke: STRETCHED, strokeWidth: 5 }),
-        fromOrigin([-2, 2], { stroke: STRETCHED, strokeWidth: 5 }),
-        fromOrigin([1, 0], { stroke: GRAY }),
-        fromOrigin([0, 1], { stroke: GRAY }),
-        fromOrigin([1, 1], { stroke: GRAY }),
-        fromOrigin([-1, 1], { stroke: GRAY }),
-    ],
-    texts: [
-        { text: 'eigenvectors', x: 290, y: -250, fontSize: 32 },
-        { text: 'A =', x: 290, y: -178, fontSize: 22 },
-        { text: '3   1\n1   3', x: 347, y: -192, fontSize: 22 },
-        { text: 'λ = 4', x: 210, y: -232, fontSize: 16, color: STRETCHED },
-        { text: 'λ = 2', x: -162, y: -128, fontSize: 16, color: STRETCHED },
-        { text: 'gray: an arrow v', x: 290, y: -100, fontSize: 15, color: GRAY },
-        { text: 'blue: A v, knocked off its line', x: 290, y: -78, fontSize: 15, color: TURNED },
-        { text: 'bold: A v = λ v, only stretched', x: 290, y: -56, fontSize: 15, color: STRETCHED },
-    ],
+    ] satisfies SitePlanText[],
 };
 
 // --- Chat channels (real chat rooms in chats/, seeded via ChatRoom.postMessage as personas) ---
