@@ -1,5 +1,5 @@
-// Which homes a backup may be of, and where such a home's folder lives. The backup routes and the folder resolver
-// both ask requireBackableHome, so a guest's home is refused in one place.
+// Which homes a backup may be of, and where such a home's folder lives. Callers such as the backup routes ask
+// requireBackableHome, so a guest's home is refused in one place.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { getDataRoot, homeDirUnder } from '../config/paths';
@@ -9,8 +9,8 @@ import type { BackableOwner } from './paths';
 import { requireBackableOwner } from './paths';
 
 // The owner an ownerId names, once it is one a backup can be of. The guest refusal needs the user
-// row, which is why this is the async half of requireBackableOwner; the routes and the folder
-// resolver both go through it, so the refusal is spelled once.
+// row, which is why this is the async half of requireBackableOwner; callers go
+// through it, so the refusal is spelled once.
 export async function requireBackableHome(ownerId: string): Promise<BackableOwner> {
     const owner = parseOwnerId(ownerId);
     requireBackableOwner(owner);

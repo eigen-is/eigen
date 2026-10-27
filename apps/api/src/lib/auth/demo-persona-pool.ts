@@ -1,5 +1,5 @@
 // The accounts a demo visitor can be signed in as, read from the org's members so the list cannot drift from the
-// seeder. The demo entry route picks one at random, and the demo tests check this same query.
+// seeder. A demo entry picks one at random.
 
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { member, user } from '../../../auth-schema';

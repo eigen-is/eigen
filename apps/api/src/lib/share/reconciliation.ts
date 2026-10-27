@@ -1,6 +1,6 @@
 // Reconciliation: when an account or a team membership appears, it reads the share registry and pulls what each
 // listed owner currently shares with the newcomer into the newcomer's home, such as shared paths, calendars and
-// invitations. It runs on account creation, on every guest sign-in and when someone joins a team. An owner's
+// invitations. It runs when an account is created or a team gains a member, such as a guest signing in. An owner's
 // current shares decide what arrives, so an entry left by a revoked share delivers nothing.
 
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';

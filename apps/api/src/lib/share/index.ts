@@ -1,2 +1,2 @@
 export { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from './reconciliation';
-export { addRegistryEntry, getEntriesForTarget, removeEntriesForTarget, removeEntriesFromSource } from './registry';
+export { addRegistryEntry, getEntriesForTarget } from './registry';

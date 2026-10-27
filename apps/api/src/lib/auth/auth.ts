@@ -177,7 +177,7 @@ export const auth = betterAuth({
             delete: {
                 // Every better-auth deletion passes here while the user row still exists, so Eigen's whole
                 // teardown runs here. A member row left behind would break listMembers for the whole org.
-                // The import is lazy because delete-user reaches back to this file through getHome.
+                // The import is lazy because delete-user imports this file directly, so a static import would be a cycle.
                 before: async (hookUser) => {
                     const user = hookUser as User;
                     const { teardownUserData } = await import('../user/delete-user');

@@ -1,7 +1,7 @@
 // Deleting a user. teardownUserData removes what Eigen keeps for an account outside better-auth's user row, such
 // as the home folder, its bucket objects, the share registry rows and the org memberships. better-auth's
-// user.delete.before hook runs it, so every way to delete an account tears down the same data once, whether an
-// admin, the raw better-auth endpoint or the inactive-guest sweep starts it.
+// user.delete.before hook runs it, so every way to delete an account tears down the same data once, whoever
+// starts it, such as an admin or the inactive-guest sweep.
 
 import * as fs from 'node:fs';
 import { auth, authDeleteUserReferences } from '../auth/auth';
