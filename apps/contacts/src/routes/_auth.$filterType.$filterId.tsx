@@ -1,3 +1,7 @@
+// The contacts page: the address book, a label or a team's members as a list, filtered by the URL's
+// filterType and filterId. The contact the URL's contactId names opens its detail beside the list.
+// The page also hosts the delete confirmation and the import picker its list and detail share.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
     useContacts,
@@ -10,7 +14,7 @@ import {
 import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
 import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/drive';
-import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState } from '@workspace/ui';
+import { DeleteDialog, ListDetailLayout, LoadingState } from '@workspace/ui';
 import { IMPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
 import { FileImportPicker } from '@workspace/ui/components/drive';
 import { LabelFilterHeader } from '@workspace/ui/components/labels';
@@ -138,30 +142,19 @@ function ContactsRoute() {
         const activeMember = activeTeam?.members.find((m) => m.email === contactId);
 
         return (
-            <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
-                <Column id="list" width="350px" onBack="sidebar" toolbar={listToolbar}>
-                    <div className="flex h-full flex-col border-r overflow-y-auto">
-                        <TeamMemberList
-                            members={activeTeam?.members || []}
-                            activeMemberEmail={contactId}
-                            searchQuery={searchQuery}
-                            onRowClick={handleRowClick}
-                        />
-                    </div>
-                </Column>
-                <Column
-                    id="detail"
-                    width="flex"
-                    onBack={handleBackToList}
-                    toolbar={activeMember ? <TeamMemberDetailToolbar member={activeMember} /> : null}
-                >
-                    {activeMember ? (
-                        <TeamMemberDetail member={activeMember} />
-                    ) : (
-                        <EmptyState message="Select a member to view details" />
-                    )}
-                </Column>
-            </ColumnLayout>
+            <ListDetailLayout
+                listToolbar={listToolbar}
+                detail={activeMember && <TeamMemberDetail member={activeMember} />}
+                detailToolbar={activeMember && <TeamMemberDetailToolbar member={activeMember} />}
+                onBackToList={handleBackToList}
+            >
+                <TeamMemberList
+                    members={activeTeam?.members || []}
+                    activeMemberEmail={contactId}
+                    searchQuery={searchQuery}
+                    onRowClick={handleRowClick}
+                />
+            </ListDetailLayout>
         );
     }
 
@@ -171,40 +164,34 @@ function ContactsRoute() {
 
     return (
         <>
-            <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
-                <Column id="list" width="350px" onBack="sidebar" toolbar={listToolbar}>
-                    <div className="flex h-full flex-col border-r overflow-y-auto">
-                        {filterType === 'label' && <LabelFilterHeader labels={labels} labelId={filterId} />}
-                        <ContactsList
-                            filterType={filterType}
-                            filterId={filterId}
-                            searchQuery={searchQuery}
-                            sortBy={sortBy}
-                            activeContactId={contactId}
-                            labels={labels}
-                            onRowClick={handleRowClick}
-                            onEdit={(contact) => {
-                                navigate({
-                                    to: '/edit/$filterType/$filterId',
-                                    params: { filterType, filterId },
-                                    search: { contactId: contact.id },
-                                });
-                            }}
-                            onDelete={(selectedContacts) => {
-                                setDeleteTargets(selectedContacts);
-                            }}
-                            onToggleLabel={handleToggleLabel}
-                        />
-                    </div>
-                </Column>
-                <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
-                    {contact ? (
-                        <ContactDetail contact={contact} />
-                    ) : (
-                        <EmptyState message="Select a contact to view details" />
-                    )}
-                </Column>
-            </ColumnLayout>
+            <ListDetailLayout
+                listToolbar={listToolbar}
+                detail={contact && <ContactDetail contact={contact} />}
+                detailToolbar={detailToolbar}
+                onBackToList={handleBackToList}
+            >
+                {filterType === 'label' && <LabelFilterHeader labels={labels} labelId={filterId} />}
+                <ContactsList
+                    filterType={filterType}
+                    filterId={filterId}
+                    searchQuery={searchQuery}
+                    sortBy={sortBy}
+                    activeContactId={contactId}
+                    labels={labels}
+                    onRowClick={handleRowClick}
+                    onEdit={(contact) => {
+                        navigate({
+                            to: '/edit/$filterType/$filterId',
+                            params: { filterType, filterId },
+                            search: { contactId: contact.id },
+                        });
+                    }}
+                    onDelete={(selectedContacts) => {
+                        setDeleteTargets(selectedContacts);
+                    }}
+                    onToggleLabel={handleToggleLabel}
+                />
+            </ListDetailLayout>
 
             <DeleteDialog
                 open={deleteDialogOpen}
