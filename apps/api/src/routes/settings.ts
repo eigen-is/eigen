@@ -1,3 +1,7 @@
+// The routes behind the Admin app's settings and users pages, such as the server settings, the S3
+// configuration, the server status, the list of users and guests with their roles and teams, and a
+// user's deletion or password reset. Every route needs an admin or the owner.
+
 import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
@@ -72,7 +76,7 @@ function adminUserRows(where: SQL | undefined): AdminUserRow[] {
     // an unscoped join would leak other orgs' team memberships into this org's admin view.
     const teamRows = orgId
         ? db
-              .select({ userId: teamMember.userId, name: team.name })
+              .select({ userId: teamMember.userId, id: team.id, name: team.name })
               .from(teamMember)
               .innerJoin(team, eq(teamMember.teamId, team.id))
               .where(eq(team.organizationId, orgId))
@@ -86,11 +90,11 @@ function adminUserRows(where: SQL | undefined): AdminUserRow[] {
         .all();
     const memberByUser = new Map(members.map((m) => [m.userId, m]));
     const sessionByUser = new Map(lastSessions.map((s) => [s.userId, new Date(s.last * 1000)]));
-    const teamsByUser = new Map<string, string[]>();
-    for (const t of teamRows) {
-        const names = teamsByUser.get(t.userId);
-        if (names) names.push(t.name);
-        else teamsByUser.set(t.userId, [t.name]);
+    const teamsByUser = new Map<string, AdminUserRow['teams']>();
+    for (const { userId, id, name } of teamRows) {
+        const teams = teamsByUser.get(userId);
+        if (teams) teams.push({ id, name });
+        else teamsByUser.set(userId, [{ id, name }]);
     }
     return users.map((u) => {
         const m = memberByUser.get(u.id);

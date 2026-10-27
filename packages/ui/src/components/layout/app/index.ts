@@ -14,6 +14,7 @@ export { ErrorState } from './error-state';
 export type { LayoutContextType } from './layout-context';
 export { LayoutContext, useApp, useLayout } from './layout-context';
 export { LeaveGuard } from './leave-guard';
+export { ListDetailLayout } from './list-detail-layout';
 export { LoadingState } from './loading-state';
 export { RequestAccessView } from './request-access-view';
 export { SettingsFooter } from './settings-footer';

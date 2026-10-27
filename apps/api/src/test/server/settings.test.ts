@@ -25,7 +25,16 @@ import { atHome } from '../../lib/home/get-home';
 import { homeSize } from '../../lib/home/home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
-import { addMember, assertJson, authedRequest, createTestUser, driveGet, driveUpload, getTestContext } from '../setup';
+import {
+    addMember,
+    assertJson,
+    authedRequest,
+    createTeam,
+    createTestUser,
+    driveGet,
+    driveUpload,
+    getTestContext,
+} from '../setup';
 
 describe('Server Settings', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -1151,6 +1160,19 @@ describe('GET /settings/users', () => {
         expect(Array.isArray(aliceRow?.teams)).toBe(true);
         // cleanup so other tests' user counts stay stable
         await db.delete(user).where(inArray(user.id, ['orphan-test-id', 'guest-test-id']));
+    });
+
+    // The user detail takes a member out of a team by its id, so a row names each team by id and name.
+    test('names each team a user is in by id and name', async () => {
+        const ctx = await getTestContext();
+        const teamId = await createTeam(ctx, getServerConfig()!.orgId, 'Users Row Team');
+        await addMember(ctx, teamId, ctx.bob.user.id);
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/users');
+        const rows: AdminUserRow[] = await res.json();
+        expect(rows.find((r) => r.id === ctx.bob.user.id)?.teams).toContainEqual({
+            id: teamId,
+            name: 'Users Row Team',
+        });
     });
 
     // The list carries no usage, and must not size anything to answer: usage is its own query, so

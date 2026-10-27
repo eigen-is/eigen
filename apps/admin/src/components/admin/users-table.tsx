@@ -1,3 +1,8 @@
+// The list of accounts on the Admin app's users and guests pages, with the toolbar above it that
+// searches the list and creates a user. A click on a row opens that account's detail; a Shift- or
+// Cmd-click selects several users, and the context menu on the selection adds them to a team. Columns
+// appear as the list grows wider, so a narrow list beside an open detail keeps only the name.
+
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
@@ -5,12 +10,16 @@ import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import type { SortDir } from '@workspace/ui';
 import { EmptyState, nextSortDir, SearchBar, SortHeader, TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
+import { ContextMenuAnchor } from '@workspace/ui/components/context-menu';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { UserAvatar } from '@workspace/ui/components/user';
-import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
 import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
+import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-context-menu';
 import { cn } from '@workspace/ui/lib/utils';
-import { Plus } from 'lucide-react';
+import { Plus, UsersRound } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { AddToTeamDialog } from './add-to-team-dialog';
 import { CreateUserDialog } from './create-user-dialog';
 
 // Org role → badge variant for the role column (orphans render a plain outline badge inline).
@@ -114,17 +123,31 @@ const GUEST_COL_VISIBILITY: typeof COL_VISIBILITY = {
     joined: 'hidden',
 };
 
+// The Teams column's text, which its sort compares too.
+const teamNames = (u: AdminUserRow) => u.teams.map((t) => t.name).join(', ');
+
 type AdminUsersTableProps = {
     users: AdminUserRow[];
     usage?: Record<string, HomeSizeResponse>;
     searchQuery: string;
     activeUserId?: string;
     onRowClick: (userId: string) => void;
+    organizationId?: string;
     guests?: boolean;
 };
 
-export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRowClick, guests }: AdminUsersTableProps) {
+export function AdminUsersTable({
+    users,
+    usage,
+    searchQuery,
+    activeUserId,
+    onRowClick,
+    organizationId,
+    guests,
+}: AdminUsersTableProps) {
     const [sort, setSort] = useState<SortState>({ col: 'name', dir: 'asc' });
+    const [teamPickOpen, setTeamPickOpen] = useState(false);
+    const [teamPickUsers, setTeamPickUsers] = useState<AdminUserRow[]>([]);
     const grid = guests ? guestGridCols : gridCols;
     const visibility = guests ? GUEST_COL_VISIBILITY : COL_VISIBILITY;
 
@@ -148,7 +171,7 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                 case 'role':
                     return (a.role ?? '').localeCompare(b.role ?? '');
                 case 'teams':
-                    return a.teams.join(', ').localeCompare(b.teams.join(', '));
+                    return teamNames(a).localeCompare(teamNames(b));
                 case 'disk':
                     return diskUsed(a) - diskUsed(b);
                 case 'lastActive':
@@ -161,11 +184,21 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
         return [...filtered].sort((a, b) => compare(a, b) * factor);
     }, [users, usage, searchQuery, sort]);
 
-    // Only org members can be dropped onto a team (addTeamMember needs org membership); orphans
-    // (no member row) still render but are excluded from selection and drag.
-    const selectableUsers = useMemo(() => visible.filter((u) => u.memberId !== null), [visible]);
-    const selection = useListSelection({ items: selectableUsers, getId: (u) => u.id });
-    const drag = useListDrag({ selection, getId: (u) => u.id, dragType: 'member' });
+    // Only org members can join a team (addTeamMember needs org membership). A guest or an orphan
+    // without a member row still shows, but takes no part in the selection or its menu.
+    const selectableUsers = useMemo(
+        () => (guests ? [] : visible.filter((u) => u.memberId !== null)),
+        [visible, guests],
+    );
+    const selection = useListSelection({ items: selectableUsers, getId: (u) => u.id, openId: activeUserId });
+    const { contextMenu, handleContextMenu, openAt } = useSelectableContextMenu({ selection, getId: (u) => u.id });
+    const longPress = useLongPress(openAt);
+
+    const menuUsers = contextMenu.item
+        ? selection.selectedCount > 1
+            ? selection.selectedItems
+            : [contextMenu.item]
+        : [];
 
     if (visible.length === 0) {
         const none = guests ? 'No guest users' : 'No users found';
@@ -229,21 +262,21 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
             </div>
 
             {visible.map((u) => {
-                const selectable = u.memberId !== null;
+                const selectable = !guests && u.memberId !== null;
                 return (
                     <button
                         key={u.id}
                         type="button"
                         onClick={(e) => {
-                            // Modifier-click builds a multi-selection (mirrors PersonList); a plain
-                            // click opens the detail pane.
+                            // A Shift- or Cmd-click builds the selection; a plain click opens the detail too.
                             if (selectable) {
                                 selection.handleItemClick(u.id, e);
                                 if (e.shiftKey || e.metaKey || e.ctrlKey) return;
                             }
                             onRowClick(u.id);
                         }}
-                        {...(selectable ? drag.getDragProps(u) : undefined)}
+                        onContextMenu={selectable ? (e) => handleContextMenu(e, u) : undefined}
+                        {...(selectable ? longPress.bind(u) : undefined)}
                         className={cn(
                             'grid w-full app-gutter-x items-center text-left eigen-list-item',
                             grid,
@@ -280,7 +313,7 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                         </div>
 
                         <div className={cn('min-w-0 items-center text-muted-foreground pr-2', visibility.teams)}>
-                            <span className="truncate">{u.teams.length > 0 ? u.teams.join(', ') : '—'}</span>
+                            <span className="truncate">{teamNames(u) || '—'}</span>
                         </div>
 
                         <div className={cn('items-center text-muted-foreground pr-2', visibility.lastActive)}>
@@ -293,6 +326,29 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                     </button>
                 );
             })}
+
+            {!guests && (
+                <>
+                    <ContextMenuAnchor contextMenu={contextMenu} className="min-w-[200px]">
+                        <DropdownMenuItem
+                            onClick={() => {
+                                setTeamPickUsers(menuUsers);
+                                setTeamPickOpen(true);
+                                contextMenu.close();
+                            }}
+                        >
+                            <UsersRound className="h-4 w-4" />
+                            Add to team…
+                        </DropdownMenuItem>
+                    </ContextMenuAnchor>
+                    <AddToTeamDialog
+                        open={teamPickOpen}
+                        onOpenChange={setTeamPickOpen}
+                        users={teamPickUsers}
+                        organizationId={organizationId}
+                    />
+                </>
+            )}
         </div>
     );
 }

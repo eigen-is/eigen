@@ -1,3 +1,7 @@
+// One person list for contacts and admin: alphabetically grouped rows with shared keyboard navigation,
+// plus opt-in selection, drag and a context menu. The page renders each row's content and owns the
+// chrome around it, such as toolbars, loading states and the detail beside the list.
+
 import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
 import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
 import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
@@ -33,10 +37,6 @@ type PersonListProps<T> = {
     onDelete?: (items: T[]) => void;
 };
 
-// One person list for contacts and admin: alphabetically grouped rows (diacritics folded via
-// alphaGroupKey) with shared keyboard navigation, plus opt-in selection, drag, and context menu.
-// The adopter renders the row content (UserItem) and owns the surrounding chrome — toolbars,
-// error/loading states, detail panes.
 export function PersonList<T>({
     items,
     searchQuery,
@@ -62,7 +62,13 @@ export function PersonList<T>({
         return sorted.filter((item) => getSearchFields(item).some((field) => field.toLowerCase().includes(q)));
     }, [items, searchQuery, getName, getSearchFields]);
 
-    const selection = useListSelection({ items: visible, getId: getSelectionId });
+    // The open row is looked up in all items, so a search that hides it doesn't count as closing it.
+    const openItem = activeId === undefined ? undefined : items.find((item) => getId(item) === activeId);
+    const selection = useListSelection({
+        items: visible,
+        getId: getSelectionId,
+        openId: openItem && getSelectionId(openItem),
+    });
     const drag = useListDrag({ selection, getId: getSelectionId, dragType: dragType ?? 'person' });
 
     // Right-click, touch long-press, and the ⋮ button all select-then-open the same menu.

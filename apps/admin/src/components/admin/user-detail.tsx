@@ -1,10 +1,14 @@
+// The detail of one account on the Admin app's users and guests pages: its role, teams, activity,
+// storage and backups, with a danger zone that deletes it. The toolbar above it resets a password.
+// The users page shows it beside the list when the URL names an account.
+
 import { useNavigate } from '@tanstack/react-router';
 import { useDeleteUser, useUpdateMemberRole } from '@workspace/lib/admin';
 import { useAuth } from '@workspace/lib/auth';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
-import { TooltipButton, useLayout } from '@workspace/ui';
+import { TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { DangerZone } from '@workspace/ui/components/delete/danger-zone';
@@ -12,20 +16,19 @@ import { StorageUsageBars } from '@workspace/ui/components/home';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { UserDetailHero } from '@workspace/ui/components/user';
-import { KeyRound, X } from 'lucide-react';
+import { KeyRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { BackupSection } from './backup-section';
 import { ResetPasswordDialog } from './reset-password-dialog';
+import { UserTeamsSection } from './user-teams-section';
 
 type UserDetailToolbarProps = {
     user: AdminUserRow;
-    onClose: () => void;
     // A guest signs in with an emailed code, so there is no password to reset.
     guest?: boolean;
 };
 
-export function UserDetailToolbar({ user, onClose, guest }: UserDetailToolbarProps) {
-    const { isMobile } = useLayout();
+export function UserDetailToolbar({ user, guest }: UserDetailToolbarProps) {
     const { user: me } = useAuth();
     const [showResetPassword, setShowResetPassword] = useState(false);
 
@@ -46,7 +49,6 @@ export function UserDetailToolbar({ user, onClose, guest }: UserDetailToolbarPro
                     />
                 </>
             )}
-            {!isMobile && <TooltipButton icon={X} tooltipText="Close" onClick={onClose} />}
         </div>
     );
 }
@@ -119,10 +121,8 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
                             )}
                         </div>
 
-                        <div>
-                            <h3 className="text-sm font-medium text-muted-foreground mb-2">Teams</h3>
-                            <p className="text-sm">{user.teams.length > 0 ? user.teams.join(', ') : '—'}</p>
-                        </div>
+                        {/* Only a member of the organization can join one of its teams. */}
+                        {user.role !== null && <UserTeamsSection user={user} organizationId={organizationId} />}
                     </>
                 )}
 

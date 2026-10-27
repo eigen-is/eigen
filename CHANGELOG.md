@@ -9,6 +9,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Forwarding email** — a forward brings the original's attachments along, pictures in the message included. Take one off with the **X** on its chip before you send
 - **Space home** — an admin gets an Admin tile next to the apps. The **Help and support** tile takes the help center's teal
 - **Help center colors** — the Admin section wears the Admin app's color, and a section page shows its title in its section's color, such as amber for Mail
+- **Contacts** — the contact list fills the page until you open a contact. Its details then open beside a narrower list, and **Close** returns to the full list
+- **Admin teams** — teams have their own list page, like users, instead of a list in the sidebar. Create a team with the **+** next to the search bar, and click a team to open its details
+- **Adding people to a team** — dragging users onto a team is gone with the sidebar list. To add several people at once, select them on the **Users** page, right-click and choose **Add to team…**. A team's **Members** section still adds one person at a time
+- **Admin users** — a user's details list their teams under the role. Add the user to a team with **Add to team**, or take them out of one with its **×**
 
 ### Fixed
 
