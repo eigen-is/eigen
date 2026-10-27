@@ -347,7 +347,9 @@ function FontSizeSubmenu() {
                         key={num}
                         onClick={() => {
                             setContext((ctx) => {
-                                handleTextSize(ctx, refs.cellInput.current!, num);
+                                const input = refs.cellInput.current;
+                                const canvas = refs.canvas.current?.getContext('2d') ?? undefined;
+                                if (input) handleTextSize(ctx, input, num, canvas);
                             });
                         }}
                     >

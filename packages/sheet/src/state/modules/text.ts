@@ -342,7 +342,8 @@ export function drawLineInfo(
 // `option.cellWidth` absent → "onlyWidth" mode (row-height auto-fit); only the geometry
 // totals are computed and the layout math returns early. `option.cellHeight` absent is
 // allowed for callers that only consume textHeightAll — the layout `values` produced
-// with the default 0 are unused.
+// with the default 0 are unused. Such a caller fits the row to the text, so a plain cell's
+// wrapped lines are all laid out rather than only those that fit the row.
 export function getCellTextInfo(
     cell: Cell,
     renderCtx: CanvasRenderingContext2D,
@@ -351,6 +352,7 @@ export function getCellTextInfo(
 ): CellTextInfo | null {
     const cellWidth = option.cellWidth ?? 0;
     const cellHeight = option.cellHeight ?? 0;
+    const linesFitIn = option.cellHeight ?? Number.POSITIVE_INFINITY;
     const space_width = option.space_width ?? 2;
     const space_height = option.space_height ?? 2;
     const isMode = option.cellWidth == null ? 'onlyWidth' : '';
@@ -866,7 +868,7 @@ export function getCellTextInfo(
                                 spaceOrTwoByte = null;
 
                                 parsedTextHeight += preTextHeight;
-                                if (parsedTextHeight >= cellHeight) break;
+                                if (parsedTextHeight >= linesFitIn) break;
                             } else {
                                 spaceOrTwoByte = null;
                                 anchor = i - 1;
@@ -891,7 +893,7 @@ export function getCellTextInfo(
                                 splitIndex += 1;
 
                                 parsedTextHeight += preTextHeight;
-                                if (parsedTextHeight >= cellHeight) break;
+                                if (parsedTextHeight >= linesFitIn) break;
                             }
                         } else if (i === valueStr.length) {
                             if (isNil(text_all_split[splitIndex])) {

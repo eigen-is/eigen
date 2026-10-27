@@ -110,6 +110,13 @@ describe('state/modules/toolbar — wrap auto-height', () => {
         ct: { fa: 'General', t: 'inlineStr', s: texts.map((v, index) => ({ v, bl: index % 2 })) },
     });
 
+    // Fitting the row lays out every line, not only those that fit the row it has.
+    test('Wrap on a plain cell grows its row by the lines it wraps to', () => {
+        const oneLine = wrappedRowHeight({ v: 'ab', m: 'ab', ct: { fa: 'General', t: 'g' } });
+        const text = 'a much longer cell text';
+        expect(wrappedRowHeight({ v: text, m: text, ct: { fa: 'General', t: 'g' } })).toBeGreaterThan(oneLine * 1.5);
+    });
+
     test('Wrap on a rich cell grows its row by the lines it wraps to', () => {
         const oneLine = wrappedRowHeight(rich('ab'));
         expect(oneLine).toBeGreaterThan(19);
