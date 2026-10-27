@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { xmlAttr, xmlChild, xmlElements } from '../../lib/core/xml';
 import type { DrawingTheme } from '../../lib/ooxml/drawingml';
 import {
+    colorXml,
     drawingColor,
     drawingLines,
     IDENTITY_COLOR_MAP,
@@ -157,6 +158,20 @@ describe('a DrawingML colour', () => {
     test('out-of-range transforms clamp', () => {
         expect(color('<a:srgbClr val="808080"><a:lumOff val="900000"/></a:srgbClr>')).toBe('#ffffff');
         expect(color('<a:srgbClr val="808080"><a:alpha val="-5"/></a:srgbClr>')).toBe('#80808000');
+    });
+});
+
+describe('a stored color as DrawingML', () => {
+    test.each([
+        ['#abc', '<a:srgbClr val="AABBCC"></a:srgbClr>'],
+        ['#AABBCC', '<a:srgbClr val="AABBCC"></a:srgbClr>'],
+        ['#aabbcc80', '<a:srgbClr val="AABBCC"><a:alpha val="50196"/></a:srgbClr>'],
+    ])('%p is %p', (color, xml) => {
+        expect(colorXml(color)).toBe(xml);
+    });
+
+    test.each(['transparent', '#abcd', 'aabbcc', 'rgb(1, 2, 3)', 'red'])('%p is none', (color) => {
+        expect(colorXml(color)).toBeNull();
     });
 });
 

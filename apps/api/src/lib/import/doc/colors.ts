@@ -3,11 +3,12 @@
 // through them.
 
 import { linearize } from '@workspace/lib/background';
+import { isHexColor } from '@workspace/lib/constants/colors';
 
 // Six hex digits, after a '#' some converters write, or nothing: `auto`, a theme name or a typo is an explicit none.
 export function hexColor(value: string | undefined): string | undefined {
     if (value === undefined) return undefined;
-    return /^#?[0-9a-f]{6}$/i.test(value) ? value.slice(-6).toUpperCase() : '';
+    return isHexColor(value.startsWith('#') ? value : `#${value}`, [6]) ? value.slice(-6).toUpperCase() : '';
 }
 
 // A color as a mark holds it, from Word's hex.
