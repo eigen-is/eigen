@@ -549,6 +549,15 @@ export function buildAllFeaturesDocJson(): JSONContent {
                     },
                 ],
             },
+            // The Google Docs re-save predates figures in front of and behind the text.
+            {
+                type: 'paragraph',
+                content: [
+                    figureNode({ mediaName: 'chart.png', width: 120, layout: 'front', offsetX: 400, offsetY: 6 }),
+                    figureNode({ mediaName: 'diagram.svg', width: 300, layout: 'behind', offsetX: -20, offsetY: -10 }),
+                    { type: 'text', text: 'Text over a figure behind it and under one in front of it.' },
+                ],
+            },
             {
                 type: 'orderedList',
                 attrs: { start: 1, type: null },

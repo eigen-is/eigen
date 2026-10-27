@@ -1,6 +1,7 @@
 // The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognises it where a
 // re-save drops the writer's styles and keeps it as direct formatting.
 
+import type { JSONContent } from '@tiptap/core';
 import {
     DOCUMENT_LINE_RATIO,
     EIGEN_FONT_NAMES,
@@ -9,8 +10,8 @@ import {
     getFontName,
 } from '@workspace/lib/constants/fonts';
 import type { NormalStyle, TitleType } from '@workspace/lib/docs/eigendoc';
-import { DOC_PROSE_CLASS, listTypeOfStyle, ptToTwips } from '@workspace/lib/docs/eigendoc';
-import { LIST_FORMATS, LIST_LEVELS, SINGLE_LINE } from '../ooxml/wordml';
+import { DOC_PROSE_CLASS, listTypeOfStyle, ptToPx, ptToTwips, readParagraphFormat } from '@workspace/lib/docs/eigendoc';
+import { LIST_FORMATS, LIST_LEVELS, SINGLE_LINE, TWIPS_PER_PX } from '../ooxml/wordml';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';
 
@@ -291,6 +292,28 @@ export const BLOCK_MARGINS = {
     ol: twips(cssPt(proseValue('.eigen-prose ol', 'margin-bottom'), BODY.sizePt)),
     blockquote: twips(cssPt(proseValue('.eigen-prose blockquote', 'margin-bottom'), BODY.sizePt)),
 };
+
+// In twips: the indent a list level adds to the text of its items.
+export const LIST_LEVEL = proseTwips('.eigen-prose ul', 'padding-left');
+
+// ── A figure in front of or behind the text ─────────────────────────────────────────────────────────────────────
+// Eigen places one from its anchor paragraph's padding box. Word places it from the text column and from the top of
+// the paragraph's space before. The writer converts one way with these and the reader the other.
+
+// How far right of the text column the paragraph's box starts, in px: its container's indent, a list's or a quote's,
+// in twips, and its own left indent.
+export function anchorIndentPx(container: number, textblock: JSONContent): number {
+    const { indentLeft } = readParagraphFormat(textblock.attrs ?? {});
+    return container / TWIPS_PER_PX + ptToPx(indentLeft ?? 0);
+}
+
+// The padding above the paragraph's text, in px: its own space before, or for a paragraph the Normal's. In a list or a
+// quote it draws none.
+export function anchorPaddingPx(textblock: JSONContent, contained: boolean, normal: NormalStyle): number {
+    if (contained) return 0;
+    const { spaceBefore } = readParagraphFormat(textblock.attrs ?? {});
+    return ptToPx(spaceBefore ?? (textblock.type === 'paragraph' ? normal.spaceBefore : 0));
+}
 
 export const LINK_LOOK = { color: proseColor('.eigen-prose a', 'color') };
 

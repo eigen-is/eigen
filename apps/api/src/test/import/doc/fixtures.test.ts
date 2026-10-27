@@ -27,6 +27,9 @@ describe('docx fixtures', () => {
             'poi-delins.docx',
             'poi-rtl.docx',
             'google-docs-all-features.docx',
+            'poi-WithGIF.docx',
+            'govuk-AcuteHepB_EnhancedSurveillanceForm.docx',
+            'lo-ooxmlexport-tdf104061_tableSectionColumns.docx',
         ];
         for (const name of names) {
             const { warnings } = await imported(name);
@@ -74,6 +77,37 @@ describe('docx fixtures', () => {
 
     test("mammoth's text box: its text follows the paragraph that anchors it", async () => {
         expect(texts((await imported('mammoth-text-box.docx')).json)).toEqual(['Datum plane']);
+    });
+
+    // Pictures over or under the text (J1 § 9): each a figure in front of or behind it at Word's place, one in a table
+    // cell a block.
+    const placesOf = (json: JSONContent) =>
+        nodesOfType(json, 'figure').map((node) => [
+            node.attrs?.['layout'],
+            node.attrs?.['offsetX'],
+            node.attrs?.['offsetY'],
+            node.attrs?.['width'],
+        ]);
+
+    test('POI GIF: a picture in front of the text, at its column offset, leading its paragraph', async () => {
+        const { json } = await imported('poi-WithGIF.docx');
+        expect(placesOf(json)).toEqual([['front', 198, -11, 176]]);
+        const holder = (json.content ?? []).find((block) => block.content?.some((node) => node.type === 'figure'));
+        expect(holder?.content?.[0]?.type).toBe('figure');
+    });
+
+    test("GOV.UK surveillance form: its logo in front of the text, its shape's text kept as text", async () => {
+        const { json } = await imported('govuk-AcuteHepB_EnhancedSurveillanceForm.docx');
+        expect(placesOf(json)).toEqual([['front', 0, -19, 180]]);
+    });
+
+    test('LibreOffice table: a picture over the text in a table cell is a block in the cell', async () => {
+        const { json } = await imported('lo-ooxmlexport-tdf104061_tableSectionColumns.docx');
+        const cells = nodesOfType(json, 'tableCell').flatMap((cell) => nodesOfType(cell, 'figure'));
+        expect(cells.length).toBeGreaterThan(0);
+        expect(placesOf(json).map(([layout, x, y]) => [layout, x, y])).toEqual(
+            placesOf(json).map(() => ['block', null, null]),
+        );
     });
 
     // Its Title is bold and purple, which Eigen's title draws neither of.

@@ -180,7 +180,7 @@ function cellXml(
         after: 0,
         align: typeof align === 'string' ? JUSTIFICATION.get(align) : undefined,
     };
-    const blocks = blocksOf(content, textProps({}, cell), cell, false);
+    const blocks = blocksOf(content, textProps({}, cell), cell);
     const empty = textProps({}, cell);
     if (marked) {
         pkg.styles.set('TableHeader', TABLE_HEADER_STYLE);

@@ -50,6 +50,8 @@ export type Package = {
     // The doc's Normal, which docDefaults and the Normal style write, and the styles built on it.
     normal: NormalStyle;
     styles: Styles;
+    // The paper's width in twips, which a figure in front of or behind the text may span.
+    paper: number;
     // Counts what the docx leaves out or draws simpler, for the export's warnings.
     lost: Lost;
 };
@@ -76,6 +78,9 @@ export type Context = {
     blockPt?: number;
     // In a node that draws italic, which draws an italic mark upright.
     upright?: boolean;
+    // In the body or a list or quote in it, where a figure keeps its place in front of or behind the text. A table cell,
+    // a note and a band draw one in line.
+    positions?: true;
 };
 
 export function sectionXml(

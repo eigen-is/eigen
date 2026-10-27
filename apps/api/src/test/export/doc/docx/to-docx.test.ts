@@ -12,7 +12,7 @@ import type { XmlElement } from '../../../../lib/core/xml';
 import { parseXml, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../../../lib/core/xml';
 import type { EigendocBands } from '../../../../lib/document/doc';
 import { docSchema } from '../../../../lib/document/doc-schema';
-import { cssPt, QUOTE_LOOK, twips } from '../../../../lib/document/looks';
+import { cssPt, LIST_LEVEL, QUOTE_LOOK, twips } from '../../../../lib/document/looks';
 import { proseValue, proseValueIfSet } from '../../../../lib/document/prose-css';
 import type { ExportMedia, TransformWarning } from '../../../../lib/document/transform/protocol';
 import { lossCounter, toTransferableText } from '../../../../lib/document/transform/protocol';
@@ -2678,6 +2678,176 @@ describe('docx writer — figures', () => {
         const json = doc(p(figure({ caption: 'Only words' })));
         expect(await blocksOf(json)).toHaveLength(1);
         expect(lossesOf(json)).toEqual([]);
+    });
+
+    // Eigen places the box from its paragraph's padding box, Word from the text column and the top of the paragraph's
+    // space before (J1 § 4, § 14).
+    describe('in front of and behind the text', () => {
+        const EMU = 9525;
+        // A4's 21 cm in whole px: a positioned figure may span the paper, not only the column.
+        const PAPER_PX = 793;
+
+        // The anchor exactly as the writer writes it, around the inline drawing's graphic.
+        function anchored(o: Parameters<typeof drawing>[0] & { x: number; y: number; behind?: boolean }): string {
+            const head = `<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="${251658240 + o.id}" behindDoc="${o.behind ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>${o.x}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>${o.y}</wp:posOffset></wp:positionV>`;
+            return drawing(o)
+                .replace('<wp:inline distT="0" distB="0" distL="0" distR="0">', head)
+                .replace(
+                    '<wp:effectExtent l="0" t="0" r="0" b="0"/>',
+                    '<wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/>',
+                )
+                .replace('</wp:inline>', '</wp:anchor>');
+        }
+
+        const front = (attrs: Record<string, unknown> = {}) =>
+            figure({ ...CHART, width: 320, layout: 'front', offsetX: 40, offsetY: 12, ...attrs });
+        const chartAt = (o: { id?: number; x: number; y: number; behind?: boolean }) =>
+            anchored({ id: 1, px: 320, ratio: 500 / 800, part: 'image1.png', embed: 'rId5', ...o });
+
+        // Each anchor's horizontal and vertical posOffset, in px to a hundredth.
+        async function placesOf(json: JSONContent): Promise<number[][]> {
+            return descendants(await bodyOf(json), WP, 'anchor').map((anchor) =>
+                descendants(anchor, WP, 'posOffset').map((offset) => hundredths(Number(xmlText(offset)) / EMU)),
+            );
+        }
+        const hundredths = (px: number) => Math.round(px * 100) / 100;
+
+        test('is an anchor run at the start of its paragraph, which is not split, an anchor-only one keeping its line', async () => {
+            expect(await blocksOf(doc(p(front(), text('Over it.')), p(front())))).toEqual([
+                `<w:p>${chartAt({ x: 40 * EMU, y: 12 * EMU })}${run('Over it.')}</w:p>`,
+                `<w:p>${chartAt({ id: 2, x: 40 * EMU, y: 12 * EMU })}</w:p>`,
+            ]);
+        });
+
+        test('behind the text is behindDoc, and each layer stacks in document order', async () => {
+            const anchors = descendants(
+                await bodyOf(doc(p(front({ layout: 'behind' }), front(), text('x')), p(front({ layout: 'behind' })))),
+                WP,
+                'anchor',
+            );
+            expect(
+                anchors.map((anchor) => [xmlAttr(anchor, '', 'behindDoc'), xmlAttr(anchor, '', 'relativeHeight')]),
+            ).toEqual([
+                ['1', '251658241'],
+                ['0', '251658242'],
+                ['1', '251658243'],
+            ]);
+        });
+
+        test("X counts from the text column, past a paragraph's own indent, a list's and a quote's", async () => {
+            const listed = LIST_LEVEL / 15;
+            const quoted = QUOTE_LOOK.indent / 15;
+            expect(
+                await placesOf(
+                    doc(
+                        p(front(), text('Plain')),
+                        { type: 'paragraph', attrs: { indentLeft: 36 }, content: [front(), text('Indented')] },
+                        ul(li(p(front(), text('Listed')))),
+                        quote(p(front({ offsetX: -10 }), text('Quoted'))),
+                    ),
+                ),
+            ).toEqual([
+                [40, 12],
+                [88, 12],
+                [hundredths(40 + listed), 12],
+                [hundredths(-10 + quoted), 12],
+            ]);
+        });
+
+        // Y = offsetY − P, P the padding Eigen draws above the text inside the box: the anchor counts from the line, so
+        // the space above the paragraph and how a reader spaces it don't move it.
+        test("Y counts from the paragraph's first line, less the padding Eigen draws above the text in its box", async () => {
+            const spaced = { ...DEFAULT_NORMAL_STYLE, spaceBefore: 6 };
+            const places = async (json: JSONContent, normal = DEFAULT_NORMAL_STYLE) => {
+                const zip = openZip(docx(json, undefined, undefined, undefined, {}, normal));
+                const document = await part(zip, 'word/document.xml');
+                return descendants(document, WP, 'posOffset').map((offset) => Number(xmlText(offset)) / EMU);
+            };
+            // An own space before is padding inside the box.
+            expect(
+                await places(
+                    doc(p(text('x')), { type: 'paragraph', attrs: { spaceBefore: 12 }, content: [front(), text('y')] }),
+                ),
+            ).toEqual([40, -4]);
+            // A heading's style space before is a margin outside the box.
+            expect(await places(doc(p(text('x')), heading(2, front(), text('Heading'))))).toEqual([40, 12]);
+            // The Normal's space before is padding too, after a list and under a table; in a list item there is none.
+            expect(await places(doc(ul(li(p(text('x')))), p(front(), text('y'))), spaced)).toEqual([40, 4]);
+            expect(await places(doc(table(tr(td({}, p(text('x'))))), p(front(), text('y'))), spaced)).toEqual([40, 4]);
+            expect(await places(doc(ul(li(p(front(), text('x'))))), spaced)).toEqual([40 + LIST_LEVEL / 15, 12]);
+        });
+
+        test('is as wide as its width, capped at the paper, not the column', async () => {
+            expect(
+                await widthsOf(
+                    doc(
+                        p(front({ width: 700 })),
+                        p(front({ width: 2000 })),
+                        p(front({ mediaName: 'diagram.svg', width: null })),
+                    ),
+                ),
+            ).toEqual([700, PAPER_PX, 300]);
+        });
+
+        test('a chart in front of the text is an anchored chart', async () => {
+            const anchor = only(
+                descendants(
+                    await bodyOf(
+                        doc(
+                            p(
+                                chartNode({
+                                    ...PARTS_OF_COLUMN,
+                                    width: 480,
+                                    height: 297,
+                                    layout: 'front',
+                                    offsetX: 5,
+                                    offsetY: 6,
+                                }),
+                                text('x'),
+                            ),
+                        ),
+                    ),
+                    WP,
+                    'anchor',
+                ),
+            );
+            expect(shape(anchor)).toEqual([
+                'simplePos',
+                'positionH',
+                'positionV',
+                'extent',
+                'effectExtent',
+                'wrapNone',
+                'docPr',
+                'cNvGraphicFramePr',
+                'graphic',
+            ]);
+            expect(descendants(anchor, C_NS, 'chart')).toHaveLength(1);
+        });
+
+        test('in a table cell, a note or a band it is written in line, as a block', async () => {
+            const json = doc(
+                table(tr(td({}, p(front(), text('In a cell'))))),
+                p(text('Noted'), { type: 'footnote', content: [p(front(), text('In a note'))] }),
+            );
+            const zip = await unzip(json, undefined, undefined, undefined, {
+                header: doc(p(front(), text('In a band'))),
+            });
+            for (const path of ['word/document.xml', 'word/footnotes.xml', 'word/header1.xml']) {
+                const root = await part(zip, path);
+                expect([path, descendants(root, WP, 'anchor').length, descendants(root, WP, 'inline').length]).toEqual([
+                    path,
+                    0,
+                    1,
+                ]);
+            }
+        });
+
+        test('one whose picture is missing writes nothing and is counted, its paragraph keeping its text', async () => {
+            const json = doc(p(front({ mediaName: 'gone' }), text('x')));
+            expect(await blocksOf(json)).toEqual([`<w:p>${run('x')}</w:p>`]);
+            expect(lossesOf(json)).toEqual([{ code: 'images-dropped', count: 1 }]);
+        });
     });
 });
 

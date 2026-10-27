@@ -4,7 +4,8 @@
 
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
-import { isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
+import type { FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
+import { isFigureFrameNode, mmToPx, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
@@ -59,11 +60,14 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             reader.lost('band-content-dropped');
             continue;
         }
-        const layout = anchored ? anchorLayout(frame, reader, inBand) : {};
-        const docPr = xmlChild(frame, WP_NS, 'docPr');
-        const alt = (docPr && (xmlAttr(docPr, '', 'descr') || xmlAttr(docPr, '', 'title'))) || null;
         const extent = xmlChild(frame, WP_NS, 'extent');
         const pictures = descendants(frame, PIC_NS, 'pic');
+        const charts = chartsIn(frame, extent);
+        const layout = anchored ? anchorPlacement(frame, reader, context, pictures.length + charts.length === 1) : {};
+        // A picture in front of or behind the text may span the paper.
+        const room = layout.offsetX === undefined ? reader.columnPx : Math.floor(mmToPx(reader.page.width));
+        const docPr = xmlChild(frame, WP_NS, 'docPr');
+        const alt = (docPr && (xmlAttr(docPr, '', 'descr') || xmlAttr(docPr, '', 'title'))) || null;
         const figures: JSONContent[] = [];
         for (const picture of pictures) {
             const [blip] = descendants(picture, A_NS, 'blip');
@@ -83,17 +87,17 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             }
             const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];
             const cx = roundedInt(ext && xmlAttr(ext, '', 'cx'));
-            const width = cx ? widthPx(cx / EMU_PER_PX, reader.columnPx) : null;
+            const width = cx ? widthPx(cx / EMU_PER_PX, room) : null;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, width, ...layout } });
             if (anchored && inBand) reader.lost('band-images-unanchored');
         }
         // Only the body holds a chart: a band's schema has none and a note's Insert leaves it out, so there it keeps its
         // title.
         const inBody = context.scope.story === 'body';
-        for (const [reference, ext] of chartsIn(frame, extent)) {
+        for (const [reference, ext] of charts) {
             const chart = readDocxChart(reader, reference, context.scope);
             if (inBody && 'parts' in chart) {
-                const { emuPerPx, ...size } = chartSize(ext, reader.columnPx);
+                const { emuPerPx, ...size } = chartSize(ext, room);
                 const look = readChartPartLook(chart.root, { theme: reader.colors, emuPerPx, host: 'docx' });
                 figures.push({ type: 'chart', attrs: { ...chart.parts, ...look, ...size, ...layout } });
                 continue;
@@ -302,39 +306,74 @@ function onShapeFill(scope: Scope): Scope {
     return { ...scope, onFill: true };
 }
 
-// Wrapped beside the text, on the side its alignment or its offset puts it; otherwise, or as a block, aligned if Word
-// aligns it.
-function anchorLayout(anchor: XmlElement, reader: Reader, block: boolean): Record<string, string> {
+// Where Word places an anchor, as the doc holds it. Wrapped beside the text, it sits on the side its alignment or its
+// offset puts it. Over or under the text, alone in its anchor and in the body outside a table, it is in front of or
+// behind the text, at its offsets from the text column and from the paragraph's first line, which placeAnchors counts
+// from the paragraph's box. Any other is a block, aligned if Word aligns it.
+function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext, single: boolean): FigureFrameAttrs {
+    const { story, tables } = context.scope;
     const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
     const offset = positionH && xmlChild(positionH, WP_NS, 'posOffset');
     const extent = xmlChild(anchor, WP_NS, 'extent');
     const cx = roundedInt(extent && xmlAttr(extent, '', 'cx')) ?? 0;
+    const area = areaOf(reader, positionH && xmlAttr(positionH, '', 'relativeFrom'));
+    const placed = align ? alignedIn(xmlText(align).trim(), area.width, cx) : roundedInt(offset && xmlText(offset));
+    const x = onPaper(reader, area.start + (placed ?? 0), cx);
+    if (xmlChild(anchor, WP_NS, 'wrapNone') && single && story === 'body' && tables === 0) {
+        const layout = isOn(xmlAttr(anchor, '', 'behindDoc')) ? 'behind' : 'front';
+        return { layout, offsetX: x / EMU_PER_PX, offsetY: lineOffset(anchor, context) };
+    }
     const side = align
         ? xmlText(align).trim()
-        : offset &&
-            columnOffset(reader, xmlAttr(positionH, '', 'relativeFrom'), roundedInt(xmlText(offset)) ?? 0, cx) +
-                cx / 2 >
-                reader.columnTwips * EMU_PER_TWIP * 0.5
+        : offset && x + cx / 2 > reader.columnTwips * EMU_PER_TWIP * 0.5
           ? 'right'
           : 'left';
-    if (wrapped && !block) return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
+    if (wrapped && story !== 'band')
+        return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
     return side === 'left' || side === 'right' || side === 'center' ? { alignment: side } : {};
 }
 
-// An offset from the area relativeFrom names, from the text column's left edge, kept on the paper: the page and the
-// left or inside margin start at the paper's edge, the right or outside margin at the column's end, and the margin, the
-// column and a character at the column, a character's place in its line being unknown.
-function columnOffset(reader: Reader, relativeFrom: string | undefined, offset: number, cx: number): number {
+// The area relativeFrom names, in EMU from the text column's left edge: the page and the left or inside margin start at
+// the paper's edge, the right or outside margin at the column's end, and the margin, the column and a character at the
+// column, a character's place in its line being unknown.
+function areaOf(reader: Reader, relativeFrom: string | undefined): { start: number; width: number } {
+    const { width, margin } = pageTwips(reader.page);
+    const column = reader.columnTwips * EMU_PER_TWIP;
+    if (AREA_AT_PAPER_EDGE.has(relativeFrom ?? ''))
+        return {
+            start: -margin.left * EMU_PER_TWIP,
+            width: (relativeFrom === 'page' ? width : margin.left) * EMU_PER_TWIP,
+        };
+    if (AREA_AT_COLUMN_END.has(relativeFrom ?? '')) return { start: column, width: margin.right * EMU_PER_TWIP };
+    return { start: 0, width: column };
+}
+
+// Where an alignment puts a picture `cx` wide in an area, from its start.
+function alignedIn(align: string, area: number, cx: number): number {
+    if (align === 'center') return (area - cx) / 2;
+    return align === 'right' || align === 'outside' ? area - cx : 0;
+}
+
+// An offset from the text column's left edge, kept on the paper.
+function onPaper(reader: Reader, x: number, cx: number): number {
     const { width, margin } = pageTwips(reader.page);
     const marginLeft = margin.left * EMU_PER_TWIP;
-    const area = AREA_AT_PAPER_EDGE.has(relativeFrom ?? '')
-        ? -marginLeft
-        : AREA_AT_COLUMN_END.has(relativeFrom ?? '')
-          ? reader.columnTwips * EMU_PER_TWIP
-          : 0;
-    return Math.min(Math.max(area + offset, -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
+    return Math.min(Math.max(x, -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
+}
+
+// The vertical offset from the paragraph's first line, in px. Word counts one from the paragraph from the top of the
+// space before it. One from another area, an aligned one or a simple position has none, so the picture goes to its
+// paragraph's top.
+function lineOffset(anchor: XmlElement, context: RunContext): number | null {
+    const positionV = xmlChild(anchor, WP_NS, 'positionV');
+    const offset = positionV && xmlChild(positionV, WP_NS, 'posOffset');
+    if (!offset || isOn(xmlAttr(anchor, '', 'simplePos'))) return null;
+    const px = (roundedInt(xmlText(offset)) ?? 0) / EMU_PER_PX;
+    const relativeFrom = xmlAttr(positionV, '', 'relativeFrom');
+    if (relativeFrom === 'line') return px;
+    return relativeFrom === 'paragraph' ? px - context.spaceBefore : null;
 }
 
 const AREA_AT_PAPER_EDGE = new Set(['page', 'leftMargin', 'insideMargin']);
