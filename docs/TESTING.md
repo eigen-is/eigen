@@ -15,6 +15,8 @@ Every workspace has exactly one test folder, `<workspace>/src/test/`. Inside it,
 
 Add the `test` script together with the first test, not before. `bun test` exits 1 when it finds no test files, which would break `bun run check`.
 
+A fix or a feature in an app ships with a test in that app, at the contract level: what the user clicks and what the app then shows or sends. An app without a runner gets one the first time it needs a test: a `test` script and `happy-dom` in its devDependencies, its tests calling `installHappyDom()` from `@workspace/ui/test/happy-dom` as `apps/docs` does. Adding `happy-dom` to an app this way is approved once for every app and needs no separate question; any other new package still does.
+
 `apps/api/src/test/transform-benchmark.ts` is not a test. It is the document-transform benchmark ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#the-runner-logs-one-line-per-job-overload-included)), run from `apps/api` with `bun src/test/transform-benchmark.ts`.
 
 ## One API test file runs from `apps/api` with the preload
