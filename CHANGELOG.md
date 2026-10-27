@@ -9,6 +9,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Slides on a phone** — a row of slide thumbnails sits under the slide. Tap one to jump straight to it
 - **SmartArt in PowerPoint files** — a SmartArt graphic comes into Slides as the shapes and text PowerPoint shows, each one a shape you can move, resize and edit. Editing its text doesn't rearrange the others
 - **SmartArt saved without its shapes** — a graphic saved that way, as LibreOffice saves one, leaves its **SmartArt not imported** box with the graphic's text listed in it
+- **Styling part of a cell in Sheets** — while you edit a cell, select some of its words and make them bold, italic, underlined, struck through, or another color, font or size. **Ctrl+B**, **Ctrl+I** and **Ctrl+U** (Mac: **⌘B**, **⌘I**, **⌘U**) work as you type, and a style you pick with no words selected applies to what you type next. The cell keeps its styles when you download it as Excel
 
 ### Changed
 
@@ -31,6 +32,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Sheets** — someone else's edit to a sheet you never opened, such as a fresh copy or a sheet you brought back with undo, shows up for you. A copy you never opened comes back with its cells when you undo its delete
 - **Sheets** — closing a spreadsheet leaves the view and the undo history of everyone else who has it open as they are
 - **Sheets** — an edit someone makes while your spreadsheet is still opening, or while it reloads, shows up instead of going missing until you reload
+- **Sheets** — a wrapped cell that mixes styles, such as one from an Excel file, breaks its lines between words instead of keeping a long styled stretch on one line
 
 ## [0.4.0] - 2026-10-26
 

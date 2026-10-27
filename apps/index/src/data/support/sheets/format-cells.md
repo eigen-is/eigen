@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, formatting, cells, numbers, alignment, borders]
 related: [sheets/conditional-formatting]
 order: 60
-updated: 2026-09-22
+updated: 2026-10-27
 ---
 
 Sheets lets you change how cells look without changing the values inside them. You can apply text styles, number formats, colors, borders, and alignment from the **Format** menu in the toolbar.
@@ -30,6 +30,17 @@ To change how text looks in one or more cells:
 
 1. Select the cells.
 2. Open **Format → Font size** and choose a size: 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, or 72.
+
+## Format part of a cell's text
+
+One cell can mix styles, such as a single bold word in a sentence.
+
+1. Double-click the cell, or select it and press **F2**, to edit it.
+2. Select the words you want to change.
+3. Press **Ctrl+B** (Mac: **⌘B**) for bold, **Ctrl+I** (Mac: **⌘I**) for italic or **Ctrl+U** (Mac: **⌘U**) for underline. The font, the font size, **Bold**, **Italic** and **Text color** in the quick-format bar work too, and so do **Format → Text** and **Format → Font size**.
+4. Press **Enter** to save the cell.
+
+With no words selected, a style applies to the text you type next. While you edit, the quick-format bar shows the style of the text at your cursor.
 
 ## Number format
 
