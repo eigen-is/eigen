@@ -336,7 +336,11 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             expect(equations.length).toBe(1);
             expect(equations[0].attrs?.['display']).toBe(true);
             expect(equations[0].attrs?.['mathml']).toContain(
-                '<annotation encoding="application/x-tex">\\mathbf{eigen}\\,|\\text{docs}\\rangle</annotation>',
+                '<annotation encoding="application/x-tex">\\mathbf{eigen}\\,\\ket{\\text{docs}}</annotation>',
+            );
+            // The ket is a fenced row, so it grows with what it holds.
+            expect(equations[0].attrs?.['mathml']).toContain(
+                '<mrow><mo fence="true">|</mo><mtext>docs</mtext><mo fence="true">⟩</mo></mrow>',
             );
             const tryingFigures = tryingNodes.filter((node) => node.type === 'figure');
             expect(tryingFigures.length).toBe(1);

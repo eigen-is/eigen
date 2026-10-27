@@ -318,6 +318,7 @@ describe('every reader ends in a tree or a MathError, within its time budget', (
             ...['\\overset', '\\xrightarrow', '\\xrightarrow[a]', '\\prescript', '\\boxed', '\\enclose{top}', '\\pmod'],
             ...['\\alpha', '\\displaystyle', '\\unknown', '\\href{javascript:alert(1)}{x}', '\\not', '\\Gamma'],
             ...['\u0301', '\u0338', '\u0311', '²', '⁻', '₂'],
+            ...['\\braket{a|', '\\Braket', '\\ket*', '\\bra', '\\set{x|', '\\expval{A}', '\\mel', '\\ketbra'],
         ];
         const random = seeded(7);
         const start = performance.now();
