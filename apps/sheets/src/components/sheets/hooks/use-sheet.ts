@@ -129,7 +129,8 @@ export function useSheet(
                     return;
                 }
                 // An update that also writes the snapshot reloads it with the whole log replayed, these batches too.
-                if (event.transaction.changed.has(stateMap)) return;
+                const state = doc.share.get('state');
+                if (state && event.transaction.changed.has(state)) return;
                 for (const delta of event.changes.delta) {
                     if (delta.insert && Array.isArray(delta.insert)) {
                         for (const ops of delta.insert as Op[][]) {
