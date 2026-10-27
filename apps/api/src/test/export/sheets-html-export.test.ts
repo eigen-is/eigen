@@ -409,12 +409,14 @@ describe('Sheets HTML export — wrap text', () => {
             ]),
             config: { rowlen: { 2: 30 }, merge: { '1_0': { r: 1, c: 0, rs: 2, cs: 1 } } },
         };
-        const clip = (height: number) => `max-height:${height}px;overflow:hidden">`;
+        // The clip is as tall as the rows less their gridline, and the text inside it is placed absolutely.
         const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
-        expect(html).toContain(`${clip(17)}one\ntwo\nthree</div>`);
-        expect(html).toContain(`${clip(47)}merged</div>`);
+        expect(html).toMatch(
+            /height:19px;margin:-1px 0"><div style="position:absolute;[^"]*">one\ntwo\nthree<\/div><\/div>/,
+        );
+        expect(html).toMatch(/height:49px;margin:-1px 0"><div style="position:absolute;[^"]*">merged<\/div><\/div>/);
         // A turned span is placed absolutely and grows no row, and a clip would cut it off.
-        expect(html).not.toContain(`${clip(17)}<span`);
+        expect(html).toMatch(/<td [^>]*><span style="position:absolute;[^"]*rotate\(-45deg\)">turned<\/span><\/td>/);
     });
 });
 
@@ -432,9 +434,8 @@ describe('Sheets HTML export — conditional formatting', () => {
         );
         expect(out.html).toContain('Hello');
         expect(out.html).toContain('42');
-        // No conditional formatting → no CF-injected dataBar anchors.
-        expect(out.css).not.toContain('position:relative');
-        expect(out.css).not.toContain('position:absolute');
+        // No conditional formatting → no CF-injected dataBar layers.
+        expect(out.css).not.toContain('z-index');
     });
 
     test('greaterThan rule applies cellColor as background on matching cells', () => {
@@ -490,13 +491,15 @@ describe('Sheets HTML export — conditional formatting', () => {
         );
         // Bar divs are positioned absolutely inside position:relative <td>s; each width is
         // proportional to the value, so the three bars produce three distinct classes.
-        expect(classesFor(out, 'position:absolute').length).toBe(3);
+        expect(classesFor(out, 'z-index:0').length).toBe(3);
         expect(classesFor(out, 'position:relative').length).toBeGreaterThan(0);
         expect(out.css).toContain('#638ec6');
         // Display text wrapped in a span with z-index above the bar, clipped to its row inside it.
         const zSpan = classesFor(out, 'z-index:1');
         expect(zSpan.length).toBe(1);
-        expect(out.html).toMatch(new RegExp(`<span class="${zSpan[0]}"><div class="s\\d+">10</div></span>`));
+        expect(out.html).toMatch(
+            new RegExp(`<span class="${zSpan[0]}"><div class="s\\d+"><div class="s\\d+">10</div></div></span>`),
+        );
     });
 
     test('colorGradation 2-color rule paints min/max cells with the configured stops', () => {
@@ -804,7 +807,7 @@ describe('Sheets HTML export — cell styling', () => {
             NO_MEDIA,
             'screen',
         );
-        expect(out.css).not.toContain('transform:');
+        expect(out.css).not.toContain('rotate(');
         expect(out.css).not.toContain('writing-mode:vertical');
     });
 });
@@ -2100,7 +2103,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
         ];
         for (const hidden of hiddens) {
             const out = renderSheetsHtml([box(hidden)], NO_MEDIA, 'screen');
-            const cls = out.html.match(/<td[^>]*class="(s\d+)"[^>]*><div[^>]*>m</)?.[1];
+            const cls = out.html.match(/<td[^>]*class="(s\d+)"[^>]*>(?:<div[^>]*>)+m</)?.[1];
             const declarations = out.css.match(new RegExp(`\\.${cls}\\{([^}]*)\\}`))?.[1].split(';');
             expect(declarations?.filter((d) => d.startsWith('border-')).sort()).toEqual([
                 'border-bottom:1px solid #000000',

@@ -67,8 +67,8 @@ describe('eigensheets preview (golden)', () => {
         // The preview read never recalcs (a legacy never-computed workbook costs
         // ~39s, past the 30s deadline), so the fixture's valueless `=SUM(B2:E2)`
         // and `=IF(F2>1500,…)` cells render empty instead of computed.
-        expect(body).not.toContain(`>${GOLDEN_ROW1_TOTAL}</div></td>`);
-        expect(body).not.toContain('>low</div></td>');
+        expect(body).not.toContain(`>${GOLDEN_ROW1_TOTAL}</div></div></td>`);
+        expect(body).not.toContain('>low</div></div></td>');
         // Edits from the pending-ops array are replayed on top of the snapshot.
         expect(body).toContain(GOLDEN_OPS_EDIT);
         expect(body).toContain(GOLDEN_OPS_PARTIAL_EDIT);
@@ -108,7 +108,7 @@ describe('eigensheets preview (read policy)', () => {
 
         const { body: rendered, warnings } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
         expect(rendered).toContain('Region 1');
-        expect(rendered).not.toContain(`>${GOLDEN_ROW1_TOTAL}</div></td>`);
+        expect(rendered).not.toContain(`>${GOLDEN_ROW1_TOTAL}</div></div></td>`);
         expect(warnings).toEqual([]);
         doc.destroy();
     });
@@ -399,7 +399,7 @@ describe('eigensheets preview (heavy fixture)', () => {
         expect(body.match(/<col /g)!.length).toBeLessThanOrEqual(50);
         expect(body.match(/<td/g)!.length).toBeLessThanOrEqual(10_000);
         // First-row content still renders from the top-left of the used range.
-        expect(body).toContain('>HA</div></td>');
+        expect(body).toContain('>HA</div></div></td>');
     }, 120_000);
 });
 
@@ -570,4 +570,4 @@ describe('eigensheets export and preview (hidden sheets)', () => {
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
 // an intentional renderer or preview-budget change. Last move: a cell's content is
 // clipped to its rows, as the editor clips it (2026-10-27).
-const GOLDEN_BODY_SHA256 = 'ff5b31a34afbbc1fd3f877f4fbe955cf650c4b66127bce2d4c050f0edf796a1c';
+const GOLDEN_BODY_SHA256 = 'a6d6585b47b8022c130cb04c60f13945613ab9f1d413273fcddcda89cb1e3465';

@@ -87,11 +87,16 @@ const CELL_BYTES = 50;
 const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
 
 // Every td's defaults: inline in the preview, whose embedders strip the <head>, and the shared td{} rule in the export.
-// There is no vertical-align here, because buildCellStyle always writes one.
 const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px;line-height:0';
 
-// The height a td adds around its content: its padding above and below, and the gridline it shares with the next row.
-const CELL_FRAME_HEIGHT = 3;
+// Where a cell's text sits in its rows, as the canvas places the text's ink: in the middle, or 2 px from the top or
+// the bottom. CSS places a line by its font's ascent and descent instead. In Inter those put the ink 0.1em below the
+// middle of the line and 0.17em below its top, so the margins lift it back.
+const TEXT_PLACEMENT: Record<(typeof VERTICAL_ALIGN)[number], string> = {
+    top: 'top:2px;margin-top:-0.17em',
+    middle: 'top:50%;transform:translateY(-50%);margin-top:-0.1em',
+    bottom: 'bottom:2px',
+};
 
 const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
@@ -436,7 +441,8 @@ function renderSheet(
                 inner = wrapForRotation(v, dataBar ? renderDataBar(dataBar, display, styles) : display, styles);
             } else {
                 const cellHeight = span ? heights.slice(i, i + span.rs).reduce((sum, rowHeight) => sum + rowHeight) : h;
-                const clipped = clipToRows(wrapForRotation(v, display, styles), cellHeight, styles);
+                const valign = v?.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
+                const clipped = clipToRows(wrapForRotation(v, display, styles), cellHeight, valign, styles);
                 inner = dataBar ? renderDataBar(dataBar, clipped, styles) : clipped;
             }
             const attrStr = attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
@@ -453,16 +459,25 @@ function renderSheet(
     return { html, size: { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) } };
 }
 
-// A table row grows to fit its content, but the editor clips a cell to its rows. So the content sits in a block no
-// taller than the cell's rows, and every row prints at its stored height. WeasyPrint pages through a block's content
-// past its max-height, but not through an inline-block's. The td's line-height is 0, so a large font's line adds no
-// height around the block. A text decoration doesn't reach into an inline-block, so the block takes the td's own.
-function clipToRows(content: string, height: number, styles?: StyleRegistry): string {
+// A table row grows to fit its content, but the editor clips a cell's text to its rows. So the content sits in an
+// inline-block as tall as the rows less their gridline, the box the editor clips to, and every row prints at its
+// stored height. Its margins give back the td's padding. WeasyPrint pages through a block's content past its height,
+// but not through an inline-block's. The text inside is placed absolutely, so centered text spills past both edges
+// as the editor's does. Its line pitch is the editor's, which spaces wrapped lines at 1.5 times their ascent. The td's
+// line-height is 0, so a large font adds no line around the block. A text decoration doesn't reach into an
+// inline-block or an absolute box, so both take the td's own.
+function clipToRows(
+    content: string,
+    height: number,
+    valign: (typeof VERTICAL_ALIGN)[number],
+    styles?: StyleRegistry,
+): string {
     if (!content) return content;
     const clip =
-        'display:inline-block;width:100%;vertical-align:top;line-height:normal;text-decoration:inherit;' +
-        `max-height:${Math.max(0, height - CELL_FRAME_HEIGHT)}px;overflow:hidden`;
-    return `<div ${styleAttr(styles, clip)}>${content}</div>`;
+        'display:inline-block;width:100%;vertical-align:top;position:relative;overflow:hidden;' +
+        `text-decoration:inherit;height:${Math.max(0, height - 1)}px;margin:-1px 0`;
+    const text = `position:absolute;left:0;right:0;line-height:1.1;text-decoration:inherit;${TEXT_PLACEMENT[valign]}`;
+    return `<div ${styleAttr(styles, clip)}><div ${styleAttr(styles, text)}>${content}</div></div>`;
 }
 
 // The position of the first track in `tracks`, ascending, at or after `track`: tracks.length when there is none.
@@ -548,13 +563,11 @@ function buildCellStyle(
         if (cellColor) parts.push(`background:${cellColor}`);
         // A rotated cell's span is placed absolutely (wrapForRotation), so no alignment acts on it. Any other cell
         // writes its own text-align, else Excel's General one as the canvas draws it, where left, the td's own, writes
-        // none. Its vertical-align defaults to middle.
+        // none. Its text places itself in the cell's rows (clipToRows).
         if (!rotated) {
             const general = generalAlign(v);
             const ht = v.ht != null && v.ht in HORIZONTAL_ALIGN ? v.ht : general === '1' ? undefined : Number(general);
             if (ht !== undefined) parts.push(`text-align:${HORIZONTAL_ALIGN[ht]}`);
-            const valign = v.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
-            parts.push(`vertical-align:${valign}`);
         }
         if (cellWrapsText(v)) parts.push('white-space:pre-wrap;word-wrap:break-word');
         if (v.un === 1 && v.cl === 1) {
