@@ -8,7 +8,7 @@
 
 import type { Editor } from '@tiptap/core';
 import { Extension } from '@tiptap/core';
-import { joinBackward, joinForward, selectNodeBackward, selectNodeForward } from '@tiptap/pm/commands';
+import { deleteSelection, joinBackward, joinForward, selectNodeBackward, selectNodeForward } from '@tiptap/pm/commands';
 import type { NodeType, Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import type { Command, EditorState, Transaction } from '@tiptap/pm/state';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
@@ -97,24 +97,23 @@ function caretAfterRun(state: EditorState): ResolvedPos | null {
 }
 
 // A text selection with an end inside a leading run, or one that reaches into a textblock only up to the end of its
-// run, as Shift+Home, Shift+Up or a pointer can make it: the same selection without the run. The caret rests after the
-// run, and a selection that starts there or before it ends before it, so Backspace never deletes an image drawn
-// elsewhere. Null when it holds no run.
+// run, as Shift+Home, Shift+Up or a pointer can make it: the same selection without the runs. The caret rests after a
+// run, and a selection that reaches into a later textblock no further than its run ends before it, so Backspace never
+// deletes an image drawn elsewhere. Both ends are fixed at once, because ProseMirror never hands a plugin's own
+// appended transaction back to it. Null when it holds no run.
 function selectionOutsideRuns(selection: Selection): TextSelection | null {
     if (!(selection instanceof TextSelection)) return null;
     const { $from, $to } = selection;
-    const fromRun = leadingRun($from.parent);
-    const toRun = leadingRun($to.parent);
-    const past = $from.start() + fromRun;
-    if ($from.parentOffset < fromRun) {
-        const keep = (pos: number) => Math.max(pos, past);
-        return TextSelection.create(selection.$anchor.doc, keep(selection.anchor), keep(selection.head));
-    }
-    if ($to.parentOffset > 0 && $to.parentOffset <= toRun && $from.start() !== $to.start()) {
-        const before = (pos: number) => (pos === $to.pos ? $to.start() : pos);
-        return TextSelection.create(selection.$anchor.doc, before(selection.anchor), before(selection.head));
-    }
-    return null;
+    const past = $from.start() + leadingRun($from.parent);
+    const from = Math.max($from.pos, past);
+    const to = $from.sameParent($to)
+        ? Math.max($to.pos, past)
+        : $to.parentOffset <= leadingRun($to.parent)
+          ? $to.start()
+          : $to.pos;
+    if (from === $from.pos && to === $to.pos) return null;
+    const forward = selection.anchor <= selection.head;
+    return TextSelection.create(selection.$anchor.doc, forward ? from : to, forward ? to : from);
 }
 
 function rectAt(view: EditorView, pos: number): DOMRect | null {
@@ -214,16 +213,20 @@ function changedTextblocks(transactions: readonly Transaction[], doc: PMNode): S
     return textblocks;
 }
 
-// Joins the way `join` does at a plain textblock's edge, with the caret at `caret`, and keeps each figure of `figures`
-// that the join carries into the textblock at `into` where it is drawn: its offsets are measured against that
-// textblock before the dispatch, and it leads it. With nothing to join, at the doc's start, the figures stay too.
-function joinKeepingPlace(view: EditorView, caret: number, figures: number[], into: number, join: Command): boolean {
+// Joins the way `join` does at a plain textblock's edge, from `selection`, and keeps each figure of `figures` that the
+// join carries into the textblock at `into` where it is drawn: its offsets are measured against that textblock before
+// the dispatch, and it leads it. With nothing to join, at the doc's start, the figures stay too.
+function joinKeepingPlace(
+    view: EditorView,
+    selection: Selection,
+    figures: number[],
+    into: number,
+    join: Command,
+): boolean {
     const scale = pageScale(view.dom);
     const target = rectAt(view, into);
     const boxes = figures.map((pos) => figureBoxAt(view, pos));
-    const state = view.state.apply(
-        view.state.tr.setSelection(TextSelection.create(view.state.doc, caret)).setMeta(positionedFiguresKey, REWIND),
-    );
+    const state = view.state.apply(view.state.tr.setSelection(selection).setMeta(positionedFiguresKey, REWIND));
     const joins: Transaction[] = [];
     if (!join(state, (tr) => joins.push(tr))) return true;
     const [tr] = joins;
@@ -240,6 +243,17 @@ function joinKeepingPlace(view: EditorView, caret: number, figures: number[], in
     leadFigures(tr, joined);
     view.dispatch(tr.scrollIntoView());
     return true;
+}
+
+// A selection that ends before a run in a later textblock, as Shift+ArrowLeft at the visual start makes it: Backspace
+// or Delete joins the two textblocks, which keeps the run where it is drawn.
+function deleteKeepingPlace(view: EditorView): boolean {
+    const { selection } = view.state;
+    const { $from, $to } = selection;
+    const run = leadingRun($to.parent);
+    if (!(selection instanceof TextSelection) || selection.empty || $to.parentOffset !== 0 || run === 0) return false;
+    const figures = Array.from({ length: run }, (_, i) => $to.start() + i);
+    return joinKeepingPlace(view, selection, figures, $from.before(), deleteSelection);
 }
 
 // The caret at the very start of its textblock, before the run, where the next keymap acts as at a plain textblock's
@@ -451,10 +465,12 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                 return true;
             },
             Backspace: () => {
+                if (deleteKeepingPlace(editor.view)) return true;
                 const $caret = caretAfterRun(editor.state);
                 if (!$caret) return false;
-                // A list's own Backspace lifts the item out of the list, the figures with their paragraph.
-                if (LIST_ITEMS.includes($caret.node(-1).type.name)) {
+                // At an item's first paragraph, a list's own Backspace lifts the item out of the list, the figures with
+                // their paragraph. A later paragraph joins the one above.
+                if (LIST_ITEMS.includes($caret.node(-1).type.name) && $caret.index(-1) === 0) {
                     rewind(editor.view, $caret);
                     return false;
                 }
@@ -463,13 +479,14 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                 const into = before ? before.$from.before() : $caret.before();
                 return joinKeepingPlace(
                     editor.view,
-                    $caret.start(),
+                    TextSelection.create(editor.state.doc, $caret.start()),
                     figures,
                     into,
                     (state, dispatch) => joinBackward(state, dispatch) || selectNodeBackward(state, dispatch),
                 );
             },
             Delete: () => {
+                if (deleteKeepingPlace(editor.view)) return true;
                 const { selection } = editor.state;
                 const $cursor = selection instanceof TextSelection ? selection.$cursor : null;
                 if (!$cursor || $cursor.parentOffset < $cursor.parent.content.size) return false;
@@ -479,7 +496,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                 const figures = Array.from({ length: run }, (_, i) => after.$from.start() + i);
                 return joinKeepingPlace(
                     editor.view,
-                    $cursor.pos,
+                    selection,
                     figures,
                     $cursor.before(),
                     (state, dispatch) => joinForward(state, dispatch) || selectNodeForward(state, dispatch),

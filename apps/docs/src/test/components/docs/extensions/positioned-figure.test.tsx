@@ -140,8 +140,12 @@ const selectBetween = (editor: TestEditor, anchor: number, head: number) =>
         editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, anchor, head)));
     });
 
-test('Shift+ArrowLeft at the visual start selects back to the paragraph above without the image, which Backspace keeps', async () => {
+// The paragraph above is drawn 40 px higher than the image's own, so the kept place is 40 px further down from it.
+test('Shift+ArrowLeft at the visual start selects back to the paragraph above without the image, whose place Backspace keeps', async () => {
     const editor = await mount(twoParagraphs());
+    place(blockDom(editor, 0), 100, 60, 600, 20);
+    place(blockDom(editor, 4), 100, 100, 600, 20);
+    place(figureBox(editor, 5), 110, 120);
     await act(async () => {
         editor.commands.setTextSelection(6);
     });
@@ -149,6 +153,8 @@ test('Shift+ArrowLeft at the visual start selects back to the paragraph above wi
     expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 5, head: 3 });
     await press(editor, 'Backspace');
     expect(blocks(editor)).toEqual([['figure:front', 'xyabc']]);
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ offsetX: 10, offsetY: 60 });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 4, head: 4 });
 });
 
 // As Shift+Home and Shift+Up can land, before the image or between two.
@@ -157,6 +163,24 @@ test('a selection extended back into the leading run stops after it', async () =
     await selectBetween(editor, 8, 5);
     expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 8, head: 6 });
 });
+
+// Two images lead each paragraph: the first's run at 1 and 2 before "ab" at 3, the second's at 7 and 8 before "cd" at 9.
+// As Shift+Up from the second's visual start, a drag from line start to line start, or a pointer between two images.
+test.each([
+    [9, 1, 7, 3],
+    [1, 9, 3, 7],
+    [8, 2, 7, 3],
+    [2, 8, 3, 7],
+])(
+    'a selection from %d to %d with both ends in a leading run ends outside both runs',
+    async (anchor, head, from, to) => {
+        const editor = await mount([paragraph(front(), front(), text('ab')), paragraph(front(), front(), text('cd'))]);
+        await selectBetween(editor, anchor, head);
+        expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: from, head: to });
+        await press(editor, 'Backspace');
+        expect(blocks(editor)).toEqual([['figure:front', 'figure:front', 'figure:front', 'figure:front', 'cd']]);
+    },
+);
 
 test('a selection from above that ends at the visual start stops before the run, and Shift+ArrowRight steps past it', async () => {
     const editor = await mount(twoParagraphs());
@@ -497,4 +521,29 @@ test('Backspace at the visual start of a list item lifts it out of the list, as 
     expect(list.content).toHaveLength(1);
     expect(blocks(editor)[1]).toEqual(['figure:front', 'b']);
     expect(lifted.content[0].attrs).toMatchObject({ offsetX: 10, offsetY: 20 });
+});
+
+// Only an item's first paragraph lifts it out of the list. A later one joins the paragraph above, as without the image,
+// which keeps its place: the paragraph above is drawn 40 px higher.
+test("Backspace at the visual start of a list item's second paragraph joins it to the first and keeps the image", async () => {
+    // The item's first paragraph at 2 holds "a" at 3; its second at 5 leads with the image at 6, "b" from 7.
+    const editor = await mount([
+        {
+            type: 'bulletList',
+            content: [{ type: 'listItem', content: [paragraph(text('a')), paragraph(front(), text('b'))] }],
+        },
+    ]);
+    place(blockDom(editor, 2), 100, 60, 600, 20);
+    place(blockDom(editor, 5), 100, 100, 600, 20);
+    place(figureBox(editor, 6), 110, 120);
+    await act(async () => {
+        editor.commands.setTextSelection(7);
+    });
+    await press(editor, 'Backspace');
+    const [list] = editor.state.doc.toJSON().content;
+    expect(list.content).toHaveLength(1);
+    expect(list.content[0].content).toHaveLength(1);
+    expect(editor.state.doc.nodeAt(3)?.attrs).toMatchObject({ layout: 'front', offsetX: 10, offsetY: 60 });
+    expect(editor.state.doc.textContent).toBe('ab');
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 5, head: 5 });
 });
