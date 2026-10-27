@@ -17,6 +17,7 @@ import {
     pxToMm,
     readFigureAttrs,
     readFigureFrameAttrs,
+    setFigureAttributes,
 } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui';
@@ -74,12 +75,12 @@ export type FigureFrameOptions = {
 
 // How far a grip moved a box's left and top edges, in page px. A west or a north grip moves them, as the opposite edge
 // stays put, which a figure in front of or behind the text follows with its offsets.
-export type FigureShift = { dx: number; dy: number };
+type FigureShift = { dx: number; dy: number };
 
 type FigureSize = { width: number; height: number };
 
 // The offsets of a positioned figure whose grip moved its edges by `shift`; none for a figure in the flow.
-export function shiftedOffsets({ layout, offsetX, offsetY }: FigureFrameAttrs, { dx, dy }: FigureShift) {
+function shiftedOffsets({ layout, offsetX, offsetY }: FigureFrameAttrs, { dx, dy }: FigureShift) {
     if (!isPositioned(layout) || (dx === 0 && dy === 0)) return {};
     return { offsetX: Math.round((offsetX ?? 0) + dx), offsetY: Math.round((offsetY ?? 0) + dy) };
 }
@@ -90,15 +91,19 @@ const shiftOf = (next: Box, start: Box, size: FigureSize): FigureShift => ({
     dy: next.y === start.y ? 0 : start.height - size.height,
 });
 
-// A resize previews locally and writes once, at the commit. `fit` turns a dragged box into the size the node keeps.
+// A resize previews locally and writes once, at the commit. `fit` turns a dragged box into the fitted size, and `stored`
+// picks what the node keeps of it, which the commit writes with the offsets a west or a north grip moved.
 export function useFigureResize<T extends FigureSize>({
+    editor,
+    getPos,
+    node,
     getMaxWidth,
     fit,
-    commit,
-}: {
+    stored,
+}: Pick<NodeViewProps, 'editor' | 'getPos' | 'node'> & {
     getMaxWidth: () => number;
     fit: (box: Box, maxWidth: number) => T;
-    commit: (size: T, shift: FigureShift) => void;
+    stored: (size: T) => Partial<FigureSize>;
 }): {
     preview: { size: T; shift: FigureShift } | null;
     onTransform: (next: Box) => void;
@@ -127,9 +132,15 @@ export function useFigureResize<T extends FigureSize>({
     const onCommit = useCallback(
         (next: Box, start: Box) => {
             const size = fit(next, gestureMaxWidth.current);
-            commit(size, shiftOf(next, start, size));
+            const offsets = shiftedOffsets(readFigureFrameAttrs(node.attrs), shiftOf(next, start, size));
+            editor.commands.command(({ tr }) => {
+                const pos = getPos();
+                if (pos === undefined) return false;
+                setFigureAttributes(tr, pos, { ...stored(size), ...offsets });
+                return true;
+            });
         },
-        [fit, commit],
+        [editor, getPos, node.attrs, fit, stored],
     );
 
     // Every gesture ends here, an Escape or a click that commits nothing too, and a deselect mid-drag unmounts the

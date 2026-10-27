@@ -12,15 +12,8 @@ import type { Box } from '@workspace/lib/vector';
 import { ImagePlaceholder } from '@workspace/ui/components/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FigureFrameOptions, FigureShift } from './figure-frame';
-import {
-    clampFigureWidth,
-    FigureFrame,
-    figureFramePlugins,
-    figureMaxWidth,
-    shiftedOffsets,
-    useFigureResize,
-} from './figure-frame';
+import type { FigureFrameOptions } from './figure-frame';
+import { clampFigureWidth, FigureFrame, figureFramePlugins, figureMaxWidth, useFigureResize } from './figure-frame';
 
 // The width a figure draws at when neither it nor its page gives one (px).
 const FIGURE_DEFAULT_WIDTH = 400;
@@ -29,6 +22,9 @@ const FIGURE_RESIZE_STEPS = { ArrowLeft: -10, ArrowRight: 10, ArrowUp: 10, Arrow
 const FIGURE_RESIZE_KEYS = Object.keys(FIGURE_RESIZE_STEPS)
     .map((key) => `Shift+${key}`)
     .join(' ');
+
+// A picture keeps its width alone, as its height follows the image's own ratio.
+const storedWidth = ({ width }: { width: number }) => ({ width });
 
 function FigureView(props: NodeViewProps) {
     const { node, selected, editor, getPos } = props;
@@ -74,12 +70,7 @@ function FigureView(props: NodeViewProps) {
         },
         [aspectRatio],
     );
-    const commitWidth = useCallback(
-        ({ width: next }: { width: number }, shift: FigureShift) =>
-            setAttributes({ width: next, ...shiftedOffsets(readFigureFrameAttrs(node.attrs), shift) }),
-        [setAttributes, node.attrs],
-    );
-    const resize = useFigureResize({ getMaxWidth, fit: fitWidth, commit: commitWidth });
+    const resize = useFigureResize({ editor, getPos, node, getMaxWidth, fit: fitWidth, stored: storedWidth });
 
     const handleImageLoad = useCallback(() => {
         if (!imageRef.current || imageProcessed.current) return;

@@ -5,17 +5,16 @@
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
-import { ChartNode, chartSvg, readChartAttrs, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
+import { ChartNode, chartSvg, readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { useCallback, useMemo, useRef } from 'react';
-import type { FigureFrameOptions, FigureShift } from './figure-frame';
+import type { FigureFrameOptions } from './figure-frame';
 import {
     clampFigureWidth,
     FIGURE_MIN_SIZE,
     FigureFrame,
     figureFramePlugins,
     figureMaxWidth,
-    shiftedOffsets,
     useFigureResize,
 } from './figure-frame';
 
@@ -32,6 +31,9 @@ const fitChart = (next: Box, maxWidth: number): ChartSize => ({
     height: Math.round(Math.max(FIGURE_MIN_SIZE, next.height)),
 });
 
+// A chart keeps both sides.
+const storedSize = (size: ChartSize) => size;
+
 function ChartView(props: NodeViewProps) {
     const { node, selected, editor, extension, getPos } = props;
     const { onEditData }: ChartOptions = extension.options;
@@ -42,17 +44,7 @@ function ChartView(props: NodeViewProps) {
     const isEditable = editor.isEditable;
 
     const getMaxWidth = useCallback(() => figureMaxWidth(editor, layout), [editor, layout]);
-    const commitSize = useCallback(
-        (size: ChartSize, shift: FigureShift) =>
-            editor.commands.command(({ tr }) => {
-                const pos = getPos();
-                if (pos === undefined) return false;
-                setFigureAttributes(tr, pos, { ...size, ...shiftedOffsets(attrs, shift) });
-                return true;
-            }),
-        [editor, getPos, attrs],
-    );
-    const resize = useFigureResize({ getMaxWidth, fit: fitChart, commit: commitSize });
+    const resize = useFigureResize({ editor, getPos, node, getMaxWidth, fit: fitChart, stored: storedSize });
 
     // A resize lays the chart out again at every move, as the canvas does.
     const size = resize.preview?.size ?? {
