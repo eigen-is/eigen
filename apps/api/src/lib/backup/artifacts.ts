@@ -1,3 +1,6 @@
+// The home archives in the backups folder: what the admin pane lists, where an uploaded archive lands, and what a
+// delete takes with it. The backup routes call it; the folders a restore leaves beside a home are the safety copies'.
+
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -7,9 +10,6 @@ import { ApiError } from '../core';
 import { errnoOf, writeTempWithHash } from '../storage';
 import { readArtifactManifest, readSidecar, writeSidecar } from './archive';
 import { backupsDirPath, getBackupTempPath, sidecarPath } from './paths';
-
-// The artifacts in the backups folder: what the admin pane lists, where an upload lands, and what a
-// delete takes with it. The folders a restore leaves beside a home are safety-copy.ts.
 
 // One home's artifacts, newest first, read from the sidecars alone: opening an archive to answer a
 // page load would decompress the whole thing. An artifact with no sidecar (one copied in by hand)
@@ -70,8 +70,8 @@ const ALREADY_THERE = 'That artifact is already in the backups folder';
 
 // Lands an uploaded body under its final name without overwriting an artifact that appeared while
 // the body was streaming (another upload of the same name, or a job's own pack). A hard link fails
-// when the name is taken, which is the point. Not every filesystem has links — a ./backups bind
-// mount from CIFS/SMB rejects link outright — and there a check-then-rename is the best on offer.
+// when the name is taken, which is the point. Not every filesystem has links: a ./backups bind
+// mount from CIFS/SMB rejects link outright, and there a check-then-rename is the best on offer.
 function landUploadedArtifact(tempPath: string, artifactPath: string): void {
     try {
         fs.linkSync(tempPath, artifactPath);
@@ -88,7 +88,7 @@ function landUploadedArtifact(tempPath: string, artifactPath: string): void {
 // An uploaded archive, from a body the route has only checked the length of to a listed artifact
 // with a sidecar: stream it into staging, land it under its final name, and read the manifest out
 // of what landed. The whole sequence is here rather than in the route because every step of it can
-// leave a file behind — the route hands over the body and gets back the name it can answer with.
+// leave a file behind. The route hands over the body and gets back the name it can answer with.
 export async function landUpload(body: ReadableStream<Uint8Array>, name: string, declared: number): Promise<void> {
     const { artifactPath, ownerId } = resolveArtifact(name);
     if (fs.existsSync(artifactPath)) throw new ApiError(409, ALREADY_THERE);
@@ -114,7 +114,7 @@ export async function landUpload(body: ReadableStream<Uint8Array>, name: string,
         await writeSidecar(artifactPath, manifest, { status: 'unverified', failures: [] });
     } catch (error) {
         // An archive nothing can read is not an artifact; keeping it would put a row in the list
-        // that every later action fails on. Only the file this request landed goes — the sidecar,
+        // that every later action fails on. Only the file this request landed goes: the sidecar,
         // if there is one, belongs to whatever wrote it.
         fs.rmSync(artifactPath, { force: true });
         if (error instanceof ApiError) throw error;

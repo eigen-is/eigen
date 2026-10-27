@@ -1,3 +1,6 @@
+// The nightly whole-server backup. serverBackupTick runs on the scheduler every few minutes and starts at most one
+// attempt per UTC day, once the owner's hour has come, reading the backups folder to know what already ran.
+
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { alertOwner } from '../user/alert-owner';
