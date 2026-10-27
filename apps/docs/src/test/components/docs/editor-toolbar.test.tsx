@@ -17,6 +17,7 @@ const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { CommandPaletteProvider } = await import('@workspace/ui');
 const { EditorToolbar } = await import('../../../components/docs/editor-toolbar');
+const { PositionedFigures } = await import('../../../components/docs/extensions/positioned-figure');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -24,8 +25,14 @@ afterEach(() => unmount());
 // Mounted in the document, so a test can read whether it holds focus.
 const editor = new Editor({
     element: document.body.appendChild(document.createElement('div')),
-    extensions: getDocExtensions(),
+    extensions: [...getDocExtensions(), PositionedFigures],
 });
+
+// A band's editor, which draws every figure in line, as a note's does.
+const bandExtensions = () => [
+    ...getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }),
+    PositionedFigures.configure({ blockOnly: true }),
+];
 
 const onReplaceImage = mock(() => {});
 const onEnterBand = mock((_band: unknown) => {});
@@ -703,10 +710,49 @@ test('Format › Image › Replace image opens the picker the image panel opens'
     await render(1920, true);
     await openMenu('Format');
     await openSubmenu('Image');
-    expect(openMenuEntries()).toEqual(['Replace image']);
+    expect(openMenuEntries()).toEqual([
+        'Replace image',
+        '—',
+        'In line',
+        'Wrap left',
+        'Wrap right',
+        'Behind text',
+        'In front of text',
+    ]);
 
     await clickItem('Replace image');
     expect(onReplaceImage).toHaveBeenCalledTimes(1);
+});
+
+// A phone has no Image panel, so Format › Image holds its layouts, the image's own checked.
+test('Format › Image › In front of text places the selected image and checks it', async () => {
+    editor.commands.setContent(TABLE_AND_FIGURE);
+    editor.commands.setNodeSelection(2);
+    await render(390, true);
+    await openMenu('Format');
+    await openSubmenu('Image');
+    const checked = () =>
+        [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
+            item.textContent?.trim(),
+        );
+    expect(checked()).toEqual(['In line']);
+
+    const front = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+        (item) => item.textContent?.trim() === 'In front of text',
+    );
+    await act(async () => front?.click());
+    expect(editor.state.doc.nodeAt(1)?.attrs['layout']).toBe('front');
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
+});
+
+test('in a band, Format › Image offers no place in front of or behind the text', async () => {
+    const band = new Editor({ extensions: bandExtensions(), content: TABLE_AND_FIGURE });
+    band.commands.setNodeSelection(2);
+    await render(1920, true, { active: band });
+    await openMenu('Format');
+    await openSubmenu('Image');
+    expect(openMenuEntries()).toEqual(['Replace image', '—', 'In line', 'Wrap left', 'Wrap right']);
+    band.destroy();
 });
 
 test('Format › Headers and footers puts the caret in the header', async () => {
@@ -775,7 +821,7 @@ test('a page number preset goes to the editor, and Page count goes in at the car
 
 // A command the schema lacks is a TypeError, so the menus ask the editor they act on what it holds.
 test("in a band, Insert, Format and the style picker offer only what the band's schema holds", async () => {
-    const band = new Editor({ extensions: getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }) });
+    const band = new Editor({ extensions: bandExtensions() });
     await render(1920, true, { active: band });
     await openMenu('Insert');
     const disabled = [...document.querySelectorAll('[role="menuitem"][aria-disabled="true"]')].map((item) =>
@@ -809,7 +855,7 @@ test("in a band, Insert, Format and the style picker offer only what the band's 
 test("in a band, Line & paragraph spacing and Increase indent act on the band's paragraph", async () => {
     const band = new Editor({
         element: document.body.appendChild(document.createElement('div')),
-        extensions: getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }),
+        extensions: bandExtensions(),
         content: formatted({}),
     });
     band.commands.setTextSelection(1);
@@ -1337,7 +1383,7 @@ test.each([
     ['in a band', true, false],
     ['in a note', false, true],
 ])('Insert › Page elements › Footnote is off %s', async (_, inBand, inNote) => {
-    const band = new Editor({ extensions: getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }) });
+    const band = new Editor({ extensions: bandExtensions() });
     editor.commands.setContent(ONE_PARAGRAPH);
     editor.commands.setTextSelection(2);
     await render(1920, true, { onInsertFootnote: () => {}, inNote, active: inBand ? band : editor });

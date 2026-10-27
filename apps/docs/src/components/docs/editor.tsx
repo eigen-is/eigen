@@ -859,6 +859,7 @@ const TiptapEditor = ({
                                                 <FigurePropertiesPanel
                                                     editor={activeEditor}
                                                     blockOnly={!!editingBand}
+                                                    inFlowOnly={activeEditor === noteEditor}
                                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                                 />
                                             ) : lastPanelRef.current === 'chart' ? (

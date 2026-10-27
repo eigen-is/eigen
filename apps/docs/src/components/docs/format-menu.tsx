@@ -1,7 +1,12 @@
+// The Docs Format menu: text, paragraph styles, alignment and spacing, lists, headers and page numbers, and the table and
+// image submenus that a phone, which has no properties panel, reaches those options through. Every item acts on the
+// editor the toolbar follows: the body's, a band's being edited or the open note's.
+
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BandEdge } from '@workspace/lib/docs/eigendoc';
+import { isPositioned } from '@workspace/lib/docs/eigendoc';
 import type { TextAlign } from '@workspace/lib/vector';
 import { TEXT_ALIGNS } from '@workspace/lib/vector';
 import { ToolbarMenu } from '@workspace/ui';
@@ -61,6 +66,8 @@ import {
     Underline,
     UnfoldVertical,
 } from 'lucide-react';
+import { setImageLayout } from './extensions/figure-frame';
+import { FIGURE_LAYOUT_LOOK } from './figure-properties-panel';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
 import type { PageNumberPreset } from './page-numbers';
@@ -385,13 +392,32 @@ export const FormatMenu = ({
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
-            <DropdownMenuSubTrigger disabled={!active.figure}>
+            <DropdownMenuSubTrigger disabled={!active.figureLayout}>
                 <ImageIcon className="h-4 w-4" /> Image
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 <DropdownMenuItem onClick={onReplaceImage}>
                     <ImagePlus className="h-4 w-4" /> Replace image
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {/* The Image panel's layouts, which a phone has no panel for. A note's and a band's image draws in line. */}
+                <ChoiceMenuItems<string>
+                    value={active.figureLayout}
+                    options={FIGURE_LAYOUT_LOOK.filter(
+                        ({ layout }) => !isPositioned(layout) || !editor.storage.positionedFigures.blockOnly,
+                    ).map(({ layout, label, icon: Icon }) => ({
+                        value: layout,
+                        label: (
+                            <>
+                                <Icon className="h-4 w-4" /> {label}
+                            </>
+                        ),
+                    }))}
+                    onChange={(layout) => {
+                        const look = FIGURE_LAYOUT_LOOK.find((option) => option.layout === layout);
+                        if (look) setImageLayout(editor, look.layout);
+                    }}
+                />
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />

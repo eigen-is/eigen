@@ -319,7 +319,8 @@ async function mountPositioned(scale = 1, attrs: object = {}) {
     Object.defineProperty(editor.view.dom, 'offsetWidth', { value: 600 });
     Object.defineProperty(box, 'offsetWidth', { value: 200 });
     at(editor.view.dom, 100, 100, 600 * scale, 300 * scale);
-    at(editor.view.nodeDOM(0) instanceof Element ? editor.view.nodeDOM(0) : null, 100, 100, 600 * scale, 20 * scale);
+    const first = editor.view.nodeDOM(0);
+    at(first instanceof Element ? first : null, 100, 100, 600 * scale, 20 * scale);
     const second = editor.view.nodeDOM(3);
     at(second instanceof Element ? second : null, 100, 100 + 20 * scale, 600 * scale, 20 * scale);
     for (const element of [box, box.firstElementChild])

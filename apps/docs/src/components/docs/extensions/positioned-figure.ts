@@ -35,7 +35,7 @@ declare module '@tiptap/core' {
     }
 
     interface Storage {
-        positionedFigures: { page: () => PageSetup };
+        positionedFigures: PositionedFiguresOptions;
     }
 }
 
@@ -261,7 +261,7 @@ function growBody(view: EditorView) {
     view.dom.style.minHeight = `${Math.ceil((bottom - top) / pageScale(view))}px`;
 }
 
-export const PositionedFigures = Extension.create<PositionedFiguresOptions, { page: () => PageSetup }>({
+export const PositionedFigures = Extension.create<PositionedFiguresOptions, PositionedFiguresOptions>({
     name: 'positionedFigures',
 
     // Ahead of the core keymap and the lists', whose Backspace and Enter would act at the caret after the run.
@@ -272,7 +272,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, { pa
     },
 
     addStorage() {
-        return { page: this.options.page };
+        return { page: this.options.page, blockOnly: this.options.blockOnly };
     },
 
     addCommands() {
