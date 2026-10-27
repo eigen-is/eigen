@@ -333,6 +333,24 @@ describe('doc export — losses', () => {
         const html = await renderEigendocExport(doc, 'html', 'Report.eigendoc', async () => [], undefined);
         expect(html.warnings).toEqual([]);
     });
+
+    // Comments are not exported, so the HTML draws no highlight for one, as the PDF and the docx don't; the text stays.
+    test.each(['html', 'pdf-html'] as const)('%s keeps a commented text and drops its highlight', async (format) => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [{ type: 'text', text: 'Noted', marks: [{ type: 'comment', attrs: { cardId: 'c1' } }] }],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
+        const body = new TextDecoder().decode(data).split('<body>')[1] ?? '';
+        expect(body).toContain('Noted');
+        expect(body).not.toContain('comment-highlight');
+        expect(body).not.toContain('data-comment-id');
+    });
 });
 
 describe('doc export — tasks', () => {

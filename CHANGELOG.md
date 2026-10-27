@@ -35,6 +35,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Comments in downloads** — a Docs web page download and the Drive preview show commented text without its yellow highlight, as the PDF and Word downloads already do
 - **Shared with me in Drive** — a text file or folder someone shared with you shows its full path at the top, starting with Shared with me, then the shared folder and every folder below it. Click Shared with me to go back to the list
 - **Public files in Drive** — a public file or folder that nobody shared with you shows its path from the first folder you can open, without Shared with me
 - **Closing a shared text file** — closing a text file that was shared with you on its own takes you back to Shared with me instead of a page asking for access to its folder
