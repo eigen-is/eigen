@@ -198,11 +198,9 @@ export type ChartPaint = {
 export type ChartLabel = TextLine;
 
 // A value-axis label for a tick and the step between ticks.
-export type ChartTickFormat = (value: number, step: number) => string;
-
-// The chart's box is width × height from (0, 0); every shape and label is in those local coordinates.
-// Without a formatTick, a tick reads in the value axis's own format, or with as many decimals as the step when the
-// axis has none.
+// The chart's box is width × height from (0, 0); every shape and label is in those local coordinates. A tick and a
+// data label read in the value axis's own format, else in sourceFormat, the values' own format, which a sheet reads
+// from its cells. Without either a tick takes as many decimals as the step, and a data label reads as General.
 export type ChartLayoutInput = {
     id: string;
     spec: ChartSpec;
@@ -210,7 +208,7 @@ export type ChartLayoutInput = {
     width: number;
     height: number;
     paint: ChartPaint;
-    formatTick?: ChartTickFormat;
+    sourceFormat?: string;
 };
 
 // The box and paint every layout starts from, a message's included.
@@ -225,7 +223,7 @@ export type ChartSpecSvgInput = {
     width: number;
     height: number;
     look?: ChartLook;
-    formatTick?: ChartTickFormat;
+    sourceFormat?: string;
 };
 
 // The elements a chart draws with: rectangles, lines, marker ellipses and pie slices.

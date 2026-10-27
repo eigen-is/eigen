@@ -221,6 +221,25 @@ describe('renderSheetChartSvg', () => {
         expect(renderSheetChartSvg(chart('0.00'), shares)).toContain('>0.50<');
     });
 
+    test('cells without a format tick as General, as the grid shows them', () => {
+        const plain = createArrayResolver([
+            {
+                id: 's1',
+                name: 'Sheet1',
+                data: [
+                    [{ v: 'Ajax', m: 'Ajax' }, { v: 0.25 }],
+                    [{ v: 'PSV', m: 'PSV' }, { v: 0.5 }],
+                ],
+                calculationChain: [],
+                dynamicArrayCompute: [],
+            },
+        ]);
+        const svg = renderSheetChartSvg(chart(null), plain);
+        expect(svg).toContain('>0<');
+        expect(svg).toContain('>0.5<');
+        expect(svg).not.toContain('>0.0<');
+    });
+
     test('draws the look the chart stores, a hatch inside a clip of its outline, and flat without one', () => {
         const fill = serializeFill({ type: 'solid', color: 'transparent', style: 'cross-hatch' });
         const svg = renderSheetChartSvg({ ...chart(null), fill, color: '#334455', roughness: 1 }, shares);

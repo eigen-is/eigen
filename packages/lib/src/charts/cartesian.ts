@@ -3,14 +3,7 @@
 // value axis upright left of the plot; bar turns both. The layout calls it with the frame the title and legend leave,
 // and with a second context in which the marks draw, flat when the chart is past its sketch cap.
 
-import type {
-    ChartLabel,
-    ChartSeriesStyle,
-    ChartShape,
-    ChartSpec,
-    ChartTickFormat,
-    InlineChartSeries,
-} from '../types/chart';
+import type { ChartLabel, ChartSeriesStyle, ChartShape, ChartSpec, InlineChartSeries } from '../types/chart';
 import { isStackingChartType } from '../types/chart';
 import { serializeFill } from '../vector/fill';
 import type { Point } from '../vector/geometry';
@@ -18,10 +11,11 @@ import type { VectorLinearElement } from '../vector/types';
 import type { Context, Frame } from './context';
 import { LABEL_SHARE } from './context';
 import { fit, hideCrowded, label, measure } from './labels';
-import type { Band, ValueAxis } from './scales';
+import { numberDisplay } from './number-display';
+import type { Band, ChartTickFormat, ValueAxis } from './scales';
 import { bandScale, MAX_TICK_COUNT, shares, valueAxis, valueExtent } from './scales';
 import { ellipse, isOutlined, line, outlineOf, rectangle } from './shapes';
-import { formatPercentTick } from './ticks';
+import { formatPercentTick, formatTickValue } from './ticks';
 
 // Excalidraw's faint range; Google's gridlines are a light gray.
 export const GRIDLINE_OPACITY = 20;
@@ -46,7 +40,7 @@ export function layoutCartesian(
     series: PaintedSeries[],
     raw: (number | null)[][],
     frame: Frame,
-    sourceFormat: ChartTickFormat,
+    format: string | null,
 ): ChartShape[] | null {
     const { lineHeight: lh, gap, fontSize } = ctx;
     const { type, blanks } = spec.chart;
@@ -56,7 +50,11 @@ export function layoutCartesian(
     const stacked = stacking !== 'none' && isStackingChartType(type);
     const percent = stacked && stacking === 'percent';
     const values = percent ? shares(raw) : raw;
-    const formatTick = percent ? formatPercentTick : sourceFormat;
+    const formatTick: ChartTickFormat = percent
+        ? formatPercentTick
+        : format === null
+          ? formatTickValue
+          : (value) => numberDisplay(value, format);
     const [low, high] = valueExtent(values, stacked, blanks === 'zero', type !== 'line');
     // Float sums can run a hair past ±100%, which nice ends would round up a whole step.
     const extent: [number, number] = percent ? [Math.max(-1, low), Math.min(1, high)] : [low, high];

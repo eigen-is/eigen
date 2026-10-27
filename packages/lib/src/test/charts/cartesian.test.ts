@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'bun:test';
-import { formatTickValue, layoutChart, sampleChartSpec } from '../../charts';
+import { describe, expect, spyOn, test } from 'bun:test';
+import { layoutChart, sampleChartSpec } from '../../charts';
+import * as tickModule from '../../charts/ticks';
 import type { ChartData, ChartLabel, ChartLayout, ChartSeriesStyle, ChartSpec } from '../../types/chart';
 import { CHART_TYPES } from '../../types/chart';
 import { parsePoints } from '../../vector/points';
@@ -205,8 +206,8 @@ describe('column and bar', () => {
         expect(count(1200)).toBeGreaterThan(count(250));
     });
 
-    // A peer stores the box, so a huge one must not mean huge work. formatTick runs once per tick of
-    // every axis the layout tries, so its calls count the tick work; past the budget it throws.
+    // A peer stores the box, so a huge one must not mean huge work. A tick's text is formatted once per tick of every
+    // axis the layout tries, so those calls count the tick work; past the budget the spy throws.
     test.each([
         ['column', 600, 1e6],
         ['bar', 1e6, 600],
@@ -215,21 +216,26 @@ describe('column and bar', () => {
         ['line', 1e9, 1e9],
     ] as const)('a %s at %d × %d lays out in bounded work', (type, width, height) => {
         let calls = 0;
-        const out = layoutChart({
-            id: 'c1',
-            spec: sampleChartSpec(type),
-            data: sampleData(type),
-            width,
-            height,
-            paint: PAINT,
-            formatTick: (value, step) => {
-                calls++;
-                if (calls > 60) throw new Error('unbounded tick work');
-                return formatTickValue(value, step);
-            },
+        const format = spyOn(tickModule, 'formatTickValue').mockImplementation((value, step) => {
+            calls++;
+            if (calls > 60) throw new Error('unbounded tick work');
+            return String(value / step);
         });
-        expect(lines(out, 'gridline').length).toBeLessThanOrEqual(30);
-        expect(out.labels.length).toBeLessThanOrEqual(40);
+        try {
+            const out = layoutChart({
+                id: 'c1',
+                spec: sampleChartSpec(type),
+                data: sampleData(type),
+                width,
+                height,
+                paint: PAINT,
+            });
+            expect(calls).toBeGreaterThan(0);
+            expect(lines(out, 'gridline').length).toBeLessThanOrEqual(30);
+            expect(out.labels.length).toBeLessThanOrEqual(40);
+        } finally {
+            format.mockRestore();
+        }
     });
 
     test("a bar chart's value labels drop ticks until they stop touching", () => {
@@ -274,7 +280,7 @@ describe('column and bar', () => {
         expect(narrow.labels.filter(isTick).map((label) => label.text)).toContain('0');
     });
 
-    test('the caller formats the ticks', () => {
+    test("the caller's source format draws the ticks of an axis without a format of its own", () => {
         const out = layoutChart({
             id: 'c1',
             spec: sampleChartSpec('column'),
@@ -282,9 +288,9 @@ describe('column and bar', () => {
             width: 640,
             height: 400,
             paint: PAINT,
-            formatTick: (value, step) => `${value}/${step}`,
+            sourceFormat: '0.0" u"',
         });
-        expect(out.labels.some((label) => /^-?\d+\/\d+$/.test(label.text))).toBe(true);
+        expect(out.labels.some((label) => /^-?\d+\.0 u$/.test(label.text))).toBe(true);
     });
 });
 

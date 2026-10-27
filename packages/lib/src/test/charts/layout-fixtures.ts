@@ -1,10 +1,4 @@
-import {
-    DEFAULT_CHART_SERIES_STYLE,
-    defaultChartSpec,
-    formatTickValue,
-    layoutChart,
-    sampleChartSpec,
-} from '../../charts';
+import { DEFAULT_CHART_SERIES_STYLE, defaultChartSpec, layoutChart, sampleChartSpec } from '../../charts';
 import type {
     ChartAxis,
     ChartData,
@@ -97,7 +91,6 @@ export function layout(type: ChartType, patch: SpecPatch = {}, options: Options 
         width: options.width ?? 640,
         height: options.height ?? 400,
         paint: { ...PAINT, ...options.paint },
-        formatTick: formatTickValue,
     });
 }
 
