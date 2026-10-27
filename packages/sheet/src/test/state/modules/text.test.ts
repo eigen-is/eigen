@@ -1,28 +1,30 @@
 // Excel and Google wrap text only: a number too wide for its column stays on one line and clips.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
-import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
 import { clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet } from '../../../state/modules/text';
 import type { Cell } from '../../../state/types';
-import { contextFactory } from '../factories/context';
+import { workbookContextFactory } from '../factories/context';
 
-function measuringCanvas(): CanvasRenderingContext2D {
+type Measure = (text: string, font: string) => { width: number; ascent: number; descent: number };
+
+const fixedGlyphs: Measure = (text) => ({ width: text.length * 7, ascent: 8, descent: 3 });
+
+function measuringCanvas(measure = fixedGlyphs): CanvasRenderingContext2D {
     const canvas = {
         font: '11px Arial',
         textAlign: 'start',
         textBaseline: 'alphabetic',
-        measureText: (text: string) => ({
-            width: text.length * 7,
-            actualBoundingBoxAscent: 8,
-            actualBoundingBoxDescent: 3,
-        }),
+        measureText: (text: string) => {
+            const { width, ascent, descent } = measure(text, canvas.font);
+            return { width, actualBoundingBoxAscent: ascent, actualBoundingBoxDescent: descent };
+        },
     };
     return canvas as unknown as CanvasRenderingContext2D;
 }
 
 function layout(cell: Cell) {
-    const ctx = contextFactory() as Context;
+    const ctx = workbookContextFactory();
     return getCellTextInfo(cell, measuringCanvas(), ctx, {
         cellWidth: 40,
         cellHeight: 60,
@@ -71,7 +73,7 @@ describe('state/modules/text — getCellTextInfo General alignment', () => {
 
     function typed(text: string): Cell {
         const data: (Cell | null)[][] = [[null]];
-        setCellValue(contextFactory() as Context, 0, 0, data, text);
+        setCellValue(workbookContextFactory(), 0, 0, data, text);
         return data[0][0] ?? {};
     }
 
@@ -113,26 +115,15 @@ describe('state/modules/text — rich text wrap', () => {
     });
 
     // Glyphs as wide and as tall as the font set's point size says, so two sizes measure apart.
-    function sizedCanvas(): CanvasRenderingContext2D {
-        const canvas = {
-            font: '10pt Inter',
-            textAlign: 'start',
-            textBaseline: 'alphabetic',
-            measureText: (text: string) => {
-                const size = Number.parseFloat(canvas.font.match(/([\d.]+)pt/)?.[1] ?? '10');
-                return {
-                    width: text.length * size * 0.7,
-                    actualBoundingBoxAscent: size,
-                    actualBoundingBoxDescent: size * 0.25,
-                };
-            },
-        };
-        return canvas as unknown as CanvasRenderingContext2D;
-    }
+    const sizedCanvas = () =>
+        measuringCanvas((text, font) => {
+            const size = Number.parseFloat(font.match(/([\d.]+)pt/)?.[1] ?? '10');
+            return { width: text.length * size * 0.7, ascent: size, descent: size * 0.25 };
+        });
 
     function lines(runs: { v: string; fs: number }[], cellWidth: number) {
         const cell: Cell = { tb: '2', ct: { fa: 'General', t: 'inlineStr', s: runs } };
-        const info = getCellTextInfo(cell, sizedCanvas(), contextFactory() as Context, {
+        const info = getCellTextInfo(cell, sizedCanvas(), workbookContextFactory(), {
             cellWidth,
             cellHeight: 200,
             r: 0,
@@ -163,5 +154,61 @@ describe('state/modules/text — rich text wrap', () => {
         );
         expect(wrapped.map((line) => line.text.trim())).toEqual(['aa bb CC dd', 'ee ff gg']);
         for (const line of wrapped) expect(line.tops.size).toBe(1);
+    });
+
+    function pieces(runs: { v: string; fs: number }[], tb: string | undefined, cellWidth = 1000) {
+        const cell: Cell = { tb, ct: { fa: 'General', t: 'inlineStr', s: runs } };
+        const info = getCellTextInfo(cell, sizedCanvas(), workbookContextFactory(), {
+            cellWidth,
+            cellHeight: 200,
+            r: 0,
+            c: 0,
+        });
+        return info?.values.map((word) => word.content);
+    }
+
+    test('the words of one style on a line draw as one piece, so right-to-left text keeps its order', () => {
+        expect(pieces([{ v: 'שלום עולם', fs: 10 }], '2')).toEqual(['שלום עולם']);
+        expect(pieces([{ v: 'aa bb cc dd', fs: 10 }], '2', 50)).toEqual(['aa bb ', 'cc dd']);
+        expect(
+            pieces(
+                [
+                    { v: 'aa ', fs: 10 },
+                    { v: 'bb', fs: 20 },
+                    { v: ' cc', fs: 10 },
+                ],
+                '2',
+            ),
+        ).toEqual(['aa ', 'bb', ' cc']);
+    });
+
+    test('a rich cell that does not wrap draws each run as one piece', () => {
+        expect(
+            pieces(
+                [
+                    { v: 'aa bb cc', fs: 10 },
+                    { v: ' dd', fs: 20 },
+                ],
+                undefined,
+            ),
+        ).toEqual(['aa bb cc', ' dd']);
+    });
+
+    // 16,000 words took seconds when every step added up the line from its start again.
+    test('a long rich cell lays out in linear time, wrapped or not', () => {
+        const v = Array.from({ length: 16000 }, (_, index) => `w${index % 97}`).join(' ');
+        for (const tb of [undefined, '2']) {
+            clearMeasureTextCache();
+            const started = performance.now();
+            pieces(
+                [
+                    { v, fs: 10 },
+                    { v: ' end', fs: 20 },
+                ],
+                tb,
+                1e7,
+            );
+            expect(performance.now() - started).toBeLessThan(500);
+        }
     });
 });
