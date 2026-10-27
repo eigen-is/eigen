@@ -1,6 +1,6 @@
 // The Image panel follows the figure selection, so a write from the panel must keep the figure selected, and the
-// panel must draw the new value though the selection didn't change. Its Width field shows and takes cm, stores px
-// and clamps as the grips do.
+// panel must draw the new value though the selection didn't change. Its W and H fields show and take cm, store px
+// and clamp as the grips do, coupled while Keep aspect ratio is on.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -18,7 +18,8 @@ let unmount = async () => {};
 afterEach(() => unmount());
 
 // "a" at 1, the figure at 2, on a page whose text column is 600 px. `band` and `note` are a band's and a note's
-// editor, where every figure draws in line; `inCell` puts the paragraph in a table cell, its figure at 5.
+// editor, where every figure draws in line; `inCell` puts the paragraph in a table cell, its figure at 5. The picture
+// is 400 x 200 px of its own, as its <img> reports once loaded.
 async function mount(attrs: object = {}, { band = false, note = false, inCell = false } = {}) {
     const paragraph = {
         type: 'paragraph',
@@ -69,6 +70,13 @@ async function mount(attrs: object = {}, { band = false, note = false, inCell = 
     );
     const page = document.querySelector('[data-document]');
     if (page) Object.defineProperty(page, 'clientWidth', { value: 600 });
+    const img = editor.view.dom.querySelector('img');
+    if (img) {
+        Object.defineProperty(img, 'naturalWidth', { value: 400 });
+        Object.defineProperty(img, 'naturalHeight', { value: 200 });
+    }
+    // The load fires no transaction, so the panel reads the picture's ratio at the next one.
+    await act(async () => editor.view.dispatch(editor.state.tr));
     unmount = async () => {
         await rendered.unmount();
         editor.destroy();
@@ -202,6 +210,20 @@ const widthField = () => {
     return input;
 };
 const widthAt2 = (editor: InstanceType<typeof Editor>) => editor.state.doc.nodeAt(2)?.attrs['width'];
+const heightField = () => {
+    const input = document.querySelectorAll<HTMLInputElement>('input[type="number"]')[1];
+    if (!input) throw new Error('no Height field');
+    return input;
+};
+const sizeAt2 = (editor: InstanceType<typeof Editor>) => {
+    const attrs = editor.state.doc.nodeAt(2)?.attrs;
+    return { width: attrs?.['width'], height: attrs?.['height'] };
+};
+const aspectBox = () => {
+    const box = document.querySelector<HTMLElement>('[role="checkbox"]');
+    if (!box) throw new Error('no Keep aspect ratio box');
+    return box;
+};
 
 const type = (input: HTMLInputElement, value: string) =>
     act(async () => {
@@ -303,6 +325,105 @@ test('a resize by Shift and an arrow key or by a grip shows in the Width field',
     expect(widthField().value).toBe('6.6');
 });
 
+// With no height stored, the picture draws at its own ratio: 200 px wide is 100 px tall.
+test('W and H show the drawn size in cm, and Keep aspect ratio starts checked', async () => {
+    await mount();
+    expect([widthField().value, heightField().value]).toEqual(['5.3', '2.6']);
+    expect(heightField().parentElement?.textContent).toBe('cm');
+    expect(aspectBox().getAttribute('aria-checked')).toBe('true');
+});
+
+test('a stored height shows in H', async () => {
+    await mount({ height: 300 });
+    expect(heightField().value).toBe('7.9');
+});
+
+// A picture at its own ratio stores no height, so it stays at that ratio wherever it is drawn.
+test.each([
+    ['W', '8', { width: 302, height: null }],
+    ['H', '4', { width: 302, height: null }],
+])('a locked %s edit of a picture at its own ratio writes the width alone', async (side, value, size) => {
+    const editor = await mount();
+    const input = side === 'W' ? widthField() : heightField();
+    await type(input, value);
+    await key(input, 'Enter');
+    expect(sizeAt2(editor)).toEqual(size);
+    expect(heightField().value).toBe('4');
+});
+
+test('a locked W edit of a stretched picture scales its height', async () => {
+    const editor = await mount({ height: 50 });
+    await type(widthField(), '8');
+    await key(widthField(), 'Enter');
+    expect(sizeAt2(editor)).toEqual({ width: 302, height: 76 });
+});
+
+test.each([
+    ['W', '8', { width: 302, height: 100 }],
+    ['H', '4', { width: 200, height: 151 }],
+])('an unlocked %s edit stretches the picture, writing both sides', async (side, value, size) => {
+    const editor = await mount();
+    await click(aspectBox());
+    expect(aspectBox().getAttribute('aria-checked')).toBe('false');
+    const input = side === 'W' ? widthField() : heightField();
+    await type(input, value);
+    await key(input, 'Enter');
+    expect(sizeAt2(editor)).toEqual(size);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
+});
+
+// Coupled first, then fitted: 30 cm is 1134 x 284 px, which the 600 px column shrinks in shape.
+test('a W past the column scales both sides to it', async () => {
+    const editor = await mount({ height: 50 });
+    await type(widthField(), '30');
+    await key(widthField(), 'Enter');
+    expect(sizeAt2(editor)).toEqual({ width: 600, height: 150 });
+});
+
+test('an H below the floor is raised to it', async () => {
+    const editor = await mount();
+    await click(aspectBox());
+    await type(heightField(), '1');
+    await key(heightField(), 'Enter');
+    expect(sizeAt2(editor)).toEqual({ width: 200, height: 100 });
+});
+
+test.each(['Enter', 'blur'])('an untouched H field writes nothing on %s', async (end) => {
+    const editor = await mount();
+    await act(async () => heightField().focus());
+    if (end === 'Enter') await key(heightField(), 'Enter');
+    await act(async () => heightField().blur());
+    expect(sizeAt2(editor)).toEqual({ width: 200, height: null });
+});
+
+test('Escape drops a typed height', async () => {
+    const editor = await mount();
+    await type(heightField(), '8');
+    await key(heightField(), 'Escape');
+    await act(async () => heightField().blur());
+    expect(sizeAt2(editor)).toEqual({ width: 200, height: null });
+    expect(heightField().value).toBe('2.6');
+});
+
+// The lock lasts while its figure stays selected: nodes have no id to remember it by.
+test('an unchecked lock stays while the figure is selected, and resets once it is left', async () => {
+    const editor = await mount();
+    await click(aspectBox());
+    await act(async () => {
+        editor.view.dispatch(editor.state.tr.insertText('x', 1));
+    });
+    expect(aspectBox().getAttribute('aria-checked')).toBe('false');
+
+    await act(async () => void editor.commands.setTextSelection(1));
+    await act(async () => void editor.commands.setNodeSelection(3));
+    expect(aspectBox().getAttribute('aria-checked')).toBe('true');
+});
+
+const click = (target: HTMLElement) =>
+    act(async () => {
+        target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
 const toggle = (label: string) => {
     const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
     if (!button) throw new Error(`no ${label} toggle`);
@@ -331,6 +452,12 @@ test('an image wider than the paper is capped at it as it goes in front of the t
     const editor = await mount({ width: 900 });
     await act(async () => toggle('In front of text').click());
     expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ layout: 'front', width: 800 });
+});
+
+test('a stretched image capped at the paper keeps its shape', async () => {
+    const editor = await mount({ width: 900, height: 450 });
+    await act(async () => toggle('In front of text').click());
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ layout: 'front', width: 800, height: 400 });
 });
 
 test('an image in front of or behind the text has no caption row', async () => {

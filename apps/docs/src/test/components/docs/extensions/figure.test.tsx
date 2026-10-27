@@ -14,6 +14,7 @@ const { act, createElement } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
 const { DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { Figure } = await import('../../../../components/docs/extensions/figure');
+const { setAspectLocked } = await import('../../../../components/docs/extensions/figure-frame');
 const { PositionedFigures } = await import('../../../../components/docs/extensions/positioned-figure');
 
 let unmount = async () => {};
@@ -213,6 +214,39 @@ test.each([
     expect(editor.state.doc.nodeAt(2)?.attrs['width']).toBe(width);
 });
 
+// With Keep aspect ratio off, every grip is free, and a drag that leaves the picture's ratio stores the height it drew.
+test('an unlocked grip stretches a picture and stores its height', async () => {
+    const { editor, box } = await mount([paragraph(text('a'), figure)]);
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+    const img = box.querySelector('img');
+    if (!img) throw new Error('no img');
+    Object.defineProperties(img, { naturalWidth: { value: 600 }, naturalHeight: { value: 300 } });
+    await act(async () => {
+        img.dispatchEvent(new Event('load'));
+        setAspectLocked(editor, 'figure', false);
+    });
+    const grip = box.querySelectorAll('.eigen-selection-handle')[3];
+    if (!grip) throw new Error('no south-east grip');
+    Object.defineProperty(grip, 'setPointerCapture', { value: () => {} });
+    await act(async () => {
+        grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0, clientX: 100 }));
+    });
+    await act(async () => {
+        document.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: 150 }));
+        document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: 150 }));
+    });
+    expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ width: 250, height: 100 });
+});
+
+test('a stored height draws the picture stretched to its box', async () => {
+    const stretched = { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 200, height: 50 } };
+    const { box } = await mount([paragraph(text('a'), stretched)]);
+    const img = box.querySelector('img');
+    expect([img?.style.width, img?.style.aspectRatio]).toEqual(['200px', '4 / 1']);
+});
+
 test('a figure deselected mid-drag draws at its stored width again', async () => {
     const { editor, box } = await mount([paragraph(text('a'), figure)]);
     await act(async () => {
@@ -259,6 +293,16 @@ test('Shift and an arrow key resize a selected figure in steps, and it stays sel
     await press(editor, 'ArrowDown');
     expect(widthAt2(editor)).toBe(200);
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
+});
+
+test('Shift and an arrow key keep a stretched figure in shape', async () => {
+    const stretched = { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 200, height: 50 } };
+    const { editor } = await mount([paragraph(text('a'), stretched)]);
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+    await press(editor, 'ArrowRight');
+    expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ width: 210, height: 53 });
 });
 
 test.each([
