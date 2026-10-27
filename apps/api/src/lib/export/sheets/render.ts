@@ -71,7 +71,10 @@ const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
 
 // Every td's defaults: inline in the preview, whose embedders strip the <head>, and the shared td{} rule in the export.
 // There is no vertical-align here, because buildCellStyle always writes one.
-const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
+const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px;line-height:0';
+
+// The height a td adds around its content: its padding above and below, and the gridline it shares with the next row.
+const CELL_FRAME_HEIGHT = 3;
 
 const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
@@ -212,10 +215,11 @@ function pdfPageCss({ width, height }: ContentSize): string {
     return `@page { size: ${side(width)}px ${side(height)}px; margin: ${PAGE_MARGIN}px; }`;
 }
 
-// The pages the PDF prints a sheet on, and how many of its rows the first `most` pages hold. A row that doesn't fit
-// what is left of a page starts the next one, as WeasyPrint breaks a table between rows, so rows taller than half a
-// page print a page each. The overlay's box stretches the sheet to its farthest image or chart. A sheet whose overlay
-// alone takes more than `most` pages has no row to keep.
+// The pages the PDF prints a sheet on, and how many of its rows the first `most` pages hold. Each row prints at its
+// stored height, since clipToRows keeps a cell's content inside its rows, and a border thicker than a pixel adds one
+// or two. A row that doesn't fit what is left of a page starts the next one, as WeasyPrint breaks a table between
+// rows, so rows taller than half a page print a page each. The overlay's box stretches the sheet to its farthest
+// image or chart. A sheet whose overlay alone takes more than `most` pages has no row to keep.
 function printedPages({ sheet, rows, offset, floating }: WindowedSheet, most: number): { pages: number; rows: number } {
     const overlay = Math.ceil(floatingExtent(floating, offset).height / PAGE_CONTENT_HEIGHT);
     if (overlay > most) return { pages: overlay, rows: 0 };
@@ -365,10 +369,11 @@ function renderSheet(
     }
     const colgroup = `<colgroup>${colTags.join('')}</colgroup>`;
 
+    const heights = rows.map((r) => sheetRowsHeight(sheet, r, r));
     const rowTags: string[] = [];
     let tableHeight = 0;
     for (let i = 0; i < rows.length; i++) {
-        const h = sheetRowsHeight(sheet, rows[i], rows[i]);
+        const h = heights[i];
         tableHeight += h;
         const cells: string[] = [];
         for (let j = 0; j < width; j++) {
@@ -400,8 +405,17 @@ function renderSheet(
             if (href != null) {
                 display = `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${display}</a>`;
             }
-            const dataBarLayer = cfStyle?.dataBar ? renderDataBar(cfStyle.dataBar, display, styles) : null;
-            const inner = wrapForRotation(v, dataBarLayer ?? display, styles);
+            // A turned span is placed absolutely, so it grows no row, and a clip around it would cut it off. Any other
+            // content is clipped to the cell's rows, under the data bar's layer, which spans the whole cell.
+            const dataBar = cfStyle?.dataBar;
+            let inner: string;
+            if (isNumericRotation(v)) {
+                inner = wrapForRotation(v, dataBar ? renderDataBar(dataBar, display, styles) : display, styles);
+            } else {
+                const cellHeight = span ? heights.slice(i, i + span.rs).reduce((sum, rowHeight) => sum + rowHeight) : h;
+                const clipped = clipToRows(wrapForRotation(v, display, styles), cellHeight, styles);
+                inner = dataBar ? renderDataBar(dataBar, clipped, styles) : clipped;
+            }
             const attrStr = attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
             cells.push(`<td${attrStr}>${inner}</td>`);
         }
@@ -414,6 +428,18 @@ function renderSheet(
     const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rowTags.join('')}</tbody></table>`;
     const html = withFloatingOverlay(table, tableWidth, offset, clip, overlay);
     return { html, size: { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) } };
+}
+
+// A table row grows to fit its content, but the editor clips a cell to its rows. So the content sits in a block no
+// taller than the cell's rows, and every row prints at its stored height. WeasyPrint pages through a block's content
+// past its max-height, but not through an inline-block's. The td's line-height is 0, so a large font's line adds no
+// height around the block. A text decoration doesn't reach into an inline-block, so the block takes the td's own.
+function clipToRows(content: string, height: number, styles?: StyleRegistry): string {
+    if (!content) return content;
+    const clip =
+        'display:inline-block;width:100%;vertical-align:top;line-height:normal;text-decoration:inherit;' +
+        `max-height:${Math.max(0, height - CELL_FRAME_HEIGHT)}px;overflow:hidden`;
+    return `<div ${styleAttr(styles, clip)}>${content}</div>`;
 }
 
 // The position of the first track in `tracks`, ascending, at or after `track`: tracks.length when there is none.
@@ -568,7 +594,8 @@ function getCellDisplay(v: Cell | null): string {
 // bottom for a positive rt, which turns up, and left and top for a negative one. CSS turns clockwise and rt
 // anticlockwise, as Excel does, so the angle is negated. Turned around a corner, the text would swing past the cell's
 // left edge and be clipped, so the span shifts right by sin(rt) em after it turns, as the canvas shifts its pivot by
-// the text's height. A 'vertical' rt stacks the characters with writing-mode instead.
+// the text's height. The span sets its own line-height, as the td's is 0 (clipToRows). A 'vertical' rt stacks the
+// characters with writing-mode instead.
 function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry): string {
     if (!v || v.rt == null) return inner;
     if (v.rt === 'vertical') {
@@ -581,7 +608,7 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
         const origin = rt > 0 ? 'left bottom' : 'left top';
         const overhangEm = Math.abs(Math.sin((rt * Math.PI) / 180)).toFixed(3);
         const decl =
-            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;` +
+            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;line-height:normal;` +
             `transform-origin:${origin};transform:translateX(${overhangEm}em) rotate(${cssAngle}deg)`;
         return `<span ${styleAttr(styles, decl)}>${inner}</span>`;
     }
@@ -589,7 +616,8 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
 }
 
 // The data bar as the canvas paints it: a negative value fills the half left of the zero line, a positive one the half
-// right of it. The canvas paints a negative bar red whatever the rule's color, so the export does too.
+// right of it. The canvas paints a negative bar red whatever the rule's color, so the export does too. The text's span
+// hands the td's text decoration on to the clipped block inside it.
 function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): string {
     const from = cssColor(bar.format[0]) ?? 'transparent';
     const to = cssColor(bar.format[1]) ?? 'transparent';
@@ -612,7 +640,7 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
     }
 
     const barStyle = `position:absolute;top:0;left:${left}%;width:${width}%;height:100%;background:${fill};z-index:0`;
-    return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, 'position:relative;z-index:1')}>${display}</span>`;
+    return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, 'position:relative;z-index:1;text-decoration:inherit')}>${display}</span>`;
 }
 
 // Images and charts at their stored boxes, rotated about their centers, in the order the editor stacks them. An image

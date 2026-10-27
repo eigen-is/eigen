@@ -104,7 +104,7 @@ describe('Sheets HTML export — class-based styles', () => {
         const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).not.toContain('style="');
         // The moved base td style lives in the stylesheet exactly once.
-        expect(out.css).toContain('td{overflow:hidden;white-space:nowrap;padding:1px 2px}');
+        expect(out.css).toContain('td{overflow:hidden;white-space:nowrap;padding:1px 2px;line-height:0}');
     });
 
     test('identical cell styles dedupe into one class referenced by every cell', () => {
@@ -395,6 +395,25 @@ describe('Sheets HTML export — wrap text', () => {
         const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         expect(html).toContain('white-space:pre-wrap');
     });
+
+    // A table row grows to fit its content, so a cell of 6,000 lines would print 3,000 pages charged as one.
+    test('a cell is clipped to its rows, as the editor clips it, so its text grows no row', () => {
+        const text = 'one\ntwo\nthree';
+        const sheet: Sheet = {
+            ...makeSheet([
+                { r: 0, c: 0, v: { v: text, m: text, tb: '2' } },
+                { r: 1, c: 0, v: { v: 'merged', m: 'merged', mc: { r: 1, c: 0, rs: 2, cs: 1 } } },
+                { r: 3, c: 0, v: { v: 'turned', m: 'turned', rt: 45 } },
+            ]),
+            config: { rowlen: { 2: 30 }, merge: { '1_0': { r: 1, c: 0, rs: 2, cs: 1 } } },
+        };
+        const clip = (height: number) => `max-height:${height}px;overflow:hidden">`;
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(html).toContain(`${clip(17)}one\ntwo\nthree</div>`);
+        expect(html).toContain(`${clip(47)}merged</div>`);
+        // A turned span is placed absolutely and grows no row, and a clip would cut it off.
+        expect(html).not.toContain(`${clip(17)}<span`);
+    });
 });
 
 describe('Sheets HTML export — conditional formatting', () => {
@@ -472,10 +491,10 @@ describe('Sheets HTML export — conditional formatting', () => {
         expect(classesFor(out, 'position:absolute').length).toBe(3);
         expect(classesFor(out, 'position:relative').length).toBeGreaterThan(0);
         expect(out.css).toContain('#638ec6');
-        // Display text wrapped in a span with z-index above the bar.
+        // Display text wrapped in a span with z-index above the bar, clipped to its row inside it.
         const zSpan = classesFor(out, 'z-index:1');
         expect(zSpan.length).toBe(1);
-        expect(out.html).toContain(`<span class="${zSpan[0]}">10</span>`);
+        expect(out.html).toMatch(new RegExp(`<span class="${zSpan[0]}"><div class="s\\d+">10</div></span>`));
     });
 
     test('colorGradation 2-color rule paints min/max cells with the configured stops', () => {
@@ -2038,7 +2057,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
         ];
         for (const hidden of hiddens) {
             const out = renderSheetsHtml([box(hidden)], NO_MEDIA, 'screen');
-            const cls = out.html.match(/<td[^>]*class="(s\d+)"[^>]*>m</)?.[1];
+            const cls = out.html.match(/<td[^>]*class="(s\d+)"[^>]*><div[^>]*>m</)?.[1];
             const declarations = out.css.match(new RegExp(`\\.${cls}\\{([^}]*)\\}`))?.[1].split(';');
             expect(declarations?.filter((d) => d.startsWith('border-')).sort()).toEqual([
                 'border-bottom:1px solid #000000',

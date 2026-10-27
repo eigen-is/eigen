@@ -4,7 +4,7 @@ import type { Sheet } from '@workspace/lib/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import type { Raster } from '../pdf-test-helpers';
-import { pixelAt, rasterize, rasterizer } from '../pdf-test-helpers';
+import { pageCount, pixelAt, rasterize, rasterizer } from '../pdf-test-helpers';
 import { NO_MEDIA } from '../setup';
 
 // The page margin the export sets, in CSS px, and the points a CSS px prints at.
@@ -26,8 +26,41 @@ function inkBox(page: Raster): { minX: number; minY: number; maxX: number; maxY:
     return box;
 }
 
-// CI installs neither WeasyPrint nor a rasterizer, so this suite runs only where both are on the machine.
-const suite = (await isWeasyPrintAvailable()) && rasterizer ? describe : describe.skip;
+// CI installs neither WeasyPrint nor a rasterizer, so these suites run only where they are on the machine.
+const weasyPrint = await isWeasyPrintAvailable();
+const suite = weasyPrint && rasterizer ? describe : describe.skip;
+
+(weasyPrint ? describe : describe.skip)('sheets PDF — rows print at their stored height', () => {
+    const pdfOf = async (sheet: Sheet) => {
+        const html = sheetsHtmlDocument({
+            title: 'Rows',
+            sheets: [sheet],
+            mediaUrls: NO_MEDIA,
+            mode: 'pdf',
+            lost: () => {},
+        });
+        return pageCount(await htmlToPdf(html));
+    };
+
+    // The editor clips a cell to its row, so a row as tall as its text would print pages the cap never charged.
+    test('a wrapped cell of 600 lines prints on the one page its row takes', async () => {
+        const text = Array.from({ length: 600 }, (_, i) => `line ${i}`).join('\n');
+        const sheet: Sheet = { name: 'Tall', id: 's1', celldata: [{ r: 0, c: 0, v: { v: text, m: text, tb: '2' } }] };
+        expect(await pdfOf(sheet)).toBe(1);
+    });
+
+    test('a font too large for its row prints the row at its stored height', async () => {
+        const celldata = Array.from({ length: 200 }, (_, r) => ({ r, c: 0, v: { v: 'X', m: 'X', fs: 409 } }));
+        expect(await pdfOf({ name: 'Large', id: 's1', celldata })).toBe(1);
+    });
+
+    // 956 rows of 20 px fill the 19,120 px a page prints, so 2,000 rows take three pages, wrapped or not.
+    test('2,000 rows of wrapped text print on the pages their stored heights pack into', async () => {
+        const text = 'one\ntwo\nthree';
+        const celldata = Array.from({ length: 2_000 }, (_, r) => ({ r, c: 0, v: { v: text, m: text, tb: '2' } }));
+        expect(await pdfOf({ name: 'Rows', id: 's1', celldata })).toBe(3);
+    });
+});
 
 suite('sheets PDF — a rotated chart', () => {
     // WeasyPrint draws a CSS rotate about the box's center, as the editor does: a 480 × 240 chart at 90° prints 240 wide
