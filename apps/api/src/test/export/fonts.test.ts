@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, FONT_FACES } from '@workspace/lib/constants/fonts';
 import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/doc/docx/fonts';
-import { allFontFaceCss, getFontFaceCSSForFamilies } from '../../lib/export/fonts';
+import { allFontFaceCss, fontFaceCssOf } from '../../lib/export/fonts';
 
 const UI_STYLES_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/styles');
 
@@ -37,7 +37,7 @@ test('the export fonts are the faces the apps load', () => {
 test('the export embeds the registry faces, and only those of the families asked for', () => {
     const families = (css: string) => [...css.matchAll(/font-family: "([^"]+)"/g)].map((m) => m[1]);
     expect(families(allFontFaceCss())).toEqual(FONT_FACES.map((face) => face.family));
-    expect(families(getFontFaceCSSForFamilies(['Inter', 'Unknown']))).toEqual(['Inter', 'Inter']);
+    expect(families(fontFaceCssOf(['Inter', 'Unknown']))).toEqual(['Inter', 'Inter']);
 });
 
 function nameRecords(name: Buffer): string[] {

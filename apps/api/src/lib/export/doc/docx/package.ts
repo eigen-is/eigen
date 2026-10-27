@@ -37,7 +37,7 @@ export type Package = {
     publicOrigin: string | undefined;
     abstractNums: List[];
     // Each w:num's abstractNum, by index.
-    numAbstracts: number[];
+    numToAbstract: number[];
     bullets: Map<number, number>;
     checkboxes: boolean;
     languages: Set<string>;

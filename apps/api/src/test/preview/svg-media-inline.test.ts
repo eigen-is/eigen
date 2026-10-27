@@ -6,7 +6,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { eigenMediaHref } from '@workspace/lib/vector';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { ManagedDatabase } from '../../lib/core';
-import { getFontFaceCSSForFamilies } from '../../lib/export/fonts';
+import { fontFaceCssOf } from '../../lib/export/fonts';
 import { collectExportMedia } from '../../lib/export/media';
 import { sanitizeExportMedia } from '../../lib/export/sanitize';
 import { Mount } from '../../lib/mount/mount';
@@ -233,7 +233,7 @@ describe('inlineSvgMediaRefs font injection', () => {
     });
 
     test('an svg already carrying a font-face block is not doubled', async () => {
-        const faces = getFontFaceCSSForFamilies(['Excalifont']);
+        const faces = fontFaceCssOf(['Excalifont']);
         const fonted = Buffer.from(
             `<svg xmlns="http://www.w3.org/2000/svg"><defs><style>${faces}</style></defs>` +
                 `<text font-family="&apos;Excalifont&apos;, cursive">hi</text></svg>`,
@@ -285,7 +285,7 @@ describe('export media path (prepareMedia, then sanitizeExportMedia in the trans
         await mount.createFile(mediaId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
         await mount.createFile(mediaId, 'figure.svg', SVG_MIME, 0, Buffer.from(svgReferencing('pic.png')));
         await mount.createFile(mediaId, 'text.svg', SVG_MIME, 0, Buffer.from(svgWithText('Excalifont')));
-        const faces = getFontFaceCSSForFamilies(['Excalifont']);
+        const faces = fontFaceCssOf(['Excalifont']);
         await mount.createFile(
             mediaId,
             'fonted.svg',

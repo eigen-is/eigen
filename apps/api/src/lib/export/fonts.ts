@@ -41,21 +41,21 @@ export function allFontFaceCss(): string {
 // The @font-face blocks for just the given families (each an EIGEN_FONTS name, the same
 // value a vector text/label element stores in `fontFamily`). An export or an SVG preview inlines
 // only the whole faces its text actually uses; an unrecognized family contributes nothing.
-export function getFontFaceCSSForFamilies(families: Iterable<string>): string {
+export function fontFaceCssOf(families: Iterable<string>): string {
     return fontFacesOf(families).map(embeddedFaceCss).join('\n');
 }
 
 // Read + base64 once per bundled font (~2 MB resident): the main-thread SVG preview path
 // asks for faces on every request, while a one-shot export's child process pays it once anyway.
 // A bundled asset that cannot be read is a build defect, so the read is unguarded.
-const faceCSSByFile = new Map<FontFaceFile, string>();
+const faceCssByFile = new Map<FontFaceFile, string>();
 
 function embeddedFaceCss(face: BundledFontFace): string {
-    let css = faceCSSByFile.get(face.file);
+    let css = faceCssByFile.get(face.file);
     if (css === undefined) {
         const bytes = fs.readFileSync(FACE_PATHS[face.file]);
         css = fontFaceCss(face, `data:font/woff2;base64,${bytes.toString('base64')}`);
-        faceCSSByFile.set(face.file, css);
+        faceCssByFile.set(face.file, css);
     }
     return css;
 }
