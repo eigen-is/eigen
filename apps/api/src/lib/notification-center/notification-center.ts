@@ -88,7 +88,7 @@ export class NotificationCenter {
             .run();
 
         if (!prior || now.getTime() - prior.createdAt.getTime() >= COALESCE_WINDOW_MS) {
-            this.home.broadcast(buildNotificationCreatedEvent(input.title, input.body, input.type, input.tag));
+            this.home.broadcast(buildNotificationCreatedEvent(input));
         }
         return row;
     }

@@ -1,3 +1,6 @@
+// Handles the notification events from the stream: each refreshes the bell, and notification:created
+// also raises the toast. This is the only handler that toasts, so every toast has a row in the bell.
+
 import type { QueryClient } from '@tanstack/react-query';
 import { publicUserKeys } from '@workspace/lib/public';
 import type { PublicUser } from '@workspace/lib/types/public';
@@ -15,20 +18,19 @@ export function handleNotificationSSEvent(event: SSEvent, queryClient: QueryClie
     switch (event.type) {
         case SSEventType.NOTIFICATION_CREATED: {
             invalidateNotifications(queryClient, userId);
-            const notificationType = event.notificationType;
-            // Chat-derived toasts carry raw wire text (emote syntax + bare emails). Render emote
-            // sentences and resolve emails from the public-user cache when already loaded — no
-            // viewer identity in this scope, so emote targets show names, not "you".
+            const { notificationType, tag } = event;
+            // A chat toast carries the raw message text, with emote syntax and bare emails. It shows the
+            // emote as a sentence and an email as the name the public-user cache already holds. This
+            // scope doesn't know who the viewer is, so an emote aimed at them names them instead of "you".
             let description = event.body;
-            if (description && notificationType && CHAT_TEXT_NOTIFICATION_TYPES.has(notificationType)) {
+            if (description && CHAT_TEXT_NOTIFICATION_TYPES.has(notificationType)) {
                 description = formatChatPreview(description, {
                     resolveName: (email) =>
                         queryClient.getQueryData<PublicUser | null>(publicUserKeys.detail(email))?.name,
                 });
             }
             const options: Parameters<typeof toast>[1] = description ? { description } : {};
-            const tag = event.tag;
-            if (notificationType && tag && isClickableNotification(notificationType)) {
+            if (tag && isClickableNotification(notificationType)) {
                 options.action = {
                     label: 'View',
                     onClick: () => {
