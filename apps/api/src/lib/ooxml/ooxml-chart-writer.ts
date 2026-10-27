@@ -31,7 +31,7 @@ import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import { rangeToA1, sheetRefName } from '@workspace/sheet/engine/a1-notation';
 import { clampTextSize, DEGREE, solidFillXml } from './drawingml';
 import { A_NS, C_NS, EMU_PER_POINT, R_NS } from './ooxml';
-import { LEGEND_BY_POSITION, PERCENT_AXIS_FORMAT, STACKING_BY_GROUPING } from './ooxml-chart';
+import { LEGEND_BY_POSITION, STACKING_BY_GROUPING } from './ooxml-chart';
 
 // The chart's own box in px, which Eigen lays it out in, and how many EMU one of those px is in the file. Text sizes
 // and line widths scale by it, so a chart drawn smaller or larger than its box keeps Eigen's proportions.
@@ -59,6 +59,9 @@ const VALUE_AXIS = 2;
 
 // ST_GapAmount's largest gap, in percent of a bar's width.
 const MAX_GAP_WIDTH = 500;
+
+// A 100% stack's value axis runs from 0 to 1, so Excel labels it in this whatever the values' format.
+const PERCENT_AXIS_FORMAT = '0%';
 
 // The reader's tables turned around. Where two spellings read the same, the reader's first is the one written:
 // clustered rather than standard, r rather than tr.
@@ -304,20 +307,36 @@ function seriesXml(spec: ChartSpec, width: number, sources: Source[]): string {
             const color = style.color ?? chartColor(i);
             const source = sources[i];
             const head = `<c:idx val="${i}"/><c:order val="${i}"/>${source.name}`;
+            const labels = style.labels.visible ? labelsXml(spec) : '';
             if (type === 'line') {
                 const marker = style.marker.visible
                     ? `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${solidFillXml(color)}<a:ln>${solidFillXml(color)}</a:ln></c:spPr></c:marker>`
                     : '<c:marker><c:symbol val="none"/></c:marker>';
                 const line = `<c:spPr><a:ln w="${width}" cap="rnd">${solidFillXml(color)}<a:round/></a:ln></c:spPr>`;
-                return `<c:ser>${head}${line}${marker}${source.data}<c:smooth val="${style.line.smooth ? 1 : 0}"/></c:ser>`;
+                return `<c:ser>${head}${line}${marker}${labels}${source.data}<c:smooth val="${style.line.smooth ? 1 : 0}"/></c:ser>`;
             }
             if (type === 'pie') {
                 const points = i === 0 ? slicesXml(spec, id, source.points) : '';
                 return `<c:ser>${head}<c:spPr>${solidFillXml(color)}</c:spPr>${points}${PIE_LABELS}${source.data}</c:ser>`;
             }
-            return `<c:ser>${head}<c:spPr>${solidFillXml(color)}</c:spPr><c:invertIfNegative val="0"/>${source.data}</c:ser>`;
+            return `<c:ser>${head}<c:spPr>${solidFillXml(color)}</c:spPr><c:invertIfNegative val="0"/>${labels}${source.data}</c:ser>`;
         })
         .join('');
+}
+
+// A labelled series' values, where Eigen draws them: past a bar's end, in a stacked segment's middle, above a point.
+// The position is stated because Office's default differs by kind. So is the values' format, which Eigen draws every
+// label in, since Office would otherwise read each cell's own.
+function labelsXml(spec: ChartSpec): string {
+    const { type } = spec.chart;
+    const { format } = spec.axes.y.labels;
+    const position = type === 'line' ? 't' : spec.plots[type].stacking === 'none' ? 'outEnd' : 'ctr';
+    return [
+        '<c:dLbls>',
+        format === null ? '' : `<c:numFmt formatCode="${escapeXml(format)}" sourceLinked="0"/>`,
+        `<c:dLblPos val="${position}"/><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/>`,
+        '<c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>',
+    ].join('');
 }
 
 // Eigen labels a slice with its name and share, beside it.
@@ -347,10 +366,11 @@ function axesXml(spec: ChartSpec, look: ChartLook, width: number, size: number):
         `<c:scaling><c:orientation val="${orientation}"/>${bounds}</c:scaling>`;
     const { min, max } = valueAxis.scale;
     const bounds = [max === null ? '' : `<c:max val="${max}"/>`, min === null ? '' : `<c:min val="${min}"/>`].join('');
-    // A 100% stack's axis runs from 0 to 1. Without a format of its own, Excel would label it that way.
+    // A 100% stack's axis formats shares, so its values' format goes with the values and their labels instead.
+    const percent = spec.plots[type].stacking === 'percent';
     const own = valueAxis.labels.format;
-    const format = own ?? (spec.plots[type].stacking === 'percent' ? PERCENT_AXIS_FORMAT : 'General');
-    const linked = own === null && format === 'General';
+    const format = percent ? PERCENT_AXIS_FORMAT : (own ?? 'General');
+    const linked = !percent && own === null;
     return [
         `<c:catAx><c:axId val="${CATEGORY_AXIS}"/>${scaling(maxMin ? 'maxMin' : 'minMax')}${deleted(categoryAxis.visible)}`,
         `<c:axPos val="${sideways ? 'l' : 'b'}"/>${axisTitleXml(categoryAxis.title.text, sideways, size)}`,
