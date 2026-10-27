@@ -93,6 +93,14 @@ test('a cell draws at its half-point size', () => {
     expect(getFontSet({ fs: 10.5 })).toStartWith('normal normal normal 10.5pt ');
 });
 
+// An imported size draws at the size the xlsx, HTML and PDF exports write: Excel's, held to its 1 to 409 points.
+test("a cell draws at its imported size, held to Excel's range", () => {
+    expect(getFontSet({ fs: 409 })).toStartWith('normal normal normal 409pt ');
+    expect(getFontSet({ fs: 10.25 })).toStartWith('normal normal normal 10.25pt ');
+    expect(getFontSet({ fs: 1e6 })).toStartWith('normal normal normal 409pt ');
+    expect(getFontSet({ fs: -5 })).toStartWith('normal normal normal 1pt ');
+});
+
 describe('state/modules/text — font sets', () => {
     test('a cell with no font, and the canvas default, draw in Inter', () => {
         expect(getFontSet({})).toStartWith('normal normal normal 10pt "Inter",');

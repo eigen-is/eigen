@@ -1,9 +1,9 @@
 // The fonts of a spreadsheet: the one a cell with no font draws in, the default digit width that column
 // widths count in an xlsx, and the font name and size a cell's `ff` and `fs` stand for. Code that needs a
-// cell's font, such as the cell editor and the xlsx export, reads it here, so they agree on it.
+// cell's font, such as the canvas, the cell editor and the xlsx export, reads it here, so they agree on it.
 
 import type { EigenFont } from '../constants/fonts';
-import { EIGEN_FONTS, readFontSize } from '../constants/fonts';
+import { EIGEN_FONTS, MIN_FONT_SIZE } from '../constants/fonts';
 import { getFontMetrics } from '../vector/font-metrics';
 import { SHEET_DEFAULT_FONT_SIZE } from './defaults';
 
@@ -24,8 +24,14 @@ export function cellFontName(ff: number | string | undefined): string | undefine
     return EIGEN_FONTS.find((font) => font.name.toLowerCase() === family.toLowerCase())?.name ?? family;
 }
 
-// A cell's or a run's `fs` in pt. A collaborator or an older editor may have stored it as a string, which reads as
-// its number, and a value that is no size is the sheet default.
+// Excel's largest font size. The import keeps a size as the file says it, so a cell draws and exports at it.
+const EXCEL_MAX_FONT_SIZE = 409;
+
+// A cell's or a run's `fs` in pt, in Excel's range but not snapped to half points, so an imported 10.25 stays 10.25.
+// A collaborator or an older editor may have stored it as a string, which reads as its number, and a value that is no
+// size is the sheet default.
 export function cellFontSize(fs: unknown): number {
-    return readFontSize(Number(fs) || undefined) ?? SHEET_DEFAULT_FONT_SIZE;
+    const size = Number(fs);
+    if (!size || !Number.isFinite(size)) return SHEET_DEFAULT_FONT_SIZE;
+    return Math.min(EXCEL_MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
 }
