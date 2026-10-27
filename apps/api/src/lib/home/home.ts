@@ -14,7 +14,7 @@ import type { ResolvedQuotas } from '../config/quota';
 import { resolveUserQuotas } from '../config/quota';
 import type { Contacts } from '../contacts/contacts';
 import type { DatabaseConfig, JsonStore, ManagedDatabase, SchemaType } from '../core';
-import { LocalFilesystem, openLocalDatabase } from '../core';
+import { LocalFilesystem, openLocalDatabase, STALE_TEMP_MAX_AGE_MS } from '../core';
 import type { Drive } from '../drive';
 import type { Mail } from '../mail/mail-domain';
 import type { NotificationCenter } from '../notification-center/notification-center';
@@ -93,6 +93,10 @@ export class Home {
 
     private async runInit(autoCreateDefaultMount: boolean): Promise<this> {
         try {
+            // A crash between writing a settings file's staged copy and its rename leaves the copy behind.
+            await this.fs
+                .sweepAtomicTemps('.', STALE_TEMP_MAX_AGE_MS)
+                .catch((err) => console.error(`[Home] Sweeping staged files failed for ${this.user.id}:`, err));
             await time('Home.init.settings', () => this.settings.load());
 
             // allSettled waits for every part. Promise.all would return at the first failure while

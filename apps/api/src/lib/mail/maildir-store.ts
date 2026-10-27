@@ -17,7 +17,7 @@ import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { isMailAppEnabled } from '../config/env';
 import { PATHS } from '../config/paths';
-import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem } from '../core';
+import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem, STALE_TEMP_MAX_AGE_MS } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
 import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
@@ -33,7 +33,6 @@ import {
     rebuildFlagsSuffix,
 } from './mailutils';
 
-const STALE_DRAFT_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 // The Maildir spec's own age: a `tmp/` file older than this is a crash leftover, never an in-flight write.
 const STALE_MAILDIR_TEMP_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 // Every mail SSE event re-lists the mailboxes, so a non-standard folder's listing-kicked reconcile is throttled to this.
@@ -682,14 +681,14 @@ export class MaildirStore implements MailStore {
     public async cleanupStaleDraftTemps(): Promise<void> {
         await this.cleanupStaleMaildirTemps();
         // The sidecars are written through writeAtomic, and nothing else passes that directory.
-        await this.storage.sweepAtomicTemps(this.getDraftMetaDir(), STALE_DRAFT_TEMP_MAX_AGE_MS);
+        await this.storage.sweepAtomicTemps(this.getDraftMetaDir(), STALE_TEMP_MAX_AGE_MS);
         if (await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR)) {
             const now = Date.now();
             for (const name of await this.storage.readdir(DRAFT_ATTACHMENTS_DIR)) {
                 const filePath = path.join(DRAFT_ATTACHMENTS_DIR, name);
                 try {
                     const stat = await this.storage.stat(filePath);
-                    if (now - stat.mtimeMs > STALE_DRAFT_TEMP_MAX_AGE_MS) {
+                    if (now - stat.mtimeMs > STALE_TEMP_MAX_AGE_MS) {
                         await this.storage.unlink(filePath);
                     }
                 } catch {}
