@@ -128,6 +128,8 @@ export function useSheet(
                     isLocalOpRef.current = false;
                     return;
                 }
+                // An update that also writes the snapshot reloads it with the whole log replayed, these batches too.
+                if (event.transaction.changed.has(stateMap)) return;
                 for (const delta of event.changes.delta) {
                     if (delta.insert && Array.isArray(delta.insert)) {
                         for (const ops of delta.insert as Op[][]) {

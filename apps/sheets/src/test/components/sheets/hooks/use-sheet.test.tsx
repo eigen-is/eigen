@@ -143,6 +143,27 @@ test("a peer's batch that arrives while the grid remounts on a new snapshot is i
     expect(cell(0, 0)).toBe('late');
 });
 
+test("a peer's snapshot and batch in one update apply the batch once", async () => {
+    const { cell } = await open({ '1_1': 'old' });
+    await act(async () => {
+        peer.transact(() => {
+            peer.getMap('state').set(
+                'snapshot',
+                encodeSheetsSnapshot([sheet({ '1_1': 'flushed' })], { computed: true }),
+            );
+            peerSends([
+                {
+                    op: 'insertRowCol',
+                    id: 's1',
+                    path: [],
+                    value: { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 's1' },
+                },
+            ]);
+        });
+    });
+    expect(cell(2, 1)).toBe('flushed');
+});
+
 test('a tab that closes connected and alone writes its edits into the snapshot', async () => {
     const { workbookRef, close } = await open();
     await act(async () => workbookRef.current?.setCellFormat(0, 0, 'bl', 1));
