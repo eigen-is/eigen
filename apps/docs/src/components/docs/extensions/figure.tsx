@@ -12,8 +12,15 @@ import type { Box } from '@workspace/lib/vector';
 import { ImagePlaceholder } from '@workspace/ui/components/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FigureFrameOptions } from './figure-frame';
-import { clampFigureWidth, FigureFrame, figureFramePlugins, figureMaxWidth, useFigureResize } from './figure-frame';
+import type { FigureFrameOptions, FigureShift } from './figure-frame';
+import {
+    clampFigureWidth,
+    FigureFrame,
+    figureFramePlugins,
+    figureMaxWidth,
+    shiftedOffsets,
+    useFigureResize,
+} from './figure-frame';
 
 // The width a figure draws at when neither it nor its page gives one (px).
 const FIGURE_DEFAULT_WIDTH = 400;
@@ -22,8 +29,6 @@ const FIGURE_RESIZE_STEPS = { ArrowLeft: -10, ArrowRight: 10, ArrowUp: 10, Arrow
 const FIGURE_RESIZE_KEYS = Object.keys(FIGURE_RESIZE_STEPS)
     .map((key) => `Shift+${key}`)
     .join(' ');
-
-const fitFigureWidth = (next: Box, maxWidth: number) => clampFigureWidth(next.width, maxWidth);
 
 function FigureView(props: NodeViewProps) {
     const { node, selected, editor, getPos } = props;
@@ -60,9 +65,21 @@ function FigureView(props: NodeViewProps) {
         setAspectRatio(null);
     }, [mediaName]);
 
-    const getMaxWidth = useCallback(() => figureMaxWidth(containerRef.current, layout), [layout]);
-    const commitWidth = useCallback((next: number) => setAttributes({ width: next }), [setAttributes]);
-    const resize = useFigureResize({ getMaxWidth, fit: fitFigureWidth, commit: commitWidth });
+    const getMaxWidth = useCallback(() => figureMaxWidth(editor, layout), [editor, layout]);
+    // The height follows the width at the image's own ratio, which a box exists only once it is known.
+    const fitWidth = useCallback(
+        (next: Box, maxWidth: number) => {
+            const fitted = clampFigureWidth(next.width, maxWidth);
+            return { width: fitted, height: aspectRatio ? fitted / aspectRatio : next.height };
+        },
+        [aspectRatio],
+    );
+    const commitWidth = useCallback(
+        ({ width: next }: { width: number }, shift: FigureShift) =>
+            setAttributes({ width: next, ...shiftedOffsets(readFigureFrameAttrs(node.attrs), shift) }),
+        [setAttributes, node.attrs],
+    );
+    const resize = useFigureResize({ getMaxWidth, fit: fitWidth, commit: commitWidth });
 
     const handleImageLoad = useCallback(() => {
         if (!imageRef.current || imageProcessed.current) return;
@@ -101,7 +118,7 @@ function FigureView(props: NodeViewProps) {
         });
     }, [getMaxWidth, node.attrs.width, setAttributes]);
 
-    const displayWidth = resize.preview ?? width;
+    const displayWidth = resize.preview?.size.width ?? width;
     // A picture no browser draws (WMF, EMF) shows its alt text, which a small width squeezes, so its box takes 10rem,
     // or all its container gives: a fixed minimum would push a narrow table cell wider. The wrapper takes it too, as a
     // wrapped figure floats and shrinks to fit. With no alt text the image would draw 0 px tall, so it keeps a line.
@@ -119,6 +136,7 @@ function FigureView(props: NodeViewProps) {
             {...props}
             containerRef={containerRef}
             box={box}
+            shift={resize.preview?.shift}
             resizeMode="aspect"
             onTransform={resize.onTransform}
             onCommit={resize.onCommit}
@@ -166,7 +184,7 @@ export const Figure = FigureNode.extend<FigureFrameOptions>({
             )
                 return false;
             const figure = this.editor.view.nodeDOM(selection.from);
-            const maxWidth = figureMaxWidth(figure, selection.node.attrs.layout);
+            const maxWidth = figureMaxWidth(this.editor, selection.node.attrs.layout);
             // With no width stored, the image draws at its own width, and a placeholder at the default.
             const drawn =
                 (figure instanceof Element && figure.querySelector('img')?.clientWidth) || FIGURE_DEFAULT_WIDTH;

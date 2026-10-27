@@ -1,7 +1,11 @@
+// The Docs Image panel for the selected picture: its width, where it sits on the page, its alt text and caption, and
+// Replace image. It writes through the editor that holds the picture, the body's, a band's or a note's, and every
+// write keeps the picture selected so the panel stays open. Its layout rows serve the Chart panel too.
+
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
 import type { FigureAlignment, FigureFrameAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
-import { cmText, mmToPx, pxToMm, readCm, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { cmText, isPositioned, mmToPx, pxToMm, readCm, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
@@ -12,9 +16,10 @@ import {
     PropertySection,
     PropertyToggle,
 } from '@workspace/ui/components/properties-panel';
-import { ImagePlus, PanelLeft, PanelRight, Rows3 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { BringToFront, ImagePlus, PanelLeft, PanelRight, Rows3, SendToBack } from 'lucide-react';
 import { useState } from 'react';
-import { clampFigureWidth, figureMaxWidth, widthWithinLayout } from './extensions/figure-frame';
+import { clampFigureWidth, figureMaxWidth, setImageLayout } from './extensions/figure-frame';
 
 // Alt, Cap or Width. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
 // from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit writes
@@ -53,18 +58,30 @@ export function FigureField({
     );
 }
 
-// Where a figure sits: in its own line, aligned, or wrapped by the text on one side. A band holds no float, as a docx
-// import reads a header's anchored picture as one in its own line, so a band's offers the alignment alone, which puts a
-// pasted wrap in its own line.
+// Each layout's name and icon, in Google's order, which the panel's toggles and Format › Image share.
+export const FIGURE_LAYOUT_LOOK: { layout: FigureLayout; label: string; icon: LucideIcon }[] = [
+    { layout: 'block', label: 'In line', icon: Rows3 },
+    { layout: 'wrap-left', label: 'Wrap left', icon: PanelLeft },
+    { layout: 'wrap-right', label: 'Wrap right', icon: PanelRight },
+    { layout: 'behind', label: 'Behind text', icon: SendToBack },
+    { layout: 'front', label: 'In front of text', icon: BringToFront },
+];
+
+// Where a figure sits: in its own line, aligned, wrapped by the text on one side, or behind or in front of the text. A
+// band holds no float, as a docx import reads a header's anchored picture as one in its own line, so a band's offers
+// the alignment alone, which puts a pasted wrap in its own line. A note's figure draws in line, so a note's offers no
+// place behind or in front of the text (inFlowOnly).
 export function FigureLayoutSection({
     layout,
     alignment,
     blockOnly = false,
+    inFlowOnly = false,
     onChange,
 }: {
     layout: FigureLayout;
     alignment: FigureAlignment;
     blockOnly?: boolean;
+    inFlowOnly?: boolean;
     onChange: (attributes: FigureFrameAttrs) => void;
 }) {
     return (
@@ -72,24 +89,19 @@ export function FigureLayoutSection({
             {!blockOnly && (
                 <PropertyRow label="Style">
                     <div className="flex items-center gap-1">
-                        <PropertyToggle
-                            pressed={layout === 'block'}
-                            onPressedChange={() => onChange({ layout: 'block' })}
-                        >
-                            <Rows3 className="h-4 w-4" />
-                        </PropertyToggle>
-                        <PropertyToggle
-                            pressed={layout === 'wrap-left'}
-                            onPressedChange={() => onChange({ layout: 'wrap-left' })}
-                        >
-                            <PanelLeft className="h-4 w-4" />
-                        </PropertyToggle>
-                        <PropertyToggle
-                            pressed={layout === 'wrap-right'}
-                            onPressedChange={() => onChange({ layout: 'wrap-right' })}
-                        >
-                            <PanelRight className="h-4 w-4" />
-                        </PropertyToggle>
+                        {FIGURE_LAYOUT_LOOK.filter((look) => !inFlowOnly || !isPositioned(look.layout)).map(
+                            ({ layout: option, label, icon: Icon }) => (
+                                <PropertyToggle
+                                    key={option}
+                                    aria-label={label}
+                                    title={label}
+                                    pressed={layout === option}
+                                    onPressedChange={() => onChange({ layout: option })}
+                                >
+                                    <Icon className="h-4 w-4" />
+                                </PropertyToggle>
+                            ),
+                        )}
                     </div>
                 </PropertyRow>
             )}
@@ -110,10 +122,11 @@ export function FigureLayoutSection({
 type FigurePropertiesPanelProps = {
     editor: Editor;
     blockOnly?: boolean;
+    inFlowOnly?: boolean;
     onReplaceImage: () => void;
 };
 
-export function FigurePropertiesPanel({ editor, blockOnly, onReplaceImage }: FigurePropertiesPanelProps) {
+export function FigurePropertiesPanel({ editor, blockOnly, inFlowOnly, onReplaceImage }: FigurePropertiesPanelProps) {
     const { resolveMediaUrl } = useMediaResolver();
     // useEditor re-renders on no transaction, and a write that keeps the figure selected fires no selectionUpdate.
     const { width, layout, alignment, alt, caption, mediaName } = useEditorState({
@@ -152,7 +165,7 @@ export function FigurePropertiesPanel({ editor, blockOnly, onReplaceImage }: Fig
                                 const mm = readCm(value);
                                 if (!Number.isFinite(mm)) return;
                                 editor.commands.updateFigure({
-                                    width: clampFigureWidth(mmToPx(mm), figureMaxWidth(editor.view.dom, layout)),
+                                    width: clampFigureWidth(mmToPx(mm), figureMaxWidth(editor, layout)),
                                 });
                             }}
                         />
@@ -165,10 +178,12 @@ export function FigurePropertiesPanel({ editor, blockOnly, onReplaceImage }: Fig
                 layout={layout}
                 alignment={alignment}
                 blockOnly={blockOnly}
-                onChange={(attributes) => {
-                    const fitted = widthWithinLayout(editor.view.dom, attributes.layout, width);
-                    editor.commands.updateFigure(fitted === undefined ? attributes : { ...attributes, width: fitted });
-                }}
+                inFlowOnly={inFlowOnly}
+                onChange={(attributes) =>
+                    attributes.layout && !attributes.alignment
+                        ? setImageLayout(editor, attributes.layout)
+                        : editor.commands.updateFigure(attributes)
+                }
             />
 
             <PropertySection title="Image">
@@ -179,13 +194,16 @@ export function FigurePropertiesPanel({ editor, blockOnly, onReplaceImage }: Fig
                         onCommit={(value) => editor.commands.updateFigure({ alt: value || null })}
                     />
                 </PropertyRow>
-                <PropertyRow label="Cap">
-                    <FigureField
-                        value={caption}
-                        placeholder="Caption"
-                        onCommit={(value) => editor.commands.updateFigure({ caption: value || null })}
-                    />
-                </PropertyRow>
+                {/* A figure in front of or behind the text draws no caption. */}
+                {!isPositioned(layout) && (
+                    <PropertyRow label="Cap">
+                        <FigureField
+                            value={caption}
+                            placeholder="Caption"
+                            onCommit={(value) => editor.commands.updateFigure({ caption: value || null })}
+                        />
+                    </PropertyRow>
+                )}
                 <Button variant="outline" size="sm" className="w-full mt-1" onClick={onReplaceImage}>
                     <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
                     Replace image

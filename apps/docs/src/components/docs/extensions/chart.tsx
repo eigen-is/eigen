@@ -8,13 +8,14 @@ import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
 import { ChartNode, chartSvg, readChartAttrs, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { useCallback, useMemo, useRef } from 'react';
-import type { FigureFrameOptions } from './figure-frame';
+import type { FigureFrameOptions, FigureShift } from './figure-frame';
 import {
     clampFigureWidth,
     FIGURE_MIN_SIZE,
     FigureFrame,
     figureFramePlugins,
     figureMaxWidth,
+    shiftedOffsets,
     useFigureResize,
 } from './figure-frame';
 
@@ -40,21 +41,21 @@ function ChartView(props: NodeViewProps) {
     const { width, height, layout } = attrs;
     const isEditable = editor.isEditable;
 
-    const getMaxWidth = useCallback(() => figureMaxWidth(containerRef.current, layout ?? null), [layout]);
+    const getMaxWidth = useCallback(() => figureMaxWidth(editor, layout), [editor, layout]);
     const commitSize = useCallback(
-        (size: ChartSize) =>
+        (size: ChartSize, shift: FigureShift) =>
             editor.commands.command(({ tr }) => {
                 const pos = getPos();
                 if (pos === undefined) return false;
-                setFigureAttributes(tr, pos, size);
+                setFigureAttributes(tr, pos, { ...size, ...shiftedOffsets(attrs, shift) });
                 return true;
             }),
-        [editor, getPos],
+        [editor, getPos, attrs],
     );
     const resize = useFigureResize({ getMaxWidth, fit: fitChart, commit: commitSize });
 
     // A resize lays the chart out again at every move, as the canvas does.
-    const size = resize.preview ?? {
+    const size = resize.preview?.size ?? {
         width: width ?? CHART_DEFAULT_SIZE.width,
         height: height ?? CHART_DEFAULT_SIZE.height,
     };
@@ -67,6 +68,7 @@ function ChartView(props: NodeViewProps) {
             {...props}
             containerRef={containerRef}
             box={box}
+            shift={resize.preview?.shift}
             resizeMode="free"
             onTransform={resize.onTransform}
             onCommit={resize.onCommit}

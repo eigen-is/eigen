@@ -12,7 +12,7 @@ import {
     readChartSpec,
 } from '@workspace/lib/charts';
 import type { ChartAttrs } from '@workspace/lib/docs/eigendoc';
-import { readChartAttrs } from '@workspace/lib/docs/eigendoc';
+import { isPositioned, readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { ChartSections, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
@@ -89,8 +89,13 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                         layout={layout}
                         alignment={alignment}
                         onChange={(attributes) => {
+                            if (isPositioned(attributes.layout)) {
+                                const { layout: positioned } = attributes;
+                                sealed(undoManager, () => editor.commands.positionFigure(positioned));
+                                return;
+                            }
                             // A chart shrunk to a wrap keeps its shape.
-                            const fitted = widthWithinLayout(editor.view.dom, attributes.layout, width);
+                            const fitted = widthWithinLayout(editor, attributes.layout, width);
                             write(
                                 fitted === undefined
                                     ? attributes
@@ -98,13 +103,16 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                             );
                         }}
                     />
-                    <PropertySection title="Caption">
-                        <FigureField
-                            value={caption}
-                            placeholder="Caption"
-                            onCommit={(value) => write({ caption: value || null })}
-                        />
-                    </PropertySection>
+                    {/* A chart in front of or behind the text draws no caption. */}
+                    {!isPositioned(layout) && (
+                        <PropertySection title="Caption">
+                            <FigureField
+                                value={caption}
+                                placeholder="Caption"
+                                onCommit={(value) => write({ caption: value || null })}
+                            />
+                        </PropertySection>
+                    )}
                 </PropertiesPanel>
             </PropertyHistoryContext.Provider>
         </PropertyGestureContext.Provider>

@@ -9,17 +9,29 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
-const { getDocExtensions, setFigureAttributes } = await import('@workspace/lib/docs/eigendoc');
+const { DEFAULT_PAGE_SETUP, getDocExtensions, setFigureAttributes } = await import('@workspace/lib/docs/eigendoc');
 const { Figure } = await import('../../../components/docs/extensions/figure');
+const { PositionedFigures } = await import('../../../components/docs/extensions/positioned-figure');
 const { FigurePropertiesPanel } = await import('../../../components/docs/figure-properties-panel');
 
 let unmount = async () => {};
 afterEach(() => unmount());
 
 // "a" at 1, the figure at 2, on a page whose text column is 600 px.
-async function mount(attrs: object = {}, blockOnly = false) {
+async function mount(attrs: object = {}, blockOnly = false, inFlowOnly = false) {
     const editor = new Editor({
-        extensions: [...getDocExtensions({ exclude: ['figure', 'comment'] }), Figure],
+        extensions: [
+            ...getDocExtensions({ exclude: ['figure', 'comment'] }),
+            Figure,
+            // An 800 px paper with 100 px margins.
+            PositionedFigures.configure({
+                page: () => ({
+                    ...DEFAULT_PAGE_SETUP,
+                    width: 800,
+                    margin: { top: 100, right: 100, bottom: 100, left: 100 },
+                }),
+            }),
+        ],
         content: {
             type: 'doc',
             content: [
@@ -43,7 +55,7 @@ async function mount(attrs: object = {}, blockOnly = false) {
                 { 'data-document': '', style: { padding: 0 } },
                 createElement(EditorContent, { editor }),
             ),
-            createElement(FigurePropertiesPanel, { editor, blockOnly, onReplaceImage: () => {} }),
+            createElement(FigurePropertiesPanel, { editor, blockOnly, inFlowOnly, onReplaceImage: () => {} }),
         ),
     );
     const page = document.querySelector('[data-document]');
@@ -280,4 +292,45 @@ test('a resize by Shift and an arrow key or by a grip shows in the Width field',
         });
     });
     expect(widthField().value).toBe('6.6');
+});
+
+const toggle = (label: string) => {
+    const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    if (!button) throw new Error(`no ${label} toggle`);
+    return button;
+};
+
+test.each([
+    ['In front of text', 'front'],
+    ['Behind text', 'behind'],
+])('%s keeps the image where it is drawn, leads its paragraph with it and keeps it selected', async (label, layout) => {
+    const editor = await mount();
+    const paragraph = editor.view.nodeDOM(0);
+    const content = editor.view.dom.querySelector('.figure')?.firstElementChild;
+    if (!(paragraph instanceof Element) || !content) throw new Error('not drawn');
+    paragraph.getBoundingClientRect = () => DOMRect.fromRect({ x: 100, y: 100, width: 600, height: 120 });
+    content.getBoundingClientRect = () => DOMRect.fromRect({ x: 300, y: 115, width: 200, height: 100 });
+
+    await act(async () => toggle(label).click());
+
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ layout, offsetX: 200, offsetY: 15 });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
+    expect(toggle(label).getAttribute('aria-pressed')).toBe('true');
+});
+
+test('an image wider than the paper is capped at it as it goes in front of the text', async () => {
+    const editor = await mount({ width: 900 });
+    await act(async () => toggle('In front of text').click());
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ layout: 'front', width: 800 });
+});
+
+test('an image in front of or behind the text has no caption row', async () => {
+    await mount({ layout: 'behind' });
+    expect(document.querySelector('input[placeholder="Caption"]')).toBeNull();
+});
+
+test("a note's panel offers no place in front of or behind the text", async () => {
+    await mount({}, false, true);
+    const labels = [...document.querySelectorAll('button[aria-pressed]')].map((t) => t.getAttribute('aria-label'));
+    expect(labels).toEqual(['In line', 'Wrap left', 'Wrap right', 'Align left', 'Align center', 'Align right']);
 });
