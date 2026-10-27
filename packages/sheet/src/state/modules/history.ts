@@ -30,7 +30,7 @@ import {
 import { applyOpBatch } from './apply-ops';
 import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
-import { createContextResolver, snapshotContext } from './formula-cache';
+import { createContextResolver, FormulaCache, snapshotContext } from './formula-cache';
 import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-exec';
 import { rowColMove } from './history-shift';
 import { settleCurrentSheet } from './sheet';
@@ -245,9 +245,11 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
     const left = withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, from));
     const target = withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, to));
     const restored = applyPatches(ctx, target);
-    // What the marker alone makes of the sheet the op left, and of the live sheet.
-    const made = applyOpBatch(applyPatches(ctx, left), [marker]);
-    const live = applyOpBatch(ctx, [marker]);
+    // What the marker alone makes of the sheet the op left, and of the live sheet. These runs are trials, so each gets a
+    // formula map of its own: a run writes into the map and the open editor's range state, which live outside immer.
+    const trial = (from: Context) => applyOpBatch({ ...from, formulaCache: new FormulaCache() }, [marker]);
+    const made = trial(applyPatches(ctx, left));
+    const live = trial(ctx);
     if (!made || !live) return { ctx, ops: [] };
     const fields = restoredFields(index, target, restored, made.ctx, live.ctx);
     const step = { fields, repair: repairOps(ctx, left, target, options) };

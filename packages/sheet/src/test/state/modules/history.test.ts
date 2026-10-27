@@ -13,6 +13,7 @@ import type { Cell } from '../../../engine/types';
 import { setColumnWidth } from '../../../state/api/rowcol';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
+import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { shiftEntries } from '../../../state/modules/history-shift';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
@@ -412,6 +413,23 @@ describe("an open cell editor follows a peer's row or column op", () => {
         open(s.a, 'B10');
         s.edit(s.b, ...insertRows(2, 2, TWO));
         expect(s.a.ctx.editingCellPosition).toEqual(at('B10'));
+    });
+
+    // A row undo first tries its marker on copies of the context. Those runs must not close the editor's formula range
+    // state, which lives outside immer, when the live sheet then refuses the marker.
+    test('an undo whose row delete the sheet refuses leaves its formula range state', () => {
+        const s = session(workbook());
+        s.edit(s.a, ...insertRows(4, 1));
+        open(s.a, 'B5');
+        s.a.ctx = produce(s.a.ctx, (ctx: Context) => {
+            ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
+        });
+        s.a.ctx.formulaCache.rangestart = true;
+        const map = warmFormulaCellInfoMap(s.a.ctx);
+        s.undo(s.a);
+        expect(s.a.ctx.editingCellPosition).toEqual(at('B5'));
+        expect(s.a.ctx.formulaCache.rangestart).toBe(true);
+        expect(s.a.ctx.formulaCache.formulaCellInfoMap).toBe(map);
     });
 });
 
