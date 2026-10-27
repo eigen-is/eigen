@@ -56,12 +56,12 @@ const KILL_WAIT_MS = 1_000;
 // Shown verbatim by useExportDocument's error toast — keep it human-readable.
 export const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 
-// Linux alone takes these limits, as macOS refuses setrlimit for the data segment. $1 is the data segment in KiB, $2 the
-// CPU seconds, and the rest is the command. The OOM score makes the kernel kill the child before the API. A refused
+// Linux alone takes these limits, as macOS refuses setrlimit for the data segment. $1 is the data segment in KiB, $2
+// the CPU seconds, and the rest is the command. The OOM score makes the kernel kill the child before the API. A refused
 // data limit only warns, so it never causes an outage. The CPU limit is soft: a spinning orphan dies by SIGXCPU, which
-// reads as a crash, not as out of memory. An abort is an expected death here, so the child writes no core. A host that
-// pipes cores to a handler, such as Ubuntu's systemd-coredump, ignores ulimit -c, so the empty dump filter keeps the
-// child's gigabytes of reserved address space out of the pipe, which holds the child's slot until it is read.
+// reads as a crash, not as out of memory. An abort is an expected death here, so the child writes no core. A host
+// that pipes cores to a handler, such as Ubuntu's systemd-coredump, ignores ulimit -c, so the empty dump filter keeps
+// the child's gigabytes of reserved address space out of the pipe, which holds the child's slot until it is read.
 const LIMITED_COMMAND =
     'echo 1000 > /proc/self/oom_score_adj; echo 0 > /proc/self/coredump_filter; ulimit -d "$1" 2>/dev/null || echo "memory limit not applied" >&2; ulimit -St "$2"; ulimit -c 0; shift 2; exec "$@"';
 // GC and JIT threads spend CPU on every core beside the job's own, so the CPU limit is the deadline on each, plus slack.

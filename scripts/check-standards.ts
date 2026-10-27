@@ -1,6 +1,6 @@
 // Counts the mechanical code standards that Biome can't express, over apps and packages, for `bun run check`. A hard
 // zero fails on any hit. A ratcheted count fails when it rises above its allowance in the baseline file. Every run
-// lowers an allowance to a count that fell, so a cleanup needs no second step. `--verbose` prints the per-file breakdown.
+// lowers an allowance to a count that fell, so a cleanup needs no second step. `--verbose` prints each file's counts.
 
 import { LanguageVariant, SyntaxKind } from 'typescript/unstable/ast';
 import { createScanner } from 'typescript/unstable/ast/scanner';
