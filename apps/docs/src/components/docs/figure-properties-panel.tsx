@@ -33,9 +33,9 @@ import {
 } from './extensions/figure-frame';
 import { inBand, selectionDrawsInLine } from './extensions/positioned-figure';
 
-// Alt, Cap, W or H. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
+// Alt, Cap, Width or Height. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
 // from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit writes
-// nothing back, and an unchanged W keeps the stored px its cm rounds. A number field shows as many decimals as its
+// nothing back, and an unchanged Width keeps the stored px its cm rounds. A number field shows as many decimals as its
 // step has, and a draft as typed. A draft stays through a transaction that moves the figure, a collaborator typing
 // above it.
 export function FigureField({
@@ -94,8 +94,9 @@ function CmField({ px, onCommit }: { px: number | undefined; onCommit: (px: numb
     );
 }
 
-// A figure's W and H as it draws, with Keep aspect ratio, laid out as a slide's. While the box is checked an edit of
-// one side writes the other at the figure's ratio. The host fits the size to the page and decides what it stores.
+// A figure's width and height as it draws, with Keep aspect ratio. Each side has a row of its own, as a cm field and
+// its unit don't fit half the panel. While the box is checked an edit of one side writes the other at the figure's
+// ratio. The host fits the size to the page and decides what it stores.
 export function FigureSizeSection({
     width,
     height,
@@ -112,14 +113,12 @@ export function FigureSizeSection({
     const { changeWidth, changeHeight } = useCoupledSize(width, height, aspectLocked, onChange);
     return (
         <PropertySection title="Size">
-            <div className="grid grid-cols-2 gap-2">
-                <PropertyRow label="W" compact>
-                    <CmField px={width} onCommit={changeWidth} />
-                </PropertyRow>
-                <PropertyRow label="H" compact>
-                    <CmField px={height} onCommit={changeHeight} />
-                </PropertyRow>
-            </div>
+            <PropertyRow label="Width">
+                <CmField px={width} onCommit={changeWidth} />
+            </PropertyRow>
+            <PropertyRow label="Height">
+                <CmField px={height} onCommit={changeHeight} />
+            </PropertyRow>
             <PropertyCheckbox label="Keep aspect ratio" checked={aspectLocked} onCheckedChange={onAspectLockChange} />
         </PropertySection>
     );
