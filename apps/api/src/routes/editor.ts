@@ -44,12 +44,12 @@ export const editorRouter = new Elysia({ name: 'editor' })
             // Quota pre-check at the route boundary, where the Buffer length is known (mirrors WebDAV PUT).
             await enforceMountQuota(params.ownerId, params.mountId, data.length, path.size);
             try {
-                const updated = await drive.writeFileContent(params.mountId, params.pathId, data, {
+                const written = await drive.writeFileContent(params.mountId, params.pathId, data, {
                     user,
                     ifMatch,
                     event: 'edited',
                 });
-                return { conflict: false, etag: computeEtag(updated) };
+                return { conflict: false, etag: written.etag };
             } catch (e) {
                 if (e instanceof StaleWriteError) return { conflict: true, currentEtag: e.currentEtag };
                 throw e;

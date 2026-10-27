@@ -169,6 +169,35 @@ describe('Editor', () => {
             expect((await editorGet(uploaded.id)).data.content).toBe('forced');
         });
 
+        // Another writer, such as a WebDAV PUT without If-Match, lands after the save lets go of the
+        // file's lock and before it answers. The save still answers its own etag, so its next save is a
+        // conflict and doesn't overwrite the other change.
+        test("a save answers its own write's etag, not that of a write landing right after it", async () => {
+            const uploaded = await uploadTextFile('own-etag.txt', 'original');
+            const { data: initial } = await editorGet(uploaded.id);
+            const { mount } = await (await getHome(ctx.alice.user.id)).drive.resolveFile(mountId, uploaded.id);
+            const writeFile = mount.writeFile.bind(mount);
+            const write = spyOn(mount, 'writeFile').mockImplementationOnce(async (...args) => {
+                const etag = await writeFile(...args);
+                await writeFile(uploaded.id, Buffer.from('theirs'));
+                return etag;
+            });
+            let saved: Awaited<ReturnType<typeof editorPut>>;
+            try {
+                saved = await editorPut(uploaded.id, { content: 'mine', expectedEtag: initial.etag });
+            } finally {
+                write.mockRestore();
+            }
+            if (saved.data?.conflict !== false) throw new Error('expected a saved result');
+
+            const { data: next } = await editorPut(uploaded.id, {
+                content: 'mine again',
+                expectedEtag: saved.data.etag,
+            });
+            expect(next?.conflict).toBe(true);
+            expect((await editorGet(uploaded.id)).data.content).toBe('theirs');
+        });
+
         test('of two saves from one etag, the one that writes second is a conflict', async () => {
             const uploaded = await uploadTextFile('race.txt', 'original');
             const { data: initial } = await editorGet(uploaded.id);

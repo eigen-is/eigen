@@ -29,7 +29,7 @@ import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
 import { canonicalACLId, canReadFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
-import type { ContentWriteOptions, Drive } from './drive';
+import type { ContentWriteOptions, ContentWriteResult, Drive } from './drive';
 import type { LockManager } from './lock-manager';
 
 // Some methods take a `_user` or `_actor` only so that their signature matches Drive's. The actor is
@@ -224,7 +224,7 @@ export class SharedDrive {
         pathId: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
         options: ContentWriteOptions = {},
-    ): Promise<DrivePath> {
+    ): Promise<ContentWriteResult> {
         await this.requireWrite(mountId, pathId);
         return this.drive.writeFileContent(mountId, pathId, data, { ...options, user: this.user });
     }

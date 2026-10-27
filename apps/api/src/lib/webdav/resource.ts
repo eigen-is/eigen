@@ -138,13 +138,16 @@ export async function handlePut(args: {
         ) ?? Buffer.alloc(0);
 
     const mimeType = Bun.file(name).type || 'application/octet-stream';
-    const path = existing
+    // An overwrite answers the etag it committed, not the row's, which a later PUT can have changed already.
+    const { path, etag } = existing
         ? await drive.writeFileContent(mountId, existing.id, data, { user, ifMatch: ifMatch || undefined })
-        : await drive.createFileFromData(mountId, parent.id, name, mimeType, data, user);
+        : await drive
+              .createFileFromData(mountId, parent.id, name, mimeType, data, user)
+              .then((created) => ({ path: created, etag: computeEtag(created) }));
 
     return new Response(null, {
         status: existing ? 204 : 201,
-        headers: { ETag: computeEtag(path), 'Last-Modified': path.updatedAt.toUTCString() },
+        headers: { ETag: etag, 'Last-Modified': path.updatedAt.toUTCString() },
     });
 }
 

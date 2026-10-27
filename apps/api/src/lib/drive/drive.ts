@@ -99,6 +99,10 @@ import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 // lock. The history row says `uploaded`, or `edited` for a save from the inline editor.
 export type ContentWriteOptions = { user?: User; ifMatch?: string; event?: 'uploaded' | 'edited' };
 
+// The row is read after the write lets go of the file's lock, so a later write can show in it. The etag
+// is the one this write committed, which the caller answers so its next save is checked against its own bytes.
+export type ContentWriteResult = { path: DrivePath; etag: string };
+
 export class Drive {
     // WebDAV locks live as long as this Drive, so they go away when the home closes.
     public readonly lockManager = new LockManager();
@@ -497,7 +501,7 @@ export class Drive {
         pathId: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
         { user, ifMatch, event = 'uploaded' }: ContentWriteOptions = {},
-    ): Promise<DrivePath> {
+    ): Promise<ContentWriteResult> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
         if (path.type !== DRIVE_TYPE_FILE) {
@@ -506,8 +510,9 @@ export class Drive {
 
         // The thumbnail job starts as soon as the bytes land, so no error after that leaves its temp
         // file behind. A content write never changes the name or the type of the file.
+        let etag: string;
         if (Buffer.isBuffer(data)) {
-            await mount.writeFile(pathId, data, ifMatch);
+            etag = await mount.writeFile(pathId, data, ifMatch);
             if (data.length > 0) regenerateThumbnailAsync(this, mount, pathId, data, path.mimeType, path.name);
         } else {
             // A stream goes through a temp file, so the bytes never sit in memory. The size and hash
@@ -515,7 +520,7 @@ export class Drive {
             const tempId = randomUUID();
             try {
                 const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
-                await mount.writeFileFromTemp(pathId, tempId, size, hash, ifMatch);
+                etag = await mount.writeFileFromTemp(pathId, tempId, size, hash, ifMatch);
                 if (size > 0) {
                     regenerateThumbnailAsync(
                         this,
@@ -548,7 +553,7 @@ export class Drive {
                     : { eventType: 'uploaded', details: { size: updated.size } },
             );
         }
-        return updated;
+        return { path: updated, etag };
     }
 
     // The folder that a create, copy or move puts something in. A folder on its way to the trash is a

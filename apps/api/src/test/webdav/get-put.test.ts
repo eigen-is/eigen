@@ -156,6 +156,41 @@ describe('WebDAV PUT', () => {
         expect(kept).toBe(statuses[0] === 204 ? 'first' : 'second');
     });
 
+    // A PUT without If-Match lands after the first one lets go of the file's lock and before it answers.
+    // The first still answers its own etag, so its next PUT is a 412 and doesn't overwrite the other change.
+    test("a PUT answers its own write's etag, not that of a write landing right after it", async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-own-etag.txt`;
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'original' })).status).toBe(201);
+        const etag = (await webdavRequest(ctx.alice.user.email, 'HEAD', url)).headers.get('ETag') ?? '';
+        const drive = (await getHome(ctx.alice.user.id)).drive;
+        const file = await drive.resolvePath(mountId, '/put-own-etag.txt');
+        if (!file) throw new Error('expected the file');
+        const { mount } = await drive.resolveFile(mountId, file.id);
+        const writeFileFromTemp = mount.writeFileFromTemp.bind(mount);
+        const write = spyOn(mount, 'writeFileFromTemp').mockImplementationOnce(async (...args) => {
+            const written = await writeFileFromTemp(...args);
+            expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'theirs' })).status).toBe(204);
+            return written;
+        });
+        let mine: Response;
+        try {
+            mine = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
+                body: 'mine',
+                headers: { 'If-Match': etag },
+            });
+        } finally {
+            write.mockRestore();
+        }
+        expect(mine.status).toBe(204);
+
+        const next = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
+            body: 'mine again',
+            headers: { 'If-Match': mine.headers.get('ETag') ?? '' },
+        });
+        expect(next.status).toBe(412);
+        expect(await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text()).toBe('theirs');
+    });
+
     test('PUT with If-None-Match: * on existing → 412', async () => {
         const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-new.txt`;
         const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
