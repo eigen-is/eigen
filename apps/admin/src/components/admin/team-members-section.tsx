@@ -1,4 +1,4 @@
-import { useAddTeamMember, useMembers, useRemoveTeamMember } from '@workspace/lib/admin';
+import { useAddTeamMembers, useMembers, useRemoveTeamMember } from '@workspace/lib/admin';
 import { useTeamMembers } from '@workspace/lib/team';
 import { EmptyState, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -17,19 +17,11 @@ export function TeamMembersSection({ teamId, organizationId }: TeamMembersSectio
 
     const { data: teamMembers = [] } = useTeamMembers(teamId);
     const { data: allMembers = [] } = useMembers(organizationId);
-    const addMember = useAddTeamMember();
+    const addMembers = useAddTeamMembers();
     const removeMember = useRemoveTeamMember();
 
     const teamMemberUserIds = new Set(teamMembers.map((m) => m.userId));
     const availableMembers = allMembers.filter((m) => !teamMemberUserIds.has(m.userId));
-
-    const handleAddMember = async (userId: string) => {
-        await addMember.mutateAsync({ teamId, userId });
-    };
-
-    const handleRemoveMember = async (userId: string) => {
-        await removeMember.mutateAsync({ teamId, userId });
-    };
 
     return (
         <div className="space-y-3">
@@ -45,7 +37,7 @@ export function TeamMembersSection({ teamId, organizationId }: TeamMembersSectio
                 open={showAddDialog}
                 onOpenChange={setShowAddDialog}
                 availableMembers={availableMembers}
-                onAdd={handleAddMember}
+                onAdd={(userId) => addMembers.mutate({ teamId, userIds: [userId] })}
             />
 
             {teamMembers.length === 0 ? (
@@ -66,7 +58,7 @@ export function TeamMembersSection({ teamId, organizationId }: TeamMembersSectio
                                     icon={X}
                                     tooltipText="Remove from team"
                                     className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                                    onClick={() => handleRemoveMember(tm.userId)}
+                                    onClick={() => removeMember.mutate({ teamId, userId: tm.userId })}
                                 />
                             </div>
                         ))}
