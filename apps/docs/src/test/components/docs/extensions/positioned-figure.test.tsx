@@ -483,3 +483,18 @@ test('a re-anchor and a Backspace join are one undo step each', async () => {
     });
     expect(blocks(editor)).toEqual(original);
 });
+
+// As at a plain item's start, the item lifts out of the list, its image with it.
+test('Backspace at the visual start of a list item lifts it out of the list, as without the image', async () => {
+    const item = (...content: object[]) => ({ type: 'listItem', content: [paragraph(...content)] });
+    // "a" in the first item at 3; the second item's paragraph at 6 leads with the image at 7, "b" from 8.
+    const editor = await mount([{ type: 'bulletList', content: [item(text('a')), item(front(), text('b'))] }]);
+    await act(async () => {
+        editor.commands.setTextSelection(8);
+    });
+    await press(editor, 'Backspace');
+    const [list, lifted] = editor.state.doc.toJSON().content;
+    expect(list.content).toHaveLength(1);
+    expect(blocks(editor)[1]).toEqual(['figure:front', 'b']);
+    expect(lifted.content[0].attrs).toMatchObject({ offsetX: 10, offsetY: 20 });
+});

@@ -55,6 +55,8 @@ const positionedFiguresKey = new PluginKey('positionedFigures');
 // A selection the keymap moves to a paragraph's start on purpose, which the caret rest leaves there.
 const REWIND = 'rewind';
 
+const LIST_ITEMS = ['listItem', 'taskItem'];
+
 const POSITIONED_BOXES = '.figure[data-layout="front"], .figure[data-layout="behind"]';
 
 const isPositionedFigure = (node: PMNode | null | undefined): boolean =>
@@ -233,6 +235,13 @@ function joinKeepingPlace(view: EditorView, caret: number, figures: number[], in
     leadFigures(tr, joined);
     view.dispatch(tr.scrollIntoView());
     return true;
+}
+
+// The caret at the very start of its textblock, before the run, where the next keymap acts as at a plain textblock's
+// start, as Enter splits there and a list item lifts.
+function rewind(view: EditorView, $caret: ResolvedPos) {
+    const { tr, doc } = view.state;
+    view.dispatch(tr.setSelection(TextSelection.create(doc, $caret.start())).setMeta(positionedFiguresKey, REWIND));
 }
 
 // Escape or a plain arrow on a selected positioned figure: the caret at the visual start of its paragraph.
@@ -417,8 +426,13 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
             },
             Backspace: () => {
                 const $caret = caretAfterRun(editor.state);
-                const before = $caret && Selection.findFrom(editor.state.doc.resolve($caret.before()), -1, true);
                 if (!$caret) return false;
+                // A list's own Backspace lifts the item out of the list, the figures with their paragraph.
+                if (LIST_ITEMS.includes($caret.node(-1).type.name)) {
+                    rewind(editor.view, $caret);
+                    return false;
+                }
+                const before = Selection.findFrom(editor.state.doc.resolve($caret.before()), -1, true);
                 const figures = Array.from({ length: $caret.parentOffset }, (_, i) => $caret.start() + i);
                 const into = before ? before.$from.before() : $caret.before();
                 return joinKeepingPlace(
@@ -448,12 +462,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
             // The split goes before the run, as at a plain paragraph's start: the figures go down with their text.
             Enter: () => {
                 const $caret = caretAfterRun(editor.state);
-                if ($caret) {
-                    const rewound = editor.state.tr.setSelection(
-                        TextSelection.create(editor.state.doc, $caret.start()),
-                    );
-                    editor.view.dispatch(rewound.setMeta(positionedFiguresKey, REWIND));
-                }
+                if ($caret) rewind(editor.view, $caret);
                 return false;
             },
         };
