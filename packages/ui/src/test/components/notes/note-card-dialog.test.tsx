@@ -114,6 +114,18 @@ test('a one-item list does not celebrate', () => {
     expect(burst).not.toHaveBeenCalled();
 });
 
+test('a tick whose save never lands does not celebrate a later edit after the dialog closed', () => {
+    render(true, twoItems);
+    const li = [...document.querySelectorAll('li[data-checked]')].find((el) => el.textContent === 'Paint the shed');
+    act(() => li?.querySelector('input')?.click());
+    // The save failed, so the parent never draws the ticked list. The dialog closes and opens again, and
+    // then a peer's edit reaches the card.
+    render(false, twoItems);
+    render(true, twoItems);
+    render(true, `<ul data-type="taskList">${item(true, 'Buy paint')}${item(false, 'Paint the fence')}</ul>`);
+    expect(burst).not.toHaveBeenCalled();
+});
+
 test('the setting off does not celebrate', () => {
     settings = { celebrations: false };
     render(true, twoItems);
