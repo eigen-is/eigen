@@ -5,6 +5,7 @@
 // switch to front or behind keeps it in place, and outside the body it draws in line.
 import { afterEach, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { TextSelection } from '@tiptap/pm/state';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -132,6 +133,37 @@ test('ArrowLeft at the visual start goes to the end of the paragraph above and n
     });
     await press(editor, 'ArrowLeft');
     expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 3, head: 3 });
+});
+
+const selectBetween = (editor: TestEditor, anchor: number, head: number) =>
+    act(async () => {
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, anchor, head)));
+    });
+
+test('Shift+ArrowLeft at the visual start selects back to the paragraph above without the image, which Backspace keeps', async () => {
+    const editor = await mount(twoParagraphs());
+    await act(async () => {
+        editor.commands.setTextSelection(6);
+    });
+    await press(editor, 'ArrowLeft', { shiftKey: true });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 5, head: 3 });
+    await press(editor, 'Backspace');
+    expect(blocks(editor)).toEqual([['figure:front', 'xyabc']]);
+});
+
+// As Shift+Home and Shift+Up can land, before the image or between two.
+test('a selection extended back into the leading run stops after it', async () => {
+    const editor = await mount(twoParagraphs());
+    await selectBetween(editor, 8, 5);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 8, head: 6 });
+});
+
+test('a selection from above that ends at the visual start stops before the run, and Shift+ArrowRight steps past it', async () => {
+    const editor = await mount(twoParagraphs());
+    await selectBetween(editor, 2, 6);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 2, head: 5 });
+    await press(editor, 'ArrowRight', { shiftKey: true });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 2, head: 7 });
 });
 
 test.each(['Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'])(

@@ -1,9 +1,10 @@
 // A figure in front of or behind the text draws at an offset from its paragraph and takes no room on its line, so this
-// extension keeps the keyboard off it. Such figures always lead their paragraph and the caret rests after them, while
-// ArrowLeft, Backspace, Delete and Enter there act as at a plain paragraph's start. It also places them: a drop
-// re-anchors one on the paragraph under it, a switch to front or behind keeps it where it is drawn, a press where text
-// doesn't cover a behind one selects it, and the body grows under the lowest. A band's and a note's editor draw every
-// figure in line, as a table cell and a note in the body do. Every docs editor registers it.
+// extension keeps the keyboard off it. Such figures always lead their paragraph, the caret rests after them and a
+// selection ends on either side of them, while ArrowLeft, Backspace, Delete and Enter there act as at a plain
+// paragraph's start. It also places them: a drop re-anchors one on the paragraph under it, a switch to front or behind
+// keeps it where it is drawn, a press where text doesn't cover a behind one selects it, and the body grows under the
+// lowest. A band's and a note's editor draw every figure in line, as a table cell and a note in the body do. Every docs
+// editor registers it.
 
 import type { Editor } from '@tiptap/core';
 import { Extension } from '@tiptap/core';
@@ -69,6 +70,27 @@ function caretAfterRun(state: EditorState): ResolvedPos | null {
     if (!(selection instanceof TextSelection) || !selection.$cursor) return null;
     const run = leadingRun(selection.$cursor.parent);
     return run > 0 && selection.$cursor.parentOffset === run ? selection.$cursor : null;
+}
+
+// A text selection with an end inside a leading run, or one that reaches into a textblock only up to the end of its
+// run, as Shift+Home, Shift+Up or a pointer can make it: the same selection without the run. The caret rests after the
+// run, and a selection that starts there or before it ends before it, so Backspace never deletes an image drawn
+// elsewhere. Null when it holds no run.
+function selectionOutsideRuns(selection: Selection): TextSelection | null {
+    if (!(selection instanceof TextSelection)) return null;
+    const { $from, $to } = selection;
+    const fromRun = leadingRun($from.parent);
+    const toRun = leadingRun($to.parent);
+    const past = $from.start() + fromRun;
+    if ($from.parentOffset < fromRun) {
+        const keep = (pos: number) => Math.max(pos, past);
+        return TextSelection.create(selection.$anchor.doc, keep(selection.anchor), keep(selection.head));
+    }
+    if ($to.parentOffset > 0 && $to.parentOffset <= toRun && $from.start() !== $to.start()) {
+        const before = (pos: number) => (pos === $to.pos ? $to.start() : pos);
+        return TextSelection.create(selection.$anchor.doc, before(selection.anchor), before(selection.head));
+    }
+    return null;
 }
 
 // The page draws scaled below its width, and a page px is a screen px divided by that scale.
@@ -351,6 +373,34 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                 if (before) editor.view.dispatch(editor.state.tr.setSelection(before).scrollIntoView());
                 return true;
             },
+            // From the visual start, the selection reaches back to the paragraph above, from before the run.
+            'Shift-ArrowLeft': () => {
+                const { selection, doc } = editor.state;
+                const { $head } = selection;
+                const run = leadingRun($head.parent);
+                if (!(selection instanceof TextSelection) || run === 0 || $head.parentOffset !== run) return false;
+                const before = Selection.findFrom(doc.resolve($head.before()), -1, true);
+                const anchor = selection.empty ? $head.start() : selection.anchor;
+                if (before)
+                    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(doc, anchor, before.head)));
+                return true;
+            },
+            // A selection that ends before a run steps over it to the first character after it.
+            'Shift-ArrowRight': () => {
+                const { selection, doc } = editor.state;
+                const { $head } = selection;
+                const run = leadingRun($head.parent);
+                if (!(selection instanceof TextSelection) || run === 0 || $head.parentOffset !== 0) return false;
+                const next = $head.parent.maybeChild(run);
+                const head = next
+                    ? $head.start() + run + (next.isText ? 1 : next.nodeSize)
+                    : Selection.findFrom(doc.resolve($head.after()), 1, true)?.head;
+                if (head !== undefined)
+                    editor.view.dispatch(
+                        editor.state.tr.setSelection(TextSelection.create(doc, selection.anchor, head)),
+                    );
+                return true;
+            },
             Backspace: () => {
                 const $caret = caretAfterRun(editor.state);
                 const before = $caret && Selection.findFrom(editor.state.doc.resolve($caret.before()), -1, true);
@@ -450,13 +500,8 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                         transactions.some((t) => t.selectionSet || t.docChanged) &&
                         !transactions.some((t) => t.getMeta(positionedFiguresKey) === REWIND)
                     ) {
-                        const { selection } = tr;
-                        const run =
-                            selection instanceof TextSelection && selection.$cursor
-                                ? leadingRun(selection.$cursor.parent)
-                                : 0;
-                        if (selection.$from.parentOffset < run)
-                            tr.setSelection(TextSelection.create(tr.doc, selection.$from.start() + run));
+                        const outside = selectionOutsideRuns(tr.selection);
+                        if (outside) tr.setSelection(outside);
                     }
                     return tr.docChanged || tr.selectionSet ? tr : null;
                 },
