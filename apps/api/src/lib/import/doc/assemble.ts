@@ -1,14 +1,26 @@
 // Turns the paragraph reader's items into the doc's blocks: floats and captions join their paragraph, quotes nest by
 // depth, lists by level, and code lines join into code blocks. The body, a band, a note and a table cell each go
-// through it.
+// through it. The body's figures in front of or behind the text then take their place from their paragraph's box.
 
 import type { JSONContent } from '@tiptap/core';
-import { isFigureFrameNode, ptToTwips, readParagraphFormat, twipsToPt } from '@workspace/lib/docs/eigendoc';
+import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
+import {
+    isFigureFrameNode,
+    isPositioned,
+    PROSE_TEXTBLOCKS,
+    ptToTwips,
+    readFigureFrameAttrs,
+    readParagraphFormat,
+    twipsToPt,
+} from '@workspace/lib/docs/eigendoc';
 import { readStoredEquation } from '../../document/equation';
 import {
+    anchorIndentPx,
+    anchorPaddingPx,
     BLOCK_MARGINS,
     CODE_BLOCK_LOOK,
     FIGURE_MARGIN,
+    LIST_LEVEL,
     QUOTE_LOOK,
     TABLE_MARGIN,
     untypedListFormat,
@@ -85,6 +97,39 @@ export function buildBlocks(raw: Item[]): JSONContent[] {
     return buildLevel(items, 0);
 }
 
+// The body's figures in front of or behind the text, which the reader placed as Word does, from the text column and
+// from the paragraph's first line, are placed from their paragraph's box as Eigen draws it: past the indents of the
+// lists and quotes around it and its own, and below the padding above its text. Each leads its paragraph, as the
+// editor keeps it. The writer converts the other way through the same looks.
+export function placeAnchors(blocks: JSONContent[], normal: NormalStyle): JSONContent[] {
+    const walk = (node: JSONContent, indent: number, depth: number, quotes: number) => {
+        if (PROSE_TEXTBLOCKS.includes(node.type ?? '')) {
+            const anchored = node.content?.filter((child) => isFigureFrameNode(child.type) && !isInFlowFigure(child));
+            if (!anchored || anchored.length === 0) return;
+            const contained = depth > 0 || quotes > 0;
+            for (const { attrs } of anchored) {
+                if (!attrs) continue;
+                attrs['offsetX'] = Math.round(attrs['offsetX'] - anchorIndentPx(indent, node));
+                const fromLine = attrs['offsetY'];
+                const y = fromLine === null ? 0 : fromLine + anchorPaddingPx(node, contained, normal);
+                attrs['offsetY'] = readFigureFrameAttrs({ offsetY: Math.round(y) }).offsetY;
+            }
+            node.content = [...anchored, ...(node.content ?? []).filter((child) => !anchored.includes(child))];
+            return;
+        }
+        // As the writer indents them, no deeper than Word's levels.
+        const item = node.type === 'listItem' || node.type === 'taskItem';
+        const quote = node.type === 'blockquote';
+        const inner =
+            indent +
+            (item && depth < LIST_LEVELS ? LIST_LEVEL : 0) +
+            (quote && quotes < LIST_LEVELS ? QUOTE_LOOK.indent : 0);
+        for (const child of node.content ?? []) walk(child, inner, depth + Number(item), quotes + Number(quote));
+    };
+    for (const block of blocks) walk(block, 0, 0, 0);
+    return blocks;
+}
+
 // An equation is set off from the text and equations beside it by a space where none is.
 export function inlineText(nodes: JSONContent[]): string {
     let text = '';
@@ -105,11 +150,17 @@ export function isCaptionLike(para: ParagraphItem): boolean {
     return !para.empty && (para.role.kind === 'caption' || (para.small && !para.list && !para.task));
 }
 
+// A figure in front of or behind the text is out of the flow, so it counts as whitespace: a heading that anchors one
+// stays a heading, and it takes no caption.
 export function isFigureOnly(para: ParagraphItem): boolean {
     return (
-        para.inlines.some((node) => isFigureFrameNode(node.type)) &&
+        para.inlines.some(isInFlowFigure) &&
         para.inlines.every((node) => isFigureFrameNode(node.type) || isWhitespace(node))
     );
+}
+
+function isInFlowFigure(node: JSONContent): boolean {
+    return isFigureFrameNode(node.type) && !isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout);
 }
 
 // A blank line before a page ends there and would draw as a blank page in Eigen, whose empty lines are taller than Word's.
@@ -170,7 +221,7 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
             // its own frame.
             const previous = items.at(-1);
             if (previous?.kind === 'para' && isFigureOnly(previous)) {
-                const figures = previous.inlines.filter((node) => isFigureFrameNode(node.type));
+                const figures = previous.inlines.filter(isInFlowFigure);
                 const last = figures.at(-1);
                 const caption = last?.attrs?.['layout']
                     ? !!item.frame && item.frame === previous.frame && isCaptionLike(item)

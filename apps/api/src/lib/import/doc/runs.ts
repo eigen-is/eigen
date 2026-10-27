@@ -53,6 +53,8 @@ export type RunContext = {
     scope: Scope;
     paraStyle: string | undefined;
     role: Role;
+    // The space Word draws above the paragraph's first line, in px, which a picture placed from the paragraph counts in.
+    spaceBefore: number;
     link?: Link;
     pieces: Piece[];
     // What a text box anchored here holds, which follows the paragraph.
