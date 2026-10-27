@@ -37,6 +37,8 @@ export type GridContext = {
     charge(cells: number, text: number): void;
     // Called before a shared formula's copy is translated, with the characters to translate; throws past the budget.
     chargeCopy(chars: number): void;
+    // Writes the workbook's defined names into a formula's text, as the engine has none.
+    inline(formula: string): string;
     // The merged and linked cells, by cellKey: the grid's cell at one takes its keys, and the rest are emitted as they
     // are. Emptied by the read.
     placed: Map<number, PlacedCell>;
@@ -211,8 +213,8 @@ function runsOf(runs: (string | InlineStringSegment)[], font: CellStyle, context
     return shown.map((run) => (typeof run === 'string' ? { ...font, v: run } : run));
 }
 
-// A shared formula's anchor holds its text and range; a copy shifts the anchor's relative references by its offset. A
-// data table's cells hold values Excel computed, with no formula of their own.
+// A shared formula's anchor holds its text and range; a copy shifts the anchor's relative references by its offset, its
+// names inlined once at the anchor. A data table's cells hold values Excel computed, with no formula of their own.
 function formulaOf(
     f: XmlElement | undefined,
     r: number,
@@ -223,7 +225,7 @@ function formulaOf(
     if (!f) return undefined;
     const type = xmlAttr(f, '', 't');
     if (type === 'dataTable') return undefined;
-    const text = withoutFuturePrefixes(xmlText(f));
+    const text = context.inline(withoutFuturePrefixes(xmlText(f)));
     if (type !== 'shared') return text;
     const si = xmlAttr(f, '', 'si') ?? '';
     if (xmlAttr(f, '', 'ref')) {

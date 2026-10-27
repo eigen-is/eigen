@@ -46,7 +46,7 @@ export {
     update,
 } from './format';
 export { FormulaEngine } from './formula-engine';
-export { functionCopy, renameSheetRefs } from './formula-shift';
+export { functionCopy, inlineNames, renameSheetRefs } from './formula-shift';
 export { iscelldata } from './formula-utils';
 export { DOTTED_FUNCTIONS } from './parser/evaluate-by-operator/operator/formula-function';
 export { recalcSheets, sheetsNeedRecalc } from './recalc';

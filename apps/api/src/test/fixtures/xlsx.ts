@@ -36,6 +36,8 @@ export type FixtureWorkbook = {
     // The whole theme part, where a test needs its namespace or prefix; wins over `colors`.
     theme?: string;
     workbookPr?: string;
+    // The <definedNames> content.
+    definedNames?: string;
     // [Content_Types].xml's entries past the workbook's own.
     types?: string;
     // Parts written as given, past the workbook's own.
@@ -153,7 +155,7 @@ export function sheetXml({ data = '', before = '', after = '', chartSheet }: Fix
 }
 
 export function xlsxFixture(workbook: FixtureWorkbook): Uint8Array {
-    const { sheets, styles, strings, colors, theme, workbookPr = '', types = '', parts = [] } = workbook;
+    const { sheets, styles, strings, colors, theme, workbookPr = '', definedNames, types = '', parts = [] } = workbook;
     const rel = (id: string, type: string, target: string) =>
         `<Relationship Id="${id}" Type="${R}/${type}" Target="${target}"/>`;
     const pathOf = ({ chartSheet }: FixtureSheet, index: number) =>
@@ -177,7 +179,9 @@ export function xlsxFixture(workbook: FixtureWorkbook): Uint8Array {
                     ({ name, state }, index) =>
                         `<sheet name="${escapeXml(name ?? `Sheet${index + 1}`)}" sheetId="${index + 1}"${state ? ` state="${state}"` : ''} r:id="rId${index + 1}"/>`,
                 )
-                .join('')}</sheets></workbook>`,
+                .join(
+                    '',
+                )}</sheets>${definedNames === undefined ? '' : `<definedNames>${definedNames}</definedNames>`}</workbook>`,
         },
         ...sheets.map((sheet, index) => ({
             name: `xl/${pathOf(sheet, index)}`,

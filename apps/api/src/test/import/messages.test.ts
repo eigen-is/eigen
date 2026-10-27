@@ -90,6 +90,17 @@ describe('importSummary', () => {
         ).toBe('1 SmartArt graphic was not imported; 2 SmartArt graphics lost their layout.');
     });
 
+    // A name the reader can't put into the formulas that use it, such as one into another workbook.
+    test('a named range left as written was not imported', () => {
+        expect(importSummary([{ code: 'names-dropped', count: 1 }])).toBe('1 named range was not imported.');
+        expect(
+            importSummary([
+                { code: 'validations-dropped', count: 1 },
+                { code: 'names-dropped', count: 2 },
+            ]),
+        ).toBe('1 data validation rule and 2 named ranges were not imported.');
+    });
+
     // A flipped picture comes in, unflipped.
     test("a picture's flip is said to be what was not imported", () => {
         expect(importSummary([{ code: 'mirrors-dropped', count: 1 }])).toBe("1 picture's flip was not imported.");

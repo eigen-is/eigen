@@ -31,6 +31,7 @@ function roundTrip(sheet: Partial<Sheet>) {
         charge: () => {},
         chargeElements: () => {},
         lost: () => {},
+        inline: (formula) => formula,
         dates: new Set(),
     });
     return { xml, lost, looks, ...read };

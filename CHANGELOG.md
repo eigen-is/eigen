@@ -29,6 +29,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Public files in Drive** — a public file or folder that nobody shared with you shows its path from the first folder you can open, without Shared with me
 - **Closing a shared text file** — closing a text file that was shared with you on its own takes you back to Shared with me instead of a page asking for access to its folder
 - **Text files on a team drive** — the path above the file starts with the team drive's name, as its folder does, and each folder in it opens that folder
+- **Excel named ranges** — a formula that uses a named range, such as `=SUM(Sales)`, keeps working after you edit the cells it reads, and a dropdown list from a named range comes in as a list. Sheets writes the cells the name stands for into the formula, so the name itself isn't kept
+- **Excel named ranges** — a named range that points at another workbook or at several separate ranges is counted in the message after the import
 - **Excel files** — a row whose height is set to normal in Excel comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
 - **Spreadsheet PDF** — a spreadsheet with thousands of small sheets prints its first 2,000 sheets instead of failing
 - **Long code blocks** — a Docs document with many long code blocks and no language set downloads and previews at once. Past about 65,000 characters of such code in all, the rest comes without syntax colors

@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, import, excel, xlsx, spreadsheet]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 110
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 You can bring an Excel workbook into Sheets in two ways: import it into a spreadsheet you have open, as new sheets or in place of its content, or convert an `.xlsx` file stored in Drive into a new spreadsheet.
@@ -53,6 +53,7 @@ The import reads every sheet in the workbook and preserves:
 - Hidden sheets, which stay hidden until you show them from the **View** menu
 - The gridlines setting (hidden or visible)
 - Conditional formatting rules, data validation rules, and hyperlinks
+- Named ranges used in formulas and dropdown lists. Sheets puts the cells a name stands for in its place, so `=SUM(Sales)` comes in as `=SUM(Data!$A$1:$A$9)` and still adds up those cells after you edit them. The name itself isn't kept.
 - Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are not carried over)
 - Column, bar, line, and pie charts, with their colors, title, background, and text and line colors, over the same cells as in Excel. A 3-D chart comes in flat. See [Add a chart to a spreadsheet](/support/sheets/add-a-chart).
 - Chart sheets, each as a sheet of its own with its chart in the top-left corner
@@ -64,13 +65,14 @@ Fonts from Excel are mapped to the four fonts Sheets supports. Common sans-serif
 
 ## What does not carry over
 
-After an import into an open spreadsheet, a message counts the charts, images, conditional formatting rules, and data validation rules that didn't come across, for example "2 charts and 1 conditional format were not imported."
+After an import into an open spreadsheet, a message counts the charts, images, conditional formatting rules, data validation rules, and named ranges that didn't come across, for example "2 charts and 1 conditional format were not imported."
 
 The following are not imported:
 
 - Charts Sheets can't draw the way Excel does, such as area, scatter, doughnut, combo, and waterfall charts. A chart sheet holding one comes in as an empty sheet.
 - Conditional formatting rules Sheets has no rule for, such as icon sets
-- Data validation rules Sheets has no rule for, such as a custom formula or a list that comes from a named range
+- Data validation rules Sheets has no rule for, such as a custom formula
+- Named ranges that point at another workbook, at several separate ranges, or at cells that depend on where the formula is. A formula that uses one keeps the name, and shows an error once it recalculates.
 - Images placed inside cells, and shapes such as text boxes
 - Comments and notes
 

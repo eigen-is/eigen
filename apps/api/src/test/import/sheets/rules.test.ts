@@ -34,6 +34,7 @@ type Options = {
     chargeElements?: (count: number) => void;
     lost?: (code: CountedWarningCode) => void;
     dates?: number[][];
+    inline?: (formula: string) => string;
 };
 
 function read(after: string, options: Options = {}) {
@@ -47,6 +48,7 @@ function read(after: string, options: Options = {}) {
         charge: options.charge ?? ((cells, text) => charged.push({ cells, text })),
         chargeElements: options.chargeElements ?? (() => {}),
         lost: options.lost ?? (() => {}),
+        inline: options.inline ?? ((formula) => formula),
         dates: new Set((options.dates ?? []).map(([r, c]) => cellKey(r, c))),
     });
     return { ...rules, charged };
@@ -433,6 +435,25 @@ describe('a data validation', () => {
         expect(dataVerification?.['1_0'].value1).toBe('$C$1:$C$3');
     });
 
+    // The reader hands each sheet its names' inliner; a name left as written is still no list.
+    test('a list or a bound from a defined name reads what the name refers to, as a formula rule does', () => {
+        const names: Record<string, string> = { Colours: 'Lists!$A$1:$A$3', Most: '10' };
+        const { dataVerification, conditionalFormatRules } = read(
+            `${cf('A1', '<cfRule type="expression" dxfId="0" priority="1"><formula>A1&gt;Most</formula></cfRule>')}${dv(
+                list('A1', 'Colours'),
+                list('A2', 'Unknown'),
+                '<dataValidation type="whole" operator="lessThan" sqref="A3"><formula1>Most</formula1></dataValidation>',
+            )}`,
+            { inline: (formula) => formula.replace(/[A-Z][a-z]+$/, (name) => names[name] ?? name) },
+        );
+        expect(Object.keys(dataVerification ?? {})).toEqual(['0_0', '2_0']);
+        expect(dataVerification?.['0_0'].value1).toBe('Lists!$A$1:$A$3');
+        expect(dataVerification?.['2_0'].value1).toBe('10');
+        expect(conditionalFormatRules?.map((rule) => rule.type === 'default' && rule.conditionValue)).toEqual([
+            ['=A1>10'],
+        ]);
+    });
+
     test('each validation the engine has no rule for is counted; one that allows any value holds no rule', () => {
         const lost: CountedWarningCode[] = [];
         read(
@@ -570,6 +591,7 @@ test('a sheet without rules has none', () => {
             charge: () => {},
             chargeElements: () => {},
             lost: () => {},
+            inline: (formula) => formula,
             dates: new Set(),
         }),
     ).toEqual({});

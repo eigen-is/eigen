@@ -1,9 +1,9 @@
-// The xlsx package: the workbook part, its sheets and the parts every sheet shares, and a part's children read a batch
-// at a time, since a sheet's grid and the shared strings can each be the whole decompressed cap.
+// The xlsx package: the workbook part, its sheets, its defined names and the parts every sheet shares, and a part's
+// children read a batch at a time, since a sheet's grid and the shared strings can each be the whole decompressed cap.
 
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
-import { hasXmlName, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import { hasXmlName, XmlError, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
 import type { Budget } from '../../ooxml/budget';
 import { budget } from '../../ooxml/budget';
 import { isOn, parseOoxml, R_NS, SML_NS } from '../../ooxml/ooxml';
@@ -14,10 +14,16 @@ import { IMPORT_MESSAGES } from '../messages';
 // A chart sheet is a sheet without a grid, holding its drawing's chart.
 export type WorkbookSheet = { name: string; path: string; hidden: boolean; chartSheet: boolean };
 
+// A name the workbook defines and the text it refers to, as Excel writes it: a range, a constant or a formula. A local
+// name holds the name of the one sheet it is defined on, as the workbook writes that sheet's name.
+export type DefinedName = { name: string; sheet?: string; text: string };
+
 export type XlsxPackage = {
     pkg: OoxmlPackage;
     // In the workbook's order.
     sheets: WorkbookSheet[];
+    // The workbook's own, without the ones Excel keeps for itself, such as a print area or a chart's data.
+    definedNames: DefinedName[];
     date1904: boolean;
     styles?: XmlElement;
     theme?: XmlElement;
@@ -34,7 +40,8 @@ export function readXlsxPackage(bytes: Uint8Array): XlsxPackage {
     const rels = pkg.relationships(workbookPath);
     const located = (type: string, path: string) => relOfType(rels, type) ?? path;
     const list = xmlChild(workbook, SML_NS, 'sheets');
-    const entries = (list ? xmlChildren(list, SML_NS, 'sheet') : []).flatMap((sheet): WorkbookSheet[] => {
+    const listed = list ? xmlChildren(list, SML_NS, 'sheet') : [];
+    const entries = listed.flatMap((sheet): WorkbookSheet[] => {
         const name = xmlAttr(sheet, '', 'name');
         const rel = rels.get(xmlAttr(sheet, R_NS, 'id') ?? '');
         const chartSheet = rel?.type.endsWith('/chartsheet') === true;
@@ -46,10 +53,22 @@ export function readXlsxPackage(bytes: Uint8Array): XlsxPackage {
     // parsed again for each.
     const last = new Map(entries.map((sheet, index) => [sheet.path, index]));
     const sheets = entries.filter((sheet, index) => last.get(sheet.path) === index);
+    const names = xmlChild(workbook, SML_NS, 'definedNames');
+    // A local name's localSheetId counts every <sheet> entry, the ones no sheet is read for too.
+    const definedNames = (names ? xmlChildren(names, SML_NS, 'definedName') : []).flatMap((element): DefinedName[] => {
+        const name = xmlAttr(element, '', 'name');
+        if (name === undefined || /^_xl(nm|chart)\./i.test(name)) return [];
+        const local = xmlAttr(element, '', 'localSheetId');
+        if (local === undefined) return [{ name, text: xmlText(element) }];
+        const scope = listed[Number(local)];
+        const sheet = scope && xmlAttr(scope, '', 'name');
+        return sheet === undefined ? [] : [{ name, sheet, text: xmlText(element) }];
+    });
     const properties = xmlChild(workbook, SML_NS, 'workbookPr');
     return {
         pkg,
         sheets,
+        definedNames,
         date1904: isOn(properties && xmlAttr(properties, '', 'date1904')) === true,
         // A damaged styles or theme part costs the looks, not the workbook.
         styles: optional(() => pkg.part(located('styles', 'xl/styles.xml'))),

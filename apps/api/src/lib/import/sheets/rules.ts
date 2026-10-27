@@ -51,6 +51,8 @@ export type RulesContext = {
     // Counts a rule left out: a conditional format or a validation the engine has no rule for, or a conditional format
     // over no range of the grid.
     lost: Lost;
+    // Writes the workbook's defined names into a rule's formula, so a list from a name reads the name's range.
+    inline(formula: string): string;
 };
 
 export function readRules(
@@ -63,6 +65,7 @@ export function readRules(
             .flatMap((list) => xmlChildren(list, SML_NS, 'ext'))
             .flatMap((ext) => xmlChildren(ext, X14_NS, name));
     const elementText = (element: XmlElement | undefined) => (element ? xmlText(element) : undefined);
+    const inlined = (formula: string | undefined) => (formula === undefined ? undefined : context.inline(formula));
 
     // The 2007 schema's elements and Excel 2010's, which hold the same rules in their own names; read lazily, as a
     // flood of rules costs only what is charged.
@@ -101,7 +104,9 @@ export function readRules(
                 continue;
             }
             for (const rule of rules) {
-                const formulas = formulasOf(rule).map((formula) => withoutFuturePrefixes(xmlText(formula)));
+                const formulas = formulasOf(rule).map((formula) =>
+                    context.inline(withoutFuturePrefixes(xmlText(formula))),
+                );
                 context.charge(
                     0,
                     formulas.reduce((text, formula) => text + formula.length, 0),
@@ -141,8 +146,8 @@ export function readRules(
         for (const validation of validations) {
             const rule = mapDataValidation(
                 validation,
-                formulaOf(validation, 'formula1'),
-                formulaOf(validation, 'formula2'),
+                inlined(formulaOf(validation, 'formula1')),
+                inlined(formulaOf(validation, 'formula2')),
                 context.date1904,
             );
             if (!rule) {
@@ -389,8 +394,8 @@ function mapDataValidation(
 
 // A quoted literal ('"Red,Green,Blue"') becomes the engine's comma-separated list. Anything else is kept as a range
 // reference when it is a valid one, so an edit to the source cells still changes the list. The editor resolves such a
-// reference itself, a quoted sheet name included. A defined name is never read, and a one-option list of its name
-// would be worse than no rule, so the rule goes.
+// reference itself, a quoted sheet name included. A defined name arrives as its range; one left as written, or one of
+// a formula, would make a one-option list of its text, worse than no rule, so the rule goes.
 function listSource(raw: string | undefined): string | null {
     if (!raw) return null;
     const inner = unquoteXlsxLiteral(raw);
