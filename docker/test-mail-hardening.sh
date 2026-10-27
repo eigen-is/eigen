@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Verify the outbound mail-relay hardening against a scratch
-# edge,mail install of this working tree: sender/login binding on the submission ports, the per-IP
-# SASL failure lockout, the queue-backlog alert, DKIM signing with the key the server backup reads, a TLS key
-# the server backup reads too, and a port 25 that relays and DKIM-signs for the API but not for the Docker gateway.
+# Verifies the outbound mail-relay hardening against a scratch edge,mail install of this working tree: the binding
+# of sender to login on the submission ports, the per-IP SASL failure lockout, the queue-backlog alert, DKIM signing
+# with the key the server backup reads, a TLS key the server backup reads too, and a port 25 that relays and
+# DKIM-signs for the API but not for the Docker gateway.
 #
 # Usage:
 #   ./docker/test-mail-hardening.sh
