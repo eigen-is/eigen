@@ -50,6 +50,7 @@ const LETTER = {
     headerDistance: 8,
     footerDistance: 10,
     differentFirstPage: false,
+    pageless: false,
 };
 
 function renderQuickLook() {
