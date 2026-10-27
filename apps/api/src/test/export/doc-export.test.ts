@@ -1486,6 +1486,23 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         expect(height).toBeCloseTo(60, 3);
     }, 60_000);
 
+    // A column narrower than the picture, as a later page setup leaves one, shrinks its width, and the box around it
+    // keeps the height in step.
+    test('a stretched image wider than the column prints in shape', async () => {
+        const png = await sharp({ create: { width: 200, height: 100, channels: 3, background: '#888' } })
+            .png()
+            .toBuffer();
+        const figure = {
+            type: 'figure',
+            attrs: { src: `data:image/png;base64,${png.toString('base64')}`, width: 1500, height: 300 },
+        };
+        const html = await pdfHtml({ type: 'paragraph', content: [figure] });
+        const boxes = await laidOut(html, "if tag == 'img': print(box.width, box.height)");
+        const [width = 0, height] = (boxes[0] ?? '').split(' ').map(Number);
+        expect(width).toBeLessThan(1000);
+        expect(height).toBeCloseTo(width / 5, 3);
+    }, 60_000);
+
     // WeasyPrint draws an absolute box from its paragraph's padding box, in front of the text or behind it.
     test.each(['front', 'behind'])(
         'a %s image prints at its offsets from its paragraph',
