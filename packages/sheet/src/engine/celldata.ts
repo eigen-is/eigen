@@ -1,7 +1,6 @@
-// Pure conversions between the two cell representations:
-//   - `celldata`: sparse list of {r, c, v} entries (snapshot/persistence form)
-//   - `data`: dense (Cell | null)[][] matrix (engine/state runtime form)
-// State's api/common.ts re-exports from here to avoid duplication.
+// Pure conversions between a sheet's two cell forms: `celldata`, the sparse list of {r, c, v} entries a snapshot
+// stores, and `data`, the dense matrix the engine and the editor state work on. The state layer re-exports both, so
+// there is one copy of each conversion.
 
 import type { CellMatrix, CellWithRowAndCol } from '@workspace/lib/sheets';
 import { maxBy, times } from 'es-toolkit/compat';
@@ -18,14 +17,21 @@ export function dataToCelldata(data: CellMatrix | undefined): CellWithRowAndCol[
     return celldata;
 }
 
+// A peer can store any number as a cell's row or column, and the matrix has no slot for one that is not an index, so
+// such a cell is dropped rather than failing every read of the workbook.
 export function celldataToData(celldata: CellWithRowAndCol[], rowCount: number, colCount: number): CellMatrix {
-    const lastRow = maxBy<CellWithRowAndCol>(celldata, 'r');
-    const lastCol = maxBy<CellWithRowAndCol>(celldata, 'c');
+    const placed = celldata.filter((d) => isIndex(d.r) && isIndex(d.c));
+    const lastRow = maxBy<CellWithRowAndCol>(placed, 'r');
+    const lastCol = maxBy<CellWithRowAndCol>(placed, 'c');
     const lastRowNum = Math.max((lastRow?.r ?? 0) + 1, rowCount);
     const lastColNum = Math.max((lastCol?.c ?? 0) + 1, colCount);
     const expandedData: CellMatrix = times(lastRowNum, () => times(lastColNum, () => null));
-    for (const d of celldata) {
+    for (const d of placed) {
         expandedData[d.r][d.c] = d.v;
     }
     return expandedData;
+}
+
+function isIndex(value: number): boolean {
+    return Number.isInteger(value) && value >= 0;
 }

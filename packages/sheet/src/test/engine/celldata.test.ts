@@ -61,6 +61,22 @@ describe('celldataToData', () => {
         expect(data[4]?.[2]).toBeNull();
     });
 
+    // A peer can store any number as a cell's row or column; the dense matrix has no slot for one that isn't an index.
+    test('a cell at a negative or fractional row or column is dropped, and the rest read', () => {
+        const cells: CellWithRowAndCol[] = [
+            { r: -1, c: 0, v: cell('negative') },
+            { r: 1.5, c: 0, v: cell('fraction') },
+            { r: 0, c: -2, v: cell('left') },
+            { r: 8, c: Number.NaN, v: cell('nan') },
+            { r: 1, c: 1, v: cell('kept') },
+        ];
+        const data = celldataToData(cells, 1, 1);
+        expect(data.length).toBe(2);
+        expect(data[0]?.length).toBe(2);
+        expect(data[1]?.[1]?.v).toBe('kept');
+        expect(dataToCelldata(data).map(({ v }) => v?.v)).toEqual(['kept']);
+    });
+
     test('hint smaller than bbox does not shrink', () => {
         const cells: CellWithRowAndCol[] = [{ r: 9, c: 9, v: cell('a') }];
         const data = celldataToData(cells, 2, 2)!;
