@@ -3,6 +3,7 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useBreadcrumb, usePathInfo } from '@workspace/lib/drive';
+import { sharedChainHead } from '@workspace/lib/types/drive';
 import { NativeFileEditor } from '../components/editor/native-file-editor';
 
 export const Route = createFileRoute('/_auth/edit/$ownerId/$mountId/$pathId')({
@@ -13,13 +14,13 @@ function EditRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
     const navigate = useNavigate();
     const { data: path } = usePathInfo(ownerId, mountId, pathId);
-    // The file heads its own chain when the viewer can't read its folder (the view toolbar reads the same chain).
+    // The file heads its own chain when the viewer can't read its folder, as the crumb above it shows.
     const { data: crumbs = [] } = useBreadcrumb(ownerId, mountId, pathId);
 
     if (!path) return null;
 
     const handleClose = () => {
-        if (crumbs[0]?.id === path.id) {
+        if (sharedChainHead(crumbs)?.id === path.id) {
             navigate({ to: '/shared/$to', params: { to: 'with-me' } });
         } else {
             navigate({
