@@ -1,3 +1,8 @@
+// Builds every editor of a doc: the body's, each header and footer band's and the open footnote's. One factory gives
+// them the schema, the node views, the collaboration and the clipboard, so a band and a note edit as the body does.
+// useDocEditor adds what a mounted editor runs, such as the sweep of images a closed tab left mid-upload, and
+// useDocMedia holds the image uploads they share.
+
 import type { Extensions } from '@tiptap/core';
 import { Extension, Node } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
@@ -311,6 +316,10 @@ export function docEditorOptions({
         });
     return {
         editable,
+        // y-tiptap writes nothing while the doc reads as one empty paragraph, unless an earlier update saw other content.
+        // It draws the root as it builds its plugin view, before its update can see that. One update as the view mounts
+        // shows it what the root holds, so an edit that empties a root that held something is saved.
+        onMount: ({ editor }) => editor.view.updateState(editor.state),
         extensions: [
             // A note's own doc holds its paragraphs; its nested note stays in the schema, as a peer may write one.
             ...getDocExtensions({

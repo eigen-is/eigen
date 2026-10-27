@@ -137,6 +137,26 @@ test('Enter on a selected equation with no Equation panel does what it does on a
     expect(enterOn({ type: 'figure', attrs: { mediaName: 'logo.png' } })).toEqual([undefined, [true]]);
 });
 
+// y-tiptap writes nothing while the doc reads as a fresh editor's one empty paragraph, so a root nobody wrote stays
+// empty. A root that held something takes the edit that leaves that paragraph, even as the editor's first.
+test.each([
+    ['the body', 'default', body],
+    ['a band', 'header', (doc: InstanceType<typeof Y.Doc>) => mount(doc, HEADER)],
+] as const)('an edit that empties %s is saved, and opening it empty writes nothing', (_, field, open) => {
+    const doc = new Y.Doc();
+    const figure = new Y.XmlElement('figure');
+    figure.setAttribute('mediaName', 'logo.png');
+    const paragraph = new Y.XmlElement('paragraph');
+    paragraph.insert(0, [figure]);
+    doc.getXmlFragment(field).insert(0, [paragraph]);
+    open(doc).commands.clearContent();
+    expect(doc.getXmlFragment(field).toString()).toBe('<paragraph></paragraph>');
+
+    const empty = new Y.Doc();
+    open(empty).commands.focus('end');
+    expect(empty.getXmlFragment(field).length).toBe(0);
+});
+
 // Comments don't reach a band, so a pasted anchor would mark text no card points at.
 test('a paste into a band drops comment anchors; the body keeps those of its own cards', () => {
     const html = '<p><span data-comment-id="c1">Noted</span></p>';
@@ -504,15 +524,15 @@ test('a body upload that settles after its editor was built anew swaps the name 
 // A tab closed mid-upload leaves a pending name that a writer's tab sweeps a minute after opening the doc. A viewer's
 // deletion would be dropped by the server.
 test.each([
-    ["a writer's editor sweeps", true, '<paragraph>Acme</paragraph>'],
-    ['a read-only editor leaves', false, '<paragraph>Acme<figure mediaName="pending:gone"></figure></paragraph>'],
+    ["a writer's editor sweeps", true, '<paragraph></paragraph>'],
+    ['a read-only editor leaves', false, '<paragraph><figure mediaName="pending:gone"></figure></paragraph>'],
 ])('%s a pending image a closed tab left', async (_, editable, left) => {
     const doc = new Y.Doc();
     const figure = new Y.XmlElement('figure');
     figure.setAttribute('mediaName', 'pending:gone');
     const paragraph = new Y.XmlElement('paragraph');
-    // Beside text: y-tiptap writes nothing back while the doc reads as a fresh editor's single empty paragraph.
-    paragraph.insert(0, [new Y.XmlText('Acme'), figure]);
+    // The band's only content, so the sweep leaves it one empty paragraph.
+    paragraph.insert(0, [figure]);
     doc.getXmlFragment('header').insert(0, [paragraph]);
     function Band() {
         useDocEditor({
