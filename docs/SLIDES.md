@@ -1,6 +1,6 @@
 # Slides
 
-> **TLDR:** A deck is a set of slides that people edit together and then present. Underneath, it is a canvas document whose pages are frames of one size per deck, 16:9 or 4:3 at a physical width of its own, drawn by the canvas engine ([CANVAS.md](CANVAS.md)). `apps/slides/src/components/slides/` is a thin shell over the engine's `CanvasEditor`: it adds the slide rail, present mode, the slide background panel and the slide counter.
+> **TLDR:** A deck is a set of slides that people edit together and then present. Underneath, it is a canvas document whose pages are frames of one size per deck, 16:9 or 4:3 at a physical width of its own, drawn by the canvas engine ([CANVAS.md](CANVAS.md)). `apps/slides/src/components/slides/` is a thin shell over the engine's `CanvasEditor`: it adds the slide rail and its phone strip, present mode, the slide background panel and the slide counter.
 
 A deck is a `.eigenslides` file. Each slide is a frame: one page of the canvas, stored in the `frames` map of the deck's Yjs document ([COLLAB.md](COLLAB.md)). Every element on the deck sits on one frame and stores its position relative to it. The shell mounts the canvas in frame mode, which shows only the active slide, fitted to the screen. Everything else (elements, tools, keymap, clipboard, rich text, comments, ⌘F, previews, export) is the engine's.
 
@@ -17,7 +17,7 @@ So the shell adds only what the engine has no word for: a deck as an ordered lis
 
 A slide is a `VectorFrame` (`packages/lib/src/vector/frames.ts`): an id, a fractional `index`, a name and a serialized `BackgroundFill`. Its size is the deck's slide size, and its elements carry its `frameId` ([CANVAS.md](CANVAS.md#every-stored-field-is-a-scalar)). Every element kind works on a slide. `SLIDES_STYLE_DEFAULTS` (flat, solid, Inter) decides only how a new element looks.
 
-The shell mounts `CanvasEditor` with `viewport="frame"`, so the slide always fits its space, with no zoom and no free pan ([CANVAS.md](CANVAS.md#frame-mode-always-shows-the-whole-page)). It fills the shared `CanvasToolbar`'s three host slots: `fileItems` with Page setup, `insertItems` with New slide and `centerItems` with Present. The engine has no notion of slides, so the slide menu (New slide above or below, Duplicate, Delete) lives in the shell. It opens from a rail thumbnail and from a right-click on empty canvas (`onEmptyContextMenu`). The last slide can't be deleted. A phone gets the deck view-only, with no rail ([MOBILE.md](MOBILE.md)).
+The shell mounts `CanvasEditor` with `viewport="frame"`, so the slide always fits its space, with no zoom and no free pan ([CANVAS.md](CANVAS.md#frame-mode-always-shows-the-whole-page)). It fills the shared `CanvasToolbar`'s three host slots: `fileItems` with Page setup, `insertItems` with New slide and `centerItems` with Present. The engine has no notion of slides, so the slide menu (New slide above or below, Duplicate, Delete) lives in the shell. It opens from a rail thumbnail and from a right-click on empty canvas (`onEmptyContextMenu`). The last slide can't be deleted. A phone gets the deck view-only. In place of the rail, `SlideStrip` puts the same thumbnails in one row under the slide, so a tap jumps to any slide of a long deck ([MOBILE.md](MOBILE.md)).
 
 ## A deck has one slide size, and a change moves nothing
 
@@ -45,7 +45,7 @@ The reader reads only `elements`, `frames` and `meta`. A deck with no frames is 
 
 ## A reorder rewrites one key
 
-The rail (`slide-panel.tsx`) is a dnd-kit sortable list of `FrameThumbnail`s. A drop calls `moveFrame(id, afterId)`, which rewrites the moved frame's fractional `index` and nothing else, so a peer's concurrent rename of either slide survives. The rail groups the scene's elements by frame once per render and hands each thumbnail its own list, so a long deck doesn't filter the scene once per thumbnail.
+The rail (`slide-panel.tsx`) is a dnd-kit sortable list of `FrameThumbnail`s. A drop calls `moveFrame(id, afterId)`, which rewrites the moved frame's fractional `index` and nothing else, so a peer's concurrent rename of either slide survives. The rail and the phone strip group the scene's elements by frame once per render and hand each thumbnail its own list, so a long deck doesn't filter the scene once per thumbnail.
 
 ## The active slide survives its own deletion
 
@@ -53,7 +53,7 @@ The rail (`slide-panel.tsx`) is a dnd-kit sortable list of `FrameThumbnail`s. A 
 
 ## Revealing an element goes to its slide first
 
-The comment pane and ⌘F span the whole deck while the canvas shows one slide. So both reveal through one callback: activate the element's slide, then select the element. An element whose slide is gone is selected in place, because switching to a missing frame would empty the canvas. ⌘F labels each match with its slide and rings the rail thumbnails that hold one ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md), [COMMENTS.md](COMMENTS.md)). Presence carries the frame, so a peer's cursor shows only on the slide they are on.
+The comment pane and ⌘F span the whole deck while the canvas shows one slide. So both reveal through one callback: activate the element's slide, then select the element. An element whose slide is gone is selected in place, because switching to a missing frame would empty the canvas. ⌘F labels each match with its slide and rings the thumbnails that hold one, in the rail or the phone strip ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md), [COMMENTS.md](COMMENTS.md)). Presence carries the frame, so a peer's cursor shows only on the slide they are on.
 
 ## Present mode replaces the editor
 

@@ -34,7 +34,7 @@ The docs comment, activity and properties panels render whenever the viewport is
 
 ## A phone views canvas documents, never edits them
 
-Slides and vector set `canEdit = canWrite && !isMobile`. The file menu, the share cluster and comments keep `canWrite`, so a phone user can still share, comment and download. A phone gets the frame-fit canvas, read-only, and pages the deck with a one-finger horizontal swipe. The slides rail and the properties panel are desktop surfaces: the rail's fixed width would take half a phone ([SLIDES.md](SLIDES.md)).
+Slides and vector set `canEdit = canWrite && !isMobile`. The file menu, the share cluster and comments keep `canWrite`, so a phone user can still share, comment and download. A phone gets the frame-fit canvas, read-only, and pages the deck with a one-finger horizontal swipe. The slides rail and the properties panel are desktop surfaces: the rail's fixed width would take half a phone. A phone gets the rail's thumbnails as a row under the slide instead, the filmstrip Google Slides shows in portrait. A tap jumps to that slide, and the row scrolls to keep the current slide in view after a swipe. It has no drag and no menu, since a phone never edits the deck ([SLIDES.md](SLIDES.md)).
 
 The canvas keymap is gated on `canEdit`, so a hardware keyboard on a phone can't act on the deck. The layered-Escape listener stays document-level.
 
