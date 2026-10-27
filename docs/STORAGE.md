@@ -33,7 +33,7 @@ data/home/{userId}/
 └── eigen.notifications/    notifications.db
 ```
 
-The names come from `PATHS` in `apps/api/src/lib/core/constants.ts`. Mail, Contacts and Calendar reach their folders through `home.fs`, a `LocalFilesystem` with the atomic and durable write family those domains need. Contacts and calendar events live as BLOBs in their databases, with columns projected from them ([CONTACTS.md](CONTACTS.md), [CALENDAR.md](CALENDAR.md)). `staging/` sits outside `tmp/` so the stale-temp sweep can never purge an upload the bucket has not acknowledged ([SYNC.md](SYNC.md)).
+The names come from `PATHS` in `apps/api/src/lib/config/paths.ts`. Mail, Contacts and Calendar reach their folders through `home.fs`, a `LocalFilesystem` with the atomic and durable write family those domains need. Contacts and calendar events live as BLOBs in their databases, with columns projected from them ([CONTACTS.md](CONTACTS.md), [CALENDAR.md](CALENDAR.md)). `staging/` sits outside `tmp/` so the stale-temp sweep can never purge an upload the bucket has not acknowledged ([SYNC.md](SYNC.md)).
 
 ## Containers name users by email, never by id
 

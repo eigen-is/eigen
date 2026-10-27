@@ -10,7 +10,7 @@ A demo box is a public Eigen that anyone can try without an account. A visitor c
 
 The branches are few, and each is inert when the var is unset:
 
-- `sendMail` (`apps/api/src/lib/core/mailer.ts`) skips delivery. A demo box runs no MTA, so a real send would fail on every share, invite and iMIP.
+- `sendMail` (`apps/api/src/lib/mailer/mailer.ts`) skips delivery. A demo box runs no MTA, so a real send would fail on every share, invite and iMIP.
 - `messageSend` (`apps/api/src/lib/mail/mail-domain.ts`) throws a 403 that says outgoing email is off, and the message stays in Drafts. The guard is not in `sendMail`, because `sendMail` serves every fire-and-forget notification, where a throw only becomes a logged error. Compose is the one send a person waits on.
 - `isMailAppEnabled()` keeps the Mail app on without hosted mail, so the seeded mailboxes show.
 - `/p/config` carries `demoMode`, the one flag the frontend reads. The login card and the landing page swap sign-in for an **Enter demo** button, and `DemoBanner` says the workspace is shared and resets every hour.

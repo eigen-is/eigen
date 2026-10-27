@@ -32,7 +32,7 @@ This proposal lets a user automate their own work across Eigen's apps with scrip
 | Per-home databases | `Home.getLocalDatabase()`, `ManagedDatabase` | The pattern `scripts.db` follows: `schema.ts` + versioned `db-config.ts` |
 | Drive access | `getSharedDrive(ownerId, user)`, `lib/drive/get-drive.ts` | The ACL-checked wrapper every Drive operation goes through |
 | Calendar access | `resolveCalendar`, `checkCalendarAccess`, `lib/calendar/get-calendar.ts` | Collection and event access, write checks for mutations |
-| Personal-only domains | `requireSelf`, `requireNonGuest`, `lib/core/access.ts` | How Mail and Contacts stay personal |
+| Personal-only domains | `requireSelf`, `requireNonGuest`, `lib/auth/access.ts` | How Mail and Contacts stay personal |
 | Cross-home calls | `lib/home/home-relay.ts` | The only way to touch another Home; never `getHome(otherOwnerId)` |
 | Document readers | `readEigendocFromDoc` (`lib/document/doc.ts`), `readSheetsFromDoc` / `replaySheetsOps` (`lib/document/sheets.ts`), `readVectorFromDoc` | Current content decoders for Docs, Sheets and the shared canvas model ([DOCUMENT-CONTENT-LAYER.md](../DOCUMENT-CONTENT-LAYER.md)) |
 | Sheet ops | `opToPatchOnSheets`, `packages/lib/src/sheets/yjs-ops.ts` | Op semantics shared by the editor and the server replay |

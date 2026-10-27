@@ -97,7 +97,7 @@ The Admin settings page (`apps/admin/src/components/admin/server-settings.tsx`) 
 
 ## Hosted mail and the relay are environment, not settings
 
-Whether this server hosts mailboxes, and which server the API hands mail to, are deployment shape rather than runtime settings. They live in `.env.production`, which `./eigen setup` writes: `isMailEnabled()` (`apps/api/src/lib/config/env.ts`) and `createTransport()` (`apps/api/src/lib/core/mailer.ts`). With hosted mail the API hands everything to the bundled Postfix at `SMTP_HOST`, and Postfix relays through `SMTP_RELAY_*` when it is set. Without hosted mail the API sends through `SMTP_RELAY_*` itself. How an operator picks a relay is in the help center ([Choose a mail relay](../apps/index/src/data/support/self-hosting/mail-relay.md)), and the keys are listed in [SELF-HOSTING.md](SELF-HOSTING.md).
+Whether this server hosts mailboxes, and which server the API hands mail to, are deployment shape rather than runtime settings. They live in `.env.production`, which `./eigen setup` writes: `isMailEnabled()` (`apps/api/src/lib/config/env.ts`) and `createTransport()` (`apps/api/src/lib/mailer/mailer.ts`). With hosted mail the API hands everything to the bundled Postfix at `SMTP_HOST`, and Postfix relays through `SMTP_RELAY_*` when it is set. Without hosted mail the API sends through `SMTP_RELAY_*` itself. How an operator picks a relay is in the help center ([Choose a mail relay](../apps/index/src/data/support/self-hosting/mail-relay.md)), and the keys are listed in [SELF-HOSTING.md](SELF-HOSTING.md).
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -130,7 +130,7 @@ Outbound mail goes on without mailboxes, as long as a relay is set. Share notifi
 ## What a server without hosted mail leaves out
 
 - No Mail app, no IMAP and no inbound mail. A Home opens no Maildir and starts no watcher, and a mail search finds nothing.
-- Every `/mail/` route, the local delivery route included, answers 403 (`requireMailEnabled()`, `apps/api/src/lib/core/access.ts`). The UI hides them.
+- Every `/mail/` route, the local delivery route included, answers 403 (`requireMailEnabled()`, `apps/api/src/lib/auth/access.ts`). The UI hides them.
 - No welcome mail, since nobody would ever read it.
 - Calendar invitations go out, but an outside attendee's reply goes to the organizer's own mailbox and Eigen never updates their status, because inbound iMIP needs hosted mail.
 - The role addresses `postmaster@`, `abuse@` and `noreply@` stay unclaimable, and an address on the server's own mail domain is never a guest, even when its mailbox lives elsewhere.
