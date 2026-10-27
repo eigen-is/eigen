@@ -49,6 +49,7 @@ const LOSSES: Record<CountedWarningCode, { noun: OneAndMany; what: Outcome }> = 
     'links-dropped': { noun: ['link', 'links'], what: 'dropped' },
     'conditional-formats-dropped': { noun: ['conditional format', 'conditional formats'], what: 'dropped' },
     'validations-dropped': { noun: ['data validation rule', 'data validation rules'], what: 'dropped' },
+    'names-dropped': { noun: ['named range', 'named ranges'], what: 'dropped' },
     'validation-prompts-cut': { noun: ['data validation message', 'data validation messages'], what: 'cut' },
     'section-pages-dropped': { noun: ["section's page setup", "sections' page setups"], what: 'dropped' },
     'even-bands-dropped': { noun: ['even-page header or footer', 'even-page headers or footers'], what: 'dropped' },
@@ -57,6 +58,7 @@ const LOSSES: Record<CountedWarningCode, { noun: OneAndMany; what: Outcome }> = 
     'fills-simplified': { noun: ['fill', 'fills'], what: 'simplified' },
     'text-simplified': { noun: ['text box', 'text boxes'], what: 'simplified' },
     'band-images-unanchored': { noun: ['header or footer picture', 'header or footer pictures'], what: 'simplified' },
+    'diagrams-flattened': { noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'flattened' },
     'blocks-flattened': { noun: ['part of the document', 'parts of the document'], what: 'flattened' },
     'images-unshown': { noun: ['picture', 'pictures'], what: 'unshown' },
 };

@@ -52,6 +52,36 @@ describe('an import summary', () => {
         ).toBe('396 fills and 1 text box were simplified.');
     });
 
+    // A deck's SmartArt drawn from its cached drawing comes in as loose shapes.
+    test('a SmartArt graphic drawn as shapes lost its layout', () => {
+        expect(lossSummary([{ code: 'diagrams-flattened', count: 1 }], 'import')).toBe(
+            '1 SmartArt graphic lost its layout.',
+        );
+        expect(
+            lossSummary(
+                [
+                    { code: 'diagrams-flattened', count: 2 },
+                    { code: 'diagrams-dropped', count: 1 },
+                ],
+                'import',
+            ),
+        ).toBe('1 SmartArt graphic was not imported; 2 SmartArt graphics lost their layout.');
+    });
+
+    // A name the reader can't put into the formulas that use it, such as one into another workbook.
+    test('a named range left as written was not imported', () => {
+        expect(lossSummary([{ code: 'names-dropped', count: 1 }], 'import')).toBe('1 named range was not imported.');
+        expect(
+            lossSummary(
+                [
+                    { code: 'validations-dropped', count: 1 },
+                    { code: 'names-dropped', count: 2 },
+                ],
+                'import',
+            ),
+        ).toBe('1 data validation rule and 2 named ranges were not imported.');
+    });
+
     // A flipped picture comes in, unflipped.
     test("a picture's flip is said to be what was not imported", () => {
         expect(lossSummary([{ code: 'mirrors-dropped', count: 1 }], 'import')).toBe(
