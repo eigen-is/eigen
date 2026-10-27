@@ -66,7 +66,11 @@ export function redoEntry(ctx: Context, entry: History): Step {
     const { options } = entry;
     if (options?.deleteSheetOp) {
         const sheet = ctx.sheets.find((s) => s.id === options.deleteSheetOp?.id);
-        if (!sheet) return { ctx, ops: [] };
+        if (!sheet) {
+            // A peer deleted it first. The next undo must not bring it back as it was when this user deleted it.
+            delete options.deletedSheet;
+            return { ctx, ops: [] };
+        }
         // The undo after this redo brings back the sheet as the redo found it, a peer's edits since the first delete
         // included. Only this state knows it, so the entry keeps it.
         options.deletedSheet = storedCopy(sheet);

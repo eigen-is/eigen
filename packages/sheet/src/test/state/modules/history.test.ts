@@ -256,8 +256,10 @@ test("an edit to a linked cell after a peer's row insert keeps its link everywhe
         const row = ctx.sheets[0].data?.[6];
         if (row) row[1] = { ...row[1], bl: 1 };
     });
-    expect(s.a.ctx.sheets[0].hyperlink).toEqual({ '6_1': { linkType: 'webpage', linkAddress: 'https://eigen.is' } });
-    expect(s.b.ctx.sheets[0].hyperlink).toEqual(s.a.ctx.sheets[0].hyperlink);
+    expect(s.a.ctx.sheets[0].hyperlink).toStrictEqual({
+        '6_1': { linkType: 'webpage', linkAddress: 'https://eigen.is' },
+    });
+    expect(s.b.ctx.sheets[0].hyperlink).toStrictEqual(s.a.ctx.sheets[0].hyperlink);
 });
 
 describe('undo skips a cell a peer changed since, by what was written into it', () => {
@@ -381,6 +383,20 @@ describe('a structural undo or redo applies exactly what it sends', () => {
             { r: 0, c: 0, v: text('two') },
             { r: 1, c: 1, v: text('peer') },
         ]);
+        expectAgree(s);
+    });
+
+    test('redoing a sheet delete a peer already made leaves the sheet deleted after your next undo', () => {
+        const s = session(workbook({}, { A1: text('two') }));
+        s.edit(s.a, ...removeSheet(TWO));
+        s.undo(s.a);
+        s.edit(s.b, typedAt('B2', 'peer', TWO));
+        s.edit(s.b, ...removeSheet(TWO));
+        s.redo(s.a);
+        s.undo(s.a);
+        for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
+            expect(view(sheets).map((x) => x.id)).toEqual([ONE, THREE]);
+        }
         expectAgree(s);
     });
 
