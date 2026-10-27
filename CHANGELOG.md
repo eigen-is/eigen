@@ -17,6 +17,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Table borders in Word files** — a Word table keeps its borders, their colors, widths and dashes, when it comes in and when you download a document as Word. A table without borders in Word has none in Docs
 - **Styling part of a cell in Sheets** — while you edit a cell, select some of its words and make them bold, italic, underlined, struck through, or another color, font or size. **Ctrl+B**, **Ctrl+I** and **Ctrl+U** (Mac: **⌘B**, **⌘I**, **⌘U**) work as you type, and a style you pick with no words selected applies to what you type next. Text you type or paste over selected words takes their style, and text you paste comes in as plain text, as in Google Sheets. The cell keeps its styles when you download it as Excel
 - **Outline in Docs** — **Tools → Show outline** lists the document's headings on the left, over the document, and a click jumps to one. It stays shown or hidden in your browser from one document to the next. On a phone it opens from the **⋮** menu
+- **Table of contents in Docs** — **Insert → Table of contents** lists the document's headings to Heading 3, and keeps the list up to date as you or anyone else edits them. Click a line to jump to its heading. The PDF shows each heading's page number, and the Word file holds Word's own table of contents, which fills in its page numbers when Word updates it. Reload a document left open since the update before you add one, or the older tab removes it
+- **Tables of contents in Word files** — a Word file's table of contents comes in as one that lists the document's headings. The message after an import says when those differ from the entries Word saved
 - **Celebrations** — tick the last box of a card's checklist in Stickies, or of a comment card elsewhere, and now and then confetti bursts from it. Turn it off under **Preferences** on the Personal info page in Space
 - **What a download left out** — after you download a document, spreadsheet, deck or drawing, a message counts what the file left out, cut short or drew simpler, such as a hatched fill a PowerPoint file draws solid. It also says when part of the document couldn't be read
 - **What a printout left out** — printing a Docs document gives the same message once the PDF opens
@@ -35,6 +37,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Contents title in Word files** — the title Word puts above a table of contents, such as **Contents**, comes in as normal text instead of a Heading 1, so it no longer lists itself in the outline
 - **Shared with me in Drive** — a text file or folder someone shared with you shows its full path at the top, starting with Shared with me, then the shared folder and every folder below it. Click Shared with me to go back to the list
 - **Public files in Drive** — a public file or folder that nobody shared with you shows its path from the first folder you can open, without Shared with me
 - **Closing a shared text file** — closing a text file that was shared with you on its own takes you back to Shared with me instead of a page asking for access to its folder
