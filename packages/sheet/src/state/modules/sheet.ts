@@ -1,7 +1,12 @@
+// The workbook's sheet list in the editor: adding, deleting and switching sheets, giving a sheet its cell matrix, and
+// the per-sheet view the grid paints. Menus and the sheet tabs call these inside an edit's recipe, and so does a
+// peer's batch through applyOpBatch.
+
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import { isNil, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import { MAX_SHEET_NAME_LENGTH } from '../../engine/a1-notation';
+import { celldataToData } from '../../engine/celldata';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
@@ -146,6 +151,29 @@ export function addSheet(
             ctx.hooks.afterAddSheet?.(sheetconfig);
         });
     }
+}
+
+// A sheet's cells come stored as a sparse list; the editor works on a full matrix, so a sheet gets one before
+// anything reads or writes its cells.
+export function initSheetData(draftCtx: Context, index: number, newData: Sheet) {
+    const { celldata, row, column } = newData;
+    const expandedData = celldataToData(
+        celldata ?? [],
+        row != null && row > 0 ? row : draftCtx.defaultrowNum,
+        column != null && column > 0 ? column : draftCtx.defaultcolumnNum,
+    );
+    if (draftCtx.sheets[index] == null) {
+        newData.data = expandedData;
+        delete newData.celldata;
+        draftCtx.sheets.push(newData);
+    } else {
+        draftCtx.sheets[index].data = expandedData;
+        delete draftCtx.sheets[index].celldata;
+        if (newData.config) {
+            draftCtx.sheets[index].config = newData.config;
+        }
+    }
+    normalizeSheetConfig(draftCtx.sheets[index]);
 }
 
 export function deleteSheet(

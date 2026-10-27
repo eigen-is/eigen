@@ -7,14 +7,13 @@ import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, produce } from 'immer';
 import { RowColError } from '../../engine/rowcol';
-import { initSheetData } from '../api/sheet';
 import type { Context } from '../context';
 import type { Op } from '../types';
 import { getSheetIndex, opToPatch } from '../utils';
 import { createFilterOptions } from './filter';
 import { registerSheetFormulas } from './formula-cache';
 import { deleteRowCol, insertRowCol } from './rowcol';
-import { addSheet, deleteSheet, leaveCurrentSheet } from './sheet';
+import { addSheet, deleteSheet, initSheetData, leaveCurrentSheet } from './sheet';
 
 // The next context, or null when an op failed and the batch was skipped.
 export function applyOpBatch(ctx: Context, ops: Op[]): Context | null {

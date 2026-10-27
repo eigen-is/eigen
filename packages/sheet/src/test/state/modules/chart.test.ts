@@ -26,7 +26,6 @@ import { enablePatches, produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { mapChartRefs, replaySheetsOps } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
-import { initSheetData } from '../../../state/api/sheet';
 import { addSheet } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
 import {
@@ -40,6 +39,7 @@ import {
 import { updateFloatingBox } from '../../../state/modules/floating';
 import { redoEntry, undoEntry } from '../../../state/modules/history';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
+import { initSheetData } from '../../../state/modules/sheet';
 import type { Op, Sheet } from '../../../state/types';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';

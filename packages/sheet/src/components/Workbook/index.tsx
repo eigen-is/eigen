@@ -47,6 +47,7 @@ import {
     groupValuesRefresh,
     handleGlobalKeyDown,
     handlePaste,
+    initSheetData,
     initSheetIndex,
     insertRowCol,
     pasteChart,
@@ -357,7 +358,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             const index = getSheetIndex(draftCtx, newDatum.id!) as number;
                             const sheet = draftCtx.sheets[index];
                             if (!sheet.data || sheet.data.length === 0) {
-                                api.initSheetData(draftCtx, index, sheet);
+                                initSheetData(draftCtx, index, sheet);
                             } else {
                                 // The replay materializes `data` for any sheet an op touched, so
                                 // initSheetData is skipped here — but the config collections it
@@ -386,7 +387,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const sheet = draftCtx.sheets[sheetIdx];
 
                     if (!sheet.data || sheet.data.length === 0) {
-                        api.initSheetData(draftCtx, sheetIdx, sheet);
+                        initSheetData(draftCtx, sheetIdx, sheet);
                         viewStale = true;
                     } else {
                         normalizeSheetConfig(sheet);

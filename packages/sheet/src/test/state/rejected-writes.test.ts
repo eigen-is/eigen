@@ -15,7 +15,6 @@
 import { describe, expect, test } from 'bun:test';
 import { setCellFormat } from '../../state/api/cell';
 import { setColumnWidth, setRowHeight, showRowOrColumn } from '../../state/api/rowcol';
-import { initSheetData } from '../../state/api/sheet';
 import type { Context } from '../../state/context';
 import { handlePasteByClick } from '../../state/events/paste';
 import { setChartLook, setChartSpec } from '../../state/modules/chart';
@@ -24,6 +23,7 @@ import { deleteFloatingObject, reorderFloatingObject, updateFloatingBox } from '
 import { removeImageByMediaName, replaceImageMediaName } from '../../state/modules/image';
 import { showSelected } from '../../state/modules/rowcol';
 import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
+import { initSheetData } from '../../state/modules/sheet';
 import { handleBorder, handleClearFormat, handleMerge, updateFormatCell } from '../../state/modules/toolbar';
 import { syncablePaths } from './factories/collab';
 import { contextFactory } from './factories/context';
