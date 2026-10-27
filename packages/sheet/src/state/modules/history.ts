@@ -247,7 +247,7 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
     const restored = applyPatches(ctx, target);
     // What the marker alone makes of the sheet the op left, and of the live sheet. These runs are trials, so each gets a
     // formula map of its own: a run writes into the map and the open editor's range state, which live outside immer.
-    const trial = (from: Context) => applyOpBatch({ ...from, formulaCache: new FormulaCache() }, [marker]);
+    const trial = (start: Context) => applyOpBatch({ ...start, formulaCache: new FormulaCache() }, [marker]);
     const made = trial(applyPatches(ctx, left));
     const live = trial(ctx);
     if (!made || !live) return { ctx, ops: [] };
