@@ -35,8 +35,11 @@ import type { PaperRoom } from './positioned-figure';
 import { roomOnPaper } from './positioned-figure';
 import { pageScale, textColumnWidth } from './text-column';
 
-// The resize floor of a figure's width (px). A height has none but a pixel, so a thin divider keeps its shape.
+// The resize floor of a figure's width (px). An image's height has none but a pixel, so a thin divider keeps its shape,
+// and a chart's has the width's, as an axis and its labels need the room.
 const FIGURE_MIN_WIDTH = 100;
+const IMAGE_MIN_HEIGHT = 1;
+export const CHART_MIN_HEIGHT = 100;
 
 // The widest a resize makes a figure: the text column, half of it for a wrapped figure, and the paper of the page map
 // for one in front of or behind the text.
@@ -55,23 +58,33 @@ export function clampFigureWidth(width: number, maxWidth: number) {
 export type FigureSizeEdit = { width?: number; height?: number };
 
 // A size the panel asks for, fitted to `maxWidth`: the width within the floor and the cap, and a height that comes with
-// it scaled alongside, so the figure keeps the shape it was given. Unlike a grip's, it stays unrounded, as a typed cm
-// gives a fraction of a px.
-export function fitFigureSize(size: FigureSizeEdit, maxWidth: number): FigureSizeEdit {
+// it scaled alongside, so the figure keeps the shape it was given, above `minHeight`. Unlike a grip's, it stays
+// unrounded, as a typed cm gives a fraction of a px.
+export function fitFigureSize(
+    size: FigureSizeEdit,
+    maxWidth: number,
+    minHeight: number = IMAGE_MIN_HEIGHT,
+): FigureSizeEdit {
     const { width, height } = size;
-    if (width === undefined) return height === undefined ? {} : { height };
+    if (width === undefined) return height === undefined ? {} : { height: Math.max(minHeight, height) };
     const fitted = Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width));
     if (height === undefined) return { width: fitted };
-    return { width: fitted, height: Math.max(1, (height * fitted) / width) };
+    return { width: fitted, height: Math.max(minHeight, (height * fitted) / width) };
 }
 
 // A dragged box fitted to the column. With a ratio, the width is the one the box allows at that ratio and the height
-// follows it, so a box whose top stopped at the paper's caps the width too. Without one, the width keeps to its floor.
-export function fitFigureBox(next: Box, maxWidth: number, ratio: number | null): FigureSize {
+// follows it, so a box whose top stopped at the paper's caps the width too. Without one, the width keeps to its floor
+// and the height to `minHeight`.
+export function fitFigureBox(
+    next: Box,
+    maxWidth: number,
+    ratio: number | null,
+    minHeight: number = IMAGE_MIN_HEIGHT,
+): FigureSize {
     if (ratio === null) {
         return {
             width: clampFigureWidth(next.width, maxWidth),
-            height: Math.round(Math.max(1, next.height)),
+            height: Math.round(Math.max(minHeight, next.height)),
         };
     }
     const width = clampFigureWidth(Math.min(next.width, next.height * ratio), maxWidth);

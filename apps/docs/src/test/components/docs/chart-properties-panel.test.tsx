@@ -211,7 +211,7 @@ const commitSize = async (index: number, value: string) => {
     await press(sizeField(index), { key: 'Enter' });
 };
 
-// 10 cm is 377.95 px, stored as typed. The sample is 600 x 371 px.
+// 10 cm is 377.95 px, stored as typed, and a side Keep aspect ratio derives is exact too. The sample is 600 x 371 px.
 test('a W edit of an unlocked chart writes the width alone, in one undo step', async () => {
     const { editor, undoManager } = await mount();
     expect([sizeField(0)?.value, sizeField(1)?.value]).toEqual(['15.88', '9.82']);
@@ -229,10 +229,17 @@ test('with Keep aspect ratio checked, a W edit writes both sides in one undo ste
     if (!box) throw new Error('no Keep aspect ratio box');
     await click(box);
     await commitSize(0, '10');
-    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: mmToPx(100), height: 234 });
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: mmToPx(100), height: mmToPx(100) / (600 / 371) });
 
     undoManager.undo();
     expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: 600, height: 371 });
+});
+
+// A chart keeps its 100 px floor, as its grips do: 1 cm is 37.8 px.
+test('an H edit of a chart keeps its height to 100 px', async () => {
+    const { editor } = await mount();
+    await commitSize(1, '1');
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: 600, height: 100 });
 });
 
 test("a Style toggle wraps the chart in one undo step and lights it, the spec's rows untouched", async () => {
