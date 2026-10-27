@@ -1,4 +1,4 @@
-// Whether the doc's outline is shown. A desktop shows it beside the page and remembers the choice in this browser, so
+// Whether the doc's outline is shown. A desktop shows it over the page and remembers the choice in this browser, so
 // every doc opens with the outline as the last one was left. A phone shows it as a pane that hides the editor, so the
 // pane opens only from the kebab and is forgotten when the doc closes.
 

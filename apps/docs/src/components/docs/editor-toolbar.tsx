@@ -70,8 +70,7 @@ import type { PageNumberPreset } from './page-numbers';
 import { PageSetupDialog } from './page-setup-dialog';
 import { RestartNumberingDialog } from './restart-numbering-dialog';
 import { StylePicker } from './style-picker';
-import { ToolsMenu, WORD_COUNT_HOTKEY, WordCountItem } from './tools-menu';
-import { ShowOutlineItem, ViewMenu } from './view-menu';
+import { ShowOutlineItem, ToolsMenu, WORD_COUNT_HOTKEY, WordCountItem } from './tools-menu';
 import { WordCountDialog } from './word-count-dialog';
 
 // A closing menu hands focus to the editor the caret is in, whether a pick, Esc or a press outside closed it, rather than
@@ -175,7 +174,7 @@ export const EditorToolbar = ({
     const showsRow = useMediaQuery('(min-width: 1210px)');
     const showsMiddle = useMediaQuery('(min-width: 1390px)');
     const showsAll = useMediaQuery('(min-width: 1610px)');
-    // A phone has no room for more than four menus beside the offline badge, so View and Tools fold into the kebab.
+    // A phone has no room for more than four menus beside the offline badge, so Tools folds into the kebab.
     const isMobile = useIsMobile();
 
     // Document-level: a viewer's editor is not editable, so an editor keymap would never see the key.
@@ -313,14 +312,6 @@ export const EditorToolbar = ({
                             }
                         />
 
-                        {!isMobile && (
-                            <ViewMenu
-                                keepEditorFocus={keepActiveEditorFocus}
-                                outlineShown={outlineShown}
-                                onToggleOutline={onToggleOutline}
-                            />
-                        )}
-
                         {canWrite && (
                             <>
                                 <FormatMenu
@@ -357,7 +348,14 @@ export const EditorToolbar = ({
                             </>
                         )}
 
-                        {!isMobile && <ToolsMenu keepEditorFocus={keepActiveEditorFocus} onWordCount={openWordCount} />}
+                        {!isMobile && (
+                            <ToolsMenu
+                                keepEditorFocus={keepActiveEditorFocus}
+                                onWordCount={openWordCount}
+                                outlineShown={outlineShown}
+                                onToggleOutline={onToggleOutline}
+                            />
+                        )}
                     </div>
                 }
                 center={
@@ -561,8 +559,8 @@ export const EditorToolbar = ({
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                         mobileMenuItems={
                             <>
-                                <ShowOutlineItem onClick={onToggleOutline} />
                                 <WordCountItem onClick={openWordCount} />
+                                <ShowOutlineItem onClick={onToggleOutline} />
                             </>
                         }
                     />
