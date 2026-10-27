@@ -104,4 +104,4 @@ export {
     selectionParagraphFormat,
 } from './paragraph-format';
 export { attributeSearchText } from './search-text';
-export { MIN_TABLE_COLUMN_PX } from './table';
+export { fitColumnWidths, MIN_TABLE_COLUMN_PX } from './table';
