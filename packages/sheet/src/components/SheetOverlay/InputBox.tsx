@@ -41,9 +41,9 @@ import { FormulaSearch } from './FormulaSearch';
 import { cycleReferenceInEditor } from './reference-cycle';
 
 const FORMAT_SHORTCUTS: Record<string, (ctx: Context, cellInput: HTMLDivElement) => void> = {
-    KeyB: handleBold,
-    KeyI: handleItalic,
-    KeyU: handleUnderline,
+    b: handleBold,
+    i: handleItalic,
+    u: handleUnderline,
 };
 
 export const InputBox: React.FC = () => {
@@ -175,8 +175,10 @@ export const InputBox: React.FC = () => {
 
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLDivElement>) => {
+            const input = inputRef.current;
+            if (!input) return;
             lastKeyDownEventRef.current = new KeyboardEvent(e.type, e.nativeEvent);
-            preText.current = inputRef.current!.innerText;
+            preText.current = input.innerText;
 
             // Alt/Meta+Enter inserts a newline regardless of suggest visibility (originally `enterKeyControll`).
             if (e.key === 'Enter' && (e.altKey || e.metaKey) && context.editingCellPosition.length > 0) {
@@ -186,11 +188,10 @@ export const InputBox: React.FC = () => {
                 return;
             }
 
-            const formatShortcut = FORMAT_SHORTCUTS[e.code];
-            const input = inputRef.current;
+            // The letter the layout types, not the physical key, so ⌘C on Dvorak still copies.
+            const formatShortcut = FORMAT_SHORTCUTS[e.key.toLowerCase()];
             if (
                 formatShortcut &&
-                input &&
                 (e.metaKey || e.ctrlKey) &&
                 !e.altKey &&
                 !e.shiftKey &&
@@ -213,7 +214,7 @@ export const InputBox: React.FC = () => {
                 // Cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1); keep the
                 // browser default suppressed even when the caret isn't on a reference.
                 e.preventDefault();
-                cycleReferenceInEditor(inputRef.current!, refs.fxInput.current, setContext);
+                cycleReferenceInEditor(input, refs.fxInput.current, setContext);
             } else if (
                 context.editingCellPosition.length > 0 &&
                 (e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown')
@@ -255,10 +256,11 @@ export const InputBox: React.FC = () => {
                         isBlur
                     )
                         return;
-                    if (!isAllowEdit(draftCtx, draftCtx.selections)) {
+                    const input = refs.cellInput.current;
+                    if (!input || !isAllowEdit(draftCtx, draftCtx.selections)) {
                         return;
                     }
-                    handleFormulaInput(draftCtx, refs.fxInput.current, refs.cellInput.current!, kcode, preText.current);
+                    handleFormulaInput(draftCtx, refs.fxInput.current, input, kcode, preText.current);
                 });
             }
         },
