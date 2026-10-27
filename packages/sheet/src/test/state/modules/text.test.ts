@@ -194,21 +194,33 @@ describe('state/modules/text — rich text wrap', () => {
         ).toEqual(['aa bb cc', ' dd']);
     });
 
-    // 16,000 words took seconds when every step added up the line from its start again.
+    // 16,000 words took seconds when every step added up the line from its start again. Four times the words
+    // cost a linear layout four times the CPU and a quadratic one sixteen times. CPU time, not the wall clock,
+    // and a ratio, not a bound, so a loaded or slower runner passes too. Ten rounds lift the short run above
+    // the clock's grain, and a first run warms the JIT.
     test('a long rich cell lays out in linear time, wrapped or not', () => {
-        const v = Array.from({ length: 16000 }, (_, index) => `w${index % 97}`).join(' ');
-        for (const tb of [undefined, '2']) {
+        const cpu = (words: number, tb: string | undefined) => {
+            const v = Array.from({ length: words }, (_, index) => `w${index % 97}`).join(' ');
             clearMeasureTextCache();
-            const started = performance.now();
-            pieces(
-                [
-                    { v, fs: 10 },
-                    { v: ' end', fs: 20 },
-                ],
-                tb,
-                1e7,
-            );
-            expect(performance.now() - started).toBeLessThan(500);
+            const started = process.cpuUsage();
+            for (let round = 0; round < 10; round += 1) {
+                pieces(
+                    [
+                        { v, fs: 10 },
+                        { v: ' end', fs: 20 },
+                    ],
+                    tb,
+                    1e7,
+                );
+            }
+            const { user, system } = process.cpuUsage(started);
+            return user + system;
+        };
+        for (const tb of [undefined, '2']) {
+            cpu(4000, tb);
+            const small = cpu(4000, tb);
+            const large = cpu(16000, tb);
+            expect(large).toBeLessThan(small * 10);
         }
     });
 });
