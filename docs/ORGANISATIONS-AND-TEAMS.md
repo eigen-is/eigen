@@ -20,6 +20,8 @@ The org join adds the user to the default team in the same `addMember` call, the
 
 An org that predates teams has no default team. A boot with no pinned id looks for it once (`pinDefaultTeam` in `apps/api/src/lib/org/org.ts`): a team in the org with the org's name, created within 5 seconds of the org. Only `createOrganization` makes such a team, since its rows are written in one call and stored to the second. Exactly one match is pinned; none or several pin nothing, and new users then join the org only. Existing members are never added, because a member an admin removed and one never added look the same.
 
+The public config carries `defaultTeamId` next to `orgId`, since the client has no other way to tell the default team from a team an admin made. Admin's user detail leaves it out of the user's Teams section, its count included, and the **Add to team** picker never offers it, so "Not in any team yet" means no team besides the one everyone joins. The team's own Members section still lists and removes its members.
+
 ## The owner holds server settings and admins manage people
 
 | Role     | Can                                             |
