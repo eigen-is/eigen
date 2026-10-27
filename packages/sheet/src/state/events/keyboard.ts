@@ -1,3 +1,9 @@
+// The grid's keyboard. The Workbook hands each keydown to handleGlobalKeyDown, which moves the selection, commits an
+// open edit on Enter or Tab, runs the ⌘ shortcuts and opens a cell when a key types into it. While a cell is open,
+// the in-cell editor handles every other key. The ⌘ letter shortcuts match through TanStack's hotkey matcher, as
+// the other apps' shortcuts do.
+
+import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { cloneDeep, isEmpty, isNil } from 'es-toolkit/compat';
 import { cellValue } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
@@ -166,8 +172,6 @@ export function handleWithCtrlOrMetaKey(
     e: KeyboardEvent,
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null | undefined,
-    handleUndo: () => void,
-    handleRedo: () => void,
 ) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
@@ -191,24 +195,16 @@ export function handleWithCtrlOrMetaKey(
             cache.ignoreWriteCell = true;
             cellInput.innerText = getNowDateTime(2);
             handleFormulaInput(ctx, fxInput, cellInput, e.keyCode);
-        } else if (e.code === 'KeyZ') {
-            // Ctrl + Shift + Z: redo
-            handleRedo();
-            e.stopPropagation();
-            return;
         }
     } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         handleControlPlusArrowKey(ctx, e, false);
-    } else if (e.code === 'KeyB') {
-        // Ctrl + B: bold
-        handleBold(ctx, cellInput);
-    } else if (e.code === 'KeyC') {
+    } else if (matchesKeyboardEvent(e, 'Mod+C')) {
         // Ctrl + C: copy. A selected chart or image copies itself in the Workbook's copy listener, and the
         // cells behind it are not marked copied.
         if (!floatingObjectSelected(ctx)) handleCopy(ctx);
         e.stopPropagation();
         return;
-    } else if (e.code === 'KeyV') {
+    } else if (matchesKeyboardEvent(e, 'Mod+V')) {
         // Ctrl + V: paste — multi-range selections are not supported, bail
         if ((ctx.selections?.length ?? 0) > 1) {
             return;
@@ -217,26 +213,24 @@ export function handleWithCtrlOrMetaKey(
         selectionCache.isPasteAction = true;
         e.stopPropagation();
         return;
-    } else if (e.code === 'KeyX') {
+    } else if (matchesKeyboardEvent(e, 'Mod+X')) {
         if (!floatingObjectSelected(ctx)) handleCut(ctx);
         e.stopPropagation();
         return;
-    } else if (e.code === 'KeyZ') {
-        // Ctrl + Z: undo
-        handleUndo();
-        e.stopPropagation();
-        return;
-    } else if (e.code === 'KeyA') {
+    } else if (matchesKeyboardEvent(e, 'Mod+B')) {
+        // Bold comes after cut. The matcher falls back to the physical key, and Dvorak types x on the B key.
+        handleBold(ctx, cellInput);
+    } else if (matchesKeyboardEvent(e, 'Mod+A')) {
         // Ctrl + A: select all
         selectAll(ctx);
-    } else if (e.code === 'KeyD' || e.code === 'KeyR') {
+    } else if (matchesKeyboardEvent(e, 'Mod+D') || matchesKeyboardEvent(e, 'Mod+R')) {
         // Ctrl + D / Ctrl + R: fill down / right
         const range = ctx.selections?.[0];
         if (!range) return;
 
         e.preventDefault();
         e.stopPropagation();
-        fillFromEdge(ctx, range, e.code === 'KeyD' ? 'down' : 'right');
+        fillFromEdge(ctx, range, matchesKeyboardEvent(e, 'Mod+D') ? 'down' : 'right');
     }
 
     e.preventDefault();
@@ -326,8 +320,6 @@ export function handleGlobalKeyDown(
     fxInput: HTMLDivElement | null | undefined,
     e: KeyboardEvent,
     cache: GlobalCache,
-    handleUndo: () => void,
-    handleRedo: () => void,
     canvas?: CanvasRenderingContext2D,
 ) {
     ctx.selectionActive = false;
@@ -404,7 +396,7 @@ export function handleGlobalKeyDown(
         // shared find bar's document-level Escape hotkey can dismiss it.
         return;
     } else if (e.ctrlKey || e.metaKey) {
-        handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo, handleRedo);
+        handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput);
         return;
     } else if (
         e.shiftKey &&

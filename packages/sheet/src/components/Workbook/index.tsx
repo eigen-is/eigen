@@ -2,6 +2,7 @@
 // recipe through setContextWithProduce, which records the tab's undo entry and sends the edit's ops through onOp. It
 // also owns undo and redo, the clipboard listeners and the imperative API a host reaches through its ref.
 
+import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { isSketchCapped, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import {
     buildImageClipboardItem,
@@ -449,16 +450,17 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // handling undo and redo ahead because handleUndo and handleRedo
                 // themselves are calling setContext, and should not be nested
                 // in setContextWithProduce.
-                if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
-                    if (e.shiftKey) {
-                        handleRedo();
-                    } else {
-                        handleUndo();
-                    }
+                if (matchesKeyboardEvent(nativeEvent, 'Mod+Z')) {
+                    handleUndo();
                     e.stopPropagation();
                     return;
                 }
-                if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') {
+                if (matchesKeyboardEvent(nativeEvent, 'Mod+Shift+Z')) {
+                    handleRedo();
+                    e.stopPropagation();
+                    return;
+                }
+                if (matchesKeyboardEvent(nativeEvent, 'Mod+Y')) {
                     handleRedo();
                     e.stopPropagation();
                     e.preventDefault();
@@ -473,8 +475,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         fxInput.current,
                         nativeEvent,
                         globalCache.current,
-                        handleUndo, // still passing handleUndo and handleRedo here to satisfy API
-                        handleRedo,
                         canvas.current?.getContext('2d') ?? undefined,
                     );
                 });
