@@ -26,6 +26,8 @@ export type UserSettings = {
     mounts?: Record<string, MountSettings>;
     email?: EmailSettings;
     driveView?: Partial<DriveViewPreferences>;
+    // Missing = on: a finished checklist now and then gets a small burst of confetti.
+    celebrations?: boolean;
 };
 
 export type TeamSettings = {
