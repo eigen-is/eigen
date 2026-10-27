@@ -1280,6 +1280,23 @@ test.each([
     expect([$from?.parent.textContent, $from?.parentOffset]).toEqual(['Method', 0]);
 });
 
+test('a jump scrolls its heading to a small margin below the top of the view, so a note number above it shows', async () => {
+    await render(WRITER);
+    await act(async () => void bodyView()?.editor?.commands.setContent(OUTLINE_DOC));
+    await openMenu('View');
+    await pick('Show outline');
+    const scroller = bodyView()?.closest<HTMLElement>('.overflow-y-scroll');
+    const heading = [...(bodyView()?.querySelectorAll('h2') ?? [])].find((h) => h.textContent === 'Method');
+    if (!scroller || !heading) throw new Error('no scroller or heading');
+    spyOn(scroller, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 800, 900));
+    spyOn(heading, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 700, 600, 30));
+    const scrollBy = spyOn(scroller, 'scrollBy').mockImplementation(() => {});
+
+    await inBrowserFrames(() => outlineEntry('Method')?.click());
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    expect(scrollBy).toHaveBeenCalledWith({ top: 700 - 100 - 24 });
+});
+
 test('a jump to a heading leaves the band being edited', async () => {
     await render(WRITER);
     await act(async () => void bodyView()?.editor?.commands.setContent(OUTLINE_DOC));

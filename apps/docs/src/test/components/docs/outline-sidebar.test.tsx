@@ -44,6 +44,10 @@ test('lists the headings in document order, each indented by its level', async (
     const { entries } = await setup(heading(1, 'Intro'), paragraph('Body'), heading(2, 'Method'), heading(3, 'Setup'));
     expect(entries().map((entry) => entry.textContent)).toEqual(['Intro', 'Method', 'Setup']);
     expect(entries().map((entry) => entry.className.match(/\bpl-[\d.]+/)?.[0])).toEqual(['pl-2.5', 'pl-5', 'pl-7.5']);
+    // A button centres its text, which would hide the indent: each entry starts at its left edge, as a side list does.
+    expect(
+        entries().every((entry) => /\bjustify-start\b/.test(entry.className) && /\btext-left\b/.test(entry.className)),
+    ).toBe(true);
 });
 
 test('a heading typed, retitled or turned to text changes the list as it happens', async () => {

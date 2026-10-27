@@ -111,6 +111,8 @@ type EquationMenuItem = NodeMenuItem & { display: boolean };
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
+// Room an outline jump leaves above its heading, in screen pixels.
+const JUMP_MARGIN = 24;
 
 export const CollaborativeEditor = ({
     path,
@@ -393,9 +395,10 @@ const TiptapEditor = ({
     };
     insertFootnoteRef.current = insertFootnote;
     const activeEditor = editingBand ? bands[editingBand] : notes.anchor ? noteEditor : editor;
-    // A jump leaves a band or a note and puts the caret at the start of the heading, which scrolls to the top of the
-    // view: the selection's own scroll stops as soon as the heading shows, at the bottom. A phone's pane closes first,
-    // and the scroll waits a frame for the editor the pane hid to be drawn again.
+    // A jump leaves a band or a note and puts the caret at the start of the heading, which scrolls to a small margin
+    // below the top of the view: the selection's own scroll stops as soon as the heading shows, at the bottom. The
+    // margin keeps a note number above the heading's line in view. A phone's pane closes first, and the scroll waits a
+    // frame for the editor the pane hid to be drawn again.
     const jumpToHeading = (pos: number) => {
         setEditingBand(null);
         notes.close();
@@ -403,7 +406,10 @@ const TiptapEditor = ({
         editor.commands.focus(pos + 1, { scrollIntoView: false });
         requestAnimationFrame(() => {
             const heading = editor.view.nodeDOM(pos);
-            if (heading instanceof Element) heading.scrollIntoView({ block: 'start' });
+            const scroller = scrollContainerRef.current;
+            if (!(heading instanceof Element) || !scroller) return;
+            const top = heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+            scroller.scrollBy({ top: top - JUMP_MARGIN });
         });
     };
     // A double-click puts the caret where it was, a menu at the band's end.
