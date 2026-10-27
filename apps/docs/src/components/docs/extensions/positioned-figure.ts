@@ -50,7 +50,7 @@ type PositionedFiguresOptions = {
     blockOnly: boolean;
 };
 
-const positionedFiguresKey = new PluginKey<number>('positionedFigures');
+const positionedFiguresKey = new PluginKey('positionedFigures');
 
 // A selection the keymap moves to a paragraph's start on purpose, which the caret rest leaves there.
 const REWIND = 'rewind';
@@ -207,14 +207,6 @@ function changedTextblocks(transactions: readonly Transaction[], doc: PMNode): S
     return textblocks;
 }
 
-const positionedIn = (doc: PMNode, from: number, to: number) => {
-    let count = 0;
-    doc.nodesBetween(from, to, (node) => {
-        if (isPositionedFigure(node)) count++;
-    });
-    return count;
-};
-
 // Joins the way `join` does at a plain textblock's edge, with the caret at `caret`, and keeps each figure of `figures`
 // that the join carries into the textblock at `into` where it is drawn: its offsets are measured against that
 // textblock before the dispatch, and it leads it. With nothing to join, at the doc's start, the figures stay too.
@@ -281,7 +273,8 @@ function overText(textblock: Element, x: number, y: number): boolean {
     return false;
 }
 
-// The body's min-height reaches the lowest positioned box, so the notes and the footer band draw below it.
+// The body's min-height reaches the lowest positioned box, so the notes and the footer band draw below it. A doc with
+// none reads no layout.
 function growBody(view: EditorView) {
     const boxes = view.dom.querySelectorAll(POSITIONED_BOXES);
     if (boxes.length === 0) {
@@ -470,29 +463,8 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
         const editor = this.editor;
         const { blockOnly } = this.options;
         return [
-            new Plugin<number>({
+            new Plugin({
                 key: positionedFiguresKey,
-                // How many positioned figures the doc holds: page growth measures only while there is one.
-                state: {
-                    init: (_config, state) => positionedIn(state.doc, 0, state.doc.content.size),
-                    apply(tr, count) {
-                        if (!tr.docChanged) return count;
-                        tr.steps.forEach((step, index) => {
-                            const before = tr.docs[index];
-                            const after = tr.docs[index + 1] ?? tr.doc;
-                            if (step instanceof AttrStep) {
-                                count +=
-                                    Number(isPositionedFigure(after.nodeAt(step.pos))) -
-                                    Number(isPositionedFigure(before.nodeAt(step.pos)));
-                            } else {
-                                step.getMap().forEach((oldFrom, oldTo, from, to) => {
-                                    count += positionedIn(after, from, to) - positionedIn(before, oldFrom, oldTo);
-                                });
-                            }
-                        });
-                        return count;
-                    },
-                },
                 appendTransaction(transactions, _oldState, newState) {
                     const tr = newState.tr;
                     // A peer's change is the peer's to fix, and the server drops a viewer's, so neither tab moves one.
@@ -536,15 +508,11 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                 },
                 view(view) {
                     // An image's height is known once it loads, which changes no doc.
-                    const onLoad = () => {
-                        if (positionedFiguresKey.getState(view.state)) growBody(view);
-                    };
+                    const onLoad = () => growBody(view);
                     view.dom.addEventListener('load', onLoad, true);
                     return {
                         update(updated, previous) {
-                            if (updated.state.doc === previous.doc) return;
-                            if (positionedFiguresKey.getState(updated.state) || updated.dom.style.minHeight)
-                                growBody(updated);
+                            if (updated.state.doc !== previous.doc) growBody(updated);
                         },
                         destroy: () => view.dom.removeEventListener('load', onLoad, true),
                     };
