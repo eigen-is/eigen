@@ -35,6 +35,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Merged cells in spreadsheet previews** — a merged cell too wide or too tall for the Drive preview, or for a download cut to fit, shows no border where the preview cuts it off
 - **Spreadsheet previews** — an image or chart on a sheet with hidden columns shows in the Drive preview when it sits within the preview's first 50 visible columns
 - **Search in Sheets** — searching your files finds a spreadsheet by a chart's title, axis titles and series names
 - **Comments in downloads** — a Docs web page download and the Drive preview show commented text without its yellow highlight, as the PDF and Word downloads already do

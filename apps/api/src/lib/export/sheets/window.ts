@@ -361,21 +361,24 @@ function windowBorders(
     return kept;
 }
 
-// Each merge cut to the window, without the ones that overlap an earlier one in reading order, as Excel forbids
-// overlapping merges. The sweep keeps, for each column, the last row a kept merge covers, so a merge overlaps a kept
-// one exactly when one of its columns is covered at its first row. A merge as wide as the grid would make a scan of
-// its columns cost the window's width for each merge, so a segment tree answers for the whole span in log time.
+// The merges that meet the window, as stored, without the ones that overlap an earlier one in reading order, as Excel
+// forbids overlapping merges. The renderer spans only the tracks a merge covers in the window, and a merge kept whole
+// draws no border on a side the window cut, where the editor draws none. The sweep keeps, for each column, the last
+// row a kept merge covers, so a merge overlaps a kept one exactly when one of its columns is covered at its first row.
+// Two merges that overlap outside the window overlap inside it too, since both start inside it. A merge as wide as the
+// grid would make a scan of its columns cost the window's width for each merge, so a segment tree answers for the
+// whole span in log time.
 function windowMerges(merges: MergeCell[], range: GridRange): Record<string, MergeCell> {
     const [firstRow, lastRow, firstCol, lastCol] = range;
-    const clipped: MergeCell[] = [];
-    for (const m of merges) {
-        const r0 = Math.max(m.r, firstRow);
-        const c0 = Math.max(m.c, firstCol);
-        const r1 = Math.min(m.r + m.rs - 1, lastRow);
-        const c1 = Math.min(m.c + m.cs - 1, lastCol);
-        if (r0 <= r1 && c0 <= c1) clipped.push({ r: r0, c: c0, rs: r1 - r0 + 1, cs: c1 - c0 + 1 });
+    const clipped: { stored: MergeCell; m: MergeCell }[] = [];
+    for (const stored of merges) {
+        const r0 = Math.max(stored.r, firstRow);
+        const c0 = Math.max(stored.c, firstCol);
+        const r1 = Math.min(stored.r + stored.rs - 1, lastRow);
+        const c1 = Math.min(stored.c + stored.cs - 1, lastCol);
+        if (r0 <= r1 && c0 <= c1) clipped.push({ stored, m: { r: r0, c: c0, rs: r1 - r0 + 1, cs: c1 - c0 + 1 } });
     }
-    clipped.sort((a, b) => a.r - b.r || a.c - b.c);
+    clipped.sort((a, b) => a.m.r - b.m.r || a.m.c - b.m.c);
     // A node holds the last row covered anywhere in its span, and the last row a kept merge covers all of its span to.
     // A merge is kept only when its columns are covered above its first row, so its last row is past each of theirs.
     const width = lastCol - firstCol + 1;
@@ -400,11 +403,11 @@ function windowMerges(merges: MergeCell[], range: GridRange): Record<string, Mer
         cover(2 * node + 1, mid + 1, hi, from, to, row);
     };
     const kept: Record<string, MergeCell> = {};
-    for (const m of clipped) {
+    for (const { stored, m } of clipped) {
         const [from, to] = [m.c - firstCol, m.c - firstCol + m.cs - 1];
         if (coveredTo(1, 0, width - 1, from, to) >= m.r) continue;
         cover(1, 0, width - 1, from, to, m.r + m.rs - 1);
-        kept[`${m.r}_${m.c}`] = m;
+        kept[`${stored.r}_${stored.c}`] = stored;
     }
     return kept;
 }
