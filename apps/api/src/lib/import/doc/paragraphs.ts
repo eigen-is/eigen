@@ -326,6 +326,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const outline = styles.para(styleId).outlineLvl;
     if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
+    // Outline level 9 is Word's body text, so a style based on a heading that sets it, as TOC Heading does, is no heading.
+    if (role.kind === 'heading' && outline === 9) role = { kind: 'paragraph' };
     const paraRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
     const numId = direct.numId ?? styled.numId;
     const listed = numId !== undefined && numId !== '0';
