@@ -90,11 +90,16 @@ export function readDocx(
         // Each table of contents lists the doc's headings now, which differ from the entries Word saved when the file
         // lists other styles (\t), outline levels set by hand (\u), or headings renamed since Word last updated it.
         // A numbered heading's number is set off by a tab in Word's entry and by a space in the heading's text.
+        // The outline's words to a level are worked out once, however many tables of contents list to it.
         const words = (texts: string[]) => texts.map((text) => text.replace(/\s+/g, ' ').trim()).join('\n');
         const outline = readOutline(doc);
+        const derived = new Map<number, string>();
         for (const toc of reader.tocs) {
-            const derived = outline.filter(({ level }) => level <= toc.levels).map(({ text }) => text);
-            if (words(derived) !== words(toc.saved)) losses.lost('toc-entries-changed');
+            const listed =
+                derived.get(toc.levels) ??
+                words(outline.filter(({ level }) => level <= toc.levels).map(({ text }) => text));
+            derived.set(toc.levels, listed);
+            if (listed !== words(toc.saved)) losses.lost('toc-entries-changed');
         }
         const bands: Partial<Record<BandRoot, Node>> = {};
         for (const [root, blocks] of bandContent) {

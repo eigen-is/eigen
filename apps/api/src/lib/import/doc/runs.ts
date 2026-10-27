@@ -49,9 +49,19 @@ type Link = { href?: string; title: string | null };
 // its code, the link its result shows, and whether it is a table of contents.
 export type Field = { inCode: boolean; code: string; link?: Link; checkbox?: boolean; toc?: boolean };
 
-// A table of contents field whose result is being read: Word's saved entries, which the doc derives again, so the
-// result is cut from the paragraphs it spans. `saved` is each entry's text, which the import compares with its own.
-export type Contents = { field: Field; levels: number; saved: string[]; paragraphs: { p: XmlElement; scope: Scope }[] };
+// A table of contents field whose result the body is in. Word's saved entries are derived again, so the result is cut
+// from the paragraphs it spans. `saved` is each entry's text, which the import compares with its own. A paragraph all
+// result is held until the field ends, as its `cut` if it does and as a paragraph again, `whole`, if a heading, a table
+// or the body's end comes first.
+export type OpenToc = { field: Field; levels: number; saved: string[]; held: { cut: Item[]; whole: Item[] }[] };
+
+// A result's pieces in one paragraph, from `from` up to `to`, or on to the paragraph's end while the result goes on.
+// `opened` when its field began here.
+export type TocCut = { toc: OpenToc; from: number; to?: number; opened: boolean };
+
+// Each node draws the whole outline in the editor, so a crafted file of thousands of fields would make thousands of
+// lists of thousands of entries. The ones past it stay their paragraphs.
+const MAX_TABLES_OF_CONTENTS = 8;
 
 export type RunContext = {
     scope: Scope;
@@ -65,9 +75,9 @@ export type RunContext = {
     pending: Item[];
     // The lines of those standing in for what a drawing left out, which the paragraph aligns as its own.
     leftOut: ParagraphItem[];
-    // The pieces of this paragraph a table of contents' result holds, from `from` up to `to`, or on to the paragraph's
-    // end while the result goes on. `opened` when its field began here.
-    contents?: { toc: Contents; from: number; to?: number; opened: boolean };
+    // The pieces of this paragraph the results of tables of contents hold, in order. Only a paragraph between the
+    // body's blocks has the list, as only there a table of contents is a node.
+    tocCuts?: TocCut[];
 };
 
 // Content that doesn't show: a tracked deletion, and properties. Markers such as bookmarks and comment ranges hold
@@ -262,19 +272,20 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
             field.link = hyperlinkField(reader, field.code) ?? outer?.link;
             field.toc = outer?.toc || /^TOC\b/i.test(field.code.trim());
             // Only between the body's blocks, as the editor inserts one: in a cell or a note it stays its paragraphs.
-            const levels =
-                outer || context.scope.story !== 'body' || context.scope.tables > 0 ? undefined : tocLevels(field.code);
-            if (levels !== undefined) {
-                reader.contents = { field, levels, saved: [], paragraphs: [] };
-                context.contents = { toc: reader.contents, from: context.pieces.length, opened: true };
+            const levels = outer || !context.tocCuts ? undefined : tocLevels(field.code);
+            if (levels !== undefined && reader.tocs.length >= MAX_TABLES_OF_CONTENTS) reader.lost('blocks-flattened');
+            else if (levels !== undefined) {
+                reader.openToc = { field, levels, saved: [], held: [] };
+                reader.tocs.push(reader.openToc);
+                context.tocCuts?.push({ toc: reader.openToc, from: context.pieces.length, opened: true });
             }
         }
     } else if (type === 'end') {
         const field = reader.fields.pop();
-        if (field && field === reader.contents?.field && context.contents) {
-            context.contents.to = context.pieces.length;
-            reader.tocs.push(reader.contents);
-            reader.contents = undefined;
+        const cut = context.tocCuts?.at(-1);
+        if (cut && field === cut.toc.field && cut.to === undefined) {
+            cut.to = context.pieces.length;
+            reader.openToc = undefined;
         }
         const kind = field && pageNumberKind(field.code);
         if (reader.fields.at(-1)?.inCode) return;

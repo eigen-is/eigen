@@ -1,13 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { cpuClock } from '../../cpu-time';
 import { importDocxBody, nodesOfType } from '../../fixtures/golden-docx';
 
 // A Word table of contents is a TOC field whose result holds Word's saved entries. The import reads it as one node,
 // whose entries the doc derives from its headings again.
 
 const run = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
-const paragraph = (inner: string, style?: string) =>
-    `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}${inner}</w:p>`;
+const paragraph = (inner: string, style?: string, pPr = '') =>
+    `<w:p>${style || pPr ? `<w:pPr>${style ? `<w:pStyle w:val="${style}"/>` : ''}${pPr}</w:pPr>` : ''}${inner}</w:p>`;
 const heading = (text: string) => paragraph(run(text), 'Heading1');
 const field = (code: string) =>
     `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${code} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`;
@@ -32,6 +33,9 @@ const STYLES =
     '<w:style w:type="paragraph" w:styleId="TOC1"><w:name w:val="toc 1"/></w:style><w:style w:type="paragraph" w:styleId="TOCHeading"><w:name w:val="TOC Heading"/><w:basedOn w:val="Heading1"/><w:pPr><w:outlineLvl w:val="9"/></w:pPr></w:style>';
 
 const read = (body: string) => importDocxBody(body, { styles: STYLES });
+
+const table = (text: string) =>
+    `<w:tbl><w:tblGrid><w:gridCol w:w="5000"/></w:tblGrid><w:tr><w:tc>${paragraph(run(text))}</w:tc></w:tr></w:tbl>`;
 
 // Each block as its type, with a table of contents' levels and a textblock's text.
 const blocks = (json: JSONContent) =>
@@ -116,4 +120,107 @@ describe('a docx table of contents', () => {
         );
         expect(stale.warnings).toEqual([{ code: 'toc-entries-changed', count: 1 }]);
     });
+
+    test('a paragraph that ends one and begins another cuts both results', async () => {
+        const { json } = await read(
+            [
+                paragraph(`${field('TOC \\o "1-3"')}${run('A\t1')}`),
+                paragraph(`${run('B\t2')}${END}${field('TOC \\o "1-2"')}${run('C\t3')}`),
+                paragraph(END),
+            ].join(''),
+        );
+        expect(blocks(json)).toEqual(['toc 3', 'toc 2']);
+    });
+
+    test('a section break in the paragraph that ends the field stays', async () => {
+        const sectionEnd = paragraph(END, undefined, '<w:sectPr><w:type w:val="nextPage"/></w:sectPr>');
+        const { json } = await read(
+            `${paragraph(`${field('TOC \\o "1-3"')}${run('Intro\t1')}`)}${sectionEnd}${heading('Intro')}`,
+        );
+        expect(blocks(json)).toEqual(['toc 3', 'pageBreak: ', 'heading: Intro']);
+    });
+
+    // A text box is no entry: its paragraphs are its own, read where the entry anchors it.
+    test("a text box an entry anchors stays, and its paragraphs aren't the result's", async () => {
+        const box = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Box"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent>${paragraph(run('Boxed'))}</w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const body = [
+            paragraph(`${field('TOC \\o "1-3" \\h')}${entry('Intro', 1, 1)}`),
+            paragraph(`${entry('Method', 2, 2)}${box}`),
+            paragraph(END),
+            heading('Intro'),
+            heading('Method'),
+        ].join('');
+        const { json } = await read(body);
+        expect(blocks(json)).toEqual(['toc 3', 'paragraph: Boxed', 'heading: Intro', 'heading: Method']);
+    });
+});
+
+// A file says where a field's result ends, and a crafted or broken one may say it late or never. A table of contents'
+// result holds neither a heading nor a table, so the first of either ends the cut: what the field held stays its
+// paragraphs, in place.
+describe("a docx table of contents' result that runs on", () => {
+    const opener = paragraph(`${field('TOC \\o "1-3" \\h')}${run('Intro\t1')}`);
+
+    test('ended past a heading, it takes none of the body', async () => {
+        const { json, warnings } = await read(
+            `${opener}${heading('Real body text')}${paragraph(run('More body'))}${paragraph(END)}`,
+        );
+        expect(blocks(json)).toEqual([
+            'paragraph: Intro\t1',
+            'heading: Real body text',
+            'paragraph: More body',
+            'paragraph: ',
+        ]);
+        expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
+    });
+
+    test('never ended, it keeps a table after it whole and the paragraphs in their order', async () => {
+        const { json } = await read(`${opener}${paragraph(run('P1'))}${table('Cell')}${paragraph(run('P2'))}`);
+        expect(blocks(json)).toEqual(['paragraph: Intro\t1', 'paragraph: P1', 'table: Cell', 'paragraph: P2']);
+    });
+
+    test("never ended, it keeps a SmartArt's text, whose parts are read once", async () => {
+        const DGM = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
+        const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+        const point = (id: number, text: string) =>
+            `<dgm:pt modelId="${id}"><dgm:t><a:bodyPr/><a:p><a:r><a:t>${text}</a:t></a:r></a:p></dgm:t></dgm:pt>`;
+        const data = `<dgm:dataModel xmlns:dgm="${DGM}" xmlns:a="${A}"><dgm:ptLst><dgm:pt modelId="0" type="doc"/>${point(1, 'Plan')}${point(2, 'Do')}</dgm:ptLst></dgm:dataModel>`;
+        const smartArt = `<w:r><w:drawing><wp:inline><wp:extent cx="2575560" cy="964504"/><wp:docPr id="3" name="Graphic 3"/><a:graphic><a:graphicData><dgm:relIds xmlns:dgm="${DGM}" r:dm="rId20"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const { json } = await importDocxBody(`${opener}${paragraph(smartArt)}${paragraph(run('After'))}`, {
+            styles: STYLES,
+            rels: '<Relationship Id="rId20" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData" Target="diagrams/data1.xml"/>',
+            media: { 'word/diagrams/data1.xml': new TextEncoder().encode(data) },
+        });
+        expect(blocks(json).filter((block) => block !== 'paragraph: ')).toEqual([
+            'paragraph: Intro\t1',
+            'paragraph: Plan',
+            'paragraph: Do',
+            'paragraph: After',
+        ]);
+    });
+});
+
+// Each node draws the whole outline in the editor, so a crafted file of thousands of fields would make thousands of
+// lists of thousands of entries.
+describe('many docx tables of contents', () => {
+    test('the first eight are nodes, and the rest stay their paragraphs, counted as flattened', async () => {
+        const toc = paragraph(`${field('TOC \\o "1-3"')}${run('Intro\t1')}${END}`);
+        const { json, warnings } = await read(`${toc.repeat(10)}${heading('Intro')}`);
+        expect(blocks(json)).toEqual([
+            ...Array.from({ length: 8 }, () => 'toc 3'),
+            'paragraph: Intro\t1',
+            'paragraph: Intro\t1',
+            'heading: Intro',
+        ]);
+        expect(warnings).toEqual([{ code: 'blocks-flattened', count: 2 }]);
+    });
+
+    test('eight thousand fields beside eight thousand headings read in linear time', async () => {
+        const fields = paragraph(`${field('TOC')}${END}`).repeat(8000);
+        const headings = Array.from({ length: 8000 }, (_, index) => heading(`Heading ${index}`)).join('');
+        const cpuMs = cpuClock();
+        const { json } = await read(`${fields}${headings}`);
+        expect(cpuMs()).toBeLessThan(3000);
+        expect(nodesOfType(json, 'heading')).toHaveLength(8000);
+    }, 60_000);
 });
