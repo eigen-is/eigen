@@ -1,7 +1,7 @@
 // Writes the files of a release install from the API image: the eigen launcher, the Compose file and the helper
 // files a server may need, such as the fail2ban filters, plus a starter .env.production that pins this release.
-// The launcher runs it when it sits alone in a new folder, and again with --force whenever an update or a restore
-// moves the install to another build.
+// The launcher runs it when it sits alone in a new folder, and again with --force, for example when an update or a
+// restore moves the install to another build.
 
 import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';

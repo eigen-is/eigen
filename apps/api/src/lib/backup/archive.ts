@@ -1,8 +1,8 @@
 // Writes and reads Eigen's archives. A home archive is a plain POSIX tar (pax for long paths) piped through zstd,
-// so `tar --zstd -xf` unpacks one anywhere; a whole-server archive is a plain tar of such members, manifest last.
-// Every backup and restore goes through it, such as the per-home jobs, the server backup and ./eigen restore. It
-// does its own tar instead of Bun.Archive, whose writer holds the whole archive in memory and whose reader stops at
-// the first non-ASCII name and segfaults on a ustar one.
+// so `tar --zstd -xf` unpacks one anywhere; a whole-server archive is a plain tar of compressed members, manifest
+// last. Every backup and restore goes through it, such as the per-home jobs, the server backup and ./eigen restore.
+// It does its own tar instead of Bun.Archive, whose writer holds the whole archive in memory and whose reader stops
+// at the first non-ASCII name and segfaults on a ustar one.
 
 /// <reference path="./node-zstd.d.ts" />
 import * as fs from 'node:fs';

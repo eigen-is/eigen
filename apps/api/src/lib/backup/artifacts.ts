@@ -1,5 +1,6 @@
 // The home archives in the backups folder: what the admin pane lists, where an uploaded archive lands, and what a
-// delete takes with it. The backup routes call it; the folders a restore leaves beside a home are the safety copies'.
+// delete takes with it. The backup routes call it. It also owns the folders a restore leaves beside a home, the
+// safety copies.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';

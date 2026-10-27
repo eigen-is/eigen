@@ -1,5 +1,5 @@
 // Captures one drive mount for a home archive: the rows of its metadata.db copy, every file those rows name from
-// wherever the mount keeps it, and its thumbnails, or for a metadata-only level its staged uploads instead. The
+// wherever the mount keeps it, and its thumbnails, or, for an s3 mount at the full level, only its staged uploads. The
 // home snapshot calls it once per mount; a storage failure fails the capture rather than leave holes unnamed.
 
 import { Database } from 'bun:sqlite';

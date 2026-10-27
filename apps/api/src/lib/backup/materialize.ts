@@ -1,7 +1,7 @@
 // What a restore of one home writes outside its folder, from what the archive carries: the owner's auth rows in
-// users3.db, the share-registry rows they granted, and their avatar. restoreHome calls these last, once the home
-// folder is whole, because nothing takes such a row back. A user still on this server keeps who they are.
-
+// users3.db, the share-registry rows they granted, and their avatar. A restore of one home, such as restoreHome,
+// calls these last, once the home folder is whole, because nothing takes such a row back. A user still on this
+// server keeps who they are.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
