@@ -20,7 +20,11 @@ The stream sends a keepalive at once when it opens and every 15 s after. The fir
 
 An event holds ids, never display text or a domain object: a drive event its path's owner, mount, id and parent, a mail event its message and mailbox, and so on. The handler invalidates the queries those ids name and refetches the truth. A fat event would be a second copy of the data that drifts from the one the query returns. The shapes are in `packages/lib/src/types/sse.ts`. A whole-file contacts import sends one `contacts:changed` in place of one event per card, since a card change invalidates the whole list anyway ([CONTACTS.md](CONTACTS.md)).
 
-The backend builds each event in `apps/api/src/lib/[domain]/sse-events.ts` and emits it with `home.broadcast()`. The frontend handler is `packages/lib/src/core/[domain]/sse-handlers.ts`, registered in `useSSE`. Space and Team have event types and no emitter or handler.
+The backend builds each event in `apps/api/src/lib/[domain]/sse-events.ts` and emits it with `home.broadcast()`. A drive event's callers pass a whole `DrivePath`, so `buildDriveEvent` picks its five ids: the path's name and its ACL, which lists the email of everyone it is shared with, never travel on the stream. The frontend handler is `packages/lib/src/core/[domain]/sse-handlers.ts`, and `handleSSEvent` (`packages/lib/src/core/sse/sse-handlers.ts`) hands every event to all of them. A test keyed by every `SSEventType` (`packages/lib/src/test/core/sse/sse-handlers.test.ts`) holds each type to a handler, so a type with no handler fails it.
+
+## A drive event reaches the owner's tabs, and a team home has no stream
+
+`Drive.emit` broadcasts on the Home that owns the path, and only a user's own Home has listeners. Nobody signs in as a team, so a team Home's broadcast reaches no tab: a file created, renamed or trashed on a team drive refreshes no member's open folder. A change inside a folder someone shared with a user refreshes none of that user's views either. Those tabs catch up on the query's next refetch. Three kinds of event do reach the members, because they are relayed to every effective member: a file-history change (`broadcastFileHistoryUpdated`), a chat message (`ChatRoom`) and an ACL change, through the share mirror in each recipient's Home ([ACL.md](ACL.md#share-propagation)). A team calendar's event changes reach the users it is shared with by name, not the team's members. Relaying every drive event to the members is open work ([ROADMAP.md](ROADMAP.md)).
 
 ## Toasts come only from the notification center
 
@@ -49,7 +53,7 @@ The owner reloads in every app, and so does every member of a restored team, bec
 1. The event type in `packages/lib/src/types/sse.ts`: its entry in `SSEventType` and its member of the `SSEvent` union.
 2. A builder in `apps/api/src/lib/[domain]/sse-events.ts` that returns only ids.
 3. `this.home.broadcast(buildEvent(...))` where the business logic changes the data.
-4. A handler in `packages/lib/src/core/[domain]/sse-handlers.ts` that invalidates, with no toast, registered in `useSSE`.
+4. A handler in `packages/lib/src/core/[domain]/sse-handlers.ts` that invalidates, with no toast, called from `handleSSEvent`, and a sample of the event in its test's table.
 
 ## See also
 
