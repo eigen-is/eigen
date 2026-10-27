@@ -20,6 +20,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Celebrations** — tick the last box of a card's checklist in Stickies, or of a comment card elsewhere, and now and then confetti bursts from it. Turn it off under **Preferences** on the Personal info page in Space
 - **What a download left out** — after you download a document, spreadsheet, deck or drawing, a message counts what the file left out, cut short or drew simpler, such as a hatched fill a PowerPoint file draws solid. It also says when part of the document couldn't be read
 - **What a printout left out** — printing a Docs document gives the same message once the PDF opens
+- **Image and chart size in Docs** — the **Image** and **Chart** panels set the width and the height in centimeters, with **Keep aspect ratio** as in Slides. Uncheck it to stretch an image, which keeps that size when you print, download it as PDF, a web page or Word, or open the Word file again
 
 ### Changed
 
