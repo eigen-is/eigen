@@ -197,7 +197,7 @@ test('a free/busy block opens no detail', async () => {
     ownEvents.data = [event({ id: '', title: 'Busy until 10:00', startTime: at(22, 9) })];
     const { container } = await open();
     await click(pill(container, 'Busy until 10:00'));
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(dialogTitle()).toBeUndefined();
 });
 
 test('deleting one occurrence of a series cancels that day and keeps the series', async () => {
