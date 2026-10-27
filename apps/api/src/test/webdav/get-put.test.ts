@@ -165,6 +165,16 @@ describe('WebDAV PUT', () => {
         expect(res.status).toBe(412);
     });
 
+    test('PUT with an If-Match on a missing file → 412, and no file lands', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-if-match-missing.txt`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
+            body: 'no',
+            headers: { 'If-Match': '"deadbeef"' },
+        });
+        expect(res.status).toBe(412);
+        expect((await webdavRequest(ctx.alice.user.email, 'HEAD', url)).status).toBe(404);
+    });
+
     test('PUT with no parent → 409', async () => {
         const url = `/webdav/${ctx.alice.user.id}/${mountId}/no/such/dir/x.txt`;
         const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'nope' });

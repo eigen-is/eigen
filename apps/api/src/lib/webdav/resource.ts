@@ -108,17 +108,13 @@ export async function handlePut(args: {
         throw new ApiError(403, 'No write permission');
     }
 
-    // A failed precondition answers before a byte is read. The write checks If-Match again under the
-    // file's lock, where two PUTs from one etag can't both pass.
-    if (existing) {
-        const etag = computeEtag(existing);
-        if (ifMatch && !matchesIfMatch(ifMatch, etag)) {
-            return new Response(null, { status: 412 });
-        }
-        if (ifNoneMatch === '*') return new Response(null, { status: 412 });
-    } else if (ifMatch === '*') {
+    // A failed precondition answers before a byte is read. A missing file has no etag, so any If-Match
+    // fails on it (RFC 7232 §3.1). The write checks If-Match again under the file's lock, where two
+    // PUTs from one etag can't both pass.
+    if (ifMatch && !matchesIfMatch(ifMatch, existing ? computeEtag(existing) : null)) {
         return new Response(null, { status: 412 });
     }
+    if (existing && ifNoneMatch === '*') return new Response(null, { status: 412 });
 
     // A 0-byte PUT (Finder's name reservation) adds nothing, so it skips the quota lookup.
     const room = contentLength === 0 ? 0 : await getMountRoom(ownerId, mountId, existing?.size ?? 0);

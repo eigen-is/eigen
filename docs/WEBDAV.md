@@ -58,7 +58,7 @@ An overwrite trashes the target first. So a request whose source and destination
 
 A create and an overwrite both stream the body to a temp file while hashing it, then write the row. The hash becomes the ETag. An empty PUT succeeds, because Finder reserves a new name with a 0-byte PUT before it sends the content. A PUT over a folder is a 409. The MIME type comes from the name's extension, and an overwrite regenerates the thumbnail.
 
-**`If-Match` is checked under the file's lock.** An overwrite's `If-Match` answers early, before a byte is read, and goes down with the write to `Mount.writeFile`, which checks it again inside the file's path lock. Two PUTs from one etag both pass the early check, and the lock lets only the first write: the second is a 412. The inline editor's save goes through the same check ([INLINE-EDITING.md](INLINE-EDITING.md#a-save-is-guarded-by-the-files-etag-not-a-lock)).
+**`If-Match` is checked under the file's lock.** An overwrite's `If-Match` answers early, before a byte is read, and goes down with the write to `Mount.writeFile`, which checks it again inside the file's path lock. Two PUTs from one etag both pass the early check, and the lock lets only the first write: the second is a 412. A missing file has no etag, so a PUT with any `If-Match` on it is a 412 and creates nothing (RFC 7232 §3.1). The inline editor's save goes through the same check ([INLINE-EDITING.md](INLINE-EDITING.md#a-save-is-guarded-by-the-files-etag-not-a-lock)).
 
 **Write access comes before the size checks.** A PUT by someone who can only read is a 403, even on a full mount, so the answer names what they can act on.
 
