@@ -29,6 +29,7 @@ import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
     MAX_EXPORT_CELLS,
+    PREVIEW_SHEET_BUDGET,
     renderSheetsHtml,
     renderSheetsPreviewHtml,
     sheetsHtmlDocument,
@@ -1572,9 +1573,12 @@ describe('Sheets HTML export — charts', () => {
         expect(drawn).toBeGreaterThan(0);
         expect(drawn).toBeLessThan(200);
         expect(lost).toEqual(Array(200 - drawn).fill('charts-dropped'));
-        // The preview spends the same cap on its one sheet, and says it left something out.
+        // The preview's charts spend what its 200 rows left of its own budget, and it says it left some out. The
+        // export's cap drew 99 here, 22 MB that the preview's byte guard threw away whole.
         const preview = renderSheetsPreviewHtml([sheet], NO_MEDIA);
-        expect(preview.html.match(/<svg /g)).toHaveLength(drawn);
+        const fit = Math.floor((PREVIEW_SHEET_BUDGET.maxCells - 200) / (500 + points));
+        expect(fit).toBeGreaterThan(0);
+        expect(preview.html.match(/<svg /g)).toHaveLength(fit);
         expect(preview.truncated).toBe(true);
     }, 60_000);
 });

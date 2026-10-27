@@ -123,16 +123,16 @@ export function sheetsHtmlDocument({
     });
 }
 
-// A preview is a glance, so it renders only the first shown sheet, cut to the budget. Its charts spend what is left of
-// the export's MAX_EXPORT_CELLS. `truncated` is true when rows, columns, cells, charts or other sheets were left out,
-// and the caller then adds the shared marker. The resolver spans every sheet, so a rule's formula can read another
-// sheet.
+// A preview is a glance, so it renders only the first shown sheet, cut to the budget. Its images and charts spend what
+// the window left of that budget's cells, so a crowded preview draws the ones that fit instead of a body the byte
+// guard throws away. `truncated` is true when rows, columns, cells, images, charts or other sheets were left out, and
+// the caller then adds the shared marker. The resolver spans every sheet, so a rule's formula can read another sheet.
 export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
     const shown = shownSheets(sheets);
     if (shown.length === 0) return { html: '', truncated: false };
     const windowed = windowedSheet(shown[0], () => PREVIEW_SHEET_BUDGET);
     if (!windowed) return { html: '', truncated: true };
-    const floating = chargeFloating(windowed.floating, mediaUrls, MAX_EXPORT_CELLS - windowed.cells);
+    const floating = chargeFloating(windowed.floating, mediaUrls, PREVIEW_SHEET_BUDGET.maxCells - windowed.cells);
     const first = renderSheet({ ...windowed, floating: floating.kept }, new FormulaEngine(), sheetsResolver(sheets), {
         budget: PREVIEW_SHEET_BUDGET,
         mediaUrls,
