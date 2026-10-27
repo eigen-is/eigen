@@ -22,7 +22,6 @@
     "apps/api/src/scripts/migrate-users.ts": 5,
     "apps/api/src/scripts/seed-test-mail.ts": 2,
     "apps/calendar/src/components/recurring-action-dialog.tsx": 2,
-    "apps/calendar/src/components/time-select.tsx": 1,
     "apps/calendar/src/routes/_auth.view.$mode.$from.$to.tsx": 1,
     "apps/docs/src/components/docs/extensions/comment-mark.ts": 2,
     "apps/drive/src/components/editor/markdown-editor.tsx": 4,
