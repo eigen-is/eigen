@@ -1,3 +1,6 @@
+// The Custom currencies dialog: a currency symbol and a layout, such as symbol first with two decimals, built
+// into a number format with buildCurrencyPattern and applied to the selection.
+
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -64,7 +67,9 @@ export function CustomCurrencies() {
     const apply = () => {
         const fa = buildCurrencyPattern(symbol, variantId);
         setContext((ctx) => {
-            handleNumberFormat(ctx, refs.cellInput.current!, fa);
+            const cellInput = refs.cellInput.current;
+            if (!cellInput) return;
+            handleNumberFormat(ctx, cellInput, fa);
         });
         hideDialog();
     };

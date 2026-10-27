@@ -1,5 +1,9 @@
+// A copy of the grid's selection, from ⌘C or a menu. handleCopy refuses a range that cuts through a merged
+// cell, or several ranges when conditional formats would not survive the paste, and hands the rest to copy.
+
 import { isEmpty, isNil } from 'es-toolkit/compat';
-import { cancelPaintModel, checkCF, getComputeMap, getSheetIndex } from '..';
+import { cancelPaintModel, checkCF, getComputeMap } from '..';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getSheetConfig } from '../context';
 import { copy, selectIsOverlap } from '../modules/selection';
@@ -39,7 +43,7 @@ export function handleCopy(ctx: Context): boolean {
     }
 
     // warn when multiple selections have conditional formatting
-    const cdformat = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].conditionalFormatRules;
+    const cdformat = getSheet(ctx).conditionalFormatRules;
     if (!isNil(ctx.selections) && ctx.selections.length > 1 && !isNil(cdformat) && cdformat.length > 0) {
         let hasCF = false;
 
