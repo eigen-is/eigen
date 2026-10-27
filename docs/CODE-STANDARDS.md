@@ -25,8 +25,8 @@ Six slips recur in review here, each with BAD/GOOD code in [CODE-EXAMPLES.md § 
 
 Types flow end-to-end: Elysia route handler return type → Eden Treaty → hook → component. Don't break the chain. Reasoning per rule: [CODE-EXAMPLES.md § Typing](CODE-EXAMPLES.md#typing).
 
-- No `as any`: fix the type at the source (route handler return type, schema definition), never by casting in hooks
-- No `as Type` on Eden Treaty responses: add an explicit return type to the backend route handler or domain method, using the shared type from `packages/lib/src/types/`
+- No casts and no non-null assertions in new code: no `as Type`, `as any`, `as unknown as` or `!`; `as const` is fine. Narrow with a type guard or `instanceof`, or fix the type at its source (a route handler's return type, a schema, an optional field that is always set). Removing old casts elsewhere doesn't pay for a new one
+- Eden Treaty responses keep their inferred type: add an explicit return type to the backend route handler or domain method, using the shared type from `packages/lib/src/types/`
 - Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it. The exception is `@workspace/math`, a leaf package with no dependencies, which owns its own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
 - `type` over `interface`, except when methods are needed
 - Infer locally, annotate publicly: no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
