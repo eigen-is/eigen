@@ -6,7 +6,7 @@ category: Basics
 tags: [sheets, cells, data, editing, keyboard, formula-bar]
 related: [sheets/get-started, sheets/create-and-edit, sheets/formulas]
 order: 30
-updated: 2026-09-23
+updated: 2026-10-27
 ---
 
 You can enter text, numbers, and formulas into any cell in Sheets, then edit or clear them at any time. Changes are saved automatically.
@@ -64,6 +64,6 @@ Sheets copies each cell whole: its value or formula, formatting, borders, data v
 ## Undo and redo
 
 - **Ctrl+Z** (Mac: **⌘Z**) undoes the last change.
-- **Ctrl+Shift+Z** (Mac: **⌘⇧Z**) redoes it.
+- **Ctrl+Shift+Z** (Mac: **⇧⌘Z**) redoes it.
 
 Both are also available under **Edit → Undo** and **Edit → Redo**.
