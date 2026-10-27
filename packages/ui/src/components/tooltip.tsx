@@ -1,5 +1,8 @@
-import * as TooltipPrimitive from '@radix-ui/react-tooltip';
+// shadcn's Tooltip on Radix: a small label shown on hover or focus of its trigger. Each Tooltip brings
+// its own provider with no delay, so a tooltip shows at once unless its caller passes a delayDuration.
+
 import { cn } from '@workspace/ui/lib/utils';
+import { Tooltip as TooltipPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
 function TooltipProvider({ delayDuration = 0, ...props }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {

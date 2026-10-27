@@ -1,6 +1,9 @@
-import * as CheckboxPrimitive from '@radix-ui/react-checkbox';
+// shadcn's Checkbox on Radix: a square box with a tick, for a form or a settings row.
+// Radix keeps it keyboard- and screen-reader-friendly; this file only gives it our look.
+
 import { cn } from '@workspace/ui/lib/utils';
 import { CheckIcon } from 'lucide-react';
+import { Checkbox as CheckboxPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
 function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxPrimitive.Root>) {

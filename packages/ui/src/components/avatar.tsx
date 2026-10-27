@@ -1,5 +1,9 @@
-import * as AvatarPrimitive from '@radix-ui/react-avatar';
+// shadcn's Avatar on Radix: a round picture with a fallback, such as a user's initials while their
+// photo loads or when it fails. AvatarIcon is our own part, for an avatar that shows an icon instead.
+// The user, contact and member components build their avatars from these parts.
+
 import { cn } from '@workspace/ui/lib/utils';
+import { Avatar as AvatarPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
 function Avatar({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Root>) {

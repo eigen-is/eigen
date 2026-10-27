@@ -1,6 +1,9 @@
-import { Slot } from '@radix-ui/react-slot';
+// shadcn's Breadcrumb: the trail of links from a root to the current page, such as a folder's path in Drive.
+// BreadcrumbLink's asChild lets a router link take the link's look.
+
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
+import { Slot } from 'radix-ui';
 import type * as React from 'react';
 
 function Breadcrumb({ ...props }: React.ComponentProps<'nav'>) {
@@ -31,7 +34,7 @@ function BreadcrumbLink({
 }: React.ComponentProps<'a'> & {
     asChild?: boolean;
 }) {
-    const Comp = asChild ? Slot : 'a';
+    const Comp = asChild ? Slot.Root : 'a';
 
     return (
         <Comp
