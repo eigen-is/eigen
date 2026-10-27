@@ -6,10 +6,11 @@ import { groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modul
 import type { Cell } from '../../../state/types';
 import { contextFactory, selectionFactory } from '../factories/context';
 
-// Mock DOM for tests. globalThis is intentionally widened — Bun's test runtime
-// has no DOM by default and these mocks are scoped to this test file.
+// Bun's test runtime has no DOM, so this file brings a minimal document. One that an earlier file
+// registered (happy-dom, through the grid factory) stays: replacing it breaks the later files that
+// share this process and expect a full DOM.
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-(globalThis as any).document = {
+(globalThis as any).document ??= {
     createElement: (_tag: string) => ({
         innerHTML: '',
         style: {},
