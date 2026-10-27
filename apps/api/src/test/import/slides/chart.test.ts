@@ -5,6 +5,7 @@ import { solidFill, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
 import { CHART_CONTENT_TYPE } from '../../../lib/ooxml/ooxml-chart';
+import { cpuClock } from '../../cpu-time';
 import type { PptxFixture } from '../../fixtures/pptx';
 import { box, buildPptx, graphicFrame, groupXfrm, grp, NS, PX, para, rel, sp } from '../../fixtures/pptx';
 
@@ -333,10 +334,10 @@ describe('bounds', () => {
             types: chartType('ppt/charts/chart1.xml'),
             files: { 'ppt/charts/chart1.xml': part },
         });
-        const started = performance.now();
+        const cpuMs = cpuClock();
         // Read for each map, the part took a minute; once the work left can't cover a read, the rest are boxes.
         const deck = readPptx(pptx, OPTIONS);
-        expect(performance.now() - started).toBeLessThan(3000);
+        expect(cpuMs()).toBeLessThan(3000);
         expect(deck.slides[0].elements[0]?.type).toBe('chart');
         expect(deck.slides[399].elements[0]).toMatchObject({ type: 'richtext', html: '<p>Chart not imported</p>' });
     });
@@ -404,9 +405,9 @@ describe('bounds', () => {
         const junk = `<c:x/>`.repeat(200_000);
         const part = COLUMN.replace('<c:idx val="0"/>', `<c:idx val="0"/>${junk}`);
         const pptx = many(400, part);
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const deck = readPptx(pptx, OPTIONS);
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs()).toBeLessThan(1000);
         expect(deck.slides.every(({ elements: [found] }) => found?.type === 'chart')).toBe(true);
     });
 });

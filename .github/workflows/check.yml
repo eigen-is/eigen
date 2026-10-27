@@ -2,7 +2,8 @@ name: Check
 
 on:
   push:
-    branches: [main, develop, "release-*"]
+    # A `ci-*` branch runs the checks without a pull request, for work on this workflow itself.
+    branches: [main, develop, "release-*", "ci-*"]
   pull_request:
     branches: [main, develop]
 
@@ -12,9 +13,57 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  # Every gate `bun run check` runs except the API suite, beside the jobs that run it.
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+
+      - name: One version per package
+        run: bun dedupe --check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Home imports
+        run: bun scripts/check-home-imports.ts
+
+      - name: Test layout
+        run: bun scripts/check-test-layout.ts
+
+      - name: Docs links
+        run: bun scripts/check-docs-links.ts
+
+      - name: Code standards
+        run: bun run standards
+
+      - name: Primitives index
+        run: bun run primitives:check
+
+      # In dependency order, one workspace after another: run all at once, they finish only 15 s sooner on four cores,
+      # and the tests that time a run against a tenth of it fail.
+      - name: Test packages
+        run: bun --filter '!@apps/api' test --timeout 30000
+
+  # The API suite in three shards, balanced by the per-file times in apps/api/src/test/timings.json.
+  api:
+    name: api ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
 
@@ -26,31 +75,68 @@ jobs:
 
       # The production image's PDF engine: Pango from the distro, WeasyPrint pinned by hash in a venv, as docker/api/Dockerfile
       # installs them, so the WeasyPrint tests run here instead of skipping; poppler-utils gives the PDF pixel tests pdftoppm.
+      # The venv and the packages the runner image lacks are cached per Ubuntu release and requirements, since the Ubuntu
+      # mirror took anything from 1 to 50 s to serve them. Not per image version: two of them serve runs at once while a
+      # new one rolls out. A cached copy that no longer installs is built again. A change to this file starts a fresh cache.
+      - uses: actions/cache@v4
+        id: pdf-engine
+        with:
+          path: |
+            ~/weasyprint
+            ~/pdf-debs
+          key: pdf-engine-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('docker/api/weasyprint-requirements.txt', '.github/workflows/check.yml') }}
+
       - name: WeasyPrint
+        env:
+          CACHED: ${{ steps.pdf-engine.outputs.cache-hit }}
         run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-venv libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 poppler-utils
-          python3 -m venv "$RUNNER_TEMP/weasyprint"
-          "$RUNNER_TEMP/weasyprint/bin/pip" install --require-hashes --only-binary :all: -r docker/api/weasyprint-requirements.txt
-          sudo ln -s "$RUNNER_TEMP/weasyprint/bin/weasyprint" /usr/local/bin/weasyprint
+          if [ "$CACHED" != true ] || ! sudo dpkg -i ~/pdf-debs/*.deb || ! ~/weasyprint/bin/weasyprint --version; then
+            rm -rf ~/pdf-debs ~/weasyprint
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-venv libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 poppler-utils
+            mkdir -p ~/pdf-debs && cp /var/cache/apt/archives/*.deb ~/pdf-debs/
+            python3 -m venv ~/weasyprint
+            ~/weasyprint/bin/pip install --require-hashes --only-binary :all: -r docker/api/weasyprint-requirements.txt
+          fi
+          sudo ln -s ~/weasyprint/bin/weasyprint /usr/local/bin/weasyprint
           weasyprint --version
+          pdftoppm -v
 
-      - name: One version per package
-        run: bun dedupe --check
-
-      - name: Lint
-        run: bun run lint
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Primitives index
-        run: bun run primitives:check
-
-      - name: Test packages
-        run: bun --filter '!@apps/api' test --timeout 30000
-
+      # The shard's file count and its measured times go to the api job below.
       - name: Test API
-        run: bun --filter '@apps/api' test --parallel=4 --timeout 30000
+        working-directory: apps/api
+        run: |
+          mkdir -p "$RUNNER_TEMP/shard"
+          bun run test --parallel=4 --timeout 30000 --shard=${{ matrix.shard }}/3 --timings=src/test/timings.json --update-timings 2>&1 | tee "$RUNNER_TEMP/api.log"
+          grep -oE 'across [0-9]+ files?' "$RUNNER_TEMP/api.log" | tail -1 | grep -oE '[0-9]+' > "$RUNNER_TEMP/shard/files-${{ matrix.shard }}"
+          cp src/test/timings.json "$RUNNER_TEMP/shard/timings-${{ matrix.shard }}.json"
+
+      - uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: api-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard
+          retention-days: 7
+
+  # The shards ran every API test file between them: a file in no shard would fail no run.
+  api-files:
+    needs: api
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: api-shard-*
+          merge-multiple: true
+          path: shards
+
+      - name: Every API test file ran once
+        run: |
+          total=$(find apps/api -name node_modules -prune -o -type f -regextype posix-extended -regex '.*[._](test|spec)\.[cm]?[jt]sx?' -print | wc -l)
+          ran=$(cat shards/files-* | paste -sd+ | bc)
+          echo "shards ran $ran of $total API test files"
+          [ "$ran" -eq "$total" ]
 
   # The launcher under dash, BusyBox and the runner's sh, with a stub docker: no stack, no Bun.
   launcher:

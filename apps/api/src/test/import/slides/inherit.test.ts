@@ -6,6 +6,7 @@ import type { SlideTheme } from '../../../lib/import/slides/inherit';
 import { withWorkBudget } from '../../../lib/import/slides/lookup';
 import { paintOf } from '../../../lib/import/slides/paint';
 import { A_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
+import { cpuClock } from '../../cpu-time';
 import type { PptxFixture } from '../../fixtures/pptx';
 import {
     box,
@@ -100,10 +101,10 @@ describe('placeholders', () => {
             layouts: [{ shapes: layout }],
             slides: [{ shapes: slide, attributes: ' showMasterSp="0"' }],
         });
-        const started = performance.now();
+        const cpuMs = cpuClock();
         readPptx(pptx, OPTIONS);
         // Quadratic matching took seconds here; one lookup each takes milliseconds.
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs()).toBeLessThan(1000);
     });
 
     test("what slide shapes inherit is read once: a master placeholder's, its text styles, the presentation's default and the theme's style lists", () => {
@@ -134,9 +135,9 @@ describe('placeholders', () => {
             zipParts(presentation),
             buildPptx({ theme, slides: [{ shapes: shape }] }),
         ]) {
-            const started = performance.now();
+            const cpuMs = cpuClock();
             readPptx(pptx, OPTIONS);
-            expect(performance.now() - started).toBeLessThan(1000);
+            expect(cpuMs()).toBeLessThan(1000);
         }
     });
 
@@ -241,9 +242,9 @@ describe('placeholders', () => {
                 files: { 'ppt/media/image1.png': PIXEL_PNG },
             }),
         ]) {
-            const started = performance.now();
+            const cpuMs = cpuClock();
             readPptx(pptx, OPTIONS);
-            expect(performance.now() - started).toBeLessThan(1000);
+            expect(cpuMs()).toBeLessThan(1000);
         }
     });
 

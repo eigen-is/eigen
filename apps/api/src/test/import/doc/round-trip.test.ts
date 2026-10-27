@@ -947,13 +947,20 @@ describe("the all-features doc's Google Docs re-save", () => {
     });
 });
 
-// Seeded, so a failure repeats; it prints the seed and the smallest document that still fails.
+// Seeded, so a failure repeats; it prints the seed and the smallest document that still fails. EIGEN_SLOW_TESTS runs
+// all 5,000 seeds. CI runs a fifth of them, the next fifth on each run, so five runs cover what one local run does.
 describe('random documents', () => {
-    const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
-    const CASES = runSlow ? 5000 : 300;
+    const ALL_SEEDS = 5000;
+    const CI_SEEDS = 1000;
+    const ciFirst = 1 + ((Number(process.env['GITHUB_RUN_NUMBER'] ?? 0) * CI_SEEDS) % ALL_SEEDS);
+    const [first, last] = process.env['EIGEN_SLOW_TESTS']
+        ? [1, ALL_SEEDS]
+        : process.env['CI']
+          ? [ciFirst, ciFirst + CI_SEEDS - 1]
+          : [1, 300];
 
-    test(`${CASES} come back as written`, async () => {
-        for (let seed = 1; seed <= CASES; seed++) {
+    test(`seeds ${first} to ${last} come back as written`, async () => {
+        for (let seed = first; seed <= last; seed++) {
             const content = randomDocument(seed);
             if (!writable(content) || (await comesBack(content))) continue;
             const smallest = await shrink(content);

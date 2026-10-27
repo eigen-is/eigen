@@ -10,6 +10,7 @@ import { getHome } from '../../lib/home/get-home';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { parseOoxml, SML_NS } from '../../lib/ooxml/ooxml';
 import { openZip } from '../../lib/ooxml/zip';
+import { cpuClock } from '../cpu-time';
 import { seedDocumentMedia } from '../fixtures/golden-documents';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { exportXlsx, rowsXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
@@ -533,10 +534,10 @@ describe('Sheets xlsx export — conditional formatting', () => {
             conditionRange: [],
             conditionValue: [operand],
         };
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const warnings: TransformWarning[] = [];
         const buffer = exportXlsx([{ name: 'CF', celldata: [], conditionalFormatRules: [rule] }], { warnings });
-        expect(performance.now() - started).toBeLessThan(1_000);
+        expect(cpuMs()).toBeLessThan(1_000);
         expect(writtenFormats(buffer).size).toBe(0);
         expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 1 }]);
     });
