@@ -6,9 +6,9 @@ import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/const
 import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
+    columnFit,
     DOC_PROSE_CLASS,
     FOOTNOTE_PARAGRAPH,
-    fitColumnWidths,
     footnotesInOrder,
     mmToPt,
     normalStyleProperties,
@@ -120,12 +120,11 @@ function withTablesFitted(node: JSONContent, columnPx: number): JSONContent {
         .flatMap((cell): unknown[] => (Array.isArray(cell.attrs?.['colwidth']) ? cell.attrs['colwidth'] : []))
         .filter(isWidth)
         .reduce((sum, width) => sum + width, 0);
+    const fit = columnFit(columnPx, total);
     const fitted = (cell: JSONContent): JSONContent => {
         const colwidth: unknown = cell.attrs?.['colwidth'];
         if (!Array.isArray(colwidth)) return cell;
-        const scaled = colwidth.map((width) =>
-            isWidth(width) ? (fitColumnWidths([width], columnPx, total)[0] ?? width) : width,
-        );
+        const scaled = colwidth.map((width) => (isWidth(width) ? fit(width) : width));
         return { ...cell, attrs: { ...cell.attrs, colwidth: scaled } };
     };
     return { ...node, content: content?.map((row) => ({ ...row, content: row.content?.map(fitted) })) };

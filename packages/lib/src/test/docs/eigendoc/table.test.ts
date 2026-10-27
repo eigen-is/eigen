@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { fitColumnWidths, MIN_TABLE_COLUMN_PX } from '../../../docs/eigendoc';
+import { columnFit, fitColumnWidths, MIN_TABLE_COLUMN_PX } from '../../../docs/eigendoc';
 
 describe('fitColumnWidths', () => {
     test('a table that fits keeps its widths', () => {
@@ -16,10 +16,13 @@ describe('fitColumnWidths', () => {
     test('no column shrinks below the floor', () => {
         expect(fitColumnWidths([1300, 30, 4], 650)).toEqual([633, MIN_TABLE_COLUMN_PX, MIN_TABLE_COLUMN_PX]);
     });
+});
 
+describe('columnFit', () => {
     // One cell's widths, scaled by the factor of the whole table they are part of.
-    test('a part of a table scales by the whole table factor', () => {
-        expect(fitColumnWidths([400], 600, 1200)).toEqual([200]);
-        expect(fitColumnWidths([400], 600, 500)).toEqual([400]);
+    test("a column scales by its whole table's factor, and keeps its width in a table that fits", () => {
+        expect(columnFit(600, 1200)(400)).toBe(200);
+        expect(columnFit(600, 500)(400)).toBe(400);
+        expect(columnFit(650, 1334)(4)).toBe(MIN_TABLE_COLUMN_PX);
     });
 });
