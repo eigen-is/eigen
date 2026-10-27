@@ -1,5 +1,6 @@
 // A small, rare reward for finishing something, such as ticking the last box of a card's checklist.
-// useCelebrate returns celebrate(origin), which a click handler calls with the element that was clicked.
+// useCelebrate returns celebrate(origin), which a caller calls with the element the reward starts from, such as
+// the box that was ticked. That element must still be in the page, as the glow plays on it.
 // The hook owns every rule, so a caller never checks anything itself: the personal celebrations setting,
 // a one-in-three chance, and reduced motion, which gets a short glow on the origin instead of confetti.
 

@@ -1,10 +1,11 @@
 // Ticking the last box of a card's checklist celebrates: once per opening, only for a list of two or more,
-// only on the tick itself, and never with the setting off. The chance is forced to win throughout.
+// only on the tick itself, and never with the setting off. The chance is forced to win throughout. Each click
+// is saved and drawn again, as a card's parent does, which replaces the boxes in the page.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { installHappyDom } from '../../happy-dom';
 
-installHappyDom();
+const window = installHappyDom();
 
 let settings: UserSettings = {};
 const realSpace = await import('@workspace/lib/space');
@@ -31,8 +32,10 @@ const item = (checked: boolean, text: string) =>
 const twoItems = `<ul data-type="taskList">${item(true, 'Buy paint')}${item(false, 'Paint the shed')}</ul>`;
 
 let root = createRoot(document.createElement('div'));
+let saved = '';
 
 function render(open: boolean, description: string) {
+    saved = description;
     act(() =>
         root.render(
             createElement(NoteCardDialog, {
@@ -41,7 +44,9 @@ function render(open: boolean, description: string) {
                 title: 'Shed',
                 description,
                 canWrite: true,
-                onDescriptionChange: () => {},
+                onDescriptionChange: (html: string) => {
+                    saved = html;
+                },
                 children: null,
             }),
         ),
@@ -51,11 +56,13 @@ function render(open: boolean, description: string) {
 function click(text: string) {
     const li = [...document.querySelectorAll('li[data-checked]')].find((el) => el.textContent === text);
     act(() => li?.querySelector('input')?.click());
+    render(true, saved);
 }
 
 beforeEach(() => {
     settings = {};
     burst.mockClear();
+    window.happyDOM.settings.device.prefersReducedMotion = 'no-preference';
     root = createRoot(document.createElement('div'));
     render(false, twoItems);
 });
@@ -65,6 +72,15 @@ test('the tick that completes the list celebrates from that box', () => {
     render(true, twoItems);
     click('Paint the shed');
     expect(burst).toHaveBeenCalledTimes(1);
+});
+
+test('under reduced motion the ticked box glows, the one in the page after the description is drawn again', () => {
+    window.happyDOM.settings.device.prefersReducedMotion = 'reduce';
+    render(true, twoItems);
+    click('Paint the shed');
+    expect(burst).not.toHaveBeenCalled();
+    const glowing = [...document.querySelectorAll('input')].filter((box) => box.getAnimations().length > 0);
+    expect(glowing.map((box) => box.closest('li')?.textContent)).toEqual(['Paint the shed']);
 });
 
 test('unticking does not celebrate', () => {

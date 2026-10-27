@@ -83,6 +83,17 @@ export function NoteCardDialog({
     useEffect(() => {
         if (open) celebratedRef.current = false;
     }, [open]);
+    // The parent draws the saved description again, which replaces every box in the page. So the celebration
+    // waits for that and starts from the box at the same place in the list, as the clicked one is gone by then.
+    const descriptionRef = useRef<HTMLDivElement>(null);
+    const celebrateBoxRef = useRef<number | null>(null);
+    useEffect(() => {
+        const index = celebrateBoxRef.current;
+        if (index === null) return;
+        celebrateBoxRef.current = null;
+        const box = descriptionRef.current?.querySelectorAll('input[type="checkbox"]')[index];
+        if (box instanceof HTMLElement) celebrate(box);
+    }, [description]);
 
     const handleDescriptionClick = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!canWrite || !onDescriptionChange) return;
@@ -94,13 +105,13 @@ export function NoteCardDialog({
         if (input.checked) input.setAttribute('checked', '');
         else input.removeAttribute('checked');
         const html = e.currentTarget.innerHTML;
-        onDescriptionChange(html);
         const { checked, total } = countTaskItems(html);
         // A checklist of one item is a toggle, not a list.
         if (total >= 2 && checked === total && !celebratedRef.current) {
             celebratedRef.current = true;
-            celebrate(input);
+            celebrateBoxRef.current = [...e.currentTarget.querySelectorAll('input[type="checkbox"]')].indexOf(input);
         }
+        onDescriptionChange(html);
     };
 
     const header = (
@@ -155,6 +166,7 @@ export function NoteCardDialog({
                                 the colored header. */}
                             <div className="min-h-14 flex-1 overflow-y-auto px-4 py-3 text-sm text-foreground">
                                 <div
+                                    ref={descriptionRef}
                                     className="eigen-prose"
                                     onClick={handleDescriptionClick}
                                     dangerouslySetInnerHTML={{ __html: description ?? '' }}
