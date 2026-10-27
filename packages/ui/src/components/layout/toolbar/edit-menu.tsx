@@ -4,9 +4,11 @@
 // find bar rather than to the host's editor.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
+import { REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/collab';
 import { DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut } from '@workspace/ui/components/dropdown-menu';
 import { Redo, Search, TextSearch, Undo } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { FIND_HOTKEY, FIND_REPLACE_HOTKEY } from '../../search/doc-search-provider';
 import { useFindBarRefocus } from '../../search/find-in-document-button';
 import { AppBarMenu } from './app-bar-menu';
 
@@ -52,11 +54,11 @@ export function EditMenu({
                 <>
                     <DropdownMenuItem onClick={onUndo} disabled={!canUndo}>
                         <Undo className="h-4 w-4" /> Undo
-                        <DropdownMenuShortcut>{formatForDisplay('Mod+Z')}</DropdownMenuShortcut>
+                        <DropdownMenuShortcut>{formatForDisplay(UNDO_HOTKEY)}</DropdownMenuShortcut>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={onRedo} disabled={!canRedo}>
                         <Redo className="h-4 w-4" /> Redo
-                        <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+Z')}</DropdownMenuShortcut>
+                        <DropdownMenuShortcut>{formatForDisplay(REDO_HOTKEY)}</DropdownMenuShortcut>
                     </DropdownMenuItem>
                     {children}
                 </>
@@ -72,7 +74,7 @@ export function EditMenu({
                     }}
                 >
                     <Search className="h-4 w-4" /> Find
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+F')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(FIND_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {docSearchBar?.canReplace && (
@@ -83,7 +85,7 @@ export function EditMenu({
                     }}
                 >
                     <TextSearch className="h-4 w-4" /> Find and replace
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+H')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(FIND_REPLACE_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
         </AppBarMenu>
