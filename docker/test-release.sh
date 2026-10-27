@@ -462,14 +462,18 @@ done
     done
 ) 2>/dev/null &
 watching=$!
+# The API's execs, recorded while the update runs: the daemon replays only its last 256 events, and the update's pulls,
+# recreates and health checks push its backup command out of them before a later query.
+docker events --since "$(date +%s)" --filter "container=$PROJECT-eigen-api-1" --format '{{.Time}} {{.Action}}' \
+    >"$SCRATCH/api-events.log" 2>/dev/null &
+listening=$!
 started=$SECONDS
-since=$(date +%s)
 eigen update
 show
 backed_up=0
 wait "$running" || backed_up=$?
-kill "$watching" 2>/dev/null || :
-wait "$watching" 2>/dev/null || :
+kill "$watching" "$listening" 2>/dev/null || :
+wait "$watching" "$listening" 2>/dev/null || :
 scratch_run rm "$BALLAST"
 if [ "$CODE" = 0 ] && says "◆  Eigen $NEW" && says "The harness's new release" &&
     says "◇  Eigen $PREVIOUS (harness) → $NEW (harness) is running at https://localhost/"; then
@@ -489,8 +493,7 @@ else
     # product's only if the update's backup command started over five seconds, the CLI's way to the API, before the
     # running backup's record was last written.
     ended=$(scratch_run stat -c %Y "$INSTALL/backups/$manual.json" 2>/dev/null || true)
-    asked=$(docker events --since "$since" --until "$(date +%s)" --filter "container=$PROJECT-eigen-api-1" \
-        --format '{{.Time}} {{.Action}}' | awk '/exec_start: .* backup .*--reason pre-update/ { print $1; exit }' || true)
+    asked=$(awk '/exec_start: .* backup .*--reason pre-update/ { print $1; exit }' "$SCRATCH/api-events.log")
     if [ -n "$asked" ] && [ -n "$ended" ] && [ "$asked" -ge $((ended - 5)) ]; then
         skip "harness timing: $manual ended at $ended, the update asked at $asked, so the wait went untested"
     else
