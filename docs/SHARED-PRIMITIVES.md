@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2043 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2045 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -17,6 +17,7 @@ rather than inlining `queryClient.invalidateQueries`.
 |------|-------------|------|
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
 | `ActivityRow` | `@workspace/ui` | packages/ui/src/components/activity-row.tsx |
+| `AppBarMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/app-bar-menu.tsx |
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
 | `AppShell` | `@workspace/ui` | packages/ui/src/components/layout/app/app-shell.tsx |
 | `AppSidebar` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
@@ -67,7 +68,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SortHeader` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `SortHeaderRow` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `Toolbar` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar.tsx |
-| `ToolbarMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-menu.tsx |
 | `ToolbarSeparator` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-separator.tsx |
 | `ToolbarTitle` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-title.tsx |
 | `TooltipButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
@@ -1006,7 +1006,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1073)
+## Utilities & constants (1075)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1246,7 +1246,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getItemMapRoot` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `NORMALIZE_ORIGIN` | `@workspace/lib/collab` | packages/lib/src/core/collab/normalize-refs.ts |
 | `normalizeParentChildRefs` | `@workspace/lib/collab` | packages/lib/src/core/collab/normalize-refs.ts |
+| `REDO_HOTKEY` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-hotkeys.ts |
 | `restoreYjsDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
+| `UNDO_HOTKEY` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-hotkeys.ts |
 | `parseQuery` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/parse-query.ts |
 | `applyCardPatch` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
 | `COMMENT_STATUS_FILTERS` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |

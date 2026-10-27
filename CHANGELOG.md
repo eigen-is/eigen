@@ -35,6 +35,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width, because the page cuts off the rest. A web page download keeps more columns while all of the sheet's rows fit
 - **Spreadsheet downloads** — a cell's text stays inside its row in a web page or PDF download, as it does in the editor. A wrapped cell taller than its row shows the part that fits
 - **Shortcuts in the Sheets menus** — the **Edit** and **Format → Text** menus show each shortcut next to its item, such as **⌘B** for bold on a Mac and **Ctrl+B** elsewhere
+- **Menus in Docs, Sheets, Slides, Vector and Stickies** — with one menu open, point at another, such as **Edit**, to open it, or move across with the left and right arrow keys. One click on **Edit** while **Format** is open opens **Edit**, and so does one click on a menu while the font or style picker is open. A click outside an open menu also reaches the page, such as selecting a cell
 
 ### Fixed
 
