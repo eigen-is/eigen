@@ -68,7 +68,9 @@ An account marked **no organization** has no **Teams** section.
 2. Click the delete icon (a bin) in the toolbar at the top right of the detail panel.
 3. Read the confirmation message and click **Delete**.
 
-Deleting a team cannot be undone.
+Deleting a team also deletes its drives with every file on them, and its calendar. It cannot be undone.
+
+The team named after your organization, which everyone joins, can't be deleted.
 
 <div class="eigen-callout">
 

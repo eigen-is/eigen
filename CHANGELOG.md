@@ -33,6 +33,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Adding people to a team** — dragging users onto a team is gone with the sidebar list. To add several people at once, select them on the **Users** page, right-click and choose **Add to team…**. A team's **Members** section still adds one person at a time
 - **Admin users** — a user's details list their teams under the role, leaving out the team named after your organization that everyone joins. Add the user to a team with **Add to team**, or take them out of one with its **×**
 - **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width, because the page cuts off the rest. A web page download keeps more columns while all of the sheet's rows fit
+- **Links** — a link is underlined, as in Word and Google Docs: in Docs, its previews and its web page and PDF downloads, and in Stickies, the email you write in Mail, the help center and the blog. A footnote's number and its ↩ in a web page download stay plain
+- **Number fields in Slides and Vector** — a number in the side panel shows at most two decimals, and the line height and letter spacing show at least one, such as 1.0. While you type, the field shows what you typed
 - **Spreadsheet downloads** — a cell's text stays inside its row in a web page or PDF download, as it does in the editor. A wrapped cell taller than its row shows the part that fits
 - **Shortcuts in the Sheets menus** — the **Edit** and **Format → Text** menus show each shortcut next to its item, such as **⌘B** for bold on a Mac and **Ctrl+B** elsewhere
 
@@ -63,6 +65,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads as a web page or PDF with the ones that fit and leaves the rest out, instead of failing. Its preview shows the charts that fit instead of nothing
 - **Sheets** — a wrapped cell that mixes styles, such as one from an Excel file, breaks its lines between words instead of keeping a long styled stretch on one line
 - **Sheets** — turning on **Format → Wrapping → Wrap**, or picking a bigger size in the font size box or **Format → Font size**, makes the row tall enough for the cell's text
+- **Deleting a team in Admin** — deletes the team's drives with every file on them, and its calendar, instead of leaving them on the server. While a backup or a restore of the team runs, the team can't be deleted, and the team named after your organization, which everyone joins, can't be deleted at all
 - **Sheets shortcuts on other keyboard layouts** — on Dvorak, **Ctrl+C** (Mac: **⌘C**) copies the selected cells and **Ctrl+X** (Mac: **⌘X**) cuts them, instead of doing nothing or making them bold. On a Russian or Greek layout, **Ctrl+B**, **Ctrl+I** and **Ctrl+U** style the words you select while typing in a cell. On a Mac the shortcuts take **⌘**, not Ctrl, as in Docs
 - **Undo while you type in a cell** — in Sheets, **Ctrl+Z** (Mac: **⌘Z**) in an open cell undoes your typing and leaves the spreadsheet's earlier changes alone
 

@@ -261,6 +261,25 @@ export const auth = betterAuth({
                 afterAddTeamMember: async ({ teamMember }) => {
                     await reconcileSharesForNewTeamMember(teamMember.userId, teamMember.teamId);
                 },
+                // The team row still exists here, and a throw keeps it, as user.delete.before does for a user.
+                // better-auth answers any error but its own APIError with a 500, so a busy home becomes its 409.
+                // The default team holds the org-wide drive every member joins, and its teardown can't be undone.
+                beforeDeleteTeam: async ({ team }) => {
+                    if (team.id === getServerConfig()?.defaultTeamId) {
+                        throw new APIError('FORBIDDEN', {
+                            message: "The organisation's default team can't be deleted",
+                        });
+                    }
+                    const { teardownTeamData } = await import('../team/delete-team');
+                    try {
+                        await teardownTeamData(team.id);
+                    } catch (error) {
+                        if (error instanceof ApiError && error.status === 409) {
+                            throw new APIError('CONFLICT', { message: error.message });
+                        }
+                        throw error;
+                    }
+                },
                 afterDeleteTeam: async ({ team }) => {
                     // Lazy import to avoid the static cycle (home-relay → get-home → team → auth).
                     const { pushTeamAvatar } = await import('../home/home-relay');

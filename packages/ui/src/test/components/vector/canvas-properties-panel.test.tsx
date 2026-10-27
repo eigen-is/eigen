@@ -191,7 +191,7 @@ describe("a text box's rows", () => {
         await type(letter, '2');
         expect(deck.writes).toEqual([[{ id: 'a', fields: { letterSpacing: 4 } }]]);
         const drawing = await renderPanel(textBox('b', { letterSpacing: 3 }));
-        expect(rowInput(drawing.container, 'Letter').value).toBe('3');
+        expect(rowInput(drawing.container, 'Letter').value).toBe('3.0');
     });
 
     // A pptx's 0.1 pt tracking on a 10 in deck stores 0.2667 px.

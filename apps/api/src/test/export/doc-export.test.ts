@@ -2177,6 +2177,37 @@ describe('doc export — footnotes', () => {
         expect(body.querySelector('article')?.lastElementChild?.className).toBe('footnotes');
     });
 
+    // eigen-prose.css underlines every link (`.eigen-prose a`); a rule that outranks it takes the line off the
+    // numbers. jsdom's computed style ignores specificity, so the test asks which links such a rule matches.
+    test('the HTML takes the underline off a note number and its link back, not off a link in a note', async () => {
+        const linked = (text: string) => ({
+            type: 'text',
+            text,
+            marks: [{ type: 'link', attrs: { href: 'https://eigen.is' } }],
+        });
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [linked('Body'), note({ type: 'paragraph', content: [linked('Source')] })],
+                },
+            ],
+        });
+        const { window } = new JSDOM(await exported('html', doc));
+        const undecorated = [...window.document.styleSheets]
+            .flatMap((sheet) => [...sheet.cssRules])
+            .filter(
+                (rule) =>
+                    rule instanceof window.CSSStyleRule && rule.style.getPropertyValue('text-decoration') === 'none',
+            )
+            .map((rule) => (rule instanceof window.CSSStyleRule ? rule.selectorText : ''));
+        const plain = [...window.document.querySelectorAll('article a')]
+            .filter((a) => undecorated.some((selector) => a.matches(selector)))
+            .map((a) => a.textContent);
+        expect(plain).toEqual(['1', '↩']);
+    });
+
     // A note floats whole to its page, so a taller one loses what doesn't fit, and WeasyPrint grows slow past about
     // 2,000 notes: past either, the PDF lists the notes after the body, as the download does.
     test.each<[string, JSONContent[]]>([
