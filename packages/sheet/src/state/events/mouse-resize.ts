@@ -1,3 +1,7 @@
+// The grid's resize and freeze handles: a mousedown on a row or column header's edge starts a resize, one on
+// the freeze bars starts freezing rows or columns, and the overlay's mousemove and mouseup handlers finish the
+// drag. A double-click on a column edge fits the column to its widest text (autoFitColumnWidth).
+
 import { cellDisplay } from '../../engine/format';
 import type { Freezen } from '..';
 import type { Context } from '../context';
@@ -231,7 +235,7 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
         const text = String(display);
         if (!text) continue;
 
-        const fontset = getFontSet(cell, ctx.defaultFontSize);
+        const fontset = getFontSet(cell);
         renderCtx.font = fontset;
         const measured = renderCtx.measureText(text);
         const width = measured.width + padding;

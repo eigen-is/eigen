@@ -3,11 +3,10 @@
 // draws, and the row's auto height asks for the same layout. Only the text measurements are cached,
 // until clearMeasureTextCache.
 
-import { cellFontName, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
+import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cellWrapsText } from '../../engine/format';
 import type { Cell, CellStyle } from '../../engine/types';
-import type { Context } from '../context';
 import { normalizedCellAttr } from './cell';
 import { isInlineStringCell, runStyleOf } from './inline-string';
 
@@ -153,11 +152,11 @@ function getTextSize(text: string, font: string) {
 // After the cell's font: the faces for a glyph it lacks, CJK among them, or for a name the browser doesn't have.
 const FALLBACK_FAMILIES = `"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif`;
 
-export function defaultFont(defaultFontSize: number) {
-    return getFontSet(null, defaultFontSize);
+export function defaultFont() {
+    return getFontSet(null);
 }
 
-export function getFontSet(format: CellStyle | null | undefined, defaultFontSize: number) {
+export function getFontSet(format: CellStyle | null | undefined) {
     const fontAttr: string[] = [];
 
     // font-style
@@ -170,7 +169,7 @@ export function getFontSet(format: CellStyle | null | undefined, defaultFontSize
     fontAttr.push(!format?.bl ? 'normal' : 'bold');
 
     // font-size
-    fontAttr.push(`${format?.fs || defaultFontSize}pt`);
+    fontAttr.push(`${format?.fs || SHEET_DEFAULT_FONT_SIZE}pt`);
 
     return `${fontAttr.join(' ')} "${cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name}",${FALLBACK_FAMILIES}`;
 }
@@ -347,7 +346,6 @@ export function drawLineInfo(
 export function getCellTextInfo(
     cell: Cell,
     renderCtx: CanvasRenderingContext2D,
-    sheetCtx: Context,
     option: CellTextInfoOption,
 ): CellTextInfo | null {
     const cellWidth = option.cellWidth ?? 0;
@@ -387,7 +385,7 @@ export function getCellTextInfo(
         for (const run of cell.ct.s) {
             const runStyle = runStyleOf(run);
             const { fc, cl, un, fs } = runStyle;
-            const style = { fontset: getFontSet(runStyle, sheetCtx.defaultFontSize), fc, cl, un, fs };
+            const style = { fontset: getFontSet(runStyle), fc, cl, un, fs };
             const lines = (run.v ?? '').split(/\r\n|&#13;&#10;|\r|\n/);
             for (const [index, line] of lines.entries()) {
                 const isLast = index === lines.length - 1;
@@ -400,7 +398,7 @@ export function getCellTextInfo(
         }
         isInline = true;
     } else {
-        fontset = getFontSet(cell, sheetCtx.defaultFontSize);
+        fontset = getFontSet(cell);
         renderCtx.font = fontset;
 
         cancelLine = normalizedCellAttr(cell, 'cl'); // cancelLine

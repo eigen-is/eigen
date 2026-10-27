@@ -24,7 +24,7 @@ export function drawRowHeader(
     renderCtx.clearRect(0, offsetTop, sheetCtx.rowHeaderWidth - 1, drawHeight);
 
     const colors = canvasColors(renderCtx.canvas);
-    renderCtx.font = defaultFont(sheetCtx.defaultFontSize);
+    renderCtx.font = defaultFont();
     renderCtx.textBaseline = 'middle';
 
     const { start: rowStart, end: rowEnd } = headerVisibleRange(sheetCtx.visibledatarow, scrollHeight, drawHeight);
@@ -140,7 +140,7 @@ export function drawColumnHeader(
     renderCtx.clearRect(offsetLeft, 0, drawWidth, sheetCtx.columnHeaderHeight - 1);
 
     const colors = canvasColors(renderCtx.canvas);
-    renderCtx.font = defaultFont(sheetCtx.defaultFontSize);
+    renderCtx.font = defaultFont();
     renderCtx.textBaseline = 'middle';
 
     const { start: colStart, end: colEnd } = headerVisibleRange(sheetCtx.visibledatacolumn, scrollWidth, drawWidth);

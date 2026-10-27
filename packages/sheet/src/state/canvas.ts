@@ -108,7 +108,7 @@ export class Canvas {
         // Initialize table canvas area
         renderCtx.fillStyle = '#ffffff';
         renderCtx.fillRect(offsetLeft - 1, offsetTop - 1, lastColRight - scrollWidth, lastRowBottom - scrollHeight);
-        renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
+        renderCtx.font = defaultFont();
         renderCtx.fillStyle = canvasColors(this.canvasElement).cellText;
 
         const sheetIndex = getSheetIndex(this.sheetCtx, this.sheetCtx.currentSheetId);

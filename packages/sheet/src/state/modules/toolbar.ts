@@ -151,7 +151,7 @@ export function updateFormatCell(
                     // A larger size or wrapped lines need a taller row. The row grows to fit and never
                     // shrinks here, as another cell in it may need the height.
                     if ((attr === 'fs' || attr === 'tb') && canvas) {
-                        const textInfo = getCellTextInfo(value, canvas, ctx, {
+                        const textInfo = getCellTextInfo(value, canvas, {
                             r,
                             c,
                             cellWidth,

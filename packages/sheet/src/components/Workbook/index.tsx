@@ -342,7 +342,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 (draftCtx) => {
                     draftCtx.defaultcolumnNum = mergedSettings.column;
                     draftCtx.defaultrowNum = mergedSettings.row;
-                    draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
                     // Only a load or newly created sheet data needs the view here; a switch derives its own.
                     let viewStale = false;
                     if (draftCtx.sheets.length === 0) {
@@ -426,7 +425,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             originalData,
             mergedSettings.column,
             mergedSettings.row,
-            mergedSettings.defaultFontSize,
             mergedSettings.devicePixelRatio,
             mergedSettings.allowEdit,
             mergedSettings.hooks,

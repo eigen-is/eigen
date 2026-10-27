@@ -1,7 +1,10 @@
+// The editor's state: one Context object holding the sheets, the selection, the open edit, the view and
+// the caches every module reads and writes through immer. defaultContext builds a fresh one, and the
+// helpers here reach a sheet's matrix and config through it.
+
 import {
     SHEET_COLUMN_HEADER_HEIGHT,
     SHEET_DEFAULT_COL_WIDTH,
-    SHEET_DEFAULT_FONT_SIZE,
     SHEET_DEFAULT_ROW_HEIGHT,
     SHEET_ROW_HEADER_WIDTH,
 } from '@workspace/lib/sheets';
@@ -192,7 +195,6 @@ export type Context = {
     allowEdit: boolean;
 
     fontList: unknown[];
-    defaultFontSize: number;
 
     formatPainterOn: boolean;
     formatPainterOnce: boolean;
@@ -344,7 +346,6 @@ export function defaultContext(refs: RefValues): Context {
         allowEdit: true,
 
         fontList: [],
-        defaultFontSize: SHEET_DEFAULT_FONT_SIZE,
 
         formatPainterOn: false,
         formatPainterOnce: false,

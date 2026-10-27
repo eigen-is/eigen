@@ -105,7 +105,7 @@ export function cellOverflowRender(pass: RenderPass, r: number, c: number, stc: 
     const space_width = 2;
     const space_height = 2;
 
-    renderCtx.font = getFontSet(cell, sheetCtx.defaultFontSize);
+    renderCtx.font = getFontSet(cell);
 
     renderCtx.save();
     renderCtx.beginPath();
@@ -113,7 +113,7 @@ export function cellOverflowRender(pass: RenderPass, r: number, c: number, stc: 
     renderCtx.clip();
 
     const textInfo = cell
-        ? getCellTextInfo(cell, renderCtx, sheetCtx, {
+        ? getCellTextInfo(cell, renderCtx, {
               cellWidth,
               cellHeight,
               space_width,

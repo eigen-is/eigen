@@ -24,8 +24,7 @@ function measuringCanvas(measure = fixedGlyphs): CanvasRenderingContext2D {
 }
 
 function layout(cell: Cell) {
-    const ctx = workbookContextFactory();
-    return getCellTextInfo(cell, measuringCanvas(), ctx, {
+    return getCellTextInfo(cell, measuringCanvas(), {
         cellWidth: 40,
         cellHeight: 60,
         r: 0,
@@ -91,18 +90,18 @@ describe('state/modules/text — getCellTextInfo General alignment', () => {
 
 // The size box takes Google's half points, so a cell draws the 10.5 it shows.
 test('a cell draws at its half-point size', () => {
-    expect(getFontSet({ fs: 10.5 }, 10)).toStartWith('normal normal normal 10.5pt ');
+    expect(getFontSet({ fs: 10.5 })).toStartWith('normal normal normal 10.5pt ');
 });
 
 describe('state/modules/text — font sets', () => {
     test('a cell with no font, and the canvas default, draw in Inter', () => {
-        expect(getFontSet({}, 10)).toStartWith('normal normal normal 10pt "Inter",');
-        expect(defaultFont(10)).toStartWith('normal normal normal 10pt "Inter",');
+        expect(getFontSet({})).toStartWith('normal normal normal 10pt "Inter",');
+        expect(defaultFont()).toStartWith('normal normal normal 10pt "Inter",');
     });
 
     test("a cell's font is its first family, an index the bundled font at it", () => {
-        expect(getFontSet({ ff: 2, bl: 1 }, 10)).toStartWith('normal normal bold 10pt "JetBrains Mono",');
-        expect(getFontSet({ ff: "'source serif 4', sans-serif", it: 1, fs: 12 }, 10)).toStartWith(
+        expect(getFontSet({ ff: 2, bl: 1 })).toStartWith('normal normal bold 10pt "JetBrains Mono",');
+        expect(getFontSet({ ff: "'source serif 4', sans-serif", it: 1, fs: 12 })).toStartWith(
             'italic normal normal 12pt "Source Serif 4",',
         );
     });
@@ -123,7 +122,7 @@ describe('state/modules/text — rich text wrap', () => {
 
     function lines(runs: { v: string; fs: number }[], cellWidth: number) {
         const cell: Cell = { tb: '2', ct: { fa: 'General', t: 'inlineStr', s: runs } };
-        const info = getCellTextInfo(cell, sizedCanvas(), workbookContextFactory(), {
+        const info = getCellTextInfo(cell, sizedCanvas(), {
             cellWidth,
             cellHeight: 200,
             r: 0,
@@ -158,7 +157,7 @@ describe('state/modules/text — rich text wrap', () => {
 
     function pieces(runs: { v: string; fs: number }[], tb: string | undefined, cellWidth = 1000) {
         const cell: Cell = { tb, ct: { fa: 'General', t: 'inlineStr', s: runs } };
-        const info = getCellTextInfo(cell, sizedCanvas(), workbookContextFactory(), {
+        const info = getCellTextInfo(cell, sizedCanvas(), {
             cellWidth,
             cellHeight: 200,
             r: 0,
@@ -186,7 +185,7 @@ describe('state/modules/text — rich text wrap', () => {
     // underline is as thick as its glyphs are large.
     test('a run without a size or a color draws at 10 pt in black', () => {
         const cell: Cell = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'plain', un: 1 }] } };
-        const info = getCellTextInfo(cell, sizedCanvas(), workbookContextFactory(), {
+        const info = getCellTextInfo(cell, sizedCanvas(), {
             cellWidth: 1000,
             cellHeight: 200,
             r: 0,
