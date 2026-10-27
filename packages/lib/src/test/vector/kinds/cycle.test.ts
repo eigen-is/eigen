@@ -2,16 +2,17 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { ELEMENT_FIELDS } from '../../../vector/kinds';
 
-// Only an entry through the vector barrel, which loads geometry before any kind, is safe: a kind's own
-// module imported first throws a TDZ ReferenceError, so these tests pin the entries that must work.
+// Any entry works except one that reaches geometry through a kind's own module or defineKind's: the
+// registry then evaluates while that module is in its TDZ and throws a ReferenceError. These tests pin
+// the entries that must work.
 //
 // The runtime back-edges inside vector/: geometry ↔ kinds (kind.ts takes geometry's box primitives while
-// geometry dispatches through the registry), geometry ↔ elbow-pins, geometry ↔ elbow-route,
-// elbow-heading ↔ kinds (arrow.ts reads the heading helpers), and elbow-route → elbow-heading →
-// geometry → elbow-route. ELEMENT_FIELDS is built during module evaluation off the imported kinds, so an
-// entry order that evaluates kinds/index.ts while a kind binding is still in its TDZ would yield a short
-// table — which is why each order gets its OWN PROCESS. Two awaited imports in one test process prove
-// nothing: the second only reads Bun's already-populated module registry.
+// geometry dispatches through the registry), geometry ↔ elbow-route, elbow-heading ↔ kinds (arrow-render
+// reads the heading helpers), and elbow-route → elbow-heading → geometry → elbow-route.
+//
+// The registry builds ELEMENT_FIELDS while it evaluates, so each entry runs in a process of its own. Two
+// imports in one test process prove nothing: the second only reads Bun's module registry, which the first
+// already filled.
 
 const VECTOR_DIR = join(import.meta.dir, '../../../vector');
 
