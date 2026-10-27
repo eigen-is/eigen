@@ -162,6 +162,8 @@ Verified, user-visible, bounded.
 
 - [ ] **The cell editor shows a cell's strikethrough or underline over a run that turns it off**: the editor box draws the cell's `line-through` and underline border (`getStyleByCell`), and CSS draws a parent's decoration through a child span that says `none`. So a word un-struck in a struck cell looks struck while it is open. The commit and the canvas are right. Fix direction: the box leaves the decorations to its spans while a cell is open. **S**
 
+- [ ] **⌘C on Dvorak italicizes in the open cell editor**: the editor's ⌘B, ⌘I and ⌘U match through TanStack's `matchesKeyboardEvent` (`InputBox`), which falls back to the physical key even when the layout types another Latin letter. Dvorak types c on the I key, so ⌘C matches ⌘I, italicizes the selection and blocks the copy. The grid has no ⌘I and copies. Fix direction: a matcher that tries every shortcut's letter before any physical key, or the fix upstream. **S**
+
 - [ ] **A caret format doesn't reach IME input**: a format on a bare caret types only an `insertText` in its style (`typeStyledText`, `state/modules/inline-string.ts`), and a composition can't be cancelled, so Japanese or Chinese typed after ⌘B on a caret takes the style of the run beside it. **S**
 
 ### Decided, not defects

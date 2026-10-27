@@ -4,6 +4,7 @@
 // styles the text typed there next, text typed over a selection takes the style of its first character,
 // and a paste inserts plain text.
 
+import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { escapeHtml } from '@workspace/lib/html';
 import { isEqual } from 'es-toolkit/compat';
 import type React from 'react';
@@ -11,7 +12,6 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, u
 import { WorkbookContext } from '../../context';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
 import { usePrevious } from '../../hooks/usePrevious';
-import type { Context } from '../../state';
 import {
     cancelNormalSelected,
     createRangeHightlight,
@@ -40,11 +40,11 @@ import { FormulaHint } from './FormulaHint';
 import { FormulaSearch } from './FormulaSearch';
 import { cycleReferenceInEditor } from './reference-cycle';
 
-const FORMAT_SHORTCUTS: Record<string, (ctx: Context, cellInput: HTMLDivElement) => void> = {
-    b: handleBold,
-    i: handleItalic,
-    u: handleUnderline,
-};
+const FORMAT_SHORTCUTS = [
+    ['Mod+B', handleBold],
+    ['Mod+I', handleItalic],
+    ['Mod+U', handleUnderline],
+] as const;
 
 export const InputBox: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
@@ -188,17 +188,11 @@ export const InputBox: React.FC = () => {
                 return;
             }
 
-            // The letter the layout types, not the physical key, so ⌘C on Dvorak still copies.
-            const formatShortcut = FORMAT_SHORTCUTS[e.key.toLowerCase()];
-            if (
-                formatShortcut &&
-                (e.metaKey || e.ctrlKey) &&
-                !e.altKey &&
-                !e.shiftKey &&
-                context.editingCellPosition.length > 0
-            ) {
+            const formatShortcut = FORMAT_SHORTCUTS.find(([hotkey]) => matchesKeyboardEvent(e.nativeEvent, hotkey));
+            if (formatShortcut && context.editingCellPosition.length > 0) {
+                const [, format] = formatShortcut;
                 e.preventDefault();
-                setContext((draftCtx) => formatShortcut(draftCtx, input));
+                setContext((draftCtx) => format(draftCtx, input));
                 return;
             }
 

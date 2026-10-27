@@ -4,9 +4,9 @@
 // characters, writes the runs back as spans and puts the selection back. updateCell commits what
 // committedRuns reads, so the cell gets what the editor shows.
 
-import { readCssFontSize, readFontSize } from '@workspace/lib/constants/fonts';
+import { readCssFontSize } from '@workspace/lib/constants/fonts';
 import { escapeHtml } from '@workspace/lib/html';
-import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import type { Cell, CellStyle, InlineStringSegment } from '../../engine/types';
 import { rgbToHex } from '../utils';
 
@@ -64,7 +64,7 @@ export function runStyleOf(style: CellStyle | null | undefined): RunStyle {
         un: Number(style?.un) || 0,
         cl: Number(style?.cl) || 0,
         fc: hexColor(style?.fc) ?? DEFAULT_TEXT_COLOR,
-        fs: readFontSize(Number(style?.fs) || undefined) ?? SHEET_DEFAULT_FONT_SIZE,
+        fs: cellFontSize(style?.fs),
         ff: cssFontName(style?.ff) ?? SHEET_DEFAULT_FONT.name,
     };
 }

@@ -413,7 +413,7 @@ export function cellRender(
         renderCtx.clip();
 
         const textInfo = cell
-            ? getCellTextInfo(cell, renderCtx, sheetCtx, {
+            ? getCellTextInfo(cell, renderCtx, {
                   cellWidth,
                   cellHeight,
                   space_width,

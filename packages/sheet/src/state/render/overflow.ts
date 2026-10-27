@@ -117,7 +117,7 @@ export function computeCellOverflowMap(
             (cell, c) =>
                 dataVerification?.[`${r}_${c}`]?.type === 'checkbox'
                     ? 0
-                    : (getCellTextInfo(cell, canvas, sheetCtx, { r, c })?.textWidthAll ?? 0),
+                    : (getCellTextInfo(cell, canvas, { r, c })?.textWidthAll ?? 0),
             colhidden,
         );
     }

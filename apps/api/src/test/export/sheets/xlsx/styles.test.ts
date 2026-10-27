@@ -18,12 +18,15 @@ function styleSheet(xml: string) {
 }
 
 describe('the style registry', () => {
-    test("a font size past Excel's 1 to 409 points is held to them, and one that is no number is the default", () => {
+    // The editor shows a legacy string size as its number and holds every size to its 1 to 400 points, so the
+    // file says the size the editor showed.
+    test('a font size is read as the editor reads it, and one that is no number is the default', () => {
         const { styles } = registryOf();
         for (const fs of [1e308, -5, 0.5, Number.NaN, Number.POSITIVE_INFINITY, 409, 11.5])
             styles.xf({ v: 'x', fs }, undefined);
+        styles.xf(JSON.parse('{"v":"x","fs":"14"}'), undefined);
         const sizes = [...styles.xml().matchAll(/<sz val="([^"]*)"\/>/g)].map((match) => match[1]);
-        expect(sizes).toEqual(['10', '409', '1', '11.5']);
+        expect(sizes).toEqual(['10', '400', '1', '11.5', '14']);
     });
 
     test("Inter at the sheet's default size is the first font, so a column width counts its digit", () => {

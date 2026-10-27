@@ -46,7 +46,7 @@ import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } fr
 // value-space union (string for color/format/alignment, number for fs, CellType for ct, …);
 // callers narrow at use, e.g. `Number(value)` or `String(value)` per attr.
 // biome-ignore lint/suspicious/noExplicitAny: per-attr return shape varies (string default vs Cell[attr]); tightening forces casts at every call site
-export function normalizedCellAttr(cell: Cell, attr: keyof Cell, defaultFontSize = 10): any {
+export function normalizedCellAttr(cell: Cell, attr: keyof Cell): any {
     const tf = { bl: 1, it: 1, ff: 1, cl: 1, un: 1 };
     // biome-ignore lint/suspicious/noExplicitAny: same union as the return type
     let value: any = cell?.[attr];
@@ -69,7 +69,7 @@ export function normalizedCellAttr(cell: Cell, attr: keyof Cell, defaultFontSize
             value = defaultValue;
         }
     } else if (attr === 'fs') {
-        value ||= defaultFontSize.toString();
+        value ||= String(SHEET_DEFAULT_FONT_SIZE);
     } else if (attr === 'tb') {
         // Text overflows unless set to clip ('0') or wrap ('2'), as in Google Sheets and Excel.
         value ||= '1';
@@ -716,7 +716,7 @@ export function updateCell(
             const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
 
             const textInfo = canvas
-                ? getCellTextInfo(written, canvas, ctx, {
+                ? getCellTextInfo(written, canvas, {
                       r,
                       c,
                       cellWidth,
@@ -912,7 +912,7 @@ export function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: Cel
     if (color !== DEFAULT_TEXT_COLOR) style.color = color;
     if (cl) style.textDecoration = 'line-through';
     const underline = Number(cell.un);
-    if (underline === 1 || underline === 3) style.borderBottom = `${Math.floor(fs / 9)}px solid ${fc}`;
+    if (underline === 1 || underline === 3) style.borderBottom = `${Math.floor(fs / 9)}px solid ${color}`;
     return style;
 }
 
@@ -926,10 +926,8 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
     const cell = d?.[r]?.[c];
     if (!cell) return {};
 
-    if ('bg' in cell) {
-        const background = hexColor(checksCF?.cellColor) ?? hexColor(cell.bg);
-        if (background) style.background = background;
-    }
+    const background = hexColor(checksCF?.cellColor) ?? hexColor(cell.bg);
+    if (background) style.background = background;
     if ('ht' in cell) {
         const value = normalizedCellAttr(cell, 'ht');
         if (Number(value) === 0) {

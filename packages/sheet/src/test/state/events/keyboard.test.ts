@@ -18,6 +18,7 @@ const g = globalThis as any;
 const win = new Window();
 g.window = win;
 g.document = win.document;
+g.sessionStorage = win.sessionStorage;
 
 const anchor = win.document.createElement('div');
 anchor.id = 'sheet-dataVerification-dropdown-btn';
@@ -34,17 +35,27 @@ function listContext(rule: DataVerificationRule | null = LIST) {
     return ctx;
 }
 
-type KeyOptions = { altKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; cellInput?: HTMLDivElement };
+// The shortcut modifier: ⌘ on a Mac, Ctrl elsewhere, as the hotkey matcher reads the platform.
+const isMac = /mac/i.test(`${navigator.platform} ${navigator.userAgent}`);
 
-function keyDown(ctx: Context, key: string, { altKey, ctrlKey, shiftKey, cellInput }: KeyOptions = {}) {
+type KeyOptions = {
+    altKey?: boolean;
+    ctrlKey?: boolean;
+    mod?: boolean;
+    shiftKey?: boolean;
+    code?: string;
+    cellInput?: HTMLDivElement;
+};
+
+function keyDown(ctx: Context, key: string, { altKey, ctrlKey, mod, shiftKey, code, cellInput }: KeyOptions = {}) {
     let prevented = false;
     const e = {
         key,
-        code: /^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : key,
+        code: code ?? (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : key),
         keyCode: key === 'ArrowDown' ? 40 : 70,
         altKey: altKey ?? false,
-        ctrlKey: ctrlKey ?? false,
-        metaKey: false,
+        ctrlKey: (ctrlKey ?? false) || (mod === true && !isMac),
+        metaKey: mod === true && isMac,
         shiftKey: shiftKey ?? false,
         preventDefault() {
             prevented = true;
@@ -52,15 +63,7 @@ function keyDown(ctx: Context, key: string, { altKey, ctrlKey, shiftKey, cellInp
         stopPropagation() {},
     } as unknown as KeyboardEvent;
     const input = cellInput ?? (win.document.createElement('div') as unknown as HTMLDivElement);
-    handleGlobalKeyDown(
-        ctx,
-        input,
-        null,
-        e,
-        {} as GlobalCache,
-        () => {},
-        () => {},
-    );
+    handleGlobalKeyDown(ctx, input, null, e, {} as GlobalCache);
     return prevented;
 }
 
@@ -176,7 +179,7 @@ describe('handleGlobalKeyDown — Ctrl+D / Ctrl+R fill', () => {
             row: [0, 2],
             column: [FIRST, FIRST + sources.length - 1],
         });
-        keyDown(ctx, 'd', { ctrlKey: true });
+        keyDown(ctx, 'd', { mod: true });
         const row = ctx.sheets[0].data![2];
         expect(formulas.map((_, i) => row[FIRST + i]?.f)).toEqual([
             '=$B3',
@@ -197,7 +200,7 @@ describe('handleGlobalKeyDown — Ctrl+D / Ctrl+R fill', () => {
             },
             { row: [0, sources.length - 1], column: [FIRST, FIRST + 2] },
         );
-        keyDown(ctx, 'r', { ctrlKey: true });
+        keyDown(ctx, 'r', { mod: true });
         const column = ctx.sheets[0].data!.map((row) => row[FIRST + 2]);
         expect(formulas.map((_, i) => column[i]?.f)).toEqual([
             '=$B1',
@@ -224,7 +227,7 @@ describe('handleGlobalKeyDown — Ctrl+Arrow over rich text', () => {
         }) as Context;
         ctx.sheetFocused = true;
         ctx.editingCellPosition = [];
-        keyDown(ctx, 'ArrowDown', { ctrlKey: true });
+        keyDown(ctx, 'ArrowDown', { mod: true });
         expect(ctx.selections?.[0]?.row_focus).toBe(2);
     });
 });
@@ -253,5 +256,37 @@ describe('handleGlobalKeyDown — Tab while editing', () => {
         keyDown(ctx, 'Tab', { cellInput, shiftKey: true });
         expect(ctx.sheets[0].data?.[1][1]?.v).toBe('north');
         expect(ctx.selections?.[0]).toMatchObject({ row_focus: 1, column_focus: 0 });
+    });
+});
+
+// A letter shortcut matches the letter the layout types. On Dvorak c sits on the physical I key and x on the B key.
+describe('handleGlobalKeyDown — letter shortcuts', () => {
+    function lettersContext() {
+        const ctx = contextFactory({
+            sheets: [{ name: 'Sheet1', id: 'id_1', order: 0, data: [[{ v: 'a', m: 'a' }]] }],
+            selections: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
+        }) as Context;
+        ctx.sheetFocused = true;
+        ctx.editingCellPosition = [];
+        return ctx;
+    }
+
+    test('⌘B bolds the selected cell', () => {
+        const ctx = lettersContext();
+        keyDown(ctx, 'b', { mod: true });
+        expect(ctx.sheets[0].data?.[0][0]?.bl).toBe(1);
+    });
+
+    test('⌘C on Dvorak copies, and lets the browser fire its copy event', () => {
+        const ctx = lettersContext();
+        expect(keyDown(ctx, 'c', { mod: true, code: 'KeyI' })).toBe(false);
+        expect(ctx.copyState?.copyRange).toEqual([{ row: [0, 0], column: [0, 0] }]);
+    });
+
+    test('⌘X on Dvorak cuts and does not bold', () => {
+        const ctx = lettersContext();
+        keyDown(ctx, 'x', { mod: true, code: 'KeyB' });
+        expect(ctx.pasteIsCut).toBe(true);
+        expect(ctx.sheets[0].data?.[0][0]?.bl).toBeUndefined();
     });
 });

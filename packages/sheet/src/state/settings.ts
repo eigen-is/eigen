@@ -1,6 +1,9 @@
+// What a host passes the Workbook: the sheets, what the editor may do, and the hooks it calls back on an
+// edit, a comment or a chart, with the defaults for every setting it leaves out.
+
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { SheetChart, SheetFloatingItem } from '@workspace/lib/sheets';
-import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_DEFAULT_FONT_SIZE, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
+import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -173,7 +176,6 @@ export type Settings = {
     forceCalculation?: boolean;
     rowHeaderWidth?: number;
     columnHeaderHeight?: number;
-    defaultFontSize?: number;
     filterContextMenu?: string[];
     generateSheetId?: () => string;
     hooks?: Hooks;
@@ -198,7 +200,6 @@ export const defaultSettings: Required<Settings> = {
     forceCalculation: false, // force formula recalculation; may cause performance issues with many formulas, use with caution
     rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
     columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
-    defaultFontSize: SHEET_DEFAULT_FONT_SIZE,
     filterContextMenu: [
         'sort-by-asc',
         'sort-by-desc',

@@ -5,6 +5,7 @@
 import { pxToPt } from '@workspace/lib/docs/eigendoc';
 import type { Cell, CellBorderSides, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
 import {
+    cellFontSize,
     columnIndexToLabel,
     parseCellKey,
     REFERENCE_COLUMN_COUNT,
@@ -14,12 +15,7 @@ import {
 import { escapeXml } from '@workspace/lib/xml';
 import { cellDisplay, cellWrapsText, rangeToA1, valueIsError } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
-import {
-    cellFontSize,
-    DEFAULT_FONT_SIZE_PT,
-    MAX_FORMULA_LENGTH,
-    withFuturePrefixes,
-} from '../../../ooxml/spreadsheetml';
+import { DEFAULT_FONT_SIZE_PT, MAX_FORMULA_LENGTH, withFuturePrefixes } from '../../../ooxml/spreadsheetml';
 import type { SharedStringTable } from './strings';
 import { BATCH_CHARS, cutText } from './strings';
 import type { StyleRegistry } from './styles';
