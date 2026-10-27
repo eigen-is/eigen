@@ -2,9 +2,9 @@ name: Check
 
 on:
   push:
-    branches: [main, "release-*"]
+    branches: [main, develop, "release-*"]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 # The jobs only check out and run lint/typecheck/test — they write nothing back, comment on
 # nothing, publish nothing. Read-only token, no per-job override needed.

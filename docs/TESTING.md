@@ -150,7 +150,7 @@ The release gate's check that `./eigen update` waits out a running backup can sk
 
 ## CI
 
-`.github/workflows/check.yml` runs on every push to `main` or a `release-*` branch and on every pull request to `main`. Its `check` job installs with `--frozen-lockfile`, then runs `bun dedupe --check`, `bun run lint`, `bun run typecheck` (each workspace runs `bun check --no-script`) and `bun run primitives:check`, then the tests:
+`.github/workflows/check.yml` runs on every push to `main`, `develop` or a `release-*` branch and on every pull request to `main` or `develop`. Its `check` job installs with `--frozen-lockfile`, then runs `bun dedupe --check`, `bun run lint`, `bun run typecheck` (each workspace runs `bun check --no-script`) and `bun run primitives:check`, then the tests:
 
 - `bun --filter '!@apps/api' test --timeout 30000`: the package suites, one sequential process each. They still depend on file order, which a [ROADMAP.md](ROADMAP.md) row tracks.
 - `bun --filter '@apps/api' test --parallel=4 --timeout 30000`: the API suite on four isolated workers.
@@ -162,6 +162,16 @@ The 30 s per-test timeout is for CI. The runner is slower than a laptop, and bun
 A second job, `launcher`, runs `docker/test-launcher.sh`. It needs no stack and no Bun, so it runs on a plain runner beside the check job.
 
 Locally, `bun run check` runs the check job's set plus four scripts, in this order: dedupe check, lint, typecheck, `bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, `bun scripts/check-docs-links.ts`, `bun scripts/check-standards.ts`, `primitives:check`, test. The docs-link check fails on a relative markdown link or a backtick'd `apps/`, `packages/`, `docker/` or `scripts/` path that does not resolve on disk. The standards check is the ratcheting code-standards gate ([CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)).
+
+## Work lands on develop, and main moves only for a release
+
+Every change merges to `develop`, and a push there runs the check workflow. `main` moves only when the owner says so, by a fast-forward to `develop` (`git switch main && git merge --ff-only develop`), and a push to it publishes the `:main` images. So `:main` and the release tags carry only code the owner chose to ship, and a pull request targets `develop`.
+
+A release follows the same path. The version bump and its CHANGELOG section are committed on `develop`, `main` fast-forwards to it, and the tag goes on `main`. `bun run release` prints the commands.
+
+## A GitHub release says what changed in a few lines
+
+`bun run release publish` posts the intro paragraph of the version's CHANGELOG section and a link to the whole section, and refuses a section with no intro. The release page is read by people who don't know Eigen yet, so a page that lists every bullet loses them; the [changelog skill](../.claude/skills/changelog/SKILL.md) says how the intro reads.
 
 ## A release publishes only the images its gates tested
 

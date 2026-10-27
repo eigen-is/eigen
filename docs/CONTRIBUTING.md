@@ -76,7 +76,7 @@ A simple rule:
 
 #### PR checklist (for small fixes)
 
-1. Fork the repo, create a branch
+1. Fork the repo, create a branch from `develop`, and open the PR against `develop`
 2. Run `bun run check` before pushing (lint, typecheck, repo guards and tests)
 3. One concern per PR
 4. Link to a related issue if there is one

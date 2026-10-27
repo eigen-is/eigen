@@ -28,7 +28,11 @@ A bullet is the effect alone: what a person sees, does or can rely on now, in on
 
 ## Markers `./eigen update` reads
 
-`apps/api/src/cli/update-check.ts` matches substrings: any line containing `(breaking)` makes the update ask first, and any line containing `(full backup)` makes it take a full backup. Write them only on purpose, put them in the label (`**Backups (breaking)**`), and never let either string appear by accident. The first paragraph under a version heading is the intro `./eigen update --check` shows: keep it a plain summary of the release.
+`apps/api/src/cli/update-check.ts` matches substrings: any line containing `(breaking)` makes the update ask first, and any line containing `(full backup)` makes it take a full backup. Write them only on purpose, put them in the label (`**Backups (breaking)**`), and never let either string appear by accident. The first paragraph under a version heading is the intro `./eigen update --check` shows.
+
+## The intro is the GitHub release
+
+`bun run release publish` posts that intro as the whole GitHub release, with a link to the full section ([TESTING.md § A GitHub release says what changed in a few lines](../../../docs/TESTING.md#a-github-release-says-what-changed-in-a-few-lines)). Write it for someone who has never used Eigen: two to five short sentences that name the main things added or changed, in plain words. A note an updater needs (reload open documents, a breaking change) closes it in one sentence. No bullet list and no internal names.
 
 ## Every claim is checked
 

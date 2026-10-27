@@ -1,8 +1,9 @@
 // Ratchet the mechanical CODE-STANDARDS rules that Biome can't express.
 //
 // Two kinds of metric: hard zeros (any hit fails) and ratcheted counts, whose allowance lives in
-// scripts/standards-baseline.json. A count may never rise; `--update` rewrites the baseline down to
-// what the tree actually has. `--verbose` prints the per-file breakdown. See docs/CODE-STANDARDS.md.
+// scripts/standards-baseline.json. A count may never rise; every run writes a count that fell into the
+// baseline, so a cleanup lowers it without a second step. `--verbose` prints the per-file breakdown.
+// See docs/CODE-STANDARDS.md.
 
 import { LanguageVariant, SyntaxKind } from 'typescript/unstable/ast';
 import { createScanner } from 'typescript/unstable/ast/scanner';
@@ -10,7 +11,6 @@ import { createScanner } from 'typescript/unstable/ast/scanner';
 const BASELINE_PATH = 'scripts/standards-baseline.json';
 
 const verbose = process.argv.includes('--verbose');
-const update = process.argv.includes('--update');
 
 // Non-test, non-generated source. The sheet grammar parser is jison output (biome skips it too).
 const GENERATED = ['routeTree.gen.ts', 'packages/sheet/src/engine/parser/grammar-parser/grammar-parser.ts'];
@@ -469,16 +469,21 @@ for (const path of paths) {
 const baselineFile = Bun.file(BASELINE_PATH);
 const baseline: Record<string, number> = (await baselineFile.exists()) ? await baselineFile.json() : {};
 
-if (update) {
-    const next: Record<string, number> = {};
-    for (const metric of METRICS) {
-        if (metric.hardZero) continue;
-        const current = counts.get(metric.id) ?? 0;
-        next[metric.id] = metric.id in baseline ? Math.min(current, baseline[metric.id]) : current;
-    }
+// A ratcheted count that fell becomes the new baseline; one that rose keeps the old one and fails below.
+// A metric with no entry yet starts at today's count.
+const next: Record<string, number> = {};
+for (const metric of METRICS) {
+    if (metric.hardZero) continue;
+    const current = counts.get(metric.id) ?? 0;
+    next[metric.id] = metric.id in baseline ? Math.min(current, baseline[metric.id]) : current;
+}
+if (JSON.stringify(next) !== JSON.stringify(baseline)) {
     await Bun.write(BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`);
+    for (const [id, allowed] of Object.entries(next)) {
+        if (allowed !== baseline[id]) console.log(`${BASELINE_PATH}: ${id} ${baseline[id] ?? 'new'} → ${allowed}`);
+    }
     Object.assign(baseline, next);
-    console.log(`Updated ${BASELINE_PATH}\n`);
+    console.log('');
 }
 
 const width = Math.max(...METRICS.map((metric) => metric.label.length));
@@ -489,7 +494,7 @@ for (const metric of METRICS) {
     const count = counts.get(metric.id) ?? 0;
     const allowed = metric.hardZero ? 0 : (baseline[metric.id] ?? 0);
     if (count > allowed) failed.push(metric);
-    const status = count > allowed ? '  OVER' : count < allowed ? '  under baseline' : '';
+    const status = count > allowed ? '  OVER' : '';
     console.log(
         `${metric.label.padEnd(width)}  ${String(count).padStart(5)}  ${metric.hardZero ? '    zero' : String(allowed).padStart(8)}${status}`,
     );

@@ -17,7 +17,7 @@ Eigen is a self-hosted alternative to Google Workspace: a monorepo of apps that 
 ## Working with the owner
 
 - A question ("what is happening?") gets findings, not edits.
-- Before multi-file work, ask "branch, or the current branch?" and keep the answer for the task; a trivial fix goes on the current branch. Never push or tag without an explicit go.
+- Before multi-file work, ask "branch, or the current branch?" and keep the answer for the task; a trivial fix goes on the current branch. Never push or tag without an explicit go. Work merges and pushes to `develop`; `main` moves only on the owner's word, by a fast-forward to `develop` ([TESTING.md § Work lands on develop](docs/TESTING.md#work-lands-on-develop-and-main-moves-only-for-a-release)).
 - Another session may share the tree. Stage by path: never `git commit -a`, `git add -A` or `git stash`. Unstage files you didn't change (`git reset -- <path>`) and re-stage them after your commit. While files you never touched are dirty, run no global check.
 - No AI attribution in PRs, issues or upstream posts either. Draft for the owner's review, post with `--body-file` (`gh` posts as eigen-is), then grep the posted body for `claude|co-author|generated`.
 - If the owner is away and a question's recommended answer is clearly the logical one, proceed after 15 minutes. Log the ruling with its cost if wrong and how to undo it, and name it in your summary. Product, UX, stored-format, irreversible and outward-facing choices still wait, and so does every yes the Critical Rules ask for.

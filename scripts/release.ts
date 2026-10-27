@@ -1,4 +1,8 @@
 #!/usr/bin/env bun
+// Cut a release: `bun run release [patch|minor|major]` bumps package.json and lists the commits since the last
+// tag for the CHANGELOG, and `bun run release publish` creates the GitHub Release. The branch flow and the release
+// notes: docs/TESTING.md.
+
 import { join } from 'node:path';
 import { $ } from 'bun';
 
@@ -11,7 +15,7 @@ type Bump = 'patch' | 'minor' | 'major';
 const arg = process.argv[2] ?? 'patch';
 
 // `bun run release publish [--publish]` — create the GitHub Release for the version in
-// package.json, using that version's CHANGELOG.md section as the notes. Draft by default,
+// package.json, its notes the intro of that version's CHANGELOG.md section. Draft by default,
 // so it can be reviewed on GitHub before it goes live.
 if (arg === 'publish') {
     const pkg = await Bun.file(PKG_PATH).json();
@@ -31,17 +35,19 @@ if (arg === 'publish') {
         console.error(`No CHANGELOG.md section for [${version}]. Fill it in before publishing.`);
         process.exit(1);
     }
-    let end = lines.length;
-    for (let i = start + 1; i < lines.length; i++) {
-        if (lines[i].startsWith('## [')) {
-            end = i;
-            break;
-        }
+    // The notes are the section's intro, the paragraph before its first `###`, and a link to the whole
+    // section: a reader new to Eigen gets the release in a few lines (docs/TESTING.md § A GitHub release says
+    // what changed in a few lines).
+    const intro: string[] = [];
+    for (const line of lines.slice(start + 1)) {
+        if (line.startsWith('#')) break;
+        if (line.trim()) intro.push(line.trim());
     }
-    const notes = lines
-        .slice(start + 1, end)
-        .join('\n')
-        .trim();
+    if (intro.length === 0) {
+        console.error(`The CHANGELOG.md section for [${version}] has no intro paragraph. Write one before publishing.`);
+        process.exit(1);
+    }
+    const notes = `${intro.join('\n\n')}\n\nEverything that changed: [CHANGELOG.md](https://github.com/eigen-is/eigen/blob/${tag}/CHANGELOG.md)`;
 
     const draftFlag = process.argv.includes('--publish') ? [] : ['--draft'];
     // --verify-tag aborts if the tag isn't on the remote, so gh never creates a stray tag.
@@ -86,17 +92,21 @@ console.log(log || '  (none)');
 console.log(`
 Next steps:
   1. Fill the [Unreleased] section in CHANGELOG.md from the commits above.
-     Tip: ask Claude to do it (Keep-a-Changelog format, user-visible only).
+     Tip: ask Claude to do it (the changelog skill, user-visible only).
   2. Move that block under a new heading: ## [${next}] - ${new Date().toISOString().slice(0, 10)}
-  3. Commit and tag:
+  3. Write the intro under that heading: two to five plain sentences for someone new to Eigen.
+     It is the whole GitHub Release, with a link to the full section.
+  4. Commit on develop, fast-forward main to it and tag main:
        git add package.json CHANGELOG.md
        git commit -m "chore: release v${next}"
+       git push origin develop
+       git switch main && git merge --ff-only develop
        git tag -a v${next} -m "v${next}"
-       git push --follow-tags
+       git push origin main v${next}
      The tag push runs the Publish workflow: the release gate, then the images to GHCR, :latest last.
-  4. Once it is green, publish the GitHub Release (draft for review) from the new CHANGELOG section:
+  5. Once it is green, publish the GitHub Release (draft for review) from the section's intro:
        bun run release publish
      Review it on GitHub and click Publish, or publish directly with:
        bun run release publish --publish
-  5. Update eigen.is to v${next}: it serves https://eigen.is/install from its own build, so the installer changes only then.
+  6. Update eigen.is to v${next}: it serves https://eigen.is/install from its own build, so the installer changes only then.
 `);

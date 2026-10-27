@@ -106,8 +106,8 @@ Before declaring any task complete, review every changed file against this list:
 
 ## Standards Gates
 
-The mechanical rules are enforced, not just documented: Biome carries what it can express, and `bun scripts/check-standards.ts` (part of `bun run check`) counts fourteen metrics over `apps/` and `packages/`: nine hard zeros and five ratcheting counts whose allowance in `scripts/standards-baseline.json` can fall but never rise (`bun run standards:update` after a cleanup). What each metric catches: [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).
+The mechanical rules are enforced, not just documented: Biome carries what it can express, and `bun scripts/check-standards.ts` (part of `bun run check`) counts fourteen metrics over `apps/` and `packages/`: nine hard zeros and five ratcheting counts whose allowance in `scripts/standards-baseline.json` can fall but never rise. Each run lowers the baseline to a count that fell; commit it with the change. What each metric catches: [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).
 
 Biome also enforces the import and class rules in § Code Style: `style/useImportType` with `separatedType`, and `style/useConsistentMemberAccessibility` with `explicit`.
 
-Never restructure code only to silence a lint rule. Use a lint-clean idiom that reads naturally (`/\p{Cc}/gu` for control characters), else a `biome-ignore` with a one-line reason and `bun run standards:update`. The ratchet stops laziness, not natural code.
+Never restructure code only to silence a lint rule. Use a lint-clean idiom that reads naturally (`/\p{Cc}/gu` for control characters), else a `biome-ignore` with a one-line reason, and raise its baseline in `scripts/standards-baseline.json` by hand in the same commit. The ratchet stops laziness, not natural code.
