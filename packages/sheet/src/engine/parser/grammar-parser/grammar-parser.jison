@@ -236,7 +236,7 @@ number
 
 error
   : ERROR {
-      $$ = yy.throwError($1);
+      $$ = yy.errorValue($1);
     }
 ;
 

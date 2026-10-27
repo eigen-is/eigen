@@ -1018,7 +1018,7 @@ export class Parser {
                 break;
             case 47: {
                 const text = $$[$0];
-                this.$ = () => yy.throwError(text);
+                this.$ = () => yy.errorValue(text);
                 break;
             }
             case 48:
