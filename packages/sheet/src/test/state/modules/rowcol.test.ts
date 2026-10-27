@@ -63,3 +63,63 @@ describe('alternate formats follow the membership rule', () => {
         });
     }
 });
+
+describe('the filter and read-only rows follow a row or column op', () => {
+    const filtered = (): Context =>
+        contextFactory({
+            sheets: [
+                {
+                    name: 'sheet',
+                    id: 'id_1',
+                    order: 0,
+                    config: { rowReadOnly: { 3: 1, 5: 1 }, colReadOnly: { 3: 1, 5: 1 } },
+                    data: Array.from({ length: 6 }, () => Array.from({ length: 6 }, () => null)),
+                    filterRange: { row: [0, 3], column: [0, 3] },
+                    filter: {
+                        1: { rowhidden: { 2: 0 }, optionstate: true, str: 0, edr: 3, cindex: 1, stc: 0, edc: 3 },
+                    },
+                },
+            ],
+        }) as Context;
+    const entry = { optionstate: true, cindex: 1, stc: 0, edc: 3 };
+
+    test('a row insert above moves the filter and its hidden rows down', () => {
+        const op = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: 'id_1' } as const;
+        const [sheet] = produce(filtered(), (ctx: Context) => insertRowCol(ctx, op, false)).sheets;
+        expect(sheet.filterRange).toEqual({ row: [2, 5], column: [0, 3] });
+        expect(sheet.filter).toEqual({ 1: { ...entry, rowhidden: { 4: 0 }, str: 2, edr: 5 } });
+        expect(sheet.config?.rowhidden).toEqual({ 4: 0 });
+        expect(sheet.config?.rowReadOnly).toEqual({ 5: 1, 7: 1 });
+    });
+
+    test('a column insert inside widens the filter', () => {
+        const op = { type: 'column', index: 1, count: 1, direction: 'rightbottom', id: 'id_1' } as const;
+        const [sheet] = produce(filtered(), (ctx: Context) => insertRowCol(ctx, op, false)).sheets;
+        expect(sheet.filterRange).toEqual({ row: [0, 3], column: [0, 4] });
+        expect(sheet.filter).toEqual({ 1: { ...entry, rowhidden: { 2: 0 }, str: 0, edr: 3, edc: 4 } });
+        expect(sheet.config?.colReadOnly).toEqual({ 4: 1, 6: 1 });
+    });
+
+    test('a row delete inside shrinks the filter and moves its hidden rows up', () => {
+        const op = { type: 'row', start: 1, end: 1, id: 'id_1' } as const;
+        const [sheet] = produce(filtered(), (ctx: Context) => deleteRowCol(ctx, op)).sheets;
+        expect(sheet.filterRange).toEqual({ row: [0, 2], column: [0, 3] });
+        expect(sheet.filter).toEqual({ 1: { ...entry, rowhidden: { 1: 0 }, str: 0, edr: 2 } });
+        expect(sheet.config?.rowReadOnly).toEqual({ 2: 1, 4: 1 });
+    });
+
+    test('a row delete of every hidden row drops the filter entries', () => {
+        const op = { type: 'row', start: 2, end: 2, id: 'id_1' } as const;
+        const [sheet] = produce(filtered(), (ctx: Context) => deleteRowCol(ctx, op)).sheets;
+        expect(sheet.filterRange).toEqual({ row: [0, 2], column: [0, 3] });
+        expect(sheet.filter).toBeUndefined();
+    });
+
+    test('a column delete at the left edge moves the filter column left', () => {
+        const op = { type: 'column', start: 0, end: 0, id: 'id_1' } as const;
+        const [sheet] = produce(filtered(), (ctx: Context) => deleteRowCol(ctx, op)).sheets;
+        expect(sheet.filterRange).toEqual({ row: [0, 3], column: [0, 2] });
+        expect(sheet.filter).toEqual({ 0: { ...entry, rowhidden: { 2: 0 }, str: 0, edr: 3, cindex: 0, edc: 2 } });
+        expect(sheet.config?.colReadOnly).toEqual({ 2: 1, 4: 1 });
+    });
+});
