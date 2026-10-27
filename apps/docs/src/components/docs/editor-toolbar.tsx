@@ -339,7 +339,6 @@ export const EditorToolbar = ({
                                     onReplaceImage={onReplaceImage}
                                     onEnterBand={onEnterBand}
                                     onPageNumbers={onPageNumbers}
-                                    inBand={editor !== body && !inNote}
                                 />
 
                                 <InsertMenu

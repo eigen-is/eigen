@@ -17,9 +17,9 @@ const { FigurePropertiesPanel } = await import('../../../components/docs/figure-
 let unmount = async () => {};
 afterEach(() => unmount());
 
-// "a" at 1, the figure at 2, on a page whose text column is 600 px. `inLineEditor` is a note's editor, where every
-// figure draws in line; `inCell` puts the paragraph in a table cell, its figure at 5.
-async function mount(attrs: object = {}, blockOnly = false, { inLineEditor = false, inCell = false } = {}) {
+// "a" at 1, the figure at 2, on a page whose text column is 600 px. `band` and `note` are a band's and a note's
+// editor, where every figure draws in line; `inCell` puts the paragraph in a table cell, its figure at 5.
+async function mount(attrs: object = {}, { band = false, note = false, inCell = false } = {}) {
     const paragraph = {
         type: 'paragraph',
         content: [
@@ -38,7 +38,8 @@ async function mount(attrs: object = {}, blockOnly = false, { inLineEditor = fal
                     width: 800,
                     margin: { top: 100, right: 100, bottom: 100, left: 100 },
                 }),
-                blockOnly: inLineEditor,
+                band,
+                note,
             }),
         ],
         content: {
@@ -63,7 +64,7 @@ async function mount(attrs: object = {}, blockOnly = false, { inLineEditor = fal
                 { 'data-document': '', style: { padding: 0 } },
                 createElement(EditorContent, { editor }),
             ),
-            createElement(FigurePropertiesPanel, { editor, blockOnly, onReplaceImage: () => {} }),
+            createElement(FigurePropertiesPanel, { editor, onReplaceImage: () => {} }),
         ),
     );
     const page = document.querySelector('[data-document]');
@@ -89,7 +90,7 @@ const styleToggles = () => [...document.querySelectorAll<HTMLButtonElement>('but
 
 // A band holds no float, as a docx import reads an anchored picture in a header as one on its own line.
 test('in a band the panel offers alignment alone, which puts a wrapped figure on its own line', async () => {
-    const editor = await mount({ layout: 'wrap-left' }, true);
+    const editor = await mount({ layout: 'wrap-left' }, { band: true });
     const toggles = [...document.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')];
     expect(toggles.map((t) => t.getAttribute('aria-label'))).toEqual(['Align left', 'Align center', 'Align right']);
 
@@ -338,10 +339,10 @@ test('an image in front of or behind the text has no caption row', async () => {
 });
 
 test.each([
-    ['a note', { inLineEditor: true }],
+    ['a note', { note: true }],
     ['a table cell', { inCell: true }],
 ])("%s's panel offers no place in front of or behind the text", async (_where, options) => {
-    await mount({}, false, options);
+    await mount({}, options);
     const labels = [...document.querySelectorAll('button[aria-pressed]')].map((t) => t.getAttribute('aria-label'));
     expect(labels).toEqual(['In line', 'Wrap left', 'Wrap right', 'Align left', 'Align center', 'Align right']);
 });

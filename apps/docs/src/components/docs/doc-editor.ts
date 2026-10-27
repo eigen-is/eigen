@@ -351,7 +351,7 @@ export function docEditorOptions({
             PageNumber,
             ...(band || note ? [] : [Footnote.configure(footnote), NoteFormatting]),
             TableWidthClamp.configure({ textColumnWidth }),
-            PositionedFigures.configure({ page, blockOnly: band || note }),
+            PositionedFigures.configure({ page, band, note }),
             AtomMarks,
             ...extensions,
             ...(band ? [leave(target.onLeave)] : []),

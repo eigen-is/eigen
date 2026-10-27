@@ -47,7 +47,8 @@ const text = (t: string) => ({ type: 'text', text: t });
 async function mount(
     content: object[],
     options: {
-        blockOnly?: boolean;
+        band?: boolean;
+        note?: boolean;
         editable?: boolean;
         page?: PageSetup;
         undoManager?: InstanceType<typeof Y.UndoManager>;
@@ -59,7 +60,11 @@ async function mount(
         extensions: [
             ...getDocExtensions({ exclude: ['figure', 'comment'] }),
             Figure,
-            PositionedFigures.configure({ page: () => options.page ?? PAGE, blockOnly: options.blockOnly ?? false }),
+            PositionedFigures.configure({
+                page: () => options.page ?? PAGE,
+                band: options.band ?? false,
+                note: options.note ?? false,
+            }),
             ...(undoManager
                 ? [Collaboration.configure({ document: undoManager.doc, yUndoOptions: { undoManager } })]
                 : []),
@@ -307,8 +312,11 @@ test('a positioned image that lands in a table cell, or is switched to in a note
     expect(layouts).toEqual(['block', 'block']);
 });
 
-test("in a band's or a note's editor every positioned image draws in line", async () => {
-    const editor = await mount([paragraph(text('a'))], { blockOnly: true });
+test.each([
+    ['band', { band: true }],
+    ['note', { note: true }],
+])("in a %s's editor every positioned image draws in line", async (_root, root) => {
+    const editor = await mount([paragraph(text('a'))], root);
     await act(async () => {
         editor.commands.insertContentAt(2, front());
     });

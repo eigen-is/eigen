@@ -54,8 +54,9 @@ export type PaperRoom = { west: number; east: number; north: number };
 type PositionedFiguresOptions = {
     // The page map in px: the paper a positioned figure stays on, never the column a screen lays out.
     page: () => PageSetup;
-    // A band's or a note's editor, where every figure draws in line.
-    blockOnly: boolean;
+    // A band's editor and a note's draw every figure in line.
+    band: boolean;
+    note: boolean;
 };
 
 const positionedFiguresKey = new PluginKey('positionedFigures');
@@ -69,9 +70,10 @@ const isPositionedFigure = (node: PMNode | null): node is PMNode =>
     node !== null && isFigureFrameNode(node.type.name) && isPositioned(node.attrs.layout);
 
 // A figure at `$pos` draws in line whatever its layout in a band's or a note's editor, and in a table cell or a note.
-function drawsInLine($pos: ResolvedPos, blockOnly: boolean): boolean {
+function drawsInLine($pos: ResolvedPos, { band, note }: PositionedFiguresOptions): boolean {
     return (
-        blockOnly ||
+        band ||
+        note ||
         Array.from({ length: $pos.depth + 1 }, (_, depth) => $pos.node(depth).type.name).some((name) =>
             BLOCK_ONLY_FIGURE_PARENTS.includes(name),
         )
@@ -80,7 +82,11 @@ function drawsInLine($pos: ResolvedPos, blockOnly: boolean): boolean {
 
 // Where the selected figure draws in line, its panel and Format › Image offer no place in front of or behind the text.
 export const selectionDrawsInLine = (editor: Editor): boolean =>
-    drawsInLine(editor.state.selection.$from, editor.storage.positionedFigures.blockOnly);
+    drawsInLine(editor.state.selection.$from, editor.storage.positionedFigures);
+
+// A band holds no float, as a docx import reads a header's anchored picture as one in its own line. So a figure in a
+// band's editor offers its alignment alone, in its panel and in Format › Image.
+export const inBand = (editor: Editor): boolean => editor.storage.positionedFigures.band;
 
 // How many positioned figures a textblock starts with. Each is one position long.
 function leadingRun(textblock: PMNode): number {
@@ -352,11 +358,11 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
     priority: 1000,
 
     addOptions() {
-        return { page: () => pagePx(DEFAULT_PAGE_SETUP), blockOnly: false };
+        return { page: () => pagePx(DEFAULT_PAGE_SETUP), band: false, note: false };
     },
 
     addStorage() {
-        return { page: this.options.page, blockOnly: this.options.blockOnly };
+        return { ...this.options };
     },
 
     addCommands() {
@@ -544,7 +550,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
 
     addProseMirrorPlugins() {
         const editor = this.editor;
-        const { blockOnly } = this.options;
+        const { options } = this;
         return [
             new Plugin({
                 key: positionedFiguresKey,
@@ -558,7 +564,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     if (fixes) {
                         for (const pos of changedTextblocks(transactions, newState.doc)) {
                             const $inside = tr.doc.resolve(pos + 1);
-                            if (!drawsInLine($inside, blockOnly)) leadFigures(tr, pos);
+                            if (!drawsInLine($inside, options)) leadFigures(tr, pos);
                             else
                                 $inside.parent.forEach((child, offset) => {
                                     if (isPositionedFigure(child))

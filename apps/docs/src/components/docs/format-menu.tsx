@@ -66,7 +66,7 @@ import {
     UnfoldVertical,
 } from 'lucide-react';
 import { setImageLayout } from './extensions/figure-frame';
-import { selectionDrawsInLine } from './extensions/positioned-figure';
+import { inBand, selectionDrawsInLine } from './extensions/positioned-figure';
 import { figureLayoutLooks } from './figure-properties-panel';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
@@ -119,8 +119,6 @@ type FormatMenuProps = {
     onReplaceImage: () => void;
     onEnterBand?: (edge: BandEdge) => void;
     onPageNumbers?: (preset: PageNumberPreset) => void;
-    // A band's editor: its image takes the alignment alone, as a band holds no float.
-    inBand: boolean;
 };
 
 export const FormatMenu = ({
@@ -138,7 +136,6 @@ export const FormatMenu = ({
     onReplaceImage,
     onEnterBand,
     onPageNumbers,
-    inBand,
 }: FormatMenuProps) => (
     <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
         <DropdownMenuSub>
@@ -404,7 +401,7 @@ export const FormatMenu = ({
                 </DropdownMenuItem>
                 {/* The Image panel's layouts, which a phone has no panel for: none in a band, as the band's panel
                     offers none, and those in the flow alone where the image draws in line, in a note or a cell. */}
-                {!inBand && (
+                {!inBand(editor) && (
                     <>
                         <DropdownMenuSeparator />
                         <ChoiceMenuItems<FigureLayout>

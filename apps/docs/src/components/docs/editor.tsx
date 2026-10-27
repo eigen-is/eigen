@@ -745,7 +745,7 @@ const TiptapEditor = ({
                                     }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                     // Comments anchor in the body only, and a band's or a note's equation comes from a paste
-                                    // or a Word file, which its panel edits: Insert greys both out there.
+                                    // or a Word file, which its panel edits: Insert grays both out there.
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
                                     onInsertEquation={insertEquation}
                                     onInsertFootnote={bandsAllowed ? insertFootnote : undefined}
@@ -891,7 +891,6 @@ const TiptapEditor = ({
                                                 ) : lastPanelRef.current === 'figure' ? (
                                                     <FigurePropertiesPanel
                                                         editor={activeEditor}
-                                                        blockOnly={!!editingBand}
                                                         onReplaceImage={() => setReplacePickerOpen(true)}
                                                     />
                                                 ) : lastPanelRef.current === 'chart' ? (
