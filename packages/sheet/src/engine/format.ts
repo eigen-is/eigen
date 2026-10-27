@@ -1,6 +1,6 @@
 // A cell's value as text: what the grid shows, how General aligns it, and the type and format that typed input
-// infers, such as "25%" read as 0.25 in a percent format. The grid, recalc, paste and the xlsx import call it. The
-// number format itself is lib's numberDisplay, which a chart's ticks share, passed on from here.
+// infers, such as "25%" read as 0.25 in a percent format. Its callers include the grid, recalc and the xlsx
+// import. The number format itself is lib's numberDisplay, which a chart's ticks share, passed on from here.
 
 import { numberDisplay } from '@workspace/lib/charts';
 import numeral from 'numeral';
