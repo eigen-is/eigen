@@ -536,17 +536,19 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expectAgree(s);
     });
 
+    // A formula cell as the engine leaves it, which is what an undo's recalculation writes back.
+    const formula = (f: string, v: number): Cell => ({ ...num(v), f });
     const sums = () =>
         workbook(
             {
-                A4: { v: 1, m: '1' },
-                A5: { v: 2, m: '2' },
-                A6: { v: 3, m: '3' },
-                A8: { v: 4, m: '4' },
-                B1: { f: '=SUM(A4:A8)', v: 10, m: '10' },
-                C1: { f: '=A5', v: 2, m: '2' },
+                A4: num(1),
+                A5: num(2),
+                A6: num(3),
+                A8: num(4),
+                B1: formula('=SUM(A4:A8)', 10),
+                C1: formula('=A5', 2),
             },
-            { A1: { f: '=SUM(One!A4:A8)', v: 10, m: '10' }, A2: { f: '=One!A6', v: 3, m: '3' } },
+            { A1: formula('=SUM(One!A4:A8)', 10), A2: formula('=One!A6', 3) },
         );
 
     test("undoing your row delete brings the cells and formulas back and keeps a peer's edit", () => {
@@ -637,6 +639,16 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
             expect(cells(sheets[3])[0].v?.f).toBe('=One!A5');
         }
+        expectAgree(s);
+    });
+
+    test("undoing your row delete recalculates the formulas it brings back from a peer's later input", () => {
+        const s = session(workbook({ A1: num(1), B6: { f: '=A1*2', v: 2, m: '2' } }));
+        s.edit(s.a, ...deleteRows(5, 5));
+        s.edit(s.b, typedAt('A1', '10'));
+        s.undo(s.a);
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'B6')?.v).toBe(20);
+        expect(s.joiner()[0].data?.[5]?.[1]?.v).toBe(20);
         expectAgree(s);
     });
 

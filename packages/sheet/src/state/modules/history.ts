@@ -1,8 +1,8 @@
 // What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id. Undo and
 // redo take the context and an entry and return the next context and the batch to send. A cell or field entry skips a
-// target a peer changed since and recalculates the formulas it touches. A sheet, row or column entry builds ops and
-// applies exactly those, through applyOpBatch, as its peers will. The Workbook keeps the stacks and calls these from,
-// for example, handleUndo.
+// target a peer changed since. A sheet, row or column entry builds ops and applies exactly those, through
+// applyOpBatch, as its peers will. A cell, field, row or column step recalculates the formulas it writes back. The
+// Workbook keeps the stacks and calls these from, for example, handleUndo.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { MergeCell } from '@workspace/lib/sheets';
@@ -23,6 +23,7 @@ import {
     filterPatch,
     getSheetIndex,
     inverseRowColOptions,
+    opToPatch,
     patchToOp,
     rowColMarker,
 } from '../utils';
@@ -235,7 +236,8 @@ function recalculate(ctx: Context, patches: Patch[]) {
 
 // A row or column entry, `from` what the op left to `to`. The batch is the marker, the edited sheet's fields and a
 // repair of the cells. The fields are what the marker makes of the live sheet, so a peer's edit since survives, with
-// what the entry restores beyond that. The live context gets only the ops.
+// what the entry restores beyond that. The live context gets only the ops. The repaired cells hold the values the
+// entry recorded, so the step then recalculates them and their dependents, as a cell undo does, and sends those too.
 function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOptions): Step {
     const marker = rowColMarker(options);
     const index = marker?.id == null ? undefined : getSheetIndex(ctx, marker.id);
@@ -249,7 +251,11 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
     if (!made || !live) return { ctx, ops: [] };
     const fields = restoredFields(index, target, restored, made.ctx, live.ctx);
     const step = { fields, repair: repairOps(ctx, left, target, options) };
-    return applyBatch(ctx, patchToOp(restored, target, options, step));
+    const applied = applyBatch(ctx, patchToOp(restored, target, options, step));
+    if (applied.ops.length === 0) return applied;
+    const [repaired] = opToPatch(applied.ctx, step.repair);
+    const [next, recalculated] = produceWithPatches(applied.ctx, (draft: Context) => recalculate(draft, repaired));
+    return { ctx: next, ops: [...applied.ops, ...patchToOp(next, filterPatch(recalculated))] };
 }
 
 // The edited sheet's fields as a row or column step leaves them: each as the marker makes it of the live sheet, but a

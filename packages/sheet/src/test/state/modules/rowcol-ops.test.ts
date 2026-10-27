@@ -33,7 +33,7 @@ function richContext(): Context {
                 data: [
                     [cell(1), cell(2), null, null],
                     [cell(3), null, null, null],
-                    [cell(4), { v: 5, f: '=A1+A2' }, null, null],
+                    [cell(4), { v: 4, m: '4', f: '=A1+A2', ct: { fa: 'General', t: 'n' } }, null, null],
                     [null, null, { v: 6, mc: { r: 3, c: 2, rs: 1, cs: 2 } }, { mc: { r: 3, c: 2 } }],
                 ],
                 config: {
