@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2037 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2039 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1005,7 +1005,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1068)
+## Utilities & constants (1070)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1315,6 +1315,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ICS_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `INDICATOR_RED` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `isExiftoolExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `isHexColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `isLightColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `isSearchableTextFile` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `isStandardMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
@@ -1340,6 +1341,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MIN_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `nextFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `parseRgb` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `PPTX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `readCssFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `readFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
