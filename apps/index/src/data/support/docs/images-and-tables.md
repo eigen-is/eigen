@@ -65,7 +65,7 @@ To select an image in front of the text, click it. To select one behind the text
 
 An image behind or in front of the text can't be selected with the keyboard, and the arrow keys don't move it. With the image selected, Shift and an arrow key still resize it.
 
-An image in a table, a footnote, or a header or footer can't go behind or in front of the text. One you paste or drag there sits on a line of its own.
+An image in a table, a footnote, or a header or footer can't go behind or in front of the text, so the **Image** panel and **Format → Image** don't offer it there. One you paste there sits on a line of its own. Drop an image behind or in front of the text over a table and it stays attached to the paragraph it was on.
 
 In a PDF or a printout, an image near the end of a page can be cut off at the paper's edge, or left out, since it doesn't continue on the next page. An image whose paragraph runs over two pages prints on the first.
 
