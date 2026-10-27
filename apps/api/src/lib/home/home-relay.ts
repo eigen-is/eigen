@@ -40,7 +40,7 @@ import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
-import { getMemberships, getUserByEmail, getUserById, updateUser } from '../user';
+import { getMemberships, getUserByEmail, getUserById, isGuest, updateUser } from '../user';
 import { getHome, getTeamHome, loadedHome, openHome, requestedSince } from './get-home';
 import { homeSize } from './home';
 import { TeamHome } from './team-home';
@@ -393,7 +393,7 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
         throw new Error(`pullHomeSize expects a user owner id, got ${ownerUserId}`);
     }
     // A guest's home has no folders or quotas of its own, so it answers what the guest home answers.
-    if ((await getUserById(ownerUserId))?.role === 'guest') return homeSize();
+    if (isGuest(await getUserById(ownerUserId))) return homeSize();
     const homeDir = getUserHomePath(ownerUserId);
     // A user who has never signed in has no home folder yet, and sizing must not create one.
     const homeFs = fs.existsSync(homeDir) ? new LocalFilesystem(homeDir) : null;

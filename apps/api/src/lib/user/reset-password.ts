@@ -3,7 +3,7 @@ import { apikey } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
 import { ApiError } from '../core/errors';
 import type { User } from './user';
-import { getUserByEmail } from './user';
+import { getUserByEmail, isGuest } from './user';
 
 // What the control socket's POST /reset-password answers with.
 export type ResetPasswordResult = { email: string };
@@ -11,7 +11,7 @@ export type ResetPasswordResult = { email: string };
 export async function resetUserPassword(email: string, password: string): Promise<User> {
     const user = await getUserByEmail(email.trim());
     if (!user) throw new ApiError(404, `No account uses ${email}.`);
-    if (user.role === 'guest') {
+    if (isGuest(user)) {
         throw new ApiError(400, `${user.email} is a guest. Guests sign in with a code by email, not a password.`);
     }
     const context = await auth.$context;

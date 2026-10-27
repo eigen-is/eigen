@@ -12,7 +12,7 @@ import { ApiError } from '../core';
 import { evictHome } from '../home/get-home';
 import { removeEntriesForTarget, removeEntriesFromSource } from '../share/registry';
 import type { User } from './user';
-import { getUserById } from './user';
+import { getUserById, isGuest } from './user';
 
 // Enough of the keys a refusing bucket kept for an operator to clean up, without one log line per object.
 const FAILED_KEYS_LOGGED = 50;
@@ -30,7 +30,7 @@ export async function teardownUserData(user: User): Promise<void> {
 
     // 2. Delete the home folder and the safety copies a restore left beside it. The bucket objects they name go
     //    in the background, so a bucket that refuses cannot keep the user.
-    const homePath = user.role === 'guest' ? getGuestHomePath(user.id) : getUserHomePath(user.id);
+    const homePath = isGuest(user) ? getGuestHomePath(user.id) : getUserHomePath(user.id);
     const { folders, objectCount, deleteObjects } = collectHomeObjects(homePath);
     for (const folder of folders) {
         fs.rmSync(folder, { recursive: true, force: true });
@@ -51,7 +51,7 @@ export async function teardownUserData(user: User): Promise<void> {
     // 3. The share registry. Entries from this user always go. Entries addressed to a guest stay, so a guest who
     //    signs in again with a new code gets the same shares back.
     await removeEntriesFromSource(user.id);
-    if (user.role !== 'guest') {
+    if (!isGuest(user)) {
         await removeEntriesForTarget(user.email);
     }
 

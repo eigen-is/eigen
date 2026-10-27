@@ -1,7 +1,7 @@
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { getDataRoot, homeDirUnder } from '../config/paths';
 import { ApiError } from '../core/errors';
-import { getUserById } from '../user/user';
+import { getUserById, isGuest } from '../user/user';
 import type { BackableOwner } from './paths';
 import { requireBackableOwner } from './paths';
 
@@ -11,7 +11,7 @@ import { requireBackableOwner } from './paths';
 export async function requireBackableHome(ownerId: string): Promise<BackableOwner> {
     const owner = parseOwnerId(ownerId);
     requireBackableOwner(owner);
-    if (owner.type === 'user' && (await getUserById(owner.id))?.role === 'guest') {
+    if (owner.type === 'user' && isGuest(await getUserById(owner.id))) {
         throw new ApiError(400, 'Guest homes are not backed up');
     }
     return owner;

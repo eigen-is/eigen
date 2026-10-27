@@ -14,7 +14,7 @@ import { ApiError } from '../core/errors';
 import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { getEntriesForTarget, reconcileSharesForNewUser } from '../share';
-import { getUserByEmail } from '../user/user';
+import { getUserByEmail, isGuest } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
 import { checkOtpRateLimit, countOtpGuess, refundOtpRequests, resetOtpGuesses } from './otp-rate-limit';
 
@@ -64,7 +64,7 @@ export async function requestOtp(email: string, ip: string): Promise<void> {
 
     const existingUser = await getUserByEmail(email);
     if (existingUser) {
-        if (existingUser.role !== 'guest') throw new ApiError(400, 'Use password login');
+        if (!isGuest(existingUser)) throw new ApiError(400, 'Use password login');
     } else {
         // A direct insert bypasses the auth hook, so refuse a guest on our own mail domain here.
         if (isInternalAddress(email)) throw new ApiError(400, 'Not a guest address');
@@ -139,7 +139,7 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
     refundOtpRequests(email, ip);
 
     let guestUser = await getUserByEmail(email);
-    if (guestUser && guestUser.role !== 'guest') throw new ApiError(400, 'Use password login');
+    if (guestUser && !isGuest(guestUser)) throw new ApiError(400, 'Use password login');
 
     if (!guestUser) {
         const now = new Date();

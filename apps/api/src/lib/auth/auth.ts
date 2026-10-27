@@ -41,7 +41,7 @@ import { sendMail } from '../mailer/mailer';
 import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
 import { getTeamExists } from '../team';
 import type { User } from '../user';
-import { getOrgRole } from '../user';
+import { getOrgRole, isGuest } from '../user';
 
 const publicOrigin = getPublicOrigin();
 // The dev apps each run on their own port, from 3000 to 3014.
@@ -153,7 +153,7 @@ export const auth = betterAuth({
                 after: async (hookUser) => {
                     // better-auth's hook type leaves out the plugin fields, such as role, which the row has.
                     const user = hookUser as User;
-                    if (user.role === 'guest') return;
+                    if (isGuest(user)) return;
                     // The row is committed, so a failure here must not turn a created account into a 500. Each
                     // step has its own guard, so a failed org join still reconciles.
                     try {
@@ -301,7 +301,7 @@ async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
 
     // Guests hold accounts and sign in, but never join the org.
     const row = await db.select({ role: userScheme.role }).from(userScheme).where(eq(userScheme.id, userId)).get();
-    if (row?.role === 'guest') return;
+    if (isGuest(row)) return;
 
     // addMember refuses a team that is gone, org join included, so a deleted default team must not reach it.
     const teamId = defaultTeamId && (await getTeamExists(defaultTeamId)) ? defaultTeamId : undefined;

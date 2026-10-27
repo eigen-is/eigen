@@ -1,14 +1,20 @@
+// The User type and the lookups of the server-wide users database: a user by email or id, their org and team
+// memberships, their org role and the org's admins and owner. Routes, homes and the auth hooks read users here.
+
 import { and, eq, inArray } from 'drizzle-orm';
 import { member, teamMember, user } from '../../../auth-schema';
 import type { auth } from '../auth/auth';
 import { getAuthDrizzleDb } from '../auth/auth';
 import { getServerConfig } from '../config/server-config';
 
-// Canonical User type — the better-auth session user, including plugin columns
-// (role, banned, twoFactorEnabled, etc.). Derived from the configured `auth`
-// instance so it always tracks the active plugin set, and matches the shape
-// served by `auth.api.getSession()` to Elysia route handlers.
+// The better-auth session user with its plugin columns, such as role and twoFactorEnabled. It is inferred from the
+// configured `auth`, so it follows the plugins and matches what getSession hands the route handlers.
 export type User = typeof auth.$Infer.Session.user;
+
+// A guest is an account with the role 'guest', signed in by an emailed code. A missing user is not a guest.
+export function isGuest(user: Pick<User, 'role'> | null | undefined): boolean {
+    return user?.role === 'guest';
+}
 
 // Actor display: name, else email local-part, else undefined (callers guard the undefined case).
 export const actorDisplayName = (name?: string | null, email?: string | null): string | undefined =>
