@@ -1,13 +1,15 @@
 // A short burst of confetti that sprays up from a point on the screen and falls under gravity, for
 // useCelebrate. It draws on one full-viewport canvas that clicks pass through, and the canvas removes
-// itself after about a second and a half. The pieces take the theme's chart colors, so they follow
-// light and dark mode. A burst asked for while one is still running is dropped.
+// itself after about a second and a half. The pieces take the first eight accents in the order chart series get
+// them, pink first. A burst asked for while one is still running is dropped.
+
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 
 const PIECES = 80;
 const DURATION_MS = 1500;
 const FADE_MS = 400;
 const GRAVITY = 1400;
-const COLORS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5'];
+const COLORS = EIGEN_ACCENT_COLORS_SHUFFLED.slice(0, 8).map(({ value }) => value);
 
 type Piece = { x: number; y: number; vx: number; vy: number; angle: number; spin: number; color: string };
 
@@ -27,8 +29,6 @@ export function burstConfetti(origin: DOMRect): void {
     canvas.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:50';
     document.body.append(canvas);
 
-    const style = getComputedStyle(document.documentElement);
-    const colors = COLORS.map((name) => style.getPropertyValue(name));
     const pieces: Piece[] = Array.from({ length: PIECES }, (_, i) => {
         // Up, spread over 120 degrees.
         const direction = -Math.PI / 2 + ((Math.random() - 0.5) * (Math.PI * 2)) / 3;
@@ -40,7 +40,7 @@ export function burstConfetti(origin: DOMRect): void {
             vy: Math.sin(direction) * speed,
             angle: Math.random() * Math.PI,
             spin: (Math.random() - 0.5) * 20,
-            color: colors[i % colors.length],
+            color: COLORS[i % COLORS.length],
         };
     });
 
