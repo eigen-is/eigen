@@ -95,8 +95,8 @@ export function windowedSheet(
     const empty = budgetFor(0, 0);
     if (!bounds) {
         const budgetEnd = {
-            row: lastShownTrack(0, empty.maxRows, config.rowhidden, REFERENCE_ROW_COUNT),
-            col: lastShownTrack(0, empty.maxCols, config.colhidden, REFERENCE_COLUMN_COUNT),
+            row: shownTracks(0, REFERENCE_ROW_COUNT - 1, empty.maxRows, config.rowhidden).at(-1) ?? -1,
+            col: shownTracks(0, REFERENCE_COLUMN_COUNT - 1, empty.maxCols, config.colhidden).at(-1) ?? -1,
         };
         return {
             sheet: tracksOf([0, budgetEnd.row], [0, budgetEnd.col]),
@@ -144,9 +144,11 @@ export function windowedSheet(
     ];
     // The budget's box counts shown tracks as the window does, so it holds every one the window keeps. A budget of no
     // columns or rows, where every one is hidden, still reaches the range's hidden ones.
+    const budgetRows = shownTracks(firstRow, REFERENCE_ROW_COUNT - 1, budget.maxRows, config.rowhidden);
+    const budgetCols = shownTracks(firstCol, REFERENCE_COLUMN_COUNT - 1, budget.maxCols, config.colhidden);
     const budgetEnd = {
-        row: Math.max(range[1], lastShownTrack(firstRow, budget.maxRows, config.rowhidden, REFERENCE_ROW_COUNT)),
-        col: Math.max(range[3], lastShownTrack(firstCol, budget.maxCols, config.colhidden, REFERENCE_COLUMN_COUNT)),
+        row: Math.max(range[1], budgetRows.at(-1) ?? firstRow - 1),
+        col: Math.max(range[3], budgetCols.at(-1) ?? firstCol - 1),
     };
     const tracks = tracksOf([firstRow, budgetEnd.row], [firstCol, budgetEnd.col]);
     const windowed: Sheet = {
@@ -326,22 +328,6 @@ function shownTracks(first: number, last: number, count: number, hidden: Record<
         if (!isRecord(hidden) || hidden[track] == null) tracks.push(track);
     }
     return tracks;
-}
-
-// The last of the first `count` shown tracks from `first`, at most the grid's last. The hidden tracks come from the
-// map's keys, so a million hidden rows past a small sheet cost what the map holds, not a walk over them.
-function lastShownTrack(
-    first: number,
-    count: number,
-    hidden: Record<string, number> | undefined,
-    gridSize: number,
-): number {
-    let last = first + count - 1;
-    for (const track of tracksIn(hidden, first, gridSize - 1)) {
-        if (track > last) break;
-        last += 1;
-    }
-    return Math.min(last, gridSize - 1);
 }
 
 function inRange([firstRow, lastRow, firstCol, lastCol]: GridRange, r: number, c: number): boolean {
