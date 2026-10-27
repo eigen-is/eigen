@@ -1,3 +1,7 @@
+// The facts about an install folder that every CLI command shares: where the repo root is, the names of
+// .env.production, data/ and backups/, this build's version, and the exit code of a question answered no. It also
+// gives the files the CLI writes as root to the operator who owns the install.
+
 import { chownSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import pkg from '../../../../package.json' with { type: 'json' };

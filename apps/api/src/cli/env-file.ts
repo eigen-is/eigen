@@ -1,3 +1,7 @@
+// Reads and writes .env.production the way Docker Compose reads it. A write changes only the lines whose value
+// changed and appends new keys, so a rerun of setup keeps the operator's own lines and comments, and a write with
+// nothing new leaves the file alone.
+
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
 type EnvLine = { raw: string; key: string | null; value: string };

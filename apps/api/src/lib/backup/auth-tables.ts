@@ -1,3 +1,7 @@
+// Which users3.db rows belong to one user's home archive, and how a restore puts them back. One list of tables
+// serves both directions, so a table added to it is archived and restored alike. The home snapshot reads the rows
+// with readAuthRows, and a per-home restore inserts them with the roles fixed here, never the archive's.
+
 import { eq, getTableColumns } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { account, apikey, member, organization, team, teamMember, twoFactor, user } from '../../../auth-schema';
@@ -9,7 +13,7 @@ import { getAuthDrizzleDb } from '../auth/auth';
 type AuthArchiveKey = 'user' | 'account' | 'two_factor' | 'apikey' | 'member' | 'team_member';
 
 // A users3.db table one user's archive carries: the key it has in auth.json, the column that scopes
-// its rows to that user, and — for a membership — the row it would be an orphan without.
+// its rows to that user, and for a membership the parent row it would be an orphan without.
 type AuthTableSpec = {
     key: AuthArchiveKey;
     table: SQLiteTable;

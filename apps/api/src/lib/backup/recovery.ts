@@ -1,9 +1,10 @@
+// Lets the next boot finish or undo a per-home restore that died halfway. The restore leaves notes in its staging
+// folder, and recoverInterruptedRestores reads them at boot, before the API listens and before the staging wipe,
+// and puts the home's pre-restore copy back where the install did not finish.
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getBackupStagingDir, getStagingRoot, parseSafetyCopyName } from './paths';
-
-// What tells the next boot that a restore died with a home folder that is not a home: the notes a
-// restore leaves in its staging folder, and the pass over them that runs before the API listens.
 
 // The note a restore leaves in its staging folder while the home folder is not where it belongs.
 // Written before the move-aside, removed when the mark clears, read once at the next boot.
@@ -60,7 +61,7 @@ function readRestoringMarker(markerPath: string): RestoringMarker | null {
 
 // Boot: a restore killed anywhere between the move-aside and the last install step left the home
 // folder either gone or half written, with its real contents under the `{id}.pre-restore-{ts}` its
-// marker names. The process that knew about it is dead, so nothing else will ever put it back —
+// marker names. The process that knew about it is dead, so nothing else will ever put it back:
 // this does, loudly. The install writes a completion note beside the marker, so a restore that
 // finished is told from one that did not. It runs before the staging wipe, which is what clears the
 // markers of both. A safety copy with no marker is not evidence of anything: nothing deletes them
@@ -82,8 +83,8 @@ export function recoverInterruptedRestores(): void {
         // A folder that is there without the completion note is the one the install was writing: an
         // extraction whose mount materialization, checks or identity writes did not land, or a safety
         // copy renamed into place before its checks. It goes aside under the name the marker gives,
-        // exactly as a failure the job itself caught would have left it. Nothing is deleted — this
-        // holds whether or not there is a copy to put back afterwards.
+        // exactly as a failure the job itself caught would have left it. Nothing is deleted, whether or
+        // not there is a copy to put back afterwards.
         if (fs.existsSync(marker.homeDir)) {
             fs.renameSync(marker.homeDir, path.join(path.dirname(marker.homeDir), marker.parkName));
             console.error(

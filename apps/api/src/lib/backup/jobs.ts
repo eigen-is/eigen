@@ -1,3 +1,7 @@
+// The backup jobs of the running API: the in-memory job list the admin pane polls, the one-job-per-home slot that
+// keeps a backup off a folder a restore writes, and the per-home backup and verify jobs themselves. The backup
+// routes start jobs here, the server backup waits for each home's slot here, and shutdown drains what still runs.
+
 import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import type { BackupJob } from '@workspace/lib/types/backup';
@@ -43,7 +47,7 @@ export function isServerJob(kind: BackupJob['kind']): boolean {
 }
 
 // An upload reads a finished archive and touches no home, so it holds no slot: an hour of it must not keep
-// ./eigen update's pre-update backup waiting. Uploads wait for each other on their own (server-job.ts).
+// ./eigen update's pre-update backup waiting. Uploads take turns among themselves (startUploadJob).
 function holdsSlot(kind: BackupJob['kind']): boolean {
     return kind !== 'upload';
 }
@@ -67,10 +71,10 @@ function poke(job: BackupJob): void {
         .catch(() => {});
 }
 
-// One piece of work per home at a time — a second backup while one is running would read a folder
-// the first is still walking, a second restore would move aside a folder the first is writing, and a
-// safety-copy delete overlapping a restore would judge the wrong home's keys as garbage, and an archive
-// deleted under a verify would get its sidecar back. A server job's archive is the owner's to know, so only
+// One piece of work per home at a time. A second backup while one runs would read a folder the first is
+// still walking, and a second restore would move aside a folder the first is writing. A safety-copy
+// delete overlapping a restore would judge the wrong home's keys as garbage, and an archive deleted
+// under a verify would get its sidecar back. A server job's archive is the owner's to know, so only
 // another server job hears its name.
 export function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
     dropExpiredJobs();
@@ -106,8 +110,8 @@ function holdSlot(ownerId: string, holder: string): () => void {
 
 // Work that takes the same slot without being a job: the safety-copy delete reads the live home's
 // storage keys to decide what is garbage, and a restore swapping the folder underneath it would turn
-// that answer into "delete what the home now points at". It never sets the restoring mark — a delete
-// is not a user-facing outage — and it is awaited by its route, so the slot lives exactly as long.
+// that answer into "delete what the home now points at". It never sets the restoring mark, since a
+// delete is not a user-facing outage, and its route awaits it, so the slot lives exactly as long.
 export async function withBackupJobSlot(ownerId: string, run: () => Promise<void>): Promise<void> {
     requireHomeSlotFree(ownerId);
     const release = holdSlot(ownerId, 'safety-copy delete');
@@ -211,8 +215,8 @@ export function getBackupJob(id: string): BackupJob | undefined {
 }
 
 // The backup job: snapshot into staging, judge the folder before it is packed, pack it, write the
-// sidecar. A failed verify still keeps the archive — an admin needs to see a bad backup, and the
-// sidecar is where its failures are recorded — but ends the job failed and tells the admin.
+// sidecar. A failed verify still keeps the archive, because an admin needs to see a bad backup and the
+// sidecar is where its failures are recorded, but it ends the job failed and tells the admin.
 export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress: SnapshotProgress): Promise<string> {
     const staging = getBackupStagingDir(job.id);
     try {

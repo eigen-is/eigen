@@ -1,3 +1,7 @@
+// The whole-server backup job: the server member, then every home at the archive's level, then the install files
+// and the manifest, into one plain tar that is read back and checked. It starts from Settings, the nightly schedule
+// or ./eigen backup over the control socket, and ends with retention and the upload to the backup bucket.
+
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';

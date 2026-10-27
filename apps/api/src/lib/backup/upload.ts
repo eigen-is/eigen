@@ -1,3 +1,7 @@
+// The backup bucket: the check that it is private and shares no bucket or key with any mount, the handling of its
+// secret in settings, and the multipart upload of a finished server archive followed by the bucket's retention.
+// The server backup job uploads through it, and the settings routes check and save the destination with it.
+
 import * as path from 'node:path';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { isS3ConfigValid, keepsSavedSecret } from '@workspace/lib/types/mount';

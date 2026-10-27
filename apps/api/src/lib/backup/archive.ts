@@ -1,3 +1,9 @@
+// Writes and reads Eigen's archives. A home archive is a plain POSIX tar (pax for long paths) piped through zstd,
+// so `tar --zstd -xf` unpacks one anywhere; a whole-server archive is a plain tar of compressed members, manifest
+// last. Every backup and restore goes through it, such as the per-home jobs, the server backup and ./eigen restore.
+// It does its own tar instead of Bun.Archive, whose writer holds the whole archive in memory and whose reader stops
+// at the first non-ASCII name and segfaults on a ustar one.
+
 /// <reference path="./node-zstd.d.ts" />
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -16,9 +22,6 @@ import { ApiError } from '../core/errors';
 import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, sidecarPath } from './paths';
 import type { SnapshotProgress } from './snapshot-home';
 
-// An artifact is a plain POSIX tar (pax for long paths) piped through zstd, so `tar --zstd -xf` unpacks one
-// anywhere. Written and read here, not with Bun.Archive: its writer holds the whole archive in memory, and its
-// reader stops at the first non-ASCII name and segfaults on a ustar one.
 const BLOCK = 512;
 const NAME_FIELD = 100;
 // The biggest size a header's 11 octal digits hold (8 GiB); above it the size goes in base-256.
@@ -557,7 +560,7 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string)
             await fsp.utimes(target, entry.mtime, entry.mtime);
         }
     } catch (error) {
-        // Half an unpacked archive is worse than none — nothing downstream can tell the two apart.
+        // Half an unpacked archive is worse than none, because nothing downstream can tell the two apart.
         // A folder the caller already had is left alone; only the tree this call made is taken back.
         if (!existed) await fsp.rm(targetDir, { recursive: true, force: true });
         throw error;

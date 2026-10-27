@@ -1,3 +1,7 @@
+// Captures what a whole-server archive holds beside the homes: the server member, with the server databases, the
+// server files and the org folder, and the install files the API may read, such as .env.production, the DKIM key
+// and the mail TLS certificate. The server backup job calls it before and after the homes.
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
