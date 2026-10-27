@@ -1,3 +1,7 @@
+// Turns a saved draft into the outgoing mail that the mailer sends. It cleans up the recipients, keeps the
+// message id the same as the one in the Sent copy, and adds the attachments. The mail routes use it when a user
+// presses send.
+
 import type { EmailDraft } from '@workspace/lib/types/mail';
 import type { OutboundAttachment, OutboundMail } from '../mailer/mailer';
 import { buildMessageId } from './mailutils';

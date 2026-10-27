@@ -1,3 +1,7 @@
+// Sign-in for guests, people with no account who were given access to something by email. A guest either uses a
+// password scoped to what was shared, or asks for a one-time code that is mailed to them and then checked.
+// Requesting and guessing codes are rate limited per address and per IP.
+
 import { randomUUID } from 'node:crypto';
 import { generateId } from '@better-auth/core/utils/id';
 import { hashPassword } from 'better-auth/crypto';

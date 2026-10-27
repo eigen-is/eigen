@@ -1,3 +1,7 @@
+// The calendar part of a user's Home: calendars and their events in one SQLite database. Each event is stored as the
+// iCalendar file it came from, and every other column is read from that file. The class is the one door for the REST
+// routes, the CalDAV server and the invitation code. It also checks names and colors.
+
 import { randomUUID } from 'node:crypto';
 import { CALENDAR_NAME_MAX_LENGTH, DEFAULT_CALENDAR_COLOR } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';

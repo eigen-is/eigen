@@ -1,3 +1,7 @@
+// The CalDAV server, so that phone and desktop calendar apps can read and write a user's calendars. It maps each
+// WebDAV method and URL, such as PROPFIND, REPORT, PUT and MKCALENDAR, to a handler that answers in the format
+// those clients expect. Requests sign in with an app password over HTTP Basic auth.
+
 import Elysia from 'elysia';
 import { requireSelf } from '../auth/access';
 import { authenticateBasic } from '../auth/protocol-auth';

@@ -1,3 +1,7 @@
+// The calendar half of the store of iCalendar files. It checks the names clients choose, limits the size of a file,
+// and turns a file into the rows that search and listing read, so that the file stays the only source of truth.
+// Calendar and the CalDAV code write through it.
+
 import { randomUUID } from 'node:crypto';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 import { and, eq, sql } from 'drizzle-orm';
@@ -10,8 +14,6 @@ import { projectResource, serializeResource } from '../ical';
 import { uidOf } from '../ical/ical-parse';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import * as schema from './schema';
-
-// The calendar-shaped half of the store over `core/blob-store.ts`. See docs/CALENDAR.md § The stored bytes are the event, and every column is a projection.
 
 export type Tx = DatabaseTx<typeof schema>;
 

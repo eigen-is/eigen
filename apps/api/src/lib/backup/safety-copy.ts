@@ -1,3 +1,7 @@
+// Lists, measures and deletes the safety copies that restores leave beside a home. A home whose files live in an
+// S3 bucket has its objects deleted with the copy, so the delete asks the mount settings in the folder where they
+// are. An admin lists the copies in the backup pane and decides, and deleting their user removes them too.
+
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -12,10 +16,6 @@ import { flatStorageKey } from './archive-layout';
 import { readHomeMounts } from './enumerate-homes';
 import { resolveHomeDir } from './home-dir';
 import { parseSafetyCopyName, resolveMountDir } from './paths';
-
-// The folders a restore leaves beside a home, and what deleting one means when the home's bytes are
-// in a bucket rather than in the folder. An admin lists these in the pane and decides; only deleting
-// their user takes them otherwise.
 
 // A safety copy holds a whole home; its size is a line in a list, not an accounting figure, so the
 // walk stops here and the number becomes a floor rather than taking a minute on a huge home. The

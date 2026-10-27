@@ -1,3 +1,7 @@
+// The routes with facts about the signed-in user's own Home, such as how much storage it uses and which teams the user
+// belongs to, with those teams' members, mounts and calendars. The app uses them for its storage meter and its
+// team lists.
+
 import { teamOwnerId } from '@workspace/lib/types';
 import { Elysia } from 'elysia';
 import { requireSelf } from '../lib/auth/access';
@@ -8,7 +12,6 @@ import { getTeam, getTeamMembers } from '../lib/team';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 
-// Home routes are personal-only (storage size, team context)
 export const homeRouter = new Elysia({ name: 'home' })
     .use(betterAuth)
 

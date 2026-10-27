@@ -1,3 +1,8 @@
+// Takes a version of a document: a copy of its database saved in the versions folder of the mount, after which old
+// versions are removed by the retention rules. A save by the user waits for its turn, and the periodic save skips
+// when the document is busy. It can also replace the live database with a copy, which is what a restore uses.
+// The restore code next door decides which version to bring back.
+
 import { constants, Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -15,10 +20,6 @@ import type { RetentionPolicy } from './retention';
 import { selectSnapshotsToPrune } from './retention';
 import { formatSnapshotTimestamp } from './timestamp';
 import { VERSIONS_FOLDER_NAME } from './versions-folder';
-
-// The mechanics half of file versioning: write/replace a container's data.db snapshot on
-// its mount. The orchestration half (grab target, pre-restore snapshot, Yjs surgery vs
-// chat byte-overwrite) lives next door in restore.ts.
 
 // Which copy of a managed db a snapshot reads first; stageManagedDbCopy says when each applies.
 type CopyOrder = 'staged-first' | 'open-handle-first';

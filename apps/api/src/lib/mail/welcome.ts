@@ -1,3 +1,6 @@
+// Builds the welcome mail that a new user finds in their inbox. The text comes from the server settings, so an admin
+// can change it or turn it off. It is written straight into the user's maildir and never goes out over SMTP.
+
 import { escapeHtml, stripTagsServer } from '@workspace/lib/html';
 import { isMailEnabled } from '../config/env';
 import { getDomain, getOrgName } from '../config/server-config';

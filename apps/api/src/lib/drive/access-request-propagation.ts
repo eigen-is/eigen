@@ -1,3 +1,7 @@
+// Tells the owner of a file or folder that someone asks for access. The owner gets a notification in their Home,
+// and, if the server settings allow it, an email (to every member for a team). A person who clicks again and again
+// does not send a second email within the hour.
+
 import { parseOwnerId } from '@workspace/lib/types';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';

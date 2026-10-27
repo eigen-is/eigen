@@ -1,3 +1,7 @@
+// The admin routes for the backups of single homes: list the backup files and the safety copies that restores leave,
+// start a backup or a restore as a background job, and follow its progress. Every route is for admins only. The
+// jobs are kept in memory, and the backups folder on disk is the lasting record.
+
 import * as fs from 'node:fs';
 import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib/constants/backup';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';

@@ -1,3 +1,7 @@
+// The routes of the calendar app: calendars, events, RSVP answers, sharing, and import and export. Each one finds the
+// Calendar of the owner in the URL, checks that the caller may use it, and passes the work to it. A team has a
+// calendar of its own too.
+
 import { CALENDAR_NAME_MAX_LENGTH, ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type {

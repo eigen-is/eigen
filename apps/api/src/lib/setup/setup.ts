@@ -1,3 +1,7 @@
+// First-time setup of a server. It saves the organization name and the storage choice, creates the first admin,
+// and ends the setup state, once. Because a failed attempt can leave half a setup behind, it starts by clearing the
+// auth database. The setup route calls it after it has checked the setup link.
+
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';

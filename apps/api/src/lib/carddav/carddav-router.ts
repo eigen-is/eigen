@@ -1,3 +1,7 @@
+// The CardDAV server, so that phone and desktop contact apps can read and write a user's address book. It maps each
+// WebDAV method and URL, such as PROPFIND, REPORT, GET and PUT, to a handler that answers in the format those
+// clients expect. Requests sign in with an app password over HTTP Basic auth.
+
 import Elysia from 'elysia';
 import { requireSelf } from '../auth/access';
 import { authenticateBasic } from '../auth/protocol-auth';

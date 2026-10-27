@@ -1,3 +1,7 @@
+// The receiving side of an invitation, for a Home that holds a copy of someone else's event. It files a new
+// invitation, applies updates and cancellations, and ignores a message that is older than the one already applied,
+// so a replay is ordered out by revision. Messages come from other Homes on this server and from inbound mail.
+
 import { heldAttendees, isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import { externalOwnerId, isExternalOwnerId } from '@workspace/lib/types/owner';
@@ -26,8 +30,6 @@ import type {
     InvitationUpdatePayload,
     ReceiveInvitationPayload,
 } from './types';
-
-// Inbound scheduling messages against this Home's copy of somebody else's event, guarded by revision so a replay is ordered out (docs/CALENDAR.md § Revisions are ordered, and a redelivery is applied as one).
 
 // What the transport vouches for about an inbound REQUEST — never anything the body spells.
 type InvitationLink = {

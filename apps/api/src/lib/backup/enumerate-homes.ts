@@ -1,3 +1,7 @@
+// Finds what a server backup has to include: every home that a user, team or organization row claims, and the
+// folders in the data root that no row claims (orphans). It also reads the mount settings of a home folder, so a
+// backup can tell which homes keep their files in S3.
+
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

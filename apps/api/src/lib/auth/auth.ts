@@ -1,3 +1,7 @@
+// The Better Auth instance: sessions, one-time codes, passkeys, two-factor, API keys and organizations, on the
+// server-wide users database. It also holds the small helpers that reach that database directly, such as adding its
+// extra columns, deleting a user's rows and copying it for a backup. Routes and the auth middleware use it.
+
 import { Database } from 'bun:sqlite';
 import { apiKey } from '@better-auth/api-key';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';

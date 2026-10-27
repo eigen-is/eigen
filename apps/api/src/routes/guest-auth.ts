@@ -1,3 +1,6 @@
+// The public sign-in routes for guests: ask for a one-time code by email, and send the code back to get a session.
+// The checks and the rate limits are in the auth code, so these routes only pass the request on.
+
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { clientIpKey } from '../lib/auth/access';

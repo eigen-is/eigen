@@ -1,3 +1,6 @@
+// The route that searches a user's mail and files in one request. The caller can limit it to one source, and the
+// results come back as one list of messages and one of files. It is for the user's own Home, and not for guests.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SearchResponse, SearchSource } from '@workspace/lib/types/search';
 import { Elysia, t } from 'elysia';

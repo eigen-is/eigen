@@ -1,3 +1,8 @@
+// The admin routes for backing up the whole server: start a backup, list and delete the archives in the backups
+// folder, upload one to the backup destination, and check that the destination works. Only the owner of the server may
+// use them, because an archive holds everything on the server.
+// There is no download: an archive leaves the machine by scp or the bucket, never through a browser.
+
 import type { ServerArchiveList } from '@workspace/lib/types/backup';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
 import { BACKUP_LEVELS } from '@workspace/lib/validation';
@@ -10,9 +15,6 @@ import { checkBackupDestination, withSavedSecret } from '../lib/backup/upload';
 import { betterAuth } from './auth';
 import { s3DestinationBody } from './shared-schemas';
 
-// The whole-server backup, the owner's alone: an archive holds every mailbox, every password hash
-// and every mount's keys. Server-wide, so no `:ownerId`. No download: an archive leaves the box by
-// scp or the bucket, never through a browser.
 export const serverBackupRouter = new Elysia({ name: 'server-backup' })
     .use(betterAuth)
 

@@ -1,3 +1,7 @@
+// The routes that other containers of the install call, not browsers or apps. The mail server checks a mail
+// login against them, and the queue monitor reports a mail backlog. Both only answer to requests from the same
+// machine.
+
 import { Elysia, t } from 'elysia';
 import { requireLocalhost } from '../lib/auth/access';
 import { verifyProtocolAuth } from '../lib/auth/protocol-auth';
