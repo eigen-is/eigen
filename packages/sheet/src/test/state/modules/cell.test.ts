@@ -54,7 +54,7 @@ describe('state/modules/cell — getInlineStringHTML', () => {
         // end the style attribute and start an event handler. Stripping quotes leaves the
         // text inert inside the value; what matters is that nothing can escape the quotes.
         const html = getInlineStringHTML(0, 0, inlineCell([{ v: 'x', fc: "red' onload='alert(1)" }]));
-        const styleValue = /style='([^']*)'/.exec(html)?.[1];
+        const styleValue = /style="([^"]*)"/.exec(html)?.[1];
         expect(styleValue).toBeDefined();
         expect(styleValue).not.toMatch(/['"<>]/);
     });

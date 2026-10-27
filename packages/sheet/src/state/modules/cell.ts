@@ -1,7 +1,11 @@
-import { escapeHtml } from '@workspace/lib/html';
+// Reads and writes of single cells in the open sheet, such as a cell's value, its display text and the
+// CSS the editor box shows it in. updateCell commits the cell editor or the formula bar into the matrix:
+// it runs the formula engine, data validation and the row's auto height. Range helpers that read cells,
+// such as getRangeByTxt, live here too.
+
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
-import { columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
-import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
+import { cellFontName, columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
     booleanDisplay,
@@ -18,14 +22,14 @@ import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { Range, RangeOrWholeAxis, Selection } from '../types';
-import { getSheetIndex, rgbToHex, styleObjectToCss } from '../utils';
+import { getSheetIndex, rgbToHex } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
 import { describeValidationRule, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
 import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
-import type { StyleAttr, UnderlineHints } from './inline-string';
-import { convertSpanToShareString, cssDomKeyForAttr, isInlineStringCell, isInlineStringCT } from './inline-string';
+import type { RunStyleKey } from './inline-string';
+import { committedRuns, isInlineStringCell, runStyleOf, runsHtml, sameRunStyle } from './inline-string';
 import { getCellTextInfo } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 
@@ -534,8 +538,7 @@ export function updateCell(
     value?: any,
     canvas?: CanvasRenderingContext2D,
 ) {
-    let inputText = $input?.innerText;
-    const inputHtml = $input?.innerHTML;
+    const inputText = $input?.innerText;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
@@ -558,22 +561,13 @@ export function updateCell(
     const oldValue = cloneDeep(curv);
 
     const isPrevInline = isInlineStringCell(curv);
-    let isCurInline = inputText?.slice(0, 1) !== '=' && inputHtml?.substring(0, 5) === '<span';
-
-    let isCopyVal = false;
-    if (!isCurInline && inputText && inputText.length > 0) {
-        const splitArr = inputText
-            .replace(/\r\n/g, '_x000D_')
-            .replace(/&#13;&#10;/g, '_x000D_')
-            .replace(/\r/g, '_x000D_')
-            .replace(/\n/g, '_x000D_')
-            .split('_x000D_');
-        if (splitArr.length > 1 && inputHtml !== '<br>') {
-            isCopyVal = true;
-            isCurInline = true;
-            inputText = splitArr.join('\r\n');
-        }
-    }
+    // Typed text is rich when its runs differ from the cell's own style or break the line. Text that is
+    // all in the cell's style commits plain, as a formula always does.
+    const runs = $input && !value && inputText?.slice(0, 1) !== '=' ? committedRuns($input, curv) : [];
+    const isCurInline =
+        runs.length > 1 ||
+        runs.some((run) => run.v.includes('\n')) ||
+        (runs.length === 1 && !sameRunStyle(runs[0], runStyleOf(curv)));
 
     if (curv?.ct && !value && !isCurInline && isPrevInline) {
         delete curv.ct.s;
@@ -581,36 +575,16 @@ export function updateCell(
         curv.ct.fa = 'General';
         value = '';
     } else if (isCurInline) {
-        if (!isPlainObject(curv)) {
-            curv = {};
-        }
-        curv ||= {};
-        const fontSize = curv.fs || 10;
-
-        if (!curv.ct) {
-            curv.ct = {};
-            curv.ct.fa = 'General';
-        }
-
-        curv.ct.t = 'inlineStr';
-        curv.ct.s = convertSpanToShareString($input!.querySelectorAll('span'), curv);
-        delete curv.fs;
+        curv = isPlainObject(curv) && curv ? curv : {};
+        curv.ct = { ...curv.ct, fa: curv.ct?.fa ?? 'General', t: 'inlineStr', s: runs };
         delete curv.f;
         delete curv.v;
         delete curv.m;
-        curv.fs = fontSize;
-        if (isCopyVal) {
-            curv.ct.s = [
-                {
-                    v: inputText,
-                    fs: fontSize,
-                },
-            ];
-        }
+        curv.fs ||= 10;
     }
 
     // API, we get value from user
-    value = value || $input?.innerText;
+    value = value || (runs.length === 1 && !isCurInline ? runs[0].v : $input?.innerText);
 
     // Hook function
     if (ctx.hooks.beforeUpdateCell?.(r, c, value) === false) {
@@ -899,104 +873,40 @@ export function getRangeByTxt(ctx: Context, txt: string) {
     return range;
 }
 
-// Whether every cell in the active selection carries `status` for the given style
-// attribute. Used by the toolbar to drive on/off toggles for bold / italic /
-// strikethrough / underline. While an inline-string edit is active the check
-// pivots to the rendered DOM and inspects each <span>'s computed style — a span
-// counts as "in status" if its style[<css attr>] is non-empty.
-export function isAllSelectedCellsInStatus(ctx: Context, attr: StyleAttr, status: unknown) {
-    const cssField = cssDomKeyForAttr[attr];
-
-    if (!isEmpty(ctx.editingCellPosition)) {
-        const w = window.getSelection();
-        if (!w) return false;
-        if (w.rangeCount === 0) return false;
-        const range = w.getRangeAt(0);
-        if (range.collapsed === true) {
-            return false;
-        }
-        const { endContainer } = range;
-        const { startContainer } = range;
-        if (startContainer === endContainer) {
-            return !isEmpty(startContainer.parentElement?.style[cssField]);
-        }
-        if (startContainer.parentElement?.tagName === 'SPAN' && endContainer.parentElement?.tagName === 'SPAN') {
-            const startSpan = startContainer.parentNode as HTMLElement | null;
-            const endSpan = endContainer.parentNode as HTMLElement | null;
-            const allSpans = startSpan?.parentNode?.querySelectorAll('span');
-            if (allSpans) {
-                const startSpanIndex = indexOf(allSpans, startSpan);
-                const endSpanIndex = indexOf(allSpans, endSpan);
-                const rangeSpans = [];
-                for (let i = startSpanIndex; i <= endSpanIndex; i += 1) {
-                    rangeSpans.push(allSpans[i]);
-                }
-                return every(rangeSpans, (s) => !isEmpty(s.style[cssField]));
-            }
-        }
-    }
-    /* Get all cells within the selection — processed as a flat list */
-    const cells = getFlattenedRange(ctx);
+// Whether every cell in the active selection has `status` for a style key, which decides whether a
+// toolbar toggle such as Bold turns the key on or off. The open cell editor decides it from its own
+// runs instead (editorSelectionStyle).
+export function isAllSelectedCellsInStatus(ctx: Context, attr: RunStyleKey, status: unknown) {
     const flowdata = getFlowdata(ctx);
-
-    return cells.every(({ r, c }) => {
+    return getFlattenedRange(ctx).every(({ r, c }) => {
         const cell = flowdata?.[r]?.[c];
-        if (isNil(cell)) {
-            return false;
-        }
-        return cell[attr] === status;
+        return !isNil(cell) && cell[attr] === status;
     });
 }
 
-const STYLE_KEYS = ['bl', 'it', 'ff', 'fs', 'fc', 'cl', 'un'] as const satisfies readonly StyleAttr[];
-
-export function getFontStyleByCell(
-    cell: (Cell & UnderlineHints) | null | undefined,
-    checksCF?: CellFormatStyle | null,
-    isCheck = true,
-) {
+// The font part of a cell's CSS, for the editor box and the copied HTML. Only the keys the cell sets
+// write CSS, so the box inherits the rest.
+export function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: CellFormatStyle | null) {
     const style: Record<string, string> = {};
     if (!cell) {
         return style;
     }
-    for (const key of STYLE_KEYS) {
-        const rawValue = cell[key];
-        const value: unknown = isCheck ? normalizedCellAttr(cell, key) : rawValue;
-        const valueNum = Number(value);
-
-        if (key === 'bl' && valueNum !== 0) {
-            style.fontWeight = 'bold';
-        }
-        if (key === 'it' && valueNum !== 0) {
-            style.fontStyle = 'italic';
-        }
-        if (key === 'ff' && typeof value === 'string' && value) {
-            style.fontFamily = `'${value}', sans-serif`;
-        }
-        if (key === 'fs' && valueNum !== SHEET_DEFAULT_FONT_SIZE) {
-            style.fontSize = `${valueNum}pt`;
-        }
-        if ((key === 'fc' && value !== '#000000') || checksCF?.textColor) {
-            if (checksCF?.textColor) {
-                style.color = checksCF.textColor;
-            } else {
-                style.color = String(value);
-            }
-        }
-        if (key === 'cl' && valueNum !== 0) {
-            style.textDecoration = 'line-through';
-        }
-        if (key === 'un' && (valueNum === 1 || valueNum === 3)) {
-            const color = cell._color ?? cell.fc ?? '#000000';
-            const fs = cell._fontSize ?? cell.fs ?? 10;
-            style.borderBottom = `${Math.floor(fs / 9)}px solid ${color}`;
-        }
+    if (cell.bl) style.fontWeight = 'bold';
+    if (cell.it) style.fontStyle = 'italic';
+    const font = cellFontName(cell.ff);
+    if (font) style.fontFamily = `'${font}', sans-serif`;
+    if (cell.fs && cell.fs !== SHEET_DEFAULT_FONT_SIZE) style.fontSize = `${cell.fs}pt`;
+    const color = checksCF?.textColor ?? cell.fc;
+    if (color && color !== '#000000') style.color = color;
+    if (cell.cl) style.textDecoration = 'line-through';
+    if (cell.un === 1 || cell.un === 3) {
+        style.borderBottom = `${Math.floor((cell.fs ?? SHEET_DEFAULT_FONT_SIZE) / 9)}px solid ${cell.fc ?? '#000000'}`;
     }
     return style;
 }
 
 export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number, cfCompute?: ComputeMap | null) {
-    let style: Record<string, string> = {};
+    const style: Record<string, string> = {};
 
     // Conditional format
     const cf_compute = cfCompute ?? getComputeMap(ctx);
@@ -1005,7 +915,6 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
     const cell = d?.[r]?.[c];
     if (!cell) return {};
 
-    const isInline = isInlineStringCell(cell);
     if ('bg' in cell) {
         const value = normalizedCellAttr(cell, 'bg');
         style.background = checksCF?.cellColor ? `${checksCF.cellColor}` : `${value}`;
@@ -1027,11 +936,8 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
             style.alignItems = 'flex-end';
         }
     }
-    if (!isInline) {
-        style = Object.assign(style, getFontStyleByCell(cell, checksCF));
-    }
-
-    return style;
+    // A rich cell's box shows its own style too: its spans state only where a run differs from it.
+    return Object.assign(style, getFontStyleByCell(cell, checksCF));
 }
 
 // A formula is shown in the formula bar and the in-cell editor as colored spans, not as
@@ -1049,25 +955,11 @@ export function getFormulaHtml(r: number, c: number, data: CellMatrix): string |
     return isNil(f) ? null : functionHTMLGenerate(String(f));
 }
 
+// A rich cell's runs as the spans the in-cell editor opens with. The text and the CSS are escaped: both
+// come from the cell, which any collaborator or an uploaded xlsx wrote.
 export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {
-    const ct = getCellValue(r, c, data, 'ct');
-    if (isInlineStringCT(ct)) {
-        const strings = ct.s;
-        let value = '';
-        for (let i = 0; i < strings.length; i += 1) {
-            const strObj = strings[i];
-            if (strObj.v) {
-                // Both halves come from the cell: a color like `red' onload='...` would
-                // otherwise close the style attribute and open an event handler. The HTML
-                // parser decodes entities inside an attribute before CSS sees it, so a
-                // quoted font family survives escaping intact.
-                const styleStr = escapeHtml(styleObjectToCss(getFontStyleByCell(strObj)));
-                value += `<span class="sheet-input-span" index='${i}' style='${styleStr}'>${escapeHtml(strObj.v)}</span>`;
-            }
-        }
-        return value;
-    }
-    return '';
+    const cell = data[r]?.[c];
+    return isInlineStringCell(cell) ? runsHtml(cell.ct.s, runStyleOf(cell)) : '';
 }
 
 export function getQKBorder(width: string, type: string, color: string): BorderSide {
