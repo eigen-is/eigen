@@ -98,7 +98,7 @@ import { useSelectionPanel } from './hooks/use-selection-panel';
 import { cellBackground, selectCellCommands } from './hooks/use-toolbar-state';
 import { useYMapRead } from './hooks/use-y-map-read';
 import { updateNormalStyle } from './normal-style';
-import { OutlineColumn } from './outline-sidebar';
+import { OUTLINE_WIDTH_PX, OutlineColumn } from './outline-sidebar';
 import { BandControls, PageBands } from './page-band';
 import type { PageNumberPreset } from './page-numbers';
 import { applyPageNumberPreset } from './page-numbers';
@@ -113,9 +113,9 @@ type EquationMenuItem = NodeMenuItem & { display: boolean };
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
-// The outline's 15rem lies over the scroll box's left side, its p-4 gutter included, which a page-less column keeps
+// The outline is an absolute overlay too, and covers the scroll box's p-4 gutter as well, which a page-less column keeps
 // as room between the outline and the text.
-const OUTLINE_INTRUSION_PX = 240;
+const OUTLINE_INTRUSION_PX = OUTLINE_WIDTH_PX;
 // Room an outline jump leaves above its heading, in screen pixels.
 const JUMP_MARGIN = 24;
 // A page-less doc's Full text width leaves this much beside the column, past the scroll box's own gutter, as Google's.
