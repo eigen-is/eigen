@@ -169,6 +169,14 @@ async function mount(
     };
     const button = (label: string) =>
         [...container.querySelectorAll<HTMLButtonElement>('button')].find((el) => el.textContent?.trim() === label);
+    // A box by the label beside it, for a box whose label reads alone.
+    const box = (label: string) => {
+        const found = [...container.querySelectorAll('label')]
+            .find((el) => el.textContent?.trim() === label)
+            ?.querySelector<HTMLButtonElement>('button[role="checkbox"]');
+        if (!found) throw new Error(`no "${label}" box; saw ${boxLabels().join(', ')}`);
+        return found;
+    };
     const click = async (name: string) => {
         const box = container.querySelector(`button[role="checkbox"][aria-label="${name}"]`);
         if (!box) throw new Error(`no "${name}" checkbox`);
@@ -195,6 +203,7 @@ async function mount(
         fonts,
         automatic,
         button,
+        box,
         click,
     };
 }
@@ -423,7 +432,13 @@ describe('ChartEditor', () => {
     test("the category axis's section reverses its order, one write a click", async () => {
         const column = await mount(sample('column'));
         // Google's words, each beside its box, the category axis's section first.
-        expect(column.boxLabels()).toEqual(['Show axis', 'Reverse axis order', 'Show axis', 'Gridlines']);
+        expect(column.boxLabels()).toEqual([
+            'Show axis',
+            'Reverse axis order',
+            'Show axis',
+            'Gridlines',
+            'Data labels',
+        ]);
         await column.click('Horizontal axis: Reverse axis order');
         const { x } = sample('column').axes;
         expect(column.changes).toEqual([withAxis(sample('column'), 'x', { scale: { ...x.scale, reversed: true } })]);
@@ -573,6 +588,67 @@ describe('ChartEditor', () => {
         await act(async () => swatch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         const colors = ['s-1', 's-2', 's-3'].map((id) => editor.last().series[id].color);
         expect(colors).toEqual([chartColor(0), chartColor(1), swatch.title]);
+    });
+
+    test('the Data labels box is checked when every series shows labels, a minus when some do, and a click sets them all', async () => {
+        const labelled = (spec: ChartSpec, ids: string[], visible = true): ChartSpec => ({
+            ...spec,
+            series: Object.fromEntries(
+                Object.entries(spec.series).map(([id, style]) => [
+                    id,
+                    ids.includes(id) ? { ...style, labels: { visible } } : style,
+                ]),
+            ),
+        });
+        const all = ['s-1', 's-2', 's-3'];
+        const none = await mount(sample('column'));
+        expect(none.box('Data labels').dataset.state).toBe('unchecked');
+        await act(async () => none.box('Data labels').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        expect(none.changes).toEqual([labelled(sample('column'), all)]);
+        expect(none.box('Data labels').dataset.state).toBe('checked');
+        await act(async () => none.box('Data labels').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        expect(none.last()).toEqual(labelled(sample('column'), all, false));
+
+        const some = await mount(labelled(sample('line'), ['s-2']));
+        expect(some.box('Data labels').dataset.state).toBe('indeterminate');
+        expect(some.box('Data labels').querySelector('svg.lucide-minus')).not.toBeNull();
+        await act(async () => some.box('Data labels').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        expect(some.changes).toEqual([labelled(sample('line'), all)]);
+    });
+
+    test('the Data labels box skips a range series with no values, which draws nothing', async () => {
+        const ref = (column: number) => ({
+            sheetId: 's1',
+            row: [1, 4] as [number, number],
+            column: [column, column] as [number, number],
+        });
+        const range: ChartSpec = {
+            ...sample('column'),
+            data: {
+                source: 'range',
+                categories: null,
+                series: [
+                    { id: 's-1', name: 'North', values: ref(1) },
+                    { id: 's-2', name: 'Gone', values: null },
+                    { id: 's-3', name: 'East', values: ref(2) },
+                ],
+            },
+        };
+        const labels = (visible: boolean[]): ChartSpec => ({
+            ...range,
+            series: Object.fromEntries(
+                ['s-1', 's-2', 's-3'].map((id, i) => [
+                    id,
+                    { ...DEFAULT_CHART_SERIES_STYLE, labels: { visible: visible[i] } },
+                ]),
+            ),
+        });
+        const shown = (spec: ChartSpec) => ['s-1', 's-2', 's-3'].map((id) => spec.series[id].labels.visible);
+        expect((await mount(labels([false, true, false]))).box('Data labels').dataset.state).toBe('unchecked');
+        const editor = await mount(labels([true, true, true]));
+        expect(editor.box('Data labels').dataset.state).toBe('checked');
+        await act(async () => editor.box('Data labels').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        expect(editor.changes.map(shown)).toEqual([[false, true, false]]);
     });
 
     test('a title typed letter by letter is one gesture, released when the field is left', async () => {
