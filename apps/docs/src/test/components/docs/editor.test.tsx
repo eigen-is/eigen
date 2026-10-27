@@ -899,6 +899,9 @@ const TABLE_ROWS = [
     '—',
     'Toggle header row',
     'Cell background color',
+    'All borders',
+    'Outer borders',
+    'No borders',
 ];
 
 // Google's table menu, in Eigen's group order: the clipboard, the inserts, the table's format, the comment, then the
@@ -966,6 +969,16 @@ test('the table menu acts on the cell right-clicked', async () => {
     await rightClick(bodyCell());
     await pick('Toggle header row');
     expect(count('default', 'tableheader')).toBe(0);
+
+    await rightClick(bodyCell());
+    await pick('No borders');
+    // The cell's four sides, and the facing side of each cell beside it.
+    expect(
+        doc
+            .getXmlFragment('default')
+            .toString()
+            .match(/border(Top|Right|Bottom|Left)="none"/g),
+    ).toHaveLength(6);
 
     await rightClick(bodyCell());
     await pick('Delete table');

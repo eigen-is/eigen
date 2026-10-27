@@ -1,9 +1,13 @@
+// The rows of Format › Table, which the table's right-click menu shows too: inserting, merging and deleting rows and
+// columns, the selected cells' fill and borders. Each runs a command of the editor that holds the table, as the table
+// panel's controls do, so a phone, which has no panel, reaches them here.
+
 import type { Editor } from '@tiptap/react';
 import { readCellBackground } from '@workspace/lib/docs/eigendoc';
 import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { ColorPickerMenuItem } from '@workspace/ui/components/media';
-import { PaintBucket } from 'lucide-react';
+import { Grid3x3, PaintBucket, Square, SquareDashed } from 'lucide-react';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { TABLE_ACTION_ICONS } from './table-action-icons';
 
@@ -60,6 +64,15 @@ export function tableMenuSections(
                         editor.chain().focus().setCellAttribute('backgroundColor', readCellBackground(color)).run()
                     }
                 />
+                <DropdownMenuItem onClick={() => editor.chain().focus().setCellBorders('all').run()}>
+                    <Grid3x3 className="h-4 w-4" /> All borders
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().setCellBorders('outer').run()}>
+                    <Square className="h-4 w-4" /> Outer borders
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().setCellBorders('none').run()}>
+                    <SquareDashed className="h-4 w-4" /> No borders
+                </DropdownMenuItem>
             </>
         ),
         destructive: (

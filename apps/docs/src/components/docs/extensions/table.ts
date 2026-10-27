@@ -1,3 +1,7 @@
+// The docs editor's table, EditorTable: TipTap's table with Google Docs' column drag, which moves width between two
+// columns, and the commands Format › Table and the table panel run, such as Distribute columns and the border rows.
+// The server's schema keeps the plain table node; this one adds behavior and no attribute.
+
 import type { CommandProps } from '@tiptap/core';
 import { Table } from '@tiptap/extension-table';
 import type { Node as PMNode } from '@tiptap/pm/model';
@@ -15,12 +19,16 @@ import {
 import type { EditorView } from '@tiptap/pm/view';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { clamp } from '@workspace/lib/vector';
+import type { BorderSet } from './table-look';
+import { addColumnWithLook, addRowWithLook, setCellBorderColor, setCellBorders } from './table-look';
 import { contentWidth, textColumnWidth } from './text-column';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         editorTable: {
             distributeColumns: () => ReturnType;
+            setCellBorders: (set: BorderSet) => ReturnType;
+            setCellBorderColor: (color: string) => ReturnType;
         };
     }
 }
@@ -208,11 +216,36 @@ function columnDrag(cellMinWidth: number) {
 }
 
 // The docs editor's table. prosemirror-tables' own TableView, not TipTap's, because TipTap's leaves a column's dragged
-// width drawn when an undo takes its colwidth back to none. `resizable` is off for a coarse pointer (editor.tsx).
+// width drawn when an undo takes its colwidth back to none. `resizable` is off for a coarse pointer (editor.tsx). A row
+// or column it adds takes its neighbour's look.
 export const EditorTable = Table.extend({
     addCommands() {
         return {
             ...this.parent?.(),
+            addRowBefore:
+                () =>
+                ({ state, dispatch }: CommandProps) =>
+                    addRowWithLook('before')(state, dispatch),
+            addRowAfter:
+                () =>
+                ({ state, dispatch }: CommandProps) =>
+                    addRowWithLook('after')(state, dispatch),
+            addColumnBefore:
+                () =>
+                ({ state, dispatch }: CommandProps) =>
+                    addColumnWithLook('before')(state, dispatch),
+            addColumnAfter:
+                () =>
+                ({ state, dispatch }: CommandProps) =>
+                    addColumnWithLook('after')(state, dispatch),
+            setCellBorders:
+                (set: BorderSet) =>
+                ({ state, dispatch }: CommandProps) =>
+                    setCellBorders(set)(state, dispatch),
+            setCellBorderColor:
+                (color: string) =>
+                ({ state, dispatch }: CommandProps) =>
+                    setCellBorderColor(color)(state, dispatch),
             // Google Docs' Distribute columns: one width for every column, splitting the table's own width, or the
             // widest the table draws when a column has none and the table draws at that width.
             distributeColumns:
