@@ -18,23 +18,25 @@ type AppBarMenuProps = {
 };
 
 export function AppBarMenu({ label, value, contentClassName, onCloseAutoFocus, children }: AppBarMenuProps) {
-    const triggerRef = useRef<HTMLButtonElement>(null);
     // While another menu of the bar is open, Radix opens this one as the pointer moves onto its trigger, before the
     // press the user aimed at it. That press must not close the menu again, as a press on an open trigger does.
     const openedByHoverRef = useRef(false);
+    const keepOpenPressRef = useRef<PointerEvent | null>(null);
     return (
         <MenubarMenu value={value}>
             <MenubarTrigger
-                ref={triggerRef}
                 onPointerEnter={(event) => {
                     if (event.currentTarget.dataset.state === 'open') return;
                     const bar = event.currentTarget.closest('[role="menubar"]');
                     openedByHoverRef.current = !!bar?.querySelector('[data-state="open"]');
                 }}
                 onPointerDown={(event) => {
-                    if (event.currentTarget.dataset.state === 'closed') openedByHoverRef.current = false;
-                    // The open menu keeps the focus, as after a press that opened it, so the arrow keys work in it.
-                    else if (openedByHoverRef.current) event.preventDefault();
+                    if (event.currentTarget.dataset.state === 'open' && openedByHoverRef.current) {
+                        keepOpenPressRef.current = event.nativeEvent;
+                        // The open menu keeps the focus, as after a press that opened it, so the arrow keys work in it.
+                        event.preventDefault();
+                    }
+                    openedByHoverRef.current = false;
                 }}
             >
                 {label}
@@ -43,11 +45,7 @@ export function AppBarMenu({ label, value, contentClassName, onCloseAutoFocus, c
                 className={contentClassName}
                 onCloseAutoFocus={onCloseAutoFocus}
                 onPointerDownOutside={(event) => {
-                    const target = event.target;
-                    if (openedByHoverRef.current && target instanceof Node && triggerRef.current?.contains(target)) {
-                        event.preventDefault();
-                    }
-                    openedByHoverRef.current = false;
+                    if (event.detail.originalEvent === keepOpenPressRef.current) event.preventDefault();
                 }}
             >
                 {children}

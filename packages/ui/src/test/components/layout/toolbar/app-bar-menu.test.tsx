@@ -106,6 +106,25 @@ test('an open menu leaves the page live, and one press on another trigger opens 
     expect(openMenu()).toBe('0 menus');
 });
 
+// A finger enters and presses in one go, before the menu it opens listens for a press outside. Outside act, React
+// renders in the microtask after each event, as in a browser, and no timer runs in between.
+async function tap(label: string) {
+    const button = trigger(label);
+    button?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    await Promise.resolve();
+    button?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+}
+
+test('a tap on another trigger opens its menu, and a second tap closes it', async () => {
+    await render(390);
+    await tap('Format');
+    await tap('Edit');
+    expect(openMenu()).toBe('Edit');
+    await tap('Edit');
+    expect(openMenu()).toBe('0 menus');
+});
+
 test("a DropdownMenu's rows work in a bar menu: a choice's submenu checks the current option and a pick sets it", async () => {
     await render(1600);
     await press('Format');
