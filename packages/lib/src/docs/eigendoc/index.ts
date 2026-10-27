@@ -62,11 +62,12 @@ export {
     readCellBackground,
     readCellBorder,
 } from './nodes/table-cell';
+export { readTocLevels, TableOfContentsNode } from './nodes/table-of-contents';
 export type { TitleType } from './nodes/title';
 export type { NormalStyle } from './normal-style';
 export { DEFAULT_NORMAL_STYLE, normalStyleProperties, readNormalStyle, STYLE_ROOT } from './normal-style';
-export type { OutlineHeading } from './outline';
-export { readOutline } from './outline';
+export type { OutlineEntry, OutlineHeading } from './outline';
+export { outlineEntry, readOutline } from './outline';
 export type { PageMargin, PageSetup, PaperSizeName } from './page';
 export {
     cmText,
