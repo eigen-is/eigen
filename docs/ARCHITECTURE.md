@@ -136,7 +136,7 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 | **Everyday UI**    | `@workspace/ui` root barrel                           | Check these before building custom UI: `TooltipButton`, `DeleteDialog`, `ConfirmDialog`, `EmptyState`/`LoadingState`/`ErrorState`, `SearchBar`, `FileMenu`, `RequestAccessView` (the "request access" screen for a shared resource). Everything else: [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) |
 | **App shell**      | `packages/ui/src/components/layout/app/app-shell.tsx` | Wraps every app (Topbar + sidebar + content)               |
 | **Provider stack** | `packages/ui/src/components/layout/app/eigen-app.tsx` | Auth → SSE → Upload → Preview → CommandPalette → Toaster   |
-| **Layout**         | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` + `Column` with responsive mobile switching |
+| **Layout**         | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` + `Column` with responsive mobile switching; `ListDetailLayout` for a list whose selection opens a detail |
 | **Routing**        | `apps/[name]/src/routes/`                             | TanStack Router, file-based. `_auth.tsx` guards            |
 | **Command palette**| `packages/lib/src/core/command-palette/`              | `Mod+K` dialog; reach it through `useOptionalCommandPalette` so apps without the provider don't crash. See [COMMAND-PALETTE.md](COMMAND-PALETTE.md) |
 | **In-document search** | `packages/lib/src/doc-search/` + `packages/ui/src/components/search/` | ⌘F find bar (+ replace) in every eigendoc editor, on one shared 3-method `DocSearchController` contract. See [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md) |

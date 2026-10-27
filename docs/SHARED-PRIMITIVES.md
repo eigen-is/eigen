@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2004 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2005 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (185)
+## Components (186)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -51,6 +51,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Ket` | `@workspace/ui` | packages/ui/src/components/braket/ket.tsx |
 | `KetTile` | `@workspace/ui` | packages/ui/src/components/braket/ket-tile.tsx |
 | `LeaveGuard` | `@workspace/ui` | packages/ui/src/components/layout/app/leave-guard.tsx |
+| `ListDetailLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/list-detail-layout.tsx |
 | `LoadingState` | `@workspace/ui` | packages/ui/src/components/layout/app/loading-state.tsx |
 | `ObjectTransform` | `@workspace/ui` | packages/ui/src/components/transform/object-transform.tsx |
 | `RequestAccessView` | `@workspace/ui` | packages/ui/src/components/layout/app/request-access-view.tsx |
