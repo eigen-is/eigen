@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2037 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2038 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -236,7 +236,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (298)
+## Hooks (299)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -509,6 +509,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useOptionalPreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `usePreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `useAspectLock` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/use-aspect-lock.ts |
+| `useCoupledSize` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/use-coupled-size.ts |
 | `useHeldGesture` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `useZOrderHotkeys` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/z-order.tsx |
 | `useFindBarRefocus` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
@@ -1457,7 +1458,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readEquation` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |
 | `readFigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `readFigureFrameAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
-| `readFrameWidth` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
+| `readFrameSide` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `readNormalStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
 | `readOutline` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `readPageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
