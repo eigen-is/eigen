@@ -8,6 +8,7 @@ import * as Y from 'yjs';
 import { PREVIEW_SHEET_BUDGET, renderSheetsHtml, renderSheetsPreviewHtml } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
+import { cpuClock } from '../cpu-time';
 import {
     buildGoldenOps,
     buildGoldenSheets,
@@ -539,9 +540,9 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             celldata: [{ r: 0, c: 0, v: { v: 'a', m: 'a' } }],
             config: { rowhidden: { 3: 0 }, borderInfo: { '-10000000_0': { b: { style: 1, color: '#000' } } } },
         };
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const { html, truncated } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
-        expect(performance.now() - started).toBeLessThan(500);
+        expect(cpuMs()).toBeLessThan(500);
         expect(truncated).toBe(false);
         expect(html).toContain('>a<');
         expect(html.match(/<tr /g)).toHaveLength(1);

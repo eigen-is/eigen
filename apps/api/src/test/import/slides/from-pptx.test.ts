@@ -5,6 +5,7 @@ import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_SLIDES } from '../../../lib/import/slides/package';
 import { MAX_ELEMENTS, MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
+import { cpuClock } from '../../cpu-time';
 import { box, buildPptx, NS, PIXEL_PNG, para, pic, pptxParts, rel, solid, sp, zipParts } from '../../fixtures/pptx';
 
 // The reader's output and the limits a hostile pptx meets before the work they bound.
@@ -224,9 +225,9 @@ describe('limits', () => {
             text: `<a:p>${'<a:r><a:t>x</a:t></a:r>'.repeat(20_000)}</a:p>`,
         });
         const pptx = buildPptx({ masters: [{ shapes: master }], slides: Array.from({ length: 500 }, () => ({})) });
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const deck = readPptx(pptx, OPTIONS);
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs()).toBeLessThan(1000);
         expect(deck.slides[499].elements).toEqual(deck.slides[0].elements);
         expect(deck.slides[499].elements[0]).not.toBe(deck.slides[0].elements[0]);
     });

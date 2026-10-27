@@ -35,6 +35,7 @@ import {
 } from '../../lib/export/sheets/render';
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
+import { cpuClock } from '../cpu-time';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { NO_MEDIA } from '../setup';
 
@@ -1447,9 +1448,9 @@ describe('Sheets HTML export — the cell cap', () => {
                 },
             },
         };
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const out = renderSheetsHtml([sheet], NO_MEDIA);
-        expect(performance.now() - started).toBeLessThan(10_000);
+        expect(cpuMs()).toBeLessThan(10_000);
         expect(out.cut).toEqual([sheet]);
         expect(out.html).toContain('>top left<');
         expect(cols(out.html)).toBe(192);
@@ -1467,9 +1468,9 @@ describe('Sheets HTML export — the cell cap', () => {
         };
         const doc = new Y.Doc();
         doc.getMap('state').set('snapshot', encodeSheetsSnapshot([sheet], { computed: true }));
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const exported = await renderEigensheetsExport(doc, 'html', 'Forged', async () => []);
-        expect(performance.now() - started).toBeLessThan(10_000);
+        expect(cpuMs()).toBeLessThan(10_000);
         expect(exported.warnings).toEqual([{ code: 'sheets-cut', count: 1 }]);
         const html = new TextDecoder().decode(exported.data);
         expect(html).toContain('colspan="192"');
@@ -1562,7 +1563,7 @@ describe('Sheets HTML export — the cell cap', () => {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'top left' } }]),
             config: { borderInfo: { '10000000000_0': { b: { style: 1, color: '#000' } } } },
         };
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const lost: string[] = [];
         const html = sheetsHtmlDocument({
             title: 'Far',
@@ -1572,7 +1573,7 @@ describe('Sheets HTML export — the cell cap', () => {
             lost: (code) => lost.push(code),
         });
         // It renders the cap's 250,000 rows, about 14 s on a loaded CI runner; the span walk it guards took 119 s.
-        expect(performance.now() - started).toBeLessThan(60_000);
+        expect(cpuMs()).toBeLessThan(60_000);
         expect(lost).toEqual(['sheets-cut']);
         expect(trs(html)).toBe(MAX_EXPORT_CELLS);
         const lone = { ...sheet, config: { borderInfo: { '10000000000_0': { b: { style: 1, color: '#000' } } } } };
@@ -1717,9 +1718,9 @@ describe('Sheets HTML export — the window over forged keys', () => {
         config,
     });
     const timed = <T>(run: () => T): { out: T; ms: number } => {
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const out = run();
-        return { out, ms: performance.now() - started };
+        return { out, ms: cpuMs() };
     };
 
     test('a border key or a merge far above the grid is dropped, and A1 renders alone', () => {
