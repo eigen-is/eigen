@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import { DEFAULT_CHART_SERIES_STYLE, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Patch } from 'immer';
 import { produce } from 'immer';
+import { generateAPIs } from '../../../components/Workbook/api';
 import { dataToCelldata } from '../../../engine/celldata';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell } from '../../../engine/types';
@@ -235,6 +236,65 @@ describe("undo after a peer's row, column or sheet change lands on your cell", (
         s.undo(s.a);
         expect(cellAt(s.a, 'A1', TWO)?.f).toBe('=One!B11');
         expectAgree(s);
+    });
+});
+
+// A peer's batch moves this tab's undos only by what it did: nothing when it was skipped or its row op refused, and
+// against the sheets it was applied to.
+describe("a peer's batch shifts the undo stacks once it applied", () => {
+    const peerInsert = (ops: Op[] = []): Op[] => [
+        { op: 'insertRowCol', id: ONE, path: [], value: { type: 'row', index: 2, count: 2, direction: 'lefttop' } },
+        ...ops,
+    ];
+
+    test('a batch that fails leaves the undo where it was', () => {
+        const s = session(workbook({ B10: text('old') }));
+        s.edit(s.a, typedAt('B10', 'new'));
+        tabReceive(s.a, peerInsert([{ op: 'replace', id: ONE, path: ['data', 999, 999, 'v'], value: 1 }]));
+        expect(cellAt(s.a, 'B10')?.v).toBe('new');
+        tabUndo(s.a);
+        expect(cellAt(s.a, 'B10')?.v).toBe('old');
+    });
+
+    test('a row op the sheet refuses leaves the undo where it was', () => {
+        const s = session(workbook({ B10: text('old') }));
+        s.edit(s.a, typedAt('B10', 'new'));
+        s.a.ctx = produce(s.a.ctx, (ctx: Context) => {
+            ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 2: 1 } };
+        });
+        tabReceive(s.a, peerInsert());
+        expect(cellAt(s.a, 'B10')?.v).toBe('new');
+        tabUndo(s.a);
+        expect(cellAt(s.a, 'B10')?.v).toBe('old');
+    });
+
+    test('a second batch before the next render shifts against the sheets the first one added', () => {
+        const base = workbook({}, { A1: text('old') });
+        const a = tab(base);
+        const b = tab(base);
+        const settings = { ...defaultSettings, generateSheetId: () => 's4' };
+        const added = tabEdit(b, (ctx) => addSheet(ctx, settings), { addSheetOp: true });
+        const name = b.ctx.sheets[3].name;
+        tabEdit(a, typedAt('A1', `=${name}!B10`, TWO));
+        const inserted = tabEdit(b, ...insertRows(2, 2, 's4'));
+        // One API, built on A's last render, takes both batches, as the Workbook's does between two renders.
+        let next = a.ctx;
+        const setContext = (recipe: (ctx: Context) => void) => {
+            next = produce(next, recipe);
+        };
+        const api = generateAPIs(
+            a.ctx,
+            setContext,
+            () => {},
+            () => {},
+            a.history,
+        );
+        api.applyOp(added);
+        api.applyOp(inserted);
+        a.ctx = next;
+        expect(cellAt(a, 'A1', TWO)?.f).toBe(`=${name}!B12`);
+        tabUndo(a);
+        expect(cellAt(a, 'A1', TWO)?.v).toBe('old');
     });
 });
 

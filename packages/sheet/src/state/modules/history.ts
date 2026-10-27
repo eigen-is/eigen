@@ -133,15 +133,16 @@ function atSheetIndex(ctx: Context, patches: Patch[]): Patch[] {
 
 function applyBatch(ctx: Context, ops: Op[]): Step {
     if (ops.length === 0) return { ctx, ops };
-    const next = applyOpBatch(ctx, ops);
-    return next ? { ctx: produce(next, settleCurrentSheet), ops } : { ctx, ops: [] };
+    const applied = applyOpBatch(ctx, ops);
+    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
 }
 
 // A sheet comes back, or goes, through applyOpBatch. The batch it sends also carries the tab order the sheet op left
 // behind, which the edit's own batch carries too; here those order ops would change nothing.
 function sheetStep(ctx: Context, batch: (sheets: Sheet[]) => Op[]): Step {
-    const next = applyOpBatch(ctx, batch(ctx.sheets).slice(0, 1));
-    return next ? { ctx: produce(next, settleCurrentSheet), ops: batch(next.sheets) } : { ctx, ops: [] };
+    const applied = applyOpBatch(ctx, batch(ctx.sheets).slice(0, 1));
+    if (!applied) return { ctx, ops: [] };
+    return { ctx: produce(applied.ctx, settleCurrentSheet), ops: batch(applied.ctx.sheets) };
 }
 
 // A cell or field entry: `apply` goes in, and `written`, the entry's other side, says what the targets should hold.

@@ -2,24 +2,29 @@
 // row or column ops first, then the cell and field patches, resolved against the sheets those ops left. A batch applies
 // whole or not at all. Callers such as the Workbook's applyOp for a peer's batch, and an undo that adds a sheet or
 // deletes rows, go through it, so the client that sends a batch, the peers that take it and a joiner all end the same.
+// It also says which row or column ops moved rows, so the Workbook moves its undo stacks by exactly those.
 
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
-import { applyPatches, produce } from 'immer';
+import { applyPatches, current, produce } from 'immer';
 import { RowColError } from '../../engine/rowcol';
 import type { Context } from '../context';
-import type { Op } from '../types';
+import type { Op, Sheet } from '../types';
 import { getSheetIndex, opToPatch } from '../utils';
 import { createFilterOptions } from './filter';
 import { registerSheetFormulas } from './formula-cache';
 import { deleteRowCol, insertRowCol } from './rowcol';
 import { addSheet, deleteSheet, initSheetData, leaveCurrentSheet } from './sheet';
 
-// The next context, or null when an op failed and the batch was skipped.
-export function applyOpBatch(ctx: Context, ops: Op[]): Context | null {
+// A row or column op the batch applied, with the sheets it was applied to.
+export type AppliedRowCol = { op: Op; sheets: Sheet[] };
+
+// The next context and the row or column ops that moved rows, or null when an op failed and the batch was skipped.
+export function applyOpBatch(ctx: Context, ops: Op[]): { ctx: Context; moved: AppliedRowCol[] } | null {
     let patches: Patch[] = [];
     // The sheets this batch gives a cell matrix, whose formulas the formula map learns once the batch applied.
     const materialized: string[] = [];
+    const moved: AppliedRowCol[] = [];
     let next: Context;
     try {
         next = produce(ctx, (draft: Context) => {
@@ -36,10 +41,13 @@ export function applyOpBatch(ctx: Context, ops: Op[]): Context | null {
                 const { id } = op;
                 // force: a peer's op lands for a read-only viewer too, or the grid and the metadata patches part ways.
                 // The op names its sheet, as the replay reads it, whatever its value carries.
-                if (op.op === 'insertRowCol' && id) {
-                    skipRowColError(() => insertRowCol(draft, { ...op.value, id }, false, true));
-                } else if (op.op === 'deleteRowCol' && id) {
-                    skipRowColError(() => deleteRowCol(draft, { ...op.value, id }, true));
+                if ((op.op === 'insertRowCol' || op.op === 'deleteRowCol') && id) {
+                    const sheets = current(draft.sheets);
+                    const applied = skipRowColError(() => {
+                        if (op.op === 'insertRowCol') insertRowCol(draft, { ...op.value, id }, false, true);
+                        else deleteRowCol(draft, { ...op.value, id }, true);
+                    });
+                    if (applied) moved.push({ op, sheets });
                 } else if (op.op === 'addSheet' && op.value?.id) {
                     // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
                     const value = cloneDeep(op.value);
@@ -68,15 +76,18 @@ export function applyOpBatch(ctx: Context, ops: Op[]): Context | null {
         if (data) registerSheetFormulas(next, id, data);
     }
     if (patches.length > 0) next.formulaCache.updateFormulaCache(next, { patches, inversePatches: [] }, 'redo');
-    return next;
+    return { ctx: next, moved };
 }
 
 // The replay skips a row or column op the sheet refuses, such as an insert into a read-only row, and so does a client.
-function skipRowColError(apply: () => void) {
+// True when the op applied.
+function skipRowColError(apply: () => void): boolean {
     try {
         apply();
+        return true;
     } catch (e) {
         if (!(e instanceof RowColError)) throw e;
         console.warn('[sheet] row or column op skipped:', e.code);
+        return false;
     }
 }

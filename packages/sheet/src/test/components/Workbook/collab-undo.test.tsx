@@ -80,3 +80,28 @@ test("undo after a peer's row insert lands on the moved cell in both tabs", asyn
         expect(tab.getFlowdata()?.[9]?.[1]).toBeNull();
     }
 });
+
+// A peer's batch shifts the stacks in its updater, so an undo called before the next render takes its entry there too,
+// after the shift.
+test("an undo called right after a peer's row insert, before a render, lands on the moved cell", async () => {
+    let b: () => WorkbookInstance = () => {
+        throw new Error('not mounted');
+    };
+    const a = await mount((ops) => b().applyOp(ops));
+    b = await mount((ops) => a().applyOp(ops));
+    const step = (run: () => void) => act(async () => run());
+
+    await step(() => a().setCellFormat(9, 1, 'bl', 1));
+    const op = { type: 'row', index: 2, count: 2, direction: 'lefttop', id: 's1' } as const;
+    const base = workbookContextFactory({ sheets: a().getAllSheets(), currentSheetId: 's1' });
+    const { ops } = author(base, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+    await step(() => b().applyOp(ops));
+    await step(() => {
+        a().applyOp(ops);
+        a().undo();
+    });
+    for (const tab of [a(), b()]) {
+        expect(tab.getFlowdata()?.[11]?.[1]).toMatchObject({ v: 'old' });
+        expect(tab.getFlowdata()?.[11]?.[1]?.bl).toBeFalsy();
+    }
+});
