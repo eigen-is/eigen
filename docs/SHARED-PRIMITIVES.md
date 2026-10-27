@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2034 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2037 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -539,7 +539,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (460)
+## Types (461)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -575,6 +575,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Caps` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/caps.ts |
 | `CellBorder` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `CellBorderAttribute` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `CellBorderStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `CellSide` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `ChartAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `Equation` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
@@ -1004,7 +1005,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1066)
+## Utilities & constants (1068)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1392,6 +1393,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `bandHasContent` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `BLOCK_ONLY_FIGURE_PARENTS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `CELL_BORDER_SIDES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `CELL_BORDER_STYLES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `cellBorderValue` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `chartSvg` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `cmText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -1550,6 +1552,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `borderInfoExtent` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `borderSidesToCss` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `cellFontName` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
+| `cellFontSize` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `chartsWithinEntryCap` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `cloneSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `columnIndexToLabel` | `@workspace/lib/sheets` | packages/lib/src/sheets/labels.ts |
