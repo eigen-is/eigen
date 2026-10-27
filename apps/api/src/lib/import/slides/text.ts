@@ -1,6 +1,6 @@
-// A text body becomes one rich-text box: its HTML and the box's typography. It leaves out per-run size, colour and
-// font, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript, subscript and
-// highlight.
+// A text body becomes one rich-text box: its HTML and the box's typography. It leaves out per-run size, color, font
+// and letter spacing, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript,
+// subscript and highlight.
 
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { escapeHtml, LIGHT_EDITOR_HREF } from '@workspace/lib/html';
@@ -156,10 +156,14 @@ export function richTextOf(
     const counted = [...covered.values()].filter((style) => style.chars > 0);
     const [box] = counted.sort((a, b) => b.chars - a.chars);
     if (!box) return undefined;
-    // The box draws one size, colour and font, so a run in another loses its own.
+    // The box draws one size, color, font and letter spacing, so a run in another loses its own.
     if (
         counted.some(
-            (style) => style.size !== box.size || style.color !== box.color || style.fontFamily !== box.fontFamily,
+            (style) =>
+                style.size !== box.size ||
+                style.color !== box.color ||
+                style.fontFamily !== box.fontFamily ||
+                style.letterSpacing !== box.letterSpacing,
         )
     )
         lost('text-simplified');

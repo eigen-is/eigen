@@ -303,8 +303,9 @@ describe('inline marks', () => {
         });
     });
 
-    // The box takes one size, colour and font; runs that differ in them lose theirs, so the import says so once.
-    test('runs that differ in size, colour or font count the box as simplified; marks alone do not', () => {
+    // The box takes one size, color, font and letter spacing. Runs that differ in them lose theirs, so the import
+    // says so once.
+    test('runs that differ in size, color, font or spacing count the box as simplified; marks alone do not', () => {
         const counted = (paragraphs: string) => {
             const codes: string[] = [];
             textOf(paragraphs, {}, (code) => codes.push(code));
@@ -319,6 +320,7 @@ describe('inline marks', () => {
         expect(
             counted(`<a:p>${run('serif', '', '<a:latin typeface="Times New Roman"/>')}${run(' sans')}</a:p>`),
         ).toEqual(['text-simplified']);
+        expect(counted(`<a:p>${run('Spaced', ' spc="300"')}${run(' and tight')}</a:p>`)).toEqual(['text-simplified']);
         expect(counted(`<a:p>${run('Bold', ' b="1"')}${run(' and plain')}</a:p>`)).toEqual([]);
         // A run of spaces draws no characters, so its size is no loss.
         expect(counted(`<a:p>${run('Text')}${run(' ', ' sz="4000"')}</a:p>`)).toEqual([]);
