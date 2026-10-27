@@ -7,7 +7,7 @@
 \s+                                                                                             {/* skip whitespace */}
 '"'("\\"["]|[^"])*'"'                                                                           {return 'STRING';}
 "'"('\\'[']|[^'])*"'"                                                                           {return 'STRING';}
-[A-Za-z]{1,}[A-Za-z_0-9\.]+(?=[(])                                                              {return 'FUNCTION';}
+[A-Za-z_][A-Za-z_0-9\.]+(?=[(])                                                                 {return 'FUNCTION';}
 '#'[A-Z0-9\/]+('!'|'?')?                                                                        {return 'ERROR';}
 '$'[A-Za-z]+'$'[0-9]+                                                                           {return 'ABSOLUTE_CELL';}
 '$'[A-Za-z]+[0-9]+                                                                              {return 'MIXED_CELL';}
@@ -236,7 +236,7 @@ number
 
 error
   : ERROR {
-      $$ = yy.throwError($1);
+      $$ = yy.errorValue($1);
     }
 ;
 
