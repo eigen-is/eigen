@@ -68,6 +68,7 @@ function session(base: Context) {
     return {
         a,
         b,
+        batches,
         edit: (t: Tab, recipe: (ctx: Context) => void, options?: Parameters<typeof tabEdit>[2]) =>
             send(t, tabEdit(t, recipe, options)),
         undo: (t: Tab) => send(t, tabUndo(t)),
@@ -304,6 +305,47 @@ describe('undo skips a cell a peer changed since, by what was written into it', 
         s.undo(s.a);
         expect(s.a.ctx.sheets[0].config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
         expect(cellAt(s.a, 'B2')?.mc).toEqual({ r: 0, c: 0 });
+        expectAgree(s);
+    });
+});
+
+// An undo sends what a person wrote and recalculates the rest: a value the engine computed is only right for the
+// inputs at the time it was recorded.
+describe('undo and redo recalculate the formulas they touch', () => {
+    const num = (n: number): Cell => ({ v: n, m: String(n), ct: { fa: 'General', t: 'n' } });
+
+    test("a dependent reads a peer's later input after your undo", () => {
+        const s = session(workbook({ A1: num(1), B1: num(2), D10: { f: '=A1+B1', v: 3, m: '3' } }));
+        s.edit(s.a, typedAt('A1', '5'));
+        s.edit(s.b, typedAt('B1', '100'));
+        expect(cellAt(s.b, 'D10')?.v).toBe(105);
+        s.undo(s.a);
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'D10')?.v).toBe(101);
+        // The batch carries the recalculated value alone, never the one the entry recorded.
+        const sent = s.batches.at(-1)?.filter(({ path }) => path[1] === 9 && path[2] === 3 && path[3] === 'v');
+        expect(sent?.map((op) => op.value)).toEqual([101]);
+        expect(s.joiner()[0].data?.[9]?.[3]?.v).toBe(101);
+        expectAgree(s);
+        s.redo(s.a);
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'D10')?.v).toBe(105);
+        expectAgree(s);
+    });
+
+    test('a formula a peer rewrote keeps a value that matches it after your undo', () => {
+        const s = session(workbook({ A1: num(1), D10: { f: '=A1*2', v: 2, m: '2' } }));
+        s.edit(s.a, typedAt('A1', '5'));
+        s.edit(s.b, typedAt('D10', '=A1*3'));
+        s.undo(s.a);
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'D10')).toMatchObject({ f: '=A1*3', v: 3 });
+        expectAgree(s);
+    });
+
+    test("an undone formula computes from a peer's later input", () => {
+        const s = session(workbook({ A1: num(5), B1: { f: '=A1*3', v: 15, m: '15' } }));
+        s.edit(s.a, typedAt('B1', '=A1*2'));
+        s.edit(s.b, typedAt('A1', '7'));
+        s.undo(s.a);
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'B1')).toMatchObject({ f: '=A1*3', v: 21 });
         expectAgree(s);
     });
 });

@@ -1,22 +1,27 @@
 // What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id. Undo and
 // redo take the context and an entry and return the next context and the batch to send. A cell or field entry skips a
-// target a peer changed since. A sheet, row or column entry builds ops and applies exactly those, through
-// applyOpBatch, as its peers will. The Workbook keeps the stacks and calls these from, for example, handleUndo.
+// target a peer changed since and recalculates the formulas it touches. A sheet, row or column entry builds ops and
+// applies exactly those, through applyOpBatch, as its peers will. The Workbook keeps the stacks and calls these from,
+// for example, handleUndo.
 
 import type { MergeCell } from '@workspace/lib/sheets';
 import { parseCellKey } from '@workspace/lib/sheets';
 import { cloneDeep, get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
-import { applyPatches, produce } from 'immer';
+import { applyPatches, produce, produceWithPatches } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
 import { RowColError } from '../../engine/rowcol';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
-import type { History, Op, Sheet } from '../types';
+import { getFlowdata } from '../context';
+import type { FormulaCell, History, Op, Sheet } from '../types';
 import type { PatchOptions } from '../utils';
-import { addSheetOps, deleteSheetOps, getSheetIndex, inverseRowColOptions, patchToOp } from '../utils';
+import { addSheetOps, deleteSheetOps, filterPatch, getSheetIndex, inverseRowColOptions, patchToOp } from '../utils';
 import { applyOpBatch } from './apply-ops';
+import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
+import { createContextResolver, snapshotContext } from './formula-cache';
+import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-exec';
 import { rowColMove } from './history-shift';
 import { settleCurrentSheet } from './sheet';
 
@@ -140,16 +145,55 @@ function sheetStep(ctx: Context, batch: (sheets: Sheet[]) => Op[]): Step {
 }
 
 // A cell or field entry: `apply` goes in, and `written`, the entry's other side, says what the targets should hold.
+// The formula values the entry recorded were right for the inputs of their time, so the step recalculates them.
 function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
-    const patches = stillWritten(
+    const kept = stillWritten(
         ctx,
         withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, apply)),
         atSheetIndex(ctx, written),
     );
+    const patches = withoutComputedValues(ctx, kept);
     if (patches.length === 0) return { ctx, ops: [] };
-    const next = produce(applyPatches(ctx, patches), settleCurrentSheet);
-    next.formulaCache.updateFormulaCache(next, { patches, inversePatches: [] }, 'redo');
-    return { ctx: next, ops: patchToOp(next, patches) };
+    const restored = produce(applyPatches(ctx, patches), settleCurrentSheet);
+    restored.formulaCache.updateFormulaCache(restored, { patches, inversePatches: [] }, 'redo');
+    const [next, recalculated] = produceWithPatches(restored, (draft: Context) => recalculate(draft, patches));
+    return { ctx: next, ops: patchToOp(next, [...patches, ...filterPatch(recalculated)]) };
+}
+
+// The patches without the value and display text the engine computed for a cell that holds a formula once they
+// apply. A peer may have changed that formula's inputs, or the formula itself, since.
+function withoutComputedValues(ctx: Context, patches: Patch[]): Patch[] {
+    const after = applyPatches(ctx, patches);
+    return patches.filter(({ path }) => {
+        const [, index, field, r, c, key] = path;
+        if (field !== 'data' || path.length !== 6 || (key !== 'v' && key !== 'm')) return true;
+        if (typeof index !== 'number' || typeof r !== 'number' || typeof c !== 'number') return true;
+        return after.sheets[index].data?.[r]?.[c]?.f == null;
+    });
+}
+
+// Recomputes each formula the patches wrote, then every formula that reads a cell they wrote, as an edit does.
+function recalculate(ctx: Context, patches: Patch[]) {
+    const cells = new Map<string, FormulaCell>();
+    for (const { path } of patches) {
+        const [, index, field, r, c] = path;
+        if (field !== 'data' || typeof index !== 'number' || typeof r !== 'number' || typeof c !== 'number') continue;
+        const { id } = ctx.sheets[index];
+        if (id != null) cells.set(`${r}_${c}_${id}`, { r, c, id });
+    }
+    if (cells.size === 0) return;
+    const resolver = createContextResolver(snapshotContext(ctx));
+    for (const { r, c, id } of cells.values()) {
+        const data = getFlowdata(ctx, id);
+        const f = data?.[r]?.[c]?.f;
+        if (!data || f == null) continue;
+        const [, v] = execfunction(ctx, f, r, c, id, undefined, false, true, resolver);
+        setCellValue(ctx, r, c, data, { v, f });
+    }
+    ctx.formulaCache.execFunctionExist = [...cells.values()];
+    execFunctionGroup(ctx, null, null, null);
+    groupValuesRefresh(ctx);
+    ctx.formulaCache.execFunctionGlobalData = null;
 }
 
 // A row or column entry, `from` what the op left to `to`. Its whole-field patches set up a scratch context, which
