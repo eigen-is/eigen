@@ -1,3 +1,7 @@
+// The rectangles drawn over the grid in each pane region, such as the selection, the focus box, formula
+// ranges, find matches and peers' cursors, plus the selection's move band and fill handle, whose
+// press starts a cell move or a fill drag.
+
 import { PresenceLabel } from '@workspace/ui/components/collab';
 import type React from 'react';
 import { useContext } from 'react';
@@ -25,22 +29,20 @@ export function OverlayVisuals({ containerRef }: Props) {
     // Decided outside the recipe, since stopPropagation has to happen now.
     const onHandleMouseDown = (e: React.MouseEvent<HTMLDivElement>, handle: 'move' | 'fill') => {
         const { nativeEvent } = e;
-        if (cellGlyphAtPointer(context, refs.globalCache, nativeEvent, refs.cellArea.current!) != null) return;
+        const cellArea = refs.cellArea.current;
+        if (!cellArea || cellGlyphAtPointer(context, refs.globalCache, nativeEvent, cellArea) != null) return;
         e.stopPropagation();
         setContext((draftCtx) => {
+            const container = containerRef.current;
+            if (!container) return;
             if (handle === 'fill') {
-                createDropCellRange(draftCtx, nativeEvent, containerRef.current!);
+                createDropCellRange(draftCtx, nativeEvent, container);
             } else {
-                onCellsMoveStart(
-                    draftCtx,
-                    refs.globalCache,
-                    nativeEvent,
-                    refs.cellArea.current!,
-                    containerRef.current!,
-                );
+                onCellsMoveStart(draftCtx, refs.globalCache, nativeEvent, cellArea, container);
             }
         });
     };
+    const focus = context.selections?.at(-1);
 
     return (
         <>
@@ -108,17 +110,14 @@ export function OverlayVisuals({ containerRef }: Props) {
             <div
                 className="sheet-cell-selected-focus"
                 style={
-                    (context.selections?.length ?? 0) > 0
-                        ? (() => {
-                              const selection = context.selections!.at(-1)!;
-                              return {
-                                  left: selection.left,
-                                  top: selection.top,
-                                  width: selection?.width || 0,
-                                  height: selection?.height || 0,
-                                  display: 'block',
-                              };
-                          })()
+                    focus
+                        ? {
+                              left: focus.left,
+                              top: focus.top,
+                              width: focus.width || 0,
+                              height: focus.height || 0,
+                              display: 'block',
+                          }
                         : {}
                 }
             />
@@ -158,9 +157,9 @@ export function OverlayVisuals({ containerRef }: Props) {
             )}
             <div className="sheet-cell-selected-extend" />
             <div className="sheet-cell-selected-move" onMouseDown={(e) => e.preventDefault()} />
-            {(context.selections?.length ?? 0) > 0 && (
+            {context.selections && context.selections.length > 0 && (
                 <div>
-                    {context.selections!.map((selection) => (
+                    {context.selections.map((selection) => (
                         <div
                             key={`${selection.row[0]}-${selection.row[1]}-${selection.column[0]}-${selection.column[1]}`}
                             className="sheet-cell-selected"
@@ -196,51 +195,51 @@ export function OverlayVisuals({ containerRef }: Props) {
                     ))}
                 </div>
             )}
-            {(context.presences?.length ?? 0) > 0 &&
-                context.presences!.map((presence, index) => {
-                    if (presence.sheetId !== context.currentSheetId) {
-                        return null;
-                    }
-                    const {
-                        selection: { r, c },
-                        color,
-                    } = presence;
-                    const row_pre = r - 1 === -1 ? 0 : context.visibledatarow[r - 1];
-                    const col_pre = c - 1 === -1 ? 0 : context.visibledatacolumn[c - 1];
-                    const row = context.visibledatarow[r];
-                    const col = context.visibledatacolumn[c];
-                    const width = col - col_pre - 1;
-                    const height = row - row_pre - 1;
+            {context.presences?.map((presence, index) => {
+                if (presence.sheetId !== context.currentSheetId) {
+                    return null;
+                }
+                const {
+                    selection: { r, c },
+                    color,
+                } = presence;
+                const row_pre = r - 1 === -1 ? 0 : context.visibledatarow[r - 1];
+                const col_pre = c - 1 === -1 ? 0 : context.visibledatacolumn[c - 1];
+                const row = context.visibledatarow[r];
+                const col = context.visibledatacolumn[c];
+                const width = col - col_pre - 1;
+                const height = row - row_pre - 1;
 
-                    // A peer can publish a cursor before this client's visibledata* maps
-                    // exist (cold render) or beyond the loaded extent — skip to avoid NaN geometry.
-                    if (
-                        !Number.isFinite(width) ||
-                        !Number.isFinite(height) ||
-                        !Number.isFinite(col_pre) ||
-                        !Number.isFinite(row_pre)
-                    ) {
-                        return null;
-                    }
+                // A peer can publish a cursor before this client's visibledata* maps
+                // exist (cold render) or beyond the loaded extent — skip to avoid NaN geometry.
+                if (
+                    !Number.isFinite(width) ||
+                    !Number.isFinite(height) ||
+                    !Number.isFinite(col_pre) ||
+                    !Number.isFinite(row_pre)
+                ) {
+                    return null;
+                }
 
-                    return (
-                        <div
-                            key={presence?.userId || index}
-                            className="sheet-presence-selection eigen-selection-ring eigen-selection-ring-peer"
-                            style={
-                                {
-                                    left: col_pre,
-                                    top: row_pre,
-                                    width,
-                                    height,
-                                    '--peer-color': color,
-                                } as React.CSSProperties
-                            }
-                        >
-                            <PresenceLabel color={color} name={presence.username} />
-                        </div>
-                    );
-                })}
+                return (
+                    <div
+                        key={presence?.userId || index}
+                        className="sheet-presence-selection eigen-selection-ring eigen-selection-ring-peer"
+                        // React's CSSProperties has no custom properties, so the --peer-color entry needs the cast.
+                        style={
+                            {
+                                left: col_pre,
+                                top: row_pre,
+                                width,
+                                height,
+                                '--peer-color': color,
+                            } as React.CSSProperties
+                        }
+                    >
+                        <PresenceLabel color={color} name={presence.username} />
+                    </div>
+                );
+            })}
         </>
     );
 }
