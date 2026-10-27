@@ -1,6 +1,6 @@
 // The W and H fields of a size panel, coupled while Keep aspect ratio is on: an edit of one side writes the other at
-// the box's ratio, in one write, so the host stores both in a single transaction. Slides' Transform section and the
-// Docs Size section use it, each over its own units and its own write.
+// the box's ratio, in one write, so the host stores both in a single transaction. Size sections such as Slides'
+// Transform section and the Docs Size section use it, each over its own units and its own write.
 
 import { useRef } from 'react';
 import type { MergedValue } from './merged-value';

@@ -13,9 +13,9 @@ import {
 
 // Fits pasted HTML to the doc it lands in, before the schema parses it. A drawn equation keeps only its <math>. Fonts
 // map onto the bundled ones, and a font or size the doc already draws goes. Images, charts and tables get no wider than
-// the column, keeping their shape. A comment anchor goes when this doc lacks its card, and a footnote goes where none can sit. A positioned
-// image or chart keeps to the paper instead of the column. Its paragraph's place isn't known here, so an indented one
-// may overhang by its indent until it is dragged.
+// the column, keeping their shape. A comment anchor goes when this doc lacks its card, and a footnote goes where none
+// can sit. A positioned image or chart keeps to the paper instead of the column. Its paragraph's place isn't known
+// here, so an indented one may overhang by its indent until it is dragged.
 export function cleanPastedHTML(
     html: string,
     page: PageSetup,
