@@ -132,3 +132,17 @@ test('⌘Z undoes in the grid, and ⇧⌘Z and ⌘Y redo', async () => {
     await press(input, 'Mod+Y');
     expect(a1()?.bl).toBe(1);
 });
+
+// In an open cell editor the browser undoes the typing, as in Google Sheets. The sheet's history stays put.
+test('⌘Z, ⇧⌘Z and ⌘Y in an open cell editor leave the sheet history alone', async () => {
+    const { input, a1 } = await mount();
+    await press(input, 'Mod+B');
+    await press(input, 'Mod+I');
+    await press(input, 'Mod+Z');
+    expect([a1()?.bl, a1()?.it ?? 0]).toEqual([1, 0]);
+    await act(async () => {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', code: 'F2', bubbles: true, cancelable: true }));
+    });
+    for (const hotkey of ['Mod+Z', 'Mod+Shift+Z', 'Mod+Y']) await press(input, hotkey);
+    expect([a1()?.bl, a1()?.it ?? 0]).toEqual([1, 0]);
+});

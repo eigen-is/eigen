@@ -446,24 +446,26 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // handler's tail steals focus out of the open menu.
                 if (!e.currentTarget.contains(e.target as Node)) return;
                 const { nativeEvent } = e;
-                // handling undo and redo ahead because handleUndo and handleRedo
-                // themselves are calling setContext, and should not be nested
-                // in setContextWithProduce.
-                if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.undo)) {
-                    handleUndo();
-                    e.stopPropagation();
-                    return;
-                }
-                if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.redo)) {
-                    handleRedo();
-                    e.stopPropagation();
-                    return;
-                }
-                if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.redoAlt)) {
-                    handleRedo();
-                    e.stopPropagation();
-                    e.preventDefault();
-                    return;
+                // Undo and redo run ahead of the grid's handler: handleUndo and handleRedo call setContext
+                // themselves and can't nest in setContextWithProduce. An open cell editor leaves them to the
+                // browser, which undoes the typing, as Google Sheets does.
+                if (context.editingCellPosition.length === 0) {
+                    if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.undo)) {
+                        handleUndo();
+                        e.stopPropagation();
+                        return;
+                    }
+                    if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.redo)) {
+                        handleRedo();
+                        e.stopPropagation();
+                        return;
+                    }
+                    if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.redoAlt)) {
+                        handleRedo();
+                        e.stopPropagation();
+                        e.preventDefault();
+                        return;
+                    }
                 }
                 setContextWithProduce((draftCtx) => {
                     const input = cellInput.current;
@@ -478,7 +480,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     );
                 });
             },
-            [handleRedo, handleUndo, setContextWithProduce],
+            [context.editingCellPosition.length, handleRedo, handleUndo, setContextWithProduce],
         );
 
         const onCopy = useCallback(
