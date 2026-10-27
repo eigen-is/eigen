@@ -1,10 +1,13 @@
+// The personal settings of the signed-in user, such as the theme, mail preferences and the drive view, which
+// the apps read and save. Only a full user reads or writes them, and only their own. A save sends just the
+// fields it changes, and they merge into the stored settings.
+
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/auth/access';
 import { getUserHome } from '../lib/home';
 import { betterAuth } from './auth';
 
-// Space routes are personal-only (user settings)
 export const spaceRouter = new Elysia({ name: 'space' })
     .use(betterAuth)
 
@@ -52,6 +55,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
                         sortDir: t.Optional(t.Union([t.Literal('asc'), t.Literal('desc')])),
                     }),
                 ),
+                celebrations: t.Optional(t.Boolean()),
             }),
             auth: true,
         },

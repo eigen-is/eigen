@@ -1,5 +1,27 @@
 import { describe, expect, test } from 'bun:test';
-import { escapeHtml, stripTagsServer, unescapeHtml } from '../../core/html';
+import { countTaskItems, escapeHtml, stripTagsServer, unescapeHtml } from '../../core/html';
+
+describe('countTaskItems', () => {
+    const item = (checked: boolean, text: string) =>
+        `<li data-checked="${checked}" data-type="taskItem"><label><input type="checkbox"${checked ? ' checked="checked"' : ''}></label><div><p>${text}</p></div></li>`;
+
+    test('counts the checked and total items of a task list', () => {
+        const html = `<p>Intro</p><ul data-type="taskList">${item(true, 'A')}${item(false, 'B')}${item(true, 'C')}</ul>`;
+        expect(countTaskItems(html)).toEqual({ checked: 2, total: 3 });
+    });
+
+    test('a nested task list counts too, and a plain list item does not', () => {
+        const nested = `<ul data-type="taskList">${item(true, 'Child')}</ul>`;
+        const parent = `<li data-checked="false" data-type="taskItem"><label><input type="checkbox"></label><div><p>Parent</p>${nested}</div></li>`;
+        const html = `<ul><li>Plain</li></ul><ul data-type="taskList">${parent}</ul>`;
+        expect(countTaskItems(html)).toEqual({ checked: 1, total: 2 });
+    });
+
+    test('text that only mentions data-checked counts nothing', () => {
+        expect(countTaskItems('<p>Just text with data-checked="true" in it</p>')).toEqual({ checked: 0, total: 0 });
+        expect(countTaskItems('')).toEqual({ checked: 0, total: 0 });
+    });
+});
 
 describe('stripTagsServer', () => {
     test('strips simple tags', () => {

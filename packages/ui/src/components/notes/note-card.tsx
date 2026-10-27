@@ -1,15 +1,15 @@
+// A card as it sits on a board or in a list, such as a sticky: its cover image, title, a preview of the
+// description, how far its checklist is done, and a footer with replies, attachments and the assignee.
+// Clicking it is the caller's to handle, usually by opening NoteCardDialog.
+
 import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
+import { countTaskItems } from '@workspace/lib/html';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, Paperclip } from 'lucide-react';
 import type { HTMLAttributes } from 'react';
 import { Card, CardContent } from '../card';
 import { MemberAvatar } from '../comments/member-avatar';
 import { Progress } from '../progress';
-
-// TipTap's TaskItem always emits `data-checked="true|false"` on each task-list
-// <li>; anchoring on `<li` prevents matching unrelated data-checked attributes.
-const TASK_ITEMS_RE = /<li[^>]*\bdata-checked=/g;
-const CHECKED_ITEMS_RE = /<li[^>]*\bdata-checked="true"/g;
 
 type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     title: string;
@@ -39,8 +39,7 @@ export function NoteCard({
     ref,
     ...rest
 }: NoteCardProps) {
-    const total = description ? (description.match(TASK_ITEMS_RE) ?? []).length : 0;
-    const checked = description ? (description.match(CHECKED_ITEMS_RE) ?? []).length : 0;
+    const { checked, total } = countTaskItems(description ?? '');
 
     return (
         <Card

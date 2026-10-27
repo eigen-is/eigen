@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { getItemMapRoot } from '../../../../core/collab/yjs-utils';
 import { readCards } from '../../../../core/comments/hooks/use-comment-cards';
+import { countTaskItems } from '../../../../core/html';
 import { sanitizeCommentCardHtml } from '../../../../core/html-dom';
 import type { CommentCard } from '../../../../types/comments';
 import type { AttachmentReference } from '../../../../types/drive-reference';
@@ -196,10 +197,7 @@ describe('readCards sanitizes hostile description HTML', () => {
         expect(card.description).toContain('body');
     });
 
-    test('the NoteCard progress regex still counts done/total after readCards', () => {
-        // The exact regexes NoteCard runs over the sanitized description (note-card.tsx).
-        const TASK_ITEMS_RE = /<li[^>]*\bdata-checked=/g;
-        const CHECKED_ITEMS_RE = /<li[^>]*\bdata-checked="true"/g;
+    test('countTaskItems still counts done/total after readCards', () => {
         const card = cardWithDescription(
             '<ul data-type="taskList">' +
                 '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"></label><div><p>A</p></div></li>' +
@@ -207,8 +205,7 @@ describe('readCards sanitizes hostile description HTML', () => {
                 '<li data-checked="false" data-type="taskItem"><label><input type="checkbox"></label><div><p>C</p></div></li>' +
                 '</ul>',
         );
-        expect(card.description.match(TASK_ITEMS_RE)?.length).toBe(3);
-        expect(card.description.match(CHECKED_ITEMS_RE)?.length).toBe(2);
+        expect(countTaskItems(card.description)).toEqual({ checked: 2, total: 3 });
     });
 
     test('sanitizing is idempotent — the toggled innerHTML NoteCardDialog writes back is stable', () => {

@@ -1,9 +1,17 @@
+// The dialog a sticky card or a comment card opens into: its colored header, the description, the
+// attachments, a meta row with actions and, below, the card's thread. A reader with write access can tick
+// the boxes of a task list in the description without opening the editor, and ticking the last box of a
+// list now and then celebrates. Callers such as CardDialog fill in the card's own content and actions.
+
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
+import { countTaskItems } from '@workspace/lib/html';
 import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import { Link as LinkIcon, Pencil } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
+import { useCelebrate } from '../celebrate/use-celebrate';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../dialog';
 import { Separator } from '../separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../tooltip';
@@ -69,17 +77,41 @@ export function NoteCardDialog({
     editForm,
     children,
 }: NoteCardDialogProps) {
+    const celebrate = useCelebrate();
+    // One try per opening: the chance is rolled once, so unticking and re-ticking the last box can't farm it.
+    const celebratedRef = useRef(false);
+    useEffect(() => {
+        if (open) celebratedRef.current = false;
+    }, [open]);
+    // The parent draws the saved description again, which replaces every box in the page. So the celebration
+    // waits for that and starts from the box at the same place in the list, as the clicked one is gone by then.
+    const descriptionRef = useRef<HTMLDivElement>(null);
+    const celebrateBoxRef = useRef<number | null>(null);
+    useEffect(() => {
+        const index = celebrateBoxRef.current;
+        if (index === null) return;
+        celebrateBoxRef.current = null;
+        const box = descriptionRef.current?.querySelectorAll('input[type="checkbox"]')[index];
+        if (box instanceof HTMLElement) celebrate(box);
+    }, [description]);
+
     const handleDescriptionClick = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!canWrite || !onDescriptionChange) return;
-        const target = e.target as HTMLElement;
-        if (target.tagName !== 'INPUT' || (target as HTMLInputElement).type !== 'checkbox') return;
-        const input = target as HTMLInputElement;
+        const input = e.target;
+        if (!(input instanceof HTMLInputElement) || input.type !== 'checkbox') return;
         const li = input.closest('li[data-checked]');
         if (!li) return;
         li.setAttribute('data-checked', input.checked ? 'true' : 'false');
         if (input.checked) input.setAttribute('checked', '');
         else input.removeAttribute('checked');
-        onDescriptionChange(e.currentTarget.innerHTML);
+        const html = e.currentTarget.innerHTML;
+        const { checked, total } = countTaskItems(html);
+        // A checklist of one item is a toggle, not a list.
+        if (total >= 2 && checked === total && !celebratedRef.current) {
+            celebratedRef.current = true;
+            celebrateBoxRef.current = [...e.currentTarget.querySelectorAll('input[type="checkbox"]')].indexOf(input);
+        }
+        onDescriptionChange(html);
     };
 
     const header = (
@@ -134,6 +166,7 @@ export function NoteCardDialog({
                                 the colored header. */}
                             <div className="min-h-14 flex-1 overflow-y-auto px-4 py-3 text-sm text-foreground">
                                 <div
+                                    ref={descriptionRef}
                                     className="eigen-prose"
                                     onClick={handleDescriptionClick}
                                     dangerouslySetInnerHTML={{ __html: description ?? '' }}
