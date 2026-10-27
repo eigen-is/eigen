@@ -1,9 +1,9 @@
 // The fonts of a spreadsheet: the one a cell with no font draws in, the default digit width that column
-// widths count in an xlsx, and the font name a cell's `ff` stands for. Code that needs a cell's font,
-// such as the cell editor and the xlsx export, reads it here, so they agree on it.
+// widths count in an xlsx, and the font name and size a cell's `ff` and `fs` stand for. Code that needs a
+// cell's font, such as the cell editor and the xlsx export, reads it here, so they agree on it.
 
 import type { EigenFont } from '../constants/fonts';
-import { EIGEN_FONTS } from '../constants/fonts';
+import { EIGEN_FONTS, readFontSize } from '../constants/fonts';
 import { getFontMetrics } from '../vector/font-metrics';
 import { SHEET_DEFAULT_FONT_SIZE } from './defaults';
 
@@ -22,4 +22,10 @@ export function cellFontName(ff: number | string | undefined): string | undefine
     const family = ff?.split(',')[0].replace(/['"]/g, '').trim();
     if (!family) return undefined;
     return EIGEN_FONTS.find((font) => font.name.toLowerCase() === family.toLowerCase())?.name ?? family;
+}
+
+// A cell's or a run's `fs` in pt. A collaborator or an older editor may have stored it as a string, which reads as
+// its number, and a value that is no size is the sheet default.
+export function cellFontSize(fs: unknown): number {
+    return readFontSize(Number(fs) || undefined) ?? SHEET_DEFAULT_FONT_SIZE;
 }

@@ -32,7 +32,7 @@ export {
     type SheetFloatingKind,
     sheetFloatingBox,
 } from './floating';
-export { cellFontName, SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from './fonts';
+export { cellFontName, cellFontSize, SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from './fonts';
 export { columnIndexToLabel, columnLabelToIndex } from './labels';
 export { decodeSheetsSnapshot, encodeSheetsSnapshot, isCurrentSheetsSnapshot } from './snapshot-codec';
 export * from './types';

@@ -3,7 +3,13 @@
 
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import type { BorderSide, Cell, CellBorderSides, CellStyle, DefaultConditionalFormatRule } from '@workspace/lib/sheets';
-import { BORDER_STYLES, cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import {
+    BORDER_STYLES,
+    cellFontName,
+    cellFontSize,
+    SHEET_DEFAULT_FONT,
+    SHEET_DEFAULT_FONT_SIZE,
+} from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import { is_date, isValidNumberFormat } from '@workspace/sheet/engine';
 import { cssColorToHex } from '../../../document/colors';
@@ -11,7 +17,6 @@ import type { Lost } from '../../../document/transform/protocol';
 import { SML_NS } from '../../../ooxml/ooxml';
 import {
     BUILTIN_NUMBER_FORMATS,
-    cellFontSize,
     DATE_FORMAT,
     FONT_FAMILY_NUMBER,
     MAX_CELL_FORMATS,
@@ -125,7 +130,7 @@ export function styleRegistry(lost: Lost): StyleRegistry {
             cell.it === 1 ||
             cell.un === 1 ||
             cell.cl === 1 ||
-            typeof cell.fs === 'number' ||
+            cell.fs !== undefined ||
             fc !== undefined ||
             cellFontName(cell.ff) !== undefined;
         const bg = argbOf(cell.bg);
