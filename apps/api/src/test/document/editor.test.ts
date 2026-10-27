@@ -146,15 +146,25 @@ describe('Editor', () => {
             expect(data.currentEtag).toBe(reloaded.etag);
         });
 
-        // A tab opened before the editor sent an etag gets the conflict dialog, whose Download and Overwrite keep its edits.
-        test('a save without an etag is a conflict, and a forced one without it saves', async () => {
+        // A tab opened before the editor sent an etag still sends the updatedAt it loaded. It gets the
+        // conflict dialog, whose Download and Overwrite keep its edits.
+        test('a save from a tab that sends updatedAt is a conflict, and its forced save lands', async () => {
             const uploaded = await uploadTextFile('no-etag.txt', 'original');
+            const { updatedAt } = uploaded;
 
-            const { data } = await editorPut(uploaded.id, { content: 'unguarded' });
+            const { status, data } = await editorPut(uploaded.id, {
+                content: 'unguarded',
+                expectedUpdatedAt: updatedAt,
+            });
+            expect(status).toBe(200);
             expect(data?.conflict).toBe(true);
             expect((await editorGet(uploaded.id)).data.content).toBe('original');
 
-            const { data: forced } = await editorPut(uploaded.id, { content: 'forced', force: true });
+            const { data: forced } = await editorPut(uploaded.id, {
+                content: 'forced',
+                expectedUpdatedAt: updatedAt,
+                force: true,
+            });
             expect(forced?.conflict).toBe(false);
             expect((await editorGet(uploaded.id)).data.content).toBe('forced');
         });
