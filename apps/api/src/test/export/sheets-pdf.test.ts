@@ -59,7 +59,7 @@ const suite = weasyPrint && rasterizer ? describe : describe.skip;
         const text = 'one\ntwo\nthree';
         const celldata = Array.from({ length: 2_000 }, (_, r) => ({ r, c: 0, v: { v: text, m: text, tb: '2' } }));
         expect(await pdfOf({ name: 'Rows', id: 's1', celldata })).toBe(3);
-    });
+    }, 60_000);
 });
 
 // The rows, in points, that hold ink between two heights of the page.

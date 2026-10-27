@@ -214,7 +214,7 @@ describe('Sheets HTML export — class-based styles', () => {
         expect(classesFor(out, `font-size:${SHEET_DEFAULT_FONT_SIZE}pt;`)).toEqual(table);
     });
 
-    // A peer can store any value, and the editor and the xlsx export read a size the same way: held to 1 to 400
+    // A peer can store any value, and the editor and the xlsx export read a size the same way: held to 1 to 409
     // points, a legacy string as its number.
     test('a font size is read as the editor reads it, and one that is not finite draws at the default', () => {
         const cellSize = (fs: unknown) => {
@@ -222,7 +222,7 @@ describe('Sheets HTML export — class-based styles', () => {
             const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: cell }])], NO_MEDIA, 'screen');
             return out.css.match(/\.s\d+\{font-size:([^;}]+)/)?.[1];
         };
-        expect(cellSize(1e9)).toBe('400pt');
+        expect(cellSize(1e9)).toBe('409pt');
         expect(cellSize('14')).toBe('14pt');
         expect(cellSize(-3)).toBe('1pt');
         expect(cellSize(Number.POSITIVE_INFINITY)).toBe(`${SHEET_DEFAULT_FONT_SIZE}pt`);
