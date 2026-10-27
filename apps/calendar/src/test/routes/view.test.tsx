@@ -1,7 +1,7 @@
 // The month view draws the visible calendars' events and the shared ones, four to a day with a count of the
 // rest. A deep link opens its event, a free/busy block opens nothing, deleting one occurrence of a series
 // cancels that day alone, and a click on a day creates an event there.
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
     CalendarItem,
@@ -223,10 +223,10 @@ test('deleting one occurrence of a series cancels that day and keeps the series'
     });
 });
 
-test('a click on a day opens New Event there, and Save creates it in the default calendar', async () => {
-    const { container } = await open();
+// Clicks a day of the grid and saves the New Event it opens as "Dentist".
+async function createOnDay(container: HTMLElement, date: string, beforeSave = async () => {}) {
     const day = [...container.querySelectorAll('.grid-cols-7 > div.cursor-pointer')].find(
-        (cell) => cell.firstElementChild?.textContent === '9',
+        (cell) => cell.firstElementChild?.textContent === date,
     );
     await click(day);
     expect(dialogTitle()).toBe('New Event');
@@ -239,22 +239,55 @@ test('a click on a day opens New Event there, and Save creates it in the default
         setValue?.call(title, '  Dentist  ');
         title.dispatchEvent(new Event('input', { bubbles: true }));
     });
+    await beforeSave();
     await click(button('Save'));
+    return createEvent.mutateAsync.mock.calls[0]?.[0];
+}
+
+// The default start is the next quarter hour of the wall clock, so each test pins the clock.
+afterEach(() => setSystemTime());
+
+test('a click on a day opens New Event there, and Save creates it in the default calendar', async () => {
+    setSystemTime(new Date(2026, 9, 27, 10, 7));
+    const { container } = await open();
+    const input = await createOnDay(container, '9');
 
     expect(createOwners.at(-1)).toBe('u1');
-    const [input] = createEvent.mutateAsync.mock.calls[0] ?? [];
     expect(input).toMatchObject({
         calendarId: 'work',
         title: 'Dentist',
+        startTime: new Date(2026, 9, 9, 10, 15),
+        endTime: new Date(2026, 9, 9, 10, 45),
         allDay: false,
         description: null,
         location: null,
         rrule: null,
-        timezone: 'UTC',
+        timezone: realCalendar.viewerTimeZone(),
         data: undefined,
     });
-    expect(input?.startTime.getDate()).toBe(9);
-    expect((input?.startTime.getMinutes() ?? 1) % 15).toBe(0);
-    expect(input && input.endTime.getTime() - input.startTime.getTime()).toBe(30 * 60_000);
     expect(dialogTitle()).toBeUndefined();
+});
+
+test('a new event made in the last half hour of the day ends after midnight, on the next day', async () => {
+    setSystemTime(new Date(2026, 9, 27, 23, 35));
+    const { container } = await open();
+    const input = await createOnDay(container, '9');
+
+    expect(input?.startTime).toEqual(new Date(2026, 9, 9, 23, 45));
+    expect(input?.endTime).toEqual(new Date(2026, 9, 10, 0, 15));
+});
+
+test('turning all day off late in the evening gives a half hour that ends on the next day', async () => {
+    setSystemTime(new Date(2026, 9, 27, 10, 7));
+    const { container } = await open();
+    const allDay = () => document.querySelector('[role="dialog"] [role="checkbox"]');
+    const input = await createOnDay(container, '9', async () => {
+        await click(allDay());
+        setSystemTime(new Date(2026, 9, 27, 23, 35));
+        await click(allDay());
+    });
+
+    expect(input?.allDay).toBe(false);
+    expect(input?.startTime).toEqual(new Date(2026, 9, 9, 23, 45));
+    expect(input?.endTime).toEqual(new Date(2026, 9, 10, 0, 15));
 });

@@ -83,6 +83,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Deleting a team in Admin** — deletes the team's drives with every file on them, and its calendar, instead of leaving them on the server. While a backup or a restore of the team runs, the team can't be deleted, and the team named after your organization, which everyone joins, can't be deleted at all
 - **Sheets shortcuts on other keyboard layouts** — on Dvorak, **Ctrl+C** (Mac: **⌘C**) copies the selected cells and **Ctrl+X** (Mac: **⌘X**) cuts them, instead of doing nothing or making them bold. On a Russian or Greek layout, **Ctrl+B**, **Ctrl+I** and **Ctrl+U** style the words you select while typing in a cell. On a Mac the shortcuts take **⌘**, not Ctrl, as in Docs
 - **Undo while you type in a cell** — in Sheets, **Ctrl+Z** (Mac: **⌘Z**) in an open cell undoes your typing and leaves the spreadsheet's earlier changes alone
+- **New events late in the evening in Calendar** — a new event made after 23:15 ends half an hour after it starts, on the next day, instead of before it starts. Turning off **All day** that late does the same
 
 ## [0.4.0] - 2026-10-26
 
