@@ -38,8 +38,42 @@ const RESOLVED: ChartData = {
     series: [{ id: 's-1', name: 'Sales', values: [3, 5] }],
 };
 
+// Shares as fractions, ticked every 0.05. A copy from a sheet carries them with their cells' percent format on the
+// value axis.
+const SHARES_SPEC: ChartSpec = {
+    ...sampleChartSpec('column'),
+    data: {
+        source: 'inline',
+        categories: ['North', 'South'],
+        series: [{ id: 's-1', name: 'Share', values: [0.1, 0.25] }],
+    },
+};
+const { x: X_AXIS, y: Y_AXIS } = SHARES_SPEC.axes;
+const PERCENT_SPEC: ChartSpec = {
+    ...SHARES_SPEC,
+    axes: { x: X_AXIS, y: { ...Y_AXIS, labels: { ...Y_AXIS.labels, format: '0%' } } },
+};
+
 const svgOf = (spec: ChartSpec | null, data?: ChartData | 'ref' | 'too-many-points'): string =>
     renderChartSpecSvg({ id: 'c1', spec, data, width: 600, height: 371 });
+
+// The same chart as a canvas or a slide holds it.
+const canvasSvgOf = (spec: ChartSpec, look: ChartLook = FLAT_CHART_LOOK): string =>
+    renderChartSvg({
+        id: 'c1',
+        type: 'chart',
+        x: 0,
+        y: 0,
+        width: 600,
+        height: 371,
+        angle: 0,
+        index: 'a0',
+        frameId: '',
+        commentCardIds: '',
+        opacity: 100,
+        ...newChartSpecParts(spec),
+        ...look,
+    });
 
 const textCount = (svg: string): number => svg.split('<text ').length - 1;
 
@@ -114,6 +148,21 @@ describe('renderChartSpecSvg', () => {
         expect(svg).toContain('>20 pts</text>');
     });
 
+    test('ticks draw in the axis format a chart copied from a sheet carries', () => {
+        const svg = svgOf(PERCENT_SPEC);
+        expect(svg).toContain('>25%</text>');
+        expect(svg).not.toContain('>0.25</text>');
+    });
+
+    test('ticks of an axis with no format draw as the step reads', () => {
+        const svg = svgOf(SHARES_SPEC);
+        expect(svg).toBe(
+            renderChartSpecSvg({ id: 'c1', spec: SHARES_SPEC, width: 600, height: 371, formatTick: formatTickValue }),
+        );
+        expect(svg).toContain('>0.00</text>');
+        expect(svg).toContain('>0.25</text>');
+    });
+
     test('the same input draws the same svg', () => {
         expect(svgOf(sampleChartSpec('pie'))).toBe(svgOf(sampleChartSpec('pie')));
     });
@@ -184,23 +233,12 @@ describe('renderChartSpecSvg', () => {
         };
         const spec = sampleChartSpec('column');
         const svg = renderChartSpecSvg({ id: 'c1', spec, width: 600, height: 371, look });
-        const canvas = renderChartSvg({
-            id: 'c1',
-            type: 'chart',
-            x: 0,
-            y: 0,
-            width: 600,
-            height: 371,
-            angle: 0,
-            index: 'a0',
-            frameId: '',
-            commentCardIds: '',
-            opacity: 100,
-            ...newChartSpecParts(spec),
-            ...look,
-        });
-        expect(svg).toContain(canvas);
+        expect(svg).toContain(canvasSvgOf(spec, look));
         expect(svg).not.toBe(svgOf(spec));
         expect(svg).toContain('<linearGradient id="fill-c1_3a_background"');
+    });
+
+    test('a canvas or slide chart draws its ticks in the axis format too', () => {
+        expect(canvasSvgOf(PERCENT_SPEC)).toContain('>25%</text>');
     });
 });

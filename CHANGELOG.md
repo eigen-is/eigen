@@ -13,6 +13,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Excel files** — a row whose height is set to normal in Excel comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
 - **Spreadsheet PDF** — a spreadsheet with thousands of small sheets prints its first 2,000 sheets instead of failing
 - **Long code blocks** — a Docs document with many long code blocks and no language set downloads and previews at once. Past about 65,000 characters of such code in all, the rest comes without syntax colors
+- **Copied charts** — a chart you copy from Sheets into Docs, Slides or Vector keeps the number format of its axis, so a column of percentages reads 25%, not 0.25
 
 ## [0.4.0] - 2026-10-26
 

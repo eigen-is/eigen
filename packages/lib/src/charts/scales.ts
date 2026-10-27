@@ -2,7 +2,7 @@
 // and its ticks; the category axis gets one band per category. The cartesian layout asks for these and turns them into
 // pixels, labels and marks.
 
-import type { ChartLayoutInput, ChartSpec } from '../types/chart';
+import type { ChartSpec, ChartTickFormat } from '../types/chart';
 import type { Context } from './context';
 import { measure } from './labels';
 import { nice, tickStep, ticks } from './ticks';
@@ -84,7 +84,7 @@ export function valueAxis(
     spec: ChartSpec,
     [low, high]: [number, number],
     count: number,
-    formatTick: ChartLayoutInput['formatTick'],
+    formatTick: ChartTickFormat,
 ): ValueAxis {
     const { min, max } = spec.axes.y.scale;
     for (let n = count; ; n--) {

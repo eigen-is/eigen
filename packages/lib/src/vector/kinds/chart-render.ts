@@ -7,7 +7,6 @@ import {
     chartPaintOf,
     DEFAULT_CHART_FONT,
     FLAT_CHART_LOOK,
-    formatTickValue,
     layoutChart,
     layoutChartMessage,
     readChartSpec,
@@ -43,7 +42,7 @@ export function renderChartSpecSvg({
     spec,
     data,
     look = FLAT_CHART_LOOK,
-    formatTick = formatTickValue,
+    formatTick,
     ...rest
 }: ChartSpecSvgInput): string {
     const box = { ...rest, paint: chartPaintOf(look) };
@@ -63,7 +62,7 @@ export function renderChartSpecSvg({
 export function chartElementLayout(el: VectorChartElement): ChartLayout | null {
     const { spec } = readChartSpec(el);
     if (spec === null || spec.data.source !== 'inline') return null;
-    return layoutChart({ ...chartBox(el), spec, data: spec.data, formatTick: formatTickValue });
+    return layoutChart({ ...chartBox(el), spec, data: spec.data });
 }
 
 // The layout, or for null the placeholder: a dashed box and one centered line, in the default font since

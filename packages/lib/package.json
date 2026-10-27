@@ -25,6 +25,7 @@
     "lib0": "^0.2.119",
     "linkifyjs": "^4.4.0",
     "nanoid": "^5.1.16",
+    "numfmt": "^3.2.6",
     "perfect-freehand": "1.2.3",
     "roughjs": "4.6.4",
     "rrule": "^2.8.1",
