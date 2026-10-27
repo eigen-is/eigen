@@ -39,6 +39,8 @@ const STALE_MAILDIR_TEMP_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 const BACKGROUND_RECONCILE_INTERVAL_MS = 60 * 1000;
 // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
 const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
+// A file uploaded for a draft is folded into the draft at its next save: one older than this was abandoned.
+const DRAFT_ATTACHMENT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 // Keyed by id and trusted only while the row's size and date match; saveDraft drops the entry a rewrite outdates.
 const PARSED_MESSAGE_CACHE_ENTRIES = 8;
 const PARSED_MESSAGE_CACHE_BYTES = 32 * 1024 * 1024;
@@ -688,7 +690,7 @@ export class MaildirStore implements MailStore {
                 const filePath = path.join(DRAFT_ATTACHMENTS_DIR, name);
                 try {
                     const stat = await this.storage.stat(filePath);
-                    if (now - stat.mtimeMs > STALE_TEMP_MAX_AGE_MS) {
+                    if (now - stat.mtimeMs > DRAFT_ATTACHMENT_MAX_AGE_MS) {
                         await this.storage.unlink(filePath);
                     }
                 } catch {}
