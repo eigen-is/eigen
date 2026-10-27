@@ -7,61 +7,20 @@ import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
 import { readChartAttrs, readFigureAttrs, readFigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { anchorIndentPx, anchorPaddingPx, BODY, boxSide, cssPt, FIGURE_MARGIN, twips } from '../../../document/looks';
-import { sanitizeMedia } from '../../../document/media';
 import { proseValue } from '../../../document/prose-css';
-import type { ExportMedia } from '../../../document/transform/protocol';
-import { toTransferableBuffer } from '../../../document/transform/protocol';
 import { blipXml } from '../../../ooxml/drawingml';
 import { EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
 import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import { BORDER_SIDES, EMU_PER_TWIP, SINGLE_LINE, TWIPS_PER_PX } from '../../../ooxml/wordml';
-import { splitDataUri } from '../../../shared/data-uri';
 import { addOfficeChart } from '../../office-chart';
 import type { OfficeImage } from '../../office-image';
-import { encodeOfficeImage } from '../../office-image';
+import { figureMediaKey } from '../pasted-media';
 import { useFace } from './fonts';
 import type { Context, Package } from './package';
 import type { Block, Inset, Paragraph } from './paragraphs';
 import { indentOf, paragraphXml, quoteBar, styleSpacing } from './paragraphs';
 import { textXml } from './runs';
 import { TABLE_BORDER_SIDES } from './tables';
-
-// The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
-// under that src.
-function figureMediaKey(node: JSONContent): string | null {
-    const { mediaName, src } = readFigureAttrs(node.attrs ?? {});
-    return mediaName ?? (src && splitDataUri(src) ? src : null);
-}
-
-// A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
-// here, once, through the encode a media file takes; an SVG through the sanitizer the main thread's media took.
-export async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMedia[]> {
-    const pasted = new Map<string, { mediaType: string | null; base64: string }>();
-    const visit = (node: JSONContent) => {
-        if (node.type === 'figure') {
-            const key = figureMediaKey(node);
-            if (key && key === node.attrs?.['src']) {
-                const split = splitDataUri(key);
-                if (split) pasted.set(key, split);
-            }
-        }
-        for (const child of node.content ?? []) visit(child);
-    };
-    for (const root of roots) visit(root);
-    if (pasted.size === 0) return [];
-    const { sharpResize } = await import('../../../shared/sharp-resize');
-    const media: ExportMedia[] = [];
-    for (const [src, { mediaType, base64 }] of pasted) {
-        const data = Buffer.from(base64, 'base64');
-        if (mediaType === 'image/svg+xml') {
-            media.push({ name: src, contentType: mediaType, data: toTransferableBuffer(data) });
-            continue;
-        }
-        const item = await encodeOfficeImage(src, mediaType ?? '', data, (options) => sharpResize(data, options));
-        if (item) media.push(item);
-    }
-    return sanitizeMedia(media);
-}
 
 // One image file per media name, and one relationship per part that shows it; an SVG's PNG is its blip, the SVG its
 // extension.
@@ -188,7 +147,7 @@ function drawnFigure(node: JSONContent, pkg: Package, cap: number, room: number)
     // The EMU a figure of this natural width is drawn across.
     const extent = (natural: number) =>
         Math.max(1, Math.round(set > 0 ? Math.min(set, cap) : Math.min(natural, room))) * EMU_PER_PX;
-    const image = node.type === 'chart' ? wordChartOf(node, pkg, extent) : imageOf(figureMediaKey(node), pkg);
+    const image = node.type === 'chart' ? wordChartOf(node, pkg, extent) : imageOf(figureMediaKey(attrs), pkg);
     if (!image && node.type !== 'chart' && (attrs.mediaName || attrs.src)) pkg.lost('images-dropped');
     if (!image) return undefined;
     const cx = extent(image.width);

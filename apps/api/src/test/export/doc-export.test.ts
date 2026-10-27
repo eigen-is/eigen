@@ -1338,6 +1338,39 @@ describe('doc export — docx data: figures', () => {
     });
 });
 
+// A pasted data: src carries whatever the source wrote into it, such as a phone photo's GPS position, so the HTML and
+// the PDF draw it re-encoded, as the docx does.
+describe('doc export — HTML data: figures', () => {
+    const dataUri = (type: string, bytes: Buffer | string) =>
+        `data:${type};base64,${Buffer.from(bytes).toString('base64')}`;
+
+    async function imgSrcsOf(format: 'html' | 'pdf-html', ...srcs: string[]): Promise<string[]> {
+        const doc = seededDoc({
+            type: 'doc',
+            content: srcs.map((src) => ({ type: 'paragraph', content: [{ type: 'figure', attrs: { src } }] })),
+        });
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
+        return [...new TextDecoder().decode(data).matchAll(/<img src="([^"]*)"/g)].map(([, src]) => src ?? '');
+    }
+
+    test.each(['html', 'pdf-html'] as const)('%s draws a data: JPEG without its EXIF', async (format) => {
+        const photo = await sharp({ create: { width: 40, height: 30, channels: 3, background: '#c00' } })
+            .jpeg()
+            .withExif({ IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '52/1 5/1 0/1' } })
+            .toBuffer();
+        expect((await sharp(photo).metadata()).exif).toBeDefined();
+        const [src] = await imgSrcsOf(format, dataUri('image/jpeg', photo));
+        const drawn = Buffer.from(src?.split(',')[1] ?? '', 'base64');
+        const { format: type, width, exif } = await sharp(drawn).metadata();
+        expect([type, width, exif]).toEqual(['jpeg', 40, undefined]);
+    });
+
+    test('a data: src no image decodes from draws nothing, and a percent-encoded SVG draws as it is', async () => {
+        const svg = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%2F%3E';
+        expect(await imgSrcsOf('html', dataUri('image/png', 'not a png'), svg)).toEqual([svg]);
+    });
+});
+
 // Worker.terminate() does not stop libvips, so only sharp's own timeout frees the one transform slot from a filter
 // librsvg grinds through for minutes.
 describe('doc export — docx SVG fallback timeout', () => {
