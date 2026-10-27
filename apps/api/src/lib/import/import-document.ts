@@ -22,6 +22,7 @@ import { ApiError } from '../core/errors';
 import { commitEigendocImport } from '../document/doc';
 import { appendSheetsToYjs, writeSheetsSnapshotToYjs } from '../document/sheets';
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
+import { lossSummary } from '../document/transform/losses';
 import type {
     DocImportJob,
     DocImportResult,
@@ -44,7 +45,7 @@ import type { DriveLike } from '../drive/get-drive';
 import type { Mount } from '../mount';
 import { MAX_DECOMPRESSED_BYTES } from '../ooxml/zip';
 import type { User } from '../user';
-import { IMPORT_MESSAGES, importSummary, PRESENTATION_EMPTY } from './messages';
+import { IMPORT_MESSAGES, PRESENTATION_EMPTY } from './messages';
 
 // No signal parameter by design: a conversion detaches from the request, so a page reload can't kill a minute of
 // transform progress.
@@ -134,7 +135,7 @@ export async function importIntoDocument(
             if (mode === 'replace') writeSheetsSnapshotToYjs(doc, snapshotJson);
             else appendSheetsToYjs(doc, snapshotJson);
         });
-        return importSummary(warnings);
+        return lossSummary(warnings, 'import');
     }
 
     if (containerMime === DRIVE_MIME_DOC) {
@@ -144,7 +145,7 @@ export async function importIntoDocument(
         await commitImport(commit, images, true, (doc) => {
             commitEigendocImport(doc, { update: new Uint8Array(update), page, style });
         });
-        return importSummary(warnings);
+        return lossSummary(warnings, 'import');
     }
 
     if (containerMime === DRIVE_MIME_SLIDES) {
@@ -162,7 +163,7 @@ export async function importIntoDocument(
             if (mode === 'replace') replaceSlidesInYjs(doc, scene);
             else insertSlidesIntoYjs(doc, scene, afterFrameId);
         });
-        return importSummary(warnings);
+        return lossSummary(warnings, 'import');
     }
 
     throw new ApiError(400, `Import into ${path.mimeType} is not supported`);

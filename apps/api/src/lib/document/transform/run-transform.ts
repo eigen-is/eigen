@@ -98,7 +98,7 @@ async function runDocumentTransform<R extends DocumentTransformRequest>(
     drivePath: DrivePath,
     opts: TransformOptions,
     toRequest: (source: YjsStatePayload) => R,
-): Promise<TransformResultFor<R>> {
+): Promise<{ result: TransformResultFor<R>; warnings: TransformWarning[] }> {
     // Refuse before the capture: a job the runner will not admit must not pay for a
     // full read of the document's blobs (a refused reindex drain did, per row).
     const priority = opts.priority ?? 'foreground';
@@ -106,12 +106,11 @@ async function runDocumentTransform<R extends DocumentTransformRequest>(
 
     const captureStart = performance.now();
     const source = await captureCollabSource(mount, drivePath);
-    const { result } = await runTransformRequest(toRequest(source), {
+    return runTransformRequest(toRequest(source), {
         ...opts,
         priority,
         captureMs: performance.now() - captureStart,
     });
-    return result;
 }
 
 // Only recalc-failed needs a line here: the child already logs every skipped blob
@@ -129,14 +128,15 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
 // Text results (preview bodies, indexable content) and binary results (exports). The
 // job kind decides which the child returns and which limits it runs under. The runner
 // validated the result pairs with the request (protocol.ts's resultMatchesRequest), so
-// these narrow instead of re-checking.
+// these narrow instead of re-checking. An export keeps its warnings, for the summary it answers with.
 export async function runTransformToPreview(
     mount: Mount,
     drivePath: DrivePath,
     job: CollabPreviewJob,
     opts: TransformOptions,
 ): Promise<PreviewResult> {
-    return runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
+    const { result } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
+    return result;
 }
 
 export async function runTransformToExtractedText(
@@ -145,8 +145,8 @@ export async function runTransformToExtractedText(
     job: ExtractTextJob,
     opts: TransformOptions,
 ): Promise<string> {
-    const { text } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
-    return text;
+    const { result } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
+    return result.text;
 }
 
 export async function runTransformToBytes(
@@ -154,9 +154,9 @@ export async function runTransformToBytes(
     drivePath: DrivePath,
     job: ExportTransformJob,
     opts: TransformOptions,
-): Promise<{ data: Buffer; zoom?: number }> {
-    const { data, zoom } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
-    return { data: Buffer.from(data), zoom };
+): Promise<{ data: Buffer; zoom?: number; warnings: TransformWarning[] }> {
+    const { result, warnings } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
+    return { data: Buffer.from(result.data), zoom: result.zoom, warnings };
 }
 
 // The bytes-sourced counterpart of runDocumentTransform: the input is the file itself, read from

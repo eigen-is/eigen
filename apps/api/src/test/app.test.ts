@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive';
 import { authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 describe('CORS', () => {
-    test('a cross-origin download exposes its Content-Disposition, so the dev client reads the filename', async () => {
+    test('a cross-origin download exposes its Content-Disposition and an export summary, so the dev client reads both', async () => {
         const ctx = await getTestContext();
         const { user } = ctx.alice;
         const root = await driveGet<DrivePath>(user.sessionToken, user.id, 'default', 'root');
@@ -22,5 +23,6 @@ describe('CORS', () => {
         expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:3001');
         const exposed = (res.headers.get('Access-Control-Expose-Headers') ?? '').toLowerCase().split(/\s*,\s*/);
         expect(exposed).toContain('content-disposition');
+        expect(exposed).toContain(EXPORT_SUMMARY_HEADER.toLowerCase());
     });
 });

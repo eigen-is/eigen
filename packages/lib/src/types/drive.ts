@@ -84,6 +84,10 @@ export function isConvertSource(name: string, target: ConvertTarget): boolean {
 // new document's path alone, and shows no summary: the document opens at once.
 export type ImportResult = { success: true; summary: string | null };
 
+// An export answers with the file alone, so what the file left out rides in this header beside it, percent-encoded,
+// for the toast after a download or a print. A file that lost nothing has no such header.
+export const EXPORT_SUMMARY_HEADER = 'Eigen-Export-Summary';
+
 // How File › Import… writes the file into the open document: beside what it holds (a deck's slides after the slide
 // `afterFrameId` names, or after its last; a workbook's tabs after its own), or in place of it, a version saved first.
 // A doc is only ever replaced: the file's page setup and headers can't sit beside the doc's.

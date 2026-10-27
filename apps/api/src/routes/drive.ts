@@ -4,7 +4,7 @@
 
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import type { DriveAccessCheckResult, DrivePath, ImportResult } from '@workspace/lib/types/drive';
-import { isConvertTarget } from '@workspace/lib/types/drive';
+import { EXPORT_SUMMARY_HEADER, isConvertTarget } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
@@ -244,6 +244,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             set.headers['Content-Type'] = result.contentType;
             set.headers['Content-Disposition'] = contentDisposition('attachment', result.fileName);
             set.headers['Content-Security-Policy'] = EXPORT_CSP;
+            if (result.summary) set.headers[EXPORT_SUMMARY_HEADER] = encodeURIComponent(result.summary);
             return result.data;
         },
         { auth: true },
