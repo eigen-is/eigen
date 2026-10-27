@@ -25,6 +25,8 @@ import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PaperRoom } from './positioned-figure';
+import { roomOnPaper } from './positioned-figure';
 import { pageScale, textColumnWidth } from './text-column';
 
 // The resize floor of a figure's side (px).
@@ -93,6 +95,15 @@ const shiftOf = (next: Box, start: Box, size: FigureSize): FigureShift => ({
     dy: next.y === start.y ? 0 : start.height - size.height,
 });
 
+// The dragged box with its west, east and north edges no further out than `room` from where they were pressed.
+function keptOnPaper(next: Box, start: Box, room: PaperRoom | null): Box {
+    if (!room) return next;
+    const left = Math.max(next.x, start.x - room.west);
+    const right = Math.min(next.x + next.width, start.x + start.width + room.east);
+    const top = Math.max(next.y, start.y - room.north);
+    return { ...next, x: left, y: top, width: right - left, height: next.y + next.height - top };
+}
+
 // A resize previews locally and writes once, at the commit. `fit` turns a dragged box into the fitted size, and `stored`
 // picks what the node keeps of it, which the commit writes with the offsets a west or a north grip moved.
 export function useFigureResize<T extends FigureSize>({
@@ -113,10 +124,11 @@ export function useFigureResize<T extends FigureSize>({
     onGestureEnd: () => void;
 } {
     const [preview, setPreview] = useState<{ size: T; shift: FigureShift } | null>(null);
-    // ObjectTransform has no onStart, so the first onTransform of a gesture, the box as pressed, latches the start and
-    // the max width: a forced layout per move costs too much.
+    // ObjectTransform has no onStart, so the first onTransform of a gesture, the box as pressed, latches the start, the
+    // max width and a positioned figure's room on the paper: a forced layout per move costs too much.
     const gestureStart = useRef<Box | null>(null);
     const gestureMaxWidth = useRef(Number.POSITIVE_INFINITY);
+    const gestureRoom = useRef<PaperRoom | null>(null);
 
     const onTransform = useCallback(
         (next: Box) => {
@@ -124,17 +136,21 @@ export function useFigureResize<T extends FigureSize>({
                 gestureStart.current = next;
                 // A hidden surface reports <=0, which the fit's floor wins over.
                 gestureMaxWidth.current = getMaxWidth();
+                const pos = getPos();
+                gestureRoom.current = pos === undefined ? null : roomOnPaper(editor, pos, next.width);
             }
-            const size = fit(next, gestureMaxWidth.current);
-            setPreview({ size, shift: shiftOf(next, gestureStart.current, size) });
+            const box = keptOnPaper(next, gestureStart.current, gestureRoom.current);
+            const size = fit(box, gestureMaxWidth.current);
+            setPreview({ size, shift: shiftOf(box, gestureStart.current, size) });
         },
-        [getMaxWidth, fit],
+        [editor, getPos, getMaxWidth, fit],
     );
 
     const onCommit = useCallback(
         (next: Box, start: Box) => {
-            const size = fit(next, gestureMaxWidth.current);
-            const offsets = shiftedOffsets(readFigureFrameAttrs(node.attrs), shiftOf(next, start, size));
+            const box = keptOnPaper(next, start, gestureRoom.current);
+            const size = fit(box, gestureMaxWidth.current);
+            const offsets = shiftedOffsets(readFigureFrameAttrs(node.attrs), shiftOf(box, start, size));
             const pos = getPos();
             if (pos !== undefined) editor.commands.resizeFigure(pos, { ...stored(size), ...offsets });
         },

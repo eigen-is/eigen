@@ -61,10 +61,14 @@ function FigureView(props: NodeViewProps) {
     }, [mediaName]);
 
     const getMaxWidth = useCallback(() => figureMaxWidth(editor, layout), [editor, layout]);
-    // The height follows the width at the image's own ratio, which a box exists only once it is known.
+    // The height follows the width at the image's own ratio, which a box exists only once it is known. A box whose top
+    // stopped at the paper's caps the width too.
     const fitWidth = useCallback(
         (next: Box, maxWidth: number) => {
-            const fitted = clampFigureWidth(next.width, maxWidth);
+            const fitted = clampFigureWidth(
+                aspectRatio ? Math.min(next.width, next.height * aspectRatio) : next.width,
+                maxWidth,
+            );
             return { width: fitted, height: aspectRatio ? fitted / aspectRatio : next.height };
         },
         [aspectRatio],

@@ -48,6 +48,9 @@ declare module '@tiptap/core' {
 
 type FigureResize = { width?: number; height?: number; offsetX?: number; offsetY?: number };
 
+// How far a positioned figure's west, east and north edges are from the paper's, in page px.
+export type PaperRoom = { west: number; east: number; north: number };
+
 type PositionedFiguresOptions = {
     // The page map in px: the paper a positioned figure stays on, never the column a screen lays out.
     page: () => PageSetup;
@@ -128,9 +131,19 @@ function figureBoxAt(view: EditorView, pos: number): DOMRect | null {
     return box ? box.getBoundingClientRect() : null;
 }
 
+// Where the paragraph drawn at `anchor` starts on the paper of the page map: the page map's margin plus its distance
+// from the text column, so a narrow screen's column clamps nothing it wouldn't on a desktop.
+function anchorOnPaper(view: EditorView, page: PageSetup, anchor: DOMRect): { left: number; top: number } {
+    const scale = pageScale(view.dom);
+    const column = view.dom.getBoundingClientRect();
+    return {
+        left: page.margin.left + (anchor.left - column.left) / scale,
+        top: page.margin.top + (anchor.top - column.top) / scale,
+    };
+}
+
 // A box's offsets from its anchor paragraph's drawn rect, kept on the paper of the page map: between its edges, and
-// below the page's top. The paragraph's place on the paper is the page map's margin plus its distance from the text
-// column, so a narrow screen's column clamps nothing it wouldn't on a desktop.
+// below the page's top.
 function offsetsOnPaper(
     view: EditorView,
     page: PageSetup,
@@ -138,14 +151,31 @@ function offsetsOnPaper(
     anchor: DOMRect,
 ): { offsetX: number; offsetY: number } {
     const scale = pageScale(view.dom);
-    const column = view.dom.getBoundingClientRect();
-    const left = page.margin.left + (anchor.left - column.left) / scale;
-    const top = page.margin.top + (anchor.top - column.top) / scale;
+    const { left, top } = anchorOnPaper(view, page, anchor);
     const x = (box.left - anchor.left) / scale;
     const y = (box.top - anchor.top) / scale;
     return {
         offsetX: Math.round(Math.max(-left, Math.min(page.width - box.width - left, x))),
         offsetY: Math.round(Math.max(-top, y)),
+    };
+}
+
+// The room on the paper around the positioned figure at `pos`, drawn `width` page px wide, which a grip grows it into
+// and no further, so resizeFigure never moves it back and its opposite edge stays put. Null for a figure in the flow.
+export function roomOnPaper(editor: Editor, pos: number, width: number): PaperRoom | null {
+    const { view } = editor;
+    const node = view.state.doc.nodeAt(pos);
+    if (!node || !isPositionedFigure(node)) return null;
+    const anchor = rectAt(view, view.state.doc.resolve(pos).before());
+    if (!anchor) return null;
+    const page = editor.storage.positionedFigures.page();
+    const { left, top } = anchorOnPaper(view, page, anchor);
+    const { offsetX, offsetY } = readFigureFrameAttrs(node.attrs);
+    const x = left + (offsetX ?? 0);
+    return {
+        west: Math.max(0, x),
+        east: Math.max(0, page.width - x - width),
+        north: Math.max(0, top + (offsetY ?? 0)),
     };
 }
 

@@ -438,6 +438,29 @@ test('a north-west grip that grows a positioned figure moves its offsets by the 
     expect(editor.state.doc.nodeAt(4)?.attrs).toMatchObject({ width: 250, offsetX: -20, offsetY: 15 });
 });
 
+// Its paragraph starts at the paper's x 100: at -80 the image has 20 px of paper to its west, at 490 10 px to its east.
+// A grip grows it no further, so the opposite edge stays put in the preview and in the commit alike.
+test.each([
+    ['north-west', 0, -80, -50, 220, -100, 30],
+    ['south-east', 3, 490, 50, 210, 490, 40],
+])(
+    'a %s grip that would grow a positioned figure past the paper stops at its edge',
+    async (_grip, index, offsetX, dx, width, x, y) => {
+        const { editor, box } = await mountPositioned(1, { offsetX });
+        await act(async () => {
+            editor.commands.setNodeSelection(4);
+        });
+        const grip = box.nextElementSibling?.querySelectorAll('.eigen-selection-handle')[index];
+        if (!grip) throw new Error('no grip');
+        Object.defineProperty(grip, 'setPointerCapture', { value: () => {} });
+        await pointer(grip, 'pointerdown', 200, 200);
+        await pointer(document, 'pointermove', 200 + dx, 200 + dx / 2);
+        expect({ left: box.style.left, width: box.style.width }).toEqual({ left: `${x}px`, width: `${width}px` });
+        await pointer(document, 'pointerup', 200 + dx, 200 + dx / 2);
+        expect(editor.state.doc.nodeAt(4)?.attrs).toMatchObject({ width, offsetX: x, offsetY: y });
+    },
+);
+
 test('Shift and an arrow key resize a positioned figure up to the paper, not the column', async () => {
     const { editor } = await mount(positioned({ width: 795 }));
     await act(async () => {
