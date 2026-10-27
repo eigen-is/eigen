@@ -1,3 +1,7 @@
+// The waitlist of a server that is not open to everyone: people ask for an invitation, and an admin accepts or
+// rejects them. An accepted person gets an email with a link that expires, which they use to register. The data is
+// server-wide, in its own database.
+
 import { randomUUID } from 'node:crypto';
 import { escapeHtml } from '@workspace/lib/html';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';

@@ -1,3 +1,7 @@
+// Takes a version of a document: a copy of its database saved in the versions folder of the mount, after which old
+// versions are removed by the retention rules. A save by the user waits for its turn, and the periodic save skips
+// when the document is busy. It can also replace the live database with a copy, which is what a restore uses.
+
 import { constants, Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';

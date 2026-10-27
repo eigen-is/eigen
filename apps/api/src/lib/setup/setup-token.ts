@@ -1,3 +1,6 @@
+// The secret link that lets the first admin set up a new server. The command line creates it, and only its hash is
+// stored. The setup routes require it until setup is done, and it can be created again to get a fresh link.
+
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
 import { SETUP_LINK_PARAM } from '@workspace/lib/constants/setup';

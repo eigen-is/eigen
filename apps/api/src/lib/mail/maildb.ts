@@ -1,3 +1,7 @@
+// The mail index of a user's Home: one SQLite database with a row for each message, and full-text search over it.
+// The message itself stays in the maildir. The index keeps what lists and search need, such as the sender, the
+// subject, the flags and a short preview. MailDomain uses it for everything it reads and writes there.
+
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import { MAIL_PREVIEW_CHARS } from '@workspace/lib/constants/mail';

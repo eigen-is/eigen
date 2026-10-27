@@ -1,3 +1,7 @@
+// The queue that uploads the changes of an S3 mount in the background. A write is saved on disk first and lands in
+// the bucket later, so saving stays fast and survives a restart. A failed upload tries again after a growing delay,
+// and uploads to the same bucket share a limit. Each mount has one queue, and the mount starts, drains and stops it.
+
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

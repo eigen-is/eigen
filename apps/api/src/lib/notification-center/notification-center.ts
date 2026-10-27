@@ -1,3 +1,7 @@
+// The notifications of a user's Home, kept in their own SQLite database. Other code adds one, such as an access
+// request or a calendar invitation, and the user lists, reads and removes them in the app. A repeat with the same
+// tag can replace the older notification within a short time, instead of piling up.
+
 import { randomUUID } from 'node:crypto';
 import type { Notification, NotificationPersistInput } from '@workspace/lib/types/notification';
 import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
