@@ -24,8 +24,10 @@ import {
     BAND_ROOTS,
     bandHasContent,
     isFigureFrameNode,
+    isPositioned,
     PROSE_TEXTBLOCKS,
     pageTwips,
+    readFigureFrameAttrs,
     twipsToPt,
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../lib/core/xml';
@@ -2056,9 +2058,6 @@ function nodeAt(imported: Imported, at: string): JSONContent | undefined {
     return path.reduce<JSONContent | undefined>((node, index) => node?.content?.[Number(index)], start);
 }
 
-const isBlockFigure = (node: JSONContent) =>
-    isFigureFrameNode(node.type) && node.attrs?.['layout'] !== 'wrap-left' && node.attrs?.['layout'] !== 'wrap-right';
-
 // Adjacent text of the same marks as one node, as the schema joins it.
 function joined(nodes: JSONContent[]): JSONContent[] {
     const out: JSONContent[] = [];
@@ -2074,8 +2073,10 @@ function joined(nodes: JSONContent[]): JSONContent[] {
 // The first import as the writer lays it out (blocksOf and figureOf in export/doc/docx/), each change a difference of its own:
 // a textblock's block figures each stand in a paragraph of their own and a display equation in a piece of its own, the
 // pieces sharing the textblock's margins, the first the one above, the last the one below, no space at a split; a wrapped
-// figure floats before the piece that holds it, which the reader reads back at its start; a figure the export has no
-// picture for writes its caption alone, as a paragraph, or nothing. `captions` holds those paragraphs' places.
+// figure floats before the piece that holds it, which the reader reads back at its start; a figure in front of or behind
+// the text is anchored at the start of the textblock's first piece in the body and the lists and quotes in it, and is a
+// block figure in a table cell or a band; a figure the export has no picture for writes its caption alone, as a
+// paragraph, or nothing. `captions` holds those paragraphs' places.
 export function asWritten(
     imported: Imported,
     prepared: ReadonlyMap<string, Picture>,
@@ -2084,13 +2085,17 @@ export function asWritten(
     const captions = new Set<string>();
     const paragraphAttrs = docSchema().nodeFromJSON({ type: 'paragraph' }).toJSON().attrs;
     const unwritten = (node: JSONContent) => node.type === 'figure' && !prepared.has(String(node.attrs?.['mediaName']));
-    // nested: inside a list, a quote or a cell, which owns the spacing of what it holds.
-    const blocks = (nodes: JSONContent[], at: string, nested: boolean): JSONContent[] => {
+    // nested: inside a list, a quote or a cell, which owns the spacing of what it holds. anchors: where a figure keeps its
+    // place in front of or behind the text.
+    const blocks = (nodes: JSONContent[], at: string, nested: boolean, anchors: boolean): JSONContent[] => {
         const out: JSONContent[] = [];
         for (const [index, node] of nodes.entries()) {
             const place = `${at}.${out.length}`;
             if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) {
-                out.push(node.content ? { ...node, content: blocks(node.content, place, true) } : node);
+                const inCell = node.type === 'tableCell' || node.type === 'tableHeader';
+                out.push(
+                    node.content ? { ...node, content: blocks(node.content, place, true, anchors && !inCell) } : node,
+                );
                 continue;
             }
             const pieces: JSONContent[] = [];
@@ -2098,12 +2103,14 @@ export function asWritten(
             const fresh = new Set<JSONContent>();
             let inline: JSONContent[] = [];
             const floating: JSONContent[] = [];
+            const leading: JSONContent[] = [];
             let split = false;
             const flush = () => {
                 pieces.push({ ...node, content: joined([...floating.splice(0), ...inline]) });
                 inline = [];
             };
             for (const child of node.content ?? []) {
+                const layout = isFigureFrameNode(child.type) ? readFigureFrameAttrs(child.attrs ?? {}).layout : null;
                 if (isFigureFrameNode(child.type) && unwritten(child)) {
                     changes.push({ feature: 'picture left out', at: place, a: child, b: undefined });
                     const caption = child.attrs?.['caption'];
@@ -2118,11 +2125,13 @@ export function asWritten(
                         fresh.add(piece);
                         pieces.push(piece);
                     }
-                } else if (isFigureFrameNode(child.type) && !isBlockFigure(child)) {
+                } else if (anchors && isPositioned(layout)) {
+                    leading.push(child);
+                } else if (layout === 'wrap-left' || layout === 'wrap-right') {
                     if (inline.some((held) => held.type !== 'text' || held.text?.trim()))
                         changes.push({ feature: 'wrapped figure moved', at: place, a: child, b: undefined });
                     floating.push(child);
-                } else if (isBlockFigure(child)) {
+                } else if (isFigureFrameNode(child.type)) {
                     if (inline.length > 0) flush();
                     // The first piece takes the space above its textblock, which the reader keeps on a figure's paragraph
                     // past the figure's own margin. A paragraph's own space is its spaceBefore, a heading's or a title's
@@ -2154,6 +2163,7 @@ export function asWritten(
                 } else inline.push(child);
             }
             if (inline.length > 0 || floating.length > 0 || !pieces.some((piece) => piece.type === node.type)) flush();
+            if (leading.length > 0) pieces[0] = { ...pieces[0], content: [...leading, ...(pieces[0].content ?? [])] };
             if (pieces.length === 1 && pieces[0].type === node.type) {
                 const [piece] = pieces;
                 const same = canonical(piece.content ?? []) === canonical(node.content ?? []);
@@ -2181,13 +2191,13 @@ export function asWritten(
     const bands = Object.fromEntries(
         Object.entries(imported.bands).map(([root, band]) => [
             root,
-            { ...band, content: blocks(band.content ?? [], root, false) },
+            { ...band, content: blocks(band.content ?? [], root, false, false) },
         ]),
     );
     return {
         imported: {
             ...imported,
-            json: { ...imported.json, content: blocks(imported.json.content ?? [], 'body', false) },
+            json: { ...imported.json, content: blocks(imported.json.content ?? [], 'body', false, true) },
             bands,
         },
         changes,
