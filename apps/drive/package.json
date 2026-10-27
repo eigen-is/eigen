@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
+    "test": "bun test",
     "typecheck": "bun check --no-script"
   },
   "dependencies": {
@@ -40,5 +41,8 @@
     "codemirror": "^6.0.2",
     "lowlight": "^3.3.0",
     "tiptap-markdown": "^0.9.0"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.14.6"
   }
 }
