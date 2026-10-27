@@ -157,6 +157,20 @@ describe('renderChartSpecSvg', () => {
         expect(svg).not.toContain('>0.25</text>');
     });
 
+    test("a series' data labels read in the axis format, else the source format, else General", () => {
+        const labelled = (spec: ChartSpec, values: number[]): ChartSpec => ({
+            ...spec,
+            series: { 's-1': { ...spec.series['s-1'], labels: { visible: true } } },
+            data: { source: 'inline', categories: ['North', 'South'], series: [{ id: 's-1', name: 'Share', values }] },
+        });
+        expect(svgOf(labelled(PERCENT_SPEC, [0.123, 0.25]))).toContain('>12%</text>');
+        const counts = labelled(SHARES_SPEC, [1234, 2345.6]);
+        expect(svgOf(counts)).toContain('>2345.6</text>');
+        const source = renderChartSpecSvg({ id: 'c1', spec: counts, width: 600, height: 371, sourceFormat: '#,##0' });
+        expect(source).toContain('>2,346</text>');
+        expect(source).toContain('>1,000</text>');
+    });
+
     test('ticks of an axis with no format draw as the step reads', () => {
         const svg = svgOf(SHARES_SPEC);
         expect(svg).toContain('>0.00</text>');

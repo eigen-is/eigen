@@ -62,10 +62,13 @@ export function layoutChart({ spec, data, sourceFormat, ...box }: ChartLayoutInp
     const categories = Array.from({ length: count }, (_, i) => data.categories[i] ?? '');
     // An automatic color is the palette's at the series' place in the spec, so a range series after one whose values
     // were deleted keeps the color the editor shows it in.
+    // Past the sketch cap a chart draws no data labels, which bounds their collision pass.
+    const capped = isSketchCapped(spec, data);
     const series = data.series.map((s, i) => {
         const style = chartSeriesStyle(spec, s.id);
         const place = spec.data.series.findIndex(({ id }) => id === s.id);
-        return { ...s, style, color: style.color ?? chartColor(place === -1 ? i : place) };
+        const color = style.color ?? chartColor(place === -1 ? i : place);
+        return { ...s, style, color, labelled: style.labels.visible && !capped };
     });
     const type = spec.chart.type;
     // A pie draws its first series, whose points are its slices.
@@ -85,9 +88,7 @@ export function layoutChart({ spec, data, sourceFormat, ...box }: ChartLayoutInp
     const frame = legend.frame;
 
     // Past MAX_SKETCH_POINTS the data marks draw unsketched and solid, their labels still the chart's.
-    const marks: Context = isSketchCapped(spec, data)
-        ? { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } }
-        : ctx;
+    const marks: Context = capped ? { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } } : ctx;
     const plot =
         type === 'pie'
             ? layoutPie(marks, spec, pieId, categories, values[0], frame)

@@ -42,6 +42,11 @@ export function marked(data: ChartData): ChartSpec['series'] {
     return Object.fromEntries(data.series.map(({ id }) => [id, style({ marker: { visible: true } })]));
 }
 
+// Data labels on the series the ids name, every series of the data by default.
+export function labelled(data: ChartData, ids = data.series.map(({ id }) => id)): ChartSpec['series'] {
+    return Object.fromEntries(ids.map((id) => [id, style({ labels: { visible: true } })]));
+}
+
 // One stacking for every plot type, as the type a test draws reads its own.
 export function plots(stacking: ChartStacking): ChartSpec['plots'] {
     return { column: { stacking }, bar: { stacking }, line: { stacking }, pie: { stacking } };

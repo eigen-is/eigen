@@ -83,6 +83,14 @@ describe('chartToElements', () => {
         expect(typesById(elements, 'marker:')).toEqual(Array(21).fill('ellipse'));
     });
 
+    test("a series' data labels convert to text boxes like every other label", () => {
+        const spec = sampleChartSpec('column');
+        const series = { ...spec.series, 's-2': { ...DEFAULT_CHART_SERIES_STYLE, labels: { visible: true } } };
+        const html = labelsOf(chartToElements(chart({ id: 'c1' }, specOf('column', { series })))).map((el) => el.html);
+        expect(html).toContain('<p>28.7</p>');
+        expect(labelsOf(chartToElements(chart({ id: 'c1' }, spec))).map((el) => el.html)).not.toContain('<p>28.7</p>');
+    });
+
     test('a pie chart: one pie element per slice', () => {
         const elements = chartToElements(chart({ id: 'c1' }, specOf('pie')));
         expect(typesById(elements, 'slice:')).toEqual(Array(7).fill('pie'));

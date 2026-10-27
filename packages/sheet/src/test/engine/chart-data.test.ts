@@ -221,6 +221,14 @@ describe('renderSheetChartSvg', () => {
         expect(renderSheetChartSvg(chart('0.00'), shares)).toContain('>0.50<');
     });
 
+    test("a series' data labels read in the first value cell's format", () => {
+        const plain = chart(null);
+        const series = JSON.stringify({ ...DEFAULT_CHART_SERIES_STYLE, labels: { visible: true } });
+        const labelled = { ...plain, specSeries: { ...plain.specSeries, 's-0': series } };
+        const count = (svg: string) => svg.split('>25%<').length - 1;
+        expect(count(renderSheetChartSvg(labelled, shares))).toBe(count(renderSheetChartSvg(plain, shares)) + 1);
+    });
+
     test('cells without a format tick as General, as the grid shows them', () => {
         const plain = createArrayResolver([
             {
