@@ -12,6 +12,7 @@ const { act, createElement, createRef, Fragment } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { produce } = await import('immer');
 const { WorkbookContext } = await import('../../../context');
+const { useCellEditorRefocus } = await import('../../../hooks/useCellEditorRefocus');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
 const { MenuBar } = await import('../../../components/MenuBar');
 const { committedRuns, defaultContext, defaultSettings, FormulaCache } = await import('../../../state');
@@ -32,6 +33,13 @@ const refs = {
     cellArea: createRef<HTMLDivElement | null>(),
     workbookContainer: createRef<HTMLDivElement | null>(),
 };
+
+// The handler the menu bar gives its menus as they close.
+let refocusCellEditor: ((event: Event) => void) | undefined;
+function RefocusProbe() {
+    refocusCellEditor = useCellEditorRefocus();
+    return null;
+}
 
 // Waits out the timers the editor and Radix run, such as the one on which a closing menu hands back the focus.
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)));
@@ -76,7 +84,13 @@ async function openEditor(html: string) {
                         handleRedo: () => {},
                     },
                 },
-                createElement(Fragment, null, createElement(MenuBar), createElement(InputBox)),
+                createElement(
+                    Fragment,
+                    null,
+                    createElement(MenuBar),
+                    createElement(InputBox),
+                    createElement(RefocusProbe),
+                ),
             ),
         );
     await act(async () => render());
@@ -213,4 +227,22 @@ test('Enter on an unchanged size still hands the focus back to the editor', asyn
     });
     expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
     expect(selectedText()).toBe('big');
+});
+
+// A menu item can open a dialog, such as Data verification, that takes the focus as the menu closes. The
+// editor leaves the focus there.
+test('a closing menu leaves the focus in a dialog that took it', async () => {
+    const { input } = await openEditor('hello big world');
+    await select(input, 6, 9);
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    const field = document.createElement('input');
+    dialog.append(field);
+    document.body.append(dialog);
+    field.focus();
+    const close = new Event('focusOutside', { cancelable: true });
+    act(() => refocusCellEditor?.(close));
+    expect(close.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(field);
+    dialog.remove();
 });
