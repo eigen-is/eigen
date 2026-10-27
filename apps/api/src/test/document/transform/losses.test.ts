@@ -150,7 +150,7 @@ describe('an export summary', () => {
                     { code: 'formulas-dropped', count: 1 },
                     { code: 'sheets-cut', count: 1 },
                     { code: 'sheets-left-out', count: 3 },
-                    { code: 'band-blocks-cut', count: 1 },
+                    { code: 'bands-cut', count: 1 },
                 ],
                 'export',
             ),

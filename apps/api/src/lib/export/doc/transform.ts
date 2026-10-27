@@ -66,7 +66,7 @@ export async function renderEigendocExport(
     const dataUriMap = toDataUriMap(media);
     const pdf = htmlExportMode(format) === 'pdf';
     const { printed, cut } = pdf ? printedBands(bands) : { printed: bands, cut: 0 };
-    const warnings: TransformWarning[] = cut > 0 ? [{ code: 'band-blocks-cut', count: cut }] : [];
+    const warnings: TransformWarning[] = cut > 0 ? [{ code: 'bands-cut', count: cut }] : [];
     // Browsers ignore running(), so the download shows each band where the long page does: page 1's header on top, the
     // other pages' footer at the end.
     const order: (BandRoot | 'body')[] = pdf
@@ -109,7 +109,7 @@ export const MAX_BAND_TEXT = 20_000;
 
 // The bands as the PDF prints them: each one's blocks in document order, counted inside tables and lists, while they
 // fit, and the one that passes the caps cut inside to what fits, so a band keeps its first lines whatever their size.
-// cut counts the top-level blocks shortened or dropped.
+// cut counts the bands that lost anything, once each, as the user's summary names headers and footers.
 function printedBands(bands: EigendocBands): { printed: EigendocBands; cut: number } {
     const { nodes } = docSchema();
     const printed: EigendocBands = {};
@@ -143,11 +143,10 @@ function printedBands(bands: EigendocBands): { printed: EigendocBands; cut: numb
         };
         const content: JSONContent[] = [];
         for (const block of band.content ?? []) {
-            short = false;
             const kept = fit(block);
             if (kept) content.push(kept);
-            if (short) cut++;
         }
+        if (short) cut++;
         printed[root] = { ...band, content };
     }
     return { printed, cut };

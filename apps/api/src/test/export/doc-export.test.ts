@@ -1687,7 +1687,7 @@ describe('doc export — headers and footers', () => {
     });
 
     // WeasyPrint lays a running element out on every page, so an unbounded header ran the PDF into its timeout.
-    test('the PDF prints a band past its caps up to them, with a warning', async () => {
+    test('the PDF prints a band past its caps up to them, with a warning that counts the band once', async () => {
         const doc = seededDoc();
         seedBand(doc, 'header', ...Array.from({ length: 4000 }, (_, index) => paragraph(`Head ${index}.`)));
         const { data, warnings } = await renderEigendocExport(
@@ -1700,7 +1700,7 @@ describe('doc export — headers and footers', () => {
         const html = new TextDecoder().decode(data);
         expect(html).toContain(`Head ${MAX_BAND_BLOCKS - 1}.`);
         expect(html).not.toContain(`Head ${MAX_BAND_BLOCKS}.`);
-        expect(warnings).toEqual([{ code: 'band-blocks-cut', count: 4000 - MAX_BAND_BLOCKS }]);
+        expect(warnings).toEqual([{ code: 'bands-cut', count: 1 }]);
     });
 
     // A table counts its rows, cells and paragraphs, so one block can pass the caps alone: it keeps what fits.
@@ -1730,7 +1730,8 @@ describe('doc export — headers and footers', () => {
         expect(html).not.toContain('After the table');
         expect(html).toContain('x'.repeat(MAX_BAND_TEXT));
         expect(html).not.toContain('Gone');
-        expect(warnings).toEqual([{ code: 'band-blocks-cut', count: 3 }]);
+        // The header and the footer were cut, each once.
+        expect(warnings).toEqual([{ code: 'bands-cut', count: 2 }]);
     });
 
     // Only the PDF lays a band out on every page; the docx and the download keep all of it.
