@@ -1,5 +1,5 @@
-// DrawingML, the drawing vocabulary docx, xlsx and pptx share, both ways. It resolves a colour element and its
-// transforms through a theme's colours, and writes a colour and a plain theme. It names a picture's parts in its blip,
+// DrawingML, the drawing vocabulary docx, xlsx and pptx share, both ways. It resolves a color element and its
+// transforms through a theme's colors, and writes a color and a plain theme. It names a picture's parts in its blip,
 // maps text alignment, line ends and dashes onto the canvas's own, reads a text body's plain text, and anchors a
 // turned picture over a spreadsheet's cells.
 
@@ -25,14 +25,14 @@ export function lineWidthEmu(value: string | undefined): number | undefined {
     return width !== undefined && width >= 0 && width <= MAX_LINE_WIDTH ? width : undefined;
 }
 
-// ── Colours ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── Colors ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-// A theme's colours by slot name (dk1, lt1, accent1…), each '#rrggbb'.
+// A theme's colors by slot name (dk1, lt1, accent1…), each '#rrggbb'.
 type ColorScheme = ReadonlyMap<string, string>;
 // Maps each name a schemeClr may use onto the slot it shows. bg1, tx1, bg2 and tx2 each name a slot, and every slot
 // names itself.
 type ColorMap = ReadonlyMap<string, string>;
-// phClr is the colour a style matrix entry is painted in, which the shape's fillRef, lnRef or bgRef supplies. It is
+// phClr is the color a style matrix entry is painted in, which the shape's fillRef, lnRef or bgRef supplies. It is
 // '#rrggbb' or '#rrggbbaa'.
 export type DrawingTheme = { scheme: ColorScheme; map: ColorMap; phClr?: string };
 
@@ -52,7 +52,7 @@ export const SCHEME_SLOTS: readonly string[] = [
     'folHlink',
 ];
 
-// The map a part without a clrMap of its own shows its colours through: every xlsx part, and a docx's or pptx's chart
+// The map a part without a clrMap of its own shows its colors through: every xlsx part, and a docx's or pptx's chart
 // without a c:clrMapOvr.
 export const IDENTITY_COLOR_MAP: ColorMap = new Map([
     ['bg1', 'lt1'],
@@ -62,7 +62,7 @@ export const IDENTITY_COLOR_MAP: ColorMap = new Map([
     ...SCHEME_SLOTS.map((slot): [string, string] => [slot, slot]),
 ]);
 
-// A part without a theme: no scheme colours, and the identity map.
+// A part without a theme: no scheme colors, and the identity map.
 export const NO_DRAWING_THEME: DrawingTheme = { scheme: new Map(), map: IDENTITY_COLOR_MAP };
 
 // DrawingML counts an angle in 60,000ths of a degree.
@@ -80,7 +80,7 @@ export function drawingAngle(value: number): number {
     return Math.round(normalizeAngle(value) * DEGREE) % (360 * DEGREE);
 }
 
-// A theme part's a:clrScheme. A slot without a colour is left out.
+// A theme part's a:clrScheme. A slot without a color is left out.
 export function readColorScheme(theme: XmlElement | undefined): ColorScheme {
     const elements = theme && hasXmlName(theme, A_NS, 'theme') ? xmlChild(theme, A_NS, 'themeElements') : undefined;
     const scheme = elements && xmlChild(elements, A_NS, 'clrScheme');
@@ -92,7 +92,7 @@ export function readColorScheme(theme: XmlElement | undefined): ColorScheme {
     return colors;
 }
 
-// A theme part with no colour map over it, so every slot shows itself, as docx and xlsx charts read their theme.
+// A theme part with no color map over it, so every slot shows itself, as docx and xlsx charts read their theme.
 export function drawingTheme(theme: XmlElement | undefined): DrawingTheme {
     return { scheme: readColorScheme(theme), map: IDENTITY_COLOR_MAP };
 }
@@ -179,10 +179,10 @@ function placeholderRgba(color: string | undefined): Rgba | undefined {
     return rgba && alpha ? [rgba[0], rgba[1], rgba[2], Number.parseInt(alpha, 16) / 255] : rgba;
 }
 
-// CSS colour keywords that ECMA-376 has no preset for.
+// CSS color keywords that ECMA-376 has no preset for.
 const NOT_PRESETS = new Set(['transparent', 'rebeccapurple']);
 
-// ECMA-376's preset names are CSS's colour keywords, with dark, light and medium shortened to dk, lt and med.
+// ECMA-376's preset names are CSS's color keywords, with dark, light and medium shortened to dk, lt and med.
 function presetRgba(name: string | undefined): Rgba | undefined {
     if (!name || !/^[a-z]+$/i.test(name) || NOT_PRESETS.has(name.toLowerCase())) return undefined;
     const keyword = name.replace(/^(dk|lt|med)(?=[A-Z])/, (prefix) =>
@@ -272,7 +272,7 @@ export function fromHsl(hue: number, sat: number, lum: number): [number, number,
     return [r + m, g + m, b + m];
 }
 
-// A stored colour token (#rgb, #rrggbb or #rrggbbaa) as an a:srgbClr. Its alpha, times `opacity`, goes inside as an
+// A stored color token (#rgb, #rrggbb or #rrggbbaa) as an a:srgbClr. Its alpha, times `opacity`, goes inside as an
 // a:alpha. Transparent and anything else is null.
 export function colorXml(color: string, opacity = 1): string | null {
     const digits = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1];
@@ -292,8 +292,8 @@ export function solidFillXml(color: string, opacity = 1): string {
 
 export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
 
-// Every shape and cell the writers write holds its own colours and fonts, so the theme they package only has to be
-// valid: plain colours, and the document's font.
+// Every shape and cell the writers write holds its own colors and fonts, so the theme they package only has to be
+// valid: plain colors, and the document's font.
 const THEME_COLORS: Record<string, string> = {
     dk1: '000000',
     lt1: 'FFFFFF',
@@ -456,7 +456,7 @@ export function isSideways(degrees: number): boolean {
 export type Box = { x: number; y: number; width: number; height: number };
 
 // The cells Excel and LibreOffice place a picture turned `degrees` over: its box, or for a sideways one its box turned
-// a quarter about its centre, so its sides swap. The mapping is its own inverse, so a reader takes the picture's box
+// a quarter about its center, so its sides swap. The mapping is its own inverse, so a reader takes the picture's box
 // back from its anchor with it.
 export function anchoredBox(box: Box, degrees: number): Box {
     if (!isSideways(degrees)) return box;

@@ -37,7 +37,7 @@ export const MAX_SHAPE_PATHS = 32;
 const OUTLINE_TOLERANCE = 0.001;
 const MAX_CURVE_CHORDS = 16;
 
-// Past the caps, a point within a tolerance of the line its neighbours draw goes, as does a curve that bulges no more:
+// Past the caps, a point within a tolerance of the line its neighbors draw goes, as does a curve that bulges no more:
 // the least of these, in fractions of the box, that fits. The corpus's largest, a 2,222-point map outline, fits at the
 // last, 2 px on its slide.
 const SIMPLIFY_TOLERANCES = [0.001, 0.002, 0.004];
@@ -333,7 +333,7 @@ function reversed({ start, segments, closed }: Subpath): Subpath {
     };
 }
 
-// A box of no extent puts every point at its edge; NaN, from infinities cancelling, at 0.
+// A box of no extent puts every point at its edge; NaN, from infinities canceling, at 0.
 function inBox(value: number, extent: number): number {
     const unit = extent > 0 ? value / extent : 0;
     return Number.isNaN(unit) ? 0 : round4(clamp(unit, PATH_COORD_MIN, PATH_COORD_MAX));
@@ -351,8 +351,8 @@ function arcCurves(from: Point, radii: Point, startAngle: number, sweepAngle: nu
     };
     const first = parametric(start);
     const last = first + clamp(parametric(start + sweep) - first, -2 * Math.PI, 2 * Math.PI);
-    const centre = { x: from.x - radii.x * Math.cos(first), y: from.y - radii.y * Math.sin(first) };
-    const on = (t: number) => ({ x: centre.x + radii.x * Math.cos(t), y: centre.y + radii.y * Math.sin(t) });
+    const center = { x: from.x - radii.x * Math.cos(first), y: from.y - radii.y * Math.sin(first) };
+    const on = (t: number) => ({ x: center.x + radii.x * Math.cos(t), y: center.y + radii.y * Math.sin(t) });
     const tangent = (t: number, k: number) => ({ x: -k * radii.x * Math.sin(t), y: k * radii.y * Math.cos(t) });
     const count = Math.ceil(Math.abs(last - first) / (Math.PI / 2) - 1e-9);
     const step = (last - first) / count;

@@ -377,7 +377,7 @@ type Stroke = { strokeColor: string; strokeWidth: number; strokeStyle: StrokeSty
 const NO_STROKE: Stroke = { strokeColor: TRANSPARENT_COLOR, strokeWidth: PPTX_STYLE.strokeWidth, strokeStyle: 'solid' };
 
 // The first fill the chain states, a placeholder's own before its layout's and master's; else p:style's fillRef, its
-// colour the style matrix entry's phClr.
+// color the style matrix entry's phClr.
 function fillOf(
     chain: ShapeProperties[],
     walk: Walk,
@@ -394,7 +394,7 @@ function fillOf(
 }
 
 // The a:ln the chain states, nearest first, then the lnStyleLst entry p:style's lnRef names: each of width, dash, ends
-// and colour comes from the first that states it.
+// and color comes from the first that states it.
 type Lines = { lns: XmlElement[]; entry: XmlElement | undefined; reference: XmlElement | undefined };
 
 function linesOf(chain: ShapeProperties[], walk: Walk, style: XmlElement | undefined): Lines {
@@ -408,7 +408,7 @@ function linesOf(chain: ShapeProperties[], walk: Walk, style: XmlElement | undef
 // width field's first step.
 const HAIRLINE_PX = 1;
 
-// No a:ln and no lnRef, or neither stating a colour, is no stroke. A gradient line strokes in its first colour.
+// No a:ln and no lnRef, or neither stating a color, is no stroke. A gradient line strokes in its first color.
 function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
     const ln = lines.lns.find((found) => fillIn(found) !== undefined);
     const fill = fillIn(ln);
@@ -547,7 +547,7 @@ function lineOf(placed: Placed, stroke: Stroke, lns: XmlElement[]): NewVectorEle
 
 const UNDRAWN: Lost = () => {};
 
-// x' = a·x + c·y, y' = b·x + d·y: a turn after the flips, as DrawingML applies them about a box's centre.
+// x' = a·x + c·y, y' = b·x + d·y: a turn after the flips, as DrawingML applies them about a box's center.
 type Turn = [a: number, b: number, c: number, d: number];
 
 function apply(m: Turn, x: number, y: number): { x: number; y: number } {
@@ -562,14 +562,14 @@ function turn(rot: number, flipH: boolean, flipV: boolean): Turn {
     return [cos * h, sin * h, -sin * v, cos * v];
 }
 
-// A shape as DrawingML places it: its centre, extents, turn and flips.
+// A shape as DrawingML places it: its center, extents, turn and flips.
 type Placement = { x: number; y: number; width: number; height: number; rot: number; flipH: boolean; flipV: boolean };
 
 // From a shape tree's coordinates, in EMU, to the frame's px: through each enclosing group, then the slide's scale.
 type Place = (shape: Placement) => Placement;
 
 // A group lays its children out in its chOff/chExt space, scaled onto its off/ext, then flips and turns them about its
-// centre. As PowerPoint, LibreOffice and POI draw it, a child is never skewed: its centre moves with the group, its
+// center. As PowerPoint, LibreOffice and POI draw it, a child is never skewed: its center moves with the group, its
 // turn adds the group's (negated by one flip), and its extents scale along the group's axes, swapped for a child
 // turned sideways.
 function inGroup(outer: Place, xfrm: Xfrm): Place {
@@ -580,11 +580,11 @@ function inGroup(outer: Place, xfrm: Xfrm): Place {
     const turned = turn(xfrm.rot, xfrm.flipH, xfrm.flipV);
     const mirrors = xfrm.flipH !== xfrm.flipV;
     return (shape) => {
-        const centre = apply(turned, xfrm.x + (shape.x - child.x) * kx - cx, xfrm.y + (shape.y - child.y) * ky - cy);
+        const center = apply(turned, xfrm.x + (shape.x - child.x) * kx - cx, xfrm.y + (shape.y - child.y) * ky - cy);
         const sideways = isSideways(shape.rot);
         return outer({
-            x: cx + centre.x,
-            y: cy + centre.y,
+            x: cx + center.x,
+            y: cy + center.y,
             width: shape.width * (sideways ? ky : kx),
             height: shape.height * (sideways ? kx : ky),
             rot: (mirrors ? -shape.rot : shape.rot) + xfrm.rot,
@@ -645,7 +645,7 @@ function onSlide(box: Box, deck: DeckWalk): boolean {
     );
 }
 
-// A box turned about its centre: a quarter turn, or three, swaps its sides.
+// A box turned about its center: a quarter turn, or three, swaps its sides.
 function turned(box: Box, turn: number): Box {
     if (turn === 0) return box;
     const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
