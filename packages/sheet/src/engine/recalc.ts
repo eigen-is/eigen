@@ -310,8 +310,8 @@ function isFunctionRange(txt: string, cellRangeFunction: (str: string) => void):
                     function_str = '';
                 }
 
-                while (cal1.length > 0) {
-                    cal2.unshift(cal1.shift()!);
+                for (const operator of cal1.splice(0)) {
+                    cal2.unshift(operator);
                 }
             }
 
