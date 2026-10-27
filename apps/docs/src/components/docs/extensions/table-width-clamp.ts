@@ -6,7 +6,7 @@
 
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
-import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+import { columnFit } from '@workspace/lib/docs/eigendoc';
 
 const DEFAULT_CELL_WIDTH = 100;
 
@@ -81,16 +81,14 @@ export const TableWidthClamp = Extension.create<TableWidthClampOptions>({
 
                         if (totalWidth <= maxWidth) return;
 
-                        const scale = maxWidth / totalWidth;
+                        const fit = columnFit(maxWidth, totalWidth);
 
                         node.descendants((child, childPos) => {
                             if (child.type.name === 'table') return false;
                             if (child.type.name !== 'tableCell' && child.type.name !== 'tableHeader') return;
                             const cw: number[] | null = child.attrs.colwidth;
                             if (!cw) return false;
-                            const scaled = cw.map((w) =>
-                                w ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor(w * scale)) : w,
-                            );
+                            const scaled = cw.map((w) => (w ? fit(w) : w));
                             if (scaled.some((w, i) => w !== cw[i])) {
                                 setColwidth(tableContentStart + childPos, child.attrs, scaled);
                             }
