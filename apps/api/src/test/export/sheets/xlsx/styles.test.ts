@@ -3,8 +3,11 @@ import type { Cell } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_DIGIT_WIDTH } from '@workspace/lib/sheets';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
 import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
+import { xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { defaultFontDigitWidth, readDxfs, readLooks } from '../../../../lib/import/sheets/styles';
 import { parseOoxml } from '../../../../lib/ooxml/ooxml';
+import { openZip } from '../../../../lib/ooxml/zip';
+import { exportXlsx, styleSheet as fixtureStyles, rowsXml, xlsxFixture } from '../../../fixtures/xlsx';
 
 function registryOf() {
     const lost: CountedWarningCode[] = [];
@@ -18,15 +21,33 @@ function styleSheet(xml: string) {
 }
 
 describe('the style registry', () => {
-    // The editor shows a legacy string size as its number and holds every size to its 1 to 400 points, so the
-    // file says the size the editor showed.
-    test('a font size is read as the editor reads it, and one that is no number is the default', () => {
+    // The canvas draws a legacy string size as its number and holds every size to Excel's 1 to 409 points, so the
+    // file says the size the canvas drew.
+    test('a font size is read as the canvas reads it, and one that is no number is the default', () => {
         const { styles } = registryOf();
         for (const fs of [1e308, -5, 0.5, Number.NaN, Number.POSITIVE_INFINITY, 409, 11.5])
             styles.xf({ v: 'x', fs }, undefined);
         styles.xf(JSON.parse('{"v":"x","fs":"14"}'), undefined);
         const sizes = [...styles.xml().matchAll(/<sz val="([^"]*)"\/>/g)].map((match) => match[1]);
-        expect(sizes).toEqual(['10', '400', '1', '11.5', '14']);
+        expect(sizes).toEqual(['10', '409', '1', '11.5', '14']);
+    });
+
+    test("a size Excel holds, its largest or one between half points, comes back from an import's export whole", () => {
+        const styles = fixtureStyles({
+            fonts: [
+                '<font><sz val="409"/><name val="Calibri"/></font>',
+                '<font><sz val="10.25"/><name val="Calibri"/></font>',
+            ],
+            xfs: ['<xf fontId="1"/>', '<xf fontId="2"/>'],
+        });
+        const data = rowsXml([
+            ['A1', 'big', 1],
+            ['A2', 'quarter', 2],
+        ]);
+        const bytes = exportXlsx(xlsxToSheets(xlsxFixture({ sheets: [{ data }], styles })));
+        const xml = new TextDecoder().decode(openZip(bytes).read('xl/styles.xml'));
+        const sizes = [...xml.matchAll(/<sz val="([^"]*)"\/>/g)].map((match) => match[1]);
+        expect(sizes).toEqual(['10', '409', '10.25']);
     });
 
     test("Inter at the sheet's default size is the first font, so a column width counts its digit", () => {

@@ -279,7 +279,7 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
             ff: 'Source Serif 4',
         });
         expect(runStyleOf({ fc: '#f00' }).fc).toBe('#f00');
-        expect(runStyleOf({ fs: 1e9 }).fs).toBe(400);
+        expect(runStyleOf({ fs: 1e9 }).fs).toBe(409);
         expect(runStyleOf({ ff: 'Curlz MT' }).ff).toBe('Curlz MT');
     });
 });

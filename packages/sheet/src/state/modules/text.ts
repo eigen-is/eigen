@@ -3,7 +3,7 @@
 // draws, and the row's auto height asks for the same layout. Only the text measurements are cached,
 // until clearMeasureTextCache.
 
-import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cellWrapsText } from '../../engine/format';
 import type { Cell, CellStyle } from '../../engine/types';
@@ -169,7 +169,7 @@ export function getFontSet(format: CellStyle | null | undefined) {
     fontAttr.push(!format?.bl ? 'normal' : 'bold');
 
     // font-size
-    fontAttr.push(`${format?.fs || SHEET_DEFAULT_FONT_SIZE}pt`);
+    fontAttr.push(`${cellFontSize(format?.fs)}pt`);
 
     return `${fontAttr.join(' ')} "${cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name}",${FALLBACK_FAMILIES}`;
 }
@@ -403,7 +403,7 @@ export function getCellTextInfo(
 
         cancelLine = normalizedCellAttr(cell, 'cl'); // cancelLine
         underLine = normalizedCellAttr(cell, 'un'); // underLine
-        fontSize = normalizedCellAttr(cell, 'fs');
+        fontSize = cellFontSize(cell.fs);
 
         value = cell.m;
         if (isNil(value)) {
