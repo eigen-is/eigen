@@ -195,6 +195,12 @@ describe('readFigureAttrs', () => {
         ).toMatchObject({ caption: null, width: null, alignment: null, layout: null, offsetX: null, offsetY: null });
     });
 
+    test('reads a width of 0 or less as unset, and one wider than the largest paper as that paper', () => {
+        expect(readFigureAttrs({ width: 0 }).width).toBeNull();
+        expect(readFigureAttrs({ width: -50 }).width).toBeNull();
+        expect(readFigureAttrs({ width: 1e9 }).width).toBe(mmToPx(MAX_PAPER_MM));
+    });
+
     test('reads a positioned figure, its far offsets at the largest paper', () => {
         expect(readFigureAttrs({ layout: 'behind', offsetX: -1e9, offsetY: 64 })).toMatchObject({
             layout: 'behind',

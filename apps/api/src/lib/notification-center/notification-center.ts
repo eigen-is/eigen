@@ -1,6 +1,7 @@
 // The notifications of a user's Home, kept in their own SQLite database. Other code adds one, such as an access
 // request or a calendar invitation, and the user lists, reads and removes them in the app. A repeat with the same
-// tag can replace the older notification within a short time, instead of piling up.
+// tag always replaces the older notification, instead of piling up. One that asks to coalesce and comes within a
+// short time of it raises no new live alert.
 
 import { randomUUID } from 'node:crypto';
 import type { Notification, NotificationPersistInput } from '@workspace/lib/types/notification';

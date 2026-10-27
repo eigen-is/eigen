@@ -289,6 +289,22 @@ test('Shift and an arrow key resize a figure with no width from the width it is 
     expect(widthAt2(editor)).toBe(260);
 });
 
+// A collaborator can store any width: one that isn't a positive number resizes from the drawn width, as no width does.
+test.each([['wide'], [-50]])(
+    'Shift and an arrow key resize a figure stored %p wide to a finite width',
+    async (width) => {
+        const junk = { type: 'figure', attrs: { src: 'data:image/png;base64,', width } };
+        const { editor, box } = await mount([paragraph(text('a'), junk)]);
+        Object.defineProperty(box.querySelector('img'), 'clientWidth', { value: 250 });
+        await act(async () => {
+            editor.commands.setNodeSelection(2);
+        });
+
+        await press(editor, 'ArrowRight');
+        expect(widthAt2(editor)).toBe(260);
+    },
+);
+
 // Shift+ArrowRight from before a figure selects it as text, and the next press extends that selection.
 test('Shift and an arrow key leave a text selection of a figure to the browser', async () => {
     const { editor } = await mount();

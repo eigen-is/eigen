@@ -6,7 +6,7 @@ import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
-import { FigureNode, readFigureFrameAttrs, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
+import { FigureNode, readFigureFrameAttrs, readFrameWidth, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
 import { ImagePlaceholder } from '@workspace/ui/components/media';
@@ -46,7 +46,7 @@ function FigureView(props: NodeViewProps) {
         [editor, getPos],
     );
 
-    const width = node.attrs.width;
+    const width = readFrameWidth(node.attrs.width);
     const mediaName: string = node.attrs.mediaName ?? '';
     const src = resolveMediaUrl(mediaName) || node.attrs.src || '';
     const showPlaceholder = !src;
@@ -93,7 +93,7 @@ function FigureView(props: NodeViewProps) {
         imageProcessed.current = true;
 
         if (hasIntrinsicSize) {
-            if (!node.attrs.width) {
+            if (!width) {
                 setAttributes({ width: Math.round(Math.min(nw, maxWidth)) });
             }
             return;
@@ -101,7 +101,7 @@ function FigureView(props: NodeViewProps) {
 
         // SVGs without explicit dimensions report 0x0 — set a width, then read
         // the rendered aspect ratio after the browser lays out using the viewBox
-        if (!node.attrs.width) {
+        if (!width) {
             setAttributes({ width: Math.round(maxWidth === Infinity ? FIGURE_DEFAULT_WIDTH : maxWidth) });
         }
         requestAnimationFrame(() => {
@@ -110,7 +110,7 @@ function FigureView(props: NodeViewProps) {
             const h = imageRef.current.clientHeight;
             if (w > 0 && h > 0) setAspectRatio(w / h);
         });
-    }, [getMaxWidth, node.attrs.width, setAttributes]);
+    }, [getMaxWidth, setAttributes, width]);
 
     const displayWidth = resize.preview?.size.width ?? width;
     // A picture no browser draws (WMF, EMF) shows its alt text, which a small width squeezes, so its box takes 10rem,
@@ -182,7 +182,7 @@ export const Figure = FigureNode.extend<FigureFrameOptions>({
             const drawn =
                 (figure instanceof Element && figure.querySelector('img')?.clientWidth) || FIGURE_DEFAULT_WIDTH;
             return this.editor.commands.resizeFigure(selection.from, {
-                width: clampFigureWidth((selection.node.attrs.width || drawn) + delta, maxWidth),
+                width: clampFigureWidth((readFrameWidth(selection.node.attrs.width) ?? drawn) + delta, maxWidth),
             });
         };
         return Object.fromEntries(

@@ -1,5 +1,5 @@
-// A forward's parts ride in history state only until its first save, which embeds them, so a reload of
-// the saved draft finds no parts to attach a second time.
+// A forward's parts ride in history state until a saved draft holds them all. The first save can run while one
+// still uploads, so its URL rewrite keeps them, and a reload before the next save attaches them again.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { NavigateOptions } from '@tanstack/react-router';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
@@ -40,17 +40,31 @@ const part: FileSubject = {
     attachment: true,
 };
 
-test("the first save's URL rewrite drops the forwarded parts and keeps the compose session", async () => {
+async function renderActions() {
+    navigations.length = 0;
     const seen: { actions?: ReturnType<typeof useMailActions> } = {};
     function Probe() {
         seen.actions = useMailActions();
         return null;
     }
     ({ unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Probe))));
-    seen.actions?.handleDraftIdAssigned('draft-1');
+    if (!seen.actions) throw new Error('the actions never rendered');
+    return seen.actions;
+}
+
+test("the first save's URL rewrite keeps the forwarded parts and the compose session", async () => {
+    (await renderActions()).handleDraftIdAssigned('draft-1');
 
     const { state, search } = navigations[0] ?? {};
     expect(typeof search === 'function' ? search({}) : search).toEqual({ mailId: 'draft-1', mode: 'compose' });
+    expect(state).toBe(true);
+});
+
+test('a saved draft that holds the forwarded parts drops them and keeps the compose session', async () => {
+    (await renderActions()).handleForwardedPartsSaved();
+
+    const { state, search } = navigations[0] ?? {};
+    expect(search).toBe(true);
     if (typeof state !== 'function') throw new Error('the rewrite must update the history state, not replace it');
     const after = state({ __TSR_index: 0, forwardedParts: [part], composeSessionKey: 'session-1' });
     expect(after.forwardedParts).toBeUndefined();

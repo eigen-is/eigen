@@ -80,20 +80,20 @@ export function FigureLayoutSection({
     layout,
     alignment,
     caption,
-    inBand = false,
+    alignOnly = false,
     inFlowOnly,
     onChange,
 }: {
     layout: FigureLayout;
     alignment: FigureAlignment;
     caption: string;
-    inBand?: boolean;
+    alignOnly?: boolean;
     inFlowOnly: boolean;
     onChange: (attributes: FigureFrameAttrs) => void;
 }) {
     return (
         <PropertySection title="Layout">
-            {!inBand && (
+            {!alignOnly && (
                 <PropertyRow label="Style">
                     <div className="flex items-center gap-1">
                         {figureLayoutLooks(inFlowOnly).map(({ layout: option, label, icon: Icon }) => (
@@ -110,7 +110,7 @@ export function FigureLayoutSection({
                     </div>
                 </PropertyRow>
             )}
-            {(inBand || layout === 'block') && (
+            {(alignOnly || layout === 'block') && (
                 <PropertyRow label="Align">
                     <AlignmentPicker
                         value={layout === 'block' ? alignment : undefined}
@@ -191,7 +191,7 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
                 layout={layout}
                 alignment={alignment}
                 caption={caption}
-                inBand={inBand(editor)}
+                alignOnly={inBand(editor)}
                 inFlowOnly={inFlowOnly}
                 onChange={(attributes) => setImageLayout(editor, attributes)}
             />
