@@ -1,3 +1,7 @@
+// Sets a user's password without the old one, for an admin's reset and the `./eigen reset-password` command. The
+// reset signs the user out everywhere and revokes their app passwords, because those open mail and DAV without the
+// password. A guest has no password to reset.
+
 import { eq } from 'drizzle-orm';
 import { apikey } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';

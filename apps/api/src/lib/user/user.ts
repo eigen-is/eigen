@@ -1,5 +1,5 @@
-// The User type and the lookups of the server-wide users database: a user by email or id, their org and team
-// memberships, their org role and the org's admins and owner. Routes, homes and the auth hooks read users here.
+// The User type and the lookups in the server-wide users database, such as a user by email or id, their org and
+// team memberships and their org role. Routes, homes and the auth hooks read users through here.
 
 import { and, eq, inArray } from 'drizzle-orm';
 import { member, teamMember, user } from '../../../auth-schema';

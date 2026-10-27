@@ -1,3 +1,6 @@
+// Which homes a backup may be of, and where such a home's folder lives. The backup routes and the folder resolver
+// both ask requireBackableHome, so a guest's home is refused in one place.
+
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { getDataRoot, homeDirUnder } from '../config/paths';
 import { ApiError } from '../core/errors';
