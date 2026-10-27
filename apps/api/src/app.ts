@@ -5,6 +5,7 @@
 import cors from '@elysiajs/cors';
 import { serverTiming } from '@elysiajs/server-timing';
 import swagger from '@elysiajs/swagger';
+import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive';
 import Elysia from 'elysia';
 import { rateLimit } from 'elysia-rate-limit';
 import { clientIpKey } from './lib/auth/access';
@@ -91,8 +92,8 @@ export const app = new Elysia({
             methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
             credentials: true,
             allowedHeaders: ['Content-Type', 'Authorization'],
-            // The dev client is cross-origin and names a download from this header.
-            exposeHeaders: ['Content-Disposition'],
+            // The dev client is cross-origin, names a download from Content-Disposition and toasts an export's summary.
+            exposeHeaders: ['Content-Disposition', EXPORT_SUMMARY_HEADER],
         }),
     )
     .use(

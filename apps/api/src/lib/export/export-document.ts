@@ -1,6 +1,6 @@
 // An export's main-thread entry, which the export route calls: the container's type and the format pick the job, the
 // transform process renders it, and a PDF is that document through WeasyPrint. The media the document names is
-// prepared here, beside the Mount.
+// prepared here, beside the Mount, and what the writer left out comes back as a summary for the user.
 
 import { DOCX_MIME, PPTX_MIME, XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
@@ -8,11 +8,13 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { getPublicOrigin } from '../config/server-config';
 import { ApiError } from '../core/errors';
+import { lossSummary } from '../document/transform/losses';
 import type {
     EigendocExportFormat,
     ExportTransformJob,
     SheetExportFormat,
     SlidesExportFormat,
+    TransformWarning,
     VectorExportFormat,
 } from '../document/transform/protocol';
 import { runTransformToBytes } from '../document/transform/run-transform';
@@ -20,10 +22,12 @@ import type { Mount } from '../mount';
 import { collectExportMedia } from './media';
 import { htmlToPdf } from './weasyprint';
 
+// `summary` says what the file left out, for the toast after a download or a print, or is null.
 type ExportResult = {
     data: Buffer;
     contentType: string;
     fileName: string;
+    summary: string | null;
 };
 
 // One envelope per download format: the document the transform process renders, the headers the
@@ -116,26 +120,27 @@ async function serveExport(
 ): Promise<ExportResult> {
     // A deck's PDF document lays its slides out at 1:1 (renderPrintPage), so WeasyPrint's zoom scales them
     // onto the sheet.
-    const { data: bytes, zoom } = await runDocumentExport(job, mount, path, signal);
+    const { data: bytes, zoom, warnings } = await runDocumentExport(job, mount, path, signal);
     return {
         // WeasyPrint runs in a subprocess of its own, so it never blocks the event loop, over the
         // document the transform process rendered.
         data: envelope.transformFormat === 'pdf-html' ? await htmlToPdf(bytes, zoom, signal) : bytes,
         contentType: envelope.contentType,
         fileName: `${stripEigenExtension(path.name)}.${envelope.extension}`,
+        summary: lossSummary(warnings, 'export'),
     };
 }
 
 // The one main-thread entry every export takes: run the shared transform seam, and prepare
 // the media the child names once it has read the document. The child returns the finished
 // bytes, the UTF-8 document for html and pdf-html or the zip for xlsx, docx and pptx, and a
-// deck's pdf-html the zoom WeasyPrint prints it at.
+// deck's pdf-html the zoom WeasyPrint prints it at, with the warnings that count what it left out.
 export async function runDocumentExport(
     job: ExportJob,
     mount: Mount,
     path: DrivePath,
     signal?: AbortSignal,
-): Promise<{ data: Buffer; zoom?: number }> {
+): Promise<{ data: Buffer; zoom?: number; warnings: TransformWarning[] }> {
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
     // docx document property carries the stripped one, applied in the child. Root-relative
     // links take the public origin in every format, none on a checkout's dev server.

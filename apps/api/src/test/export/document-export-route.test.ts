@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { inflateSync } from 'node:zlib';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive';
+import { serializeFill } from '@workspace/lib/vector';
 import type { MathRow } from '@workspace/math';
 import { writeMathml } from '@workspace/math';
 import { EXPORT_CSP } from '../../lib/export/sanitize';
@@ -28,6 +30,7 @@ const mountId = 'default';
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let docPath: DrivePath;
 let deckPath: DrivePath;
+let hatchedDeckPath: DrivePath;
 
 beforeAll(async () => {
     ctx = await getTestContext();
@@ -57,6 +60,23 @@ beforeAll(async () => {
     seedDeckDoc(deckCollab.doc, buildGoldenDeckScene());
     const deck = await home.drive.resolveFile(mountId, deckPath.id);
     await seedDocumentMedia(deck.mount, deck.path, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
+
+    // The same deck with its title box hatched, a fill a pptx draws solid.
+    hatchedDeckPath = await drivePost<DrivePath>(
+        ctx.alice.user.sessionToken,
+        ctx.alice.user.id,
+        mountId,
+        `folder/${root.id}/create/slides`,
+        { fileName: 'Hatched Deck' },
+    );
+    const hatched = buildGoldenDeckScene();
+    const fill = serializeFill({ type: 'solid', color: '#ff0000', style: 'hachure' });
+    hatched.elements = hatched.elements.map((element) =>
+        element.id === 'el-1' && element.type === 'richtext' ? { ...element, fill } : element,
+    );
+    seedDeckDoc((await home.drive.getCollabDocument(mountId, hatchedDeckPath.id)).doc, hatched);
+    const hatchedDeck = await home.drive.resolveFile(mountId, hatchedDeckPath.id);
+    await seedDocumentMedia(hatchedDeck.mount, hatchedDeck.path, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
 });
 
 function exportRequest(pathId: string, format: string) {
@@ -151,6 +171,14 @@ describe('Eigenslides export route — response contract', () => {
                 .subarray(1, 4)
                 .toString(),
         ).toBe('PNG');
+        // A deck the pptx holds whole says nothing about losses.
+        expect(res.headers.get(EXPORT_SUMMARY_HEADER)).toBeNull();
+    }, 120_000);
+
+    test('a pptx that draws a fill simpler says so in its summary header', async () => {
+        const res = await exportRequest(hatchedDeckPath.id, 'pptx');
+        expect(res.status).toBe(200);
+        expect(decodeURIComponent(res.headers.get(EXPORT_SUMMARY_HEADER) ?? '')).toBe('1 fill was simplified.');
     }, 120_000);
 
     test('an unsupported format is rejected with 400', async () => {

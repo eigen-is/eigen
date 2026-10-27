@@ -27,6 +27,8 @@ A PDF or web page shows a cell that mixes several styles in the cell's own style
 
 In the PDF and the web page, text that doesn't fit its cell's row is cut off at the row's edge, as it is in the spreadsheet.
 
+When the file leaves something out, cuts it short, or draws it simpler, a message says so after the download, for example "2 sheets were cut to fit." An Excel file says so too when a text or formula is longer than Excel allows, or a sheet has a name Excel refuses, for example "1 sheet was renamed."
+
 ## What carries over to Excel
 
 When you download as **Microsoft Excel (.xlsx)**, the following are preserved:

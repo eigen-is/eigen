@@ -1,7 +1,11 @@
+// File › Print from the server's PDF, which Docs' print menu calls. The PDF opens in a tab of its own to print from,
+// and when it can't be had the editor falls back to browser print and says what that leaves out.
+
 import { getDriveExportUrl } from '@workspace/lib/api';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { AppError, getErrorMessage } from '../../api-error';
+import { toastExportSummary } from './use-export-document';
 
 // A tab that navigated away runs no listener of ours, so its closing is polled. The blob URL lives until then,
 // so a reload of the tab still finds the PDF.
@@ -15,7 +19,7 @@ function printWithoutBands(fallback: () => void, reason: string): void {
 // Print as Google prints: the server's PDF, which draws the headers, footers and page numbers browser print leaves
 // out, in a tab of its own to print from. A popup blocker allows the tab only inside the click or key press, so it
 // opens before the first await. `fallback` is browser print, for a tab whose edits the server may not have, a
-// blocked tab or a PDF that fails.
+// blocked tab or a PDF that fails. A PDF that left something out says so, as a download does.
 export function usePrintPdf(fallback: () => void): {
     printPdf: (ownerId: string, mountId: string, pathId: string, canUsePdf: boolean) => Promise<void>;
 } {
@@ -36,6 +40,7 @@ export function usePrintPdf(fallback: () => void): {
                 if (tab.closed) return;
                 const url = URL.createObjectURL(blob);
                 tab.location.href = url;
+                toastExportSummary(response.headers);
                 const poll = setInterval(() => {
                     if (!tab.closed) return;
                     clearInterval(poll);

@@ -29,9 +29,10 @@ export function filenameFromDisposition(header: string | null, fallback: string)
 
 // A download the browser cannot do from an `<a href>` alone — the response's own Content-Disposition
 // names the file, and a POST carries the selection. There is no mutation to carry a failure, so this
-// reports its own; the flag drives the caller's spinner.
+// reports its own; the flag drives the caller's spinner. A saved download resolves to the response's
+// headers, for a caller that reads more of them; a failed one to null.
 export function useFileDownload(): {
-    download: (url: string, fallbackName: string, init?: RequestInit) => Promise<void>;
+    download: (url: string, fallbackName: string, init?: RequestInit) => Promise<Headers | null>;
     isDownloading: boolean;
 } {
     const [isDownloading, setIsDownloading] = useState(false);
@@ -46,8 +47,10 @@ export function useFileDownload(): {
             }
             const blob = await response.blob();
             downloadBlob(blob, filenameFromDisposition(response.headers.get('Content-Disposition'), fallbackName));
+            return response.headers;
         } catch (e) {
             onMutationError(e);
+            return null;
         } finally {
             setIsDownloading(false);
         }

@@ -2,6 +2,7 @@
 // click or key press, so it must open before the first await; every way the PDF can't be had falls back to browser
 // print, says what is left out, and leaves no empty tab behind.
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { EXPORT_SUMMARY_HEADER } from '../../../../types/drive';
 import { installHappyDom } from '../../../happy-dom';
 
 installHappyDom();
@@ -93,6 +94,20 @@ describe('usePrintPdf', () => {
         expect(tab?.location.href).toBe('blob:http://localhost:3000/pdf');
         expect(fallbacks).toBe(0);
         expect(toasts).toEqual([]);
+    });
+
+    test('says what the PDF left out once it shows in its tab', async () => {
+        const summary = '1 header or footer was cut to fit.';
+        answer = async () =>
+            new Response('%PDF-1.7', { headers: { [EXPORT_SUMMARY_HEADER]: encodeURIComponent(summary) } });
+        const { latest, unmount } = await renderPrint();
+
+        await latest.printPdf('owner', 'mount', 'path', true);
+        await unmount();
+
+        expect(tab?.location.href).toBe('blob:http://localhost:3000/pdf');
+        expect(fallbacks).toBe(0);
+        expect(toasts).toEqual([`info: ${summary}`]);
     });
 
     test('keeps the blob URL while the tab is open and revokes it once the tab closes', async () => {

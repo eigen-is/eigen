@@ -156,7 +156,7 @@ export const COUNTED_WARNING_CODES = [
     'even-bands-dropped',
     'band-images-unanchored',
     'band-content-dropped',
-    'band-blocks-cut',
+    'bands-cut',
     'sheets-cut',
     'sheets-left-out',
     'conditional-formats-dropped',
