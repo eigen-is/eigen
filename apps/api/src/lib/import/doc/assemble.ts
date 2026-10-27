@@ -109,9 +109,9 @@ export function placeAnchors(blocks: JSONContent[], normal: NormalStyle): JSONCo
             const contained = depth > 0 || quotes > 0;
             for (const { attrs } of anchored) {
                 if (!attrs) continue;
-                attrs['offsetX'] = wholePx(attrs['offsetX'] - anchorIndentPx(indent, node));
-                const fromLine = attrs['offsetY'];
-                const y = fromLine === null ? 0 : fromLine + anchorPaddingPx(node, contained, normal);
+                const { offsetX, offsetY } = readFigureFrameAttrs(attrs);
+                attrs['offsetX'] = wholePx((offsetX ?? 0) - anchorIndentPx(indent, node));
+                const y = offsetY == null ? 0 : offsetY + anchorPaddingPx(node, contained, normal);
                 attrs['offsetY'] = readFigureFrameAttrs({ offsetY: wholePx(y) }).offsetY;
             }
             node.content = [...anchored, ...(node.content ?? []).filter((child) => !anchored.includes(child))];
@@ -131,7 +131,9 @@ export function placeAnchors(blocks: JSONContent[], normal: NormalStyle): JSONCo
 }
 
 // Never -0, which a stored doc would keep apart from 0.
-const wholePx = (px: number) => Math.round(px) || 0;
+function wholePx(px: number): number {
+    return Math.round(px) || 0;
+}
 
 // An equation is set off from the text and equations beside it by a space where none is.
 export function inlineText(nodes: JSONContent[]): string {
