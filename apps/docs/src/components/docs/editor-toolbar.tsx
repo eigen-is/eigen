@@ -169,10 +169,9 @@ export const EditorToolbar = ({
     // A range of mixed alignments checks no Align item, and its trigger draws Left's icon.
     const AlignmentIcon = ALIGNMENT_LOOK[active.alignment ?? 'left'].icon;
     const { exportPath, isExporting } = useDocumentExport();
-    // The icon row folds from its right end, as Google's does, so its order is its priority order; all it
-    // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Normal text") its three cuts
-    // sat centered beside five menus from 1086, 1268 and 1483px. View's trigger, about 58px wide, moves each cut
-    // by twice its width, as the row stays centered in the bar.
+    // The icon row folds from its right end, as Google's does, so its order is its priority order. All it folds
+    // stays in Format and Insert. Each breakpoint is where a part of the row fits beside the menus at its widest,
+    // with a link in a JetBrains Mono "Normal text". The row stays centered in the bar.
     const showsRow = useMediaQuery('(min-width: 1210px)');
     const showsMiddle = useMediaQuery('(min-width: 1390px)');
     const showsAll = useMediaQuery('(min-width: 1610px)');

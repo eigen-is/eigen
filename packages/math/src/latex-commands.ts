@@ -32,8 +32,8 @@ type LatexRow =
     | { kind: 'notation' }
     | { kind: 'pmod' }
     // The braket package's commands, such as \ket and \braket: a fenced row around the argument. With `split`, each |
-    // in the argument is a separator. `join` is what physics reads after the argument as a ket, making ⟨a|b⟩: a
-    // command, as \ket after \bra, or a group.
+    // in the argument is a separator. Physics can join a ket to the argument, which makes ⟨a|b⟩. `join` says what it
+    // reads as that ket: a command right after the argument, as \ket after \bra, or a group.
     | { kind: 'braket'; open: string; close: string; split: boolean; stars: number; join?: 'ket' | 'group' }
     // The physics package's \expval, \mel and \ketbra. Their stars only size the fences, which the tree doesn't keep.
     | { kind: 'expectation'; stars: number }

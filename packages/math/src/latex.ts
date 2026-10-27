@@ -298,14 +298,15 @@ class LatexReader {
         const braced = this.#isChar(index, '{');
         const end = Math.min(braced ? this.#partners[index] : this.#argumentEnd(index, nesting), this.#end);
         const bars: number[] = [];
-        for (let at = braced ? index + 1 : index; at < end; at = this.#atomEnd(at, nesting + 1))
+        for (let at = braced ? index + 1 : index; at < end; at = this.#atomEnd(at, nesting + 1)) {
             if (this.#isChar(at, '|')) bars.push(at);
+        }
         return bars;
     }
 
-    // Where the ket starts that physics joins to the bra-ket argument at `index`, making ⟨a|b⟩: after a \ket right
-    // after \bra{a}, or a group after a \braket{a} without a bar. Physics reads only a group as the ket's argument, so
-    // `\bra{a}\ket\psi` is ⟨a|⟩ before ψ. Undefined where nothing joins.
+    // Where the ket starts that physics joins to the bra-ket argument at `index`, which makes ⟨a|b⟩. A \ket right after
+    // \bra{a} joins, and so does a group right after a \braket{a} that has no bar. Physics reads only a group as the
+    // ket's argument, so `\bra{a}\ket\psi` is ⟨a|⟩ followed by ψ. Undefined where nothing joins.
     #ketAt(command: Extract<LatexCommand, { kind: 'braket' }>, index: number, nesting: number): number | undefined {
         const end = this.#argumentEnd(index, nesting);
         const next = this.#commandAt(end);
@@ -639,8 +640,8 @@ class LatexReader {
         return { kind: 'fenced', open, close, separator: parts.length > 1 ? (separator ?? '') : '', parts };
     }
 
-    // A bra-ket's argument as the parts of a fenced row. Where it splits, each | at the argument's top is a separator,
-    // as \Braket makes it a \middle|; one in a group or a delimiter's own stays a character.
+    // A bra-ket's argument as the parts of a fenced row. Where the command splits, each | at the top of the argument is
+    // a separator, as \Braket makes it a \middle|. A | inside a group, or a delimiter's own, stays a character.
     #braket(open: string, close: string, split: boolean, style: Style, depth: number): MathNode {
         const bars = split ? this.#bars(this.#pos, 0) : [];
         const parts: MathRow[] = [];
