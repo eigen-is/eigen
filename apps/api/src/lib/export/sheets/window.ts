@@ -22,7 +22,7 @@ import {
     sheetFloatingBox,
 } from '@workspace/lib/sheets';
 import { getElementBounds } from '@workspace/lib/vector';
-import { richText, withCfRanges } from '@workspace/sheet/engine';
+import { isWellFormedCfRule, richText, withCfRanges } from '@workspace/sheet/engine';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 
 // A window keeps at most maxRows shown rows and maxCols shown columns from the top-left of the used range, and at most
@@ -370,18 +370,17 @@ function windowMerges(merges: MergeCell[], range: GridRange): Record<string, Mer
 }
 
 // A rule may name the whole sheet while the window is small, and the evaluator visits every cell of every range,
-// running a formula rule's engine once per cell. Clipping keeps that work to what is rendered. A rule that misses the
-// window drops out, and a formula rule keeps its anchor (withCfRanges). No reader checks a rule's shape, so one a peer
-// stored without ranges, or with a range that has no rows or columns, drops out too.
+// running a formula rule's engine once per cell. Clipping keeps that work to the window's rows and columns, its hidden
+// ones included. A rule that misses the window drops out, and a formula rule keeps its anchor (withCfRanges). So does
+// a rule whose shape the evaluator can't read, as a peer can store anything.
 function clipRulesToWindow(
     rules: ConditionalFormatRule[],
     [firstRow, lastRow, firstCol, lastCol]: GridRange,
 ): ConditionalFormatRule[] {
     const clipped: ConditionalFormatRule[] = [];
     for (const rule of rules) {
-        const ranges = Array.isArray(rule?.cellrange) ? rule.cellrange : [];
-        if (!ranges.every((range) => Array.isArray(range?.row) && Array.isArray(range.column))) continue;
-        const cellrange = ranges
+        if (!isWellFormedCfRule(rule)) continue;
+        const cellrange = rule.cellrange
             .map((range) => ({
                 row: [Math.max(range.row[0], firstRow), Math.min(range.row[1], lastRow)],
                 column: [Math.max(range.column[0], firstCol), Math.min(range.column[1], lastCol)],

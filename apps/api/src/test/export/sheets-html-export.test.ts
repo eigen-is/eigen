@@ -2030,6 +2030,70 @@ describe('Sheets HTML export — the window over forged keys', () => {
         expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('background:#00ff00');
     });
 
+    test('a rule whose values, looks or colors a peer forged is dropped, and the export and the preview still render', () => {
+        const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
+        const at = [{ row: [5, 6], column: [0, 0] }];
+        const red = { cellColor: '#ff0000' };
+        // As a peer's update arrives: JSON no type checked. The formula rule starts above the window, so its anchor moves.
+        const forged = JSON.parse(
+            JSON.stringify([
+                {
+                    type: 'default',
+                    conditionName: 'formula',
+                    cellrange: [{ row: [0, 10], column: [0, 0] }],
+                    format: red,
+                    conditionValue: null,
+                },
+                { type: 'default', conditionName: 'greaterThan', cellrange: at, format: red },
+                { type: 'default', conditionName: 'greaterThan', cellrange: at, conditionValue: [1] },
+                { type: 'default', conditionName: 'equal', cellrange: at, format: red, conditionValue: [null] },
+                { type: 'dataBar', cellrange: at },
+                { type: 'colorGradation', cellrange: at, format: ['red', 'blue'] },
+                {
+                    type: 'default',
+                    conditionName: 'greaterThan',
+                    cellrange: [{ row: [6, 5], column: [0, 0] }],
+                    format: red,
+                    conditionValue: [1],
+                },
+            ]),
+        );
+        const valid: ConditionalFormatRule = {
+            type: 'default',
+            cellrange: [{ row: [5, 6], column: [0, 0] }],
+            format: { cellColor: '#00ff00' },
+            conditionName: 'greaterThan',
+            conditionRange: [],
+            conditionValue: [1],
+        };
+        const sheet = makeSheet(
+            [
+                { r: 5, c: 0, v: cell },
+                { r: 6, c: 0, v: cell },
+            ],
+            [...forged, valid],
+        );
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
+        expect(classesFor(out, 'background:#00ff00')).toHaveLength(1);
+        expect(out.css).not.toContain('#ff0000');
+        expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('background:#00ff00');
+    });
+
+    // The editor stores an empty list for a rule that takes no value, and the evaluator reads the first one.
+    test('a date rule with no value draws nothing and fails nothing', () => {
+        const date = { v: 46_000, m: '2025-12-09', ct: { fa: 'yyyy-mm-dd', t: 'd' } };
+        const rule: ConditionalFormatRule = {
+            type: 'default',
+            cellrange: [{ row: [0, 0], column: [0, 0] }],
+            format: { cellColor: '#ff0000' },
+            conditionName: 'occurrenceDate',
+            conditionRange: [],
+            conditionValue: [],
+        };
+        const sheet = makeSheet([{ r: 0, c: 0, v: date }], [rule]);
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').html).toContain('>2025-12-09<');
+    });
+
     test('an empty tab between two others adds no page', () => {
         const tab = (id: string, cells: Sheet['celldata']): Sheet => ({ id, name: id, order: 0, celldata: cells });
         const a = tab('a', [{ r: 0, c: 0, v: { v: 'a', m: 'a' } }]);

@@ -10,7 +10,7 @@ import type {
 } from '@workspace/lib/sheets';
 import { parseCellKey, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { iscelldata, rangeToA1, toA1, withCfRanges } from '@workspace/sheet/engine';
+import { iscelldata, isWellFormedCfRule, rangeToA1, toA1, withCfRanges } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import {
     CF_CELL_IS_CONDITION,
@@ -73,23 +73,15 @@ function conditionalFormattingXml(rules: ConditionalFormatRule[], styles: StyleR
         .join('');
 }
 
-// No reader checks a rule's shape, so a peer's can be anything. Its ranges are cut to Excel's grid, which drops one
-// outside it, and a rule whose looks or values are no list has none.
+// A rule's ranges cut to Excel's grid, which drops one outside it. A peer can store anything, so a rule whose shape
+// the engine can't read has none.
 function rangesInGrid(rule: ConditionalFormatRule): SingleRange[] {
-    const listed = rule.type === 'default' ? rule.conditionValue : rule.type === 'icons' ? [] : rule.format;
-    if (!Array.isArray(rule.cellrange) || !Array.isArray(listed)) return [];
-    return rule.cellrange.flatMap((range) => {
-        const row = spanInGrid(range?.row, REFERENCE_ROW_COUNT);
-        const column = spanInGrid(range?.column, REFERENCE_COLUMN_COUNT);
-        return row && column ? [{ row, column }] : [];
+    if (!isWellFormedCfRule(rule)) return [];
+    return rule.cellrange.flatMap(({ row, column }) => {
+        const rows = [Math.max(0, row[0]), Math.min(REFERENCE_ROW_COUNT - 1, row[1])];
+        const columns = [Math.max(0, column[0]), Math.min(REFERENCE_COLUMN_COUNT - 1, column[1])];
+        return rows[0] <= rows[1] && columns[0] <= columns[1] ? [{ row: rows, column: columns }] : [];
     });
-}
-
-function spanInGrid(ends: number[] | undefined, count: number): [number, number] | undefined {
-    if (!Array.isArray(ends) || ends.length !== 2 || !ends.every(Number.isInteger)) return undefined;
-    const first = Math.max(0, Math.min(...ends));
-    const last = Math.min(count - 1, Math.max(...ends));
-    return first <= last ? [first, last] : undefined;
 }
 
 function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
