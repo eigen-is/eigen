@@ -20,7 +20,8 @@ import {
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
 import { nodeLook, QUOTE_LOOK } from '../../document/looks';
-import { hastToHtml, highlightCode } from '../../document/lowlight';
+import type { CodeHighlighter } from '../../document/lowlight';
+import { codeHighlighter, hastToHtml } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
 import { renderEquations } from './equations';
 
@@ -45,12 +46,13 @@ export function renderDocHtml(
 ): string {
     const content = inEditorMarkOrder(withTrailingBreaks(flattenNestedFootnotes(json)));
     const footnotes = options?.pageFootnotes ? undefined : footnoteList();
+    const highlight = codeHighlighter();
     const html = renderToHTMLString({
         content,
         extensions: docExtensions(),
         options: {
             nodeMapping: {
-                codeBlock: ({ node }) => renderCodeBlockNode(node),
+                codeBlock: ({ node }) => renderCodeBlockNode(node, highlight),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
                 chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
@@ -83,10 +85,12 @@ function withTrailingBreaks(node: JSONContent): JSONContent {
     return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
 }
 
-function renderCodeBlockNode(node: Node): string {
-    const language = node.attrs['language'] || '';
+// A peer can store any JSON as the language.
+function renderCodeBlockNode(node: Node, highlight: CodeHighlighter): string {
+    const attr = node.attrs['language'];
+    const language = typeof attr === 'string' ? attr : '';
     const code = node.textContent;
-    const highlighted = hastToHtml(highlightCode(language, code));
+    const highlighted = hastToHtml(highlight(language, code));
     const langClass = language ? ` language-${escapeHtml(language)}` : '';
     // withTrailingBreaks' rule: a code block holds only text, so it ends open when empty or in a newline.
     const trailingBreak = code === '' || code.endsWith('\n') ? '<br>' : '';

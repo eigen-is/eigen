@@ -7,6 +7,7 @@ import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { FIRST_PAGE_BAND, flattenNestedFootnotes, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { EigendocBands } from '../../../document/doc';
+import { codeHighlighter } from '../../../document/lowlight';
 import type { LossCounter } from '../../../document/transform/protocol';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
@@ -47,6 +48,7 @@ export function writeDocx(
         bullets: new Map(),
         checkboxes: false,
         languages: new Set(),
+        highlight: codeHighlighter(),
         images: officeImages(media, 'word/media'),
         charts: officeCharts('word'),
         lastDrawingId: 0,

@@ -122,6 +122,18 @@ describe('renderEigendocPreviewBody', () => {
         );
     });
 
+    test('a code block in a list item counts against the block cap as a top-level one does', () => {
+        const code = { type: 'codeBlock', content: [{ type: 'text', text: 'x' }] };
+        const list = {
+            type: 'bulletList',
+            content: Array.from({ length: 20 }, () => ({ type: 'listItem', content: [{ type: 'paragraph' }, code] })),
+        };
+        const body = previewOf({ type: 'doc', content: [code, list] });
+        expect(body.match(/<pre>/g)).toHaveLength(1);
+        expect(body).not.toContain('<ul>');
+        expect(body).toContain('Preview truncated');
+    });
+
     test('an empty paragraph keeps the line the editor shows', () => {
         expect(previewOf({ type: 'doc', content: [{ type: 'paragraph' }] })).toBe('<p><br></p>');
     });
