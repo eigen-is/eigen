@@ -89,6 +89,7 @@ export async function renderEigendocExport(
                     print: pdf,
                     pageFootnotes: pageNotes,
                     band: part !== 'body',
+                    anchors: part === 'body',
                     equations,
                 },
             );
@@ -101,7 +102,7 @@ export async function renderEigendocExport(
     const html = exportHtmlDocument({
         title,
         fonts: usedFamilies(body, style),
-        css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf ? PAGE_NUMBER_CSS : ''}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
+        css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf ? `${PAGE_NUMBER_CSS}${TOC_CSS}` : ''}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings };
@@ -222,6 +223,12 @@ ${page.differentFirstPage ? '@page :first { @top-center { content: element(heade
 const PAGE_NUMBER_CSS = `
 [data-type="page-number"][data-kind="page"]::after { content: counter(page); }
 [data-type="page-number"][data-kind="pages"]::after { content: counter(pages); }
+`;
+
+// A table of contents entry's page number, after a dotted leader to the right edge. attr() reads the link's #h-N; in the
+// head, as the sanitizer strips attr() from a body's CSS.
+const TOC_CSS = `
+[data-type="table-of-contents"] a::after { content: leader('.') target-counter(attr(href), page); }
 `;
 
 // A note floats to the foot of its reference's page, numbered in the text and at the note, under a short rule, as Google
