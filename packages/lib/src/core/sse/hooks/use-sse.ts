@@ -1,61 +1,41 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { handleAdminSSEvent } from '@workspace/lib/admin';
-import { useAuth } from '@workspace/lib/auth';
-import { handleCalendarSSEvent } from '@workspace/lib/calendar';
-import { handleChatSSEvent } from '@workspace/lib/chat';
-import { handleContactsSSEvent } from '@workspace/lib/contacts';
-import { handleDriveSSEvent } from '@workspace/lib/drive';
-import { handleHomeSSEvent } from '@workspace/lib/home';
-import { handleMailSSEvent } from '@workspace/lib/mail';
-import { handleNotificationSSEvent } from '@workspace/lib/notification';
-import type { SSEvent } from '@workspace/lib/types/sse';
-import { useCallback, useEffect, useRef } from 'react';
-import { getSSEEventsUrl } from '../../api';
+// Holds the signed-in tab's one event stream from its user's own Home, and hands every event to
+// handleSSEvent, which refreshes the queries the event names. The app's provider stack mounts it once.
+// It reconnects with a growing delay after the stream closes on an HTTP error.
 
-export function useSSE() {
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@workspace/lib/auth';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import { useEffect } from 'react';
+import { getSSEEventsUrl } from '../../api';
+import { handleSSEvent } from '../sse-handlers';
+
+export function useSSE(): void {
     const { isAuthenticated, user } = useAuth();
     const queryClient = useQueryClient();
-    const eventSourceRef = useRef<EventSource | null>(null);
-    const userIdRef = useRef(user?.id || '');
-    userIdRef.current = user?.id || '';
-
-    const handleEvent = useCallback(
-        (event: SSEvent) => {
-            const userId = userIdRef.current;
-            handleDriveSSEvent(event, queryClient, userId);
-            handleMailSSEvent(event, queryClient, userId);
-            handleContactsSSEvent(event, queryClient, userId);
-            handleChatSSEvent(event, queryClient);
-            handleCalendarSSEvent(event, queryClient, userId);
-            handleNotificationSSEvent(event, queryClient, userId);
-            handleAdminSSEvent(event, queryClient);
-            handleHomeSSEvent(event);
-        },
-        [queryClient],
-    );
+    const userId = user?.id;
 
     useEffect(() => {
-        if (!isAuthenticated || !user?.id) return;
+        if (!isAuthenticated || !userId) return;
 
-        const url = getSSEEventsUrl(user.id);
+        const url = getSSEEventsUrl(userId);
+        let eventSource: EventSource | null = null;
         let retryTimer: ReturnType<typeof setTimeout>;
         let retryDelay = 1000;
         let stopped = false;
 
-        function connect() {
+        const connect = () => {
             if (stopped) return;
 
             const es = new EventSource(url, { withCredentials: true });
-            eventSourceRef.current = es;
+            eventSource = es;
 
             es.onopen = () => {
                 retryDelay = 1000;
             };
 
-            es.onmessage = (event) => {
+            es.onmessage = (message) => {
                 try {
-                    const sseEvent = JSON.parse(event.data) as SSEvent;
-                    handleEvent(sseEvent);
+                    handleSSEvent(JSON.parse(message.data) as SSEvent, queryClient, userId);
                 } catch (e) {
                     console.error('Failed to parse SSE event', e);
                 }
@@ -63,28 +43,24 @@ export function useSSE() {
 
             es.onerror = () => {
                 if (stopped) return;
-                // EventSource won't auto-reconnect after HTTP errors (e.g. 502)
+                // EventSource reconnects by itself after a network error, but not after an HTTP error such as a 502.
                 if (es.readyState === EventSource.CLOSED) {
                     es.close();
-                    eventSourceRef.current = null;
+                    eventSource = null;
                     const jitter = retryDelay * 0.2 * Math.random();
                     retryTimer = setTimeout(connect, retryDelay + jitter);
                     retryDelay = Math.min(retryDelay * 2, 30000);
                 }
             };
-        }
+        };
 
         connect();
 
         return () => {
             stopped = true;
             clearTimeout(retryTimer);
-            eventSourceRef.current?.close();
-            eventSourceRef.current = null;
+            eventSource?.close();
+            eventSource = null;
         };
-    }, [isAuthenticated, user?.id, handleEvent]);
-
-    return {
-        isConnected: eventSourceRef.current?.readyState === EventSource.OPEN,
-    };
+    }, [isAuthenticated, userId, queryClient]);
 }
