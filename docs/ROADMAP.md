@@ -235,7 +235,7 @@ Still to do:
 - `packages/lib` absences (owner-scoped query keys carry `ownerId`, mutations use `onMutationError`, SSE handlers invalidate what their emitter changes) and the `types/drive.ts` split into per-concern modules (it holds a private twin of `getExtension` that cannot import the shared one from `constants/preview` without a cycle).
 - `packages/ui`.
 - The apps, thin ones last.
-- Auth, guests and the share registry (better-auth wrapper, `verifyProtocolAuth`, guest cleanup, `addRegistryEntry`), before SSO adds a second identity path.
+- Auth, guests and the share registry (better-auth wrapper, `verifyProtocolAuth`, guest cleanup, `addRegistryEntry`), before SSO adds a second identity path: cleanup done, review pending.
 - The ops path: `./eigen` backup, restore, update and rollback, `docker/` and first-run setup, as restore drills and upgrade rehearsals.
 - The SSE to query-key contract: every `sse-events.ts` emitter against `sse-handlers.ts` and the `*Keys` in `packages/lib`.
 - WebDAV and CalDAV conformance, the measured gaps first (litmus 0.17, cadaver, vdirsyncer 0.21):
