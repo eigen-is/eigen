@@ -41,12 +41,13 @@ import * as path from 'node:path';
 2. Simplify without changing behaviour: drop dead members, inline a helper with one caller, merge copies, use `??`, `??=`, `Set` and `Map` instead of hand-written versions, replace index juggling with straight code. A behaviour change is its own commit with its own test.
 3. Rename what doesn't say what it is: a function, type, constant, parameter or file named in shorthand, or spelled differently from the same concept elsewhere in the repo. A rename updates every caller in the same commit.
 4. Order the file so it reads top-down: the exports and the entry point first, then the helpers in the order they are called. Code that belongs to another file or module moves there; the same logic or fact in two files lives in one.
-5. Make types honest: a part that can be missing is optional. No new `as`.
-6. Give every class member `public`, `private` or `protected`, the narrowest that compiles.
-7. Split `import type { … }` from the value import of the same module, so each line fits.
-8. Comments: keep only the WHY a maintainer can't see in the code, and only where it adds real value. Rewrite each as you would explain it to a colleague: whole sentences, one thought each, no comma-chained clauses or private shorthand. A comment that doesn't make the code clearer goes. Delete narration, history, review reasoning and audit tags.
-9. Write the header.
-10. Neighbouring files with the same smell: fix it when it is a few lines, otherwise list it in your report.
+5. Split a long file when the split is clean. Past about 400 lines, look for a logical split, such as one concern the rest only calls into, and split there when the result is easier to understand. With no logical split, a long file stays whole. This is a recommendation, not a limit: the goal is the cleanest, easiest file to read.
+6. Make types honest: a part that can be missing is optional. No new `as`.
+7. Give every class member `public`, `private` or `protected`, the narrowest that compiles.
+8. Split `import type { … }` from the value import of the same module, so each line fits.
+9. Comments: keep only the WHY a maintainer can't see in the code, and only where it adds real value. Rewrite each as you would explain it to a colleague: whole sentences, one thought each, no comma-chained clauses or private shorthand. A comment that doesn't make the code clearer goes. Delete narration, history, review reasoning and audit tags.
+10. Write the header.
+11. Neighbouring files with the same smell: fix it when it is a few lines, otherwise list it in your report.
 
 ## Verify
 
