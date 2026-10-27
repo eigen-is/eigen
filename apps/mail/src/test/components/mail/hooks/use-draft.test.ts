@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import type { Attachment, AttachmentMeta, EmailDraft } from '@workspace/lib/types/mail';
-import { buildSaveOptions, initFields, mergeServerAttachments } from '../../../../components/mail/hooks/use-draft';
+import type { Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
+import {
+    buildSaveOptions,
+    draftReducer,
+    initFields,
+    isDirty,
+    mergeServerAttachments,
+    savedState,
+} from '../../../../components/mail/hooks/use-draft';
 
 function att(filename: string | undefined, contentType: string, index: number, size = 10): Attachment {
     return { filename, contentType, index, size, content: new Uint8Array(size) };
@@ -126,5 +133,55 @@ describe('buildSaveOptions', () => {
         const options = buildSaveOptions({ ...fields, attachments: [...fields.attachments, uploading] }, false);
         expect(options.tempAttachmentIds).toEqual(['t1']);
         expect(options.keepAttachmentIndexes).toEqual([0]);
+    });
+});
+
+describe('a forward carries the parts of the message it forwards', () => {
+    const forward: NewDraft = { subject: 'FW: Lunch', html: '<p>quoted</p>', text: 'quoted' };
+    const part = (tempId: string, filename: string): AttachmentMeta => ({
+        key: `forward-${tempId}`,
+        tempId,
+        filename,
+        size: 10,
+        contentType: 'application/pdf',
+    });
+    const opened = () => savedState(initFields(null, undefined, forward));
+
+    test('both parts of a two-part message go out with the first save, and only an edit saves', () => {
+        let state = draftReducer(opened(), { type: 'add-prefill-attachment', meta: part('t1', 'a.pdf') });
+        state = draftReducer(state, { type: 'add-prefill-attachment', meta: part('t2', 'b.pdf') });
+        // Like the quoted body, the parts are the prefill: a forward the user leaves saves no draft.
+        expect(isDirty(state)).toBe(false);
+
+        state = draftReducer(state, { type: 'set-field', field: 'to', value: 'bob@test.eigen.is' });
+        expect(isDirty(state)).toBe(true);
+        expect(buildSaveOptions(state.fields, false).tempAttachmentIds).toEqual(['t1', 't2']);
+    });
+
+    test('removing one part in the composer sends the other', () => {
+        let state = draftReducer(opened(), { type: 'add-prefill-attachment', meta: part('t1', 'a.pdf') });
+        state = draftReducer(state, { type: 'add-prefill-attachment', meta: part('t2', 'b.pdf') });
+        state = draftReducer(state, { type: 'remove-attachment', index: 0 });
+        expect(isDirty(state)).toBe(true);
+        expect(buildSaveOptions(state.fields, false).tempAttachmentIds).toEqual(['t2']);
+    });
+
+    test('a forward of a message without attachments sends none', () => {
+        const state = draftReducer(opened(), { type: 'set-field', field: 'to', value: 'bob@test.eigen.is' });
+        expect(state.fields.attachments).toEqual([]);
+        expect(buildSaveOptions(state.fields, false).tempAttachmentIds).toBeUndefined();
+    });
+
+    test('a part that lands after the user typed rides on the pending save', () => {
+        let state = draftReducer(opened(), { type: 'set-field', field: 'to', value: 'bob@test.eigen.is' });
+        state = draftReducer(state, { type: 'add-prefill-attachment', meta: part('t1', 'a.pdf') });
+        expect(isDirty(state)).toBe(true);
+        expect(buildSaveOptions(state.fields, false).tempAttachmentIds).toEqual(['t1']);
+    });
+
+    test('a part that lands after the draft was saved is an edit, so the next save embeds it', () => {
+        const saved = savedState({ ...initFields(null, undefined, forward), id: 'draft-1' });
+        const state = draftReducer(saved, { type: 'add-prefill-attachment', meta: part('t1', 'a.pdf') });
+        expect(isDirty(state)).toBe(true);
     });
 });

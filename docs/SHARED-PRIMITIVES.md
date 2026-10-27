@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2004 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2005 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -234,7 +234,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (297)
+## Hooks (298)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -426,6 +426,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useHomeSize` | `@workspace/lib/home` | packages/lib/src/core/home/hooks/use-home.ts |
 | `useMyTeams` | `@workspace/lib/home` | packages/lib/src/core/home/hooks/use-home.ts |
 | `useAttachFromDrive` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
+| `useAttachMailPart` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `useDeleteEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useEmailById` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |

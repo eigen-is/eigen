@@ -1,7 +1,13 @@
+// The mail composer's mutations: saving a draft, sending it, and staging a file as one of its
+// attachments, such as an upload from the disk, a copy from Drive or a part of a message the user
+// forwards. A staged file waits on the server until a draft save embeds it. Each mutation toasts its
+// own failure, so the composer only handles what it shows.
+
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDriveAppUrl, getMailDraftAttachmentUploadUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { MAILBOX_DRAFTS } from '@workspace/lib/constants/mailboxes';
+import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type {
     DraftAttachmentUpload,
     DraftInput,
@@ -13,7 +19,9 @@ import type {
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateItemCreated } from '../../drive/hooks/keys';
+import { subjectInfo } from '../../file-subject';
 import { invalidateHomeSize } from '../../home';
+import { fetchImportBlob } from '../../transfer';
 import { emailKeys, invalidateMailboxes } from './keys';
 
 export function createDraftEmail(input: DraftInput): NewDraft {
@@ -140,6 +148,23 @@ export function useUploadDraftAttachment() {
 
     return useMutation({
         mutationFn: (file: File) => uploadDraftAttachmentRequest(ownerId, file),
+        onError: onMutationError,
+    });
+}
+
+// A part of a message the user forwards has no Drive path behind it, so the browser carries its bytes from
+// the part's download route to the draft upload, and it is staged like a file the user picked.
+export function useAttachMailPart() {
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
+
+    return useMutation({
+        mutationFn: async (part: FileSubject) => {
+            const { name, mimeType, downloadUrl } = subjectInfo(part);
+            if (!downloadUrl) throw new Error(`${name} has no bytes to attach`);
+            const blob = await fetchImportBlob(downloadUrl);
+            return uploadDraftAttachmentRequest(ownerId, new File([blob], name, { type: mimeType }));
+        },
         onError: onMutationError,
     });
 }
