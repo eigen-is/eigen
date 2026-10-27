@@ -154,7 +154,9 @@ export function updateFormatCell(
                     if (isRunStyleKey(attr)) updateInlineStringFormatOutside(value, attr, foucsStatus);
                     Object.assign(value, { [attr]: foucsStatus });
                     const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
-                    if (attr === 'fs' && canvas) {
+                    // A larger size or wrapped lines need a taller row. The row grows to fit and never
+                    // shrinks here, as another cell in it may need the height.
+                    if ((attr === 'fs' || attr === 'tb') && canvas) {
                         const textInfo = getCellTextInfo(d[r][c]!, canvas, ctx, {
                             r,
                             c,

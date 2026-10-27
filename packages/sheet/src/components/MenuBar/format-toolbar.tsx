@@ -44,7 +44,8 @@ export function FormatToolbar() {
     const italic = (caret?.it ?? Number(cell?.it)) === 1;
     const setFontSize = (size: number) => {
         setContext((ctx) => {
-            handleTextSize(ctx, refs.cellInput.current!, size);
+            const input = refs.cellInput.current;
+            if (input) handleTextSize(ctx, input, size, refs.canvas.current?.getContext('2d') ?? undefined);
         });
     };
 

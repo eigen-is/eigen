@@ -310,8 +310,10 @@ function WrappingSubmenu() {
                     onClick={() => {
                         setContext((ctx) => {
                             const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(ctx, refs.cellInput.current!, d, 'tb', 'wrap');
+                            const input = refs.cellInput.current;
+                            if (d == null || !input) return;
+                            const canvas = refs.canvas.current?.getContext('2d') ?? undefined;
+                            updateFormat(ctx, input, d, 'tb', 'wrap', canvas);
                         });
                     }}
                 >
