@@ -348,6 +348,58 @@ describe("undo after a peer's row op on another sheet keeps formulas pointing at
     });
 });
 
+// Enter commits where the open editor stands, so a peer's row or column op moves it with its cell.
+describe("an open cell editor follows a peer's row or column op", () => {
+    const open = (t: Tab, a1: string) => {
+        t.ctx = produce(t.ctx, (ctx: Context) => {
+            ctx.editingCellPosition = at(a1);
+        });
+    };
+    const commit = (ctx: Context) => {
+        const [r, c] = ctx.editingCellPosition;
+        typed(r, c, 'mine')(ctx);
+    };
+
+    test("a peer's row insert above moves it, and the commit keeps the peer's cell", () => {
+        const s = session(workbook({ B8: text('peer'), B10: text('old') }));
+        open(s.a, 'B10');
+        s.edit(s.b, ...insertRows(2, 2));
+        expect(s.a.ctx.editingCellPosition).toEqual(at('B12'));
+        s.edit(s.a, commit);
+        expect(cellAt(s.a, 'B10')?.v).toBe('peer');
+        expect(cellAt(s.a, 'B12')?.v).toBe('mine');
+        expectAgree(s);
+    });
+
+    test("a peer's row delete above moves it up", () => {
+        const s = session(workbook({ B10: text('old') }));
+        open(s.a, 'B10');
+        s.edit(s.b, ...deleteRows(2, 3));
+        expect(s.a.ctx.editingCellPosition).toEqual(at('B8'));
+    });
+
+    test("a peer's column insert to the left moves it right", () => {
+        const s = session(workbook({ B10: text('old') }));
+        open(s.a, 'B10');
+        s.edit(s.b, ...insertColumns(0, 1));
+        expect(s.a.ctx.editingCellPosition).toEqual(at('C10'));
+    });
+
+    test("a peer's delete of its row closes it", () => {
+        const s = session(workbook({ B10: text('old') }));
+        open(s.a, 'B10');
+        s.edit(s.b, ...deleteRows(9, 9));
+        expect(s.a.ctx.editingCellPosition).toEqual([]);
+    });
+
+    test("a peer's row op on another sheet leaves it", () => {
+        const s = session(workbook({ B10: text('old') }));
+        open(s.a, 'B10');
+        s.edit(s.b, ...insertRows(2, 2, TWO));
+        expect(s.a.ctx.editingCellPosition).toEqual(at('B10'));
+    });
+});
+
 // A joiner and the server read the stored cells of every sheet a batch doesn't name, so a row op must move the
 // formulas there as the live tabs move them in their matrices.
 describe("a row op moves another sheet's formulas for every reader", () => {

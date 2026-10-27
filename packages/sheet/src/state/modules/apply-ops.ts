@@ -2,7 +2,8 @@
 // row or column ops first, then the cell and field patches, resolved against the sheets those ops left. A batch applies
 // whole or not at all. Callers such as the Workbook's applyOp for a peer's batch, and an undo that adds a sheet or
 // deletes rows, go through it, so the client that sends a batch, the peers that take it and a joiner all end the same.
-// It also says which row or column ops moved rows, so the Workbook moves its undo stacks by exactly those.
+// It also says which row or column ops moved rows, so the Workbook moves its undo stacks by exactly those, and moves
+// an open cell editor with its cell.
 
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
@@ -11,8 +12,10 @@ import { RowColError } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Sheet } from '../types';
 import { getSheetIndex, opToPatch } from '../utils';
+import { cancelNormalSelected } from './cell';
 import { createFilterOptions } from './filter';
 import { registerSheetFormulas } from './formula-cache';
+import { rowColMove } from './history-shift';
 import { deleteRowCol, insertRowCol } from './rowcol';
 import { addSheet, deleteSheet, initSheetData, leaveCurrentSheet } from './sheet';
 
@@ -47,7 +50,9 @@ export function applyOpBatch(ctx: Context, ops: Op[]): { ctx: Context; moved: Ap
                         if (op.op === 'insertRowCol') insertRowCol(draft, { ...op.value, id }, false, true);
                         else deleteRowCol(draft, { ...op.value, id }, true);
                     });
-                    if (applied) moved.push({ op, sheets });
+                    if (!applied) continue;
+                    moved.push({ op, sheets });
+                    if (id === draft.currentSheetId) followEditor(draft, op, id);
                 } else if (op.op === 'addSheet' && op.value?.id) {
                     // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
                     const value = cloneDeep(op.value);
@@ -77,6 +82,21 @@ export function applyOpBatch(ctx: Context, ops: Op[]): { ctx: Context; moved: Ap
     }
     if (patches.length > 0) next.formulaCache.updateFormulaCache(next, { patches, inversePatches: [] }, 'redo');
     return { ctx: next, moved };
+}
+
+// An open cell editor moves with its cell, so a commit writes where the person was typing, not into the row that slid
+// under it. A delete of that cell closes the editor without writing.
+function followEditor(draft: Context, op: Op, id: string) {
+    const [r, c] = draft.editingCellPosition;
+    if (r == null || c == null) return;
+    const move = rowColMove(
+        op.op === 'insertRowCol' ? { insertRowColOp: { ...op.value, id } } : { deleteRowColOp: { ...op.value, id } },
+    );
+    if (!move) return;
+    const row = move.type === 'row';
+    const moved = move.to(row ? r : c);
+    if (moved == null) cancelNormalSelected(draft);
+    else draft.editingCellPosition = row ? [moved, c] : [r, moved];
 }
 
 // The replay skips a row or column op the sheet refuses, such as an insert into a read-only row, and so does a client.
