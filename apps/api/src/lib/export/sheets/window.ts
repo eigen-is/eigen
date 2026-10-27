@@ -52,9 +52,8 @@ const MAX_TRACK_PX = MAX_PDF_PAGE_PX;
 // draws a stored 0 at the default, and a length like 1e-300 would take the window to a track no count reaches.
 const MIN_TRACK_PX = 1;
 
-// The longest span of tracks read by a lookup each, well under a millisecond. Enumerating a map's keys costs about
-// 250 ms for a million of them, so a short span is never read through the map.
-const MAX_TRACK_WALK = 65_536;
+// How many keys each track map holds, counted once per map: enumerating a million of them costs about 250 ms.
+const keyCounts = new WeakMap<object, number>();
 
 // The sheet cut to the window that `budgetFor` sizes from its shown rows and columns, or null when the budget holds
 // none of its rows. Keys past Excel's grid, merges that overlap an earlier one and track sizes no sheet can have are
@@ -80,8 +79,9 @@ export function windowedSheet(
     });
     const merges = gridMerges(config.merge);
     const bounds = usedBounds(sheet, merges);
+    const empty = budgetFor(0, 0);
     if (!bounds) {
-        const { maxRows, maxCols } = budgetFor(0, 0);
+        const { maxRows, maxCols } = empty;
         const blank = tracksOf([0, maxRows - 1], [0, maxCols - 1]);
         return {
             sheet: blank,
@@ -93,6 +93,8 @@ export function windowedSheet(
             cells: 0,
         };
     }
+    // A sheet with content costs at least one cell, so a budget with none left leaves it out before any map is read.
+    if (empty.maxCells < 1) return null;
 
     // The overlay places images and charts at their stored pixels from A1. One above or left of the used range would
     // take a negative offset and fall off the page, so the window starts at the track the earliest one starts in.
@@ -169,13 +171,18 @@ function trackLength(value: unknown): number | undefined {
     return length >= MIN_TRACK_PX && length <= MAX_TRACK_PX ? length : undefined;
 }
 
-// The tracks from first to last that a map has a key for, ascending. A span of up to MAX_TRACK_WALK tracks is walked
-// by lookup, which a map of a million hidden rows can't slow down. A longer span reads the map's keys instead, so a key
-// at the far end of the grid costs what the map holds.
+// The tracks from first to last that a map has a key for, ascending. A span shorter than the map's keys is walked by
+// lookup, so a map of a million hidden rows can't slow down a small window. Any other span reads the map's keys, so a
+// first cell at the far end of the grid costs what the map holds, not the tracks before it.
 function tracksIn(map: Record<string, number> | undefined, first: number, last: number): number[] {
     const tracks: number[] = [];
     if (!map) return tracks;
-    if (last - first < MAX_TRACK_WALK) {
+    let keys = keyCounts.get(map);
+    if (keys === undefined) {
+        keys = Object.keys(map).length;
+        keyCounts.set(map, keys);
+    }
+    if (last - first < keys) {
         for (let track = first; track <= last; track++) if (map[track] != null) tracks.push(track);
         return tracks;
     }

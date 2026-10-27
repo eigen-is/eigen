@@ -2072,6 +2072,47 @@ describe('Sheets HTML export — the window over forged keys', () => {
         expect(out.leftOut).toHaveLength(299);
     }, 30_000);
 
+    // Each read of a track map, by key or by enumerating it, is counted.
+    test('a track map is read no more than its keys, however far the first cell is, and not at all once the cap is spent', () => {
+        let reads = 0;
+        const counted = (map: Record<string, number>) =>
+            new Proxy(map, {
+                get: (target, key) => {
+                    reads++;
+                    return Reflect.get(target, key);
+                },
+                ownKeys: (target) => {
+                    reads++;
+                    return Reflect.ownKeys(target);
+                },
+            });
+        const far = (id: string): Sheet => ({
+            id,
+            name: id,
+            order: 0,
+            config: {
+                borderInfo: { '65535_8191': border },
+                rowlen: counted({}),
+                rowhidden: counted({ 0: 0 }),
+                columnlen: counted({}),
+                colhidden: counted({}),
+            },
+        });
+        const kept = renderSheetsHtml([far('kept')], NO_MEDIA, 'screen');
+        expect(tds(kept.html)).toBe(1);
+        expect(reads).toBeLessThan(100);
+
+        reads = 0;
+        const spender = topLeft({ borderInfo: { '1249_199': border } }, 'spender');
+        const out = renderSheetsHtml(
+            [spender, ...Array.from({ length: 20 }, (_, i) => far(`s${i}`))],
+            NO_MEDIA,
+            'screen',
+        );
+        expect(out.leftOut).toHaveLength(20);
+        expect(reads).toBe(0);
+    }, 30_000);
+
     test("a merge's span counts the rows and columns that show, so it matches the colgroup", () => {
         const sheet: Sheet = {
             id: 'spans',
