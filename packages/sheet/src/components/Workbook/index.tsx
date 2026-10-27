@@ -13,7 +13,6 @@ import {
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
-import { SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import type {
     EigenClipboardChartItem,
     EigenClipboardData,
@@ -53,6 +52,7 @@ import {
     patchToOp,
     recordEntry,
     redoEntry,
+    runStyleOf,
     selectionCache,
     sheetChartClipboardItem,
     undoEntry,
@@ -91,7 +91,7 @@ function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboard
             width: ctx.visibledatacolumn[c2] - (c1 === 0 ? 0 : ctx.visibledatacolumn[c1 - 1]),
             height: ctx.visibledatarow[r2] - (r1 === 0 ? 0 : ctx.visibledatarow[r1 - 1]),
         },
-        typography: { fontSize: getFlowdata(ctx)?.[r1]?.[c1]?.fs ?? SHEET_DEFAULT_FONT_SIZE },
+        typography: { fontSize: runStyleOf(getFlowdata(ctx)?.[r1]?.[c1]).fs },
     });
 }
 

@@ -9,7 +9,7 @@ import { cellWrapsText } from '../../engine/format';
 import type { Cell, CellStyle } from '../../engine/types';
 import type { Context } from '../context';
 import { normalizedCellAttr } from './cell';
-import { isInlineStringCell } from './inline-string';
+import { isInlineStringCell, runStyleOf } from './inline-string';
 
 // Geometry the canvas painter walks back to draw text-decoration overlays.
 type LineSegment = {
@@ -385,13 +385,9 @@ export function getCellTextInfo(
     const inlineStringArr: InlineRun[] = [];
     if (isInlineStringCell(cell)) {
         for (const run of cell.ct.s) {
-            const style = {
-                fontset: getFontSet(run, sheetCtx.defaultFontSize),
-                fc: run.fc || '#000',
-                cl: run.cl || 0,
-                un: run.un || 0,
-                fs: run.fs || 11,
-            };
+            const runStyle = runStyleOf(run);
+            const { fc, cl, un, fs } = runStyle;
+            const style = { fontset: getFontSet(runStyle, sheetCtx.defaultFontSize), fc, cl, un, fs };
             const lines = (run.v ?? '').split(/\r\n|&#13;&#10;|\r|\n/);
             for (const [index, line] of lines.entries()) {
                 const isLast = index === lines.length - 1;

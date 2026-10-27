@@ -3,7 +3,6 @@
 // bar's 1360px container query hides it, as read-only does, below the width where it still sits centered.
 
 import { nextFontSize } from '@workspace/lib/constants/fonts';
-import { cellFontName, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
 import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
@@ -20,11 +19,12 @@ import {
     handleTextBackground,
     handleTextColor,
     handleTextSize,
+    runStyleOf,
 } from '../../state';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 
 export function FormatToolbar() {
-    const { context, setContext, refs, settings } = useContext(WorkbookContext);
+    const { context, setContext, refs } = useContext(WorkbookContext);
     // Reflect the anchor cell so the swatches + active alignment track the selection, and while a cell
     // is open the run at its caret, the way the docs toolbar follows the caret.
     const cell = useAnchorCell();
@@ -38,10 +38,9 @@ export function FormatToolbar() {
     const textColor = caret?.fc ?? cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
     const align = cell?.ht == null ? undefined : Number(cell.ht); // 0 = center, 1 = left, 2 = right
-    const fontName = caret?.ff ?? cellFontName(cell?.ff) ?? SHEET_DEFAULT_FONT.name;
-    const fontSize = caret?.fs ?? (Number(cell?.fs) || settings.defaultFontSize);
-    const bold = (caret?.bl ?? Number(cell?.bl)) === 1;
-    const italic = (caret?.it ?? Number(cell?.it)) === 1;
+    const { ff: fontName, fs: fontSize, bl, it } = caret ?? runStyleOf(cell);
+    const bold = bl === 1;
+    const italic = it === 1;
     const setFontSize = (size: number) => {
         setContext((ctx) => {
             const input = refs.cellInput.current;

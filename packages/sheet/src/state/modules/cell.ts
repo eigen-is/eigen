@@ -589,7 +589,7 @@ export function updateCell(
         delete curv.f;
         delete curv.v;
         delete curv.m;
-        curv.fs ||= 10;
+        curv.fs ||= SHEET_DEFAULT_FONT_SIZE;
     }
 
     // API, we get value from user
