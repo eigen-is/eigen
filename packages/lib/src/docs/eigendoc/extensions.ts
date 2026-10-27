@@ -24,6 +24,7 @@ import { PageNumberNode } from './nodes/page-number';
 import { EigenParagraphFormat } from './nodes/paragraph-format';
 import { SmallMark } from './nodes/small-mark';
 import { EigenTableCell, EigenTableHeader } from './nodes/table-cell';
+import { TableOfContentsNode } from './nodes/table-of-contents';
 import { SubtitleNode, TitleNode } from './nodes/title';
 import type { NormalStyle } from './normal-style';
 import { PROSE_TEXTBLOCKS } from './paragraph-format';
@@ -77,6 +78,7 @@ export function getDocExtensions(options?: {
         EquationNode,
         PageBreakNode,
         PageNumberNode,
+        TableOfContentsNode,
         FootnoteNode,
         // ⇧⌘H is Find and replace, as in Google Docs, which binds no key to highlighting.
         Highlight.extend({ addKeyboardShortcuts: () => ({}) }).configure({ multicolor: true }),

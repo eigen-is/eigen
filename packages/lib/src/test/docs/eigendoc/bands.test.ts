@@ -55,6 +55,7 @@ describe('the header and footer bands', () => {
             'footnote',
             'pageBreak',
             'subtitle',
+            'tableOfContents',
             'title',
         ]);
         // The code block exists only with lowlight, so the band leaves it out of the schema that has one.
