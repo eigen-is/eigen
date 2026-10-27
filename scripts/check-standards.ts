@@ -1,6 +1,7 @@
 // Counts the mechanical code standards that Biome can't express, over apps and packages, for `bun run check`. A hard
-// zero fails on any hit. A ratcheted count fails when it rises above its allowance in the baseline file. Every run
-// lowers an allowance to a count that fell, so a cleanup needs no second step. `--verbose` prints each file's counts.
+// zero fails on any hit. A ratcheted count fails when it rises above its allowance in the baseline file: one total, or
+// for casts and `!` one allowance per file, so a new one can't hide behind a removal elsewhere. Every run lowers an
+// allowance to a count that fell, so a cleanup needs no second step. `--verbose` prints each file's counts.
 
 import { LanguageVariant, SyntaxKind } from 'typescript/unstable/ast';
 import { createScanner } from 'typescript/unstable/ast/scanner';
@@ -311,6 +312,8 @@ type Metric = {
     id: string;
     label: string;
     hardZero: boolean;
+    // Ratcheted per file: a file without an allowance is allowed none.
+    perFile?: true;
     count: (file: SourceFile) => number;
 };
 
@@ -318,17 +321,30 @@ function countMatches(source: string, pattern: RegExp): number {
     return source.match(pattern)?.length ?? 0;
 }
 
+function sum(values: number[]): number {
+    return values.reduce((total, value) => total + value, 0);
+}
+
 const METRICS: Metric[] = [
     {
         id: 'as-casts',
         label: '`as Type` casts',
         hardZero: false,
+        perFile: true,
         // `as unknown as T` is one escape hatch, not two.
         count: ({ code }) =>
             countMatches(
                 code.replaceAll(MODULE_STATEMENT, '').replaceAll(/\bas\s+unknown\s+as\b/g, 'as'),
                 /\bas\s+(?!const\b)/g,
             ),
+    },
+    {
+        id: 'non-null-assertions',
+        label: '`!` non-null assertions',
+        hardZero: false,
+        perFile: true,
+        // A postfix `!` after a name, a call or an index, not the start of `!=`; `let x!: T` counts too.
+        count: ({ code }) => countMatches(code, /[\w$)\]]!(?!=)/g),
     },
     {
         id: 'interface-decls',
@@ -463,37 +479,81 @@ for (const path of paths) {
     }
 }
 
-const baselineFile = Bun.file(BASELINE_PATH);
-const baseline: Record<string, number> = (await baselineFile.exists()) ? await baselineFile.json() : {};
+type Allowance = number | Record<string, number>;
 
-// A ratcheted count that fell becomes the new baseline; one that rose keeps the old one and fails below.
-// A metric with no entry yet starts at today's count.
-const next: Record<string, number> = {};
+const baselineFile = Bun.file(BASELINE_PATH);
+const baseline: Record<string, Allowance> = (await baselineFile.exists()) ? await baselineFile.json() : {};
+
+// What one file may hold of a metric: its own entry when the metric is per file, else the total.
+function allowedIn(metric: Metric, allowance: Allowance | undefined, path: string): number {
+    if (metric.hardZero) return 0;
+    if (typeof allowance === 'object') return allowance[path] ?? 0;
+    return allowance ?? 0;
+}
+
+// A ratcheted count that fell becomes the new baseline; one that rose keeps the old one and fails below. A metric with
+// no entry yet starts at today's count. A file over its allowance keeps it, so the failure below still names it, and
+// the entry of a file that holds none, or that is gone, drops.
+const next: Record<string, Allowance> = {};
 for (const metric of METRICS) {
     if (metric.hardZero) continue;
-    const current = counts.get(metric.id) ?? 0;
-    next[metric.id] = metric.id in baseline ? Math.min(current, baseline[metric.id]) : current;
+    const previous = baseline[metric.id];
+    if (!metric.perFile) {
+        const current = counts.get(metric.id) ?? 0;
+        next[metric.id] = typeof previous === 'number' ? Math.min(current, previous) : current;
+        continue;
+    }
+    const files: Record<string, number> = {};
+    for (const [path, hits] of [...(breakdown.get(metric.id) ?? [])].sort((a, b) => a[0].localeCompare(b[0]))) {
+        const allowed = typeof previous === 'object' ? (previous[path] ?? 0) : hits;
+        if (Math.min(hits, allowed) > 0) files[path] = Math.min(hits, allowed);
+    }
+    next[metric.id] = files;
 }
 if (JSON.stringify(next) !== JSON.stringify(baseline)) {
     await Bun.write(BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`);
-    for (const [id, allowed] of Object.entries(next)) {
-        if (allowed !== baseline[id]) console.log(`${BASELINE_PATH}: ${id} ${baseline[id] ?? 'new'} → ${allowed}`);
+    for (const metric of METRICS) {
+        if (metric.hardZero) continue;
+        const before = baseline[metric.id];
+        const after = next[metric.id];
+        if (typeof after === 'number') {
+            if (after !== before) console.log(`${BASELINE_PATH}: ${metric.id} ${before ?? 'new'} → ${after}`);
+            continue;
+        }
+        for (const path of new Set([...Object.keys(typeof before === 'object' ? before : {}), ...Object.keys(after)])) {
+            const was = typeof before === 'object' ? (before[path] ?? 0) : 'new';
+            if (was !== (after[path] ?? 0))
+                console.log(`${BASELINE_PATH}: ${metric.id} ${path} ${was} → ${after[path] ?? 0}`);
+        }
     }
     Object.assign(baseline, next);
-    console.log('');
+    console.log('Commit the lowered baseline with the change that lowered it.\n');
 }
 
 const width = Math.max(...METRICS.map((metric) => metric.label.length));
 const failed: Metric[] = [];
+// The files that hold more than they are allowed, per metric.
+const over = new Map<string, [string, number, number][]>();
 
 console.log(`${'metric'.padEnd(width)}  count  baseline`);
 for (const metric of METRICS) {
     const count = counts.get(metric.id) ?? 0;
-    const allowed = metric.hardZero ? 0 : (baseline[metric.id] ?? 0);
-    if (count > allowed) failed.push(metric);
-    const status = count > allowed ? '  OVER' : '';
+    const allowance = baseline[metric.id];
+    const allowed = metric.hardZero
+        ? 0
+        : typeof allowance === 'object'
+          ? sum(Object.values(allowance))
+          : (allowance ?? 0);
+    const files = metric.perFile
+        ? [...(breakdown.get(metric.id) ?? [])]
+              .map(([path, hits]): [string, number, number] => [path, hits, allowedIn(metric, allowance, path)])
+              .filter(([, hits, fileAllowed]) => hits > fileAllowed)
+        : [];
+    if (files.length > 0) over.set(metric.id, files);
+    const exceeded = metric.perFile ? files.length > 0 : count > allowed;
+    if (exceeded) failed.push(metric);
     console.log(
-        `${metric.label.padEnd(width)}  ${String(count).padStart(5)}  ${metric.hardZero ? '    zero' : String(allowed).padStart(8)}${status}`,
+        `${metric.label.padEnd(width)}  ${String(count).padStart(5)}  ${metric.hardZero ? '    zero' : String(allowed).padStart(8)}${exceeded ? '  OVER' : ''}`,
     );
     if (!verbose) continue;
     for (const [path, hits] of [...(breakdown.get(metric.id) ?? [])].sort((a, b) => b[1] - a[1])) {
@@ -505,6 +565,12 @@ if (failed.length === 0) process.exit(0);
 
 console.error('\nERROR: code-standards gate exceeded\n');
 for (const metric of failed) {
+    const files = over.get(metric.id);
+    if (files) {
+        console.error(`  ${metric.label}, per file:`);
+        for (const [path, hits, allowed] of files) console.error(`      ${path}: ${hits} allowed ${allowed}`);
+        continue;
+    }
     console.error(
         `  ${metric.label}: ${counts.get(metric.id)} allowed ${metric.hardZero ? 0 : (baseline[metric.id] ?? 0)}`,
     );
