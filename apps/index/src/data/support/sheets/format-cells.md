@@ -19,12 +19,14 @@ To change how text looks in one or more cells:
 1. Select the cells you want to format.
 2. Open **Format → Text**.
 3. Choose from the available styles:
-   - **Bold (Ctrl+B)**: makes the text heavier.
-   - **Italic (Ctrl+I)**: tilts the text.
+   - **Bold**: makes the text heavier.
+   - **Italic**: tilts the text.
    - **Underline**: adds a line under the text.
-   - **Strikethrough (Alt+Shift+5)**: draws a line through the text.
+   - **Strikethrough**: draws a line through the text.
 4. To change the font family, open **Format → Text → Font** and pick a font from the list.
 5. To change the text color, open **Format → Text → Font color** and pick a color from the picker.
+
+The menu shows the shortcut next to each style that has one: **Ctrl+B** (Mac: **⌘B**) for bold, **Ctrl+I** (Mac: **⌘I**) for italic and **Ctrl+U** (Mac: **⌘U**) for underline.
 
 ## Font size
 

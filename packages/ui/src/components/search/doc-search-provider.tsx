@@ -1,3 +1,7 @@
+// The find bar every document app shares, such as Docs and Sheets: DocSearchProvider owns one find session, its
+// keys and the floating bar, and searches through the DocSearchController the app implements over its live
+// document. Chrome such as an Edit menu or a toolbar button opens the bar through useOptionalDocSearchBar.
+
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { usePaletteDocSearch } from '@workspace/lib/command-palette';
 import type {
@@ -11,6 +15,10 @@ import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+
+// The find bar's own shortcuts, which the Edit menus show next to Find and Find and replace.
+export const FIND_HOTKEY = 'Mod+F';
+export const FIND_REPLACE_HOTKEY = 'Mod+Shift+H';
 
 const DEFAULT_OPTIONS: DocSearchOptions = { matchCase: false, wholeWord: false, regex: false };
 const DEBOUNCE_MS = 150;
@@ -310,7 +318,7 @@ export function DocSearchProvider({
     // The keys listen on the document; behind an open dialog the bar would open unseen.
     const dialogOpen = useDialogOpen();
     useHotkey(
-        'Mod+F',
+        FIND_HOTKEY,
         (e) => {
             e.preventDefault();
             openBar(true);
@@ -318,7 +326,7 @@ export function DocSearchProvider({
         { enabled: !dialogOpen },
     );
     useHotkey(
-        'Mod+Shift+H',
+        FIND_REPLACE_HOTKEY,
         (e) => {
             e.preventDefault();
             openReplace();

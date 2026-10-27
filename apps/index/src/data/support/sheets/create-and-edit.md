@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, spreadsheet, create, edit, cells, data]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 20
-updated: 2026-10-23
+updated: 2026-10-27
 ---
 
 You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the toolbar menus and keyboard shortcuts.
@@ -64,7 +64,7 @@ Copied cells paste into other apps as rows and columns, for example into a text 
 ## Undo and redo
 
 - **Ctrl+Z** (Mac: **⌘Z**) undoes your last change.
-- **Ctrl+Shift+Z** (Mac: **⌘⇧Z**) redoes it.
+- **Ctrl+Shift+Z** (Mac: **⇧⌘Z**) redoes it.
 
 Both are also available under **Edit → Undo** and **Edit → Redo**.
 
@@ -72,7 +72,7 @@ Both are also available under **Edit → Undo** and **Edit → Redo**.
 
 The **Format** menu covers all formatting options:
 
-- **Text**: bold (**Ctrl+B**), italic (**Ctrl+I**), underline, and strikethrough.
+- **Text**: bold (**Ctrl+B**), italic (**Ctrl+I**), underline (**Ctrl+U**), and strikethrough. On a Mac, press **⌘** in place of **Ctrl**.
 - **Number**: choose a format such as currency, percentage, or date from the submenu.
 - **Alignment**: left, center, or right horizontally; top, middle, or bottom vertically.
 - **Wrapping**: overflow (default), wrap, or clip long text.

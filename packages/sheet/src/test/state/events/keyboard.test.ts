@@ -10,6 +10,7 @@ import { describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
 import { handleGlobalKeyDown } from '../../../state/events/keyboard';
+import { selectionCache } from '../../../state/modules/selection';
 import type { Cell, DataVerificationRule, GlobalCache, SingleRange } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
@@ -271,10 +272,25 @@ describe('handleGlobalKeyDown — letter shortcuts', () => {
         return ctx;
     }
 
-    test('⌘B bolds the selected cell', () => {
+    test('⌘B, ⌘I and ⌘U bold, italicize and underline the selected cell', () => {
         const ctx = lettersContext();
-        keyDown(ctx, 'b', { mod: true });
-        expect(ctx.sheets[0].data?.[0][0]?.bl).toBe(1);
+        for (const letter of ['b', 'i', 'u']) expect(keyDown(ctx, letter, { mod: true })).toBe(true);
+        const cell = ctx.sheets[0].data?.[0][0];
+        expect([cell?.bl, cell?.it, cell?.un]).toEqual([1, 1, 1]);
+    });
+
+    test('⌘V marks the paste the browser fires next', () => {
+        const ctx = lettersContext();
+        selectionCache.isPasteAction = false;
+        expect(keyDown(ctx, 'v', { mod: true })).toBe(false);
+        expect(selectionCache.isPasteAction).toBe(true);
+        selectionCache.isPasteAction = false;
+    });
+
+    test('⌘A selects the whole sheet', () => {
+        const ctx = lettersContext();
+        keyDown(ctx, 'a', { mod: true });
+        expect(ctx.selections?.[0]).toMatchObject({ row_select: true, column_select: true });
     });
 
     test('⌘C on Dvorak copies, and lets the browser fire its copy event', () => {

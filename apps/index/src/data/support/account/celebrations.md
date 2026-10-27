@@ -1,6 +1,6 @@
 ---
 title: "Turn celebrations on or off"
-description: "Eigen now and then celebrates when you finish a checklist. Turn it off, or back on, from your Personal info page."
+description: "Eigen now and then celebrates when you finish a checklist. Turn it off, or back on, from your Preferences page."
 type: how-to
 category: Appearance
 tags: [celebrations, confetti, preferences, checklist]
@@ -25,7 +25,7 @@ If your computer is set to reduce motion, there is no confetti. The box you tick
 
 ## Turn celebrations off or on
 
-1. Open [**Personal info**](/space/user) in Space.
-2. Under **Preferences**, turn the **Celebrations** switch off, or on again.
+1. Open [**Preferences**](/space/preferences) in Space.
+2. Under **Appearance**, turn the **Celebrations** switch off, or on again.
 
 The change is saved straight away and applies in every Eigen app.

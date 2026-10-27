@@ -200,7 +200,7 @@ test('Format › Text › Strikethrough leaves the focus and the selection in th
     await select(input, 6, 9);
     await openMenu(container, 'Format');
     await openSubmenu('Text');
-    await clickRow('Strikethrough (Alt+Shift+5)');
+    await clickRow('Strikethrough');
     await settle();
     expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
     expect(selectedText()).toBe('big');
