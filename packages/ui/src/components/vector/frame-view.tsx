@@ -109,6 +109,7 @@ export const FrameThumbnail = memo(function FrameThumbnail({
         // select-none + callout suppression keep a long press off iOS's loupe (as .eigen-list-item does).
         <button
             type="button"
+            aria-current={active || undefined}
             onClick={() => onSelect(frame.id)}
             className={cn(
                 'flex w-full items-start gap-2 rounded-sm px-1 py-1 text-left',
