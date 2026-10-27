@@ -123,7 +123,7 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
     let width = colGeom.span;
     let columnseleted = colGeom.selected;
 
-    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
+    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, top, height, left, width);
     if (changeparam != null) {
         [columnseleted, rowseleted, top, height, left, width] = changeparam;
     }

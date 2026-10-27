@@ -80,16 +80,7 @@ export function handleRowHeaderMouseDown(
             israngeseleciton(ctx)
         ) {
             // Formula range selection
-            let changeparam = mergeMoveMain(
-                ctx,
-                [0, col_index],
-                rowseleted,
-                { row_focus: row_index, column_focus: 0 },
-                top,
-                height,
-                col_pre,
-                col,
-            );
+            let changeparam = mergeMoveMain(ctx, [0, col_index], rowseleted, top, height, col_pre, col);
             if (changeparam != null) {
                 [rowseleted, top, height] = [changeparam[1], changeparam[2], changeparam[3]];
             }
@@ -121,16 +112,7 @@ export function handleRowHeaderMouseDown(
                 height = rowGeom.span;
                 rowseleted = rowGeom.selected;
 
-                changeparam = mergeMoveMain(
-                    ctx,
-                    [0, col_index],
-                    rowseleted,
-                    { row_focus: row_index, column_focus: 0 },
-                    top,
-                    height,
-                    col_pre,
-                    col,
-                );
+                changeparam = mergeMoveMain(ctx, [0, col_index], rowseleted, top, height, col_pre, col);
                 if (changeparam != null) {
                     [rowseleted, top, height] = [changeparam[1], changeparam[2], changeparam[3]];
                 }
@@ -385,16 +367,7 @@ export function handleColumnHeaderMouseDown(
             israngeseleciton(ctx)
         ) {
             // Formula range selection
-            let changeparam = mergeMoveMain(
-                ctx,
-                columnseleted,
-                [0, row_index],
-                { row_focus: 0, column_focus: col_index },
-                row_pre,
-                row,
-                left,
-                width,
-            );
+            let changeparam = mergeMoveMain(ctx, columnseleted, [0, row_index], row_pre, row, left, width);
             if (changeparam != null) {
                 [columnseleted, left, width] = [changeparam[0], changeparam[4], changeparam[5]];
             }
@@ -426,16 +399,7 @@ export function handleColumnHeaderMouseDown(
                 width = colGeom.span;
                 columnseleted = colGeom.selected;
 
-                changeparam = mergeMoveMain(
-                    ctx,
-                    columnseleted,
-                    [0, row_index],
-                    { row_focus: 0, column_focus: col_index },
-                    row_pre,
-                    row,
-                    left,
-                    width,
-                );
+                changeparam = mergeMoveMain(ctx, columnseleted, [0, row_index], row_pre, row, left, width);
                 if (changeparam != null) {
                     [columnseleted, left, width] = [changeparam[0], changeparam[4], changeparam[5]];
                 }

@@ -247,7 +247,7 @@ export function rangeDrag(
         columnseleted = [func_selectedrange.column[0], col_index];
     }
 
-    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, func_selectedrange, top, height, left, width);
+    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, top, height, left, width);
     if (changeparam != null) {
         [columnseleted, rowseleted, top, height, left, width] = changeparam;
     }
@@ -320,16 +320,7 @@ export function rangeDragColumn(
         columnseleted = [func_selectedrange.column[0], col_index];
     }
 
-    const changeparam = mergeMoveMain(
-        ctx,
-        columnseleted,
-        [0, row_index],
-        func_selectedrange,
-        row_pre,
-        row - row_pre - 1,
-        left,
-        width,
-    );
+    const changeparam = mergeMoveMain(ctx, columnseleted, [0, row_index], row_pre, row - row_pre - 1, left, width);
     if (changeparam != null) {
         [columnseleted, , , , left, width] = changeparam;
     }
@@ -398,16 +389,7 @@ export function rangeDragRow(
         rowseleted = [func_selectedrange.row[0], row_index];
     }
 
-    const changeparam = mergeMoveMain(
-        ctx,
-        [0, col_index],
-        rowseleted,
-        func_selectedrange,
-        top,
-        height,
-        col_pre,
-        col - col_pre - 1,
-    );
+    const changeparam = mergeMoveMain(ctx, [0, col_index], rowseleted, top, height, col_pre, col - col_pre - 1);
     if (changeparam != null) {
         [, rowseleted, top, height] = changeparam;
     }
