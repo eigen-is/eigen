@@ -1,9 +1,23 @@
+// A workbook's collab protocol in the editor: the stored snapshot plus a log of op batches, both in one Yjs document.
+// It decodes the snapshot with the log replayed on top for the Workbook, pushes the Workbook's own batches onto the
+// log, and hands a peer's batches to the Workbook's applyOp, queueing them while a grid mounts. The tab that closes
+// last, while connected, writes the log into a fresh snapshot.
+
 import { useCollabDoc } from '@workspace/lib/collab';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { Op, Sheet, WorkbookInstance } from '@workspace/sheet';
 import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
+
+// A throw escaping the Yjs observer would kill the app, so a batch that fails is logged.
+function applyBatch(workbook: WorkbookInstance | null, ops: Op[]) {
+    try {
+        workbook?.applyOp(ops);
+    } catch (e) {
+        console.error('[sheet] Failed to apply remote op:', e);
+    }
+}
 
 export function useSheet(
     ownerId: string,
@@ -22,6 +36,8 @@ export function useSheet(
     // Same fact for the callbacks: a fallback workbook must never be flushed over state.snapshot.
     const loadedRef = useRef(false);
     const latestDataRef = useRef<Sheet[] | null>(null);
+    // A peer's batches that arrive while a grid mounts on `data`. They wait for that grid, never the one it replaces.
+    const pendingRef = useRef<{ data: Sheet[]; batches: Op[][] } | null>(null);
 
     // Decodes state.snapshot with the pending ops replayed on top (browser A flushes while B
     // has unflushed local ops: B's edits survive the Yjs merge and must be reapplied). A failure
@@ -53,9 +69,18 @@ export function useSheet(
         setLoadFailed(!loaded);
         if (!loaded && keepViewOnFailure) return false;
         latestDataRef.current = data;
+        pendingRef.current = { data, batches: [] };
         setInitialData(data);
         return true;
     };
+
+    // The grid's own seed runs in its effect, before this host's, so the queue applies on top of the seed.
+    useEffect(() => {
+        const pending = pendingRef.current;
+        if (!pending || pending.data !== initialData || !workbookRef.current) return;
+        pendingRef.current = null;
+        for (const ops of pending.batches) applyBatch(workbookRef.current, ops);
+    }, [initialData, workbookRef]);
 
     // useCollabDoc owns the doc/provider lifecycle; sheets layers its op-log + snapshot protocol on
     // top via onInit/onSync. No UndoManager — the sheet engine's own op stack owns undo. The op-log
@@ -73,11 +98,13 @@ export function useSheet(
             const stateMap = doc.getMap('state');
             const opsArray = doc.getArray('ops');
 
+            // Only a tab that is connected and alone writes the snapshot. A flush reaches every open tab and remounts
+            // its grid, which costs that tab its undo, and offline it can't reach the server; the log waits either way.
             const flushSnapshot = () => {
                 const data = latestDataRef.current;
-                if (!loadedRef.current || !data) return;
-                // Every edit reaches the doc as an op, so no pending ops means the stored snapshot is
-                // current. Rewriting it anyway sent the whole workbook to the server and every peer on close.
+                if (!loadedRef.current || !data || !provider.wsconnected) return;
+                if ([...provider.awareness.getStates().keys()].some((id) => id !== doc.clientID)) return;
+                // Every edit reaches the doc as an op, so no pending ops means the stored snapshot is current.
                 if (opsArray.length === 0 && stateMap.has('snapshot')) return;
                 let json: string;
                 try {
@@ -101,16 +128,11 @@ export function useSheet(
                     isLocalOpRef.current = false;
                     return;
                 }
-                const workbook = workbookRef.current;
-                if (!workbook) return;
                 for (const delta of event.changes.delta) {
                     if (delta.insert && Array.isArray(delta.insert)) {
                         for (const ops of delta.insert as Op[][]) {
-                            try {
-                                workbook.applyOp(ops);
-                            } catch (e) {
-                                console.error('[sheet] Failed to apply remote op:', e);
-                            }
+                            if (pendingRef.current) pendingRef.current.batches.push(ops);
+                            else applyBatch(workbookRef.current, ops);
                         }
                     }
                 }
@@ -129,15 +151,10 @@ export function useSheet(
             };
             stateMap.observe(handleState);
 
-            // Offline the flush can't reach the server anyway, and its local write would arm the
-            // shared hook's beforeunload guard on a sheet with nothing to lose.
-            const handleBeforeUnload = () => {
-                if (provider.wsconnected) flushSnapshot();
-            };
-            window.addEventListener('beforeunload', handleBeforeUnload);
+            window.addEventListener('beforeunload', flushSnapshot);
 
             return () => {
-                window.removeEventListener('beforeunload', handleBeforeUnload);
+                window.removeEventListener('beforeunload', flushSnapshot);
                 flushSnapshot();
                 readyForOpsRef.current = false;
                 // Unregister observers (held by reference) before the shared hook destroys the
