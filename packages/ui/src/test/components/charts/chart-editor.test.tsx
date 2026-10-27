@@ -616,7 +616,7 @@ describe('ChartEditor', () => {
         expect(some.changes).toEqual([labelled(sample('line'), all)]);
     });
 
-    test('the Data labels box skips a range series with no values, which draws nothing', async () => {
+    test('the Data labels box skips a range series with no values, which draws nothing, and shows only with values', async () => {
         const ref = (column: number) => ({
             sheetId: 's1',
             row: [1, 4] as [number, number],
@@ -649,6 +649,11 @@ describe('ChartEditor', () => {
         expect(editor.box('Data labels').dataset.state).toBe('checked');
         await act(async () => editor.box('Data labels').dispatchEvent(new MouseEvent('click', { bubbles: true })));
         expect(editor.changes.map(shown)).toEqual([[false, true, false]]);
+        const gone: ChartSpec = {
+            ...range,
+            data: { source: 'range', categories: null, series: [{ id: 's-2', name: 'Gone', values: null }] },
+        };
+        expect((await mount(gone)).boxLabels()).not.toContain('Data labels');
     });
 
     test('a title typed letter by letter is one gesture, released when the field is left', async () => {

@@ -111,7 +111,8 @@ export function ChartEditor({
 
     const setSeriesColor = (id: string, color: string | null) => onChange([set(['series', id, 'color'], color)]);
 
-    // A range series whose values were deleted draws nothing, so it has no row and no say in the Data labels box.
+    // A range series whose values were deleted draws nothing, so it has no row and no say in the Data labels box, which
+    // a chart without a drawn series doesn't show.
     const drawn = data.series.flatMap((series, i) => (series.values === null ? [] : [{ series, i }]));
     const labels = getMergedValue(drawn, ({ series }) => chartSeriesStyle(spec, series.id).labels.visible) ?? false;
     const setLabels = (visible: boolean) =>
@@ -293,11 +294,13 @@ export function ChartEditor({
                 </PropertySection>
             ) : (
                 <PropertySection title="Series">
-                    <PropertyCheckbox
-                        label="Data labels"
-                        checked={labels}
-                        onCheckedChange={() => setLabels(labels !== true)}
-                    />
+                    {drawn.length > 0 && (
+                        <PropertyCheckbox
+                            label="Data labels"
+                            checked={labels}
+                            onCheckedChange={() => setLabels(labels !== true)}
+                        />
+                    )}
                     {drawn.map(({ series, i }) => {
                         const { color } = chartSeriesStyle(spec, series.id);
                         return (
