@@ -1,3 +1,7 @@
+// Restores one home from a backup, or from a safety copy of an earlier restore. The current home folder is moved
+// aside as a new safety copy, the backup is checked and unpacked in its place, and a failed restore puts both
+// folders back. The backup routes call it.
+
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';

@@ -1,3 +1,7 @@
+// Checks that a backup can be restored before anyone relies on it. It reads a home folder or a server archive,
+// compares sizes and hashes with the manifest, and decodes a sample of the documents. The result is a record of
+// failures that restores refuse on and the backup pane shows.
+
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';

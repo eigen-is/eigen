@@ -1,3 +1,7 @@
+// HTTP Basic authentication for the protocol servers that cannot use a browser session, such as CalDAV, CardDAV
+// and WebDAV. The password is an app password, checked through Better Auth, and failed attempts are rate limited
+// per IP.
+
 import { ApiError } from '../core/errors';
 import type { User } from '../user';
 import { getUserByEmail } from '../user';

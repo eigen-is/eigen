@@ -1,3 +1,7 @@
+// The restore command of the eigen launcher: it puts a whole-server archive back in two steps. The stage
+// unpacks and checks the archive while Eigen runs, and the swap, with Eigen stopped, moves the staged tree in and
+// keeps what it replaces aside. Every refusal comes before anything in the data folder moves.
+
 import type { Database } from 'bun:sqlite';
 import {
     chmodSync,

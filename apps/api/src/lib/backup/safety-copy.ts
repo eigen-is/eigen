@@ -1,3 +1,7 @@
+// Lists, measures and deletes the safety copies that restores leave beside a home. A home whose files live in an
+// S3 bucket has its objects deleted with the copy, so the delete asks the mount settings in the folder where they
+// are. The backup routes call it, and so does deleting a user.
+
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';

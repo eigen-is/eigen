@@ -1,3 +1,8 @@
+// Takes the snapshot of one home that goes into a backup: its files, its databases in a consistent state, its
+// share rows and the auth rows of its owner. A light backup skips what can be rebuilt. It reports progress as it
+// goes and counts the bytes first, so the caller can check the room on disk. Home backups and server backups
+// both use it.
+
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';

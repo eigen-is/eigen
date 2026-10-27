@@ -1,3 +1,7 @@
+// The first half of restoring a whole server: unpacking and checking the server archive into a staging folder in
+// the data root, while Eigen still runs. The homes are rebuilt there from the archive, so that the later swap only
+// has to rename folders. The restore command of the launcher calls it.
+
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
