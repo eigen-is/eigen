@@ -187,18 +187,18 @@ describe("a text box's rows", () => {
     test('a deck shows letter spacing in pt and writes the px it stores, a drawing px', async () => {
         const deck = await renderPanel(textBox('a', { letterSpacing: 3 }), 960);
         const letter = rowInput(deck.container, 'Letter');
-        expect(letter.value).toBe('1.5');
+        expect(letter.value).toBe('1.50');
         await type(letter, '2');
         expect(deck.writes).toEqual([[{ id: 'a', fields: { letterSpacing: 4 } }]]);
         const drawing = await renderPanel(textBox('b', { letterSpacing: 3 }));
-        expect(rowInput(drawing.container, 'Letter').value).toBe('3');
+        expect(rowInput(drawing.container, 'Letter').value).toBe('3.00');
     });
 
     // A pptx's 0.1 pt tracking on a 10 in deck stores 0.2667 px.
     test('letter spacing shows to the hundredth, and showing it writes nothing', async () => {
         const { container, writes } = await renderPanel(textBox('a', { letterSpacing: 0.26666666666666666 }), 720);
         const letter = rowInput(container, 'Letter');
-        expect(letter.value).toBe('0.1');
+        expect(letter.value).toBe('0.10');
         await act(async () => {
             letter.focus();
             letter.blur();

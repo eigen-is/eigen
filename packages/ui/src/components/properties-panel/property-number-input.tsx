@@ -1,3 +1,7 @@
+// The number field of the properties panels, such as a shape's size in Slides or a chart axis bound.
+// It writes on every change and folds one edit into one undo step. When it is not focused it shows the
+// decimals its step implies, so a step of 0.01 shows 16 as 16.00, in the browser's own number format.
+
 import { Input } from '@workspace/ui/components/input';
 import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
@@ -16,9 +20,9 @@ type PropertyNumberInputProps = {
     onClear?: () => void;
 };
 
-// The panel's number field. It writes on EVERY change — a keystroke, a spinner click, an arrow-key
-// step — so the edit is wrapped in one gesture from the first of them until the field is left or
-// committed: typing "250" is one undo step, not the three ⌘Z would otherwise walk back through.
+// The field writes on every change, such as a keystroke, a spinner click or an arrow-key step. So the
+// edit is one gesture from the first change until the field is left or committed: typing "250" is one
+// undo step, not three.
 export function PropertyNumberInput({
     value,
     onChange,
@@ -33,12 +37,13 @@ export function PropertyNumberInput({
     // While focused the field shows its own draft, so a half-typed "-" or a clamped value never jumps under the caret.
     const [draft, setDraft] = useState<string | null>(null);
     const { hold, end: endGesture, undoKey } = useHeldGesture();
+    const shown = value === undefined ? '' : step === undefined ? String(value) : value.toFixed(stepDecimals(step));
 
     return (
         <Input
             type="number"
             className={cn('h-7 text-xs', className)}
-            value={draft ?? String(value ?? '')}
+            value={draft ?? shown}
             placeholder={placeholder}
             onChange={(e) => {
                 const raw = e.target.value;
@@ -65,7 +70,7 @@ export function PropertyNumberInput({
                 if (undoKey(e)) setDraft(null);
                 else if (e.key === 'Enter' || e.key === 'Escape') endGesture();
             }}
-            onFocus={() => setDraft(String(value ?? ''))}
+            onFocus={() => setDraft(shown)}
             onBlur={() => {
                 endGesture();
                 setDraft(null);
@@ -76,4 +81,9 @@ export function PropertyNumberInput({
             disabled={disabled}
         />
     );
+}
+
+// The digits after the decimal point of a step: two for 0.01, none for 1.
+function stepDecimals(step: number): number {
+    return String(step).split('.')[1]?.length ?? 0;
 }
