@@ -1,10 +1,24 @@
+// The doc's page as the editor writes it, and the reader's text width on a page-less doc. A page setup change, from Page
+// setup, a band's bar or Format › Switch to page-less, is one write to the page map and one undo step beside the
+// typing. The text width is no part of the doc: each reader keeps their own.
+
 import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { PAGE_ROOT, pageRecord, readPageSetup, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
+import type { DocsTextWidth } from '@workspace/lib/types/settings';
 import * as Y from 'yjs';
 import { NORMAL_STYLE_ORIGIN } from './normal-style';
 
 const PAGE_SETUP_ORIGIN = Symbol('page setup');
+
+// Google Docs' text widths, measured on its page-less doc and rounded to the quarter inch: the column a page-less doc
+// draws its text in, whatever its paper. Full is the editor's width less a gutter on each side.
+export const TEXT_WIDTHS: { value: DocsTextWidth; label: string; px: number | null }[] = [
+    { value: 'narrow', label: 'Narrow', px: 696 },
+    { value: 'medium', label: 'Medium', px: 888 },
+    { value: 'wide', label: 'Wide', px: 1056 },
+    { value: 'full', label: 'Full', px: null },
+];
 
 // y-tiptap's own undo manager over the page and style maps too, so ⌘Z takes back a page setup change and an update of
 // Normal text. yUndoPlugin applies these defaults only to a manager it builds, so they are copied here; its plugin view
