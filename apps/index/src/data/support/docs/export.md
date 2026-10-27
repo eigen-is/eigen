@@ -23,6 +23,8 @@ You can download a copy of any document as a Word file, a PDF, or a standalone w
 
 A progress dialog appears while the file is being prepared. Your browser downloads the file automatically when it is ready. The file is named after your document.
 
+When the file leaves something out or draws it simpler, a message says so after the download, for example "1 chart was left out of the file; 2 charts were simplified." It also says when part of the document couldn't be read and is missing from the file.
+
 ## Export from Drive
 
 You do not need to open the document to export it. In Drive, right-click the document (or click the **⋮** button next to it) and hover over **Download**. Choose the format you want. The same three formats are available.

@@ -25,6 +25,8 @@ The downloaded file takes the name of the spreadsheet.
 
 A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells and sheets past a size limit. Even cut short, a PDF of a very large spreadsheet can take too long to make and fail. To keep every cell, download it as Excel.
 
+When the file leaves something out, cuts it short, or draws it simpler, a message says so after the download, for example "2 sheets were cut to fit." An Excel file says so too when a text or formula is longer than Excel allows, or a sheet has a name Excel refuses, for example "1 sheet was renamed."
+
 ## What carries over to Excel
 
 When you download as **Microsoft Excel (.xlsx)**, the following are preserved:
