@@ -1,5 +1,5 @@
 // The CSS colors the Office writers share, such as the docx and xlsx styles: a stored or stylesheet color as Office's
-// RRGGBB, and whether a color shows nothing. Both read hex and rgb() through lib's one color reader.
+// RRGGBB, and whether a color shows nothing.
 
 import { isHexColor, parseRgb } from '@workspace/lib/constants/colors';
 

@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { createCfFormulaEvaluator, evaluateConditionalFormat, withCfRanges } from '../../engine/conditional-format';
+import {
+    createCfFormulaEvaluator,
+    evaluateConditionalFormat,
+    isWellFormedCfRule,
+    withCfRanges,
+} from '../../engine/conditional-format';
 import { FormulaEngine } from '../../engine/formula-engine';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, ConditionalFormatRule, SingleRange } from '../../engine/types';
@@ -82,6 +87,17 @@ describe('engine/conditional-format — colorGradation', () => {
             ],
             data,
         );
+        expect(styles['1_0']?.cellColor).toBe('rgb(128, 128, 0)');
+    });
+
+    test('keeps a color-scale rule whose stops are space-syntax rgb() and renders it', () => {
+        const rule: ConditionalFormatRule = {
+            type: 'colorGradation',
+            cellrange: [{ row: [0, 2], column: [0, 0] }],
+            format: ['rgb(255 0 0)', 'rgb(0 255 0 / 50%)'],
+        };
+        expect(isWellFormedCfRule(rule)).toBe(true);
+        const styles = evaluateConditionalFormat([rule], buildMatrix([[0], [5], [10]]));
         expect(styles['1_0']?.cellColor).toBe('rgb(128, 128, 0)');
     });
 

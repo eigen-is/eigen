@@ -284,7 +284,7 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
     });
 });
 
-// A run's color, a cell's fill and a rule's colors read through one check, and each stored spelling reads as before.
+// A run's color, a cell's fill and a rule's colors read through one check.
 describe('a stored color', () => {
     const fill = (bg: string) => getStyleByCell(workbookContextFactory(), [[{ v: 'x', bg }]], 0, 0, {})['background'];
     const rule = (cellColor: string) =>

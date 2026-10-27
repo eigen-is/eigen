@@ -480,7 +480,7 @@ export function isWellFormedCfRule(rule: ConditionalFormatRule | null): boolean 
             return (
                 Array.isArray(rule.format) &&
                 rule.format.every(
-                    (color) => typeof color === 'string' && (color.startsWith('#') || color.split(',').length >= 3),
+                    (color) => typeof color === 'string' && (color.startsWith('#') || parseRgb(color) !== undefined),
                 )
             );
         case 'icons':
