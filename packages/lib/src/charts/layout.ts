@@ -60,10 +60,10 @@ export function layoutChart({ spec, data, sourceFormat, ...box }: ChartLayoutInp
     );
     if (values.every((row) => row.every((value) => value === null))) return message(CHART_MESSAGES.noData);
     const categories = Array.from({ length: count }, (_, i) => data.categories[i] ?? '');
-    // An automatic color is the palette's at the series' place in the spec, so a range series after one whose values
-    // were deleted keeps the color the editor shows it in.
     // Past the sketch cap a chart draws no data labels, which bounds their collision pass.
     const capped = isSketchCapped(spec, data);
+    // An automatic color is the palette's at the series' place in the spec, so a range series after one whose values
+    // were deleted keeps the color the editor shows it in.
     const series = data.series.map((s, i) => {
         const style = chartSeriesStyle(spec, s.id);
         const place = spec.data.series.findIndex(({ id }) => id === s.id);
@@ -86,22 +86,15 @@ export function layoutChart({ spec, data, sourceFormat, ...box }: ChartLayoutInp
             : series.map(({ name, color }) => ({ name, color }));
     const legend = placeLegend(ctx, spec.legend.position, items, placeTitle(ctx, spec.title.text));
     const frame = legend.frame;
+    // The values' own format, which their ticks and data labels read in.
+    const valuesFormat = spec.axes.y.labels.format ?? sourceFormat ?? null;
 
     // Past MAX_SKETCH_POINTS the data marks draw unsketched and solid, their labels still the chart's.
     const marks: Context = capped ? { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } } : ctx;
     const plot =
         type === 'pie'
             ? layoutPie(marks, spec, pieId, categories, values[0], frame)
-            : layoutCartesian(
-                  ctx,
-                  marks,
-                  spec,
-                  categories,
-                  series,
-                  values,
-                  frame,
-                  spec.axes.y.labels.format ?? sourceFormat ?? null,
-              );
+            : layoutCartesian(ctx, marks, spec, categories, series, values, frame, valuesFormat);
     if (!plot) return message(CHART_MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
 }
