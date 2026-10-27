@@ -1,7 +1,7 @@
 // Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, merges, borders, sizes and
 // conditional formats of the sheet the op names, and the formula text and chart ranges on every sheet that point at
-// it. The editor runs it inside its reducers, and a peer and the server's replay run it for an insertRowCol or
-// deleteRowCol op. The shifters for one kind of map are exported for the editor's own fields and its undo stack.
+// it. It runs wherever such an op applies, for example in the editor's own insert and in the server's replay of the op
+// log. The shifters for one kind of map are exported for code that moves the same maps, such as the undo stacks.
 
 import type { MergeCell, Sheet, SheetChart } from '@workspace/lib/sheets';
 import { cloneSides, parseCellKey, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';

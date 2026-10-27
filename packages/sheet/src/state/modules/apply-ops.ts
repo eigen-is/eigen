@@ -1,7 +1,7 @@
 // Applies one op batch to the editor's context, the way replaySheetsOps applies it to a joiner's sheets: the sheet and
 // row or column ops first, then the cell and field patches, resolved against the sheets those ops left. A batch applies
-// whole or not at all. A peer's batch, the batches queued before the grid mounted, and every structural undo or redo
-// go through it, so the client that sends a batch, the peers that take it and a joiner all end the same.
+// whole or not at all. Callers such as the Workbook's applyOp for a peer's batch, and an undo that adds a sheet or
+// deletes rows, go through it, so the client that sends a batch, the peers that take it and a joiner all end the same.
 
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';

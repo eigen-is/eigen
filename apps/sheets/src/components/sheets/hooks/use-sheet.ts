@@ -1,7 +1,7 @@
 // A workbook's collab protocol in the editor: the stored snapshot plus a log of op batches, both in one Yjs document.
 // It decodes the snapshot with the log replayed on top for the Workbook, pushes the Workbook's own batches onto the
-// log, and hands a peer's batches to the Workbook's applyOp, queueing them while a grid mounts. The tab that closes
-// last, while connected, writes the log into a fresh snapshot.
+// log, and hands a peer's batches to the Workbook's applyOp, queueing them while a grid mounts. A tab that closes while
+// connected and alone, with no other client in the document, viewers included, writes the log into a fresh snapshot.
 
 import { useCollabDoc } from '@workspace/lib/collab';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';

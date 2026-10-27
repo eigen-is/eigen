@@ -1,6 +1,7 @@
 // Converts between the editor's immer patches and the ops it sends to peers. patchToOp names each sheet by id and
-// swaps the matrices a row or column op rewrote for the op itself, with the sheet's other fields whole; filterPatch
-// keeps what belongs on the wire; opToPatch turns a peer's ops back into patches on this client's sheet indices.
+// swaps the matrices a row or column op rewrote for the op itself, with the sheet's other fields whole. addSheetOps and
+// deleteSheetOps build a sheet's add and delete batches; filterPatch keeps what belongs on the wire; opToPatch turns
+// a peer's ops back into patches on this client's sheet indices.
 
 import type { MergeCell, SheetConfig } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
