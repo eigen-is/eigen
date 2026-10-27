@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, update, rollback, release, breaking]
 related: [self-hosting/back-up-and-restore, self-hosting/commands-and-files]
 order: 80
-updated: 2026-10-12
+updated: 2026-10-27
 ---
 
 An update is one command, and so is going back. Eigen backs itself up before every update, so a rollback puts back the old version with the accounts, settings, and databases it had.
@@ -65,9 +65,3 @@ Does cron run `./eigen backup` for you? Check its line. The `--keep` option of 0
 Eigen is not 1.0 yet. Until then, a release can change how Eigen stores something, and it does not keep the old way working. It converts what you have once, or that data does not open after the update. Stickies boards are the exception: they keep working across releases.
 
 A release like that marks the change as breaking in its notes. `./eigen update` shows you the notes, asks before it goes on, and makes a Full backup first, so `./eigen rollback` can bring everything back. Read the notes before you say yes.
-
-## Follow the newest code
-
-`./eigen update main` puts an install on the main channel. Every change to Eigen's code builds a new version there. `./eigen update` then installs the newest build, and `./eigen status` names it, like `0.3.0 (abc1234) on main`. While a build is still being published, `./eigen update` says so. Run it again a few minutes later.
-
-Release notes and the breaking question only come with a new version number, so on the main channel a breaking change can arrive without warning. The channel is for people who work on Eigen. `./eigen update <version>` takes you back to releases.
