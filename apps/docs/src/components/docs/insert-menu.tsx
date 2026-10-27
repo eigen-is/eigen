@@ -191,9 +191,9 @@ export function InsertMenu({
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
             )}
-            {/* Last before the comment, as Google's Insert lists its table of contents. */}
+            {/* Last before the comment, as Google's Insert lists its table of contents. Only between the body's blocks. */}
             <DropdownMenuItem
-                disabled={inNote || !('tableOfContents' in editor.schema.nodes)}
+                disabled={inNote || !active.canInsertTableOfContents}
                 onClick={() => editor.chain().focus().insertTableOfContents().run()}
             >
                 <TableOfContents className="h-4 w-4" /> Table of contents

@@ -1362,6 +1362,26 @@ test('Insert › Table of contents puts one in the body where the caret is', asy
     expect(editor.getJSON().content?.map((block) => block.type)).toEqual(['paragraph', 'tableOfContents', 'paragraph']);
 });
 
+// The command refuses in a cell, so the item says so rather than doing nothing.
+test('Insert › Table of contents is greyed out in a table cell', async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [
+            {
+                type: 'table',
+                content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [{ type: 'paragraph' }] }] }],
+            },
+        ],
+    });
+    editor.commands.setTextSelection(3);
+    await render(1920, true);
+    await openMenu('Insert');
+    const item = [...document.querySelectorAll('[role="menuitem"]')].find(
+        (entry) => entry.textContent?.trim() === 'Table of contents',
+    );
+    expect(item?.getAttribute('aria-disabled')).toBe('true');
+});
+
 // Print is the server's PDF in a tab of its own, so the headers and footers print; browser print is the fallback.
 describe('Print', () => {
     const opened: string[] = [];
