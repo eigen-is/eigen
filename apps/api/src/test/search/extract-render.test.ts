@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
+import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import { DEFAULT_SCENE_META } from '@workspace/lib/vector';
 import { MATHML_NAMESPACE, readLatex, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
+import { writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
 import { sampleChartParts } from '../fixtures/chart-parts';
@@ -262,6 +265,48 @@ describe('extractCollabText', () => {
         );
         const { text } = await extractCollabText('eigensheets', doc);
         expect(text).toContain('Findable runs');
+        doc.destroy();
+    });
+
+    test("eigensheets: a chart's title and series names index after the cells", async () => {
+        const doc = new Y.Doc();
+        const chart = {
+            id: 'c1',
+            index: 'a0',
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 300,
+            ...newSheetChartSpecParts({ ...sampleChartSpec('column'), title: { text: 'Quarterly revenue' } }),
+        };
+        const sheet = {
+            id: 'sheet-1',
+            name: 'Sheet1',
+            order: 0,
+            config: {},
+            celldata: [{ r: 0, c: 0, v: { v: 'A1' } }],
+        };
+        seedSheetsDoc(doc, [{ ...sheet, charts: { c1: chart } }], []);
+        const { text } = await extractCollabText('eigensheets', doc);
+        expect(text.startsWith('A1 Quarterly revenue')).toBe(true);
+        expect(text).toContain('Hot star');
+        doc.destroy();
+    });
+
+    // A peer can store anything under a chart's id: an entry that is no record is no chart, and the cells still index.
+    test('eigensheets: a stored chart entry that is no object leaves the cells indexed', async () => {
+        const doc = new Y.Doc();
+        const sheet = {
+            id: 'sheet-1',
+            name: 'Sheet1',
+            order: 0,
+            config: {},
+            celldata: [{ r: 0, c: 0, v: { v: 'A1' } }],
+        };
+        const snapshot = encodeSheetsSnapshot([sheet], { computed: false });
+        writeSheetsSnapshotToYjs(doc, snapshot.replace('"name":"Sheet1"', '"name":"Sheet1","charts":{"c1":null}'));
+        const { text } = await extractCollabText('eigensheets', doc);
+        expect(text).toBe('A1');
         doc.destroy();
     });
 

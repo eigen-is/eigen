@@ -4,7 +4,11 @@
 
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { domOutputSpecToHTMLString, renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
+import {
+    domOutputSpecToHTMLString,
+    renderToHTMLString,
+    serializeChildrenToHTMLString,
+} from '@tiptap/static-renderer/pm/html-string';
 import { readChartSpec } from '@workspace/lib/charts';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { ChartAttrs, FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
@@ -78,6 +82,8 @@ export function renderDocHtml(
                         `<span data-type="page-number" data-kind="${readPageNumberKind(node.attrs['kind'])}"></span>`,
                 }),
             },
+            // Comments are not exported, so a commented text draws as plain text, with no highlight.
+            markMapping: { comment: ({ children }) => serializeChildrenToHTMLString(children) },
         },
     });
     return footnotes ? `${html}${footnotes.list()}` : html;

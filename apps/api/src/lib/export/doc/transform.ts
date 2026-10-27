@@ -31,14 +31,19 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
+import { isDataUri } from '../../shared/data-uri';
 import { exportHtmlDocument } from '../html-document';
 import { withSvgFallbacks } from '../office-image';
 import { renderEquations, svgEquations } from './equations';
+import { figureMediaKey, pastedFigureMedia } from './pasted-media';
 import { renderDocHtml, withAbsoluteLinks } from './render';
+
+// A percent-encoded or plain-text SVG, which draws as it is. The media type matches in any case, as splitDataUri reads it.
+const SVG_DATA_URI = /^data:image\/svg\+xml[;,]/i;
 
 // HTML and PDF render the same document: WeasyPrint prints what the HTML download serves, but for the small caps the
 // PDF fakes and the equations it draws as SVG. The docx writer loads lazily, so an HTML export never evaluates it, its
-// styles or its fonts.
+// styles or its fonts. Every format draws a pasted data: image re-encoded, without its EXIF.
 export async function renderEigendocExport(
     doc: Y.Doc,
     format: EigendocExportFormat,
@@ -51,11 +56,10 @@ export async function renderEigendocExport(
     const style = readEigendocStyle(doc);
     const bands = readEigendocBands(doc);
     const media = await loadMedia(mediaNamesIn([json, bands]));
+    const pasted = await pastedFigureMedia([json, ...Object.values(bands)]);
     if (format === 'docx') {
         const { writeDocx } = await import('./docx/to-docx');
-        const { pastedFigureMedia } = await import('./docx/drawings');
-        const drawn = await pastedFigureMedia([json, ...Object.values(bands)]);
-        const docxMedia = await withSvgFallbacks([...media, ...drawn]);
+        const docxMedia = await withSvgFallbacks([...media, ...pasted]);
         const losses = lossCounter();
         const docx = writeDocx(
             { json, bands, page, style },
@@ -63,7 +67,7 @@ export async function renderEigendocExport(
         );
         return { data: toTransferableBuffer(docx), warnings: losses.warnings() };
     }
-    const dataUriMap = toDataUriMap(media);
+    const dataUriMap = toDataUriMap([...media, ...pasted]);
     const pdf = htmlExportMode(format) === 'pdf';
     const { printed, cut } = pdf ? printedBands(bands) : { printed: bands, cut: 0 };
     const warnings: TransformWarning[] = cut > 0 ? [{ code: 'bands-cut', count: cut }] : [];
@@ -83,7 +87,13 @@ export async function renderEigendocExport(
         .map(({ part, content }) => {
             const html = renderDocHtml(
                 withAbsoluteLinks(content, publicOrigin),
-                (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
+                (mediaName, src) => {
+                    const key = figureMediaKey({ mediaName, src });
+                    if (key) return dataUriMap.get(key) ?? null;
+                    // Only a base64 src is re-encoded, so any other data: src but an SVG's would carry its bytes, EXIF
+                    // included, out as pasted: it draws nothing, as a src no image decodes from does.
+                    return src && isDataUri(src) && !SVG_DATA_URI.test(src) ? null : src;
+                },
                 {
                     ...(pdf && { smallCapsFont: style.font }),
                     print: pdf,
@@ -286,9 +296,11 @@ h1, h2, h3, h4, h5, h6 { font-size: inherit; }
     z-index: 0;
 }
 
-/* A block holding a page break must split: avoid pushes it whole to a new page and breaks inside it anyway */
-.figure, table, pre, blockquote { page-break-inside: avoid; }
-table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
+/* A block holding a page break must split: avoid pushes it whole to a new page and breaks inside it anyway. A table
+   and each of its rows split, as Word, whose "Allow row to break across pages" is on by default, and Google Docs print
+   one, rather than leaving a page half empty */
+.figure, pre, blockquote { page-break-inside: avoid; }
+blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
 
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 

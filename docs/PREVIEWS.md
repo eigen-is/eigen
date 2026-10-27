@@ -85,7 +85,7 @@ An SVG is served as its own bytes under the sandbox CSP, not rasterised. An `eig
 
 ## Images convert through sharp first
 
-`generateImagePreview` (`apps/api/src/lib/shared/thumbnails.ts`) runs in a Worker and makes both the 512 px thumbnail and the 2560 px screen preview. It tries sharp, then `heic-convert` for HEIC, then the JPEG exiftool finds embedded in a RAW, PSD or AI file. `isExiftoolCandidate` gates it.
+`generateImagePreview` (`apps/api/src/lib/shared/thumbnails.ts`) runs in a Worker and makes both the 512 px thumbnail and the 2560 px screen preview. It tries sharp, then `heic-convert` for HEIC, then the JPEG exiftool finds embedded in a RAW, PSD or AI file. `isExiftoolCandidate` gates it. The main thread terminates the Worker at `THUMBNAIL_TIMEOUT_SECONDS` (30 s), and `terminate()` stops the Worker's timers but not a child process, so exiftool's calls share one deadline 5 s before that (`EXIFTOOL_SPARE_MS`): each is killed when the time left runs out, and none starts after it. A hostile file therefore leaves no exiftool running past the Worker.
 
 The Worker gets 30 s per image (`THUMBNAIL_TIMEOUT_SECONDS`). `Worker.terminate()` does not stop libvips, so every sharp pipeline in the Worker carries the same value as its own `timeout`, and an SVG librsvg grinds through stops instead of holding a core after its slot is freed.
 

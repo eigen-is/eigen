@@ -46,6 +46,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Unread counts in Mail** — a message you read in another mail app clears its unread count in Eigen's sidebar at once
 - **Saving a text file in Drive** — when someone else changed the file since you opened it, even within the same second, Drive shows **File conflict** instead of overwriting their change
 - **Recent activity in Drive** — saving a text file in Drive's editor shows as edited, not as an upload
+- **Long tables in Docs PDFs** — a table too tall for what is left of a page starts there and continues on the next page, instead of jumping whole to the next page and leaving a gap. A tall row splits across the pages too, as Word does by default
+- **Pasted photos in Docs downloads** — a web page or PDF download draws a pasted image without the camera details and location it carried, as the Word download already did. An animated GIF pasted that way shows its first frame, and one pasted in a form the download can't clean is left out
+- **Merged cells in spreadsheet previews** — a merged cell too wide or too tall for the Drive preview, or for a download cut to fit, shows no border where the preview cuts it off
+- **Spreadsheet previews** — an image or chart on a sheet with hidden columns shows in the Drive preview when it sits within the preview's first 50 visible columns
+- **Search in Sheets** — searching your files finds a spreadsheet by a chart's title, axis titles and series names
+- **Comments in downloads** — a Docs web page download and the Drive preview show commented text without its yellow highlight, as the PDF and Word downloads already do
 - **Shared with me in Drive** — a text file or folder someone shared with you shows its full path at the top, starting with Shared with me, then the shared folder and every folder below it. Click Shared with me to go back to the list
 - **Public files in Drive** — a public file or folder that nobody shared with you shows its path from the first folder you can open, without Shared with me
 - **100% stacked charts in Office files** — a 100% stacked chart downloaded as Excel, Word or PowerPoint shows its axis from 0% to 100%, also when its numbers have a format of their own
