@@ -7,10 +7,18 @@ import { renderInDocument } from '../../../render-in-document';
 
 const window = installHappyDom();
 
+// The person search reads display names for the session's user.
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({
+    ...realAuth,
+    useAuth: () => ({ user: { id: 'me', email: 'me@example.com' } }),
+}));
+
 const { act, createElement } = await import('react');
 const { ChoiceMenuSub, DropdownMenuItem } = await import('../../../../components/dropdown-menu');
 const { Menubar } = await import('../../../../components/menubar');
 const { AppBarMenu } = await import('../../../../components/layout/toolbar/app-bar-menu');
+const { CommentFilterMenuItems } = await import('../../../../components/comments/comment-filter-menu-items');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -132,4 +140,46 @@ test('on a phone a submenu is a page of the bar menu, and the menu reopens at it
     expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
     await press('Format');
     expect(shownRows()).toEqual(['Bold', 'Line spacing']);
+});
+
+// A long member list has a search box. Its arrow keys move the caret, where in a bar menu they would move to the next
+// menu.
+test("the arrow keys in the Filter menu's person search stay in the box", async () => {
+    window.happyDOM.setViewport({ width: 1600, height: 900 });
+    const filter = {
+        filter: { assignee: 'all' as const, colors: new Set<string>(), status: 'open' as const },
+        setAssignee: () => {},
+        toggleColor: () => {},
+        setStatus: () => {},
+        isActive: false,
+        clear: () => {},
+    };
+    const members = Array.from({ length: 9 }, (_, i) => ({ email: `p${i}@example.com`, read: true, write: true }));
+    ({ unmount } = await renderInDocument(
+        createElement(
+            Menubar,
+            null,
+            createElement(AppBarMenu, {
+                label: 'Filter',
+                children: createElement(CommentFilterMenuItems, {
+                    filter,
+                    members,
+                    currentUserEmail: 'me@example.com',
+                }),
+            }),
+            createElement(AppBarMenu, { label: 'Edit', children: createElement(DropdownMenuItem, null, 'Undo') }),
+        ),
+    ));
+    await press('Filter');
+    await openSubmenu('Assigned to');
+    const search = document.querySelector<HTMLInputElement>('[role="menu"] input');
+    if (!search) throw new Error('no search box');
+    search.focus();
+    for (const key of ['ArrowRight', 'ArrowLeft']) {
+        await act(async () => {
+            search.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+        });
+        expect(openMenu()).not.toBe('Edit');
+        expect(document.activeElement).toBe(search);
+    }
 });

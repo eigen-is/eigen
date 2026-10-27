@@ -1,3 +1,7 @@
+// The people a comment can be assigned to, or filtered by, as a searchable list: the members of the document's
+// share, with Me, Unassigned and, for a filter, Anyone pinned above. Pickers such as AssigneePicker and the comment
+// filter render it, in a popover or inside a menu's submenu.
+
 import type { CommentAssigneeFilter } from '@workspace/lib/comments';
 import { usePublicUsers } from '@workspace/lib/public';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
@@ -93,7 +97,15 @@ export function MemberCommandList({
     const showSearch = listed.length > 8;
     return (
         <Command>
-            {showSearch && <CommandInput placeholder="Find person…" />}
+            {showSearch && (
+                <CommandInput
+                    placeholder="Find person…"
+                    // The caret's keys: a menu around the list would close its submenu or move to the next bar menu.
+                    onKeyDown={(event) => {
+                        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') event.stopPropagation();
+                    }}
+                />
+            )}
             {header}
             <CommandList className="max-h-56 overflow-y-auto">
                 {/* Anyone/Me/Unassigned live in the header, so an empty member list is normal — only a real search miss (list non-empty) warrants the message. */}
