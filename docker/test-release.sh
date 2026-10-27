@@ -437,20 +437,22 @@ PINS_BEFORE=$(pins)
 ##############################################################################
 header "./eigen update to :latest"
 ##############################################################################
-# A Full backup that runs when the update starts, slow with a file of noise in the home: the update's own backup
-# waits it out instead of failing. Its Light backup holds the file too, so the rollback brings it back.
+# A Full backup, slow with a file of noise in the home, started once the update's own backup asks: HARNESS_HOLD keeps
+# that one in the docker shim until this one runs, so it waits one out instead of failing. Its Light backup holds the
+# file too, so the rollback brings it back.
 BALLAST="$INSTALL/data/home/$ADMIN_ID/ballast.bin"
 scratch_run sh -c 'head -c 1000000000 /dev/urandom >"$1" && chown 1000:1000 "$1"' sh "$BALLAST"
+held="$SCRATCH/update-held"
 (
+    for _ in $(seq 1 300); do
+        if [ -e "$held" ]; then break; fi
+        sleep 1
+    done
     eigen backup
     printf '%s\n' "$OUT" >"$SCRATCH/running-backup.log"
     exit "$CODE"
 ) &
 running=$!
-for _ in $(seq 1 300); do
-    if backups | grep -q '^server-manual-full-.*\.tar\.json$'; then break; fi
-    sleep 0.2
-done
 # The line the update's backup step writes while it waits, seen while it waits: the step's log is overwritten after.
 (
     for _ in $(seq 1 1500); do
@@ -462,18 +464,13 @@ done
     done
 ) 2>/dev/null &
 watching=$!
-# The API's execs, recorded while the update runs: the daemon replays only its last 256 events, and the update's pulls,
-# recreates and health checks push its backup command out of them before a later query.
-docker events --since "$(date +%s)" --filter "container=$PROJECT-eigen-api-1" --format '{{.Time}} {{.Action}}' \
-    >"$SCRATCH/api-events.log" 2>/dev/null &
-listening=$!
 started=$SECONDS
-eigen update
+HARNESS_HOLD=$held eigen update
 show
 backed_up=0
 wait "$running" || backed_up=$?
-kill "$watching" "$listening" 2>/dev/null || :
-wait "$watching" "$listening" 2>/dev/null || :
+kill "$watching" 2>/dev/null || :
+wait "$watching" 2>/dev/null || :
 scratch_run rm "$BALLAST"
 if [ "$CODE" = 0 ] && says "◆  Eigen $NEW" && says "The harness's new release" &&
     says "◇  Eigen $PREVIOUS (harness) → $NEW (harness) is running at https://localhost/"; then
@@ -489,16 +486,7 @@ if [ "$backed_up" != 0 ] || [ -z "$manual" ] || [[ $saved != server-pre-update-l
 elif [ -e "$SCRATCH/update-waited" ]; then
     ok "the update waited for the backup that ran, $manual, then made $saved on the running API"
 else
-    # No seam holds a backup open, and a fast runner ends the 1 GB one before the update's pulls do: a miss is the
-    # product's only if the update's backup command started over five seconds, the CLI's way to the API, before the
-    # running backup's record was last written.
-    ended=$(scratch_run stat -c %Y "$INSTALL/backups/$manual.json" 2>/dev/null || true)
-    asked=$(awk '/exec_start: .* backup .*--reason pre-update/ { print $1; exit }' "$SCRATCH/api-events.log")
-    if [ -n "$asked" ] && [ -n "$ended" ] && [ "$asked" -ge $((ended - 5)) ]; then
-        skip "harness timing: $manual ended at $ended, the update asked at $asked, so the wait went untested"
-    else
-        fail "the update asked for its backup at '$asked', before $manual ended at '$ended', and was not seen waiting for it"
-    fi
+    fail "the update asked for its backup while $manual ran, and was not seen waiting for it"
 fi
 check_running "$NEW"
 after=$(unpinned)

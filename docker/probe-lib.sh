@@ -55,10 +55,18 @@ scratch_init() {
     for name in $IMAGES; do export "$(image_key "$name")=eigentest-$name:$RUN"; done
     CLI_IMAGE="eigentest-cli:$RUN"
     # The daemon is shared with whatever else runs on this machine, so the launcher's prunes, which reach past its
-    # own install, are logged to $HARNESS_PRUNE_LOG instead of run.
+    # own install, are logged to $HARNESS_PRUNE_LOG instead of run. With $HARNESS_HOLD set, the update's backup creates
+    # that file and goes in once a manual Full backup runs, or after five minutes, so it has one to wait out.
     mkdir "$SCRATCH/cli-image"
     printf '%s\n' '#!/bin/sh' \
         'case "$1 $2" in "image prune") echo "$*" >>"$HARNESS_PRUNE_LOG"; exit 0 ;; esac' \
+        'case "${HARNESS_HOLD:+hold} $* " in "hold "*" --reason pre-update "*)' \
+        '    : >"$HARNESS_HOLD"' \
+        '    for _ in $(seq 1 300); do' \
+        '        grep -qs "^  \"state\": \"running\"" backups/server-manual-full-*.tar.json && break' \
+        '        sleep 1' \
+        '    done ;;' \
+        'esac' \
         'exec docker.real "$@"' >"$SCRATCH/cli-image/docker"
     chmod 755 "$SCRATCH/cli-image/docker"
     printf '%s\n' 'FROM docker:cli' \
@@ -196,8 +204,8 @@ EOF
 
 # in_cli_container [--stdin] [--user uid:gid] <command…>: runs in $INSTALL inside the no-Bun docker:cli image, with
 # the Docker socket, and the scratch folder at its own path so the bind mounts Compose creates resolve on the host. The
-# EIGEN_*_IMAGE variables and COMPOSE_PROFILES pass through when set, and BUN_VERSION, which the Compose view of a local
-# build needs as the launcher sets it.
+# EIGEN_*_IMAGE variables, COMPOSE_PROFILES and HARNESS_HOLD pass through when set, and BUN_VERSION, which the Compose
+# view of a local build needs as the launcher sets it.
 # --stdin passes this script's stdin through, for a piped answer; without it the command reads nothing.
 in_cli_container() {
     local user=() stdin=()
@@ -212,7 +220,7 @@ in_cli_container() {
     docker run --rm ${stdin[@]+"${stdin[@]}"} --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
         -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" ${IMAGE_FLAGS[@]+"${IMAGE_FLAGS[@]}"} \
         -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" -e BUN_VERSION ${COMPOSE_PROFILES:+-e COMPOSE_PROFILES} \
-        ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
+        ${HARNESS_HOLD:+-e HARNESS_HOLD} ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
 }
 
 # eigen <args…>: the launcher in the no-Bun container, as $OPERATOR when set (else root); sets OUT (stdout and
