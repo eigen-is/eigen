@@ -24,6 +24,7 @@ import { IMPORT_MESSAGES, importError, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
 import type { Drawing } from './drawing';
 import { placeDrawings, readSheetDrawing } from './drawing';
+import { nameInliner } from './names';
 import { readBudget, readInBatches, readXlsxPackage } from './package';
 import { readRules } from './rules';
 import { readSharedStrings } from './strings';
@@ -53,8 +54,8 @@ export type XlsxOptions = {
 // Every worksheet's grid and what lies past it, charged against the output budget as it is read. The cells count what
 // they emit, a value, a rich string's run, a border, a row's height or hidden flag, a merged or linked cell, a column's
 // width, a rule's range or a validated cell, and the grids recalc materialises; the text counts every value, display,
-// run, formula, link and rule text, each shared string and shared formula once per copy. A chart sheet is a sheet
-// without a grid. The pictures come back beside the sheets as the media files their images name, and what was left out
+// run, formula, link and rule text, each shared string and shared formula once per copy. The workbook's defined names
+// are written into the formulas that use them. A chart sheet is a sheet without a grid. The pictures come back beside the sheets as the media files their images name, and what was left out
 // as warnings that count it.
 export function readXlsx(
     bytes: Uint8Array,
@@ -81,6 +82,7 @@ export function readXlsx(
             emitted.text.charge(text);
         };
         const losses = lossCounter();
+        const inline = nameInliner(book.definedNames, losses.lost);
         const sheets: Sheet[] = [];
         // Excel refuses two sheets of one name, in any case: the first keeps it, so a formula naming it means that one,
         // and a later one is numbered as Excel numbers a copy, past every name the workbook holds.
@@ -114,6 +116,7 @@ export function readXlsx(
                 palette,
                 charge,
                 chargeCopy: emitted.translated.charge,
+                inline: (formula) => inline(formula, written),
                 placed: worksheet.placed,
             });
             // The cells' span, at least a default grid's so empty sheets add up; and the grid recalc materialises from it,
@@ -162,6 +165,7 @@ export function readXlsx(
                     charge,
                     chargeElements: reads.elements.charge,
                     lost: losses.lost,
+                    inline: (formula) => inline(formula, written),
                 }),
             };
             sheets.push(sheet);

@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { detectAbsolute, functionCopy, functionStrChange, renameSheetRefs } from '../../engine/formula-shift';
+import {
+    detectAbsolute,
+    functionCopy,
+    functionStrChange,
+    inlineNames,
+    renameSheetRefs,
+} from '../../engine/formula-shift';
 
 describe('engine/formula-shift — functionCopy single-cell refs', () => {
     test('shifts a relative ref down', () => {
@@ -470,5 +476,60 @@ describe('engine/formula-shift — renameSheetRefs', () => {
 
     test('a ref without its `=` comes back without one', () => {
         expect(renameSheetRefs('Data!$A$1:$A$5', renames)).toBe("'Data(Copy)'!$A$1:$A$5");
+    });
+});
+
+describe('engine/formula-shift — inlineNames', () => {
+    const names: Record<string, string> = {
+        rate: 'Inputs!$B$2',
+        sales: "'Q 1'!$A$1:$A$9",
+        sum: 'Data!$C$1:$C$3',
+        rhoco2: 'Data!$L$5',
+        dynamic: '(OFFSET(Data!$A$1,0,0,3,1))',
+    };
+    // The resolver sees each name as written and the sheet that qualifies it, unquoted.
+    const seen: [string, string | undefined][] = [];
+    const resolve = (name: string, sheet: string | undefined) => {
+        seen.push([name, sheet]);
+        return sheet === 'Local' && name === 'Rate' ? 'Local!$Z$1' : names[name.toLowerCase()];
+    };
+
+    test('a name in any argument, beside an operator or after a unary minus becomes its text', () => {
+        expect(inlineNames('=SUM(Sales)*Rate', resolve)).toBe("=SUM('Q 1'!$A$1:$A$9)*Inputs!$B$2");
+        expect(inlineNames('=IF(A1>Rate,-Rate,MAX(1,Rate))', resolve)).toBe(
+            '=IF(A1>Inputs!$B$2,-Inputs!$B$2,MAX(1,Inputs!$B$2))',
+        );
+        expect(inlineNames('=Rate&" "&Rate', resolve)).toBe('=Inputs!$B$2&" "&Inputs!$B$2');
+        expect(inlineNames('=SUM(Dynamic)', resolve)).toBe('=SUM((OFFSET(Data!$A$1,0,0,3,1)))');
+    });
+
+    test('a name qualified by its sheet reaches the resolver with that sheet, unquoted', () => {
+        seen.length = 0;
+        expect(inlineNames("=Local!Rate+'Local'!Rate", resolve)).toBe('=Local!$Z$1+Local!$Z$1');
+        expect(seen).toEqual([
+            ['Rate', 'Local'],
+            ['Rate', 'Local'],
+        ]);
+    });
+
+    // Excel tells a function from a name by the parenthesis after it.
+    test('a function named as a name is called, and the name it shadows is still inlined', () => {
+        expect(inlineNames('=SUM(Sum)', resolve)).toBe('=SUM(Data!$C$1:$C$3)');
+    });
+
+    test('a string, a structured reference, a ref, a number and an unknown name stay as written', () => {
+        expect(inlineNames('="Rate"&Table1[Rate]&A1&2.5&Other', resolve)).toBe('="Rate"&Table1[Rate]&A1&2.5&Other');
+    });
+
+    // The walker reads RhoCO2 as a cell, but RHOCO is past Excel's last column, so Excel reads a name.
+    test('a name that looks like a cell past the grid is a name', () => {
+        expect(inlineNames('=RhoCO2*2', resolve)).toBe('=Data!$L$5*2');
+    });
+
+    // The walker drops the spaces around a range's colon, which a formula without a name keeps.
+    test('a formula without a name comes back as written, its spaces included', () => {
+        const formula = '= SUM( A1 : B2 ) ';
+        expect(inlineNames(formula, resolve)).toBe(formula);
+        expect(inlineNames('Rate', resolve)).toBe('Inputs!$B$2');
     });
 });

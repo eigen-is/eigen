@@ -392,7 +392,7 @@ Every imported sheet takes a fresh id: the importer numbers its sheets `sheet-0`
 | A chart's series and categories | Id ([§ A chart is a floating record](#a-chart-is-a-floating-record-whose-refs-name-sheets-by-id)) | `mapChartRefs` |
 | A link cell's `hl` and the calc chain | Id | The new id |
 
-Defined names need nothing: the reader drops them ([SHEETS-TODO.md](SHEETS-TODO.md)). A range written with its sheet on both ends (`'Data'!A1:'Data'!B2`) gets the new name on its first end only, as the formula walker hands the second end's prefix back untouched; Excel writes a range's sheet once.
+Defined names need nothing: the reader has already written each into the formulas that use it as the range it names ([EXPORT.md](EXPORT.md#an-xlsx-defined-name-is-inlined-into-the-formulas-that-use-it)), so its refs are renamed like any other. A range written with its sheet on both ends (`'Data'!A1:'Data'!B2`) gets the new name on its first end only, as the formula walker hands the second end's prefix back untouched; Excel writes a range's sheet once.
 
 ## Some xlsx round-trip drifts are decisions
 

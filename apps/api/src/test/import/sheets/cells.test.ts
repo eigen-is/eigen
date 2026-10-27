@@ -13,7 +13,15 @@ const PALETTE = ['#FFFFFF', '#000000'];
 const STYLES = `<numFmts><numFmt numFmtId="164" formatCode="yyyy\\-mm\\-dd"/></numFmts><fonts><font/><font><b/></font></fonts><fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill></fills><borders><border/><border><bottom style="thin"/></border></borders><cellXfs><xf/><xf numFmtId="14"/><xf numFmtId="164"/><xf fontId="1" fillId="2"/><xf><alignment horizontal="left"/></xf><xf borderId="1"/><xf numFmtId="10" fillId="2"/></cellXfs>`;
 const [DATE, CUSTOM_DATE, BOLD_FILLED, LEFT, BORDERED, PERCENT_FILLED] = [1, 2, 3, 4, 5, 6];
 
-function read(data: string, options: { strings?: string[]; date1904?: boolean; placed?: PlacedCell[] } = {}) {
+function read(
+    data: string,
+    options: {
+        strings?: string[];
+        date1904?: boolean;
+        placed?: PlacedCell[];
+        inline?: (formula: string) => string;
+    } = {},
+) {
     const charged: [number, number][] = [];
     const copied: number[] = [];
     const sst = new TextEncoder().encode(
@@ -28,6 +36,7 @@ function read(data: string, options: { strings?: string[]; date1904?: boolean; p
         palette: PALETTE,
         charge: (cells, text) => charged.push([cells, text]),
         chargeCopy: (chars) => copied.push(chars),
+        inline: options.inline ?? ((formula) => formula),
         placed: new Map((options.placed ?? []).map((placed) => [cellKey(placed.r, placed.c), placed])),
     });
     const cell = (ref: string) => {
@@ -263,6 +272,18 @@ describe('the grid', () => {
             [1, 0],
             [1, 0],
         ]);
+    });
+
+    // The anchor is inlined once, so its copies shift the inlined text, the name's absolute refs staying put.
+    test("a shared formula's names are inlined at its anchor, and its copies are charged the inlined text", () => {
+        const { cell, copied } = read(
+            '<row r="1"><c r="C1"><f>Rate</f></c><c r="D1"><f t="shared" ref="D1:D2" si="0">A1*Rate</f></c></row><row r="2"><c r="D2"><f t="shared" si="0"/></c></row>',
+            { inline: (formula) => formula.replaceAll('Rate', 'Data!$B$1') },
+        );
+        expect(cell('C1')?.f).toBe('=Data!$B$1');
+        expect(cell('D1')?.f).toBe('=A1*Data!$B$1');
+        expect(cell('D2')?.f).toBe('=A2*Data!$B$1');
+        expect(copied).toEqual(['A1*Data!$B$1'.length]);
     });
 
     test('charges every copy of a shared formula with its own text', () => {

@@ -162,6 +162,7 @@ export const COUNTED_WARNING_CODES = [
     'conditional-formats-dropped',
     'validations-dropped',
     'validation-prompts-cut',
+    'names-dropped',
     'sheet-names-changed',
     'cells-dropped',
     'texts-cut',

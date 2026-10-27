@@ -98,6 +98,27 @@ describe('the workbook', () => {
         ]);
     });
 
+    // A local name's localSheetId counts the workbook's <sheet> entries, the ones the reader skips included.
+    test('reads its defined names, a local one with the name of its sheet, and skips the ones Excel keeps for itself', () => {
+        const book = readXlsxPackage(
+            xlsxFixture({
+                sheets: [{ name: 'One' }, { name: 'Two' }],
+                definedNames:
+                    '<definedName name="Rate">One!$B$2</definedName>' +
+                    '<definedName name="Rate" localSheetId="1" hidden="1">Two!$C$3</definedName>' +
+                    '<definedName name="Gone" localSheetId="7">One!$A$1</definedName>' +
+                    '<definedName name="_xlnm.Print_Area" localSheetId="0">One!$A$1:$B$2</definedName>' +
+                    '<definedName name="_xlchart.v1.0">One!$A$1</definedName>' +
+                    '<definedName>One!$A$1</definedName>',
+            }),
+        );
+        expect(book.definedNames).toEqual([
+            { name: 'Rate', text: 'One!$B$2' },
+            { name: 'Rate', sheet: 'Two', text: 'Two!$C$3' },
+        ]);
+        expect(readXlsxPackage(xlsxFixture({ sheets: [{}] })).definedNames).toEqual([]);
+    });
+
     test("finds the styles, theme and shared strings through the workbook's relationships", () => {
         const book = readXlsxPackage(
             xlsxFixture({

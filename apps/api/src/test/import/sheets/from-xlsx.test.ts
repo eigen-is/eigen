@@ -1,8 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
+import { recalcSheets } from '@workspace/sheet/engine';
 import { ApiError } from '../../../lib/core/errors';
-import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
-import { openZip, writeZip } from '../../../lib/ooxml/zip';
+import {
+    MAX_GRID_SLOTS,
+    MAX_SHARED_FORMULA_TEXT,
+    MAX_TEXT,
+    readXlsx,
+    xlsxToSheets,
+} from '../../../lib/import/sheets/from-xlsx';
+import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
 import { OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
@@ -615,6 +622,66 @@ describe("the reader's rules", () => {
         expect(sheet.hyperlink).toEqual({ '1_2': { linkType: 'cellrange', linkAddress: "'Second sheet'!A1" } });
         expect(sheet.config?.merge).toMatchObject({ '0_0': { rs: 1, cs: 2 }, '11_4': { rs: 2, cs: 2 } });
         expect(Object.keys(sheet.dataVerification ?? {})).toHaveLength(1013 + 3);
+    });
+});
+
+// The engine has no names, so the reader inlines each into the formulas and the list sources that use it.
+describe("the reader's defined names", () => {
+    const book = () =>
+        readXlsx(
+            xlsxFixture({
+                sheets: [
+                    {
+                        name: 'Data',
+                        data: rowsXml([
+                            ['A1', 1],
+                            ['A2', 2],
+                            ['A3', 3],
+                            ['B1', { formula: 'SUM(Sales)*rate', result: 12 }],
+                            ['B2', { formula: '[1]Prices!Cost+External', result: 4 }],
+                        ]),
+                        after: '<dataValidations><dataValidation type="list" sqref="C1"><formula1>Colours</formula1></dataValidation></dataValidations>',
+                    },
+                    {
+                        name: 'Lists',
+                        data: rowsXml([
+                            ['A1', 'Red'],
+                            ['A2', 'Green'],
+                        ]),
+                    },
+                ],
+                definedNames:
+                    '<definedName name="Sales">Data!$A$1:$A$3</definedName>' +
+                    '<definedName name="Rate">1</definedName>' +
+                    '<definedName name="Rate" localSheetId="0">2</definedName>' +
+                    '<definedName name="Colours">Lists!$A$1:$A$2</definedName>' +
+                    '<definedName name="External">[1]Prices!$B$1</definedName>',
+            }),
+            { maxMediaBytes: MAX_DECOMPRESSED_BYTES },
+        );
+
+    test("a formula computes from the name's cells after an edit, and a list reads them", () => {
+        const { sheets } = book();
+        const [data] = sheets;
+        expect(cellsOf(data)['0_1']?.f).toBe('=SUM(Data!$A$1:$A$3)*2');
+        expect(data.dataVerification?.['0_2']).toMatchObject({ type: 'dropdown', value1: 'Lists!$A$1:$A$2' });
+        // An edit to A1, and the sum the editor computes again rather than the value Excel saved.
+        const edited = sheets.map((sheet) => ({
+            ...sheet,
+            celldata: (sheet.celldata ?? []).map((entry) => {
+                if (sheet.name !== 'Data') return entry;
+                if (entry.r === 0 && entry.c === 0) return { ...entry, v: { ...entry.v, v: 10, m: '10' } };
+                if (entry.r === 0 && entry.c === 1) return { ...entry, v: { ...entry.v, v: undefined, m: undefined } };
+                return entry;
+            }),
+        }));
+        expect(cellsOf(recalcSheets(edited)[0])['0_1']?.v).toBe(30);
+    });
+
+    test('a name into another workbook stays as written and counts', () => {
+        const { sheets, warnings } = book();
+        expect(cellsOf(sheets[0])['1_1']?.f).toBe('=[1]Prices!Cost+External');
+        expect(warnings).toContainEqual({ code: 'names-dropped', count: 1 });
     });
 });
 

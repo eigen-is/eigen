@@ -85,6 +85,7 @@ const LOSSES: { code: CountedWarningCode; noun: OneAndMany; what: Outcome }[] = 
     { code: 'mirrors-dropped', noun: ["picture's flip", "pictures' flips"], what: 'dropped' },
     { code: 'conditional-formats-dropped', noun: ['conditional format', 'conditional formats'], what: 'dropped' },
     { code: 'validations-dropped', noun: ['data validation rule', 'data validation rules'], what: 'dropped' },
+    { code: 'names-dropped', noun: ['named range', 'named ranges'], what: 'dropped' },
     { code: 'section-pages-dropped', noun: ["section's page setup", "sections' page setups"], what: 'dropped' },
     {
         code: 'even-bands-dropped',
