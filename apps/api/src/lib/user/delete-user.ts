@@ -1,6 +1,6 @@
 // Deletes a user and everything Eigen keeps for them: their home, their share-registry rows and the
-// auth rows that point at them. Admin deletion and the inactive-guest cleanup call deleteUserCompletely,
-// and better-auth's user-delete hook runs teardownUserData, so every way a user goes takes the same path.
+// auth rows that point at them. Callers such as admin deletion use deleteUserCompletely, and better-auth's
+// user-delete hook runs teardownUserData, so every way a user goes takes the same path.
 
 import { eq } from 'drizzle-orm';
 import { auth, authDeleteUserReferences } from '../auth/auth';

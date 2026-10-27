@@ -1,6 +1,6 @@
 // Deletes one owner's home for good: its folder, the safety copies a restore left beside it, and the
-// bucket objects their s3 drives name. Deleting a user and deleting a team both end here, from the
-// better-auth hook that runs before the row goes, so a throw keeps the user or the team.
+// bucket objects their s3 drives name. It runs from a better-auth hook before the owner's row goes, such
+// as a user's or a team's, so a throw keeps the owner.
 
 import * as fs from 'node:fs';
 import { requireHomeSlotFree } from '../backup/jobs';
