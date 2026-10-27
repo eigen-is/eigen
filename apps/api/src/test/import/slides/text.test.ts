@@ -236,9 +236,9 @@ describe('run properties', () => {
         expect(textOf(para('t', '', '<a:latin typeface="Papyrus"/>'))?.fontFamily).toBe('Inter');
     });
 
-    // As LibreOffice draws it: a shape's own list style beats its style's fontRef, whose colour beats the master's
+    // As LibreOffice draws it: a shape's own list style beats its style's fontRef, whose color beats the master's
     // text styles and the presentation's default, whose typeface beats the fontRef's.
-    test("take the shape style's fontRef colour beneath the list styles a shape states, its font beneath every one", () => {
+    test("take the shape style's fontRef color beneath the list styles a shape states, its font beneath every one", () => {
         const style = fontRef('major', '<a:schemeClr val="accent1"/>');
         const red = level(1, '', defRPr('', `${schemeFill('accent2')}<a:latin typeface="Times New Roman"/>`));
         expect(textOf(para('t'), { style })).toMatchObject({ fontFamily: 'Source Serif 4', color: '#4f81bd' });
@@ -255,11 +255,11 @@ describe('run properties', () => {
         expect(
             textOf(para('t', '', `${schemeFill('tx1')}<a:latin typeface="Arial"/>`), { style, lstStyle: red }),
         ).toMatchObject({ fontFamily: 'Inter', color: '#000000' });
-        // A fontRef naming no colour leaves the colour to the list styles.
+        // A fontRef naming no color leaves the color to the list styles.
         expect(textOf(para('t'), { style: fontRef('minor'), listStyle: minor })).toMatchObject({ color: '#c0504d' });
     });
 
-    test('a run stating no fill keeps the inherited colour', () => {
+    test('a run stating no fill keeps the inherited color', () => {
         const found = textOf(para('t', '', '<a:noFill/>'), {
             listStyle: level(1, '', defRPr('', schemeFill('accent1'))),
         });
@@ -303,8 +303,9 @@ describe('inline marks', () => {
         });
     });
 
-    // The box takes one size, colour and font; runs that differ in them lose theirs, so the import says so once.
-    test('runs that differ in size, colour or font count the box as simplified; marks alone do not', () => {
+    // The box takes one size, color, font and letter spacing. Runs that differ in them lose theirs, so the import
+    // says so once.
+    test('runs that differ in size, color, font or spacing count the box as simplified; marks alone do not', () => {
         const counted = (paragraphs: string) => {
             const codes: string[] = [];
             textOf(paragraphs, {}, (code) => codes.push(code));
@@ -319,6 +320,7 @@ describe('inline marks', () => {
         expect(
             counted(`<a:p>${run('serif', '', '<a:latin typeface="Times New Roman"/>')}${run(' sans')}</a:p>`),
         ).toEqual(['text-simplified']);
+        expect(counted(`<a:p>${run('Spaced', ' spc="300"')}${run(' and tight')}</a:p>`)).toEqual(['text-simplified']);
         expect(counted(`<a:p>${run('Bold', ' b="1"')}${run(' and plain')}</a:p>`)).toEqual([]);
         // A run of spaces draws no characters, so its size is no loss.
         expect(counted(`<a:p>${run('Text')}${run(' ', ' sz="4000"')}</a:p>`)).toEqual([]);

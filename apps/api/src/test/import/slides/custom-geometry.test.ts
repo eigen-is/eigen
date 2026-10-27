@@ -181,7 +181,7 @@ describe('arcTo', () => {
         }
     });
 
-    test("takes its angles on the ellipse as drawn: an end at 45° lies on the centre's 45° ray", () => {
+    test("takes its angles on the ellipse as drawn: an end at 45° lies on the center's 45° ray", () => {
         // wR 100, hR 50 about (100, 50) in a 200 × 100 space: t = atan(2) on the ellipse, (100 + 44.72, 50 + 44.72).
         const found = pathOf(path(moveTo(200, 50) + arcTo(100, 50, 0, 45), 'w="200" h="100"'));
         expect(found?.split(' ').slice(-2)).toEqual(['0.7236', '0.9472']);
@@ -380,7 +380,7 @@ describe('fill and stroke', () => {
         // 4% inside the disc, its first curve's middle at 22.5°, where an octagon of ends and middles lies 7.6% inside.
         const ring = path(circle(50_000, 0) + circle(48_000, -22.5), 'w="100000" h="100000"');
         expect(windings(pathOf(ring))).toEqual([1, -1]);
-        // Three circles about one centre: a disc, a hole, a disc.
+        // Three circles about one center: a disc, a hole, a disc.
         const circles = [500, 400, 300].map((r) => moveTo(500 + r, 500) + arcTo(r, r, 0, 360) + CLOSE);
         expect(windings(pathOf(path(circles.join(''), 'w="1000" h="1000"')))).toEqual([1, -1, 1]);
         // A donut whose ring is 10% and 5% of its box.
@@ -457,7 +457,7 @@ describe('caps', () => {
         expect(charged(path(zigzag))).toBeGreaterThanOrEqual(4000);
     });
 
-    test('a path past MAX_PATH_COMMANDS drops points on the line between their neighbours and tiny steps', () => {
+    test('a path past MAX_PATH_COMMANDS drops points on the line between their neighbors and tiny steps', () => {
         let body = moveTo(0, 0);
         for (let i = 1; i <= 1000; i++) body += lnTo(i / 10, i % 2 === 0 ? 0 : 0.01);
         body += lnTo(100, 100) + CLOSE;
@@ -536,7 +536,7 @@ describe('caps', () => {
     });
 
     test("work the read's budget can't cover is never begun: the shape is undrawn and the budget left for the rest", () => {
-        // 100 circles about one centre, each of 36 arcs: each one's probe is tested against every circle around it.
+        // 100 circles about one center, each of 36 arcs: each one's probe is tested against every circle around it.
         const rings = Array.from({ length: 100 }, (_, i) => {
             const r = 100 + i * 4;
             return moveTo(500 + r, 500) + arcTo(r, r, 0, 10).repeat(36) + CLOSE;

@@ -25,7 +25,7 @@ import {
     zipParts,
 } from '../../fixtures/pptx';
 
-// What a slide takes from its layout, master and theme: placeholder geometry, the shapes drawn beneath, the colour
+// What a slide takes from its layout, master and theme: placeholder geometry, the shapes drawn beneath, the color
 // map and the background.
 
 const OPTIONS = { maxMediaBytes: 35 * 1024 * 1024 };
@@ -214,7 +214,7 @@ describe('placeholders', () => {
                 slides: slides(500),
             }),
             zipParts(master),
-            // Every slide maps its colours anew, the same way: its own placeholder's master fill resolves once.
+            // Every slide maps its colors anew, the same way: its own placeholder's master fill resolves once.
             buildPptx({
                 masters: [
                     {
@@ -290,7 +290,7 @@ describe('layout and master shapes', () => {
         expect(colors(fixture(''))).toEqual(['#aa0000', '#00aa00', '#0000aa']);
     });
 
-    test("a master's shape is painted with each slide's colour map", () => {
+    test("a master's shape is painted with each slide's color map", () => {
         const override = '<p:clrMapOvr><a:overrideClrMapping bg1="dk1" tx1="dk2" bg2="lt2" tx2="lt2"/></p:clrMapOvr>';
         const deck = deckOf({
             masters: [{ shapes: sp({ xfrm: box(0, 0, 1, 1), spPr: scheme('tx1') }) }],
@@ -306,7 +306,7 @@ describe('layout and master shapes', () => {
     });
 });
 
-describe('colour', () => {
+describe('color', () => {
     const tx1 = (after = '', clrMap?: string) =>
         JSON.parse(
             String(
@@ -317,7 +317,7 @@ describe('colour', () => {
             ),
         ).color;
 
-    test("a scheme colour is mapped through the master's clrMap, and the slide's override", () => {
+    test("a scheme color is mapped through the master's clrMap, and the slide's override", () => {
         expect(tx1()).toBe('#000000');
         expect(tx1('', 'bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2"')).toBe('#ffffff');
         expect(tx1('<p:clrMapOvr><a:overrideClrMapping bg1="dk1" tx1="dk2" bg2="lt2" tx2="lt2"/></p:clrMapOvr>')).toBe(
@@ -347,7 +347,7 @@ describe('a shared fill', () => {
     const lost = () => {};
     const junk = '<a:x/>'.repeat(100);
 
-    test('is scanned once and resolved once for each colour map, however many shapes it paints', () => {
+    test('is scanned once and resolved once for each color map, however many shapes it paints', () => {
         const fill = parse(`<a:solidFill ${NS}>${junk}<a:schemeClr val="accent1"/></a:solidFill>`);
         const count = countVisits(fill);
         const [mapped, remapped] = [themeOf('accent1'), themeOf('accent2')];
@@ -358,7 +358,7 @@ describe('a shared fill', () => {
         expect(count.visits).toBe(101);
     });
 
-    test("a style matrix entry's colour and its gradient's stops are found once, however many phClr paint them", () => {
+    test("a style matrix entry's color and its gradient's stops are found once, however many phClr paint them", () => {
         const solidEntry = parse(
             `<a:solidFill ${NS}>${junk}<a:schemeClr val="phClr">${junk}<a:shade val="50000"/></a:schemeClr></a:solidFill>`,
         );
@@ -382,11 +382,11 @@ describe('a shared fill', () => {
             });
             expect(paintOf(solidEntry, theme, { lost, reference })?.type).toBe('solid');
         }
-        // Each scanned once: a phClr reapplies the colour's few transforms, and the ramp's ends are picked anew.
+        // Each scanned once: a phClr reapplies the color's few transforms, and the ramp's ends are picked anew.
         expect(counts.map((count) => count.visits)).toEqual([101, 101, 103, 101]);
     });
 
-    test("a gradient's ends alone are resolved for each phClr, and a colour that isn't phClr once for all", () => {
+    test("a gradient's ends alone are resolved for each phClr, and a color that isn't phClr once for all", () => {
         const stops = Array.from(
             { length: 1000 },
             (_, i) => `<a:gs pos="${i * 100}"><a:schemeClr val="phClr"/></a:gs>`,
@@ -396,7 +396,7 @@ describe('a shared fill', () => {
             `<a:solidFill ${NS}><a:srgbClr val="123456">${'<a:lumMod val="99000"/>'.repeat(20)}</a:srgbClr></a:solidFill>`,
         );
         const theme = themeOf('accent1');
-        // Every stop resolved for every phClr would be a million units, the fixed colour's 20 transforms 21,000.
+        // Every stop resolved for every phClr would be a million units, the fixed color's 20 transforms 21,000.
         withWorkBudget(20_000, () => {
             for (let i = 0; i < 1000; i++) {
                 const reference = parse(
@@ -432,7 +432,7 @@ describe('backgrounds', () => {
         ).toEqual({ type: 'solid', color: '#c0504d' });
     });
 
-    test("a bgRef of 1001 and up picks from the theme's bgFillStyleLst, its own colour the placeholder colour", () => {
+    test("a bgRef of 1001 and up picks from the theme's bgFillStyleLst, its own color the placeholder color", () => {
         const ref = (idx: number) =>
             background({ masters: [{ bg: `<p:bgRef idx="${idx}"><a:srgbClr val="FF8800"/></p:bgRef>` }] });
         expect(ref(1001)).toEqual({ type: 'solid', color: '#ff8800' });
@@ -463,7 +463,7 @@ describe('backgrounds', () => {
         expect(angle('<a:path path="rect"/>')).toBeCloseTo(90, 6);
     });
 
-    test("a bgRef's gradient paints the reference's colour into phClr", () => {
+    test("a bgRef's gradient paints the reference's color into phClr", () => {
         const theme = THEME.replace(
             '<a:bgFillStyleLst>',
             `<a:bgFillStyleLst><a:gradFill><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:lumMod val="50000"/></a:schemeClr></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"/></a:gs></a:gsLst><a:lin ang="0" scaled="1"/></a:gradFill>`,
@@ -501,7 +501,7 @@ describe('backgrounds', () => {
         expect(tiled.slides[0].background).toMatchObject({ type: 'image', fit: 'cover' });
         expect(tiled.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
 
-        const recoloured = deckOf({
+        const recolored = deckOf({
             slides: [
                 {
                     bg: '<p:bgPr><a:blipFill><a:blip r:embed="rId7"><a:duotone><a:srgbClr val="000000"/><a:srgbClr val="FFFFFF"/></a:duotone></a:blip><a:stretch/></a:blipFill></p:bgPr>',
@@ -510,8 +510,8 @@ describe('backgrounds', () => {
             ],
             files: { 'ppt/media/bg.png': PIXEL_PNG },
         });
-        expect(recoloured.slides[0].background).toMatchObject({ type: 'image', fit: 'cover' });
-        expect(recoloured.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
+        expect(recolored.slides[0].background).toMatchObject({ type: 'image', fit: 'cover' });
+        expect(recolored.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
     });
 
     test("a background picture whose bytes don't read is none, and counted", () => {

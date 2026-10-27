@@ -36,9 +36,9 @@ export type PptxDeck = {
 // replace, whose deck takes the file's own.
 export type PptxOptions = { deck?: SlidePage; maxMediaBytes: number };
 
-// The read's work, charged through the lookups: children scanned where a lookup or a colour isn't known yet, colour
+// The read's work, charged through the lookups: children scanned where a lookup or a color isn't known yet, color
 // transforms applied, paragraph and run nodes and characters read, shapes walked, and a chart part's elements and
-// points for each colour map it is painted with. Whatever a file repeats, or makes each cache key anew, the read does
+// points for each color map it is painted with. Whatever a file repeats, or makes each cache key anew, the read does
 // no more than this. It is over ten times the corpus's most, 260,005 in a 369-slide deck.
 export const MAX_PPTX_WORK = 3_000_000;
 
@@ -71,7 +71,7 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         slideSize,
         slideWidth: Math.min(MAX_SLIDE_WIDTH, Math.max(MIN_SLIDE_WIDTH, fitted)),
     };
-    // Centred. An Import letterboxes the whole slide into the open deck's frame; a Convert's shapes take its deck's pt
+    // Centered. An Import letterboxes the whole slide into the open deck's frame; a Convert's shapes take its deck's pt
     // per px, so a pt stays a pt, and a slide the range held overhangs its frame or sits inside it.
     const scale = options.deck
         ? Math.min(frame.width / cx, frame.height / cy)

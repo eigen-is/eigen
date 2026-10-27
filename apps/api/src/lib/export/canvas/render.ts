@@ -126,9 +126,10 @@ function pageStyle(page: CanvasPage, scale: number, resolveMedia?: MediaResolver
     ];
 }
 
-// The same page in the fit box every screen consumer scales it in — the HTML export document, the
-// lightbox and the drive hero. The box carries the page's composed size as custom properties so one
-// rule set (`.page-fit`, the app's, which the export document's own CSS mirrors) fits a slide of either size and a drawing of any ratio the same way.
+// The same page in the fit box every screen consumer scales it in, such as the HTML export document, the
+// lightbox and the drive hero. The box carries the page's composed size as custom properties. That way the
+// app's `.page-fit` rules, which the export document copies, fit a slide of either size and a drawing of any
+// ratio the same way.
 export function renderFittedPage(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string {
     const width = round(page.width * scale);
     const height = round(page.height * scale);

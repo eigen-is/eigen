@@ -1,4 +1,4 @@
-// Excel's vocabulary, one source for the xlsx writer that writes it and the xlsx reader that recognises it: content
+// Excel's vocabulary, one source for the xlsx writer that writes it and the xlsx reader that recognizes it: content
 // types, the date systems, column widths in pixels, Excel's limits, number formats, the _xHHHH_ escapes, the
 // names of conditional formats and data validations, and the prefixes of the functions Excel added after 2007. The
 // OOXML every format shares sits in its own module.

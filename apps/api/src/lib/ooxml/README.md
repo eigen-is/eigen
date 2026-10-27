@@ -173,8 +173,8 @@ Signatures are as the code declares them. Types the signatures name but the modu
 
 - `DrawingTheme`: `{ scheme, map, phClr? }`. `NO_DRAWING_THEME`, `IDENTITY_COLOR_MAP`, `SCHEME_SLOTS`.
 - `readColorScheme(theme)`, `readColorMap(element)`, `drawingTheme(theme)`.
-- `drawingColor(fill: XmlElement | undefined, theme: DrawingTheme): string | undefined`: `#rrggbb`, or `#rrggbbaa` when not opaque.
-- `percent(value)`, `DEGREE`, `HUNDRED_PERCENT`.
+- `drawingColor(fill: XmlElement | undefined, theme: DrawingTheme): string | undefined`: `#rrggbb`, or `#rrggbbaa` when not opaque. `isColorChoice(element)`: whether an element is one of the color elements it reads.
+- `percent(value)`, `DEGREE`, `HUNDRED_PERCENT`, `drawingAngle(degrees)`, `drawingShare(value)`.
 - `colorXml(color, opacity = 1)`, `solidFillXml(color, opacity = 1)`, `themeXml(font)`, `THEME_TYPE`.
 - `blipXml(rId, svgRId, effects = '')`, `blipEmbeds(blip)`, `IMAGE_EXTENSION_BY_MIME`, `MIME_ALIASES`.
 - `ALGN_BY_ALIGN`, `ALIGN_BY_ALGN`, `ANCHOR_BY_ALIGN`, `ALIGN_BY_ANCHOR`, `LINE_END_BY_ARROWHEAD`, `ARROWHEAD_BY_LINE_END`, `PRESET_DASH_BY_STYLE`, `strokeStyleOf(dash)`.

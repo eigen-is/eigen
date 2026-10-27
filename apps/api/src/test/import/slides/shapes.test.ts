@@ -57,7 +57,7 @@ describe('geometry', () => {
         expectBox(element(sp({ xfrm: box(100, 50, 400, 200), spPr: FILLED })), 100, 50, 400, 200);
     });
 
-    test("a 4:3 slide is letterboxed into a 16:9 deck's frame, centred, and fills a frame its own size", () => {
+    test("a 4:3 slide is letterboxed into a 16:9 deck's frame, centered, and fills a frame its own size", () => {
         const pptx = buildPptx({
             sldSz: '<p:sldSz cx="9144000" cy="6858000"/>',
             slides: [{ shapes: sp({ xfrm: xfrm(0, 0, 9144000, 6858000), spPr: FILLED }) }],
@@ -66,7 +66,7 @@ describe('geometry', () => {
         expectBox(readPptx(pptx, OPTIONS).slides[0].elements[0], 0, 0, 1920, 1440);
     });
 
-    test("a 16:9 slide is letterboxed into a 4:3 deck's frame, centred", () => {
+    test("a 16:9 slide is letterboxed into a 4:3 deck's frame, centered", () => {
         const pptx = buildPptx({ slides: [{ shapes: sp({ xfrm: xfrm(0, 0, 12192000, 6858000), spPr: FILLED }) }] });
         expectBox(readPptx(pptx, { ...OPTIONS, deck: STANDARD }).slides[0].elements[0], 0, 180, 1920, 1080);
     });
@@ -82,7 +82,7 @@ describe('geometry', () => {
         );
     });
 
-    test('a group scales its children from chOff/chExt onto off/ext, and turns them about its centre', () => {
+    test('a group scales its children from chOff/chExt onto off/ext, and turns them about its center', () => {
         const child = sp({ xfrm: box(0, 0, 50, 50), spPr: FILLED });
         const scaled = groupXfrm([100 * PX, 100 * PX, 200 * PX, 200 * PX], [0, 0, 100 * PX, 100 * PX]);
         expectBox(element(grp(scaled, child)), 100, 100, 100, 100);
@@ -96,7 +96,7 @@ describe('geometry', () => {
         expect(found?.angle).toBeCloseTo(90, 6);
     });
 
-    test('a flipped group mirrors its children about its centre and negates their angles', () => {
+    test('a flipped group mirrors its children about its center and negates their angles', () => {
         const child = sp({ xfrm: box(0, 0, 100, 50, ' rot="1800000"'), spPr: FILLED });
         const flipped = groupXfrm([0, 0, 400 * PX, 200 * PX], [0, 0, 400 * PX, 200 * PX], ' flipH="1"');
         const found = element(grp(flipped, child));
@@ -288,7 +288,7 @@ describe('kinds', () => {
         expect(JSON.parse(String(onTop.fill))).toMatchObject({ color: 'transparent' });
     });
 
-    test('vertical text turns its box a further quarter turn, or three, its sides swapped about the centre', () => {
+    test('vertical text turns its box a further quarter turn, or three, its sides swapped about the center', () => {
         const turned = (vert: string, geom = 'rect', layout = '') => {
             const shape = (bodyPr: string, text?: string) =>
                 sp({
@@ -432,7 +432,7 @@ describe('kinds', () => {
     });
 
     test("a geometry the read's budget can't cover keeps its text and counts as simplified, the deck imported", () => {
-        // 250 circles about one centre, each 127 full turns: every turn's curves outline it, every circle around another.
+        // 250 circles about one center, each 127 full turns: every turn's curves outline it, every circle around another.
         let rings = '';
         for (let ring = 0; ring < 250; ring++) {
             const r = 100 + ring * 3;
@@ -538,7 +538,7 @@ describe('kinds', () => {
 });
 
 describe('paint', () => {
-    test('a scheme colour goes through the theme, its transforms applied, and alpha into the hex', () => {
+    test('a scheme color goes through the theme, its transforms applied, and alpha into the hex', () => {
         const found = element(
             sp({
                 xfrm: box(0, 0, 10, 10),
@@ -556,7 +556,7 @@ describe('paint', () => {
         expect(JSON.parse(String(element(group)?.fill))).toMatchObject({ color: '#123456' });
     });
 
-    test('a pattern fills in its foreground colour, and says so', () => {
+    test('a pattern fills in its foreground color, and says so', () => {
         const deck = deckOf({
             slides: [
                 {
@@ -609,7 +609,7 @@ describe('style references', () => {
     const fillOf = (found: NewVectorElement | undefined) => JSON.parse(String(found?.fill)).color;
     const shape = (style: string, spPr = '') => element(sp({ xfrm: box(0, 0, 100, 50), spPr, style }));
 
-    test("a fillRef paints its fillStyleLst entry in the reference's colour, the entry's transforms on top", () => {
+    test("a fillRef paints its fillStyleLst entry in the reference's color, the entry's transforms on top", () => {
         expect(fillOf(shape(styleRefs(1, 0)))).toBe('#c0504d');
         expect(fillOf(shape(styleRefs(2, 0)))).toBe('#e2c2c2');
         expect(fillOf(shape(styleRefs(3, 0)))).toBe('#8e3b39');
@@ -623,7 +623,7 @@ describe('style references', () => {
         expect(elementsOf(sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(9, 0) }))).toEqual([]);
     });
 
-    test("an lnRef strokes with its lnStyleLst entry's width and the reference's colour", () => {
+    test("an lnRef strokes with its lnStyleLst entry's width and the reference's color", () => {
         const found = shape(styleRefs(0, 2, '<a:srgbClr val="00FF00"/>'));
         expect(found).toMatchObject({ type: 'rectangle', strokeColor: '#00ff00', strokeStyle: 'solid' });
         expect(found?.strokeWidth).toBeCloseTo(4, 6);
@@ -639,7 +639,7 @@ describe('style references', () => {
         expect(fillOf(shape(styleRefs(1, 3), '<a:noFill/>'))).toBe('transparent');
     });
 
-    test('a shape with neither a:ln nor p:style has no stroke, nor one whose a:ln states no colour', () => {
+    test('a shape with neither a:ln nor p:style has no stroke, nor one whose a:ln states no color', () => {
         expect(element(sp({ xfrm: box(0, 0, 10, 10), spPr: FILLED }))?.strokeColor).toBe('transparent');
         expect(element(sp({ xfrm: box(0, 0, 10, 10), spPr: `${FILLED}<a:ln w="25400"/>` }))?.strokeColor).toBe(
             'transparent',
@@ -678,7 +678,7 @@ describe('gradients', () => {
     const fillOf = (spPr: string, width = 200, height = 100) =>
         JSON.parse(String(element(sp({ xfrm: box(0, 0, width, height), spPr }))?.fill));
 
-    test('two stops, the ends of the ramp, through the theme, alpha kept, no colour-space correction', () => {
+    test('two stops, the ends of the ramp, through the theme, alpha kept, no color-space correction', () => {
         const found = fillOf(
             grad(
                 '<a:lin ang="0" scaled="1"/>',
@@ -726,7 +726,7 @@ describe('gradients', () => {
         expect(deck.warnings).toContainEqual({ code: 'fills-simplified', count: 1 });
     });
 
-    test("a style matrix gradient paints its stops in the reference's colour", () => {
+    test("a style matrix gradient paints its stops in the reference's color", () => {
         const theme = THEME.replace(
             '<a:fillStyleLst>',
             `<a:fillStyleLst>${grad('<a:lin ang="0" scaled="1"/>', stop(0, '<a:schemeClr val="phClr"><a:tint val="0"/></a:schemeClr>') + stop(100000, '<a:schemeClr val="phClr"/>'))}`,
@@ -737,7 +737,7 @@ describe('gradients', () => {
         expect(JSON.parse(String(found?.fill))).toMatchObject({ from: '#ffffff', to: '#ff0000' });
     });
 
-    test("a gradient line strokes in its first stop's colour, and says so", () => {
+    test("a gradient line strokes in its first stop's color, and says so", () => {
         const deck = deckOf({
             slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), spPr: `<a:ln>${grad('<a:lin ang="0"/>')}</a:ln>` }) }],
         });

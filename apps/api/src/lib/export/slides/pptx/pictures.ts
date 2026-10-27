@@ -3,11 +3,11 @@
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { VectorFrame, VectorImageElement } from '@workspace/lib/vector';
 import { isBordered } from '@workspace/lib/vector';
-import { blipXml } from '../../../ooxml/drawingml';
+import { blipXml, drawingShare } from '../../../ooxml/drawingml';
 import type { OfficeImage } from '../../office-image';
 import { lineXml } from './lines';
 import type { Slide } from './package';
-import { boxGeometry, drawingShare, fillXml, presetXml, spXml, xfrmXml } from './shapes';
+import { boxGeometry, fillXml, presetXml, spXml, xfrmXml } from './shapes';
 
 function slideBlipXml(image: OfficeImage, slide: Slide, opacity: number): string {
     const rId = slide.part.relate('image', `../media/${image.part}`);

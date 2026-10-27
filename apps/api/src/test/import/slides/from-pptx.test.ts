@@ -231,8 +231,8 @@ describe('limits', () => {
         expect(deck.slides[499].elements[0]).not.toBe(deck.slides[0].elements[0]);
     });
 
-    test(`more than ${MAX_PPTX_WORK} units of work is too large, a master's text charged by its characters for each colour map`, () => {
-        // A master's run of a tenth of the budget is read again on every slide whose clrMapOvr maps a colour anew.
+    test(`more than ${MAX_PPTX_WORK} units of work is too large, a master's text charged by its characters for each color map`, () => {
+        // A master's run of a tenth of the budget is read again on every slide whose clrMapOvr maps a color anew.
         const master = sp({
             xfrm: box(0, 0, 1, 1),
             txBox: true,

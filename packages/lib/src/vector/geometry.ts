@@ -1,4 +1,4 @@
-// Pure scene-space geometry for the canvas. Angle is DEGREES at every boundary; radian math never
+// Pure scene-space geometry for the canvas. Angles are degrees at every boundary, and radian math never
 // escapes a function body. `Box` is the canonical transform core shared by hit-testing, bounds, the
 // properties bar and the shared ObjectTransform primitive.
 
@@ -7,8 +7,9 @@ import { elbowRoutingContext } from './elbow-route';
 import { isTransparentFill, parseFill } from './fill';
 import { getLineHeightPx } from './font-metrics';
 // The registry imports geometry's box primitives and geometry dispatches through the registry: one
-// deliberate cycle. It is safe only when the entry goes through the vector barrel, which loads geometry
-// before any kind. Importing a kind's own module first throws a TDZ ReferenceError.
+// deliberate cycle. A kind calls geometry only inside its methods, so the registry can evaluate before
+// geometry's body does. Any entry works except one that reaches geometry through a kind's own module or
+// defineKind's: the registry then evaluates while that module is in its TDZ and throws a ReferenceError.
 import { ELEMENT_KINDS, isBindable } from './kinds';
 import { clamp, distanceToSegment, nearestPoint, outlineHits, pointInPolygon, segSegIntersect } from './outline';
 import { DEG_TO_RAD, parsePoints, pointsBounds, round, serializePoints } from './points';
@@ -307,7 +308,7 @@ export function hitTestElement(element: VectorElement, point: Point, threshold: 
 }
 
 // A linear element's local frame ↔ scene mapping. The renderer places every vertex at
-// rotate(origin + local, boxCentre, angle), so hit-testing and the point-handles share this one
+// rotate(origin + local, boxCenter, angle), so hit-testing and the point-handles share this one
 // transform — the pivot convention lives here, not copied at each call site.
 export function linearSceneToLocal(box: Box, scene: Point): Point {
     const un = rotatePoint(scene, boxCenter(box), -box.angle);

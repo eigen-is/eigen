@@ -1,15 +1,15 @@
-// The pptx reader's paint: a fill, a line or a background resolved through the slide's colour map and theme into a
-// colour, a gradient or a picture, as the canvas stores it. Each resolved colour, ramp and stop list is kept per
+// The pptx reader's paint: a fill, a line or a background resolved through the slide's color map and theme into a
+// color, a gradient or a picture, as the canvas stores it. Each resolved color, ramp and stop list is kept per
 // element, so a master's fill shows on every slide for the cost of one. Readers such as the shape and text readers
 // paint through it.
 
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
-import { normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@workspace/lib/vector';
+import { DEG_TO_RAD, normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
 import type { Lost } from '../../document/transform/protocol';
 import type { DrawingTheme } from '../../ooxml/drawingml';
-import { DEGREE, drawingColor, percent } from '../../ooxml/drawingml';
+import { DEGREE, drawingColor, isColorChoice, percent } from '../../ooxml/drawingml';
 import { A_NS, isOn, P_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
 import type { SlideInheritance, SlideTheme } from './inherit';
@@ -28,20 +28,13 @@ function isFill(child: XmlElement): boolean {
     return child.ns === A_NS && FILLS.has(child.local);
 }
 
-// EG_ColorChoice: the colour elements drawingColor takes the first of.
-const COLOR_CHOICES = new Set(['scrgbClr', 'srgbClr', 'hslClr', 'sysClr', 'schemeClr', 'prstClr']);
-
-function isColorChoice(child: XmlElement): boolean {
-    return child.ns === A_NS && COLOR_CHOICES.has(child.local);
-}
-
-// A colour element reduced to what drawingColor reads: its colour child with the transforms it applies, and whether
-// that colour is phClr.
+// A color element reduced to what drawingColor reads: its color child with the transforms it applies, and whether
+// that color is phClr.
 type Swatch = { fill: XmlElement; transforms: number; placeholder: boolean };
 
 const swatches = cachedBy<null, Swatch | undefined>();
 
-// Found once, whatever colours it is resolved with: junk beside the colour or among its transforms is passed over once,
+// Found once, whatever colors it is resolved with: junk beside the color or among its transforms is passed over once,
 // not again for every phClr a style reference paints it with.
 function swatchOf(element: XmlElement): Swatch | undefined {
     return swatches(element, null, () => {
@@ -61,7 +54,7 @@ function swatchOf(element: XmlElement): Swatch | undefined {
 
 const resolved = cachedBy<DrawingTheme, string | undefined>();
 
-// What a colour element shows, resolved once for each slide's colours, and a phClr once for each phClr: one in a theme,
+// What a color element shows, resolved once for each slide's colors, and a phClr once for each phClr: one in a theme,
 // master or layout is painted again for every shape and run that takes it.
 export function resolvedColor(element: XmlElement | undefined, colors: DrawingTheme): string | undefined {
     const swatch = element && swatchOf(element);
@@ -74,22 +67,23 @@ export function resolvedColor(element: XmlElement | undefined, colors: DrawingTh
 }
 
 // The slide's tx1, light on a dark theme: what an imported chart and a dropped object's box write in where the file
-// states no colour.
+// states no color.
 export function textColorOf(colors: DrawingTheme): string {
     const slot = colors.map.get('tx1');
     return (slot && colors.scheme.get(slot)) ?? SLIDES_STYLE_DEFAULTS.color;
 }
 
-// Their axes and outlines: the text's colour faded, as PowerPoint's chart axes are.
+// A text color at 60% opacity, for the dashed outline of the box that marks a dropped object.
 export function mutedColor(color: string): string {
     return `${color.slice(0, 7)}99`;
 }
 
 const placeholderColors = new WeakMap<DrawingTheme, Map<string | undefined, DrawingTheme>>();
-// Each phClr's colours back to the slide's, which any colour but phClr resolves the same with.
+// Maps each slide's colors with a phClr back to the slide's own colors. A color other than phClr resolves the same
+// through either, so resolvedColor caches it once, under the slide's colors.
 const unplaced = new WeakMap<DrawingTheme, DrawingTheme>();
 
-// A slide's colours with a reference's phClr, one object for each, as resolvedColor keeps its answers by the object.
+// A slide's colors with a reference's phClr, one object for each, as resolvedColor keeps its answers by the object.
 function withPlaceholder(colors: DrawingTheme, phClr: string | undefined): DrawingTheme {
     let known = placeholderColors.get(colors);
     if (!known) {
@@ -105,7 +99,7 @@ function withPlaceholder(colors: DrawingTheme, phClr: string | undefined): Drawi
 export type PaintOptions = {
     // A fill drawn simpler than the file has it, or a picture fill dropped.
     lost: Lost;
-    // The fillRef, lnRef or bgRef whose colour a style matrix entry's phClr shows.
+    // The fillRef, lnRef or bgRef whose color a style matrix entry's phClr shows.
     reference?: XmlElement;
     // What grpFill shows.
     group?: GroupFill;
@@ -161,7 +155,7 @@ function gradientOf(fill: XmlElement, colors: DrawingTheme, options: PaintOption
 
 const stopLists = cachedBy<null, XmlElement[]>();
 
-// A gradient's stops as PowerPoint orders them, by position, sorted once whatever colours paint them.
+// A gradient's stops as PowerPoint orders them, by position, sorted once whatever colors paint them.
 function stopsOf(fill: XmlElement): XmlElement[] {
     return stopLists(fill, null, () => {
         const list = childOf(fill, A_NS, 'gsLst');
@@ -176,7 +170,7 @@ function stopsOf(fill: XmlElement): XmlElement[] {
 
 const ramps = cachedBy<DrawingTheme, { from: string | undefined; to: string | undefined; single: boolean }>();
 
-// A gradient's end stops that show a colour, picked once for each slide's colours and phClr however many shapes it
+// A gradient's end stops that show a color, picked once for each slide's colors and phClr however many shapes it
 // paints; a stop that shows none is passed over.
 function rampOf(fill: XmlElement, colors: DrawingTheme) {
     return ramps(fill, colors, () => {
@@ -200,24 +194,22 @@ function quarterTurn(degrees: number): number {
     return degrees + 90;
 }
 
-const RADIANS = Math.PI / 180;
-
 // An element's gradient, which the canvas lays along its box's units (objectBoundingBox): a scaled angle is already in
 // them, a true one is the box-unit angle whose isolines the box stretches onto the true ones.
 export function elementGradientAngle(width: number, height: number): GradientAngle {
     return (degrees, scaled) => {
         if (scaled) return quarterTurn(degrees);
-        const r = degrees * RADIANS;
-        return Math.atan2(width * Math.cos(r), -height * Math.sin(r)) / RADIANS;
+        const r = degrees * DEG_TO_RAD;
+        return Math.atan2(width * Math.cos(r), -height * Math.sin(r)) / DEG_TO_RAD;
     };
 }
 
 // A background's gradient, which CSS draws at a true angle: a scaled one turns with the slide's proportions.
-export function backgroundGradientAngle(width: number, height: number): GradientAngle {
+function backgroundGradientAngle(width: number, height: number): GradientAngle {
     return (degrees, scaled) => {
         if (!scaled) return quarterTurn(degrees);
-        const r = degrees * RADIANS;
-        return quarterTurn(Math.atan2(width * Math.sin(r), height * Math.cos(r)) / RADIANS);
+        const r = degrees * DEG_TO_RAD;
+        return quarterTurn(Math.atan2(width * Math.sin(r), height * Math.cos(r)) / DEG_TO_RAD);
     };
 }
 
@@ -259,7 +251,7 @@ function isEffect(child: XmlElement): boolean {
     return child.ns === A_NS && child.local !== 'extLst';
 }
 
-// A picture covers the frame, stretched or tiled. A tile is drawn as one picture, and a recolouring (a theme's duotone,
+// A picture covers the frame, stretched or tiled. A tile is drawn as one picture, and a recoloring (a theme's duotone,
 // a washout's lum) as the picture itself: each a loss counted.
 function pictureBackground(blipFill: XmlElement, owner: Part, deck: DeckWalk, lost: Lost): BackgroundFill | null {
     const blip = childOf(blipFill, A_NS, 'blip');

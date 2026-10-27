@@ -183,9 +183,8 @@ function embeddedSource(
 }
 
 // The sheet a docx's or pptx's chart embeds as its workbook, laid out as embeddedSource's refs name it. Each value is
-// in the format its cache carries, and a gap is no cell. A label drops the characters XML can't hold. The cache only
-// escapes its labels, so a spec built in code with such a character is stripped here, not there. Range data names
-// a workbook's own cells, so it embeds none.
+// in the format its cache carries, and a gap is no cell. A label drops the characters XML can't hold, as its cache
+// does, so the two can't disagree. Range data names a workbook's own cells, so it embeds none.
 export function embeddedChartSheet(spec: ChartSpec): Sheet | undefined {
     if (spec.data.source !== 'inline') return undefined;
     const { categories, series } = spec.data;

@@ -180,7 +180,7 @@ describe('a deck exported and read back', () => {
         expect(slide.background).toEqual(BACKGROUND);
     });
 
-    test("keeps a pie's angles, and each stroke's colour, width and dash", () => {
+    test("keeps a pie's angles, and each stroke's color, width and dash", () => {
         const [pie, back] = pairs[6];
         expect(back.type).toBe('pie');
         if (pie.type !== 'pie') throw new Error('not a pie');
@@ -459,7 +459,7 @@ describe('a bordered picture exported and read back', () => {
         expect(back[0]).toMatchObject({ strokeColor: '#c0504d', strokeWidth: 4, strokeStyle: 'dashed' });
     });
 
-    // PowerPoint and LibreOffice draw a line 0 wide as a hairline, in its colour.
+    // PowerPoint and LibreOffice draw a line 0 wide as a hairline, in its color.
     test('a line 0 wide reads as the thinnest stroke, and comes back as it', () => {
         const shapes = sp({
             xfrm: box(100, 100, 200, 100),

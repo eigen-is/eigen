@@ -1,5 +1,5 @@
 // A graphic frame's chart: its c:chartSpace part through the core chart reader, from the caches, which hold every
-// value, so none of the part's own relationships (workbook, user shapes, colours, style) is followed. Its look is the
+// value, so none of the part's own relationships (workbook, user shapes, colors, style) is followed. Its look is the
 // one the core reader reads for every format, at the slide's scale.
 
 import { FLAT_CHART_LOOK, newChartSpecParts } from '@workspace/lib/charts';
@@ -23,11 +23,11 @@ export type FrameChart =
 const SKETCH = { strokeStyle: FLAT_CHART_LOOK.strokeStyle, roughness: FLAT_CHART_LOOK.roughness };
 
 const read = cachedBy<DrawingTheme, FrameChart | undefined>();
-// Counted once per part, however many colour maps it is read in.
+// Counted once per part, however many color maps it is read in.
 const costs = cachedBy<null, number>();
 
 // The chart a:graphicData names through the relationships of the part it is in; none when the part is missing, of
-// another type, doesn't parse or costs more work than the read has left. A part is read once for each colour map it is
+// another type, doesn't parse or costs more work than the read has left. A part is read once for each color map it is
 // painted with, however many frames on however many slides name it.
 export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors: DrawingTheme): FrameChart | undefined {
     const reference = childOf(data, C_NS, 'chart');
@@ -35,7 +35,7 @@ export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors:
     return (
         root &&
         read(root, colors, () => {
-            // Read again for every colour map a slide paints it with, so each read is charged its elements and points;
+            // Read again for every color map a slide paints it with, so each read is charged its elements and points;
             // one the budget can't cover costs only its box, as a docx's chart past a cap does.
             const cost = costs(root, null, () => chartCost(root));
             if (!affords(cost)) return undefined;

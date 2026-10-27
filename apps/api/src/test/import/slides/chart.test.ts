@@ -54,7 +54,7 @@ const SCATTER = chartSpace(`<c:scatterChart>${ser(0, 'Spread', [1, 2, 3])}</c:sc
 // The theme's accents, as the fixture's theme states them.
 const ACCENT = { 1: '#4f81bd', 2: '#c0504d', 3: '#9bbb59', 4: '#8064a2' };
 
-// accent1 shows accent3 and accent4 accent1 on the slide: a chart's colours go through the slide's clrMap.
+// accent1 shows accent3 and accent4 accent1 on the slide: a chart's colors go through the slide's clrMap.
 // A dark theme's map: text in lt1 on dk1.
 const DARK =
     'bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"';
@@ -82,7 +82,7 @@ function chartOf(part: string, fixture: Partial<PptxFixture> = {}) {
 }
 
 describe('a chart', () => {
-    test("a column chart is a chart element at the frame's box with its series, categories, colours and title", () => {
+    test("a column chart is a chart element at the frame's box with its series, categories, colors and title", () => {
         const { element, spec, deck } = chartOf(COLUMN, {
             slides: [{ shapes: frame(), rels: rel('rId5', 'chart', '../charts/chart1.xml'), after: OVERRIDE }],
         });
@@ -106,21 +106,21 @@ describe('a chart', () => {
         expect(deck.warnings).toEqual([]);
     });
 
-    test("its text is the chart's txPr colour, else the slide's tx1, light on a dark theme", () => {
+    test("its text is the chart's txPr color, else the slide's tx1, light on a dark theme", () => {
         expect(chartOf(COLUMN).element).toMatchObject({ color: '#000000' });
         const dark = { masters: [{ clrMap: DARK }] };
         expect(chartOf(COLUMN, dark).element).toMatchObject({ color: '#ffffff' });
-        // PowerPoint's own: tx1 at 65% lightened by 35%, grey on a light slide and white on a dark one.
+        // PowerPoint's own: tx1 at 65% lightened by 35%, gray on a light slide and white on a dark one.
         const txPr = (fill: string) =>
             COLUMN.replace(
                 '</c:chartSpace>',
                 `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr>${fill}</a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr></c:chartSpace>`,
             );
-        const grey = txPr(
+        const gray = txPr(
             '<a:solidFill><a:schemeClr val="tx1"><a:lumMod val="65000"/><a:lumOff val="35000"/></a:schemeClr></a:solidFill>',
         );
-        expect(chartOf(grey).element).toMatchObject({ color: '#595959' });
-        expect(chartOf(grey, dark).element).toMatchObject({ color: '#ffffff' });
+        expect(chartOf(gray).element).toMatchObject({ color: '#595959' });
+        expect(chartOf(gray, dark).element).toMatchObject({ color: '#ffffff' });
         expect(chartOf(txPr('<a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill>'), dark).element.color).toBe(
             '#d9d9d9',
         );
@@ -145,7 +145,7 @@ describe('a chart', () => {
         });
     });
 
-    test("its text and series go through the chart's own colour map, which overrides the slide's", () => {
+    test("its text and series go through the chart's own color map, which overrides the slide's", () => {
         const own = COLUMN.replace(
             '<c:chart>',
             '<c:clrMapOvr bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent2" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><c:chart>',
@@ -314,7 +314,7 @@ describe('bounds', () => {
         expect(() => readPptx(many(fits + 5, HEAVY), OPTIONS)).toThrow('This presentation is too large to import');
     });
 
-    test('slides painting one large chart part in as many colour maps read it a bounded number of times', () => {
+    test('slides painting one large chart part in as many color maps read it a bounded number of times', () => {
         const junk = `<c:x/>`.repeat(200_000);
         const part = COLUMN.replace('<c:idx val="0"/>', `<c:idx val="0"/>${junk}`);
         const permutations = (slots: string[]): string[][] =>
@@ -343,7 +343,7 @@ describe('bounds', () => {
 
     test('a chart is charged the points its caches declare, not only its elements', () => {
         // A few hundred elements declaring 32 series of 2,000 points each. Charged its elements alone, the part was
-        // read again for every one of 60 colour maps. An area chart, which Eigen can't draw, tells the read part apart
+        // read again for every one of 60 color maps. An area chart, which Eigen can't draw, tells the read part apart
         // from one past the budget.
         const series = Array.from(
             { length: 32 },
@@ -367,7 +367,7 @@ describe('bounds', () => {
     });
 
     test("a chart the read's work left can't cover is left as its box, and the rest of the deck reads", () => {
-        // A master's run read again for each of ten colour maps spends all but 200,000 of the budget.
+        // A master's run read again for each of ten color maps spends all but 200,000 of the budget.
         const master = sp({
             xfrm: box(0, 0, 1, 1),
             txBox: true,

@@ -13,7 +13,7 @@ import { IMPORT_MESSAGES } from '../messages';
 // One of a few children is scanned each time instead, which costs no more than the index and keeps no memory.
 const SCANNED_BELOW = 16;
 
-// What the read under way may still do, in children scanned, colours resolved, characters, shapes and charts read. The
+// What the read under way may still do, in children scanned, colors resolved, characters, shapes and charts read. The
 // caches here are keyed by element and live past a read, so the budget is the module's while a read runs; a read is
 // synchronous, so no other read charges it meanwhile.
 let work: Budget = budget(Number.POSITIVE_INFINITY, IMPORT_MESSAGES.pptx.tooLarge);

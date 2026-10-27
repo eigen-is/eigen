@@ -69,7 +69,7 @@ export type DeckWalk = {
     elements: Budget;
     // The update's weight, charged as each frame and element is written.
     weight: Budget;
-    // A layout's or master's elements and the children walked for them, by part and colour map: read once, copied onto
+    // A layout's or master's elements and the children walked for them, by part and color map: read once, copied onto
     // every slide that shows them.
     decorations: Map<string, { elements: NewVectorElement[]; shapes: number }>;
     // A picture part's media name, its bytes read the first time a slide shows it; none when they don't read.
@@ -151,7 +151,7 @@ const PRESENTATION_PREFIXES = new Set(['p', 'a', 'r', 'mc']);
 const alternativeOf = alternativeFor(PRESENTATION_PREFIXES);
 const alternatives = cachedBy<null, XmlElement[]>();
 
-// A layout's or master's is unwrapped again for every colour map its shapes are read with.
+// A layout's or master's is unwrapped again for every color map its shapes are read with.
 export function presentationAlternative(element: XmlElement): XmlElement[] {
     return alternatives(element, null, () => {
         charge(element.children.length);

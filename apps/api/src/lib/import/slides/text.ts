@@ -1,6 +1,6 @@
-// A text body becomes one rich-text box: its HTML and the box's typography. It leaves out per-run size, colour and
-// font, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript, subscript and
-// highlight.
+// A text body becomes one rich-text box: its HTML and the box's typography. It leaves out per-run size, color, font
+// and letter spacing, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript,
+// subscript and highlight.
 
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { escapeHtml, LIGHT_EDITOR_HREF } from '@workspace/lib/html';
@@ -32,7 +32,7 @@ export type TextSource = {
     inherited: Pick<ShapeProperties, 'bodyPr' | 'listStyle'>[];
     // The master's p:titleStyle, p:bodyStyle or p:otherStyle, or the presentation's p:defaultTextStyle.
     listStyle: XmlElement | undefined;
-    // The p:style the shape or its placeholder chain states, whose fontRef names a theme font and a colour.
+    // The p:style the shape or its placeholder chain states, whose fontRef names a theme font and a color.
     style: XmlElement | undefined;
     // The relationships of the part the shape is in, which name its links.
     rels: ReadonlyMap<string, Relationship>;
@@ -79,7 +79,7 @@ function isAutofit(child: XmlElement): boolean {
 
 type Marks = { bold: boolean; italic: boolean; underline: boolean; strike: boolean };
 type RunStyle = Marks & { fontFamily: string; size: number; color: string; letterSpacing: number };
-// Escaped text, or a <br> (no style: it takes its neighbours' marks).
+// Escaped text, or a <br> (no style: it takes its neighbors' marks).
 type Run = { html: string; style?: RunStyle; href?: string };
 type TextParagraph = { list: 'ul' | 'ol' | undefined; level: number; runs: Run[]; text: boolean; chain: XmlElement[] };
 
@@ -156,10 +156,14 @@ export function richTextOf(
     const counted = [...covered.values()].filter((style) => style.chars > 0);
     const [box] = counted.sort((a, b) => b.chars - a.chars);
     if (!box) return undefined;
-    // The box draws one size, colour and font, so a run in another loses its own.
+    // The box draws one size, color, font and letter spacing, so a run in another loses its own.
     if (
         counted.some(
-            (style) => style.size !== box.size || style.color !== box.color || style.fontFamily !== box.fontFamily,
+            (style) =>
+                style.size !== box.size ||
+                style.color !== box.color ||
+                style.fontFamily !== box.fontFamily ||
+                style.letterSpacing !== box.letterSpacing,
         )
     )
         lost('text-simplified');
@@ -248,7 +252,7 @@ type TextRunContext = {
 // presentation's default.
 type Inherited = { shape: XmlElement[]; text: XmlElement[] };
 
-// The run's own properties, else what its level inherits. The shape style's fontRef colour comes beneath the shape's
+// The run's own properties, else what its level inherits. The shape style's fontRef color comes beneath the shape's
 // list styles and its font beneath every one, as LibreOffice draws it.
 function runStyleOf(rPr: XmlElement | undefined, inherited: Inherited, context: TextRunContext): RunStyle {
     const { theme, fontRef } = context;
@@ -262,7 +266,7 @@ function runStyleOf(rPr: XmlElement | undefined, inherited: Inherited, context: 
     const colorIn = (element: XmlElement) => {
         const paint = paintOf(fillIn(element), theme, { lost: context.lost });
         const color = paint?.type === 'gradient' ? paint.from : paint?.color;
-        // A run with no fill keeps its colour: text nobody can see is worse than a colour that differs.
+        // A run with no fill keeps its color: text nobody can see is worse than a color that differs.
         return color === TRANSPARENT_COLOR ? undefined : color;
     };
     const refIdx = fontRef && xmlAttr(fontRef, '', 'idx');
@@ -359,7 +363,7 @@ function htmlOf(paragraphs: TextParagraph[], marks: Marks): string {
     return html + closing(open);
 }
 
-// A run's marks the box lacks, neighbours with the same marks sharing their tags.
+// A run's marks the box lacks, neighbors with the same marks sharing their tags.
 function inlineOf(runs: Run[], box: Marks): string {
     const decoration = box.underline ? 'underline' : box.strike ? 'strike' : undefined;
     let html = '';

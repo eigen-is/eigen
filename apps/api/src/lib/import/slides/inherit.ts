@@ -1,4 +1,4 @@
-// What a slide takes from its layout, master and theme: placeholders matched down the chain, the theme's colours,
+// What a slide takes from its layout, master and theme: placeholders matched down the chain, the theme's colors,
 // fonts and style matrix, and the shapes the layout and master draw beneath the slide's own. The paint reader
 // resolves a fill or a background through what it finds here.
 
@@ -75,7 +75,7 @@ export function createInheritance(pkg: PptxPackage): (slide: Part) => SlideInher
     const defaultTextStyle = childOf(pkg.presentation.root, P_NS, 'defaultTextStyle');
     const masters = new Map<string, Master>();
     const layouts = new Map<string, Layout>();
-    // One object for each master and colour map: what a colour element shows is kept for the colours it was resolved with.
+    // One object for each master and color map: what a color element shows is kept for the colors it was resolved with.
     const palettes = new Map<string, DrawingTheme>();
     const masterOf = (part: Part): Master => {
         const known = masters.get(part.path);
