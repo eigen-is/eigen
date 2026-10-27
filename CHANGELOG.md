@@ -26,11 +26,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Forwarding email** — a forward brings the original's attachments along, pictures in the message included. Take one off with the **X** on its chip before you send
 - **Space home** — an admin gets an Admin tile next to the apps. The **Help and support** tile takes the help center's teal
 - **Help center colors** — the Admin section wears the Admin app's color, and a section page shows its title in its section's color, such as amber for Mail
-- **Contacts** — the contact list fills the page until you open a contact. Its details then open beside a narrower list, and **Close** returns to the full list
+- **Contacts** — the contact list fills the page until you open a contact. Its details then open beside a narrower list, and **Close** returns to the full list. A link to a contact that was deleted opens to **Contact not found**
 - **Admin teams** — teams have their own list page, like users, instead of a list in the sidebar. Create a team with the **+** next to the search bar, and click a team to open its details
 - **Adding people to a team** — dragging users onto a team is gone with the sidebar list. To add several people at once, select them on the **Users** page, right-click and choose **Add to team…**. A team's **Members** section still adds one person at a time
 - **Admin users** — a user's details list their teams under the role. Add the user to a team with **Add to team**, or take them out of one with its **×**
-- **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, about 190 at the default width, because the page cuts off the rest. A web page download keeps more columns while all of the sheet's rows fit
+- **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width, because the page cuts off the rest. A web page download keeps more columns while all of the sheet's rows fit
 - **Spreadsheet downloads** — a cell's text stays inside its row in a web page or PDF download, as it does in the editor. A wrapped cell taller than its row shows the part that fits
 
 ### Fixed
@@ -39,17 +39,13 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Public files in Drive** — a public file or folder that nobody shared with you shows its path from the first folder you can open, without Shared with me
 - **Closing a shared text file** — closing a text file that was shared with you on its own takes you back to Shared with me instead of a page asking for access to its folder
 - **Text files on a team drive** — the path above the file starts with the team drive's name, as its folder does, and each folder in it opens that folder
-- **Excel named ranges** — a formula that uses a named range, such as `=SUM(Sales)`, keeps working after you edit the cells it reads, and a dropdown list from a named range comes in as a list. Sheets writes the cells the name stands for into the formula, so the name itself isn't kept
-- **Excel named ranges** — a named range that points at another workbook or at several separate ranges is counted in the message after the import
+- **Excel named ranges** — a formula that uses a named range, such as `=SUM(Sales)`, keeps working after you edit the cells it reads, and a dropdown list from a named range comes in as a list. Sheets writes the cells the name stands for into the formula, so the name itself isn't kept. A named range that points at another workbook or at several separate ranges is counted in the message after the import
 - **Excel files** — a row whose height is set to normal in Excel comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
 - **Spreadsheet PDF** — a spreadsheet with thousands of small sheets prints its first 2,000 sheets instead of failing
 - **Long code blocks** — a Docs document with many long code blocks and no language set downloads and previews at once. Past about 65,000 characters of such code in all, the rest comes without syntax colors
 - **Copied charts** — a chart you copy from Sheets into Docs, Slides or Vector keeps the number format of its axis, so a column of percentages reads 25%, not 0.25
-- **Sheets undo** — undo changes your own cell where it now is after someone else inserts or deletes rows or columns, or deletes another sheet, formulas pointing at the moved rows included. It skips a cell someone else changed after you, and a formula still undoes when someone changed a cell it reads
-- **Sheets undo** — undoing or redoing your own row, column or sheet change keeps the edits others made since, and everyone sees the same result. Undoing a row delete brings back the formulas it broke, on every sheet
-- **Sheets** — someone else's edit to a sheet you never opened, such as a fresh copy or a sheet you brought back with undo, shows up for you. A copy you never opened comes back with its cells when you undo its delete
-- **Sheets** — closing a spreadsheet leaves the view and the undo history of everyone else who has it open as they are
-- **Sheets** — an edit someone makes while your spreadsheet is still opening, or while it reloads, shows up instead of going missing until you reload
+- **Sheets undo while others edit** — undo changes your own cell where it now is after someone else inserts or deletes rows or columns, or deletes another sheet, formulas pointing at the moved rows included. It skips a cell someone else changed after you, and a formula still undoes when someone changed a cell it reads. Undoing or redoing your own row, column or sheet change keeps the edits others made since, and everyone sees the same result. Undoing a row delete brings back the formulas it broke, on every sheet. Closing a spreadsheet leaves everyone else's view and undo history as they are
+- **Sheets edits from others** — someone else's edit shows up for you, also on a sheet you never opened, such as a fresh copy or a sheet brought back with undo, and while your spreadsheet is still opening or reloading. A copy you never opened comes back with its cells when you undo its delete
 - **Spreadsheet PDF** — a sheet with one cell of thousands of lines prints on one page instead of thousands
 - **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads as a web page or PDF with the ones that fit and leaves the rest out, instead of failing. Its preview shows the charts that fit instead of nothing
 - **Sheets** — a wrapped cell that mixes styles, such as one from an Excel file, breaks its lines between words instead of keeping a long styled stretch on one line
@@ -152,7 +148,7 @@ Eigen now opens and saves Word, Excel and PowerPoint files. Docs gets equations,
 - **Calendar** — looking up the calendar of a guest or of the organization answers that you have no access, instead of failing with a server error
 - **Calendar** — looking up the calendar of an account that doesn't exist answers the same as one you can't see, so it doesn't tell which accounts exist
 - **Excel theme colors** — a lighter or darker shade of a theme color, such as Text 2, Lighter 40%, comes into Sheets in the color Excel shows. A file you imported before keeps its old colors until you import it again
-- **Very large spreadsheets** — a web page download of a spreadsheet draws up to 250,000 cells, shared by its sheets in tab order, instead of running until the export fails. A sheet cut short keeps one PDF page of columns, or more when all its rows fit, then the rows that fit. A sheet with too few cells left is left out. A PDF download is cut the same way, but past about 150,000 cells it can still fail
+- **Very large spreadsheets** — a web page download of a spreadsheet draws up to 250,000 cells, shared by its sheets in tab order, instead of running until the export fails. A sheet cut short keeps one PDF page of columns, or more when all its rows fit, then the rows that fit. A sheet with too few cells left is left out. A PDF download is cut the same way, but a PDF of a very large spreadsheet can still fail
 - **Merged cells in spreadsheet downloads** — a merged cell over a hidden row or column keeps the table's columns in line in the web page, PDF and preview, and shows its text and its outer border even when its first or last row or column is hidden
 - **Long code blocks** — a Docs code block longer than about 65,000 characters, with no language set, downloads at once without syntax colors, instead of stalling the export
 
