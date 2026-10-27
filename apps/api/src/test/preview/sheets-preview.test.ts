@@ -570,4 +570,4 @@ describe('eigensheets export and preview (hidden sheets)', () => {
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
 // an intentional renderer or preview-budget change. Last move: a cell's content is
 // clipped to its rows, as the editor clips it (2026-10-27).
-const GOLDEN_BODY_SHA256 = 'a6d6585b47b8022c130cb04c60f13945613ab9f1d413273fcddcda89cb1e3465';
+const GOLDEN_BODY_SHA256 = 'f137618e50ed96f78dc2a9a794ca7c882a8337f697d99a7d72713d12f1d64f9b';
