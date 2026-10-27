@@ -2,10 +2,10 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { EmailDraft } from '@workspace/lib/types/mail';
 import { getMailDomain } from '../../lib/config/server-config';
-import { renderAttachmentLinksText } from '../../lib/core/mail-template';
-import type { OutboundMail } from '../../lib/core/mailer';
-import { buildMailOptions, composeRfc822 } from '../../lib/core/mailer';
 import { draftToOutboundMail } from '../../lib/mail/sender';
+import { renderAttachmentLinksText } from '../../lib/mailer/mail-template';
+import type { OutboundMail } from '../../lib/mailer/mailer';
+import { buildMailOptions, composeRfc822 } from '../../lib/mailer/mailer';
 import { ensureServer } from '../setup';
 
 // The mail-template + sender helpers read the configured domain, written by the setup wizard.

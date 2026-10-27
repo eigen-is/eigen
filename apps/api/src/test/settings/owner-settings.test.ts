@@ -13,7 +13,7 @@ import { getDataRoot } from '../../lib/config/paths';
 import { getMailDomain, getOrgName, getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
-import * as mailer from '../../lib/core/mailer';
+import * as mailer from '../../lib/mailer/mailer';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { FakeS3Server } from '../fake-s3-server';

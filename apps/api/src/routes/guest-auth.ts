@@ -1,7 +1,7 @@
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
+import { clientIpKey } from '../lib/auth/access';
 import { requestOtp, verifyOtpAndSignIn } from '../lib/auth/guest-auth';
-import { clientIpKey } from '../lib/core/access';
 
 export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
     .post(

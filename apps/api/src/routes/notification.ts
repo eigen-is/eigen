@@ -1,6 +1,6 @@
 import type { Notification } from '@workspace/lib/types/notification';
 import { Elysia, t } from 'elysia';
-import { requireSelf } from '../lib/core/access';
+import { requireSelf } from '../lib/auth/access';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
 

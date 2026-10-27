@@ -305,7 +305,7 @@ describe('Guest Auth', () => {
         });
 
         async function requestOtpAndCapture(email: string): Promise<string> {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             spy.mockClear();
             const res = await ctx.app.handle(

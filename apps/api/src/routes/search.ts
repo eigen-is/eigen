@@ -1,7 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SearchResponse, SearchSource } from '@workspace/lib/types/search';
 import { Elysia, t } from 'elysia';
-import { requireNonGuest, requireSelf } from '../lib/core/access';
+import { requireNonGuest, requireSelf } from '../lib/auth/access';
 import { aggregateFileSearch } from '../lib/drive/aggregate';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';

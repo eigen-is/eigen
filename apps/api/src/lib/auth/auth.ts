@@ -31,8 +31,8 @@ import {
     isRoleAddress,
 } from '../config/server-config';
 import { ApiError } from '../core';
-import { composeOtpEmail } from '../core/mail-composers';
-import { sendMail } from '../core/mailer';
+import { composeOtpEmail } from '../mailer/mail-composers';
+import { sendMail } from '../mailer/mailer';
 import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
 import { getTeamExists } from '../team';
 import type { User } from '../user';
@@ -223,7 +223,7 @@ export const auth = betterAuth({
         minPasswordLength: MIN_PASSWORD_LENGTH,
     },
     advanced: {
-        // Same X-Real-IP → X-Forwarded-For precedence as clientIpKey (lib/core/access); better-auth
+        // Same X-Real-IP → X-Forwarded-For precedence as clientIpKey (lib/auth/access); better-auth
         // extracts the IP itself from these header names, so it declares the precedence here rather
         // than calling the helper. Caddy overwrites both on proxied routes, so they're not spoofable.
         ipAddress: { ipAddressHeaders: ['x-real-ip', 'x-forwarded-for'] },

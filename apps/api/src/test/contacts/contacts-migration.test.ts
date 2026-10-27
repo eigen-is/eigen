@@ -4,10 +4,11 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { is, sql } from 'drizzle-orm';
 import { getTableConfig, SQLiteTable } from 'drizzle-orm/sqlite-core';
+import { PATHS } from '../../lib/config/paths';
 import { readContactsTotalSize } from '../../lib/contacts/card-store';
 import { CONTACTS_DB_CONFIG } from '../../lib/contacts/db-config';
 import * as schema from '../../lib/contacts/schema';
-import { LocalFilesystem, ManagedDatabase, PATHS } from '../../lib/core';
+import { LocalFilesystem, ManagedDatabase } from '../../lib/core';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-contacts-mig-${Date.now()}`);
 let counter = 0;

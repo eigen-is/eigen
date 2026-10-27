@@ -10,9 +10,9 @@ import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@w
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import type { ElysiaCustomStatusResponse } from 'elysia';
 import { Elysia, t } from 'elysia';
+import { requireNonGuest, requireSelf } from '../lib/auth/access';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
-import { requireNonGuest, requireSelf } from '../lib/core/access';
 import {
     answerPreview,
     contentDisposition,

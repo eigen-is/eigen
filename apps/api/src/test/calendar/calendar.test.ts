@@ -1824,7 +1824,7 @@ describe('Calendar invite email to Eigen user', () => {
 
     test('emails Eigen attendee when toggle on', async () => {
         await setToggle(true);
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -1841,7 +1841,7 @@ describe('Calendar invite email to Eigen user', () => {
 
     test('does not email Eigen attendee when toggle off', async () => {
         await setToggle(false);
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -2128,7 +2128,7 @@ describe('Event move across calendars (finding #1)', () => {
         // Deleting a linked copy DOES decline, so it is the control the move's silence is measured against.
         const control = await seedLinked('Invited Control', 'control@example.com', 'ext-move-control');
 
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear();
 

@@ -344,7 +344,7 @@ describe('CalDAV round-trip fidelity', () => {
         });
 
         test('an organized event tells its guests about the new title without rescheduling them', async () => {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             spy.mockClear();
 
@@ -1011,7 +1011,7 @@ describe('CalDAV round-trip fidelity', () => {
         });
 
         test('the web route edits it and fans out to the guests as organizer', async () => {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             spy.mockClear();
 
@@ -1040,7 +1040,7 @@ describe('CalDAV round-trip fidelity', () => {
         });
 
         test('a web edit keeps the ORGANIZER and the guests the client wrote', async () => {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
 
             const occ = await ownOccurrence();
@@ -1150,7 +1150,7 @@ describe('CalDAV round-trip fidelity', () => {
         });
 
         test('a CalDAV PUT mails the guests nothing — invitations fan out from the web route only', async () => {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             spy.mockClear();
 
@@ -1197,7 +1197,7 @@ describe('CalDAV round-trip fidelity', () => {
         });
 
         test('the web route deletes it without composing a decline', async () => {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             spy.mockClear();
 
@@ -1254,7 +1254,7 @@ describe('CalDAV round-trip fidelity', () => {
         // Transports stay projected (R17 6a): a message leaves with the event's fields, never with the
         // lines the store keeps for itself, whatever the stored resource carries.
         test('no outgoing iMIP message carries an X-EIGEN- line', async () => {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             spy.mockClear();
 
@@ -1294,7 +1294,7 @@ describe('CalDAV round-trip fidelity', () => {
         // A CalDAV-parsed organizer is known by address only (no Eigen user id), so the decline takes the
         // same iMIP REPLY path an external organizer takes — in-app propagation has nothing to address.
         test('deleting that foreign-organizer event from the web replies with a decline', async () => {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             spy.mockClear();
 

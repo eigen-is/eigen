@@ -6,7 +6,7 @@ import {
     composeInviteEmail,
     composeOtpEmail,
     composeShareEmail,
-} from '../../lib/core/mail-composers';
+} from '../../lib/mailer/mail-composers';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 
 // Links for a recipient depend on which addresses are local, so every test pins the mail domain.

@@ -8,8 +8,8 @@ import { DRIVE_TYPE_CHAT, stripEigenExtension, withEigenExtension } from '@works
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { MAX_EMAIL_LENGTH, validateEmailTarget } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
+import { requireNonGuest, requireSelf, requireTeamAccess } from '../lib/auth/access';
 import { findChatsByMembers } from '../lib/chat/find-by-members';
-import { requireNonGuest, requireSelf, requireTeamAccess } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import type { Drive } from '../lib/drive';
 import { getDrive, getSharedDrive } from '../lib/drive';

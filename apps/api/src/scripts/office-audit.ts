@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import { isChartSpecKey, readChartSpec } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
-import { peakRss } from '../lib/core/peak-rss';
+import { peakRss } from '../lib/document/transform/peak-rss';
 import type { ExportMedia, TransformWarning } from '../lib/document/transform/protocol';
 import { toTransferableBuffer } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';

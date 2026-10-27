@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
 import type { Mount } from '../../lib/mount/mount';
+import { setShutdownDrainDeadline } from '../../lib/mount/upload-limits';
 import { UPLOAD_PUT_TIMEOUT_MS } from '../../lib/mount/upload-queue';
-import { setShutdownDrainDeadline } from '../../lib/sync';
 import type { FaultStorage, ParkedWrite } from '../fault-storage-helpers';
 import {
     countBackingRows,

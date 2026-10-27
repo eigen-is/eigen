@@ -2,8 +2,8 @@ import { escapeHtml, stripTagsServer } from '@workspace/lib/html';
 import { isMailEnabled } from '../config/env';
 import { getDomain, getOrgName } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
-import { renderEigenEmail } from '../core/mail-template';
-import { composeRfc822 } from '../core/mailer';
+import { renderEigenEmail } from '../mailer/mail-template';
+import { composeRfc822 } from '../mailer/mailer';
 
 // Welcome lives in the user's own maildir so it persists in their Inbox — that's why this
 // path bypasses sendMail() (which goes over SMTP) and writes RFC822 bytes straight to disk.

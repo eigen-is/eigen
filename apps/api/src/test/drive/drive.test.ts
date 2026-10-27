@@ -3325,7 +3325,7 @@ describe('Drive', () => {
 
     describe('emailCollaborators', () => {
         test('sends HTML mail with body and link', async () => {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -3371,7 +3371,7 @@ describe('Drive', () => {
 
         // A guest may not mail people through the server, as a guest may not share.
         test('refuses a guest editor', async () => {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             spy.mockClear();
             const guest = await createTestGuest('Mail Guest');

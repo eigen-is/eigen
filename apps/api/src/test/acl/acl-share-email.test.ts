@@ -53,7 +53,7 @@ describe('ACL share email', () => {
     afterEach(resetToggles);
 
     test('does not email Eigen user when userOnAclAdd is off', async () => {
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -68,7 +68,7 @@ describe('ACL share email', () => {
 
     test('emails Eigen user when userOnAclAdd is on', async () => {
         await setEmailToggle('userOnAclAdd', true);
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -88,7 +88,7 @@ describe('ACL share email', () => {
         await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
         await new Promise((r) => setTimeout(r, 10));
 
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -106,7 +106,7 @@ describe('ACL share email', () => {
         await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: true }] });
         await new Promise((r) => setTimeout(r, 10));
 
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -169,7 +169,7 @@ describe('ACL share email', () => {
     // The route has no options param, so these drive the domain method directly.
     test("suppressShareEmail 'all' does not email an account-less address", async () => {
         const aliceHome = await getHome(ctx.alice.user.id);
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -194,7 +194,7 @@ describe('ACL share email', () => {
     test("suppressShareEmail 'all' does not email a registered user", async () => {
         await setEmailToggle('userOnAclAdd', true);
         const aliceHome = await getHome(ctx.alice.user.id);
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -218,7 +218,7 @@ describe('ACL share email', () => {
 
     test("suppressShareEmail 'registered' still emails an account-less address", async () => {
         const aliceHome = await getHome(ctx.alice.user.id);
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 

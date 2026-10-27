@@ -11,10 +11,10 @@ import type ICAL from 'ical.js';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getMailDomain } from '../../lib/config/server-config';
-import type { OutboundMail } from '../../lib/core/mailer';
 import { ICS_IMPORT_MAX_EVENTS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
 import { parseResource } from '../../lib/ical';
+import type { OutboundMail } from '../../lib/mailer/mailer';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import type { TestUser } from '../setup';
@@ -253,7 +253,7 @@ describe('Calendar transfer routes', () => {
                 .sort(),
         ).toEqual(['Demo', 'Kickoff', 'Retro']);
 
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear();
 
@@ -378,7 +378,7 @@ describe('Calendar transfer routes', () => {
         // Alarms are not scheduling: the write seam bounds a resource by its size, as it does a device PUT.
         expect(stored.data?.reminders?.length).toBe(alarmCount);
 
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear();
 

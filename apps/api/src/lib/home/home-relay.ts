@@ -24,10 +24,18 @@ import { captureBytes, snapshotHome } from '../backup/snapshot-home';
 import type { Calendar } from '../calendar/calendar';
 import { readCalendarTotalSize } from '../calendar/resource-store';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
-import { getAvatarsDir, getDataRoot, getUserHomePath, homeDirUnder, SERVER_DIR, SERVER_FILES } from '../config/paths';
+import {
+    getAvatarsDir,
+    getDataRoot,
+    getUserHomePath,
+    homeDirUnder,
+    PATHS,
+    SERVER_DIR,
+    SERVER_FILES,
+} from '../config/paths';
 import { resolveUserQuotas } from '../config/quota';
 import { readContactsTotalSize } from '../contacts/card-store';
-import { LocalFilesystem, PATHS } from '../core';
+import { LocalFilesystem } from '../core';
 import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';

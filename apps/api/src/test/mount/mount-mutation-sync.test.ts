@@ -6,7 +6,7 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
-import { setShutdownDrainDeadline } from '../../lib/sync';
+import { setShutdownDrainDeadline } from '../../lib/mount/upload-limits';
 import type { FaultStorage } from '../fault-storage-helpers';
 import { countRowsInFile, createFaultMount, createGetLocalDatabase } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';

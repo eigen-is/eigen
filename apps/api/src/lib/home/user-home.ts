@@ -4,10 +4,10 @@
 
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
-import { getUserHomePath } from '../config/paths';
+import { getUserHomePath, PATHS } from '../config/paths';
 import { getServerSettings, mapStorageType } from '../config/server-settings';
 import { Contacts } from '../contacts/contacts';
-import { JsonStore, PATHS } from '../core';
+import { JsonStore } from '../core';
 import { Drive } from '../drive';
 import { Mail } from '../mail/mail-domain';
 import { MaildirStore } from '../mail/maildir-store';

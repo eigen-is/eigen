@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import { eq, sql } from 'drizzle-orm';
+import { PATHS } from '../config/paths';
 import type { Tx as DatabaseTx } from '../core';
-import { computeResourceEtag, PATHS, readBlobTableSize, sanitizeResourceUri } from '../core';
+import { computeResourceEtag, readBlobTableSize, sanitizeResourceUri } from '../core';
 import type { LocalFilesystem } from '../core/local-filesystem';
 import type { ParsedCard } from '../vcard/types';
 import { CONTACTS_DB_CONFIG } from './db-config';

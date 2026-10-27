@@ -4,11 +4,11 @@ import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/
 import type { AddressObject, Attachment, CalendarInvite } from '@workspace/lib/types/mail';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
-import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../core/mail-template';
-import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
 import { parseIcs, serializeEventForImip } from '../ical';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
+import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../mailer/mail-template';
+import type { OutboundICalEvent, OutboundMail } from '../mailer/mailer';
 
 type Organizer = NonNullable<EventData['organizer']>;
 

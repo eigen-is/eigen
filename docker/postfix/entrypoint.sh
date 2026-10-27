@@ -16,7 +16,7 @@ export MAIL_DOMAIN
 # container's default route when that route leaves through the subnet's interface, read from
 # /proc/net/route (little-endian hex), since the image has no `ip`. Otherwise, as when an override
 # attaches a second network whose default route wins, the gateway is unknown, so loopback only.
-# The API applies the same rule: apps/api/src/lib/core/trusted-networks.ts.
+# The API applies the same rule: apps/api/src/lib/auth/trusted-networks.ts.
 MAIL_TRUST_NETWORKS="127.0.0.0/8"
 BRIDGE_GATEWAY=""
 if [ -n "${EIGEN_SUBNET:-}" ]; then

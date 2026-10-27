@@ -7,7 +7,7 @@ import { member as memberSchema, teamMember as teamMemberSchema, team as teamSch
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getServerConfig, updateServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
-import * as mailer from '../../lib/core/mailer';
+import * as mailer from '../../lib/mailer/mailer';
 import { getUserByEmail } from '../../lib/user';
 import { assertJson, authedRequest, eventually, getTestContext } from '../setup';
 

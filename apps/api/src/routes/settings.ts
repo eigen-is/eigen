@@ -14,6 +14,7 @@ import type { SQL } from 'drizzle-orm';
 import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
+import { requireAdmin, requireOwner } from '../lib/auth/access';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
 import { resolveBackupUpload, withoutBackupSecret } from '../lib/backup/upload';
 import { getOrgName, getServerConfig } from '../lib/config/server-config';
@@ -21,8 +22,7 @@ import { DEFAULT_BACKUPS, getS3Config, getServerSettings, updateServerSettings }
 import type { ControlStatus } from '../lib/config/server-status';
 import { getServerStatus } from '../lib/config/server-status';
 import { ApiError } from '../lib/core';
-import { requireAdmin, requireOwner } from '../lib/core/access';
-import { sendMailOrThrow, storedSender } from '../lib/core/mailer';
+import { sendMailOrThrow, storedSender } from '../lib/mailer/mailer';
 import { renameOrganization } from '../lib/org';
 import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
 import { getOrgRole, getUserById } from '../lib/user';

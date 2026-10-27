@@ -2,9 +2,9 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { member as memberSchema } from '../../../auth-schema';
+import { requireAdmin } from '../../lib/auth/access';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getServerConfig } from '../../lib/config/server-config';
-import { requireAdmin } from '../../lib/core/access';
 import { getOrgRole } from '../../lib/user';
 import { authedRequest, getTestContext } from '../setup';
 

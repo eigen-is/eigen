@@ -1,3 +1,8 @@
+// The HTML shell that wraps every email Eigen sends: a card with a title, the body, an optional banner
+// and a footer. It also renders links to Drive items as "Open …" pills. Their URLs are absolute and point
+// into each app, because the recipient clicks them in an inbox, not in Eigen. adminUrl gives the same kind
+// of absolute link to the admin app.
+
 import { escapeHtml } from '@workspace/lib/html';
 import {
     DRIVE_TYPE_CHAT,

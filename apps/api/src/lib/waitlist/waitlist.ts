@@ -8,9 +8,9 @@ import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import { getDomain, getOrgName, getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
-import { composeInviteEmail } from '../core/mail-composers';
-import type { OutboundMail } from '../core/mailer';
 import { ManagedDatabase } from '../core/managed-database';
+import { composeInviteEmail } from '../mailer/mail-composers';
+import type { OutboundMail } from '../mailer/mailer';
 import { WAITLIST_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 

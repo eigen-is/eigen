@@ -1,8 +1,8 @@
 import Elysia from 'elysia';
+import { requireSelf } from '../auth/access';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { CARD_MAX_BYTES, sanitizeCardUri } from '../contacts/card-store';
 import { resolveContacts } from '../contacts/get-contacts';
-import { requireSelf } from '../core/access';
 import { readBoundedBody, readBoundedBodyBytes } from '../core/http';
 import { DAV_BODY_MAX_BYTES } from '../dav/body';
 import type { CollectionPath } from '../dav/href';

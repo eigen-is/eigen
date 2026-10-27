@@ -9,7 +9,7 @@ import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
-import { storedSender } from '../core/mailer';
+import { storedSender } from '../mailer/mailer';
 import { findDefaultTeamId } from '../org';
 import { checkS3Connection } from '../storage/s3-storage';
 import { clearSetupToken } from './setup-token';

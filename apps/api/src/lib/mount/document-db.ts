@@ -9,11 +9,11 @@ import { settlesWithin } from '../../utils/timing';
 import type { DatabaseConfig, SchemaType, SyncCallbacks } from '../core';
 import { ApiError, ManagedDatabase, storageGone, storageUnavailable } from '../core';
 import { errnoOf } from '../storage';
-import { getShutdownDrainDeadline } from '../sync';
 import { isViableRecoveryTemp } from './helpers';
 import type { Mount } from './mount';
 import { paths } from './schema';
 import { markContainerContentDirty } from './search-index';
+import { getShutdownDrainDeadline } from './upload-limits';
 
 export type DocumentDbSlot = {
     db: ManagedDatabase<SchemaType> | null; // the live instance while open; null while a build or a close is in flight

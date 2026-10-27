@@ -8,8 +8,7 @@ import { parseHomeMountSettings } from '@workspace/lib/validation';
 import { asc } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { team, user } from '../../../auth-schema';
-import { getDataRoot, getTeamDataPath, getUserHomePath, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
-import { PATHS } from '../core';
+import { getDataRoot, getTeamDataPath, getUserHomePath, PATHS, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
 import { parseSafetyCopyName } from './paths';
 
 export type ServerHome = Pick<ServerArchiveManifest['homes'][number], 'ownerId' | 'kind' | 'name'>;

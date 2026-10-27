@@ -24,9 +24,8 @@ import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } fr
 import { stageBytesNeeded } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
 import { lockDataDir } from '../../lib/config/data-lock';
-import { homeDirUnder, SERVER_DATABASES, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
+import { homeDirUnder, PATHS, SERVER_DATABASES, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
-import { PATHS } from '../../lib/core/constants';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
 import type { RealShapeHome } from '../backup/backup-test-helpers';

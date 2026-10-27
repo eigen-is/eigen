@@ -6,8 +6,8 @@
 // The leaf module, not the vector barrel, so a doc export's child loads no canvas code.
 import { isSafeMediaName } from '@workspace/lib/vector/media-refs';
 import type * as Y from 'yjs';
-import { peakRss } from '../../core/peak-rss';
 import { sanitizeMedia } from '../media';
+import { peakRss } from './peak-rss';
 import type {
     BytesPreviewJob,
     BytesTransformJob,

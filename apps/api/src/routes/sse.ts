@@ -1,5 +1,5 @@
 import { Elysia, sse } from 'elysia';
-import { requireSelf } from '../lib/core/access';
+import { requireSelf } from '../lib/auth/access';
 import { createSSEStream, getHome } from '../lib/home';
 import { betterAuth } from './auth';
 

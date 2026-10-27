@@ -44,7 +44,7 @@ function requestAccess(pathId: string, body: object = {}, token = ctx.bob.user.s
 
 // sendMail stubbed; `toAlice()` lists the mails it was handed for Alice.
 async function catchMail() {
-    const mailer = await import('../../lib/core/mailer');
+    const mailer = await import('../../lib/mailer/mailer');
     const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
     spy.mockClear(); // spyOn returns a shared mock; reset call history per test
     return {

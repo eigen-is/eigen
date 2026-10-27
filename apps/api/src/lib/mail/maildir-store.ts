@@ -16,7 +16,8 @@ import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMai
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { isMailAppEnabled } from '../config/env';
-import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
+import { PATHS } from '../config/paths';
+import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
 import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';

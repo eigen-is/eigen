@@ -139,7 +139,7 @@ function measuredImport(
             ...process.env,
             READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir),
             TRANSFORM: Bun.resolveSync('../../../lib/import/doc/transform', import.meta.dir),
-            PEAK_RSS: Bun.resolveSync('../../../lib/core/peak-rss', import.meta.dir),
+            PEAK_RSS: Bun.resolveSync('../../../lib/document/transform/peak-rss', import.meta.dir),
             THROUGH: through,
         },
         stdin: new Uint8Array(docx),

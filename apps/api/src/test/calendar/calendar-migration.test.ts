@@ -7,7 +7,8 @@ import { getTableConfig, SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { CALENDAR_DB_CONFIG } from '../../lib/calendar/db-config';
 import { readCalendarTotalSize } from '../../lib/calendar/resource-store';
 import * as schema from '../../lib/calendar/schema';
-import { LocalFilesystem, ManagedDatabase, PATHS } from '../../lib/core';
+import { PATHS } from '../../lib/config/paths';
+import { LocalFilesystem, ManagedDatabase } from '../../lib/core';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-calendar-mig-${Date.now()}`);
 let counter = 0;

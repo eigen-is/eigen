@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
+import { requireLocalhost } from '../lib/auth/access';
 import { verifyProtocolAuth } from '../lib/auth/protocol-auth';
-import { requireLocalhost } from '../lib/core/access';
 import { alertOwner } from '../lib/user/alert-owner';
 
 export const internalRouter = new Elysia({ name: 'internal' })

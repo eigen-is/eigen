@@ -1,3 +1,8 @@
+// Works out which client IPs the TRUSTED_NETWORKS list really trusts. It reads the Linux route table to
+// find the bridge subnets this host sits on. A subnet's gateway is not trusted, because a client of a
+// published port can arrive from it, and a subnet whose gateway is unknown is not trusted at all.
+// requireLocalhost asks isIpTrusted, built on these rules, before it lets a caller in.
+
 import { existsSync, readFileSync } from 'node:fs';
 
 export type Route = { iface: string; destination: string; gateway: string; prefix: number };

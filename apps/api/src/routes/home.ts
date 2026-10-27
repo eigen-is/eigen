@@ -1,6 +1,6 @@
 import { teamOwnerId } from '@workspace/lib/types';
 import { Elysia } from 'elysia';
-import { requireSelf } from '../lib/core/access';
+import { requireSelf } from '../lib/auth/access';
 import { ApiError } from '../lib/core/errors';
 import { getHome } from '../lib/home';
 import { pullCalendars, pullTeamMounts } from '../lib/home/home-relay';

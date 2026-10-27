@@ -9,7 +9,7 @@ import { listArtifacts } from '../../lib/backup/artifacts';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import { restoreHome } from '../../lib/backup/restore';
 import { verifyFolder } from '../../lib/backup/verify';
-import { PATHS } from '../../lib/core';
+import { PATHS } from '../../lib/config/paths';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';

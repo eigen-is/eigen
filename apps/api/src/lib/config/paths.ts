@@ -1,8 +1,56 @@
+// Where Eigen keeps its files on disk. getDataRoot is the data folder; the server keeps its own files in
+// one folder there, and each user, team, org and guest gets a home folder beside it. PATHS names the folders
+// and databases inside one home. Every part of the server that opens a file, and every backup and restore,
+// builds the path from these names, so the layout is written down once.
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { DATA_LOCK_FILE } from './data-lock';
 import { isProduction } from './env';
+
+// The layout inside one home folder.
+const DRIVE_ROOT = 'mounts';
+const MAIL_ROOT = 'eigen.mail';
+const CONTACTS_ROOT = 'eigen.contacts';
+const CALENDAR_ROOT = 'eigen.calendar';
+
+export const PATHS = {
+    // At the root of every home folder, and so of every archive and safety copy of one.
+    SETTINGS: 'settings.json',
+    DRIVE: {
+        ROOT: DRIVE_ROOT,
+        DEFAULT_MOUNT: 'default',
+        SHARED_DB: `${DRIVE_ROOT}/shared.db`,
+        METADATA_DB: 'metadata.db',
+        DATA_DIR: 'data',
+        THUMBS_DIR: 'thumbs',
+        TMP_DIR: 'tmp',
+        STAGING_DIR: 'staging',
+        PREVIEWS_DIR: 'previews',
+        DOCS_DIR: 'docs',
+    },
+    MAIL: {
+        ROOT: MAIL_ROOT,
+        MAILDIR: 'Maildir',
+        DB: `${MAIL_ROOT}/mail.db`,
+        CUR: 'cur',
+        NEW: 'new',
+        TMP: 'tmp',
+    },
+    CONTACTS: {
+        ROOT: CONTACTS_ROOT,
+        DB: `${CONTACTS_ROOT}/contacts.db`,
+        AVATARS: 'avatars',
+    },
+    CALENDAR: {
+        ROOT: CALENDAR_ROOT,
+        DB: `${CALENDAR_ROOT}/calendar.db`,
+    },
+    NOTIFICATIONS: {
+        DB: 'eigen.notifications/notifications.db',
+    },
+} as const;
 
 export function getDataRoot(): string {
     const envRoot = process.env['EIGEN_DATA_ROOT'];

@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { SearchResponse } from '@workspace/lib/types/search';
-import { PATHS } from '../../lib/core';
+import { PATHS } from '../../lib/config/paths';
 import { getHome } from '../../lib/home';
 import { evictHome } from '../../lib/home/get-home';
 import { readMailTotalSize } from '../../lib/mail/maildir-store';

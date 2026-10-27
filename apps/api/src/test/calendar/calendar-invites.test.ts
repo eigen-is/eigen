@@ -733,7 +733,7 @@ describe('Calendar Invites', () => {
         });
 
         test('Bob toggling a reminder does not bump SEQUENCE or send a spoofed iMIP update', async () => {
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             spy.mockClear();
 
@@ -946,7 +946,7 @@ describe('Delete-as-decline is for attendees only', () => {
         });
 
     const declinesTo = async (id: string): Promise<number> => {
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear();
         const mailsTo = (address: string) =>

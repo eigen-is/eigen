@@ -1,12 +1,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { and, eq } from 'drizzle-orm';
 import { account as accountSchema, member as memberSchema, user as userSchema } from '../../../auth-schema';
+import { requireMailEnabled } from '../../lib/auth/access';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getDemoPersonaPool } from '../../lib/auth/demo-persona-pool';
 import { signInWithScopedPassword } from '../../lib/auth/guest-auth';
 import { getServerConfig } from '../../lib/config/server-config';
-import { requireMailEnabled } from '../../lib/core/access';
-import { sendMail } from '../../lib/core/mailer';
+import { sendMail } from '../../lib/mailer/mailer';
 import { authedRequest, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;

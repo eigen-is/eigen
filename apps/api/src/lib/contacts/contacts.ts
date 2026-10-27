@@ -1,4 +1,10 @@
+// Contacts is one home's address book: the cards in its SQLite database, their labels and avatar images.
+// It seeds the default labels and a "me" card for the owner, whose name and photo flow back to their profile.
+// The contacts routes and the CardDAV server both call it, so an edit from the web app or from a phone
+// goes through the same write lock, quota check and events. It is a part of the Home and closes with it.
+
 import { randomUUID } from 'node:crypto';
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 import type { Address, Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -7,17 +13,10 @@ import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
+import { PATHS } from '../config/paths';
 import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
-import {
-    ApiError,
-    BroadcastBatch,
-    computeResourceEtag,
-    DEFAULT_LABELS,
-    LocalFilesystem,
-    newSyncGen,
-    PATHS,
-} from '../core';
+import { ApiError, BroadcastBatch, computeResourceEtag, LocalFilesystem, newSyncGen } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
@@ -47,6 +46,13 @@ import { dbRowToContact, toData } from './mappers';
 import * as schema from './schema';
 import { buildContactEvent, buildContactsChangedEvent, buildLabelEvent } from './sse-events';
 import * as transfer from './transfer';
+
+const DEFAULT_LABELS = [
+    { name: 'Family', color: EIGEN_ACCENT_COLORS_SHUFFLED[0].value },
+    { name: 'Friends', color: EIGEN_ACCENT_COLORS_SHUFFLED[1].value },
+    { name: 'Work', color: EIGEN_ACCENT_COLORS_SHUFFLED[2].value },
+    { name: 'Important', color: EIGEN_ACCENT_COLORS_SHUFFLED[3].value },
+] as const;
 
 function isBlankAddress(a: Address): boolean {
     return (

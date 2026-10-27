@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import { getOrgName } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
-import { buildMailOptions, createTransport } from '../../lib/core/mailer';
+import { buildMailOptions, createTransport } from '../../lib/mailer/mailer';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 
 // nodemailer's Transporter type does not surface the resolved options the factory built, so the

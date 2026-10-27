@@ -27,10 +27,10 @@ import {
 import { startServerBackup } from '../../lib/backup/server-job';
 import * as snapshotModule from '../../lib/backup/snapshot-home';
 import { readServerArchive } from '../../lib/backup/verify';
-import { getServerDataPath, SERVER_DATABASES } from '../../lib/config/paths';
+import { getServerDataPath, PATHS, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
-import { ApiError, PATHS } from '../../lib/core';
+import { ApiError } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { deleteUserCompletely } from '../../lib/user/delete-user';

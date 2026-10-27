@@ -164,7 +164,7 @@ describe('Occurrence edits of an invited series', () => {
 
     // Holds what Eigen mails; `to` waits for the mail to `address` whose subject starts with `subject`.
     async function catchMail() {
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear();
         return {

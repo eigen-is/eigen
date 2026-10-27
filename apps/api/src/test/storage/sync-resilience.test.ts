@@ -9,8 +9,8 @@ import { ApiError, ManagedDatabase } from '../../lib/core';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
+import { getUploadSemaphore, setShutdownDrainDeadline } from '../../lib/mount/upload-limits';
 import { LocalStorage } from '../../lib/storage/local-storage';
-import { getUploadSemaphore, setShutdownDrainDeadline } from '../../lib/sync';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import {
     countBackingRows,
