@@ -222,6 +222,17 @@ describe('the reader', () => {
         expect(sheet.config?.rowlen).toBeUndefined();
     });
 
+    test('an empty wrapped cell grows no row, as LibreOffice draws it at the default', () => {
+        // A coloured font, so the reader keeps the cell without a value.
+        const styles = styleSheet({
+            fonts: ['<font><sz val="11"/><color rgb="FF333399"/><name val="Calibri"/></font>'],
+            xfs: ['<xf numFmtId="0" fontId="1" fillId="0" borderId="0"><alignment wrapText="1"/></xf>'],
+        });
+        const [sheet] = xlsxToSheets(xlsxFixture({ sheets: [{ data: '<row r="1"><c r="A1" s="1"/></row>' }], styles }));
+        expect(sheet.celldata?.[0]?.v).toMatchObject({ tb: '2', fc: '#333399' });
+        expect(sheet.config?.rowlen).toBeUndefined();
+    });
+
     test('columns, frozen panes, gridlines and the filter', () => {
         const data =
             '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><v>1</v></c></row><row r="2"><c r="C2" s="11" t="s"><v>5</v></c></row>';

@@ -16,6 +16,7 @@ import { lossCounter } from '../../document/transform/protocol';
 import { budget } from '../../ooxml/budget';
 import { drawingTheme } from '../../ooxml/drawingml';
 import { optional } from '../../ooxml/opc';
+import { DEFAULT_FONT_SIZE_PT } from '../../ooxml/spreadsheetml';
 import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
 import type { ImportedMedia } from '../image-types';
 import { importMedia } from '../image-types';
@@ -192,8 +193,6 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
     return readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }).sheets;
 }
 
-// Excel's default font size, which the estimate takes for a cell whose look names none.
-const DEFAULT_FONT_SIZE = 11;
 const LINE_HEIGHT_FACTOR = 1.35;
 // The padding a cell draws above and below its text, in px.
 const CELL_PADDING = 6;
@@ -208,14 +207,12 @@ function estimateCellHeight(
     colWidthPx: Record<number, number>,
     defaultColWidth: number,
 ): number {
-    const fontSize = cell.fs ?? DEFAULT_FONT_SIZE;
+    // Excel's default font size for a cell whose look names none.
+    const fontSize = cell.fs ?? DEFAULT_FONT_SIZE_PT;
     const lineHeightPx = ptToPx(fontSize) * LINE_HEIGHT_FACTOR;
-    if (!cellWrapsText(cell)) {
-        return fontSize > DEFAULT_FONT_SIZE ? lineHeightPx + CELL_PADDING : 0;
-    }
-
-    const text = String(cellDisplay(cell) ?? '');
-    if (!text) return lineHeightPx + CELL_PADDING;
+    // An empty wrapped cell draws one line, as an unwrapped one does.
+    const text = cellWrapsText(cell) ? String(cellDisplay(cell) ?? '') : '';
+    if (!text) return fontSize > DEFAULT_FONT_SIZE_PT ? lineHeightPx + CELL_PADDING : 0;
 
     let cellWidth = colWidthPx[c] ?? defaultColWidth;
     const mergeInfo = merge[`${r}_${c}`];

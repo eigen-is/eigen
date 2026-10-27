@@ -312,6 +312,7 @@ describe('Sheets xlsx export — a row Excel would refit', () => {
     });
 
     test('a wrapped or large row the sheet leaves at the default is written custom at the default', () => {
+        // Larger means above Excel's 11 pt default, in the cell's font or a rich run's. A wrapped cell counts when it holds text.
         const sheets: Sheet[] = [
             {
                 name: 'Sheet1',
@@ -319,6 +320,9 @@ describe('Sheets xlsx export — a row Excel would refit', () => {
                     { r: 0, c: 0, v: { v: long, m: long, tb: '2' } },
                     { r: 1, c: 0, v: { v: 'large', m: 'large', fs: 20 } },
                     { r: 2, c: 0, v: { v: 'plain', m: 'plain' } },
+                    { r: 3, c: 0, v: { ct: { t: 'inlineStr', s: [{ v: 'large run', fs: 24 }] } } },
+                    { r: 4, c: 0, v: { v: 'eleven', m: 'eleven', fs: 11 } },
+                    { r: 5, c: 0, v: { tb: '2' } },
                 ],
             },
         ];
@@ -327,6 +331,9 @@ describe('Sheets xlsx export — a row Excel would refit', () => {
         expect(xml).toContain('<row r="1" ht="15" customHeight="1">');
         expect(xml).toContain('<row r="2" ht="15" customHeight="1">');
         expect(xml).toContain('<row r="3">');
+        expect(xml).toContain('<row r="4" ht="15" customHeight="1">');
+        expect(xml).toContain('<row r="5">');
+        expect(xml).toContain('<row r="6">');
         expect(xlsxToSheets(buffer)[0].config?.rowlen).toBeUndefined();
     });
 });
