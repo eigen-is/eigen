@@ -120,8 +120,7 @@ export function PaintSections({
                     <MergedNumberInput
                         value={typeof strokeWidth === 'number' ? round(strokeWidth) : strokeWidth}
                         onChange={(v) => onChange({ strokeWidth: v })}
-                        // The field shows the decimals of its step, and a pptx's 1 pt line of 2.67 px needs two.
-                        step={0.01}
+                        step={1}
                         min={0}
                         max={100}
                     />

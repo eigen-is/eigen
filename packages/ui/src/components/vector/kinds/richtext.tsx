@@ -203,8 +203,7 @@ export function RichTextPanelSection({ elements, slideWidth, onChange, onChangeE
                         onChange={(v) =>
                             onChange({ letterSpacing: slideWidth === undefined ? v : slidePtToPx(v, slideWidth) })
                         }
-                        // The field shows the decimals of its step, and a pptx's 0.1 pt tracking needs two.
-                        step={0.01}
+                        step={0.5}
                         min={shownSpacing(-10)}
                         max={shownSpacing(50)}
                     />

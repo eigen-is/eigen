@@ -32,12 +32,33 @@ async function render(value: number, step?: number) {
     return { input, writes };
 }
 
-test('a field shows the decimals its step implies: two for 0.01, one for 0.5, none for 1', async () => {
-    expect((await render(16, 0.01)).input.value).toBe('16.00');
+async function shown(value: number, step: number): Promise<string> {
+    const { input } = await render(value, step);
     await cleanup?.();
-    expect((await render(1.25, 0.5)).input.value).toBe('1.3');
-    await cleanup?.();
-    expect((await render(120.37, 1)).input.value).toBe('120');
+    cleanup = undefined;
+    return input.value;
+}
+
+test("a field shows its step's decimals at least: 16 at a step of 0.01 is 16.00, 3 at a step of 1 is 3", async () => {
+    expect(await shown(16, 0.01)).toBe('16.00');
+    expect(await shown(3, 1)).toBe('3');
+    expect(await shown(1.5, 0.5)).toBe('1.5');
+});
+
+test("a field shows the value's own decimals up to two, past a coarser step", async () => {
+    expect(await shown(2.67, 1)).toBe('2.67');
+    expect(await shown(2.6666666666666665, 1)).toBe('2.67');
+    expect(await shown(120.37, 1)).toBe('120.37');
+});
+
+test('a field rounds the decimal the value was written as, not its binary neighbour', async () => {
+    // 1.15 is stored as 1.1499…, which toFixed(1) shows as 1.1; 2.675 as 2.6749…, which toFixed(2) shows as 2.67.
+    expect(await shown(1.15, 0.1)).toBe('1.15');
+    expect(await shown(2.675, 1)).toBe('2.68');
+    // 1.005 * 100 is 100.4999…, so rounding by multiplying shows 1.
+    expect(await shown(1.005, 1)).toBe('1.01');
+    expect(await shown(0.1 + 0.2, 0.1)).toBe('0.3');
+    expect(await shown(-2.675, 1)).toBe('-2.68');
 });
 
 test('a field without a step shows its value as it is', async () => {

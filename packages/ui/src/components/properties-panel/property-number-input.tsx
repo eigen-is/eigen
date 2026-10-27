@@ -1,6 +1,7 @@
 // The number field of the properties panels, such as a shape's size in Slides or a chart axis bound.
-// It writes on every change and folds one edit into one undo step. When it is not focused it shows the
-// decimals its step implies, so a step of 0.01 shows 16 as 16.00, in the browser's own number format.
+// It writes on every change and folds one edit into one undo step. When it is not focused it shows at
+// least its step's decimals and up to two of the value's own: 16 at a step of 0.01 is 16.00, a 2.67 px
+// stroke at a step of 1 stays 2.67, and 3 stays 3. The browser shows it in its own number format.
 
 import { Input } from '@workspace/ui/components/input';
 import { cn } from '@workspace/ui/lib/utils';
@@ -37,7 +38,7 @@ export function PropertyNumberInput({
     // While focused the field shows its own draft, so a half-typed "-" or a clamped value never jumps under the caret.
     const [draft, setDraft] = useState<string | null>(null);
     const { hold, end: endGesture, undoKey } = useHeldGesture();
-    const shown = value === undefined ? '' : step === undefined ? String(value) : value.toFixed(stepDecimals(step));
+    const shown = value === undefined ? '' : step === undefined ? String(value) : showNumber(value, step);
 
     return (
         <Input
@@ -83,7 +84,25 @@ export function PropertyNumberInput({
     );
 }
 
-// The digits after the decimal point of a step: two for 0.01, none for 1.
-function stepDecimals(step: number): number {
-    return String(step).split('.')[1]?.length ?? 0;
+// The value's own decimals count up to this many, so a 2.6666… px stroke shows 2.67.
+const MAX_OWN_DECIMALS = 2;
+
+function showNumber(value: number, step: number): string {
+    const decimals = Math.max(decimalsOf(step), decimalsOf(roundDecimal(value, MAX_OWN_DECIMALS)));
+    return roundDecimal(value, decimals).toFixed(decimals);
+}
+
+// The digits after the decimal point: two for 0.01, none for 1.
+function decimalsOf(n: number): number {
+    return String(n).split('.')[1]?.length ?? 0;
+}
+
+// Rounds half away from zero on the decimal the number prints as, where toFixed rounds the binary value:
+// it shows 1.15 to one decimal as 1.1. Shifting by exponent notation keeps 1.005 at 100.5, where
+// 1.005 * 100 is 100.4999….
+function roundDecimal(n: number, digits: number): number {
+    const shifted = Number(`${Math.abs(n)}e${digits}`);
+    // A number String writes in exponent notation itself, such as 1e-7, is past the shift: toFixed rounds it.
+    if (!Number.isFinite(shifted)) return n;
+    return Math.sign(n) * Number(`${Math.round(shifted)}e-${digits}`);
 }
