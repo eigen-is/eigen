@@ -112,12 +112,15 @@ export function addSheet(
         return;
     }
     const order = ctx.sheets.length;
-    const id = newSheetID ?? (settings?.generateSheetId() as string);
+    const id = newSheetID ?? settings?.generateSheetId() ?? uuidv4();
     const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable);
     if (!isNil(sheetData)) {
         delete sheetData.data;
+        // A sheet without an order sorts as 0, as the tab strip sorts it.
+        const insertAt = sheetData.order ?? 0;
         for (const sheet of ctx.sheets) {
-            sheet.order = (sheet.order as number) < sheetData.order! ? sheet.order : (sheet.order as number) + 1;
+            const order = sheet.order ?? 0;
+            sheet.order = order < insertAt ? sheet.order : order + 1;
         }
     }
     const sheetconfig: Sheet = isNil(sheetData)
@@ -196,11 +199,10 @@ export function deleteSheet(
         return;
     }
 
+    const deletedOrder = ctx.sheets[arrIndex].order ?? 0;
     ctx.sheets = ctx.sheets.map((sheet) => {
-        sheet.order =
-            (sheet.order as number) < (ctx.sheets[arrIndex].order as number)
-                ? sheet.order
-                : (sheet.order as number) - 1;
+        const order = sheet.order ?? 0;
+        sheet.order = order < deletedOrder ? sheet.order : order - 1;
         return sheet;
     });
 

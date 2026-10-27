@@ -1,3 +1,6 @@
+// The sheet tab strip below the grid: the add-sheet button, the list of all sheets, the tabs themselves and the
+// scroll buttons that bring a tab into view. Adding a sheet first commits an open cell edit.
+
 import {
     ChoiceMenuItems,
     DropdownMenu,
@@ -84,7 +87,7 @@ export const SheetTab: React.FC = () => {
                                 draftCtx,
                                 draftCtx.editingCellPosition[0],
                                 draftCtx.editingCellPosition[1],
-                                refs.cellInput.current!,
+                                refs.cellInput.current,
                             );
                         }
                         addSheet(draftCtx, settings);
