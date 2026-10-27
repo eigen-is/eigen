@@ -69,6 +69,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
                 invalidateMailMessageChanged(queryClient, userId, mail.messageId, mailbox);
             }
+            invalidateMailboxesSoon(queryClient, userId);
             invalidateSearchOwner(queryClient, userId);
             return true;
 
