@@ -1,5 +1,6 @@
 // The Docs editor page: the collaborative document opened from a route, drawn as one sheet of paper with its header
-// and footer bands, its body and its notes, scaled to fit a narrow window. Around the page it wires the toolbar and
+// and footer bands, its body and its notes, scaled to fit a narrow window, or, for a page-less doc, as a column of
+// text at the reader's own width with room beside it for wide tables and images. Around the page it wires the toolbar and
 // menus, the outline, the selection's properties panel, comments, chat and search, all through the body's, a band's
 // or a note's editor, whichever holds the selection.
 
@@ -16,6 +17,7 @@ import {
     useCommentLifecycle,
     useDocumentPanels,
 } from '@workspace/lib/comments';
+import { useDocsTextWidth } from '@workspace/lib/docs';
 import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
@@ -100,7 +102,7 @@ import { OutlineColumn } from './outline-sidebar';
 import { BandControls, PageBands } from './page-band';
 import type { PageNumberPreset } from './page-numbers';
 import { applyPageNumberPreset } from './page-numbers';
-import { createDocUndoManager, writePageSetup } from './page-setup';
+import { createDocUndoManager, TEXT_WIDTHS, writePageSetup } from './page-setup';
 import { tableMenuSections } from './table-menu-sections';
 import { TablePropertiesPanel } from './table-properties-panel';
 
@@ -113,6 +115,10 @@ type EquationMenuItem = NodeMenuItem & { display: boolean };
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
 // Room an outline jump leaves above its heading, in screen pixels.
 const JUMP_MARGIN = 24;
+// A page-less doc's Full text width leaves this much beside the column, past the scroll box's own gutter, as Google's.
+const FULL_WIDTH_GUTTER_PX = 48;
+// Beside an open panel a page-less column narrows to end left of it, and moves left only once it is this narrow.
+const PAGELESS_MIN_COLUMN_PX = 320;
 
 export const CollaborativeEditor = ({
     path,
@@ -250,6 +256,8 @@ const TiptapEditor = ({
     const pageSetup = useYMapRead(yDoc.getMap(PAGE_ROOT), readPageSetup);
     const writeSetup = (from: PageSetup, to: PageSetup) => writePageSetup(yDoc, undoManager, from, to);
     const normalStyle = useYMapRead(yDoc.getMap(STYLE_ROOT), readNormalStyle);
+    const { pageless } = pageSetup;
+    const { textWidth, setTextWidth } = useDocsTextWidth();
     // The page at 96 dpi, for the layout math below and the text column before the page mounts.
     const page = pagePx(pageSetup);
     // Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
@@ -349,7 +357,8 @@ const TiptapEditor = ({
     // over to the other pages' once Different first page goes off, a collaborator's untick too.
     const bandsAllowed = canWrite && !isMobile;
     const [editingBand, setEditingBand] = useState<BandRoot | null>(null);
-    if (editingBand && !bandsAllowed) setEditingBand(null);
+    // A page-less doc draws no bands, so a switch to it, a collaborator's too, leaves the one being edited.
+    if (editingBand && (!bandsAllowed || pageless)) setEditingBand(null);
     else if (editingBand && !pageSetup.differentFirstPage && editingBand !== bandEdge(editingBand)) {
         setEditingBand(bandEdge(editingBand));
     }
@@ -587,7 +596,30 @@ const TiptapEditor = ({
     const canvasShift = canShift ? panelOverlap : 0;
     const canvasScale =
         containerWidth === 0 ? 1 : Math.min(1, containerWidth / page.width, canShift ? 1 : panelLeft / textColumnRight);
-    const needsScale = canvasScale < 1;
+    // A page-less doc never scales: its column is laid out at the reader's width instead.
+    const needsScale = !pageless && canvasScale < 1;
+
+    // A page-less column is the reader's text width, centred, or the screen on a phone. An open panel narrows it to
+    // end at the panel's edge, then moves it left below the floor. The room right of it, to the scroll box's edge or
+    // the panel's, is the breakout strip a wide table scrolls in and a wide image grows into (--breakout).
+    const room = scrollSize.width;
+    const textWidthPx = TEXT_WIDTHS.find(({ value }) => value === textWidth)?.px ?? null;
+    const widest = isMobile ? room : (textWidthPx ?? room - 2 * FULL_WIDTH_GUTTER_PX);
+    const roomEdge = showSidebar ? room - PANEL_INTRUSION_PX : room;
+    const centredWidth = Math.min(widest, room);
+    const centredLeft = (room - centredWidth) / 2;
+    const columnWidth =
+        centredLeft + centredWidth > roomEdge
+            ? Math.max(Math.min(centredWidth, PAGELESS_MIN_COLUMN_PX), roomEdge - centredLeft)
+            : centredWidth;
+    const columnLeft = Math.max(0, Math.min(centredLeft, roomEdge - columnWidth));
+    const breakout = Math.max(0, roomEdge - columnLeft - columnWidth);
+    const breakoutProperty: Record<string, string> = pageless ? { '--breakout': `${breakout}px` } : {};
+    // On paper the @page rule draws the margins, as for pages, so the column is laid out for the screen only.
+    const pagelessStylesheet =
+        room > 0
+            ? `@media screen { [data-document][data-pageless] { width: ${columnWidth}px; margin-left: ${columnLeft}px; padding: 48px 0 96px; } }`
+            : `@media screen { [data-document][data-pageless] { width: 100%; max-width: ${widest > 0 ? `${widest}px` : 'none'}; margin: 0 auto; padding: 48px 0 96px; } }`;
 
     // The document observer stays quiet while unscaled, so seed the height on the way in.
     useLayoutEffect(() => {
@@ -722,6 +754,8 @@ const TiptapEditor = ({
                                     canRedo={canRedo}
                                     pageSetup={pageSetup}
                                     onPageSetupChange={writeSetup}
+                                    textWidth={textWidth}
+                                    onTextWidthChange={setTextWidth}
                                     onUpdateNormalStyle={
                                         editingBand || notes.anchor
                                             ? undefined
@@ -751,8 +785,10 @@ const TiptapEditor = ({
                                     onInsertEquation={insertEquation}
                                     onInsertFootnote={bandsAllowed ? insertFootnote : undefined}
                                     inNote={!!notes.anchor}
-                                    onEnterBand={bandsAllowed ? (edge) => enterBand(entryBand(edge)) : undefined}
-                                    onPageNumbers={bandsAllowed ? applyPreset : undefined}
+                                    onEnterBand={
+                                        bandsAllowed && !pageless ? (edge) => enterBand(entryBand(edge)) : undefined
+                                    }
+                                    onPageNumbers={bandsAllowed && !pageless ? applyPreset : undefined}
                                     outlineShown={outline.shown}
                                     onToggleOutline={outline.toggle}
                                 />
@@ -760,11 +796,16 @@ const TiptapEditor = ({
                         >
                             <div className="h-full relative overflow-hidden">
                                 {/* The page box, and on paper the @page margins in its place; the printed clone matches it too. */}
-                                <style>{pageStylesheet(pageSetup, '[data-document]')}</style>
+                                <style>
+                                    {pageStylesheet(pageSetup, '[data-document]')}
+                                    {pageless && `\n${pagelessStylesheet}`}
+                                </style>
                                 <div
                                     ref={setScrollContainer}
                                     className={cn(
-                                        'h-full w-full overflow-y-scroll bg-muted p-4',
+                                        'h-full w-full overflow-y-scroll p-4',
+                                        // A page-less doc has no paper, so the whole view is its white, in dark mode too.
+                                        pageless ? 'eigen-paper bg-white' : 'bg-muted',
                                         needsScale && 'overflow-x-hidden',
                                     )}
                                     onClick={(e) => {
@@ -818,40 +859,48 @@ const TiptapEditor = ({
                                 >
                                     <div
                                         data-document="true"
+                                        data-pageless={pageless || undefined}
                                         className={cn(
                                             // eigen-paper: the page always renders light, in dark mode too (globals.css)
                                             // Rows: the header band, the body, the notes, the footer band.
                                             // isolate: the figures behind the text draw on the paper, in every scale.
-                                            'eigen-paper isolate grid grid-rows-[auto_1fr_auto_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
-                                            !needsScale && 'min-h-full m-auto',
+                                            'eigen-paper isolate grid grid-rows-[auto_1fr_auto_auto] bg-white',
+                                            pageless
+                                                ? 'min-h-full'
+                                                : 'rounded-lg shadow-sm shadow-transparent print:shadow-none',
+                                            !pageless && !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}
                                         // The doc's Normal, which the body and the bands draw unformatted text in.
                                         style={{
                                             ...normalStyleProperties(normalStyle),
+                                            ...breakoutProperty,
                                             ...(needsScale
                                                 ? {
                                                       transform: `scale(${canvasScale})`,
                                                       transformOrigin: 'top left',
                                                       marginBottom: -(1 - canvasScale) * docHeight,
                                                   }
-                                                : canvasShift > 0 && {
+                                                : !pageless &&
+                                                  canvasShift > 0 && {
                                                       transform: `translateX(${-canvasShift}px)`,
                                                   }),
                                         }}
                                     >
-                                        <PageBands
-                                            edge="header"
-                                            editors={bands}
-                                            setup={pageSetup}
-                                            editing={editingBand}
-                                            onEnter={
-                                                bandsAllowed
-                                                    ? (root, at) => enterBand(root ?? entryBand('header'), at)
-                                                    : undefined
-                                            }
-                                            controls={bandControls}
-                                        />
+                                        {!pageless && (
+                                            <PageBands
+                                                edge="header"
+                                                editors={bands}
+                                                setup={pageSetup}
+                                                editing={editingBand}
+                                                onEnter={
+                                                    bandsAllowed
+                                                        ? (root, at) => enterBand(root ?? entryBand('header'), at)
+                                                        : undefined
+                                                }
+                                                controls={bandControls}
+                                            />
+                                        )}
                                         <EditorContent
                                             editor={editor}
                                             data-page-body
@@ -863,18 +912,20 @@ const TiptapEditor = ({
                                             open={notes.anchor}
                                             onOpen={bandsAllowed ? openNote : undefined}
                                         />
-                                        <PageBands
-                                            edge="footer"
-                                            editors={bands}
-                                            setup={pageSetup}
-                                            editing={editingBand}
-                                            onEnter={
-                                                bandsAllowed
-                                                    ? (root, at) => enterBand(root ?? entryBand('footer'), at)
-                                                    : undefined
-                                            }
-                                            controls={bandControls}
-                                        />
+                                        {!pageless && (
+                                            <PageBands
+                                                edge="footer"
+                                                editors={bands}
+                                                setup={pageSetup}
+                                                editing={editingBand}
+                                                onEnter={
+                                                    bandsAllowed
+                                                        ? (root, at) => enterBand(root ?? entryBand('footer'), at)
+                                                        : undefined
+                                                }
+                                                controls={bandControls}
+                                            />
+                                        )}
                                     </div>
                                 </div>
                                 {/* Unmounted when closed. The stable gutter ends the panel left of the scrollbar. The

@@ -1,5 +1,5 @@
-// The Docs Format menu: text, paragraph styles, alignment and spacing, lists, headers and page numbers, and the table and
-// image submenus that a phone, which has no properties panel, reaches those options through. Every item acts on the
+// The Docs Format menu: text, paragraph styles, alignment and spacing, lists, headers and page numbers, the switch
+// between pages and page-less, and the table and image submenus that a phone, which has no properties panel, reaches those options through. Every item acts on the
 // editor the toolbar follows: the body's, a band's being edited or the open note's.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
@@ -55,6 +55,7 @@ import {
     RemoveFormatting,
     RotateCwSquare,
     Ruler,
+    ScrollText,
     Settings2,
     Strikethrough,
     Subscript,
@@ -119,6 +120,9 @@ type FormatMenuProps = {
     onReplaceImage: () => void;
     onEnterBand?: (edge: BandEdge) => void;
     onPageNumbers?: (preset: PageNumberPreset) => void;
+    // A page-less doc has no paper on screen, so Page orientation leaves the menu, as in Google.
+    pageless: boolean;
+    onSwitchFormat: () => void;
 };
 
 export const FormatMenu = ({
@@ -136,6 +140,8 @@ export const FormatMenu = ({
     onReplaceImage,
     onEnterBand,
     onPageNumbers,
+    pageless,
+    onSwitchFormat,
 }: FormatMenuProps) => (
     <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
         <DropdownMenuSub>
@@ -379,8 +385,13 @@ export const FormatMenu = ({
                 </DropdownMenuSub>
             </>
         )}
-        <DropdownMenuItem onClick={onPageSetup}>
-            <RotateCwSquare className="h-4 w-4" /> Page orientation
+        {!pageless && (
+            <DropdownMenuItem onClick={onPageSetup}>
+                <RotateCwSquare className="h-4 w-4" /> Page orientation
+            </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={onSwitchFormat}>
+            <ScrollText className="h-4 w-4" /> {pageless ? 'Switch to pages format' : 'Switch to page-less format'}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuSub>

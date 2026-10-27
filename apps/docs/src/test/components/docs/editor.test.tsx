@@ -261,6 +261,49 @@ test('a double-click in the top margin edits the header in place, and one in the
     expect([labels('header'), labels('footer')]).toEqual([[], ['Footer']]);
 });
 
+const pageBox = () => document.querySelector<HTMLElement>('[data-document]');
+const pageStyles = () => [...document.querySelectorAll('style')].map((style) => style.textContent ?? '').join('\n');
+
+test("a page-less doc draws no paper and no bands, never scales, and its text column is the reader's Narrow", async () => {
+    write('header', 'Acme');
+    doc.getMap(PAGE_ROOT).set('pageless', true);
+    await render({ ...WRITER, width: 390 });
+    expect(pageBox()?.hasAttribute('data-pageless')).toBe(true);
+    expect(pageBox()?.className).not.toMatch(/rounded|shadow/);
+    expect(pageBox()?.style.transform).toBe('');
+    expect(margin('header')).toBeNull();
+    expect(band('header')).toBeNull();
+    expect(pageStyles()).toContain('max-width: 696px');
+    // The paper still prints: the page's own @page rule stays.
+    expect(pageStyles()).toContain('@page { size: 210mm 297mm');
+});
+
+test('each reader draws a page-less doc at their own text width, which the doc never holds', async () => {
+    doc.getMap(PAGE_ROOT).set('pageless', true);
+    localStorage.setItem('eigen-docs-text-width:u1', 'wide');
+    await render(WRITER);
+    expect(pageStyles()).toContain('max-width: 1056px');
+    expect(Object.keys(doc.getMap(PAGE_ROOT).toJSON())).toEqual(['pageless']);
+});
+
+test("a switch to page-less, a collaborator's too, leaves the band being edited and hides the bands", async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    expect(editing()).toEqual(['header']);
+    await act(async () => doc.getMap(PAGE_ROOT).set('pageless', true));
+    expect(editing()).toEqual([]);
+    expect(margin('header')).toBeNull();
+    await openMenu('Insert');
+    expect(menuItems()).not.toContain(`Page break${formatForDisplay('Mod+Enter')}`);
+    // The menus act on the body again, whose schema holds the chart a band's leaves out.
+    const chart = [...document.querySelectorAll('[role="menuitem"]')].find(
+        (item) => item.textContent?.trim() === 'Chart',
+    );
+    expect(chart?.hasAttribute('data-disabled')).toBe(false);
+    await openSubmenu('Page elements');
+    expect(menuItems().filter((item) => item === 'Header' || item === 'Footer')).toEqual([]);
+});
+
 test('a single click in a margin enters nothing', async () => {
     write('header', 'Acme');
     await render(WRITER);
