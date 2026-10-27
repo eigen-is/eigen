@@ -33,6 +33,8 @@ export function AppBarMenu({ label, value, contentClassName, onCloseAutoFocus, c
                 }}
                 onPointerDown={(event) => {
                     if (event.currentTarget.dataset.state === 'closed') openedByHoverRef.current = false;
+                    // The open menu keeps the focus, as after a press that opened it, so the arrow keys work in it.
+                    else if (openedByHoverRef.current) event.preventDefault();
                 }}
             >
                 {label}

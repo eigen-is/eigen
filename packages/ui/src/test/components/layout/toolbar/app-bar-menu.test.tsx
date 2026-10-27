@@ -59,10 +59,15 @@ async function hover(label: string) {
     await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
 }
 
+// A press focuses the button it lands on, as a browser does, unless a handler prevents that.
 async function press(label: string) {
     await hover(label);
+    const button = trigger(label);
+    if (!(button instanceof HTMLElement)) throw new Error(`no ${label} trigger`);
     await act(async () => {
-        trigger(label)?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        const down = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 });
+        button.dispatchEvent(down);
+        if (!down.defaultPrevented) button.focus();
     });
 }
 
@@ -85,6 +90,8 @@ test('an open menu leaves the page live, and one press on another trigger opens 
     await press('Edit');
     expect(openMenu()).toBe('Edit');
     expect(menuRows()).toEqual(['Undo']);
+    // The press leaves the focus in the menu, where the arrow keys work, not on the trigger.
+    expect(document.activeElement?.getAttribute('role')).toBe('menu');
 
     // A second press on the open trigger closes the bar.
     await press('Edit');
