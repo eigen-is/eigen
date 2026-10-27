@@ -32,12 +32,13 @@ type CanvasDocumentOptions = { title: string; pages: CanvasPage[]; resolveMedia?
 
 export function canvasHtmlDocument(opts: CanvasDocumentOptions): string {
     const { title, pages, resolveMedia } = opts;
+    const pdf = opts.mode === 'pdf';
     // The screen document wraps each page in the shared fit box, so a downloaded deck reads on a phone. The layers
     // inside stay in scene pixels. The PDF has no viewport, as WeasyPrint gives each page a sheet, so its pages stay
     // unwrapped, laid out where they print.
-    const scale = opts.mode === 'pdf' ? 1 : opts.scale;
+    const scale = pdf ? 1 : opts.scale;
     const rendered = pages.map((page) =>
-        opts.mode === 'pdf' ? renderPrintPage(page, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
+        pdf ? renderPrintPage(page, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
     );
     // Every page in a document is the same size (a deck has one slide size; a drawing has one page), and it
     // is rounded exactly as the page box is — a sheet a fraction narrower than its content is an extra
@@ -47,11 +48,11 @@ export function canvasHtmlDocument(opts: CanvasDocumentOptions): string {
     // A rich-text box's raw HTML was filtered at the scene; the builder sanitizes the assembled body. No ADD_TAGS: the
     // compositor emits ordinary HTML, never a foreignObject.
     const body = rendered.join('');
-    const css = opts.mode === 'pdf' ? pdfCss(width, height) : screenCss(width);
+    const css = pdf ? pdfCss(width, height) : screenCss(width);
     return exportHtmlDocument({
         title,
         css: `${SHARED_CSS}${css}${canvasTextCSSRaw}`,
-        body: opts.mode === 'pdf' ? body : `<div class="deck">${body}</div>`,
+        body: pdf ? body : `<div class="deck">${body}</div>`,
         viewport: true,
     });
 }
