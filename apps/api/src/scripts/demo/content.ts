@@ -1943,7 +1943,7 @@ export const TRYING_EIGEN: PersonalDoc = {
         '<p><strong>bold</strong> works. <em>italic</em> works. <s>so does this</s>.</p>',
         '<p><span class="figure"><img data-media-name="hands-up-at-camp.webp" alt="Arms up in front of the tents" width="420"></span></p>',
         "<p>the logo isn't half a bra-ket: <strong>eigen</strong> is an operator acting on the ket |docs⟩.</p>",
-        displayedEquation('\\mathbf{eigen}\\,|\\text{docs}\\rangle'),
+        displayedEquation('\\mathbf{eigen}\\,\\ket{\\text{docs}}'),
         '<p>click the equation and the LaTeX comes back. nice.</p>',
         '<ul><li><s>find the strikethrough button</s></li><li>look at the budget sheet</li><li>coffee</li></ul>',
     ].join(''),
