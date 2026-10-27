@@ -207,8 +207,12 @@ function estimateCellHeight(
     colWidthPx: Record<number, number>,
     defaultColWidth: number,
 ): number {
-    // Excel's default font size for a cell whose look names none.
-    const fontSize = cell.fs ?? DEFAULT_FONT_SIZE_PT;
+    // Excel's default font size for a cell whose look names none. A line is as tall as its largest rich run, as the
+    // writer's refitsOnOpen counts it.
+    const fontSize = (cell.ct?.s ?? []).reduce(
+        (largest, run) => Math.max(largest, run.fs ?? 0),
+        cell.fs ?? DEFAULT_FONT_SIZE_PT,
+    );
     const lineHeightPx = ptToPx(fontSize) * LINE_HEIGHT_FACTOR;
     // An empty wrapped cell draws one line, as an unwrapped one does.
     const text = cellWrapsText(cell) ? String(cellDisplay(cell) ?? '') : '';

@@ -335,6 +335,18 @@ describe('a data validation', () => {
         ]);
     });
 
+    test("a prompt is cut before a surrogate pair's halves, never between them", () => {
+        const prompt = `${'p'.repeat(254)}😀`;
+        const { xml, dataVerification, lost } = roundTrip({
+            dataVerification: {
+                '0_0': validation({ type: 'number', type2: 'equal', hintShow: true, hintValue: prompt }),
+            },
+        });
+        expect(dataVerification?.['0_0']?.hintValue).toBe('p'.repeat(254));
+        expect(xml).not.toContain('&#xD83D;');
+        expect(lost).toEqual(['validation-prompts-cut']);
+    });
+
     test('conditional formats come before validations, as CT_Worksheet orders them', () => {
         const { xml } = roundTrip({
             dataVerification: { '0_0': validation({}) },

@@ -1689,15 +1689,16 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(cols(over.html)).toBe(499);
     }, 30_000);
 
-    test('a row whose every column is hidden still counts against the cap', () => {
+    test('a row whose every column is hidden still counts against the cap, though it prints nothing', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'hidden' } }]),
             config: { colhidden: { 0: 0 }, merge: { '0_0': { r: 0, c: 0, rs: REFERENCE_ROW_COUNT, cs: 1 } } },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
+        const next = makeSheet([{ r: 0, c: 0, v: { v: 'next' } }]);
+        const out = renderSheetsHtml([sheet, next], NO_MEDIA, 'screen');
         expect(out.cut).toEqual([sheet]);
-        expect(trs(out.html)).toBe(MAX_EXPORT_CELLS);
-        expect(tds(out.html)).toBe(0);
+        expect(out.leftOut).toEqual([next]);
+        expect(out.html).toBe('');
     }, 30_000);
 
     test("a border key past Excel's grid sizes the PDF page from the kept window, quickly", () => {
@@ -1951,8 +1952,9 @@ describe('Sheets HTML export — the window over forged keys', () => {
         );
         const { out, ms } = timed(() => renderSheetsHtml(sheets, NO_MEDIA, 'screen'));
         expect(ms).toBeLessThan(2_000);
-        // Fifteen sheets keep all 16,384 columns, the sixteenth the 4,240 cells left, and the rest are left out.
-        expect(cols(out.html)).toBe(MAX_EXPORT_CELLS);
+        // Fifteen sheets keep all 16,384 columns, the sixteenth the 4,240 cells left, and the rest are left out. None
+        // of them prints.
+        expect(out.html).toBe('');
         expect(out.cut).toEqual([sheets[15]]);
         expect(out.leftOut).toEqual(sheets.slice(16));
     }, 30_000);
@@ -2151,6 +2153,14 @@ describe('Sheets HTML export — the window over forged keys', () => {
         };
         const sheet = makeSheet([{ r: 0, c: 0, v: date }], [rule]);
         expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').html).toContain('>2025-12-09<');
+    });
+
+    test('a sheet whose every row or every column is hidden prints no page, as a blank one prints none', () => {
+        const shown = topLeft(undefined, 'shown');
+        const rows = topLeft({ rowhidden: { 0: 0 } }, 'rows');
+        const columns = topLeft({ colhidden: { 0: 0 } }, 'columns');
+        const out = renderSheetsHtml([rows, shown, columns], NO_MEDIA, 'pdf');
+        expect(out.html).toBe(renderSheetsHtml([shown], NO_MEDIA, 'pdf').html);
     });
 
     test('an empty tab between two others adds no page', () => {

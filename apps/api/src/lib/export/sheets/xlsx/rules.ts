@@ -28,6 +28,7 @@ import {
     TOP10_CONDITION,
     withFuturePrefixes,
 } from '../../../ooxml/spreadsheetml';
+import { cut } from './strings';
 import type { StyleRegistry } from './styles';
 import { argbOf } from './styles';
 
@@ -188,7 +189,7 @@ function dataValidationsXml(verification: NonNullable<Sheet['dataVerification']>
         }
         let prompt = promptOf(rule);
         if (prompt.length > MAX_PROMPT_LENGTH) {
-            prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
+            prompt = cut(prompt, MAX_PROMPT_LENGTH);
             lost('validation-prompts-cut');
         }
         const { type, operator, formulas } = validation;

@@ -155,8 +155,11 @@ export function renderSheetsHtml(
     for (const sheet of shownSheets(sheets)) {
         const budget = (rows: number, cols: number) => exportWindow(mode, cellsLeft, rows, cols);
         let windowed = windowedSheet(sheet, budget);
-        // A sheet with cells, images or charts prints a page of its own. A blank one takes no page.
-        const draws = windowed !== null && (windowed.range !== null || windowed.floating.length > 0);
+        // A sheet with shown cells, images or charts prints a page of its own. A blank one takes no page, and nor does
+        // one whose every row or every column is hidden.
+        const draws =
+            windowed !== null &&
+            ((windowed.rows.length > 0 && windowed.cols.length > 0) || windowed.floating.length > 0);
         let pages = 0;
         if (windowed && draws && mode === 'pdf') {
             const printed = printedPages(windowed, Math.floor(cellsLeft / PDF_PAGE_CELLS));
@@ -178,13 +181,14 @@ export function renderSheetsHtml(
         }
         cellsLeft -= cells;
         if (windowed.truncated) cut.push(sheet);
+        if (!draws) continue;
         const charts = chargeCharts(windowed.floating, cellsLeft);
         cellsLeft -= charts.cells;
         chartsLeftOut.push(...charts.leftOut);
         const rendered = renderSheet({ ...windowed, floating: charts.kept }, engine, resolver, { styles, mediaUrls });
         size.width = Math.max(size.width, rendered.size.width);
         size.height = Math.max(size.height, rendered.size.height);
-        // A blank sheet draws nothing, so it takes no page.
+        // Images whose media resolves to nothing draw nothing.
         if (rendered.html) bodies.push(rendered.html);
     }
     // Each sheet but the last ends its page. The .sheet div already has a class, so its page break is a second class.

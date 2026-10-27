@@ -222,6 +222,14 @@ describe('the reader', () => {
         expect(sheet.config?.rowlen).toBeUndefined();
     });
 
+    // LibreOffice refits a row that isn't custom to its largest run: a 24 pt run opens at 29.1 pt.
+    test("a rich run larger than Excel's default grows its row, as the cell's own font does", () => {
+        const strings = ['<r><t>small </t></r><r><rPr><sz val="24"/></rPr><t>large</t></r>'];
+        const data = '<row r="1"><c r="A1" t="s"><v>0</v></c></row>';
+        const [sheet] = xlsxToSheets(xlsxFixture({ sheets: [{ data }], strings }));
+        expect(sheet.config?.rowlen).toEqual({ 0: 49 });
+    });
+
     test('an empty wrapped cell grows no row, as LibreOffice draws it at the default', () => {
         // A coloured font, so the reader keeps the cell without a value.
         const styles = styleSheet({
