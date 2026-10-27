@@ -1,8 +1,8 @@
 // Google Docs' column drag: the border between two columns moves width from one to the other and the table keeps its
 // width, each column stopping at the floor; the table's right edge sets the table's width, up to the block it sits in.
-// The first drag on a table stores every column's drawn width, and undoing it draws the columns as before; a click
-// writes nothing. Distribute columns gives every column one width, the table's own or, with a column of no width, the
-// text column's.
+// The first drag on a table stores every column's drawn width, in page pixels when a page-less doc draws it wider, and
+// undoing it draws the columns as before; a click writes nothing. Distribute columns gives every column one width, the
+// table's own or, with a column of no width, the text column's.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -35,12 +35,17 @@ const widthRow = (...widths: (number | null)[]) =>
 
 const PAPER_PX = 800;
 
-// Mounted on a page whose text column is COLUMN_PX wide, as the editor mounts it, on PAPER_PX of paper.
-async function mountDoc(content: object[], pageless = false) {
+// Mounted on a page whose text column is COLUMN_PX wide, as the editor mounts it, on PAPER_PX of paper. A page-less doc
+// draws that column at the reader's width, so the page map's own column may be narrower.
+async function mountDoc(content: object[], pageless = false, pageColumn = COLUMN_PX) {
     const editor = new Editor({
         extensions: [
             ...getDocExtensions({ exclude: ['table'] }),
-            EditorTable.configure({ pageless: () => pageless, paperWidth: () => PAPER_PX }),
+            EditorTable.configure({
+                pageless: () => pageless,
+                paperWidth: () => PAPER_PX,
+                textColumnWidth: () => pageColumn,
+            }),
             TableWidthClamp.configure({ paperWidth: () => PAPER_PX }),
         ],
         content: { type: 'doc', content },
@@ -59,7 +64,8 @@ async function mountDoc(content: object[], pageless = false) {
     return editor;
 }
 
-const mount = (rows: object[], pageless = false) => mountDoc([{ type: 'table', content: rows }], pageless);
+const mount = (rows: object[], pageless = false, pageColumn = COLUMN_PX) =>
+    mountDoc([{ type: 'table', content: rows }], pageless, pageColumn);
 
 const widths = (editor: InstanceType<typeof Editor>) => {
     const found: (number[] | null)[] = [];
@@ -381,6 +387,20 @@ test("a page-less doc's table in a list item still grows only up to the list ite
     Object.defineProperty(item, 'clientWidth', { value: 400 });
     drag(editor, 16, 1000);
     expect(widths(editor)).toEqual([[100], [100], [200]]);
+});
+
+test("a page-less doc's first drag stores page pixels, not the reader's wider column it draws at", async () => {
+    const editor = await mount([widthRow(null, null, null)], true, COLUMN_PX / 2);
+    drawCells(editor, 200);
+    drag(editor, first, 50);
+    expect(widths(editor)).toEqual([[150], [50], [100]]);
+});
+
+test("Distribute columns fills a page-less table with no widths to the page map's column, not the reader's", async () => {
+    const editor = await mount([widthRow(null, null, null)], true, COLUMN_PX / 2);
+    editor.commands.setTextSelection(first + 2);
+    expect(editor.commands.distributeColumns()).toBe(true);
+    expect(widths(editor)).toEqual([[100], [100], [100]]);
 });
 
 test('Distribute columns keeps a wide page-less table at its own width', async () => {
