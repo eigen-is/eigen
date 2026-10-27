@@ -4,6 +4,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Added
+
+- **Images behind or in front of the text** — in Docs, put an image or a chart behind the text or in front of it and drag it anywhere on the page. It moves with its paragraph when you type above it
+- **Image layouts on a phone** — **Format → Image** has every way to place an image: in line, wrapped left or right, behind or in front of the text
+- **Word files** — an image or a chart behind or in front of the text stays there when you import a Word file or download a document as Word
+
 ### Fixed
 
 - **Excel files** — a row Excel shows at normal height comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
