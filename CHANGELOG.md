@@ -13,7 +13,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Sheets undo** — undoing your own row or column insert or delete keeps the edits others made since, and everyone sees the same result. Undoing a delete brings back the formulas it broke, on every sheet
 - **Sheets undo** — redoing a sheet delete keeps what others changed on the other sheets, and someone else's edit to a sheet you brought back with undo shows up for you
 - **Sheets undo** — deleting a copied sheet you never opened and then undoing brings the copy back with its cells
-- **Sheets** — closing a spreadsheet no longer resets the open view and the undo history of everyone else who has it open
+- **Sheets** — closing a spreadsheet leaves the view and the undo history of everyone else who has it open as they are
 - **Sheets** — an edit someone makes while your spreadsheet is still opening, or while it reloads, shows up instead of going missing until you reload
 
 ## [0.4.0] - 2026-10-26
