@@ -64,28 +64,20 @@ function draggedWidths(start: number[], col: number, dx: number, limits: TableLi
     return widths;
 }
 
-// A page-less doc draws its text column at the reader's width, so a width read off the screen is scaled to the page
-// map's column, as every stored width is page px. 1 on pages, or for a column not laid out.
-function pagePxPerDrawnPx(view: EditorView, options: EditorTableOptions): number {
-    const drawn = textColumnWidth(view.dom);
-    return options.pageless() && drawn ? options.textColumnWidth() / drawn : 1;
-}
-
-// The width the table at `tablePos` fills, in page px: the content box of the block it sits in, a list item or a
-// cell, within the text column. Null when neither is laid out.
-function blockWidth(view: EditorView, tablePos: number, options: EditorTableOptions): number | null {
+// The width the table at `tablePos` fills: the content box of the block it sits in, a list item or a cell, within
+// the text column. Null when neither is laid out.
+function blockWidth(view: EditorView, tablePos: number): number | null {
     const container = view.nodeDOM(tablePos)?.parentElement;
     const fits = container ? contentWidth(container) : null;
     const column = textColumnWidth(view.dom);
-    const drawn = fits !== null && column !== null ? Math.min(fits, column) : (fits ?? column);
-    return drawn === null ? null : drawn * pagePxPerDrawnPx(view, options);
+    return fits !== null && column !== null ? Math.min(fits, column) : (fits ?? column);
 }
 
 // The widest the table at `tablePos` grows: the block it fills, or no limit for a page-less doc's table in the body,
 // which scrolls sideways past the text. Infinity when nothing is laid out.
 function maxTableWidth(view: EditorView, tablePos: number, options: EditorTableOptions): number {
     if (options.pageless() && view.state.doc.resolve(tablePos).depth === 0) return Number.POSITIVE_INFINITY;
-    return blockWidth(view, tablePos, options) ?? Number.POSITIVE_INFINITY;
+    return blockWidth(view, tablePos) ?? Number.POSITIVE_INFINITY;
 }
 
 // Every column's stored width, read off its first-row cell, 0 for none.
@@ -95,8 +87,8 @@ function storedWidths(table: PMNode, map: TableMap): number[] {
         .map((pos, col): number => table.nodeAt(pos)?.attrs['colwidth']?.[col - map.colCount(pos)] || 0);
 }
 
-// Every column's width in page px: its stored one, or the share it draws at of its first-row cell's width.
-function columnWidths(view: EditorView, table: PMNode, tableStart: number, map: TableMap, scale: number): number[] {
+// Every column's width: its stored one, or the share it draws at of its first-row cell's width.
+function columnWidths(view: EditorView, table: PMNode, tableStart: number, map: TableMap): number[] {
     const stored = storedWidths(table, map);
     return stored.map((width, col) => {
         if (width) return width;
@@ -106,7 +98,7 @@ function columnWidths(view: EditorView, table: PMNode, tableStart: number, map: 
         const dom = view.nodeDOM(tableStart + pos);
         const drawn = dom instanceof HTMLElement ? dom.offsetWidth : 0;
         const unknown = spanned.filter((spannedWidth) => !spannedWidth).length;
-        return Math.max(MIN_TABLE_COLUMN_PX, Math.round(((drawn - sum(spanned)) * scale) / unknown));
+        return Math.max(MIN_TABLE_COLUMN_PX, Math.round((drawn - sum(spanned)) / unknown));
     });
 }
 
@@ -189,7 +181,7 @@ function columnDrag(options: EditorTableOptions) {
                     const dom = view.nodeDOM(tablePos)?.firstChild;
                     if (!(dom instanceof HTMLTableElement)) return false;
 
-                    const start = columnWidths(view, table, tablePos + 1, map, pagePxPerDrawnPx(view, options));
+                    const start = columnWidths(view, table, tablePos + 1, map);
                     const limits = {
                         maxTableWidth: maxTableWidth(view, tablePos, options),
                         maxColumnWidth: options.paperWidth(),
@@ -246,7 +238,6 @@ type EditorTableOptions = TableOptions & {
     // Read off the page map at each gesture, as a peer may switch the doc meanwhile.
     pageless: () => boolean;
     paperWidth: () => number;
-    textColumnWidth: () => number;
 };
 
 // The docs editor's table. prosemirror-tables' own TableView, not TipTap's, because TipTap's leaves a column's dragged
@@ -258,7 +249,6 @@ export const EditorTable = Table.extend<EditorTableOptions>({
             ...(this.parent?.() ?? Table.options),
             pageless: () => false,
             paperWidth: () => Number.POSITIVE_INFINITY,
-            textColumnWidth: () => Number.POSITIVE_INFINITY,
         };
     },
     addCommands() {
@@ -298,7 +288,7 @@ export const EditorTable = Table.extend<EditorTableOptions>({
                     const stored = storedWidths(table, map);
                     const tableWidth = stored.every((width) => width > 0)
                         ? sum(stored)
-                        : (blockWidth(view, tableStart - 1, this.options) ?? 0);
+                        : (blockWidth(view, tableStart - 1) ?? 0);
                     const total = Math.min(tableWidth, maxTableWidth(view, tableStart - 1, this.options));
                     if (total <= 0) return false;
                     const width = Math.max(MIN_TABLE_COLUMN_PX, Math.floor(total / map.width));

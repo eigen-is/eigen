@@ -357,7 +357,7 @@ export function docEditorOptions({
                 note && extension.name === 'starterKit' ? extension.configure({ document: false }) : extension,
             ),
             ...(note ? [NoteDocument] : []),
-            EditorTable.configure({ resizable: !coarsePointer, pageless, paperWidth, textColumnWidth }),
+            EditorTable.configure({ resizable: !coarsePointer, pageless, paperWidth }),
             Figure.configure(figure),
             ...(band ? [] : [Chart.configure(chart)]),
             Equation.configure(equation),
