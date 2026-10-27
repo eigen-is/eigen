@@ -24,7 +24,7 @@ type InlineStringCell = Cell & { ct: { t: 'inlineStr'; s: InlineStringSegment[] 
 // A format on a bare caret, waiting for the text typed there next, as in Google Sheets and Excel.
 type PendingStyle = { at: number; style: Partial<RunStyle> };
 
-const DEFAULT_COLOR = '#000000';
+export const DEFAULT_TEXT_COLOR = '#000000';
 
 const HEX_COLOR = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/;
 
@@ -63,7 +63,7 @@ export function runStyleOf(style: CellStyle | null | undefined): RunStyle {
         it: Number(style?.it) || 0,
         un: Number(style?.un) || 0,
         cl: Number(style?.cl) || 0,
-        fc: hexColor(style?.fc),
+        fc: hexColor(style?.fc) ?? DEFAULT_TEXT_COLOR,
         fs: readFontSize(Number(style?.fs) || undefined) ?? SHEET_DEFAULT_FONT_SIZE,
         ff: cssFontName(style?.ff) ?? SHEET_DEFAULT_FONT.name,
     };
@@ -235,7 +235,7 @@ function elementStyle(element: HTMLElement, inherited: RunStyle): RunStyle {
         style.un = decoration.includes('underline') ? style.un || 1 : 0;
         style.cl = decoration.includes('line-through') ? 1 : 0;
     }
-    if (color) style.fc = hexColor(color);
+    if (color) style.fc = hexColor(color) ?? DEFAULT_TEXT_COLOR;
     const points = readCssFontSize(fontSize);
     if (points) style.fs = points;
     if (fontFamily) style.ff = cellFontName(fontFamily) ?? style.ff;
@@ -243,15 +243,16 @@ function elementStyle(element: HTMLElement, inherited: RunStyle): RunStyle {
 }
 
 // The browser hands a color back as rgb(), and runs store the hex the color picker writes. Anything else
-// is no color a run can hold.
-function hexColor(color: string | undefined): string {
-    if (!color) return DEFAULT_COLOR;
+// is no color a run can hold. A stored color comes from a collaborator or an xlsx, so it is checked here
+// before any CSS gets it, as the cell's fill and a rule's colors are.
+export function hexColor(color: unknown): string | undefined {
+    if (typeof color !== 'string') return undefined;
     const hex = color.startsWith('rgb') ? rgbToHex(color) : color.toLowerCase();
-    return HEX_COLOR.test(hex) ? hex : DEFAULT_COLOR;
+    return HEX_COLOR.test(hex) ? hex : undefined;
 }
 
 function styleValue(key: RunStyleKey, value: string | number): Partial<RunStyle> {
-    if (key === 'fc') return { fc: hexColor(String(value)) };
+    if (key === 'fc') return { fc: hexColor(value) ?? DEFAULT_TEXT_COLOR };
     if (key === 'ff') return { ff: cellFontName(value) ?? SHEET_DEFAULT_FONT.name };
     return { [key]: Number(value) };
 }
