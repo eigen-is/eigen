@@ -294,9 +294,9 @@ The overlay sits in a wrapper with a stable scrollbar gutter (`scrollbar-gutter:
 
 ## The outline is the body's headings, by one rule the stored JSON shares
 
-The outline is the list of the body's headings, levels 1 to 6, in document order, that the outline sidebar shows and jumps to. `readOutline` (`packages/lib/src/docs/eigendoc/outline.ts`) reads it from the editor's document as each heading's level, text, position and node. A heading's text leaves out its footnotes, whose paragraphs hold the note's text, and a heading with no text is not listed. The title and subtitle are nodes of their own, and the bands and the open note are other editors, so none of them is in the outline.
+The outline is the list of the body's headings, levels 1 to 6, in document order, that the outline sidebar shows and jumps to. `readOutline` (`packages/lib/src/docs/eigendoc/outline.ts`) reads it from the editor's document as each heading's level, text and position. A heading's text leaves out its footnotes, whose paragraphs hold the note's text, and a heading with no text is not listed. The title and subtitle are nodes of their own, and the bands and the open note are other editors, so none of them is in the outline.
 
-The rule itself, `isOutlineHeading` and `outlineText`, reads a node's stored JSON, not a ProseMirror node. So a reader that walks a doc's JSON and never builds nodes, such as the docx writer ([EXPORT.md](EXPORT.md)), can list the same headings with the same text; `outline.test.ts` pins that parity. The walk stops at every textblock, as no heading sits inside one, so the sidebar reads the outline again on each change at the cost of a step per block, not per character.
+The walk stops at every textblock, as no heading sits inside one, so the sidebar reads the outline again on each change at the cost of a step per block, not per character.
 
 ## The outline sidebar is a column left of the page, shown per browser
 
