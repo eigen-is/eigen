@@ -154,12 +154,12 @@ Eigen counts the offsets from the paragraph's padding box, and Word from the tex
 
 | Offset | Written as | Helper |
 |---|---|---|
-| X | `positionH relativeFrom="column"`, `offsetX` plus the paragraph's indent: its list's or quote's, as the writer indents them, and its own left indent | `anchorIndentPx` |
+| X | `positionH relativeFrom="column"`, `offsetX` plus the paragraph's indent: its list's or quote's, as the writer indents them, and its own left indent, except on an item's numbered paragraph, whose own indent Word replaces with the list's and the file doesn't hold | `anchorIndentPx` |
 | Y | `positionV relativeFrom="line"`, `offsetY` less the padding Eigen draws above the text: the paragraph's own space before, else the Normal's for a paragraph and none for a heading or a title, and none in a list or a quote | `anchorPaddingPx` |
 
 Y counts from the first line, not the paragraph. LibreOffice counts a paragraph-relative offset from the end of the space after the block above, so a paragraph-relative place would move with how each reader spaces two paragraphs. Word's origin for either is unverified ([ROADMAP.md](ROADMAP.md)): if it differs, the fix is one formula.
 
-A doc round-trips through its own docx within 1 px, in both layers, in a plain, an indented, a list and a quote paragraph and after a heading (`apps/api/src/test/import/doc/round-trip.test.ts`). A Word file that goes through Eigen and back does not: [§ A Word picture in front of or behind the text comes in placed from its paragraph](#a-word-picture-in-front-of-or-behind-the-text-comes-in-placed-from-its-paragraph) lists what changes.
+A doc round-trips through its own docx within 1 px, in both layers, in a plain, an indented, a list, an indented list and a quote paragraph and after a heading (`apps/api/src/test/import/doc/round-trip.test.ts`). A Word file that goes through Eigen and back does not: [§ A Word picture in front of or behind the text comes in placed from its paragraph](#a-word-picture-in-front-of-or-behind-the-text-comes-in-placed-from-its-paragraph) lists what changes.
 
 ## The docx writes a figure's margin inside its paragraph's spacing
 
@@ -389,7 +389,7 @@ So a Word file comes back from an Eigen round trip changed in these ways:
 
 - A picture placed from the page or a margin, or aligned vertically, moves to its paragraph's top.
 - A horizontal alignment becomes an offset, at the same place.
-- A `wrapNone` group of more than one picture is a block, as one offset would stack its pictures, and so is a `wrapNone` picture in a table cell or a note. In a band, a `behindDoc` picture is dropped and any other anchor is a block ([§ A docx import replaces the document](#a-docx-import-replaces-the-document)).
+- A `wrapNone` group or canvas is a block, whatever it holds: one offset would stack its pictures, and a text box beside a picture would leave the picture at the group's extent (`isLoneGraphic`). So is a `wrapNone` picture in a table cell or a note. In a band, a `behindDoc` picture is dropped and any other anchor is a block ([§ A docx import replaces the document](#a-docx-import-replaces-the-document)).
 - `relativeHeight` isn't read, so each layer stacks in document order.
 - The anchor moves to its paragraph's start, which Word doesn't show, and comes back relative to the `column` and the `line`.
 
