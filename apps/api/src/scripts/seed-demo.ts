@@ -501,20 +501,19 @@ async function main(): Promise<void> {
 
     // Fixture files into a container's media/ folder (CollabDocument.create makes it), where a doc's figures and a
     // canvas's images find them by name, so the document stays whole.
-    const uploadMedia = async (container: DrivePath, files: string[], author: User): Promise<void> => {
-        const mediaFolder = await teamDrive.getChildByName(teamMountId, container.id, 'media');
+    const uploadMedia = async (
+        drive: Drive,
+        mountId: string,
+        container: DrivePath,
+        files: string[],
+        author: User,
+    ): Promise<void> => {
+        const mediaFolder = await drive.getChildByName(mountId, container.id, 'media');
         if (!mediaFolder) throw new Error(`media/ subfolder missing for ${container.name}`);
         for (const file of files) {
             const path = join(FIXTURES_DIR, file);
             const bytes = readFileSync(path);
-            await teamDrive.createFileFromData(
-                teamMountId,
-                mediaFolder.id,
-                basename(path),
-                Bun.file(path).type,
-                bytes,
-                author,
-            );
+            await drive.createFileFromData(mountId, mediaFolder.id, basename(path), Bun.file(path).type, bytes, author);
         }
     };
 
@@ -526,7 +525,7 @@ async function main(): Promise<void> {
         const parentId = folderId.get(doc.folder)!;
         const docPath = await teamDrive.create(teamMountId, parentId, doc.name, 'doc', author);
         teamDocs.set(doc.name, docPath);
-        await uploadMedia(docPath, doc.media ?? [], author);
+        await uploadMedia(teamDrive, teamMountId, docPath, doc.media ?? [], author);
 
         // Comment threads are chats inside the container's chat/ subfolder (see assertCommentChatExists).
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, 'chat');
@@ -612,7 +611,7 @@ async function main(): Promise<void> {
     ): Promise<DrivePath> => {
         const author = userForRole(spec.author);
         const container = await teamDrive.create(teamMountId, folderId.get(spec.folder)!, spec.name, type, author);
-        await uploadMedia(container, imageFiles, author);
+        await uploadMedia(teamDrive, teamMountId, container, imageFiles, author);
         const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
         build(collab.doc);
         await teamDrive.flushContainerDb(teamMountId, container.id);
@@ -1006,10 +1005,12 @@ async function main(): Promise<void> {
     }
 
     // --- Personal docs: a private "my notes" and a "trying eigen" scratch doc in every persona's own drive (same
-    // content for all). Each JSON is built once and written into each persona's own home drive. ---
+    // content for all). Each JSON is built once and written into each persona's own home drive, its photos into the
+    // doc's media/. ---
     const personalDocs = [NOTES, TRYING_EIGEN].map((doc) => ({
         name: doc.name,
         json: htmlToDocJson(docSchema(), doc.html),
+        media: doc.media ?? [],
     }));
     for (const persona of PERSONAS) {
         const owner = userByKey.get(persona.key)!;
@@ -1017,7 +1018,8 @@ async function main(): Promise<void> {
         const ownerRoot = await ownerHome.drive.getRootFolder('default');
         if (!ownerRoot) throw new Error(`Root missing for ${owner.email}`);
         for (const doc of personalDocs) {
-            await createDoc(ownerHome.drive, 'default', ownerRoot.id, doc.name, doc.json, owner);
+            const docPath = await createDoc(ownerHome.drive, 'default', ownerRoot.id, doc.name, doc.json, owner);
+            await uploadMedia(ownerHome.drive, 'default', docPath, doc.media, owner);
         }
     }
 

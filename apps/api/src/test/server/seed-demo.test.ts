@@ -289,7 +289,8 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             );
             expect(notesDoc[0].n).toBe(1);
 
-            // ...and a "trying eigen" scratch doc whose equations are equation nodes holding MathML and the LaTeX.
+            // ...and a "trying eigen" scratch doc: one displayed equation node holding MathML and the LaTeX, and a
+            // figure with no caption whose photo landed in the doc's media/.
             const tryingDoc = await loadCollabDoc(
                 findContainerDataDb(
                     personaMetaDb,
@@ -298,14 +299,25 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                     `${TRYING_EIGEN.name}.eigendoc`,
                 ),
             );
-            const equations = docNodes(yXmlFragmentToProsemirrorJSON(tryingDoc.getXmlFragment('default'))).filter(
-                (node) => node.type === 'equation',
+            const tryingNodes = docNodes(yXmlFragmentToProsemirrorJSON(tryingDoc.getXmlFragment('default')));
+            const equations = tryingNodes.filter((node) => node.type === 'equation');
+            expect(equations.length).toBe(1);
+            expect(equations[0].attrs?.['display']).toBe(true);
+            expect(equations[0].attrs?.['mathml']).toContain(
+                '<annotation encoding="application/x-tex">\\mathbf{eigen}\\,|\\text{docs}\\rangle</annotation>',
             );
-            expect(equations.length).toBe(2);
-            for (const equation of equations) {
-                expect(equation.attrs?.['display']).toBe(true);
-                expect(equation.attrs?.['mathml']).toContain('<annotation encoding="application/x-tex">');
-            }
+            const tryingFigures = tryingNodes.filter((node) => node.type === 'figure');
+            expect(tryingFigures.length).toBe(1);
+            expect(tryingFigures[0].attrs?.['caption']).toBeFalsy();
+            const tryingId = query<{ id: string }>(
+                personaMetaDb,
+                `SELECT id FROM paths WHERE name = '${TRYING_EIGEN.name}.eigendoc' AND trashedAt IS NULL`,
+            )[0].id;
+            const tryingMedia = query<{ name: string }>(
+                personaMetaDb,
+                `SELECT p.name FROM paths p JOIN paths m ON p.parentId = m.id WHERE m.parentId = '${tryingId}' AND m.name = 'media'`,
+            ).map((row) => row.name);
+            expect(tryingMedia).toContain(tryingFigures[0].attrs?.['mediaName']);
 
             // A persona's own calendar holds their shift, beside the team calendar's events.
             const financeKey = personaByRole('finance').key;

@@ -107,6 +107,9 @@ export type SeededDoc = {
     comments: DocComment[];
 };
 
+// A doc in each persona's own drive: no folder, author or comments.
+export type PersonalDoc = Pick<SeededDoc, 'name' | 'html' | 'media'>;
+
 export const DOCS: SeededDoc[] = [
     {
         folder: 'production',
@@ -1895,7 +1898,7 @@ export const PERSONAL_SHARES: SeededShare[] = [
 // --- Personal notes doc, seeded into every persona's OWN drive (same cozy content for all —
 // a private scratch pad, not shared). Role-agnostic on purpose so one document serves everyone. ---
 
-export const NOTES = {
+export const NOTES: PersonalDoc = {
     name: 'my notes', // lowercase, no extension
     html: [
         '<h1>My notes</h1>',
@@ -1932,19 +1935,19 @@ const displayedEquation = (latex: string) =>
 // --- A scratch doc in every persona's own drive, beside "my notes": someone made a file to see what the editor does.
 // Not a tour. ---
 
-export const TRYING_EIGEN = {
+export const TRYING_EIGEN: PersonalDoc = {
     name: 'trying eigen', // lowercase, no extension
     html: [
         '<h1>trying eigen|docs⟩</h1>',
         '<p>new doc, just poking around before the festival eats my week.</p>',
         '<p><strong>bold</strong> works. <em>italic</em> works. <s>so does this</s>.</p>',
-        "<p>the logo is half a bra-ket, so let's close it:</p>",
-        displayedEquation('\\left\\langle \\text{me} \\middle| \\text{eigen} \\right\\rangle'),
-        '<p>and the one the name comes from, an arrow that only stretches:</p>',
-        displayedEquation('A\\vec{v} = \\lambda\\vec{v}'),
-        '<p>click an equation and the LaTeX comes back. nice.</p>',
+        '<p><span class="figure"><img data-media-name="hands-up-at-camp.webp" alt="Arms up in front of the tents" width="420"></span></p>',
+        "<p>the logo isn't half a bra-ket: <strong>eigen</strong> is an operator acting on the ket |docs⟩.</p>",
+        displayedEquation('\\mathbf{eigen}\\,|\\text{docs}\\rangle'),
+        '<p>click the equation and the LaTeX comes back. nice.</p>',
         '<ul><li><s>find the strikethrough button</s></li><li>look at the budget sheet</li><li>coffee</li></ul>',
     ].join(''),
+    media: ['images/hands-up-at-camp.webp'],
 };
 
 export function personaByRole(role: LeadRole): Persona {
