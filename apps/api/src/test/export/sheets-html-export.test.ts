@@ -1661,6 +1661,38 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(cols(secondHtml)).toBe(250);
     }, 30_000);
 
+    test('in a PDF each sheet that draws costs a page of cells, so a workbook of tiny sheets is cut', () => {
+        const tiny = (i: number): Sheet => ({
+            id: `s${i}`,
+            name: `S${i}`,
+            order: i,
+            celldata: [{ r: 0, c: 0, v: { v: i, m: String(i) } }],
+        });
+        const blank: Sheet = { id: 'blank', name: 'Blank', order: 2005, celldata: [] };
+        const sheets = [...Array.from({ length: 2005 }, (_, i) => tiny(i)), blank];
+        const exported = (mode: 'pdf' | 'screen') => {
+            const lost: string[] = [];
+            const html = sheetsHtmlDocument({
+                title: 'Tiny',
+                sheets,
+                mediaUrls: NO_MEDIA,
+                mode,
+                lost: (code) => lost.push(code),
+            });
+            return { html, lost };
+        };
+        // The PDF prints the first 2,000, and the blank sheet, which takes no page, is not counted.
+        const pdf = exported('pdf');
+        expect(pdf.lost).toEqual(Array(5).fill('sheets-left-out'));
+        expect(tds(pdf.html)).toBe(2000);
+        expect(pdf.html).toContain('>1999<');
+        expect(pdf.html).not.toContain('>2000<');
+        // The HTML download has no pages to pay for, so it keeps every sheet.
+        const screen = exported('screen');
+        expect(screen.lost).toEqual([]);
+        expect(tds(screen.html)).toBe(2005);
+    }, 30_000);
+
     test('a sheet under the cap is not cut and carries no warning', async () => {
         const sheet: Sheet = { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [{ r: 0, c: 0, v: { v: 'x' } }] };
         expect(renderSheetsHtml([sheet], NO_MEDIA).cut).toEqual([]);
