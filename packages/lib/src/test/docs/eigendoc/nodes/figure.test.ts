@@ -25,7 +25,7 @@ describe('figure HTML', () => {
     // The clipboard carries a cut image as this HTML, so a commented image keeps its card like commented text.
     test("a figure's comment card survives the HTML round-trip", () => {
         const html = generateHTML(figureDoc({ mediaName: 'a.png', commentCardId: 'card-1' }), extensions);
-        expect(html).toContain('<span class="figure" data-comment-id="card-1">');
+        expect(html).toContain('<span class="figure" data-layout="block" data-comment-id="card-1">');
         const ids: unknown[] = [];
         createDocument(html, getSchema(extensions)).descendants((node) => {
             if (node.type.name === 'figure') ids.push(node.attrs.commentCardId);
@@ -62,6 +62,41 @@ describe('figure parse', () => {
             { src: 'data:image/png;base64,AA==', alt: 'A chart', caption: 'Sales', layout: 'wrap-left', width: 320 },
             { layout: 'block', alignment: 'right', caption: null },
         ]);
+    });
+
+    // Eigen's own span writes the height a stretched picture stores. Another app's <img width height> often carries a
+    // size its CSS overrides, so there the picture keeps its own ratio.
+    test('an own figure span parses its height, and a foreign figure or a bare image none', () => {
+        expect(
+            figuresIn(
+                '<p><span class="figure"><img src="a.png" width="320" height="90"></span></p>' +
+                    '<figure><img src="b.png" width="320" height="90"></figure>' +
+                    '<p><img src="c.png" width="320" height="90"></p>',
+            ),
+        ).toMatchObject([
+            { src: 'a.png', width: 320, height: 90 },
+            { src: 'b.png', width: 320, height: null },
+            { src: 'c.png', width: 320, height: null },
+        ]);
+    });
+
+    test('a stretched figure writes its height and survives the HTML round-trip', () => {
+        const html = generateHTML(figureDoc({ mediaName: 'a.png', width: 320, height: 90 }), extensions);
+        expect(html).toContain('height="90"');
+        expect(figuresIn(html)).toMatchObject([{ mediaName: 'a.png', width: 320, height: 90 }]);
+    });
+
+    // A size typed in cm stores px with a fraction, 8 x 4 cm here, which a Docs-to-Docs paste keeps.
+    test('a figure sized in fractional px survives the HTML round-trip', () => {
+        const size = { width: mmToPx(80), height: mmToPx(40) };
+        const html = generateHTML(figureDoc({ mediaName: 'a.png', ...size }), extensions);
+        expect(figuresIn(html)).toMatchObject([size]);
+    });
+
+    test('a figure without a height writes none and comes back without one', () => {
+        const html = generateHTML(figureDoc({ mediaName: 'a.png', width: 320 }), extensions);
+        expect(html).not.toContain('height');
+        expect(figuresIn(html)).toMatchObject([{ mediaName: 'a.png', width: 320, height: null }]);
     });
 
     test('a figure element still parses', () => {
@@ -174,6 +209,7 @@ describe('readFigureAttrs', () => {
             alt: null,
             caption: null,
             width: 320,
+            height: null,
             alignment: 'right',
             layout: 'wrap-left',
             offsetX: null,
@@ -199,6 +235,13 @@ describe('readFigureAttrs', () => {
         expect(readFigureAttrs({ width: 0 }).width).toBeNull();
         expect(readFigureAttrs({ width: -50 }).width).toBeNull();
         expect(readFigureAttrs({ width: 1e9 }).width).toBe(mmToPx(MAX_PAPER_MM));
+    });
+
+    test('reads a positive height, one taller than the largest paper as that paper, and any other as unset', () => {
+        expect(readFigureAttrs({ height: 90 }).height).toBe(90);
+        expect(readFigureAttrs({ height: 1e9 }).height).toBe(mmToPx(MAX_PAPER_MM));
+        expect(readFigureAttrs({ height: '90' }).height).toBeNull();
+        expect(readFigureAttrs({ height: -5 }).height).toBeNull();
     });
 
     test('reads a positioned figure, its far offsets at the largest paper', () => {

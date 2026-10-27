@@ -43,7 +43,8 @@ function sourceNames(media: ImportedMedia[]): Map<string, string> {
 }
 
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
-// column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
+// column or an image without a width the one it lays it out at, and an image without a height the one its ratio
+// draws, which the import keeps (Word's extent is what Word drew). (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
 // (7) OWNER: a run of empty paragraphs right before a page break goes. (8) A chart is a paragraph of its own in Word,
 // as a display equation is (11), and its series ids are compared by place (byPlace). (9) Small is written as its
@@ -59,7 +60,7 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         if (source.type === 'paragraph')
             for (const name of ['lineSpacing', 'spaceBefore', 'spaceAfter'] as const)
                 if (attrs[name] === DEFAULT_NORMAL_STYLE[name]) attrs[name] = null;
-        for (const name of ['colwidth', 'width'])
+        for (const name of ['colwidth', 'width', ...(source.type === 'figure' ? ['height'] : [])])
             if (name in attrs && attrs[name] === null) attrs[name] = imported?.attrs?.[name] ?? null;
         if ('commentCardId' in attrs) attrs['commentCardId'] = null;
         if (attrs['textAlign'] === 'left') attrs['textAlign'] = null;
@@ -1390,6 +1391,31 @@ describe('a Word file, imported, written and imported again', () => {
 
 // The writer places a positioned figure from the text column and the paragraph's first line, and the reader places it
 // back from the paragraph's box, so each comes back where Eigen drew it (J1 § 9).
+// Word stretches a picture to its extent, which the import reads back as the size Word drew.
+test('a stretched picture comes back at its stored box, and one at its own ratio at the height that ratio gives', () => {
+    const media = [
+        { name: 'a.png', contentType: 'image/png', data: toTransferableText('png'), width: 400, height: 300 },
+    ];
+    const figure = (attrs: Record<string, unknown>): JSONContent => ({
+        type: 'paragraph',
+        content: [{ type: 'figure', attrs: { mediaName: 'a.png', width: 320, ...attrs } }],
+    });
+    const docx = writeDocx(
+        {
+            json: { type: 'doc', content: [figure({ height: 80 }), figure({})] },
+            bands: {},
+            page: DEFAULT_PAGE_SETUP,
+            style: DEFAULT_NORMAL_STYLE,
+        },
+        { title: 'Stretched', media, lost: () => {} },
+    );
+    const { json } = docxToPmJson(Buffer.from(docx));
+    expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+        [320, 80],
+        [320, 240],
+    ]);
+});
+
 describe('a figure in front of or behind the text', () => {
     const media = [
         { name: 'a.png', contentType: 'image/png', data: toTransferableText('png'), width: 400, height: 300 },

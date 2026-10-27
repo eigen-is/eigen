@@ -139,8 +139,9 @@ export function anchoredFigure(node: JSONContent, textblock: JSONContent, contex
     });
 }
 
-// The picture or chart a figure draws: as wide as its width up to `cap` px, else its natural width up to `room`. A
-// figure that names a picture it can't write is counted; one that names none loses nothing.
+// The picture or chart a figure draws: as wide as its width up to `cap` px, else its natural width up to `room`, and as
+// tall as its stored height or its own ratio gives at that width. A figure that names a picture it can't write is
+// counted; one that names none loses nothing.
 function drawnFigure(node: JSONContent, pkg: Package, cap: number, room: number): Drawn | undefined {
     const attrs = readFigureAttrs(node.attrs ?? {});
     const set = Math.round(attrs.width ?? 0);
@@ -151,11 +152,14 @@ function drawnFigure(node: JSONContent, pkg: Package, cap: number, room: number)
     if (!image && node.type !== 'chart' && (attrs.mediaName || attrs.src)) pkg.lost('images-dropped');
     if (!image) return undefined;
     const cx = extent(image.width);
+    // A stretched picture draws at its stored box, which Word stretches it to as well. The ratio is the stored one, as
+    // a width typed in cm keeps a fraction of a px that the extent rounds.
+    const ratio = attrs.height && attrs.width ? attrs.height / attrs.width : image.height / image.width;
     return {
         image,
         cx,
         // Observed in Word: a fractional-twip height refits the width (a 1204×4 px divider drew 466.5 pt wide), so the height is whole.
-        cy: Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
+        cy: Math.max(EMU_PER_TWIP, Math.round((cx * ratio) / EMU_PER_TWIP) * EMU_PER_TWIP),
         alt: image.kind === 'chart' ? image.alt : (attrs.alt ?? ''),
     };
 }

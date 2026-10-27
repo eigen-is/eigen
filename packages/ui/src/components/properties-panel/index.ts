@@ -25,4 +25,5 @@ export { PropertyTextInput } from './property-text-input';
 export { PropertyToggle } from './property-toggle';
 export { type TransformFields, TransformSection } from './transform-section';
 export { useAspectLock } from './use-aspect-lock';
+export { useCoupledSize } from './use-coupled-size';
 export { useZOrderHotkeys, ZOrderButtons } from './z-order';

@@ -8,7 +8,6 @@ import { NodeSelection } from '@tiptap/pm/state';
 import { nanoid } from 'nanoid';
 import {
     CHART_DEFAULT_SIZE,
-    CHART_MAX_SIDE,
     exceedsChartSpecBytes,
     exceedsChartSpecDepth,
     MAX_CHART_SPEC_BYTES,
@@ -24,7 +23,13 @@ import { CHART_LOOK_FIELDS, CHART_SPEC_PART_KEYS } from '../../../types/chart';
 // that kind, which the barrel avoids by loading geometry first.
 import { randomSeed, renderChartSpecSvg } from '../../../vector';
 import type { FigureFrameAttrs } from './figure-frame';
-import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
+import {
+    figureFrameAttributes,
+    figureFrameHTML,
+    readFigureFrameAttrs,
+    readFrameSide,
+    updateFigureNodes,
+} from './figure-frame';
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null). The spec is an
 // attribute per part, each the stored string, kept as it is even when it doesn't parse, as a canvas keeps it; the look
@@ -47,8 +52,6 @@ declare module '@tiptap/core' {
     }
 }
 
-const side = (value: unknown) => (typeof value === 'number' && value > 0 ? Math.min(CHART_MAX_SIDE, value) : null);
-
 // The spec's parts as the node stores them, a part that isn't a string unset; readChartSpec reads the spec off them.
 function chartParts(attrs: Record<string, unknown>): Partial<Record<ChartSpecPartKey, string | null>> {
     return Object.fromEntries(
@@ -65,8 +68,8 @@ export function readChartAttrs(attrs: Record<string, unknown>): ChartAttrs & Cha
     const { width, height } = attrs;
     return {
         ...chartParts(attrs),
-        width: side(width),
-        height: side(height),
+        width: readFrameSide(width),
+        height: readFrameSide(height),
         ...readChartLook(attrs),
         ...readFigureFrameAttrs(attrs),
     };
@@ -84,7 +87,7 @@ export function chartSvg(spec: ChartSpec | null, { width, height, ...rest }: Cha
     });
 }
 
-const sideOf = (element: HTMLElement, name: string) => side(Number(element.getAttribute(name)));
+const sideOf = (element: HTMLElement, name: string) => readFrameSide(Number(element.getAttribute(name)));
 
 // The parts' attribute escapes every quote in their text again, about a fifth more for a real chart, so it is bounded
 // at twice the spec's byte limit before the parse, and the parts it holds at the limit itself after.

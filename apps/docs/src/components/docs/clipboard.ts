@@ -17,14 +17,14 @@ import {
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { getFontName, readCssFontSize } from '@workspace/lib/constants/fonts';
-import type { TitleType } from '@workspace/lib/docs/eigendoc';
+import type { FigureAttrs, TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     ITALIC_HEADING_LEVELS,
     ITALIC_HEADING_SELECTOR,
     PAGE_NUMBER_TEXT,
     readChartAttrs,
     readEquation,
-    readFrameWidth,
+    readFigureAttrs,
 } from '@workspace/lib/docs/eigendoc';
 import type {
     EigenClipboardChartItem,
@@ -34,27 +34,23 @@ import type {
 } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_IMAGE_BOX, oneOf, TEXT_ALIGNS } from '@workspace/lib/vector';
+import { pictureRatio } from './extensions/figure';
 import { textOutsideNotes } from './extensions/footnote';
 
-// The clipboard box for a figure at `pos`. Figures store WIDTH ONLY on purpose (the doc reflows and
-// the height must follow the image), but the wire carries both dims, so measure the rendered <img>.
-// clientWidth, not getBoundingClientRect: layout px are the space the stored width lives in (the
-// identity mapping in extensions/figure.tsx), while a narrow viewport puts a `scale()` on the page.
-// Height comes from the image's own intrinsic ratio rather than its laid-out height, so a mid-load
-// layout can't skew it. Nothing measurable (node view not mounted, image not loaded) → the stored
-// width at the shared default ratio, the single fallback.
-function figureClipboardBox(view: EditorView, pos: number, storedWidth: number | null): ClipboardBox {
+// The clipboard box for a figure at `pos`, which the wire carries as both sides. A stretched picture keeps its stored
+// ratio, and any other the picture's own, read off its rendered <img> so a mid-load layout can't skew it. The width is
+// the drawn one: clientWidth, not getBoundingClientRect, as layout px are the space the stored width lives in, while a
+// narrow viewport puts a scale() on the page. With nothing drawn (no node view mounted, the image not loaded), it is
+// the stored width, at the shared default ratio unless a height is stored.
+function figureClipboardBox(view: EditorView, pos: number, { width, height }: FigureAttrs): ClipboardBox {
     const dom = view.nodeDOM(pos);
     const img = dom instanceof HTMLElement ? dom.querySelector('img') : null;
-    if (img && img.clientWidth > 0 && img.clientHeight > 0) {
-        const ratio =
-            img.naturalWidth > 0 && img.naturalHeight > 0
-                ? img.naturalWidth / img.naturalHeight
-                : img.clientWidth / img.clientHeight;
-        return { width: img.clientWidth, height: img.clientWidth / ratio };
-    }
-    const width = storedWidth ?? DEFAULT_IMAGE_BOX.width;
-    return { width, height: (width * DEFAULT_IMAGE_BOX.height) / DEFAULT_IMAGE_BOX.width };
+    const drawn = img && img.clientWidth > 0 && img.clientHeight > 0 ? img.clientWidth : null;
+    const ratio =
+        (width && height ? width / height : drawn && pictureRatio(view, pos)) ||
+        DEFAULT_IMAGE_BOX.width / DEFAULT_IMAGE_BOX.height;
+    const boxWidth = drawn ?? width ?? DEFAULT_IMAGE_BOX.width;
+    return { width: boxWidth, height: boxWidth / ratio };
 }
 
 // The rendered box of the text blocks `from`..`to` spans: the widest, and their heights summed.
@@ -121,7 +117,7 @@ function copiedClipboardItems(
             buildImageClipboardItem({
                 mediaName: node.attrs.mediaName,
                 source: mediaPath,
-                box: figureClipboardBox(view, pos, readFrameWidth(node.attrs.width)),
+                box: figureClipboardBox(view, pos, readFigureAttrs(node.attrs)),
                 caption: node.attrs.caption || undefined,
             }),
         );

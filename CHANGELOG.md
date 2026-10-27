@@ -24,6 +24,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Italic and underline shortcuts in Sheets** — select cells and press **Ctrl+I** or **Ctrl+U** (Mac: **⌘I**, **⌘U**) to make them italic or underlined, as **Ctrl+B** makes them bold
 - **Chart data labels** — in Docs, Sheets, Slides and Vector, the **Data labels** box in a chart's **Series** section writes each value on a column, bar or line chart, in the values' number format. Labels that would overlap hide, and the bigger bar keeps its own
 - **Data labels in Office files** — a chart's data labels come in from Excel, Word and PowerPoint files and go out when you download one
+- **Image and chart size in Docs** — the **Image** and **Chart** panels set the width and the height in centimeters, with **Keep aspect ratio** as in Slides. Uncheck it to stretch an image, which keeps that size when you print, download it as PDF, a web page or Word, or open the Word file again
 
 ### Changed
 

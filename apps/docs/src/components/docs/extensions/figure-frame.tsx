@@ -1,15 +1,20 @@
 // The box a Docs figure draws in inside the editor, such as an image's or a chart's: the node view's wrapper that the
 // page's figure rules lay out, its selection ring, its grips and its comment mark. It also holds the plugins for a
-// click beside the box and a drag out of its paragraph. A figure in front of or behind the text is that wrapper placed
-// at its offsets, with its grips in a sibling above every layer, where a press drags it. Each node view draws inside.
+// click beside the box, a drag out of its paragraph and the selected figure's Keep aspect ratio. A figure in front of
+// or behind the text is that wrapper placed at its offsets, with its grips in a sibling above every layer, where a
+// press drags it. Each node view draws inside.
 
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import type { EditorState } from '@tiptap/pm/state';
 import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Mapping } from '@tiptap/pm/transform';
+import type { Decoration as PMDecoration } from '@tiptap/pm/view';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper } from '@tiptap/react';
-import type { FigureFrameAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
+import type { FigureFrameAttrs, FigureFrameNode, FigureLayout } from '@workspace/lib/docs/eigendoc';
 import {
     cmText,
     figureLayoutStyle,
@@ -17,7 +22,7 @@ import {
     pxToMm,
     readFigureAttrs,
     readFigureFrameAttrs,
-    readFrameWidth,
+    readFrameSide,
 } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui';
@@ -30,8 +35,11 @@ import type { PaperRoom } from './positioned-figure';
 import { roomOnPaper } from './positioned-figure';
 import { pageScale, textColumnWidth } from './text-column';
 
-// The resize floor of a figure's side (px).
-export const FIGURE_MIN_SIZE = 100;
+// The resize floor of a figure's width (px). An image's height has none but a pixel, so a thin divider keeps its shape,
+// and a chart's has the width's, as an axis and its labels need the room.
+const FIGURE_MIN_WIDTH = 100;
+const IMAGE_MIN_HEIGHT = 1;
+export const CHART_MIN_HEIGHT = 100;
 
 // The widest a resize makes a figure: the text column, half of it for a wrapped figure, and the paper of the page map
 // for one in front of or behind the text.
@@ -41,9 +49,46 @@ export function figureMaxWidth(editor: Editor, layout: FigureLayout | null | und
     return layout === 'wrap-left' || layout === 'wrap-right' ? fullWidth * 0.5 : fullWidth;
 }
 
-// The width a grip, Shift and an arrow, or the panel's Width field writes.
+// The whole width a resize writes, such as a grip's or Shift and an arrow's.
 export function clampFigureWidth(width: number, maxWidth: number) {
-    return Math.round(Math.max(FIGURE_MIN_SIZE, Math.min(maxWidth, width)));
+    return Math.round(Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width)));
+}
+
+// What a size edit writes: a side it leaves out stays as stored.
+export type FigureSizeEdit = { width?: number; height?: number };
+
+// A size the panel asks for, fitted to `maxWidth`: the width within the floor and the cap, and a height that comes with
+// it scaled alongside, so the figure keeps the shape it was given, above `minHeight`. Unlike a grip's, it stays
+// unrounded, as a typed cm gives a fraction of a px.
+export function fitFigureSize(
+    size: FigureSizeEdit,
+    maxWidth: number,
+    minHeight: number = IMAGE_MIN_HEIGHT,
+): FigureSizeEdit {
+    const { width, height } = size;
+    if (width === undefined) return height === undefined ? {} : { height: Math.max(minHeight, height) };
+    const fitted = Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width));
+    if (height === undefined) return { width: fitted };
+    return { width: fitted, height: Math.max(minHeight, (height * fitted) / width) };
+}
+
+// A dragged box fitted to the column. With a ratio, the width is the one the box allows at that ratio and the height
+// follows it, so a box whose top stopped at the paper's caps the width too. Without one, the width keeps to its floor
+// and the height to `minHeight`.
+export function fitFigureBox(
+    next: Box,
+    maxWidth: number,
+    ratio: number | null,
+    minHeight: number = IMAGE_MIN_HEIGHT,
+): FigureSize {
+    if (ratio === null) {
+        return {
+            width: clampFigureWidth(next.width, maxWidth),
+            height: Math.round(Math.max(minHeight, next.height)),
+        };
+    }
+    const width = clampFigureWidth(Math.min(next.width, next.height * ratio), maxWidth);
+    return { width, height: width / ratio };
 }
 
 // A layout or an alignment for the selected image or chart, from its panel or Format › Image, which `write` writes. A
@@ -293,7 +338,7 @@ export function FigureFrame({
         ...frame,
         offsetX: (frame.offsetX ?? 0) + (shift?.dx ?? 0) + (travel?.dx ?? 0),
         offsetY: (frame.offsetY ?? 0) + (shift?.dy ?? 0) + (travel?.dy ?? 0),
-        width: box?.width ?? readFrameWidth(node.attrs.width),
+        width: box?.width ?? readFrameSide(node.attrs.width),
     });
     const chrome = place && box;
 
@@ -379,9 +424,62 @@ export function FigureFrame({
     );
 }
 
-// A click beside a block figure's content and a drag out of its paragraph, for the figure node named `name`.
-export function figureFramePlugins(name: string): Plugin[] {
+// Keep aspect ratio, which the panel's box and the grips share: on for a picture and off for a chart, as on a slide.
+// A choice lasts while its figure stays selected, as a node has no id to remember it by.
+const ASPECT_LOCKED_BY_DEFAULT: Record<FigureFrameNode, boolean> = { figure: true, chart: false };
+type AspectChoice = { pos: number; locked: boolean };
+const ASPECT_LOCK_KEYS: Record<FigureFrameNode, PluginKey<AspectChoice | null>> = {
+    figure: new PluginKey('figureAspectLock'),
+    chart: new PluginKey('chartAspectLock'),
+};
+
+const selectedFigureAt = (state: EditorState, name: FigureFrameNode) =>
+    state.selection instanceof NodeSelection && state.selection.node.type.name === name ? state.selection.from : null;
+
+export const isAspectLocked = (state: EditorState, name: FigureFrameNode): boolean =>
+    ASPECT_LOCK_KEYS[name].getState(state)?.locked ?? ASPECT_LOCKED_BY_DEFAULT[name];
+
+export const setAspectLocked = (editor: Editor, name: FigureFrameNode, locked: boolean) =>
+    editor.view.dispatch(editor.state.tr.setMeta(ASPECT_LOCK_KEYS[name], locked));
+
+// The lock a node view's grips follow, which the selected figure carries as a decoration.
+export function aspectLockedIn(decorations: readonly PMDecoration[], name: FigureFrameNode): boolean {
+    const lock = decorations.find((d) => 'aspectLocked' in d.spec);
+    return lock ? lock.spec.aspectLocked === true : ASPECT_LOCKED_BY_DEFAULT[name];
+}
+
+// The choice follows its figure through an edit around it. A peer's change replaces the whole doc, which maps every
+// position away, while the selection survives it, so the choice survives it too.
+function aspectLockPlugin(name: FigureFrameNode): Plugin<AspectChoice | null> {
+    const key = ASPECT_LOCK_KEYS[name];
+    return new Plugin<AspectChoice | null>({
+        key,
+        state: {
+            init: () => null,
+            apply(tr, choice, _oldState, state) {
+                const at = selectedFigureAt(state, name);
+                const locked: unknown = tr.getMeta(key);
+                if (at === null) return null;
+                if (typeof locked === 'boolean') return { pos: at, locked };
+                if (!choice || (!tr.getMeta(ySyncPluginKey) && tr.mapping.map(choice.pos) !== at)) return null;
+                return { pos: at, locked: choice.locked };
+            },
+        },
+        props: {
+            decorations(state) {
+                const at = selectedFigureAt(state, name);
+                if (at === null) return null;
+                const decoration = Decoration.node(at, at + 1, {}, { aspectLocked: isAspectLocked(state, name) });
+                return DecorationSet.create(state.doc, [decoration]);
+            },
+        },
+    });
+}
+
+// A click beside a block figure's content, a drag out of its paragraph and the lock, for the figure node named `name`.
+export function figureFramePlugins(name: FigureFrameNode): Plugin[] {
     return [
+        aspectLockPlugin(name),
         new Plugin({
             key: new PluginKey('figureClickBeside'),
             props: {
