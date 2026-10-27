@@ -154,12 +154,12 @@ test('a writer on a phone gets File, Edit, Format and Insert, and no Tools', asy
 
 test.each([
     [1920, FULL_ROW],
-    [1610, FULL_ROW],
-    [1609, MIDDLE_ROW],
-    [1390, MIDDLE_ROW],
-    [1389, SHORT_ROW],
-    [1210, SHORT_ROW],
-    [1209, []],
+    [1490, FULL_ROW],
+    [1489, MIDDLE_ROW],
+    [1270, MIDDLE_ROW],
+    [1269, SHORT_ROW],
+    [1090, SHORT_ROW],
+    [1089, []],
     [390, []],
 ])('at %ipx the icon row holds its first controls in priority order', async (width, row) => {
     await render(width, true);

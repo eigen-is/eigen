@@ -171,9 +171,9 @@ export const EditorToolbar = ({
     // The icon row folds from its right end, as Google's does, so its order is its priority order. All it folds
     // stays in Format and Insert. Each breakpoint is where a part of the row fits beside the menus at its widest,
     // with a link in a JetBrains Mono "Normal text". The row stays centered in the bar.
-    const showsRow = useMediaQuery('(min-width: 1210px)');
-    const showsMiddle = useMediaQuery('(min-width: 1390px)');
-    const showsAll = useMediaQuery('(min-width: 1610px)');
+    const showsRow = useMediaQuery('(min-width: 1090px)');
+    const showsMiddle = useMediaQuery('(min-width: 1270px)');
+    const showsAll = useMediaQuery('(min-width: 1490px)');
     // A phone has no room for more than four menus beside the offline badge, so Tools folds into the kebab.
     const isMobile = useIsMobile();
 
