@@ -38,7 +38,7 @@ The roadmap's own warning is the design constraint: **flaky suites get abandoned
 
 ## Current state (grounded)
 
-- **CI exists**: `../../.github/workflows/check.yml` runs on push/PR to `main` (`ubuntu-latest`, 15-minute timeout): `bun install --frozen-lockfile`, lint, typecheck, `primitives:check`, `bun --filter '*' test`. No E2E job, no browser step.
+- **CI exists**: `../../.github/workflows/check.yml` runs on a push to `main`, `develop` or a `release-*` branch and on a PR to `main` or `develop` (`ubuntu-latest`, 15-minute timeout): `bun install --frozen-lockfile`, lint, typecheck, `primitives:check`, `bun --filter '*' test`. No E2E job, no browser step.
 - **Playwright is not a dependency anywhere.** No `playwright` in the root or any workspace `../../package.json`, no `playwright.config.*` in the repo. The verify-in-browser skill's recipe installs it ad-hoc (`bun add playwright` in a `/tmp` work dir, `chromium.launch({ channel: 'chrome' })`).
 - **Dev stack**: `bun run serve` = `bun --filter '*' dev` — every app's vite server plus the API. Ports in `../../vite.shared.config.ts` (`APP_PORTS`: index 3000 … sheets 3013); each app serves under its name as base path and builds to `dist/<app>`. The API listens on a **hardcoded port 8000** (`../../apps/api/src/index.ts`).
 - **API host resolution**: `resolveApiHost()` in `../../packages/lib/src/core/api.ts` — `VITE_API_HOST` absolute in dev (`http://localhost:8000`), relative in prod (`/eigen`, spliced onto `window.location.origin`). In production the frontend image's Caddy serves the built apps from `/www` and proxies the API (`../../docker/frontend/Dockerfile`). CORS/auth origins are the hardcoded `trustedOrigins` list in `../../apps/api/src/lib/auth/auth.ts` (localhost:3000…3013).
@@ -158,7 +158,7 @@ One future row is reserved now: [PROPOSAL_CRDT_MIGRATION.md](PROPOSAL_CRDT_MIGRA
 
 ### CI integration
 
-A separate job in `../../.github/workflows` (new `e2e.yml` or a second job in `check.yml` — separate job either way, so lint/typecheck feedback speed is untouched), on the same triggers: push/PR to `main`. With a phase-1 suite of four tests there is no PR-vs-nightly split yet — everything runs on PR. The split gets introduced only when the full matrix pushes past the budget: PR keeps the docs column plus one convergence test per other type; nightly runs the full matrix.
+A separate job in `../../.github/workflows` (new `e2e.yml` or a second job in `check.yml` — separate job either way, so lint/typecheck feedback speed is untouched), on the same triggers as the check job. With a phase-1 suite of four tests there is no PR-vs-nightly split yet — everything runs on PR. The split gets introduced only when the full matrix pushes past the budget: PR keeps the docs column plus one convergence test per other type; nightly runs the full matrix.
 
 ```yaml
 e2e:
