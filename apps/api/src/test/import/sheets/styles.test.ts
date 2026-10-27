@@ -121,6 +121,12 @@ describe('a font', () => {
         expect(look.cell).toEqual({ fc: '#A2B9E2', fs: 10.5 });
     });
 
+    // ECMA-376 applies a tint to a color of any kind, and LibreOffice reads it so. Accent 1 is #4472C4.
+    test('an rgb color takes its tint as a theme color does', () => {
+        const [, look] = looks(`${font('<color rgb="FF4472C4" tint="0.5"/>')}${xfs('<xf/>', '<xf fontId="1"/>')}`);
+        expect(look.cell).toEqual({ fc: '#A2B9E2' });
+    });
+
     // ECMA-376 shifts the colour's HLS luminance by the tint. Excel's swatches for the Office theme work that out in
     // whole steps of 1/240, so a channel can land up to two steps from the spec's: Text 2, Lighter 40% is exact. The
     // RGB blend this replaced was up to 17 steps off on a dark colour lightened.

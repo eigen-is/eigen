@@ -224,14 +224,14 @@ function bordersOf(border: XmlElement, palette: ThemePalette): CellBorderSides |
     return Object.keys(sides).length > 0 ? sides : undefined;
 }
 
-// An rgb colour, else a theme colour and its tint. An indexed colour is none.
+// An rgb color, else a theme color, shifted by its tint: ECMA-376 tints a color of any kind. An indexed color is none.
 export function resolveColor(element: XmlElement | undefined, palette: ThemePalette): string | null {
     const rgb = element && xmlAttr(element, '', 'rgb');
-    if (rgb) return argbToHex(rgb);
     const theme = Number.parseInt((element && xmlAttr(element, '', 'theme')) ?? '', 10);
-    if (!(theme >= 0 && theme < palette.length)) return null;
+    const color = rgb ? argbToHex(rgb) : theme >= 0 && theme < palette.length ? palette[theme] : undefined;
+    if (color === undefined) return null;
     const tint = Number.parseFloat((element && xmlAttr(element, '', 'tint')) ?? '');
-    return Number.isFinite(tint) ? tinted(palette[theme], tint) : palette[theme];
+    return Number.isFinite(tint) ? tinted(color, tint) : color;
 }
 
 function argbToHex(argb: string): string {
