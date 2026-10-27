@@ -53,6 +53,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads as a web page or PDF with the ones that fit and leaves the rest out, instead of failing. Its preview shows the charts that fit instead of nothing
 - **Sheets** — a wrapped cell that mixes styles, such as one from an Excel file, breaks its lines between words instead of keeping a long styled stretch on one line
 - **Sheets** — turning on **Format → Wrapping → Wrap**, or picking a bigger size in the font size box or **Format → Font size**, makes the row tall enough for the cell's text
+- **Deleting a team in Admin** — deletes the team's drives with every file on them, and its calendar, instead of leaving them on the server. While a backup or a restore of the team runs, the team can't be deleted
 - **Sheets shortcuts on other keyboard layouts** — on Dvorak, **Ctrl+C** (Mac: **⌘C**) copies the selected cells and **Ctrl+X** (Mac: **⌘X**) cuts them, instead of doing nothing or making them bold. On a Russian or Greek layout, **Ctrl+B**, **Ctrl+I** and **Ctrl+U** style the words you select while typing in a cell. On a Mac the shortcuts take **⌘**, not Ctrl, as in Docs
 
 ## [0.4.0] - 2026-10-26
