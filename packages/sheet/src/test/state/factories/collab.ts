@@ -10,7 +10,7 @@ import { replaySheetsOps } from '../../../engine';
 import type { Context } from '../../../state/context';
 import { FormulaCache } from '../../../state/modules/formula-cache';
 import { groupValuesRefresh } from '../../../state/modules/formula-exec';
-import { recordEntry, redoEntry, undoEntry } from '../../../state/modules/history';
+import { pushEntry, recordEntry, redoEntry, undoEntry } from '../../../state/modules/history';
 import type { History, Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
 import { filterPatch, opToPatch, patchToOp } from '../../../state/utils/patch';
@@ -89,7 +89,7 @@ export function tabEdit(t: Tab, recipe: (ctx: Context) => void, options?: PatchO
     };
     const { next, ops, entry } = author(t.ctx, recalculated, options);
     t.ctx = next;
-    t.history.undoList.push(entry);
+    pushEntry(t.history.undoList, entry);
     t.history.redoList = [];
     return ops;
 }

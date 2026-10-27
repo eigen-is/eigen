@@ -62,6 +62,29 @@ export function recordEntry(
     };
 }
 
+// How far back undo reaches. A row, column or sheet entry holds whole cell matrices, so fewer of those stay.
+const MAX_ENTRIES = 200;
+const MAX_WHOLE_MATRIX_ENTRIES = 10;
+
+// Puts an edit's entry on the undo stack and drops the oldest entries past those limits. Only the oldest ever go: an
+// entry fits the grid as the entries above it leave it, so one dropped from the middle would misplace the rest.
+export function pushEntry(stack: History[], entry: History) {
+    stack.push(entry);
+    let keep = Math.min(stack.length, MAX_ENTRIES);
+    let whole = 0;
+    for (let i = stack.length - 1; i >= stack.length - keep; i -= 1) {
+        if (!holdsWholeMatrices(stack[i])) continue;
+        whole += 1;
+        if (whole > MAX_WHOLE_MATRIX_ENTRIES) keep = stack.length - 1 - i;
+    }
+    stack.splice(0, stack.length - keep);
+}
+
+function holdsWholeMatrices({ patches, inversePatches, options }: History): boolean {
+    const whole = ({ path }: Patch) => path.length === 2 || (path.length === 3 && path[2] === 'data');
+    return options?.deletedSheet != null || patches.some(whole) || inversePatches.some(whole);
+}
+
 export function undoEntry(ctx: Context, entry: History): Step {
     const { options } = entry;
     if (options?.deleteSheetOp) {

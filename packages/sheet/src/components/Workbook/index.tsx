@@ -51,6 +51,7 @@ import {
     insertRowCol,
     pasteChart,
     patchToOp,
+    pushEntry,
     recordEntry,
     redoEntry,
     selectionCache,
@@ -220,7 +221,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                         last.inversePatches.unshift(...entry.inversePatches);
                                     }
                                 } else {
-                                    undoList.push({ ...entry, gesture: undoGesture });
+                                    pushEntry(undoList, { ...entry, gesture: undoGesture });
                                 }
                                 globalCache.current.redoList = [];
                             }

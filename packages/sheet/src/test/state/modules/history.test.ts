@@ -736,6 +736,26 @@ describe('a structural undo or redo applies exactly what it sends', () => {
     });
 });
 
+// A row, column or sheet entry holds whole cell matrices, so the stack keeps fewer of those than of the rest.
+describe('the undo stack keeps the newest entries', () => {
+    test('the newest 200', () => {
+        const t = tab(workbook());
+        for (let i = 0; i < 205; i += 1) tabEdit(t, typedAt('A1', `v${i}`));
+        expect(t.history.undoList).toHaveLength(200);
+        tabUndo(t);
+        expect(cellAt(t, 'A1')?.v).toBe('v203');
+    });
+
+    test('the newest ten that hold whole matrices, and every entry after the oldest of them', () => {
+        const t = tab(workbook());
+        tabEdit(t, typedAt('A1', 'x'));
+        for (let i = 0; i < 12; i += 1) tabEdit(t, ...insertRows(30, 1));
+        tabEdit(t, typedAt('A1', 'y'));
+        expect(t.history.undoList).toHaveLength(11);
+        expect(t.history.undoList.filter((entry) => entry.options?.insertRowColOp)).toHaveLength(10);
+    });
+});
+
 // The shifter's own table: one patch of an entry through a peer's marker on One, and what it becomes, or null when the
 // entry is dropped. It pins paths and values, which the cases above only see through what a user sees.
 describe('shiftEntries', () => {
