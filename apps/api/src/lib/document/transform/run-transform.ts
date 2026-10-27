@@ -21,7 +21,7 @@ import type {
     PreviewResult,
     SheetsImportJob,
     SlidesImportJob,
-    SlidesImportWorkerResult,
+    SlidesImportTransformResult,
     TransformError,
     TransformMedia,
     TransformResultFor,
@@ -220,7 +220,7 @@ export async function runImportToSlidesUpdate(
     job: SlidesImportJob,
     data: ArrayBuffer,
     opts: TransformOptions,
-): Promise<SlidesImportWorkerResult & { warnings: TransformWarning[] }> {
+): Promise<SlidesImportTransformResult & { warnings: TransformWarning[] }> {
     const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
     return { ...result, warnings };
 }

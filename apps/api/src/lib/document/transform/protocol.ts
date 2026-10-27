@@ -230,30 +230,30 @@ export type PreviewResult = Omit<TextPreviewResult, 'mode'>;
 // preview body.
 export type ExtractTextResult = { text: string };
 // `zoom` is the one htmlToPdf hands WeasyPrint for a PDF document laid out at 1:1: a deck's, from its width.
-export type ExportWorkerResult = { data: ArrayBuffer; zoom?: number };
+export type ExportTransformResult = { data: ArrayBuffer; zoom?: number };
 // UTF-8 bytes of the lean Sheet[] JSON — the main thread commits the string
 // without parsing it — plus the pictures its images name, which it writes through Mount.
-export type SheetsImportWorkerResult = { snapshotJson: ArrayBuffer; images: TransformMedia[] };
+export type SheetsImportTransformResult = { snapshotJson: ArrayBuffer; images: TransformMedia[] };
 // A ready Yjs update plus the images extracted from the docx, its page and its Normal: the main thread
 // only commits the update, the page and the Normal and writes the media through Mount.
-export type DocImportWorkerResult = {
+export type DocImportTransformResult = {
     update: ArrayBuffer;
     page: PageSetup;
     style: NormalStyle;
     images: TransformMedia[];
 };
 // The same with the warnings the reader counted, which the import's summary phrases.
-export type DocImportResult = DocImportWorkerResult & { warnings: TransformWarning[] };
+export type DocImportResult = DocImportTransformResult & { warnings: TransformWarning[] };
 // A pptx's update plus its pictures: the main thread only applies the update and writes the media through Mount.
-export type SlidesImportWorkerResult = { update: ArrayBuffer; images: TransformMedia[] };
+export type SlidesImportTransformResult = { update: ArrayBuffer; images: TransformMedia[] };
 
 export type TransformResult =
     | PreviewResult
     | ExtractTextResult
-    | ExportWorkerResult
-    | SheetsImportWorkerResult
-    | DocImportWorkerResult
-    | SlidesImportWorkerResult;
+    | ExportTransformResult
+    | SheetsImportTransformResult
+    | DocImportTransformResult
+    | SlidesImportTransformResult;
 
 // Which result a job kind produces. The runner proves the pairing at runtime with
 // resultMatchesRequest; run-transform.ts narrows to this once so no caller re-checks.
@@ -264,13 +264,13 @@ export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob>
     : R extends { kind: 'extract-text' }
       ? ExtractTextResult
       : R extends { kind: 'export' }
-        ? ExportWorkerResult
+        ? ExportTransformResult
         : R extends { targetType: 'eigensheets' }
-          ? SheetsImportWorkerResult
+          ? SheetsImportTransformResult
           : R extends { targetType: 'eigendoc' }
-            ? DocImportWorkerResult
+            ? DocImportTransformResult
             : R extends { targetType: 'eigenslides' }
-              ? SlidesImportWorkerResult
+              ? SlidesImportTransformResult
               : never;
 
 export type DocumentTransformResponse =

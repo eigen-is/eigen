@@ -2,7 +2,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type * as Y from 'yjs';
 import { materializeYjsState } from '../../lib/collab/yjs-loader';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
-import type { DocImportWorkerResult, DocumentTransformResponse } from '../../lib/document/transform/protocol';
+import type { DocImportTransformResult, DocumentTransformResponse } from '../../lib/document/transform/protocol';
 import type { Mount } from '../../lib/mount';
 
 // What the transform suites share: the persisted document every reader materializes,
@@ -38,7 +38,7 @@ export function importSnapshot(response: DocumentTransformResponse): string {
     return new TextDecoder().decode(response.result.snapshotJson);
 }
 
-export function importDocUpdate(response: DocumentTransformResponse): DocImportWorkerResult {
+export function importDocUpdate(response: DocumentTransformResponse): DocImportTransformResult {
     if (!response.ok || !('update' in response.result) || !('page' in response.result)) {
         throw new Error(`expected a document update, got ${JSON.stringify(response)}`);
     }

@@ -28,7 +28,7 @@ import type {
     ImportTransformJob,
     SheetsImportJob,
     SlidesImportJob,
-    SlidesImportWorkerResult,
+    SlidesImportTransformResult,
     TransformMedia,
     TransformWarning,
 } from '../document/transform/protocol';
@@ -214,7 +214,7 @@ function importPptxUpdate(
     buffer: Buffer,
     deck: SlidesImportJob['deck'],
     signal?: AbortSignal,
-): Promise<SlidesImportWorkerResult & { warnings: TransformWarning[] }> {
+): Promise<SlidesImportTransformResult & { warnings: TransformWarning[] }> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'pptx');
     return runImportToSlidesUpdate(

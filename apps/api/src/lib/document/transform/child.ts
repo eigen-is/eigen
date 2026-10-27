@@ -22,7 +22,7 @@ import type {
     ExportMedia,
     ExportMediaLoader,
     ExportTransformJob,
-    ExportWorkerResult,
+    ExportTransformResult,
     ImportTransformJob,
     ParentMediaReply,
     PreviewResult,
@@ -59,7 +59,7 @@ async function renderExport(
     request: ExportTransformJob,
     doc: Y.Doc,
     loadMedia: ExportMediaLoader,
-): Promise<ExportWorkerResult & { warnings: TransformWarning[] }> {
+): Promise<ExportTransformResult & { warnings: TransformWarning[] }> {
     switch (request.documentType) {
         case 'eigensheets': {
             const { renderEigensheetsExport } = await import('../../export/sheets/transform');

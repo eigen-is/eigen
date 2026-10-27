@@ -13,7 +13,7 @@ import { toDataUriMap } from '../../document/media';
 import type {
     DocumentExportFormat,
     ExportMediaLoader,
-    ExportWorkerResult,
+    ExportTransformResult,
     TransformWarning,
 } from '../../document/transform/protocol';
 import { htmlExportMode, toTransferableText } from '../../document/transform/protocol';
@@ -62,7 +62,7 @@ export async function renderEigenslidesHtml(
     format: DocumentExportFormat,
     title: string,
     loadMedia: ExportMediaLoader,
-): Promise<ExportWorkerResult & { warnings: TransformWarning[] }> {
+): Promise<ExportTransformResult & { warnings: TransformWarning[] }> {
     // Rich text is filtered per element before the compositor lays it out, so a <style> block in a
     // text box cannot reach the document — which carries the generated @font-face rules of its own.
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
