@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, presentation, full-screen]
 related: [slides/get-started, slides/add-slides]
 order: 60
-updated: 2026-09-13
+updated: 2026-10-27
 ---
 
 You can present your slides straight from the Slides editor, in full screen, without any extra software.
@@ -38,4 +38,4 @@ You can also press **Escape** at any time. And when you move past the last slide
 
 ## On a phone
 
-On a phone a presentation is view-only, and the slide panel is not shown. Swipe left on the slide to move to the next one, and swipe right to go back.
+On a phone a presentation is view-only. Swipe left on the slide to move to the next one, and swipe right to go back. To jump further, tap a slide in the row of thumbnails under the slide. Scroll the row sideways to reach the rest of a long presentation.
