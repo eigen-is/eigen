@@ -13,7 +13,6 @@ import {
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
-import { SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import type {
     EigenClipboardChartItem,
     EigenClipboardData,
@@ -53,6 +52,7 @@ import {
     patchToOp,
     recordEntry,
     redoEntry,
+    runStyleOf,
     selectionCache,
     sheetChartClipboardItem,
     undoEntry,
@@ -91,7 +91,7 @@ function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboard
             width: ctx.visibledatacolumn[c2] - (c1 === 0 ? 0 : ctx.visibledatacolumn[c1 - 1]),
             height: ctx.visibledatarow[r2] - (r1 === 0 ? 0 : ctx.visibledatarow[r1 - 1]),
         },
-        typography: { fontSize: getFlowdata(ctx)?.[r1]?.[c1]?.fs ?? SHEET_DEFAULT_FONT_SIZE },
+        typography: { fontSize: runStyleOf(getFlowdata(ctx)?.[r1]?.[c1]).fs },
     });
 }
 
@@ -345,9 +345,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         // !sheet.data || length === 0), so their frozen contents are never mutated.
                         draftCtx.sheets = originalData.map((sheet) => ({ ...sheet }));
                         ensureSheetIndex(draftCtx.sheets, mergedSettings.generateSheetId);
-                        for (const newDatum of draftCtx.sheets) {
-                            const index = getSheetIndex(draftCtx, newDatum.id!) as number;
-                            const sheet = draftCtx.sheets[index];
+                        for (const [index, sheet] of draftCtx.sheets.entries()) {
                             if (!sheet.data || sheet.data.length === 0) {
                                 initSheetData(draftCtx, index, sheet);
                             } else {
@@ -455,15 +453,17 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     return;
                 }
                 setContextWithProduce((draftCtx) => {
+                    const input = cellInput.current;
+                    if (!input) return;
                     handleGlobalKeyDown(
                         draftCtx,
-                        cellInput.current!,
-                        fxInput.current!,
+                        input,
+                        fxInput.current,
                         nativeEvent,
-                        globalCache.current!,
+                        globalCache.current,
                         handleUndo, // still passing handleUndo and handleRedo here to satisfy API
                         handleRedo,
-                        canvas.current!.getContext('2d')!,
+                        canvas.current?.getContext('2d') ?? undefined,
                     );
                 });
             },
@@ -638,18 +638,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     // Parse into an inert document, never a live <div>: txtdata is OS clipboard HTML
                     // and a live element's innerHTML loads <img> and fires its onerror even detached.
                     const trList = new DOMParser().parseFromString(txtdata, 'text/html').querySelectorAll('table tr');
-                    const maxRow = trList.length + context.selections![0].row[0];
-                    const rowToBeAdded =
-                        maxRow -
-                        context.sheets[getSheetIndex(context, context!.currentSheetId! as string) as number].data!
-                            .length;
+                    const rowCount = getFlowdata(context)?.length ?? 0;
                     const range = context.selections;
+                    const firstRow = range?.[0]?.row[0];
+                    const rowToBeAdded = firstRow == null ? 0 : trList.length + firstRow - rowCount;
                     if (rowToBeAdded > 0) {
                         const insertRowColOp: SetContextOptions['insertRowColOp'] = {
                             type: 'row',
-                            index:
-                                context.sheets[getSheetIndex(context, context!.currentSheetId! as string) as number]
-                                    .data!.length - 1,
+                            index: rowCount - 1,
                             count: rowToBeAdded,
                             direction: 'rightbottom',
                             id: context.currentSheetId,

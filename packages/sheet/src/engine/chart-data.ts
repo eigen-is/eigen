@@ -53,11 +53,7 @@ export function resolveRangeChartData(data: RangeChartData, resolver: CellResolv
         if (!usable(s.values) || (typeof s.name !== 'string' && !sheetIds.has(s.name.sheetId))) return 'ref';
     }
 
-    // Counted from the refs, so a whole-column selection costs nothing before it is refused.
-    const points = series.reduce((sum, s) => sum + size(s.values), 0);
-    if (points > MAX_CHART_POINTS || (categories !== null && size(categories) > MAX_CHART_POINTS)) {
-        return 'too-many-points';
-    }
+    if (rangeChartPoints(data) === null) return 'too-many-points';
 
     const cells = (ref: CellRangeRef) => {
         const out: (Cell | null)[] = [];
@@ -89,10 +85,7 @@ export function sheetChartPoints(chart: SheetChart): number {
     if (data.source === 'inline') {
         return data.series.reduce((sum, { values }) => sum + values.length, data.categories.length);
     }
-    const count = (ref: CellRangeRef | null) => (ref ? Math.max(0, size(ref)) : 0);
-    const values = data.series.reduce((sum, { values }) => sum + count(values), 0);
-    const categories = count(data.categories);
-    return values > MAX_CHART_POINTS || categories > MAX_CHART_POINTS ? 0 : values + categories;
+    return rangeChartPoints(data) ?? 0;
 }
 
 // A name is one cell, Google's header cell; a wider ref reads its first.
@@ -214,6 +207,15 @@ function valueFormat(spec: ChartSpec, resolver: CellResolver): string | undefine
     if (format !== null) return format;
     const first = spec.data.source === 'range' ? spec.data.series.find((s) => s.values)?.values : null;
     return first ? resolver.getCell(first.sheetId, first.row[0], first.column[0])?.ct?.fa : undefined;
+}
+
+// The values and labels a range chart's refs hold, counted before a cell is read, so a whole-column selection
+// costs nothing before it is refused. Null past MAX_CHART_POINTS, where the chart draws a message instead.
+function rangeChartPoints({ series, categories }: RangeChartData): number | null {
+    const count = (ref: CellRangeRef | null) => (ref ? Math.max(0, size(ref)) : 0);
+    const values = series.reduce((sum, s) => sum + count(s.values), 0);
+    const labels = count(categories);
+    return values > MAX_CHART_POINTS || labels > MAX_CHART_POINTS ? null : values + labels;
 }
 
 function size(ref: CellRangeRef): number {

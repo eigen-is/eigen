@@ -62,16 +62,10 @@ export function updateFormatCell(
 
             for (let c = col_st; c <= col_ed; c += 1) {
                 const cell = d[r][c];
-                let value: string | number | boolean | null | undefined;
-
-                if (cell != null && typeof cell === 'object') {
-                    value = cell.v;
-                } else {
-                    value = cell as string | number | boolean | null | undefined;
-                }
+                let value = cell?.v;
 
                 if (foucsStatus !== '@' && isRealNum(value)) {
-                    value = Number(value!);
+                    value = Number(value);
                 }
 
                 const mask = numberDisplay(value, String(foucsStatus));
@@ -157,7 +151,7 @@ export function updateFormatCell(
                     // A larger size or wrapped lines need a taller row. The row grows to fit and never
                     // shrinks here, as another cell in it may need the height.
                     if ((attr === 'fs' || attr === 'tb') && canvas) {
-                        const textInfo = getCellTextInfo(d[r][c]!, canvas, ctx, {
+                        const textInfo = getCellTextInfo(value, canvas, ctx, {
                             r,
                             c,
                             cellWidth,

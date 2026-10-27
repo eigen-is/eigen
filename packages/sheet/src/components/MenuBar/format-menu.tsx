@@ -14,7 +14,7 @@ import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { Fragment, useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { useEditorSelectionStyle } from '../../hooks/useEditorSelectionStyle';
+import type { RunStyle } from '../../state';
 import {
     applyColorScalePreset,
     applyDataBarPreset,
@@ -83,7 +83,8 @@ function NumberFormatSubmenu() {
                             }))}
                             onChange={(value) =>
                                 setContext((ctx) => {
-                                    handleNumberFormat(ctx, refs.cellInput.current!, value);
+                                    const input = refs.cellInput.current;
+                                    if (input) handleNumberFormat(ctx, input, value);
                                 })
                             }
                         />
@@ -100,10 +101,10 @@ function NumberFormatSubmenu() {
     );
 }
 
-function TextSubmenu() {
+function TextSubmenu({ caretColor }: { caretColor: string | undefined }) {
     const { setContext, refs } = useContext(WorkbookContext);
     const anchorColor = useAnchorCell()?.fc;
-    const textColor = useEditorSelectionStyle()?.fc ?? anchorColor ?? '';
+    const textColor = caretColor ?? anchorColor ?? '';
 
     return (
         <DropdownMenuSub>
@@ -112,7 +113,8 @@ function TextSubmenu() {
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
-                            handleBold(ctx, refs.cellInput.current!);
+                            const input = refs.cellInput.current;
+                            if (input) handleBold(ctx, input);
                         });
                     }}
                 >
@@ -121,7 +123,8 @@ function TextSubmenu() {
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
-                            handleItalic(ctx, refs.cellInput.current!);
+                            const input = refs.cellInput.current;
+                            if (input) handleItalic(ctx, input);
                         });
                     }}
                 >
@@ -130,7 +133,8 @@ function TextSubmenu() {
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
-                            handleUnderline(ctx, refs.cellInput.current!);
+                            const input = refs.cellInput.current;
+                            if (input) handleUnderline(ctx, input);
                         });
                     }}
                 >
@@ -139,7 +143,8 @@ function TextSubmenu() {
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
-                            handleStrikeThrough(ctx, refs.cellInput.current!);
+                            const input = refs.cellInput.current;
+                            if (input) handleStrikeThrough(ctx, input);
                         });
                     }}
                 >
@@ -156,7 +161,8 @@ function TextSubmenu() {
                                 key={o}
                                 onClick={() => {
                                     setContext((ctx) => {
-                                        handleFont(ctx, refs.cellInput.current!, o);
+                                        const input = refs.cellInput.current;
+                                        if (input) handleFont(ctx, input, o);
                                     });
                                 }}
                             >
@@ -173,7 +179,8 @@ function TextSubmenu() {
                     contentClassName="sheet-mousedown-cancel"
                     onChange={(color) => {
                         setContext((ctx) => {
-                            handleTextColor(ctx, refs.cellInput.current!, color);
+                            const input = refs.cellInput.current;
+                            if (input) handleTextColor(ctx, input, color);
                         });
                     }}
                 />
@@ -192,7 +199,8 @@ function AlignmentSubmenu() {
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
-                            handleHorizontalAlign(ctx, refs.cellInput.current!, 'left');
+                            const input = refs.cellInput.current;
+                            if (input) handleHorizontalAlign(ctx, input, 'left');
                         });
                     }}
                 >
@@ -201,7 +209,8 @@ function AlignmentSubmenu() {
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
-                            handleHorizontalAlign(ctx, refs.cellInput.current!, 'center');
+                            const input = refs.cellInput.current;
+                            if (input) handleHorizontalAlign(ctx, input, 'center');
                         });
                     }}
                 >
@@ -210,7 +219,8 @@ function AlignmentSubmenu() {
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
-                            handleHorizontalAlign(ctx, refs.cellInput.current!, 'right');
+                            const input = refs.cellInput.current;
+                            if (input) handleHorizontalAlign(ctx, input, 'right');
                         });
                     }}
                 >
@@ -222,7 +232,8 @@ function AlignmentSubmenu() {
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
-                            handleVerticalAlign(ctx, refs.cellInput.current!, 'top');
+                            const input = refs.cellInput.current;
+                            if (input) handleVerticalAlign(ctx, input, 'top');
                         });
                     }}
                 >
@@ -231,7 +242,8 @@ function AlignmentSubmenu() {
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
-                            handleVerticalAlign(ctx, refs.cellInput.current!, 'middle');
+                            const input = refs.cellInput.current;
+                            if (input) handleVerticalAlign(ctx, input, 'middle');
                         });
                     }}
                 >
@@ -240,7 +252,8 @@ function AlignmentSubmenu() {
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
-                            handleVerticalAlign(ctx, refs.cellInput.current!, 'bottom');
+                            const input = refs.cellInput.current;
+                            if (input) handleVerticalAlign(ctx, input, 'bottom');
                         });
                     }}
                 >
@@ -275,8 +288,9 @@ function RotationSubmenu() {
                         onClick={() => {
                             setContext((ctx) => {
                                 const d = getFlowdata(ctx);
-                                if (d == null) return;
-                                updateFormat(ctx, refs.cellInput.current!, d, 'rt', value);
+                                const input = refs.cellInput.current;
+                                if (d == null || !input) return;
+                                updateFormat(ctx, input, d, 'rt', value);
                             });
                         }}
                     >
@@ -299,8 +313,9 @@ function WrappingSubmenu() {
                     onClick={() => {
                         setContext((ctx) => {
                             const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(ctx, refs.cellInput.current!, d, 'tb', 'overflow');
+                            const input = refs.cellInput.current;
+                            if (d == null || !input) return;
+                            updateFormat(ctx, input, d, 'tb', 'overflow');
                         });
                     }}
                 >
@@ -323,8 +338,9 @@ function WrappingSubmenu() {
                     onClick={() => {
                         setContext((ctx) => {
                             const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(ctx, refs.cellInput.current!, d, 'tb', 'clip');
+                            const input = refs.cellInput.current;
+                            if (d == null || !input) return;
+                            updateFormat(ctx, input, d, 'tb', 'clip');
                         });
                     }}
                 >
@@ -373,7 +389,8 @@ function FillColorItem() {
             contentClassName="sheet-mousedown-cancel"
             onChange={(color) => {
                 setContext((ctx) => {
-                    handleTextBackground(ctx, refs.cellInput.current!, color);
+                    const input = refs.cellInput.current;
+                    if (input) handleTextBackground(ctx, input, color);
                 });
             }}
         />
@@ -632,13 +649,14 @@ function ConditionalFormattingSubmenu() {
     );
 }
 
-export function FormatMenu() {
+// `caret` is the style at the open cell editor's caret, null while no cell is open.
+export function FormatMenu({ caret }: { caret: RunStyle | null }) {
     const { setContext } = useContext(WorkbookContext);
 
     return (
         <>
             <NumberFormatSubmenu />
-            <TextSubmenu />
+            <TextSubmenu caretColor={caret?.fc} />
             <AlignmentSubmenu />
             <WrappingSubmenu />
 

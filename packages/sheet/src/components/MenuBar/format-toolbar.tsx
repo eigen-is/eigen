@@ -3,7 +3,6 @@
 // bar's 1360px container query hides it, as read-only does, below the width where it still sits centered.
 
 import { nextFontSize } from '@workspace/lib/constants/fonts';
-import { cellFontName, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
 import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
@@ -11,7 +10,7 @@ import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
-import { useEditorSelectionStyle } from '../../hooks/useEditorSelectionStyle';
+import type { RunStyle } from '../../state';
 import {
     handleBold,
     handleFont,
@@ -20,15 +19,15 @@ import {
     handleTextBackground,
     handleTextColor,
     handleTextSize,
+    runStyleOf,
 } from '../../state';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 
-export function FormatToolbar() {
-    const { context, setContext, refs, settings } = useContext(WorkbookContext);
-    // Reflect the anchor cell so the swatches + active alignment track the selection, and while a cell
-    // is open the run at its caret, the way the docs toolbar follows the caret.
+// The controls show the anchor cell's colors, font and alignment. While a cell is open, they show the
+// run at its `caret` instead, as the docs toolbar does.
+export function FormatToolbar({ caret }: { caret: RunStyle | null }) {
+    const { context, setContext, refs } = useContext(WorkbookContext);
     const cell = useAnchorCell();
-    const caret = useEditorSelectionStyle();
     const refocusCellEditor = useCellEditorRefocus();
 
     if (!context.allowEdit) return null;
@@ -38,10 +37,9 @@ export function FormatToolbar() {
     const textColor = caret?.fc ?? cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
     const align = cell?.ht == null ? undefined : Number(cell.ht); // 0 = center, 1 = left, 2 = right
-    const fontName = caret?.ff ?? cellFontName(cell?.ff) ?? SHEET_DEFAULT_FONT.name;
-    const fontSize = caret?.fs ?? (Number(cell?.fs) || settings.defaultFontSize);
-    const bold = (caret?.bl ?? Number(cell?.bl)) === 1;
-    const italic = (caret?.it ?? Number(cell?.it)) === 1;
+    const { ff: fontName, fs: fontSize, bl, it } = caret ?? runStyleOf(cell);
+    const bold = bl === 1;
+    const italic = it === 1;
     const setFontSize = (size: number) => {
         setContext((ctx) => {
             const input = refs.cellInput.current;
@@ -56,7 +54,8 @@ export function FormatToolbar() {
                 onCloseAutoFocus={refocusCellEditor}
                 onChange={(name) => {
                     setContext((ctx) => {
-                        handleFont(ctx, refs.cellInput.current!, name);
+                        const input = refs.cellInput.current;
+                        if (input) handleFont(ctx, input, name);
                     });
                 }}
             />
@@ -85,7 +84,8 @@ export function FormatToolbar() {
                 preventFocusLoss
                 onClick={() => {
                     setContext((ctx) => {
-                        handleBold(ctx, refs.cellInput.current!);
+                        const input = refs.cellInput.current;
+                        if (input) handleBold(ctx, input);
                     });
                 }}
             />
@@ -96,7 +96,8 @@ export function FormatToolbar() {
                 preventFocusLoss
                 onClick={() => {
                     setContext((ctx) => {
-                        handleItalic(ctx, refs.cellInput.current!);
+                        const input = refs.cellInput.current;
+                        if (input) handleItalic(ctx, input);
                     });
                 }}
             />
@@ -113,7 +114,8 @@ export function FormatToolbar() {
                 onCloseAutoFocus={refocusCellEditor}
                 onChange={(color) => {
                     setContext((ctx) => {
-                        handleTextColor(ctx, refs.cellInput.current!, color);
+                        const input = refs.cellInput.current;
+                        if (input) handleTextColor(ctx, input, color);
                     });
                 }}
             />
@@ -128,7 +130,8 @@ export function FormatToolbar() {
                 onCloseAutoFocus={refocusCellEditor}
                 onChange={(color) => {
                     setContext((ctx) => {
-                        handleTextBackground(ctx, refs.cellInput.current!, color);
+                        const input = refs.cellInput.current;
+                        if (input) handleTextBackground(ctx, input, color);
                     });
                 }}
             />
@@ -142,7 +145,8 @@ export function FormatToolbar() {
                 preventFocusLoss
                 onClick={() => {
                     setContext((ctx) => {
-                        handleHorizontalAlign(ctx, refs.cellInput.current!, 'left');
+                        const input = refs.cellInput.current;
+                        if (input) handleHorizontalAlign(ctx, input, 'left');
                     });
                 }}
             />
@@ -153,7 +157,8 @@ export function FormatToolbar() {
                 preventFocusLoss
                 onClick={() => {
                     setContext((ctx) => {
-                        handleHorizontalAlign(ctx, refs.cellInput.current!, 'center');
+                        const input = refs.cellInput.current;
+                        if (input) handleHorizontalAlign(ctx, input, 'center');
                     });
                 }}
             />
@@ -164,7 +169,8 @@ export function FormatToolbar() {
                 preventFocusLoss
                 onClick={() => {
                     setContext((ctx) => {
-                        handleHorizontalAlign(ctx, refs.cellInput.current!, 'right');
+                        const input = refs.cellInput.current;
+                        if (input) handleHorizontalAlign(ctx, input, 'right');
                     });
                 }}
             />

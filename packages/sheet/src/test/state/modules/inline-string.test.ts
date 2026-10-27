@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { getFontStyleByCell, getInlineStringHTML, updateCell } from '../../../state/modules/cell';
+import { getFontStyleByCell, getInlineStringHTML, getStyleByCell, updateCell } from '../../../state/modules/cell';
 import type { RunStyleKey } from '../../../state/modules/inline-string';
 import {
     committedRuns,
@@ -232,6 +232,28 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
             const css = Object.values(getFontStyleByCell(JSON.parse(JSON.stringify(style)))).join(';');
             expect(css).not.toMatch(/url|background|expression/);
         }
+    });
+
+    // A fill or a rule's color with a second declaration would make the editor box or a paste fetch a URL.
+    test("a cell's fill and a rule's colors that are not plain values give the editor box no CSS", () => {
+        const forged = ['#fff;background-image:url(//x)', 'url(//x)'];
+        for (const color of forged) {
+            const ctx = workbookContextFactory();
+            const data = [[JSON.parse(JSON.stringify({ v: 'x', bg: color }))]];
+            const fill = Object.values(getStyleByCell(ctx, data, 0, 0, {})).join(';');
+            const rule = Object.values(
+                getStyleByCell(ctx, data, 0, 0, { '0_0': { cellColor: color, textColor: color } }),
+            ).join(';');
+            expect(fill).not.toMatch(/url/);
+            expect(rule).not.toMatch(/url/);
+        }
+        const ctx = workbookContextFactory();
+        const data = [[{ v: 'x', bg: '#FFEE00' }]];
+        expect(getStyleByCell(ctx, data, 0, 0, {})).toEqual({ background: '#ffee00' });
+        expect(getStyleByCell(ctx, data, 0, 0, { '0_0': { cellColor: 'rgb(1, 2, 3)', textColor: '#f00' } })).toEqual({
+            background: '#010203',
+            color: '#f00',
+        });
     });
 
     test('a valid color, size and font still style the run', () => {

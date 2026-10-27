@@ -13,6 +13,7 @@ const { createRoot } = await import('react-dom/client');
 const { produce } = await import('immer');
 const { WorkbookContext } = await import('../../../context');
 const { useCellEditorRefocus } = await import('../../../hooks/useCellEditorRefocus');
+const { useEditorSelectionStyle } = await import('../../../hooks/useEditorSelectionStyle');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
 const { MenuBar } = await import('../../../components/MenuBar');
 const { committedRuns, defaultContext, defaultSettings, FormulaCache } = await import('../../../state');
@@ -38,6 +39,13 @@ const refs = {
 let refocusCellEditor: ((event: Event) => void) | undefined;
 function RefocusProbe() {
     refocusCellEditor = useCellEditorRefocus();
+    return null;
+}
+
+// Every style the hook handed out, so a test sees whether a caret move gave the toolbar a new one.
+const caretStyles: unknown[] = [];
+function CaretStyleProbe() {
+    caretStyles.push(useEditorSelectionStyle());
     return null;
 }
 
@@ -90,6 +98,7 @@ async function openEditor(html: string) {
                     createElement(MenuBar),
                     createElement(InputBox),
                     createElement(RefocusProbe),
+                    createElement(CaretStyleProbe),
                 ),
             ),
         );
@@ -159,6 +168,16 @@ test('the toolbar shows the run at the caret, and moves with it', async () => {
     expect(fontButton(container)?.textContent).toBe('Inter');
     expect(sizeBox(container)?.value).toBe('10');
     expect(boldButton(container)?.className).not.toContain('bg-secondary');
+});
+
+// The toolbar and the Format menu re-render only when the style at the caret changes.
+test('a caret moved inside one run keeps the style it had', async () => {
+    const { input } = await openEditor('hello world');
+    await select(input, 1);
+    const style = caretStyles.at(-1);
+    expect(style).toMatchObject({ bl: 0, fs: 10 });
+    await select(input, 3);
+    expect(caretStyles.at(-1)).toBe(style);
 });
 
 test('a font picked from the toolbar leaves the focus and the selection in the editor', async () => {

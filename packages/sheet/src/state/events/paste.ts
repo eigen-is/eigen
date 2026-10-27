@@ -1,7 +1,7 @@
 // A paste into the grid: cells copied in this tab with their formulas and formats, a cut that moves them,
-// an HTML table from another program, plain text or a formula. The Workbook's paste listener calls
-// handlePaste for a ⌘V on the grid, and the context menu and the Edit menu call handlePasteByClick. The
-// open cell editor takes its own paste, so none of it comes here.
+// an HTML table from another program, plain text or a formula. handlePaste takes a ⌘V on the grid, and
+// handlePasteByClick a paste from a menu, such as the context menu. The open cell editor takes its own
+// paste, so none of it comes here.
 
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
 import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';

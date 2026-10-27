@@ -182,6 +182,24 @@ describe('state/modules/text — rich text wrap', () => {
         ).toEqual(['aa ', 'bb', ' cc']);
     });
 
+    // A run that leaves a key out draws at its default, as the editor and the toolbar read it, so its
+    // underline is as thick as its glyphs are large.
+    test('a run without a size or a color draws at 10 pt in black', () => {
+        const cell: Cell = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'plain', un: 1 }] } };
+        const info = getCellTextInfo(cell, sizedCanvas(), workbookContextFactory(), {
+            cellWidth: 1000,
+            cellHeight: 200,
+            r: 0,
+            c: 0,
+        });
+        const style = info?.values[0]?.style;
+        expect(typeof style === 'string' ? style : style?.fontset).toStartWith('normal normal normal 10pt');
+        expect(typeof style === 'string' ? undefined : { fc: style?.fc, fs: style?.fs }).toEqual({
+            fc: '#000000',
+            fs: 10,
+        });
+    });
+
     test('a rich cell that does not wrap draws each run as one piece', () => {
         expect(
             pieces(

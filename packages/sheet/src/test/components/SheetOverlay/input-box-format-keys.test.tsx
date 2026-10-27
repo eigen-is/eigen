@@ -105,10 +105,10 @@ function selectWord(word: Node | null | undefined) {
     document.getSelection()?.addRange(range);
 }
 
-function press(input: HTMLElement, code: string) {
+function press(input: HTMLElement, code: string, letter = code.at(-1)?.toLowerCase()) {
     const key = new KeyboardEvent('keydown', {
         code,
-        key: code.at(-1)?.toLowerCase(),
+        key: letter,
         metaKey: true,
         bubbles: true,
         cancelable: true,
@@ -126,6 +126,21 @@ test('⌘B, ⌘I and ⌘U format the selected word, not the browser', async () =
     expect(committedRuns(input, null).map(({ v, bl, it, un }) => [v, bl, it, un])).toEqual([
         ['hello ', 0, 0, 0],
         ['big', 1, 1, 1],
+        [' world', 0, 0, 0],
+    ]);
+});
+
+// On a Dvorak layout the physical I key types c, so ⌘ with it copies, and the physical N key types b.
+test('the shortcuts follow the letter the layout types, not the physical key', async () => {
+    const { input } = await openEditor('hello big world');
+    select(input, 6, 9);
+    expect(press(input, 'KeyI', 'c').defaultPrevented).toBe(false);
+    expect(press(input, 'KeyN', 'b').defaultPrevented).toBe(true);
+    // Caps Lock types the capital letter.
+    expect(press(input, 'KeyF', 'U').defaultPrevented).toBe(true);
+    expect(committedRuns(input, null).map(({ v, bl, it, un }) => [v, bl, it, un])).toEqual([
+        ['hello ', 0, 0, 0],
+        ['big', 1, 0, 1],
         [' world', 0, 0, 0],
     ]);
 });

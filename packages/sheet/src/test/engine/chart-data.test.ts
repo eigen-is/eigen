@@ -21,7 +21,13 @@ import type {
 } from '@workspace/lib/types/chart';
 import { serializeFill } from '@workspace/lib/vector';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { inlineChartSpec, mapChartRefs, renderSheetChartSvg, resolveRangeChartData } from '../../engine/chart-data';
+import {
+    inlineChartSpec,
+    mapChartRefs,
+    renderSheetChartSvg,
+    resolveRangeChartData,
+    sheetChartPoints,
+} from '../../engine/chart-data';
 import type { Cell } from '../../engine/types';
 
 const ref = (row: [number, number], column: [number, number], sheetId = 's1'): CellRangeRef => ({
@@ -347,6 +353,14 @@ describe('inlineChartSpec', () => {
         expect(inlineChartSpec(rangeChart([series(ref([1, 3], [1, 2]))]), resolver)).toBeNull();
         expect(inlineChartSpec(rangeChart([series(ref([0, MAX_CHART_POINTS], [1, 1]))]), resolver)).toBeNull();
         expect(inlineChartSpec({ ...rangeChart([]), specData: '{' }, resolver)).toBeNull();
+    });
+
+    // The export charges a chart by its points before it draws, so it counts them where the chart refuses them.
+    test('a chart past the point limit counts no points, and one at the limit counts its values and labels', () => {
+        const half = Math.floor(MAX_CHART_POINTS / 2);
+        const columns = (last: number) => [series(ref([0, last], [1, 1])), series(ref([0, last], [2, 2]))];
+        expect(sheetChartPoints(rangeChart(columns(half)))).toBe(0);
+        expect(sheetChartPoints(rangeChart(columns(half - 1)))).toBe(2 * half + 3);
     });
 
     test('a chart whose cells pass the spec’s size limit copies nothing', () => {

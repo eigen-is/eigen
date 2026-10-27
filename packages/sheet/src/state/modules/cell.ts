@@ -29,7 +29,16 @@ import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
 import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
 import type { RunStyleKey } from './inline-string';
-import { committedRuns, cssFontName, isInlineStringCell, runStyleOf, runsHtml, sameRunStyle } from './inline-string';
+import {
+    committedRuns,
+    cssFontName,
+    DEFAULT_TEXT_COLOR,
+    hexColor,
+    isInlineStringCell,
+    runStyleOf,
+    runsHtml,
+    sameRunStyle,
+} from './inline-string';
 import { getCellTextInfo } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 
@@ -580,7 +589,7 @@ export function updateCell(
         delete curv.f;
         delete curv.v;
         delete curv.m;
-        curv.fs ||= 10;
+        curv.fs ||= SHEET_DEFAULT_FONT_SIZE;
     }
 
     // API, we get value from user
@@ -899,8 +908,8 @@ export function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: Cel
     const font = cssFontName(cell.ff);
     if (font) style.fontFamily = `'${font}', sans-serif`;
     if (fs !== SHEET_DEFAULT_FONT_SIZE) style.fontSize = `${fs}pt`;
-    const color = checksCF?.textColor ?? fc;
-    if (color && color !== '#000000') style.color = color;
+    const color = hexColor(checksCF?.textColor) ?? fc;
+    if (color !== DEFAULT_TEXT_COLOR) style.color = color;
     if (cl) style.textDecoration = 'line-through';
     const underline = Number(cell.un);
     if (underline === 1 || underline === 3) style.borderBottom = `${Math.floor(fs / 9)}px solid ${fc}`;
@@ -918,8 +927,8 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
     if (!cell) return {};
 
     if ('bg' in cell) {
-        const value = normalizedCellAttr(cell, 'bg');
-        style.background = checksCF?.cellColor ? `${checksCF.cellColor}` : `${value}`;
+        const background = hexColor(checksCF?.cellColor) ?? hexColor(cell.bg);
+        if (background) style.background = background;
     }
     if ('ht' in cell) {
         const value = normalizedCellAttr(cell, 'ht');

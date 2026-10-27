@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
+import { useEditorSelectionStyle } from '../../hooks/useEditorSelectionStyle';
 import { DataMenu } from './data-menu';
 import { FormatMenu } from './format-menu';
 import { FormatToolbar } from './format-toolbar';
@@ -30,6 +31,8 @@ export function MenuBar({ leftItems, rightItems }: Props) {
     const { context } = useContext(WorkbookContext);
     const { focusFindBarRef, onCloseAutoFocus: refocusFindBar } = useFindBarRefocus();
     const refocusCellEditor = useCellEditorRefocus();
+    // Read once for the toolbar and the Format menu, so a caret move reads the editor once.
+    const caret = useEditorSelectionStyle();
     return (
         <div className="@container border-b border-border bg-background">
             <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] @[1360px]:grid-cols-[1fr_auto_1fr] items-center gap-1 app-gutter-x h-12">
@@ -72,7 +75,7 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                                 contentClassName="w-64 sheet-mousedown-cancel"
                                 onCloseAutoFocus={refocusCellEditor}
                             >
-                                <FormatMenu />
+                                <FormatMenu caret={caret} />
                             </ToolbarMenu>
 
                             <ToolbarMenu
@@ -87,7 +90,7 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                 </div>
 
                 <div className="flex justify-center">
-                    <FormatToolbar />
+                    <FormatToolbar caret={caret} />
                 </div>
 
                 <div className="flex items-center justify-self-end gap-1">{rightItems}</div>
