@@ -691,6 +691,14 @@ describe("the reader's defined names", () => {
         expect(cellsOf(sheets[0])['1_1']?.f).toBe('=[1]Prices!Cost+External');
         expect(warnings).toContainEqual({ code: 'names-dropped', count: 1 });
     });
+
+    test('40,000 of them import, and a formula still finds its own', () => {
+        const name = (i: number) => `Name${i}_${'x'.repeat(24)}`;
+        const names = Array.from({ length: 40_000 }, (_, i) => `<definedName name="${name(i)}">${i}</definedName>`);
+        const data = rowsXml([['A1', { formula: `${name(39_999)}*2`, result: 79_998 }]]);
+        const [sheet] = xlsxToSheets(xlsxFixture({ sheets: [{ data }], definedNames: names.join('') }));
+        expect(cellsOf(sheet)['0_0']?.f).toBe('=39999*2');
+    });
 });
 
 describe("the reader's output budget", () => {
@@ -736,6 +744,17 @@ describe("the reader's output budget", () => {
         let data = `<row r="1"><c r="B1"><f t="shared" ref="B1:B${copies + 1}" si="0">${anchor}</f></c></row>`;
         for (let r = 2; r <= copies + 1; r++) data += `<row r="${r}"><c r="B${r}"><f t="shared" si="0"/></c></row>`;
         expect(refused(xlsxFixture({ sheets: [{ data }] }))).toEqual({
+            status: 413,
+            message: 'This spreadsheet is too large to import',
+        });
+    }, 30_000);
+
+    test("a formula that uses a defined name is walked within the shared formulas' budget", () => {
+        const formula = `Rate&"${'x'.repeat(8_000)}"`;
+        const cells = Math.ceil(MAX_SHARED_FORMULA_TEXT / formula.length) + 1;
+        const data = rowsXml(Array.from({ length: cells }, (_, r) => [`A${r + 1}`, { formula }]));
+        const definedNames = '<definedName name="Rate">0.2</definedName>';
+        expect(refused(xlsxFixture({ sheets: [{ data }], definedNames }))).toEqual({
             status: 413,
             message: 'This spreadsheet is too large to import',
         });

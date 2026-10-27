@@ -1,10 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { inlineNames } from '@workspace/sheet/engine';
 import { lossCounter } from '../../../lib/document/transform/protocol';
 import { nameInliner } from '../../../lib/import/sheets/names';
 import type { DefinedName } from '../../../lib/import/sheets/package';
 import { MAX_FORMULA_LENGTH } from '../../../lib/ooxml/spreadsheetml';
-import { cpuClock } from '../../cpu-time';
 
 // A workbook's defined names inlined into the formulas that use them, on the sheet each formula sits on.
 
@@ -32,10 +30,12 @@ describe('a defined name', () => {
         const { inline } = inliner([
             { name: 'Rate', text: 'Inputs!$B$2' },
             { name: 'RATE', sheet: 'Local', text: 'Local!$Z$1' },
+            { name: 'Tax', sheet: 'My Sheet', text: '0.2' },
         ]);
         expect(inline('=Rate', 'local')).toBe('=Local!$Z$1');
         expect(inline('=Rate', 'Data')).toBe('=Inputs!$B$2');
         expect(inline('=Local!Rate+Data!Rate', 'Data')).toBe('=Local!$Z$1+Data!Rate');
+        expect(inline("='My Sheet'!Tax*2", 'Data')).toBe('=0.2*2');
     });
 
     test('naming another name is inlined through it; a formula is inlined in parentheses, a constant as itself', () => {
@@ -75,6 +75,12 @@ describe('a defined name', () => {
         expect(warnings()).toEqual([{ code: 'names-dropped', count: 1 }]);
     });
 
+    // JavaScript lower-cases a dotted capital I to an i and a combining dot, two characters.
+    test('is found in the lower case Excel compares it in, a dotted capital I too', () => {
+        const { inline } = inliner([{ name: 'İndex', text: '0.2' }]);
+        expect(inline('=i\u0307ndex*2', 'Data')).toBe('=0.2*2');
+    });
+
     test('nobody defined stays as written, uncounted', () => {
         const { inline, warnings } = inliner([{ name: 'Rate', text: '0.2' }]);
         expect(inline('=Unknown*2', 'Data')).toBe('=Unknown*2');
@@ -94,15 +100,25 @@ describe('the walk over a formula', () => {
         expect(walked()).toBe('=A1*Rate'.length + '0.2'.length);
     });
 
-    test('is skipped, uncharged, for a formula that names none, so a defined name costs other formulas nothing', () => {
-        const formulas = Array.from({ length: 200 }, (_, i) => `=${Array(1_000).fill(`A${i}+Sum`).join('+')}`);
+    test('is skipped, uncharged, for a formula that only spells a name inside a longer word', () => {
         const { inline, walked } = inliner([{ name: 'Sales', text: 'Data!$A$1:$A$9' }]);
-        const walking = cpuClock();
-        for (const formula of formulas) inlineNames(formula, () => undefined);
-        const walk = walking();
-        const inlining = cpuClock();
-        for (const formula of formulas) expect(inline(formula, 'Data')).toBe(formula);
-        expect(inlining()).toBeLessThan(walk / 4);
+        for (const formula of ['=SalesTax+Sale', '=Data!Sales2*A1', `=${Array(1_000).fill('A1+Sum').join('+')}`])
+            expect(inline(formula, 'Data')).toBe(formula);
         expect(walked()).toBe(0);
     });
+
+    // One search over every name's spelling took 27 s a formula here, and 40,000 names were too many for it.
+    test('of a workbook of 20,000 names is taken only by the formulas that use one', () => {
+        const names = Array.from({ length: 20_000 }, (_, i) => ({
+            name: `N${Bun.hash(String(i)).toString(36)}${i}`.padEnd(30, 'x'),
+            text: '0.2',
+        }));
+        const { inline, walked } = inliner(names);
+        const plain = `=${Array(1_000).fill('A1+Sum').join('+')}`;
+        for (let i = 0; i < 300; i++) expect(inline(plain, 'Data')).toBe(plain);
+        expect(walked()).toBe(0);
+        const using = `${plain}+${names[19_999].name}`;
+        expect(inline(using, 'Data')).toBe(`${plain}+0.2`);
+        expect(walked()).toBe(using.length + '0.2'.length);
+    }, 10_000);
 });
