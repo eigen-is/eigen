@@ -112,3 +112,44 @@ describe('thumbnail worker scratch files', () => {
         expect(fs.readdirSync(tmpDir)).toEqual([]);
     }, 30_000);
 });
+
+// terminate() stops the Worker and the timers that kill exiftool, not exiftool itself, so its calls must end by a
+// deadline of their own before the Worker's.
+describe('exiftool deadline', () => {
+    test('a hung exiftool is killed at the deadline, and no call starts after it', async () => {
+        fs.mkdirSync(TMP_DIR, { recursive: true });
+        const bin = fs.mkdtempSync(path.join(TMP_DIR, 'bin-'));
+        const pids = path.join(bin, 'pids');
+        // A -ver answers, so the fake is the binary the fallback picks; every other call hangs.
+        fs.writeFileSync(
+            path.join(bin, 'exiftool'),
+            `#!/bin/sh\nif [ "$1" = "-ver" ]; then echo 13.0; exit 0; fi\necho $$ >> "${pids}"\nexec sleep 30\n`,
+            { mode: 0o755 },
+        );
+        const source = path.join(bin, 'photo.raw');
+        fs.writeFileSync(source, 'not an image');
+        const script = `
+            const { extractEmbeddedPreview } = await import(process.env.EXIFTOOL_PREVIEW);
+            const started = Date.now();
+            const extract = await extractEmbeddedPreview(process.env.SOURCE, process.env.BIN, 'id', started + 1000);
+            console.log(JSON.stringify({ extract, ms: Date.now() - started }));
+        `;
+        const child = Bun.spawn([process.execPath, '-e', script], {
+            env: {
+                ...process.env,
+                PATH: `${bin}:${process.env['PATH']}`,
+                EXIFTOOL_PREVIEW: Bun.resolveSync('../../lib/preview/exiftool-preview', import.meta.dir),
+                SOURCE: source,
+                BIN: bin,
+            },
+        });
+        const { extract, ms } = JSON.parse(await new Response(child.stdout).text());
+        await child.exited;
+
+        expect(extract).toBeNull();
+        expect(ms).toBeLessThan(3000);
+        const started = fs.readFileSync(pids, 'utf8').trim().split('\n').map(Number);
+        expect(started).toHaveLength(1);
+        for (const pid of started) expect(() => process.kill(pid, 0)).toThrow();
+    }, 10_000);
+});

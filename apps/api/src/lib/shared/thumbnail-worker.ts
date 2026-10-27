@@ -1,9 +1,14 @@
+// The thumbnail Worker: one image or video in, a resized preview out, posted back to the main thread that started it.
+// It tries sharp first, then a HEIC decode, then the preview exiftool finds embedded in the file, or for a video a
+// frame ffmpeg grabs. The main thread runs one Worker per image under a semaphore and terminates it at its timeout.
+
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import { cleanupExtract, extractEmbeddedPreview } from '../preview/exiftool-preview';
 import { sharpResize } from './sharp-resize';
+import { THUMBNAIL_TIMEOUT_SECONDS } from './thumbnail-timeout';
 import { extractVideoFrame } from './video-thumbnail';
 
 export type ThumbnailFormat = 'webp' | 'jpeg' | 'png' | 'gif';
@@ -31,6 +36,11 @@ export type WorkerOutput =
       }
     | { ok: false };
 
+// The main thread terminates this Worker THUMBNAIL_TIMEOUT_SECONDS after it starts it, which stops the timers that kill
+// exiftool but not exiftool. So its calls end this long before that, a margin for the Worker's start and the resize of
+// what exiftool found.
+const EXIFTOOL_SPARE_MS = 5_000;
+
 export type ImageResult = ImageDimensions & {
     data: Buffer;
     hasAlpha: boolean;
@@ -54,7 +64,7 @@ async function heicToJpeg(source: Buffer | string): Promise<Buffer | null> {
     }
 }
 
-async function processImage(input: WorkerInput): Promise<ImageResult | null> {
+async function processImage(input: WorkerInput, deadline: number): Promise<ImageResult | null> {
     const source = typeof input.source === 'string' ? input.source : Buffer.from(input.source);
 
     const result = await sharpResize(source, input.options);
@@ -84,7 +94,7 @@ async function processImage(input: WorkerInput): Promise<ImageResult | null> {
             filePath = tempFile;
         }
 
-        const extractPath = await extractEmbeddedPreview(filePath, scratchDir, input.pathId);
+        const extractPath = await extractEmbeddedPreview(filePath, scratchDir, input.pathId, deadline);
         if (!extractPath) return null;
 
         try {
@@ -116,10 +126,11 @@ async function processVideo(input: WorkerInput): Promise<ImageResult | null> {
 declare var self: Worker;
 
 self.onmessage = async (event: MessageEvent<WorkerInput>) => {
+    const exiftoolDeadline = Date.now() + THUMBNAIL_TIMEOUT_SECONDS * 1000 - EXIFTOOL_SPARE_MS;
     try {
         const result = event.data.mimeType.startsWith('video/')
             ? await processVideo(event.data)
-            : await processImage(event.data);
+            : await processImage(event.data, exiftoolDeadline);
         if (result) {
             const ab = result.data.buffer.slice(
                 result.data.byteOffset,
