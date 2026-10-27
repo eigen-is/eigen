@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'bun:test';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
+import { dataToCelldata } from '../../../engine/celldata';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
@@ -217,6 +218,28 @@ describe('applyOp and a joiner agree on every batch shape', () => {
         const next = applyPeerOps(ctx, ops);
         expect(summary(next.sheets)).toEqual(summary(join(ctx, [ops])));
         expect({ ...next.formulaCache.formulaCellInfoMap }).toEqual(before);
+    });
+
+    it('gives a sheet that has only its stored cells a matrix before a row or cell op on it', () => {
+        const ops: Op[] = [
+            {
+                op: 'insertRowCol',
+                id: 'id_2',
+                path: [],
+                value: { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_2' },
+            },
+            { op: 'replace', id: 'id_2', path: ['data', 0, 0], value: { v: 9, m: '9' } },
+        ];
+        const ctx = produce(makeCtx(null), (draft: Context) => {
+            draft.sheets[1].celldata = [{ r: 0, c: 1, v: { v: 7, m: '7' } }];
+            delete draft.sheets[1].data;
+        });
+        const [, joiner] = join(ctx, [ops]);
+        expect(dataToCelldata(joiner.data)).toEqual([
+            { r: 0, c: 0, v: { v: 9, m: '9' } },
+            { r: 1, c: 1, v: { v: 7, m: '7' } },
+        ]);
+        expect(dataToCelldata(applyPeerOps(ctx, ops).sheets[1].data)).toEqual(dataToCelldata(joiner.data));
     });
 
     it('skips an insert into a read-only row and applies the rest, as the replay does', () => {

@@ -18,10 +18,20 @@ import { addSheet, deleteSheet, initSheetData, leaveCurrentSheet } from './sheet
 // The next context, or null when an op failed and the batch was skipped.
 export function applyOpBatch(ctx: Context, ops: Op[]): Context | null {
     let patches: Patch[] = [];
-    const addedSheets: string[] = [];
+    // The sheets this batch gives a cell matrix, whose formulas the formula map learns once the batch applied.
+    const materialized: string[] = [];
     let next: Context;
     try {
         next = produce(ctx, (draft: Context) => {
+            // A sheet nobody opened, such as a copy, holds only its stored cells. A cell or row op on it needs the
+            // matrix, as the replay builds it for a joiner.
+            for (const { op, id, path } of ops) {
+                if (id == null || (path[0] !== 'data' && op !== 'insertRowCol' && op !== 'deleteRowCol')) continue;
+                const index = getSheetIndex(draft, id);
+                if (index == null || draft.sheets[index].data) continue;
+                initSheetData(draft, index, draft.sheets[index]);
+                materialized.push(id);
+            }
             for (const op of ops) {
                 // force: a peer's op lands for a read-only viewer too, or the grid and the metadata patches part ways.
                 if (op.op === 'insertRowCol') skipRowColError(() => insertRowCol(draft, op.value, false, true));
@@ -33,7 +43,7 @@ export function applyOpBatch(ctx: Context, ops: Op[]): Context | null {
                     const index = getSheetIndex(draft, value.id);
                     if (index == null) continue;
                     initSheetData(draft, index, value);
-                    addedSheets.push(value.id);
+                    materialized.push(value.id);
                 } else if (op.op === 'deleteSheet' && op.id) deleteSheet(draft, op.id, true);
             }
             [patches] = opToPatch(draft, ops);
@@ -49,7 +59,7 @@ export function applyOpBatch(ctx: Context, ops: Op[]): Context | null {
         return null;
     }
     // The formula map lives outside immer, so it follows the batch only once the batch applied.
-    for (const id of addedSheets) {
+    for (const id of materialized) {
         const data = next.sheets[getSheetIndex(next, id) ?? -1]?.data;
         if (data) registerSheetFormulas(next, id, data);
     }

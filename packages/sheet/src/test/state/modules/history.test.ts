@@ -329,6 +329,15 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expectAgree(s);
     });
 
+    test("a peer's edit to a copy you never opened applies on your side", () => {
+        const s = session(workbook({}, { A1: text('two') }));
+        s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
+        const copy = String(s.a.ctx.sheets[3].id);
+        s.edit(s.b, typedAt('B2', 'peer', copy));
+        expect(cellAt(s.a, 'B2', copy)?.v).toBe('peer');
+        expectAgree(s);
+    });
+
     test('undoing a sheet add removes it everywhere, and redo brings it back', () => {
         const s = session(workbook());
         const settings = { ...defaultSettings, generateSheetId: () => 's4' };
