@@ -92,15 +92,11 @@ describe('remote-op mirror (applyOp) still applies to viewers', () => {
         const setContext = (r: (c: Context) => void) => {
             vctx = produce(vctx, r);
         };
-        // applyOp only reads `settings` on the addSheet branch, not for row/col ops.
-        // biome-ignore lint/suspicious/noExplicitAny: minimal settings stub for this path
-        const settings = {} as any;
         const workbook = generateAPIs(
             vctx,
             setContext,
             () => {},
             () => {},
-            settings,
             { undoList: [], redoList: [] },
         );
         workbook.applyOp(ops);

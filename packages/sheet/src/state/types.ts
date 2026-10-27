@@ -1,3 +1,7 @@
+// The editor's own types: the context's parts, such as the sheet with its editor-only fields, an undo entry and the
+// caches beside the context. The sheet's stored shapes are lib's and the engine's, re-exported here so state code
+// imports from one place.
+
 import type {
     ConditionalFormatRule,
     DataVerificationRule,
@@ -274,6 +278,8 @@ export type FilterOptions = {
     }[];
 };
 
+// One undo step: the edit's patches and their inverse. A cell or field path names its sheet by id,
+// ['sheets', id, field, …], so another sheet's add or delete moves nothing (recordEntry).
 export type History = {
     patches: ImmerPatch[];
     inversePatches: ImmerPatch[];

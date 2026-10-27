@@ -1,6 +1,6 @@
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import type { Context, SheetConfig } from '../../../state/index';
-import { FormulaCache } from '../../../state/index';
+import { defaultContext, FormulaCache } from '../../../state/index';
 
 export function selectionFactory(row: number[], column: number[], row_focus: number, column_focus: number) {
     return [
@@ -69,4 +69,25 @@ export function contextFactory({
         hooks: {},
         ...params,
     };
+}
+
+// A whole context, for code typed to take one: the editor's defaults under contextFactory's fields.
+export function workbookContextFactory(params: Partial<Context> & { config?: SheetConfig } = {}): Context {
+    const globalCache = {
+        undoList: [],
+        redoList: [],
+        scrollLeft: 0,
+        scrollTop: 0,
+        scrollListeners: new Set<() => void>(),
+        notifyScrollListeners: () => {},
+    };
+    const refs = {
+        globalCache,
+        cellInput: { current: null },
+        fxInput: { current: null },
+        canvas: { current: null },
+        cellArea: { current: null },
+        workbookContainer: { current: null },
+    };
+    return { ...defaultContext(refs), ...contextFactory(params) };
 }

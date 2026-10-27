@@ -14,6 +14,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Spreadsheet PDF** — a spreadsheet with thousands of small sheets prints its first 2,000 sheets instead of failing
 - **Long code blocks** — a Docs document with many long code blocks and no language set downloads and previews at once. Past about 65,000 characters of such code in all, the rest comes without syntax colors
 - **Copied charts** — a chart you copy from Sheets into Docs, Slides or Vector keeps the number format of its axis, so a column of percentages reads 25%, not 0.25
+- **Sheets undo** — undo changes your own cell where it now is after someone else inserts or deletes rows or columns, or deletes another sheet, formulas pointing at the moved rows included. It skips a cell someone else changed after you, and a formula still undoes when someone changed a cell it reads
+- **Sheets undo** — undoing or redoing your own row, column or sheet change keeps the edits others made since, and everyone sees the same result. Undoing a row delete brings back the formulas it broke, on every sheet
+- **Sheets** — someone else's edit to a sheet you never opened, such as a fresh copy or a sheet you brought back with undo, shows up for you. A copy you never opened comes back with its cells when you undo its delete
+- **Sheets** — closing a spreadsheet leaves the view and the undo history of everyone else who has it open as they are
+- **Sheets** — an edit someone makes while your spreadsheet is still opening, or while it reloads, shows up instead of going missing until you reload
 
 ## [0.4.0] - 2026-10-26
 

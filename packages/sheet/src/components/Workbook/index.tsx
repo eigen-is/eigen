@@ -1,3 +1,7 @@
+// The Workbook: the sheet editor's root component and the context every part of the grid reads. Each edit runs as a
+// recipe through setContextWithProduce, which records the tab's undo entry and sends the edit's ops through onOp. It
+// also owns undo and redo, the clipboard listeners and the imperative API a host reaches through its ref.
+
 import { isSketchCapped, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import {
     buildImageClipboardItem,
@@ -18,8 +22,7 @@ import type {
 } from '@workspace/lib/types/clipboard';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cloneDeep, isEqual } from 'es-toolkit/compat';
-import type { Patch } from 'immer';
-import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
+import { enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { RefValues, SetContextOptions } from '../../context';
@@ -27,16 +30,7 @@ import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
 import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
-import type { CellMatrix } from '../../engine/types';
-import type {
-    CellWithRowAndCol,
-    ChartPanelState,
-    Context,
-    GlobalCache,
-    Op,
-    Settings,
-    Sheet as SheetType,
-} from '../../state';
+import type { ChartPanelState, Context, GlobalCache, Op, Settings, Sheet as SheetType } from '../../state';
 import {
     api,
     applySheetView,
@@ -52,15 +46,16 @@ import {
     groupValuesRefresh,
     handleGlobalKeyDown,
     handlePaste,
+    initSheetData,
     initSheetIndex,
     insertRowCol,
-    inverseRowColOptions,
     pasteChart,
     patchToOp,
-    settleCurrentSheet,
+    recordEntry,
+    redoEntry,
     sheetChartClipboardItem,
+    undoEntry,
     warmFormulaCellInfoMap,
-    withoutDeletedFloatingEdits,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
@@ -112,22 +107,6 @@ const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
         }
     };
 };
-
-function dataToCelldata(data: CellMatrix) {
-    const cellData: CellWithRowAndCol[] = [];
-    for (let row = 0; row < data?.length; row += 1) {
-        for (let col = 0; col < data[row]?.length; col += 1) {
-            if (data[row][col] !== null) {
-                cellData.push({
-                    r: row,
-                    c: col,
-                    v: data[row][col],
-                });
-            }
-        }
-    }
-    return cellData;
-}
 
 export const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
     ({ onChange, onOp, toolbarLeftItems, toolbarRightItems, data: originalData, ...props }, ref) => {
@@ -186,15 +165,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             return () => clearTimeout(id);
         }, [dataReady]);
 
-        const emitOp = useCallback(
-            (ctx: Context, patches: Patch[], options?: SetContextOptions, undo: boolean = false) => {
-                if (onOp) {
-                    onOp(patchToOp(ctx, patches, options, undo));
-                }
-            },
-            [onOp],
-        );
-
         const setContextWithProduce = useCallback(
             (recipe: (ctx: Context) => void, options: SetContextOptions = {}) => {
                 setContext((ctx_) => {
@@ -225,151 +195,69 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             console.info('patch', patches);
                         }
                         const filteredPatches = filterPatch(patches);
-                        let filteredInversePatches = filterPatch(inversePatches);
+                        const filteredInversePatches = filterPatch(inversePatches);
                         if (filteredInversePatches.length > 0) {
-                            options.id = ctx_.currentSheetId;
-                            if (options.deleteSheetOp) {
-                                const target = ctx_.sheets.filter((sheet) => sheet.id === options.deleteSheetOp?.id);
-                                if (target) {
-                                    const index = getSheetIndex(ctx_, options.deleteSheetOp.id as string) as number;
-                                    options.deletedSheet = {
-                                        id: options.deleteSheetOp.id as string,
-                                        index: index as number,
-                                        value: cloneDeep(ctx_.sheets[index]),
-                                    };
-                                    options.deletedSheet!.value!.celldata = dataToCelldata(
-                                        options.deletedSheet!.value!.data as CellMatrix,
-                                    );
-                                    delete options.deletedSheet!.value!.data;
-                                    options.deletedSheet.value!.status = 0;
-                                    filteredInversePatches = [
-                                        {
-                                            op: 'add',
-                                            path: ['sheets', 0],
-                                            value: options.deletedSheet.value,
-                                        },
-                                    ];
-                                }
-                            } else if (options.addSheetOp) {
-                                options.addSheet = {};
-                                options.addSheet!.id = result.sheets[result.sheets.length - 1].id;
-                            }
+                            const entry = recordEntry(ctx_, result, filteredPatches, filteredInversePatches, options);
                             // noUndo: emit the op (peers need the swap/correction) but record no local
                             // undo entry, so a cross-mount paste stays a single ⌘Z.
                             if (!options.noUndo) {
                                 const { undoList, undoGesture } = globalCache.current;
                                 const last = undoList.at(-1);
                                 if (undoGesture && last?.gesture === undoGesture) {
-                                    const [patch] = filteredPatches;
+                                    const [patch] = entry.patches;
                                     const previous = last.patches.at(-1);
                                     // A field typed key by key keeps its first old value and its latest new one.
                                     if (
-                                        filteredPatches.length === 1 &&
+                                        entry.patches.length === 1 &&
                                         patch.op === 'replace' &&
                                         previous?.op === 'replace' &&
                                         isEqual(previous.path, patch.path)
                                     ) {
                                         last.patches[last.patches.length - 1] = patch;
                                     } else {
-                                        last.patches.push(...filteredPatches);
-                                        last.inversePatches.unshift(...filteredInversePatches);
+                                        last.patches.push(...entry.patches);
+                                        last.inversePatches.unshift(...entry.inversePatches);
                                     }
                                 } else {
-                                    undoList.push({
-                                        patches: filteredPatches,
-                                        inversePatches: filteredInversePatches,
-                                        options,
-                                        gesture: undoGesture,
-                                    });
+                                    undoList.push({ ...entry, gesture: undoGesture });
                                 }
                                 globalCache.current.redoList = [];
                             }
-                            emitOp(result, filteredPatches, options);
+                            onOp?.(patchToOp(result, filteredPatches, options));
                         }
                     }
                     return result;
                 });
             },
-            [emitOp],
+            [onOp],
         );
 
+        // The entry moves to the other stack now, in call order, so a peer batch called after it shifts it there.
         const handleUndo = useCallback(() => {
             if (context.allowEdit === false) return;
-            const history = globalCache.current.undoList.pop();
-            if (history) {
-                setContext((ctx_) => {
-                    // A peer deleted an image or chart this entry edits: immer throws on those writes, the rest apply.
-                    history.inversePatches = withoutDeletedFloatingEdits(ctx_, history.inversePatches);
-                    if (history.inversePatches.length === 0) return ctx_;
-                    if (history.options?.deleteSheetOp) {
-                        history.inversePatches[0].path[1] = ctx_.sheets.length;
-                        const order = history.options.deletedSheet?.value?.order as number;
-                        const sheetsRight = ctx_.sheets.filter(
-                            (sheet) =>
-                                (sheet?.order as number) >= (order as number) &&
-                                sheet.id !== history?.options?.deleteSheetOp?.id,
-                        );
-                        for (const sheet of sheetsRight) {
-                            history.inversePatches.push({
-                                op: 'replace',
-                                path: ['sheets', getSheetIndex(ctx_, sheet.id as string) as number, 'order'],
-                                value: (sheet?.order as number) + 1,
-                            } as Patch);
-                        }
-                    }
-                    const newContext = produce(applyPatches(ctx_, history.inversePatches), settleCurrentSheet);
-                    globalCache.current.redoList.push(history);
-                    const inversedOptions = inverseRowColOptions(history.options);
-                    if (inversedOptions?.insertRowColOp) {
-                        inversedOptions.restoreDeletedCells = true;
-                    }
-                    if (history.options?.addSheetOp) {
-                        const index = getSheetIndex(ctx_, history.options.addSheet!.id as string) as number;
-                        inversedOptions!.addSheet = {
-                            id: history.options.addSheet!.id as string,
-                            index: index as number,
-                            value: cloneDeep(ctx_.sheets[index]),
-                        };
-                        inversedOptions!.addSheet!.value!.celldata = dataToCelldata(
-                            inversedOptions!.addSheet!.value?.data as CellMatrix,
-                        );
-                        delete inversedOptions!.addSheet!.value!.data;
-                    }
-                    emitOp(newContext, history.inversePatches, inversedOptions, true);
-                    if (
-                        history.options?.deleteRowColOp ||
-                        history.options?.insertRowColOp ||
-                        history.options?.restoreDeletedCells
-                    )
-                        newContext.formulaCache.formulaCellInfoMap = null;
-                    else newContext.formulaCache.updateFormulaCache(newContext, history, 'undo');
-                    return newContext;
-                });
-            }
-        }, [emitOp, context.allowEdit]);
+            const { undoList, redoList } = globalCache.current;
+            const entry = undoList.pop();
+            if (!entry) return;
+            redoList.push(entry);
+            setContext((ctx_) => {
+                const { ctx, ops } = undoEntry(ctx_, entry);
+                if (ops.length > 0) onOp?.(ops);
+                return ctx;
+            });
+        }, [onOp, context.allowEdit]);
 
         const handleRedo = useCallback(() => {
             if (context.allowEdit === false) return;
-            const history = globalCache.current.redoList.pop();
-            if (history) {
-                setContext((ctx_) => {
-                    history.patches = withoutDeletedFloatingEdits(ctx_, history.patches);
-                    if (history.patches.length === 0) return ctx_;
-                    const newContext = produce(applyPatches(ctx_, history.patches), settleCurrentSheet);
-                    globalCache.current.undoList.push(history);
-                    emitOp(newContext, history.patches, history.options);
-
-                    if (
-                        history.options?.deleteRowColOp ||
-                        history.options?.insertRowColOp ||
-                        history.options?.restoreDeletedCells
-                    )
-                        newContext.formulaCache.formulaCellInfoMap = null;
-                    else newContext.formulaCache.updateFormulaCache(newContext, history, 'redo');
-                    return newContext;
-                });
-            }
-        }, [emitOp, context.allowEdit]);
+            const { undoList, redoList } = globalCache.current;
+            const entry = redoList.pop();
+            if (!entry) return;
+            undoList.push(entry);
+            setContext((ctx_) => {
+                const { ctx, ops } = redoEntry(ctx_, entry);
+                if (ops.length > 0) onOp?.(ops);
+                return ctx;
+            });
+        }, [onOp, context.allowEdit]);
 
         useEffect(() => {
             if (context.selections != null) {
@@ -460,7 +348,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             const index = getSheetIndex(draftCtx, newDatum.id!) as number;
                             const sheet = draftCtx.sheets[index];
                             if (!sheet.data || sheet.data.length === 0) {
-                                api.initSheetData(draftCtx, index, sheet);
+                                initSheetData(draftCtx, index, sheet);
                             } else {
                                 // The replay materializes `data` for any sheet an op touched, so
                                 // initSheetData is skipped here — but the config collections it
@@ -489,7 +377,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const sheet = draftCtx.sheets[sheetIdx];
 
                     if (!sheet.data || sheet.data.length === 0) {
-                        api.initSheetData(draftCtx, sheetIdx, sheet);
+                        initSheetData(draftCtx, sheetIdx, sheet);
                         viewStale = true;
                     } else {
                         normalizeSheetConfig(sheet);
@@ -792,16 +680,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // expose APIs
         useImperativeHandle(
             ref,
-            () =>
-                generateAPIs(
-                    context,
-                    setContextWithProduce,
-                    handleUndo,
-                    handleRedo,
-                    mergedSettings,
-                    globalCache.current,
-                ),
-            [context, setContextWithProduce, handleUndo, handleRedo, mergedSettings],
+            () => generateAPIs(context, setContextWithProduce, handleUndo, handleRedo, globalCache.current),
+            [context, setContextWithProduce, handleUndo, handleRedo],
         );
 
         const i = getSheetIndex(context, context.currentSheetId);

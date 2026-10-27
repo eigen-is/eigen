@@ -20,6 +20,7 @@ import {
     updateFloatingBox,
     withoutDeletedFloatingEdits,
 } from '../../../state/modules/floating';
+import { undoEntry } from '../../../state/modules/history';
 import {
     insertImage,
     removeImageByMediaName,
@@ -27,9 +28,10 @@ import {
     replaceMediaNameInHistory,
 } from '../../../state/modules/image';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
+import { deleteSheet } from '../../../state/modules/sheet';
 import type { Op, Sheet } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
-import { inverseRowColOptions, patchToOp } from '../../../state/utils/patch';
+import { patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
@@ -300,9 +302,7 @@ describe('row and column ops over floating objects', () => {
         const base = withGrid();
         const op = author(base, recipe, options);
         const peerEdit = author(receive(base, op.ops), peerEdits);
-        const undone = applyPatches(receive(op.next, peerEdit.ops), op.inverse);
-        const undoOptions = { ...inverseRowColOptions(options), restoreDeletedCells: 'deleteRowColOp' in options };
-        const undoOps = patchToOp(undone, op.inverse, undoOptions, true);
+        const { ctx: undone, ops: undoOps } = undoEntry(receive(op.next, peerEdit.ops), op.entry);
         const expected = objects(peerEdit.next.sheets);
         expect(Object.keys(expected[0].images!)).toHaveLength(1);
         expect(objects(undone.sheets)).toEqual(expected);
@@ -347,17 +347,13 @@ describe('a pending name in the undo stack', () => {
         expect(names(applyPatches(workbook(), entries.undoList[0].patches).sheets[2])).toEqual(['photo.png']);
     });
 
-    // Workbook records a sheet's delete as the sheet itself, in the inverse and in the options its undo ships.
+    // Workbook records a sheet's delete as the sheet itself, in the options its undo ships.
     test('undoing the delete of a sheet whose upload settled names its image', () => {
-        const deleted = structuredClone(workbook().sheets[1]);
-        const deletedSheet = { id: T, value: deleted };
-        const entries = history({
-            patches: [],
-            inversePatches: [{ op: 'add', path: ['sheets', 0], value: deleted }],
-            options: { deleteSheetOp: { id: T }, deletedSheet },
-        });
+        const deleted = author(workbook(), (ctx) => deleteSheet(ctx, T), { deleteSheetOp: { id: T } });
+        const entries = history(deleted.entry);
         replaceMediaNameInHistory(entries, 'pending:t1', 'photo.png');
-        expect(names(entries.undoList[0].inversePatches[0].value)).toEqual(['photo.png']);
-        expect(names(deletedSheet.value)).toEqual(['photo.png']);
+        const { ctx, ops } = undoEntry(deleted.next, entries.undoList[0]);
+        expect(names(ctx.sheets.find((sheet) => sheet.id === T))).toEqual(['photo.png']);
+        expect(names(join(workbook(), [deleted.ops, ops]).find((sheet) => sheet.id === T))).toEqual(['photo.png']);
     });
 });

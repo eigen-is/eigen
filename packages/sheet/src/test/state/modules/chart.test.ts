@@ -22,11 +22,10 @@ import {
     SHEET_DEFAULT_ROW_HEIGHT,
 } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
-import { applyPatches, enablePatches, produce } from 'immer';
+import { enablePatches, produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { mapChartRefs, replaySheetsOps } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
-import { initSheetData } from '../../../state/api/sheet';
 import { addSheet } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
 import {
@@ -37,10 +36,11 @@ import {
     setChartSpec,
     sheetChartSvg,
 } from '../../../state/modules/chart';
-import { updateFloatingBox, withoutDeletedFloatingEdits } from '../../../state/modules/floating';
+import { updateFloatingBox } from '../../../state/modules/floating';
+import { redoEntry, undoEntry } from '../../../state/modules/history';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
+import { initSheetData } from '../../../state/modules/sheet';
 import type { Op, Sheet } from '../../../state/types';
-import { inverseRowColOptions, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
@@ -201,14 +201,11 @@ describe("the Workbook's insertChart", () => {
         const setContext = (recipe: (draft: Context) => void) => {
             next = produce(next, recipe);
         };
-        // biome-ignore lint/suspicious/noExplicitAny: insertChart reads no settings
-        const settings = {} as any;
         const api = generateAPIs(
             base,
             setContext,
             () => {},
             () => {},
-            settings,
             { undoList: [], redoList: [] },
         );
         const id = api.insertChart(BOX, sampleChartSpec('bar'));
@@ -420,10 +417,7 @@ describe('charts converge over real ops', () => {
         expect(rangeData(deleted.next.sheets, 0, 'c1')?.series[0].values?.row).toEqual([2, 2]);
         expect(rangeData(deleted.next.sheets, 1, 't1')?.categories).toBeNull();
 
-        // Workbook's handleUndo: apply the inverse locally, ship it as an insert that restores cells.
-        const undone = applyPatches(deleted.next, deleted.inverse);
-        const undoOptions = inverseRowColOptions({ deleteRowColOp: del });
-        const undoOps = patchToOp(undone, deleted.inverse, { ...undoOptions, restoreDeletedCells: true }, true);
+        const { ctx: undone, ops: undoOps } = undoEntry(deleted.next, deleted.entry);
 
         const peer = receive(receive(base, deleted.ops), undoOps);
         const joiner = join(base, [deleted.ops, undoOps]);
@@ -437,13 +431,8 @@ describe('charts converge over real ops', () => {
         const del = { type: 'row', start: 3, end: 6, id: S } as const;
         const deleted = author(base, (ctx) => deleteRowCol(ctx, del), { deleteRowColOp: del });
         const afterPeer = receive(deleted.next, peerEdit);
-        const inverse = withoutDeletedFloatingEdits(afterPeer, deleted.inverse);
-        const undone = applyPatches(afterPeer, inverse);
-        const undoOptions = { ...inverseRowColOptions({ deleteRowColOp: del }), restoreDeletedCells: true };
-        const undoOps = patchToOp(undone, inverse, undoOptions, true);
-        const patches = withoutDeletedFloatingEdits(undone, deleted.patches);
-        const redone = applyPatches(undone, patches);
-        const redoOps = patchToOp(redone, patches, { deleteRowColOp: del });
+        const { ctx: undone, ops: undoOps } = undoEntry(afterPeer, deleted.entry);
+        const { ctx: redone, ops: redoOps } = redoEntry(undone, deleted.entry);
         const peerUndone = receive(receive(receive(base, deleted.ops), peerEdit), undoOps);
         return {
             undo: {
@@ -502,12 +491,9 @@ describe('charts converge over real ops', () => {
         base.sheets[1].data![9][3] = { f: '=SUM(S!B3:B6)', v: 0, m: '0' };
         const del = { type: 'row', start: 3, end: 6, id: S } as const;
         const deleted = author(base, (ctx) => deleteRowCol(ctx, del), { deleteRowColOp: del });
-        const undone = applyPatches(deleted.next, deleted.inverse);
-        const undoOptions = { ...inverseRowColOptions({ deleteRowColOp: del }), restoreDeletedCells: true };
-        const undoOps = patchToOp(undone, deleted.inverse, undoOptions, true);
+        const { ctx: undone, ops: undoOps } = undoEntry(deleted.next, deleted.entry);
         const peerMove: Op[] = [{ op: 'replace', id: T, path: ['charts', 't1', 'x'], value: 99 }];
-        const redone = applyPatches(receive(undone, peerMove), deleted.patches);
-        const redoOps = patchToOp(redone, deleted.patches, { deleteRowColOp: del });
+        const { ctx: redone, ops: redoOps } = redoEntry(receive(undone, peerMove), deleted.entry);
         const peer = receive(receive(receive(receive(base, deleted.ops), undoOps), peerMove), redoOps);
         const joiner = join(base, [deleted.ops, undoOps, peerMove, redoOps]);
         expect(charts(peer.sheets)).toEqual(charts(redone.sheets));
@@ -521,8 +507,7 @@ describe('charts converge over real ops', () => {
         const op = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: S } as const;
         const insert = author(base, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
         expect(rangeData(insert.next.sheets, 1, 't1')?.series[0].values?.row).toEqual([2, 1048575]);
-        const undone = applyPatches(insert.next, insert.inverse);
-        const undoOps = patchToOp(undone, insert.inverse, inverseRowColOptions({ insertRowColOp: op }), true);
+        const { ctx: undone, ops: undoOps } = undoEntry(insert.next, insert.entry);
         const peer = receive(receive(base, insert.ops), undoOps);
         const joiner = join(base, [insert.ops, undoOps]);
         expect(charts(undone.sheets)).toEqual(charts(base.sheets));
@@ -644,13 +629,8 @@ describe('two peers editing one chart keep both edits', () => {
                 const op = author(base, rowOp.run, rowOp.options);
                 const peer = author(base, (ctx) => setChartSpec(ctx, 'c1', [...edit.change]));
                 const afterPeer = receive(op.next, peer.ops);
-                const inverse = withoutDeletedFloatingEdits(afterPeer, op.inverse);
-                const undone = applyPatches(afterPeer, inverse);
-                const undoOptions = { ...inverseRowColOptions(rowOp.options), restoreDeletedCells: true };
-                const undoOps = patchToOp(undone, inverse, undoOptions, true);
-                const patches = withoutDeletedFloatingEdits(undone, op.patches);
-                const redone = applyPatches(undone, patches);
-                const redoOps = patchToOp(redone, patches, rowOp.options);
+                const { ctx: undone, ops: undoOps } = undoEntry(afterPeer, op.entry);
+                const { ctx: redone, ops: redoOps } = redoEntry(undone, op.entry);
                 const peerUndone = receive(receive(peer.next, op.ops), undoOps);
                 const joinUndone = join(base, [peer.ops, op.ops, undoOps]);
                 expect(spec(undone.sheets)).toMatchObject(edit.kept);

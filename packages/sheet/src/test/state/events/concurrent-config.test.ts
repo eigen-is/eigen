@@ -12,9 +12,9 @@
 
 import { describe, expect, test } from 'bun:test';
 import { produce } from 'immer';
-import { initSheetData } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { mergeCells } from '../../../state/modules/merge';
+import { initSheetData } from '../../../state/modules/sheet';
 import { emitOps, receiveOps, syncablePaths } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 import { mouseUpAt, withGridGeometry } from '../factories/grid-dom';

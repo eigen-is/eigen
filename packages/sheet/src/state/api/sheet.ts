@@ -1,44 +1,23 @@
+// The sheet calls of the Workbook's imperative API: hiding, showing and copying a sheet, and computing or seeding its
+// formulas. A host reaches them through the Workbook's ref, and the menus call some of them inside an edit's recipe.
+
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { cloneDeep } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import { mapChartRefs } from '../../engine/chart-data';
-import { normalizeSheetConfig } from '../../engine/sheet-config';
 import { copySheetName } from '../../engine/sheet-name';
-import type { CellMatrix } from '../../engine/types';
 import { api, createContextResolver, execfunction, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';
 import { leaveCurrentSheet } from '../modules';
-import type { FormulaCell, Sheet, SingleRange } from '../types';
+import type { FormulaCell, SingleRange } from '../types';
 import { getSheetIndex } from '../utils';
-import { celldataToData, dataToCelldata, getSheet } from './common';
+import { dataToCelldata, getSheet } from './common';
 
 export function getAllSheets(ctx: Context) {
     return ctx.sheets;
 }
 
 export { getSheet };
-
-export function initSheetData(draftCtx: Context, index: number, newData: Sheet): CellMatrix {
-    const { celldata, row, column } = newData;
-    const expandedData = celldataToData(
-        celldata ?? [],
-        row != null && row > 0 ? row : draftCtx.defaultrowNum,
-        column != null && column > 0 ? column : draftCtx.defaultcolumnNum,
-    );
-    if (draftCtx.sheets[index] == null) {
-        newData.data = expandedData;
-        delete newData.celldata;
-        draftCtx.sheets.push(newData);
-    } else {
-        draftCtx.sheets[index].data = expandedData;
-        delete draftCtx.sheets[index].celldata;
-        if (newData.config) {
-            draftCtx.sheets[index].config = newData.config;
-        }
-    }
-    normalizeSheetConfig(draftCtx.sheets[index]);
-    return expandedData;
-}
 
 export function hideSheet(ctx: Context, sheetId: string) {
     if (ctx.allowEdit === false) return;

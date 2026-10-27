@@ -71,9 +71,10 @@ test('undoing a move of a chart a peer deleted drops the entry and sends nothing
     await step((w) => w.undo());
     expect(charts()).toEqual({});
     expect(sent.length).toBe(before);
-    // The next entry is the insert's own, whose undo still applies.
+    // The next entry is the insert's own. Its chart is gone already, so it sends nothing either.
     await step((w) => w.undo());
-    expect(sent.at(-1)).toEqual(peerDeletes(id));
+    expect(charts()).toEqual({});
+    expect(sent.length).toBe(before);
 });
 
 test('redoing a move of a chart a peer deleted drops the entry', async () => {

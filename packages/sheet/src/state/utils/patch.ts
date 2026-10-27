@@ -1,18 +1,16 @@
+// Converts between the editor's immer patches and the ops it sends to peers. patchToOp names each sheet by id and
+// swaps the matrices a row or column op rewrote for the op itself, with the sheet's other fields whole. addSheetOps and
+// deleteSheetOps build a sheet's add and delete batches; filterPatch keeps what belongs on the wire; opToPatch turns
+// a peer's ops back into patches on this client's sheet indices.
+
 import type { MergeCell, SheetConfig } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
-import { every, isEqual, isNil, isNumber, partition } from 'es-toolkit/compat';
+import { isEqual, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { Op, Sheet } from '../types';
 import { getSheetIndex } from '.';
-
-export type ChangedSheet = {
-    index?: number;
-    id?: string;
-    value?: Sheet;
-    order?: number;
-};
 
 export type PatchOptions = {
     insertRowColOp?: {
@@ -28,14 +26,12 @@ export type PatchOptions = {
         end: number;
         id: string;
     };
-    restoreDeletedCells?: boolean;
     addSheetOp?: boolean;
     deleteSheetOp?: {
         id: string;
     };
-    addSheet?: ChangedSheet;
-    deletedSheet?: ChangedSheet;
-    id?: string;
+    // The deleted sheet as it stood, with its cells stored, which recordEntry keeps for the delete's undo.
+    deletedSheet?: Sheet;
 };
 
 const addtionalMergeOps = (ops: Op[], id: string) => {
@@ -189,7 +185,15 @@ export function filterPatch(patches: Patch[]) {
     return patches.filter((p) => p.path[0] === 'sheets' && !PER_CLIENT_SHEET_FIELDS.has(p.path[2]));
 }
 
-export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions, undo: boolean = false): Op[] {
+// The batch an edit sends. A row or column op ships its marker instead of the matrices it rewrote; an undo or redo of
+// one passes `undo` and the repair cells history computes, which land before the merge stamps that need them.
+export function patchToOp(
+    ctx: Context,
+    patches: Patch[],
+    options?: PatchOptions,
+    undo: boolean = false,
+    repair: Op[] = [],
+): Op[] {
     let ops = patches.map((p) => {
         const op: Op = {
             op: p.op,
@@ -207,17 +211,15 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
         }
         return op;
     });
-    every(ops, (p) => {
-        if (p.op === 'replace' && !isNil(p.value?.hl) && p.path.length === 3 && p.path![0] === 'data') {
-            const index = getSheetIndex(ctx, p.id!) as number;
-            ops.push({
-                id: p!.id!,
-                op: 'replace',
-                path: ['hyperlink', `${p.path[1]}_${p.path![2]}`],
-                value: ctx.sheets[index].hyperlink![`${p.value!.hl!.r!}_${p.value!.hl.c!}`],
-            });
-        }
-    });
+    // A linked cell written whole ships its link. The link sits under the cell's own key: the cell's `hl` keeps the
+    // place the link was made at, which a row or column op does not move.
+    for (const op of [...ops]) {
+        const [field, r, c] = op.path;
+        if (op.op !== 'replace' || op.value?.hl == null || op.path.length !== 3 || field !== 'data') continue;
+        const key = `${r}_${c}`;
+        const sheet = ctx.sheets.find((s) => s.id === op.id);
+        ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: sheet?.hyperlink?.[key] });
+    }
     if (options?.insertRowColOp) {
         ops = ops.filter(writesOneFloatingObject);
         ops.push({
@@ -226,46 +228,12 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
             path: [],
             value: options.insertRowColOp,
         });
-        ops = [...ops, ...sheetMetadataOps(ctx, options.insertRowColOp.id, !!options.restoreDeletedCells)];
-
-        // The cell-content ops below must precede the merge mc ops at the end of
-        // this branch: the engine fills inserted rows with nulls, and a
-        // ['data', r, c, 'mc'] patch can't be applied to a cell that doesn't
-        // exist yet on the replay side.
-        if (options?.restoreDeletedCells) {
-            // undoing deleted row/col, find out cells to restore
-            const restoreCellsOps: Op[] = [];
-            const flowdata = getFlowdata(ctx);
-            if (flowdata) {
-                const rowlen = flowdata.length;
-                const collen = flowdata[0].length;
-                for (let i = 0; i < rowlen; i += 1) {
-                    for (let j = 0; j < collen; j += 1) {
-                        const cell = flowdata[i][j];
-                        if (!cell) continue;
-                        if (
-                            (options.insertRowColOp.type === 'row' &&
-                                i >= options.insertRowColOp.index &&
-                                i < options.insertRowColOp.index + options.insertRowColOp.count) ||
-                            (options.insertRowColOp.type === 'column' &&
-                                j >= options.insertRowColOp.index &&
-                                j < options.insertRowColOp.index + options.insertRowColOp.count)
-                        ) {
-                            restoreCellsOps.push({
-                                op: 'replace',
-                                path: ['data', i, j],
-                                id: ctx.currentSheetId,
-                                value: cell,
-                            });
-                        }
-                    }
-                }
-            }
-            ops = [...ops, ...restoreCellsOps];
-        } else {
-            ops = [...ops, ...additionalCellOps(ctx, options.insertRowColOp)];
-        }
-        ops = [...ops, ...addtionalMergeOps(ops, options.insertRowColOp.id)];
+        // An insert that undoes a delete brings back the deleted rows' cells through `repair`.
+        ops = [...ops, ...sheetMetadataOps(ctx, options.insertRowColOp.id, undo)];
+        if (!undo) ops = [...ops, ...additionalCellOps(ctx, options.insertRowColOp)];
+        // The engine fills inserted rows with nulls, and a ['data', r, c, 'mc'] patch can't be applied to a cell that
+        // doesn't exist yet, so the cells go before the merge stamps.
+        ops = [...ops, ...repair, ...addtionalMergeOps(ops, options.insertRowColOp.id)];
     } else if (options?.deleteRowColOp) {
         ops = ops.filter(writesOneFloatingObject);
         ops.push({
@@ -274,98 +242,36 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
             path: [],
             value: options.deleteRowColOp,
         });
-        ops = [...ops, ...sheetMetadataOps(ctx, options.deleteRowColOp.id, false)];
+        ops = [...ops, ...sheetMetadataOps(ctx, options.deleteRowColOp.id, false), ...repair];
         ops = [...ops, ...addtionalMergeOps(ops, options.deleteRowColOp.id)];
     } else if (options?.addSheetOp) {
-        const [addSheetOps, otherOps] = partition(ops, (op) => op.path.length === 0 && op.op === 'add');
-        options.id = options.addSheet!.id as string;
-        if (undo) {
-            // undo add sheet
-            const index = getSheetIndex(ctx, options.addSheet!.id as string) as number;
-            const order = options.addSheet?.value?.order;
-            ops = otherOps;
-            ops.push({
-                op: 'deleteSheet',
-                id: options.addSheet?.id,
-                path: [],
-                value: options.addSheet,
-            });
-            if (index !== ctx.sheets.length) {
-                const sheetsRight = ctx.sheets.filter((sheet) => (sheet?.order as number) >= (order as number));
-                for (const sheet of sheetsRight) {
-                    ops.push({
-                        id: sheet.id,
-                        op: 'replace',
-                        path: ['order'],
-                        value: (sheet?.order as number) - 1,
-                    });
-                }
-            }
-        } else {
-            // normal add sheet
-            ops = otherOps;
-            ops.push({
-                op: 'addSheet',
-                id: options.addSheet?.id,
-                path: [],
-                value: addSheetOps[0]?.value,
-            });
-        }
-    } else if (options?.deleteSheetOp) {
-        options.id = options.deleteSheetOp!.id as string;
-        if (undo) {
-            // undo delete sheet
-            ops = [
-                {
-                    op: 'addSheet',
-                    id: options.deleteSheetOp.id,
-                    path: [],
-                    value: options.deletedSheet?.value,
-                },
-                {
-                    id: options.deleteSheetOp.id,
-                    op: 'replace',
-                    path: ['name'],
-                    value: options.deletedSheet?.value?.name,
-                },
-            ];
-            const order = options.deletedSheet?.value?.order as number;
-            const sheetsRight = ctx.sheets.filter(
-                (sheet) => (sheet?.order as number) >= (order as number) && sheet.id !== options.deleteSheetOp?.id,
-            );
-            for (const sheet of sheetsRight) {
-                ops.push({
-                    id: sheet.id,
-                    op: 'replace',
-                    path: ['order'],
-                    value: sheet?.order as number,
-                });
-            }
-        } else {
-            // normal delete sheet
-            ops = [
-                {
-                    op: 'deleteSheet',
-                    id: options.deleteSheetOp.id,
-                    path: [],
-                    value: options.deletedSheet,
-                },
-            ];
-            const order = options.deletedSheet?.value?.order as number;
-            if (options.deletedSheet?.order !== ctx.sheets.length) {
-                const sheetsRight = ctx.sheets.filter((sheet) => (sheet?.order as number) >= (order as number));
-                for (const sheet of sheetsRight) {
-                    ops.push({
-                        id: sheet.id,
-                        op: 'replace',
-                        path: ['order'],
-                        value: sheet?.order as number,
-                    });
-                }
-            }
-        }
+        // A copy moves the sheets after it, and the batch carries their orders.
+        const [[added], rest] = partition(ops, (op) => op.op === 'add' && op.path.length === 0);
+        ops = rest.filter((op) => op.path[0] !== 'order');
+        if (added) ops.push(...addSheetOps(added.value, ctx.sheets));
+    } else if (options?.deletedSheet) {
+        ops = deleteSheetOps(options.deletedSheet, ctx.sheets);
     }
     return ops;
+}
+
+// A sheet add as a batch: the sheet, then the order of each sheet at or past its place, as `sheets` hold them once it
+// was added. A peer's addSheet moves those orders itself, but a joiner's replay only appends the sheet. The edit, its
+// undo and its redo all send this batch.
+export function addSheetOps(added: Sheet, sheets: Sheet[]): Op[] {
+    return [{ op: 'addSheet', id: added.id, path: [], value: added }, ...orderOps(added, sheets)];
+}
+
+// A sheet delete as a batch, for the same reason with the orders `sheets` hold once it was deleted.
+export function deleteSheetOps(deleted: Sheet, sheets: Sheet[]): Op[] {
+    return [{ op: 'deleteSheet', id: deleted.id, path: [], value: { id: deleted.id } }, ...orderOps(deleted, sheets)];
+}
+
+function orderOps(changed: Sheet, sheets: Sheet[]): Op[] {
+    const from = changed.order ?? 0;
+    return sheets
+        .filter((sheet) => sheet.id !== changed.id && (sheet.order ?? 0) >= from)
+        .map((sheet): Op => ({ op: 'replace', id: sheet.id, path: ['order'], value: sheet.order }));
 }
 
 export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {

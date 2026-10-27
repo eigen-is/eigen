@@ -1,5 +1,6 @@
 export * from '../../engine/format';
 export { functionCopy } from '../../engine/formula-shift';
+export * from './apply-ops';
 export * from './border';
 export * from './cell';
 export * from './cell-glyph';
@@ -21,6 +22,8 @@ export * from './formula-exec';
 export * from './formula-range';
 export * from './freeze';
 export * from './function-list';
+export * from './history';
+export * from './history-shift';
 export * from './hyperlink';
 export * from './image';
 export * from './inline-string';

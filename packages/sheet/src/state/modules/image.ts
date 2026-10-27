@@ -1,3 +1,7 @@
+// Images on a sheet in the editor: inserting one at the selected cell, and swapping a pending upload's name for the real
+// one once the upload settles, on every sheet and in the undo stacks. The toolbar and the paste and upload flows call
+// these inside an edit's recipe.
+
 import { CHART_MAX_SIDE } from '@workspace/lib/charts';
 import type { SheetImage } from '@workspace/lib/sheets';
 import { nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
@@ -48,8 +52,7 @@ export function replaceMediaNameInHistory(
     for (const entry of [...history.undoList, ...history.redoList]) {
         entry.patches = entry.patches.map(rename);
         entry.inversePatches = entry.inversePatches.map(rename);
-        const deleted = entry.options?.deletedSheet;
-        if (deleted?.value) deleted.value = sheet(deleted.value);
+        if (entry.options?.deletedSheet) entry.options.deletedSheet = sheet(entry.options.deletedSheet);
     }
 }
 

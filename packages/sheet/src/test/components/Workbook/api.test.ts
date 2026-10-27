@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'bun:test';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
+import { dataToCelldata } from '../../../engine/celldata';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
@@ -41,8 +42,6 @@ function makeCtx(b1: Cell | null, currentSheetId = 'id_1'): Context {
 
 function applyPeerOps(ctx: Context, ops: Op[]): Context {
     let next = ctx;
-    // biome-ignore lint/suspicious/noExplicitAny: applyOp reads settings only on the addSheet branch
-    const settings = {} as any;
     const setContext = (recipe: (draft: Context) => void) => {
         next = produce(next, recipe);
     };
@@ -51,7 +50,6 @@ function applyPeerOps(ctx: Context, ops: Op[]): Context {
         setContext,
         () => {},
         () => {},
-        settings,
         { undoList: [], redoList: [] },
     ).applyOp(ops);
     return next;
@@ -175,5 +173,104 @@ describe('applyOp and a batch that fails halfway', () => {
         const [joiner] = join(ctx, [ops]);
         expect(peer.sheets[0].data).toEqual(ctx.sheets[0].data);
         expect(joiner.data).toEqual(ctx.sheets[0].data);
+    });
+});
+
+// A live client applies a batch to the same sheets a joiner's replay builds from it.
+describe('applyOp and a joiner agree on the batch shapes that once disagreed', () => {
+    const summary = (sheets: { id?: string; name: string; order?: number; color?: string }[]) =>
+        sheets.map(({ id, name, order, color }) => ({ id, name, order, color }));
+    const added = { name: 'third', id: 'id_3', order: 2, row: 4, column: 4, celldata: [] };
+
+    it('applies an op on a sheet the same batch adds', () => {
+        const ops: Op[] = [
+            { op: 'addSheet', id: 'id_3', path: [], value: structuredClone(added) },
+            { op: 'replace', id: 'id_3', path: ['color'], value: '#ff0000' },
+        ];
+        const ctx = makeCtx(null);
+        expect(summary(join(ctx, [ops]))[2].color).toBe('#ff0000');
+        expect(summary(applyPeerOps(ctx, ops).sheets)).toEqual(summary(join(ctx, [ops])));
+    });
+
+    it('keeps the order ops of a batch that deletes a sheet', () => {
+        const ops: Op[] = [
+            { op: 'deleteSheet', id: 'id_1', path: [], value: { id: 'id_1' } },
+            { op: 'replace', id: 'id_2', path: ['order'], value: 5 },
+        ];
+        const ctx = makeCtx(null);
+        expect(summary(applyPeerOps(ctx, ops).sheets)).toEqual(summary(join(ctx, [ops])));
+    });
+
+    it('leaves the formula map alone when a batch fails after adding a sheet with formulas', () => {
+        const withFormula = {
+            ...added,
+            celldata: [
+                { r: 0, c: 0, v: { v: 5, m: '5' } },
+                { r: 0, c: 1, v: { f: '=A1*2', v: 10, m: '10' } },
+            ],
+        };
+        const ops: Op[] = [
+            { op: 'addSheet', id: 'id_3', path: [], value: withFormula },
+            { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 },
+        ];
+        const ctx = makeCtx(null);
+        const before = { ...warmFormulaCellInfoMap(ctx) };
+        const next = applyPeerOps(ctx, ops);
+        expect(summary(next.sheets)).toEqual(summary(join(ctx, [ops])));
+        expect({ ...next.formulaCache.formulaCellInfoMap }).toEqual(before);
+    });
+
+    it('gives a sheet that has only its stored cells a matrix before a row or cell op on it', () => {
+        const ops: Op[] = [
+            {
+                op: 'insertRowCol',
+                id: 'id_2',
+                path: [],
+                value: { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_2' },
+            },
+            { op: 'replace', id: 'id_2', path: ['data', 0, 0], value: { v: 9, m: '9' } },
+        ];
+        const ctx = produce(makeCtx(null), (draft: Context) => {
+            draft.sheets[1].celldata = [{ r: 0, c: 1, v: { v: 7, m: '7' } }];
+            delete draft.sheets[1].data;
+        });
+        const [, joiner] = join(ctx, [ops]);
+        expect(dataToCelldata(joiner.data)).toEqual([
+            { r: 0, c: 0, v: { v: 9, m: '9' } },
+            { r: 1, c: 1, v: { v: 7, m: '7' } },
+        ]);
+        expect(dataToCelldata(applyPeerOps(ctx, ops).sheets[1].data)).toEqual(dataToCelldata(joiner.data));
+    });
+
+    it("inserts on the op's own sheet, as the replay does, whatever sheet is current", () => {
+        const ops: Op[] = [
+            {
+                op: 'insertRowCol',
+                id: 'id_2',
+                path: [],
+                value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+            },
+        ];
+        const ctx = makeCtx({ v: 1, m: '1' });
+        const next = applyPeerOps(ctx, ops);
+        expect(next.sheets.map((s) => s.data?.length)).toEqual(join(ctx, [ops]).map((s) => s.data?.length));
+    });
+
+    it('skips an insert into a read-only row and applies the rest, as the replay does', () => {
+        const ops: Op[] = [
+            {
+                op: 'insertRowCol',
+                id: 'id_1',
+                path: [],
+                value: { type: 'row', index: 1, count: 1, direction: 'lefttop' },
+            },
+            { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 9, m: '9' } },
+        ];
+        const ctx = produce(makeCtx(null), (draft: Context) => {
+            draft.sheets[0].config = { rowReadOnly: { 1: 1 } };
+        });
+        const [joiner] = join(ctx, [ops]);
+        expect(joiner.data?.[0][0]?.v).toBe(9);
+        expect(applyPeerOps(ctx, ops).sheets[0].data).toEqual(joiner.data);
     });
 });
