@@ -1,9 +1,11 @@
+// The Admin app's root route. It runs the setup wizard until the server is configured, then draws the
+// app shell with the admin sidebar around the page the URL names.
+
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { useAddTeamMember, useIsOrgOwner, useSetupStatus, useTeams } from '@workspace/lib/admin';
+import { useIsOrgOwner, useSetupStatus } from '@workspace/lib/admin';
 import type { RouterAppContext } from '@workspace/lib/auth';
 import { useAuth } from '@workspace/lib/auth';
 import { SETUP_LINK_PARAM } from '@workspace/lib/constants/setup';
-import { usePublicConfig } from '@workspace/lib/public';
 import { useServerSettings } from '@workspace/lib/settings';
 import { AppShell, ErrorState, LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -53,19 +55,9 @@ function AdminApp() {
 }
 
 function AuthenticatedAdmin() {
-    const { data: config } = usePublicConfig();
-    const { data: teams = [] } = useTeams(config?.orgId);
-    const addMember = useAddTeamMember();
-
     const { data: serverSettings } = useServerSettings();
     const isOwner = useIsOrgOwner();
     const waitlistEnabled = serverSettings?.onboarding?.waitlist?.enabled ?? false;
-
-    const handleAddMembersToTeam = async (memberIds: string[], teamId: string) => {
-        for (const userId of memberIds) {
-            await addMember.mutateAsync({ teamId, userId });
-        }
-    };
 
     return (
         <AppShell
@@ -73,13 +65,7 @@ function AuthenticatedAdmin() {
             rootRoute={Route}
             sidebarMode="collapsible"
             sidebar={({ condensed }) => (
-                <AdminSidebar
-                    condensed={condensed}
-                    teams={teams}
-                    isOwner={isOwner}
-                    waitlistEnabled={waitlistEnabled}
-                    onAddMembersToTeam={handleAddMembersToTeam}
-                />
+                <AdminSidebar condensed={condensed} isOwner={isOwner} waitlistEnabled={waitlistEnabled} />
             )}
         >
             <Outlet />

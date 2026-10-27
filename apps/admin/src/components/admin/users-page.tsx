@@ -1,9 +1,12 @@
+// The users page and the guests page of the Admin app share this component. It lists the accounts,
+// and the account the URL's userId names opens its detail beside the list. The routes fetch the
+// rows; this page owns the search text and the navigation between list and detail.
+
 import { useNavigate } from '@tanstack/react-router';
 import { usePublicConfig } from '@workspace/lib/public';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
-import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui';
-import { cn } from '@workspace/ui/lib/utils';
+import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui';
 import { useState } from 'react';
 import { UserDetail, UserDetailToolbar } from './user-detail';
 import { AdminUsersTable, AdminUsersToolbar } from './users-table';
@@ -16,7 +19,6 @@ type AdminUsersPageProps = {
     guests?: boolean;
 };
 
-// The users page and the guests page: the list, and the selected account's detail beside it.
 export function AdminUsersPage({ users, isLoading, userId, usage, guests }: AdminUsersPageProps) {
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
@@ -42,38 +44,35 @@ export function AdminUsersPage({ users, isLoading, userId, usage, guests }: Admi
         />
     );
 
-    const detailToolbar = selected ? (
-        <UserDetailToolbar user={selected} onClose={handleBackToList} guest={guests} />
-    ) : null;
+    const detailToolbar = selected ? <UserDetailToolbar user={selected} guest={guests} /> : null;
 
     return (
-        <ColumnLayout mobileColumn={userId ? 'detail' : 'list'}>
-            <Column id="list" width={userId ? '350px' : 'flex'} onBack="sidebar" toolbar={listToolbar}>
-                <div className={cn('flex h-full flex-col overflow-y-auto', userId && 'border-r')}>
-                    <AdminUsersTable
-                        users={users}
-                        usage={usage}
-                        searchQuery={searchQuery}
-                        activeUserId={userId}
-                        onRowClick={(id) => navigate({ to, search: { userId: id } })}
-                        guests={guests}
+        <ListDetailLayout
+            listToolbar={listToolbar}
+            detail={
+                userId &&
+                (selected ? (
+                    <UserDetail
+                        user={selected}
+                        usage={usage?.[selected.id]}
+                        organizationId={config?.orgId}
+                        guest={guests}
                     />
-                </div>
-            </Column>
-            {userId && (
-                <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
-                    {selected ? (
-                        <UserDetail
-                            user={selected}
-                            usage={usage?.[selected.id]}
-                            organizationId={config?.orgId}
-                            guest={guests}
-                        />
-                    ) : (
-                        <EmptyState message={guests ? 'Guest not found' : 'User not found'} />
-                    )}
-                </Column>
-            )}
-        </ColumnLayout>
+                ) : (
+                    <EmptyState message={guests ? 'Guest not found' : 'User not found'} />
+                ))
+            }
+            detailToolbar={detailToolbar}
+            onBackToList={handleBackToList}
+        >
+            <AdminUsersTable
+                users={users}
+                usage={usage}
+                searchQuery={searchQuery}
+                activeUserId={userId}
+                onRowClick={(id) => navigate({ to, search: { userId: id } })}
+                guests={guests}
+            />
+        </ListDetailLayout>
     );
 }
