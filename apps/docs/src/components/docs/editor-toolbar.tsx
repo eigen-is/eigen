@@ -1,3 +1,8 @@
+// The docs editor's toolbar: the menus on the left, the formatting icon row in the middle and the share cluster on the
+// right. It acts on the editor the caret is in, the body's, a band's or the open note's, and owns the dialogs its menus
+// open, such as Page setup and Word count. The editor hands it what it shares with the page, such as the panels' and
+// the outline's toggles.
+
 import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import type { BandEdge, PageSetup } from '@workspace/lib/docs/eigendoc';
@@ -66,6 +71,7 @@ import { PageSetupDialog } from './page-setup-dialog';
 import { RestartNumberingDialog } from './restart-numbering-dialog';
 import { StylePicker } from './style-picker';
 import { ToolsMenu, WORD_COUNT_HOTKEY, WordCountItem } from './tools-menu';
+import { ShowOutlineItem, ViewMenu } from './view-menu';
 import { WordCountDialog } from './word-count-dialog';
 
 // A closing menu hands focus to the editor the caret is in, whether a pick, Esc or a press outside closed it, rather than
@@ -115,6 +121,8 @@ type EditorToolbarProps = {
     // Puts the caret in a band, and writes a page-number preset there; a writer's on a desktop or a tablet only.
     onEnterBand?: (edge: BandEdge) => void;
     onPageNumbers?: (preset: PageNumberPreset) => void;
+    outlineShown: boolean;
+    onToggleOutline: () => void;
 };
 
 export const EditorToolbar = ({
@@ -145,6 +153,8 @@ export const EditorToolbar = ({
     inNote,
     onEnterBand,
     onPageNumbers,
+    outlineShown,
+    onToggleOutline,
 }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -161,11 +171,12 @@ export const EditorToolbar = ({
     const { exportPath, isExporting } = useDocumentExport();
     // The icon row folds from its right end, as Google's does, so its order is its priority order; all it
     // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Normal text") its three cuts
-    // sit centered beside the five menus from 1086, 1268 and 1483px.
-    const showsRow = useMediaQuery('(min-width: 1090px)');
-    const showsMiddle = useMediaQuery('(min-width: 1270px)');
-    const showsAll = useMediaQuery('(min-width: 1490px)');
-    // A phone has no room for a fifth menu beside the offline badge, so Tools folds into the kebab.
+    // sat centered beside five menus from 1086, 1268 and 1483px. View's trigger, about 58px wide, moves each cut
+    // by twice its width, as the row stays centered in the bar.
+    const showsRow = useMediaQuery('(min-width: 1210px)');
+    const showsMiddle = useMediaQuery('(min-width: 1390px)');
+    const showsAll = useMediaQuery('(min-width: 1610px)');
+    // A phone has no room for more than four menus beside the offline badge, so View and Tools fold into the kebab.
     const isMobile = useIsMobile();
 
     // Document-level: a viewer's editor is not editable, so an editor keymap would never see the key.
@@ -302,6 +313,14 @@ export const EditorToolbar = ({
                                 </>
                             }
                         />
+
+                        {!isMobile && (
+                            <ViewMenu
+                                keepEditorFocus={keepActiveEditorFocus}
+                                outlineShown={outlineShown}
+                                onToggleOutline={onToggleOutline}
+                            />
+                        )}
 
                         {canWrite && (
                             <>
@@ -541,7 +560,12 @@ export const EditorToolbar = ({
                         activityPanelOpen={activityPanelOpen}
                         assignedCommentCount={assignedCommentCount}
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
-                        mobileMenuItems={<WordCountItem onClick={openWordCount} />}
+                        mobileMenuItems={
+                            <>
+                                <ShowOutlineItem onClick={onToggleOutline} />
+                                <WordCountItem onClick={openWordCount} />
+                            </>
+                        }
                     />
                 }
             />

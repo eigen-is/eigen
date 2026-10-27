@@ -1,5 +1,5 @@
 // A writer always has the Format and Insert menus; the icon row beside them folds from its right end as the window narrows.
-// Tools reaches everyone, viewers included.
+// View and Tools reach everyone, viewers included.
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { collapseSeparators } from '@workspace/ui/test/menu-rows';
@@ -30,6 +30,7 @@ const editor = new Editor({
 const onReplaceImage = mock(() => {});
 const onEnterBand = mock((_band: unknown) => {});
 const onPageNumbers = mock((_preset: unknown) => {});
+const onToggleOutline = mock(() => {});
 
 async function render(
     width: number,
@@ -40,12 +41,14 @@ async function render(
         onInsertFootnote,
         inNote = false,
         sync = { offline: false, unsyncedEdits: false },
+        outlineShown = false,
     }: {
         active?: typeof editor;
         onInsertEquation?: () => void;
         onInsertFootnote?: () => void;
         inNote?: boolean;
         sync?: { offline: boolean; unsyncedEdits: boolean };
+        outlineShown?: boolean;
     } = {},
 ) {
     window.happyDOM.setViewport({ width, height: 1000 });
@@ -68,6 +71,8 @@ async function render(
         onReplaceImage,
         onEnterBand,
         onPageNumbers,
+        outlineShown,
+        onToggleOutline,
         path: drivePath({ name: 'Notes', mimeType: DRIVE_MIME_DOC }),
     });
     const router = createRouter({
@@ -128,26 +133,30 @@ const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', '
 const CLEAR_FORMATTING = `Clear formatting${formatForDisplay('Mod+\\')}`;
 const FULL_ROW = [...MIDDLE_ROW, 'Align', 'Bulleted list', 'Numbered list', 'Checklist', 'Clear formatting'];
 
-test.each([1920, 1300, 1000])('a writer gets the File, Edit, Format, Insert and Tools menus at %ipx', async (width) => {
-    await render(width, true);
-    expect(menus().slice(0, 5)).toEqual(['File', 'Edit', 'Format', 'Insert', 'Tools']);
-});
+test.each([1920, 1300, 1000])(
+    'a writer gets the File, Edit, View, Format, Insert and Tools menus at %ipx',
+    async (width) => {
+        await render(width, true);
+        expect(menus().slice(0, 6)).toEqual(['File', 'Edit', 'View', 'Format', 'Insert', 'Tools']);
+    },
+);
 
-// Five menus and the offline badge overflow a 360px phone, so Tools folds into the kebab there.
-test('a writer on a phone gets File, Edit, Format and Insert, and no Tools', async () => {
+// Six menus and the offline badge overflow a 360px phone, so View and Tools fold into the kebab there.
+test('a writer on a phone gets File, Edit, Format and Insert, and no View or Tools', async () => {
     await render(390, true);
     expect(menus().slice(0, 4)).toEqual(['File', 'Edit', 'Format', 'Insert']);
+    expect(menus()).not.toContain('View');
     expect(menus()).not.toContain('Tools');
 });
 
 test.each([
     [1920, FULL_ROW],
-    [1490, FULL_ROW],
-    [1489, MIDDLE_ROW],
-    [1270, MIDDLE_ROW],
-    [1269, SHORT_ROW],
-    [1090, SHORT_ROW],
-    [1089, []],
+    [1610, FULL_ROW],
+    [1609, MIDDLE_ROW],
+    [1390, MIDDLE_ROW],
+    [1389, SHORT_ROW],
+    [1210, SHORT_ROW],
+    [1209, []],
     [390, []],
 ])('at %ipx the icon row holds its first controls in priority order', async (width, row) => {
     await render(width, true);
@@ -1019,9 +1028,9 @@ test('List options › Restart numbering in the middle splits the list there, as
     expect([$from.parent.textContent, $from.parentOffset]).toEqual(['b', 1]);
 });
 
-test('a viewer gets File, Edit and Tools, but neither the Format and Insert menus nor the icon row', async () => {
+test('a viewer gets File, Edit, View and Tools, but neither the Format and Insert menus nor the icon row', async () => {
     await render(1920, false);
-    expect(menus().slice(0, 3)).toEqual(['File', 'Edit', 'Tools']);
+    expect(menus().slice(0, 4)).toEqual(['File', 'Edit', 'View', 'Tools']);
     expect(menus()).not.toContain('Format');
     expect(menus()).not.toContain('Insert');
     expect(iconRow()).toEqual([]);
@@ -1091,6 +1100,32 @@ test.each([true, false])("on a phone the kebab's Word count opens the dialog (wr
     );
     await act(async () => item?.click());
     expect(wordCountRows()[0]).toEqual(['Words', '4']);
+});
+
+// Google's View › Show outline, a row checked while the outline shows.
+test.each([
+    [true, false],
+    [false, true],
+])('View › Show outline toggles the outline, checked while it shows (writer %p, shown %p)', async (canWrite, shown) => {
+    onToggleOutline.mockClear();
+    await render(1920, canWrite, { outlineShown: shown });
+    await openMenu('View');
+    const item = document.querySelector<HTMLElement>('[role="menuitemcheckbox"]');
+    expect(item?.textContent?.trim()).toBe('Show outline');
+    expect(item?.getAttribute('aria-checked')).toBe(String(shown));
+    await act(async () => item?.click());
+    expect(onToggleOutline).toHaveBeenCalledTimes(1);
+});
+
+test.each([true, false])("on a phone the kebab's Show outline opens the outline (writer %p)", async (canWrite) => {
+    onToggleOutline.mockClear();
+    await render(390, canWrite);
+    await openMenu('More actions');
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (entry) => entry.textContent?.trim() === 'Show outline',
+    );
+    await act(async () => item?.click());
+    expect(onToggleOutline).toHaveBeenCalledTimes(1);
 });
 
 test('Mod+Shift+C opens the word count, for a viewer too', async () => {
