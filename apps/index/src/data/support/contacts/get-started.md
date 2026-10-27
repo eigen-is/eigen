@@ -7,7 +7,7 @@ tags: [contacts, getting-started, people, address-book]
 related: [contacts/add-a-contact, contacts/edit-or-delete, contacts/search-contacts]
 crossSections: [getting-started]
 order: 10
-updated: 2026-09-13
+updated: 2026-10-27
 ---
 
 Contacts is where you keep the people you work with. You can store names, email addresses, phone numbers, job titles, addresses, birthdays, and notes, and reach someone in Mail straight from their contact page. This page is a quick tour of what you can do.
@@ -24,7 +24,9 @@ One of the cards is you. Contacts keeps a card linked to your own Eigen account,
 
 ## View a contact
 
-Click any row in the list to open the contact's details on the right. The detail panel shows their **Contact Information** (email addresses and phone numbers), company and job title, birthday, **Addresses**, and **Notes**, depending on what has been filled in.
+The list fills the page until you pick someone. Click any row to open the contact's details on the right, beside a narrower list. On a phone, the details take the place of the list, and the back arrow returns to it. To go back to the full list on a computer, click **Close** (the **X**) in the toolbar above the details.
+
+The detail panel shows their **Contact Information** (email addresses and phone numbers), company and job title, birthday, **Addresses**, and **Notes**, depending on what has been filled in.
 
 If a contact has an email address, you can click it to open a new message to them in Mail.
 
