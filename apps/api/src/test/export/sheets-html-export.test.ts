@@ -107,7 +107,7 @@ describe('Sheets HTML export — class-based styles', () => {
         const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).not.toContain('style="');
         // The moved base td style lives in the stylesheet exactly once.
-        expect(out.css).toContain('td{overflow:hidden;white-space:nowrap;padding:1px 2px;line-height:0}');
+        expect(out.css).toContain('td{overflow:hidden;white-space:nowrap;padding:1px 2px}');
     });
 
     test('identical cell styles dedupe into one class referenced by every cell', () => {
@@ -400,13 +400,14 @@ describe('Sheets HTML export — wrap text', () => {
     });
 
     // A table row grows to fit its content, so a cell of 6,000 lines would print 3,000 pages charged as one.
-    test('a cell is clipped to its rows, as the editor clips it, so its text grows no row', () => {
+    test('a cell whose text can pass its rows is clipped to them, as the editor clips it, so its text grows no row', () => {
         const text = 'one\ntwo\nthree';
         const sheet: Sheet = {
             ...makeSheet([
                 { r: 0, c: 0, v: { v: text, m: text, tb: '2' } },
-                { r: 1, c: 0, v: { v: 'merged', m: 'merged', mc: { r: 1, c: 0, rs: 2, cs: 1 } } },
+                { r: 1, c: 0, v: { v: 'merged', m: 'merged', fs: 36, mc: { r: 1, c: 0, rs: 2, cs: 1 } } },
                 { r: 3, c: 0, v: { v: 'turned', m: 'turned', rt: 45 } },
+                { r: 4, c: 0, v: { v: 'stacked', m: 'stacked', rt: 'vertical' } },
             ]),
             config: { rowlen: { 2: 30 }, merge: { '1_0': { r: 1, c: 0, rs: 2, cs: 1 } } },
         };
@@ -416,8 +417,29 @@ describe('Sheets HTML export — wrap text', () => {
             /height:19px;margin:-1px 0"><div style="position:absolute;[^"]*">one\ntwo\nthree<\/div><\/div>/,
         );
         expect(html).toMatch(/height:49px;margin:-1px 0"><div style="position:absolute;[^"]*">merged<\/div><\/div>/);
+        expect(html).toMatch(/margin:-1px 0"><div style="position:absolute;[^"]*"><span [^>]*>stacked<\/span><\/div>/);
         // A turned span is placed absolutely and grows no row, and a clip would cut it off.
         expect(html).toMatch(/<td [^>]*><span style="position:absolute;[^"]*rotate\(-45deg\)">turned<\/span><\/td>/);
+    });
+
+    // A clip doubles what a cell costs WeasyPrint, so most cells, one short line each, have none.
+    test('a line that fits its rows is no clip, and only a clipped cell sets its line-height to 0', () => {
+        const sheet: Sheet = {
+            ...makeSheet([
+                { r: 0, c: 0, v: { v: 'plain', m: 'plain' } },
+                { r: 1, c: 0, v: { v: 'eleven', m: 'eleven', fs: 11, vt: 1 } },
+                { r: 2, c: 0, v: { v: 'twelve', m: 'twelve', fs: 12 } },
+                { r: 3, c: 0, v: { v: 'tall row', m: 'tall row', fs: 24 } },
+            ]),
+            config: { rowlen: { 3: 40 } },
+        };
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(html).toMatch(/<td style="[^"]*">plain<\/td>/);
+        expect(html).toMatch(/<td style="[^"]*vertical-align:top[^"]*">eleven<\/td>/);
+        expect(html).toMatch(/<td style="[^"]*">tall row<\/td>/);
+        expect(html).toMatch(/<td style="[^"]*line-height:0[^"]*"><div style="[^"]*"><div style="[^"]*">twelve<\/div>/);
+        expect(html.match(/line-height:0/g)).toHaveLength(1);
+        expect(html).not.toContain('vertical-align:middle');
     });
 });
 
@@ -495,12 +517,10 @@ describe('Sheets HTML export — conditional formatting', () => {
         expect(classesFor(out, 'z-index:0').length).toBe(3);
         expect(classesFor(out, 'position:relative').length).toBeGreaterThan(0);
         expect(out.css).toContain('#638ec6');
-        // Display text wrapped in a span with z-index above the bar, clipped to its row inside it.
+        // Display text wrapped in a span with z-index above the bar.
         const zSpan = classesFor(out, 'z-index:1');
         expect(zSpan.length).toBe(1);
-        expect(out.html).toMatch(
-            new RegExp(`<span class="${zSpan[0]}"><div class="s\\d+"><div class="s\\d+">10</div></div></span>`),
-        );
+        expect(out.html).toContain(`<span class="${zSpan[0]}">10</span>`);
     });
 
     test('colorGradation 2-color rule paints min/max cells with the configured stops', () => {
@@ -2154,7 +2174,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
         ];
         for (const hidden of hiddens) {
             const out = renderSheetsHtml([box(hidden)], NO_MEDIA, 'screen');
-            const cls = out.html.match(/<td[^>]*class="(s\d+)"[^>]*>(?:<div[^>]*>)+m</)?.[1];
+            const cls = out.html.match(/<td[^>]*class="(s\d+)"[^>]*>m</)?.[1];
             const declarations = out.css.match(new RegExp(`\\.${cls}\\{([^}]*)\\}`))?.[1].split(';');
             expect(declarations?.filter((d) => d.startsWith('border-')).sort()).toEqual([
                 'border-bottom:1px solid #000000',

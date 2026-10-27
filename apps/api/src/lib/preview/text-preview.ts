@@ -5,6 +5,7 @@ import type { BytesTextPreviewMode } from '@workspace/lib/constants/preview';
 import { getExtension } from '@workspace/lib/constants/preview';
 import { escapeHtml } from '@workspace/lib/html';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
+import { codeHighlighter, hastToHtml } from '../document/lowlight';
 import { sanitizeExportHtml } from '../export/sanitize';
 
 const LANGUAGE_MAP: Record<string, string> = {
@@ -82,8 +83,8 @@ export async function generateTextPreview(
 
     if (mode === 'code') {
         try {
-            const { codeHighlighter, hastToHtml } = await import('../document/lowlight');
-            const highlighted = hastToHtml(codeHighlighter()(getLanguageFromFileName(fileName) ?? '', content));
+            const highlight = codeHighlighter();
+            const highlighted = hastToHtml(highlight(getLanguageFromFileName(fileName) ?? '', content));
             return { body: `<pre><code>${highlighted}</code></pre>`, mode };
         } catch {
             return { body: `<pre><code>${escapeHtml(content)}</code></pre>`, mode };

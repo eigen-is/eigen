@@ -1,9 +1,9 @@
-// Word's vocabulary, one source for the docx writer that writes it and the docx reader that recognises it: content
+// Word's vocabulary, one source for the docx writer that writes it and the docx reader that recognizes it: content
 // types, style names, list formats and Word's spelling of a list number, alignment, table limits, units, and the
 // names a font table, a drawing's wrap or a link's look uses. The OOXML every format shares sits in its own module.
 
 import type { EigenFont } from '@workspace/lib/constants/fonts';
-import type { PageNumberKind } from '@workspace/lib/docs/eigendoc';
+import type { CellBorderStyle, PageNumberKind } from '@workspace/lib/docs/eigendoc';
 import { ptToTwips, pxToPt } from '@workspace/lib/docs/eigendoc';
 
 // The prefix of WordprocessingML's content types.
@@ -192,6 +192,28 @@ export const TWIPS_PER_PX = ptToTwips(pxToPt(1));
 
 // A border's w:sz counts in eighths of a point.
 export const BORDER_EIGHTHS_PER_PX = pxToPt(1) * 8;
+
+// Word's border styles, by the style the editor draws each as. The writer writes a style's first. The reader reads
+// every listed one as its style, and any other, such as a 3-D or an art border, as solid.
+export const WORD_BORDER_STYLES: Record<CellBorderStyle, readonly [string, ...string[]]> = {
+    solid: ['single'],
+    dashed: ['dashed', 'dashSmallGap', 'dashDotStroked', 'dotDash', 'dotDotDash'],
+    dotted: ['dotted'],
+    double: [
+        'double',
+        'doubleWave',
+        'triple',
+        'thinThickSmallGap',
+        'thickThinSmallGap',
+        'thinThickThinSmallGap',
+        'thinThickMediumGap',
+        'thickThinMediumGap',
+        'thinThickThinMediumGap',
+        'thinThickLargeGap',
+        'thickThinLargeGap',
+        'thinThickThinLargeGap',
+    ],
+};
 
 export const EMU_PER_TWIP = 635;
 

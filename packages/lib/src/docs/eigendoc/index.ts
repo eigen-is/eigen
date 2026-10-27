@@ -52,9 +52,10 @@ export { listTypeOfStyle } from './nodes/ordered-list';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';
 export { PAGE_NUMBER_KINDS, PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';
-export type { CellBorder, CellBorderAttribute, CellSide } from './nodes/table-cell';
+export type { CellBorder, CellBorderAttribute, CellBorderStyle, CellSide } from './nodes/table-cell';
 export {
     CELL_BORDER_SIDES,
+    CELL_BORDER_STYLES,
     cellBorderValue,
     MAX_CELL_BORDER_PX,
     MIN_CELL_BORDER_PX,

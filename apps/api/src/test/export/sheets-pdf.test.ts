@@ -77,8 +77,9 @@ function inkRows(page: Raster, from: number, to: number): { top: number; bottom:
 }
 
 suite('sheets PDF — a cell draws its text as the editor does', () => {
-    // Each text prints twice: in a default row of 20 px, then in a row of 60 px that nothing can cut. The editor draws
-    // all of these whole in the default row, so the PDF must too: the default row's ink is as tall as the tall row's.
+    // Each text prints twice: in a default row of 20 px, then wrapped on one line in a row of 60 px that nothing can cut,
+    // where it is clipped as a 12 pt line in a default row is. The editor draws all of these whole in the default row, so
+    // the PDF must too: the default row's ink is as tall as the tall row's.
     const texts = [
         { v: 'gjpqy Ag', fs: 10 },
         { v: 'gjpqy Ag', fs: 12 },
@@ -100,9 +101,16 @@ suite('sheets PDF — a cell draws its text as the editor does', () => {
     };
 
     beforeAll(async () => {
-        const celldata = [...texts, ...texts].map((text, r) => ({ r, c: 0, v: { ...text, m: text.v } }));
+        const wrapped = texts.map((text) => ({ ...text, tb: '2' }));
+        const celldata = [...texts, ...wrapped].map((text, r) => ({ r, c: 0, v: { ...text, m: text.v } }));
         const rowlen = Object.fromEntries(texts.map((_, i) => [texts.length + i, TALL_ROW]));
-        const sheet: Sheet = { name: 'Look', id: 's1', celldata, showGridLines: 0, config: { rowlen } };
+        const sheet: Sheet = {
+            name: 'Look',
+            id: 's1',
+            celldata,
+            showGridLines: 0,
+            config: { rowlen, columnlen: { 0: 300 } },
+        };
         const html = sheetsHtmlDocument({
             title: 'Look',
             sheets: [sheet],
@@ -121,7 +129,8 @@ suite('sheets PDF — a cell draws its text as the editor does', () => {
         }
     });
 
-    // The canvas centers the text's ink in the cell, and puts it 2 px from the top or the bottom.
+    // The canvas centers the text's ink in the cell, and puts it 2 px from the top or the bottom. Clipped text sits
+    // there too; a plain line sits where CSS puts it, its ink about 0.1em low.
     test('the ink sits where the canvas puts it: in the middle, or 2 px from the top or the bottom', () => {
         const middle = band(texts.length + 2);
         const offCenter = (middle.top + middle.bottom - middle.rowTop - middle.rowBottom) / 2;

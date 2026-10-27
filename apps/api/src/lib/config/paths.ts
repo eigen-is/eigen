@@ -1,5 +1,5 @@
 // Where Eigen keeps its files on disk. getDataRoot is the data folder; the server keeps its own files in
-// one folder there, and each user, team, org and guest gets a home folder beside it. PATHS names the folders
+// one folder there, and each owner, such as a user or a team, gets a home folder beside it. PATHS names the folders
 // and databases inside one home. Every part of the server that opens a file, and every backup and restore,
 // builds the path from these names, so the layout is written down once.
 

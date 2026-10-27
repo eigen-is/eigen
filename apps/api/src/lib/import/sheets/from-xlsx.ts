@@ -39,8 +39,9 @@ export const MAX_CELLS = 4_000_000;
 // The snapshot spells a cell's text out per cell, its value, its display and a rich string's runs; real workbooks emit
 // under 120M characters.
 export const MAX_TEXT = 250_000_000;
-// A shared formula's copy is translated before it is weighed, at about 3M characters a second. The corpus translates
-// at most 3.1M characters, in a GOV.UK inspections workbook of 24,706 copies. Five times that is about 5 s.
+// A shared formula's copy is translated, and a formula that uses a defined name is walked, before either is weighed,
+// at about 3M characters a second. The corpus spends at most 4.3M characters, 1.2M of them on names, in a GOV.UK
+// inspections workbook of 24,706 copies. The budget is nearly four times that, about 5 s.
 export const MAX_SHARED_FORMULA_TEXT = 16_000_000;
 // Recalc materializes a sheet's rows by its columns, each at least a default grid's, at about 13 bytes a slot, so a
 // narrow sheet's span is far smaller than its grid. The corpus builds at most 27.3M, in docling's inflated test file of
@@ -56,8 +57,7 @@ export type XlsxOptions = {
 // width, a rule's range or a validated cell, and the grids recalc materializes; the text counts every value, display,
 // run, formula, link and rule text, each shared string and shared formula once per copy. The workbook's defined names
 // are written into the formulas that use them. A chart sheet is a sheet without a grid. The pictures come back beside
-// the sheets as the media files their images name, and what was left out
-// as warnings that count it.
+// the sheets as the media files their images name, and what was left out as warnings that count it.
 export function readXlsx(
     bytes: Uint8Array,
     options: XlsxOptions,
@@ -83,7 +83,7 @@ export function readXlsx(
             emitted.text.charge(text);
         };
         const losses = lossCounter();
-        const inline = nameInliner(book.definedNames, losses.lost);
+        const inline = nameInliner(book.definedNames, losses.lost, emitted.translated.charge);
         const sheets: Sheet[] = [];
         // Excel refuses two sheets of one name, in any case: the first keeps it, so a formula naming it means that one,
         // and a later one is numbered as Excel numbers a copy, past every name the workbook holds.

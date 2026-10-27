@@ -5,7 +5,7 @@
 
 import { functionCopy, inlineNames, iscelldata } from '@workspace/sheet/engine';
 import type { LossCounter } from '../../document/transform/protocol';
-import { MAX_FORMULA_LENGTH } from '../../ooxml/spreadsheetml';
+import { MAX_FORMULA_LENGTH, withoutFuturePrefixes } from '../../ooxml/spreadsheetml';
 import type { DefinedName } from './package';
 
 // How many names deep a name may name another. A deeper one stays as written, and so does one that names itself,
@@ -15,7 +15,12 @@ const MAX_NAME_DEPTH = 8;
 // A formula's text, and the sheet it sits on as the workbook writes the sheet's name.
 export type NameInliner = (formula: string, sheet: string) => string;
 
-export function nameInliner(names: DefinedName[], lost: LossCounter['lost']): NameInliner {
+// The walk over a formula's text is charged with `charge`, which throws past the import's budget.
+export function nameInliner(
+    names: DefinedName[],
+    lost: LossCounter['lost'],
+    charge: (chars: number) => void,
+): NameInliner {
     if (names.length === 0) return (formula) => formula;
     // Excel compares names and sheet names without case. The first name of a key wins.
     const defined = new Map<string, DefinedName>();
@@ -23,6 +28,8 @@ export function nameInliner(names: DefinedName[], lost: LossCounter['lost']): Na
         const key = nameKey(name.name, name.sheet);
         if (!defined.has(key)) defined.set(key, name);
     }
+    // One search finds whether a formula holds any name, so the formulas that hold none are not walked.
+    const anyName = new RegExp(names.map(({ name }) => RegExp.escape(name)).join('|'), 'iu');
     // A bare name is the sheet's own before the workbook's. A name qualified with a sheet is that sheet's only.
     const find = (written: string, qualified: string | undefined, sheet: string) =>
         qualified === undefined
@@ -37,7 +44,8 @@ export function nameInliner(names: DefinedName[], lost: LossCounter['lost']): Na
         const known = inlined.get(key);
         if (known !== undefined) return known;
         if (depth > MAX_NAME_DEPTH) return null;
-        const source = name.text.trim().replace(/^=/, '');
+        const source = withoutFuturePrefixes(name.text.trim().replace(/^=/, ''));
+        charge(source.length);
         let failed = !inlinable(source);
         const text = failed
             ? source
@@ -52,6 +60,8 @@ export function nameInliner(names: DefinedName[], lost: LossCounter['lost']): Na
         return result;
     };
     return (formula, sheet) => {
+        if (!anyName.test(formula)) return formula;
+        charge(formula.length);
         const used = new Set<DefinedName>();
         const text = inlineNames(formula, (written, qualified) => {
             const name = find(written, qualified, sheet);

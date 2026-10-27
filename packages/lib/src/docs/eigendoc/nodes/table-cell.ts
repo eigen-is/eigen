@@ -9,8 +9,8 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/;
 // A browser spells a style's color as rgb(), whatever the HTML wrote.
 const RGB_COLOR = /^rgb\((\d{1,3}), (\d{1,3}), (\d{1,3})\)$/;
 
-const CELL_BORDER_STYLES = ['solid', 'dashed', 'dotted', 'double'] as const;
-type CellBorderStyle = (typeof CELL_BORDER_STYLES)[number];
+export const CELL_BORDER_STYLES = ['solid', 'dashed', 'dotted', 'double'] as const;
+export type CellBorderStyle = (typeof CELL_BORDER_STYLES)[number];
 
 // A side Eigen draws in its own look is null; a side the cell sets is a border or none.
 export type CellBorder = 'none' | { width: number; style: CellBorderStyle; color: string };

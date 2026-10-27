@@ -3,7 +3,7 @@
 // read their properties through it.
 
 import type { CellBorder } from '@workspace/lib/docs/eigendoc';
-import { MAX_CELL_BORDER_PX, MIN_CELL_BORDER_PX } from '@workspace/lib/docs/eigendoc';
+import { CELL_BORDER_STYLES, MAX_CELL_BORDER_PX, MIN_CELL_BORDER_PX } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
@@ -16,6 +16,7 @@ import {
     LINK_THEME_COLORS,
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
+    WORD_BORDER_STYLES,
 } from '../../ooxml/wordml';
 import { hexColor, markColor } from './colors';
 import type { Fonts, Script, Theme } from './docx-fonts';
@@ -131,8 +132,6 @@ const TABLE_BORDER_SIDE = new Map<string, TableBorderSide>([
     ['insideV', 'insideV'],
 ]);
 
-const DASHED_BORDERS = new Set(['dashed', 'dashSmallGap', 'dashDotStroked', 'dotDash', 'dotDotDash']);
-
 export function tableBordersOf(borders: XmlElement | undefined): TableBorders {
     const sides: TableBorders = {};
     for (const border of borders ? xmlElements(borders) : []) {
@@ -142,21 +141,13 @@ export function tableBordersOf(borders: XmlElement | undefined): TableBorders {
     return sides;
 }
 
-// The editor draws four styles: a 3-D or an art border draws solid, and Word's double lines double.
 function cellBorderOf(border: XmlElement): CellBorder {
     const val = w(border, 'val');
     if (!val || val === 'nil' || val === 'none') return 'none';
     const px = (roundedInt(w(border, 'sz')) ?? 0) / BORDER_EIGHTHS_PER_PX;
     return {
         width: Number(Math.min(Math.max(px, MIN_CELL_BORDER_PX), MAX_CELL_BORDER_PX).toFixed(2)),
-        style:
-            val === 'dotted'
-                ? 'dotted'
-                : DASHED_BORDERS.has(val)
-                  ? 'dashed'
-                  : /^(double|triple|thinThick|thickThin)/.test(val)
-                    ? 'double'
-                    : 'solid',
+        style: CELL_BORDER_STYLES.find((style) => WORD_BORDER_STYLES[style].includes(val)) ?? 'solid',
         color: markColor(hexColor(w(border, 'color')) || '000000'),
     };
 }

@@ -17,6 +17,7 @@ import {
     NO_STORED_WIDTH,
     STYLE_NAMES,
     TWIPS_PER_PX,
+    WORD_BORDER_STYLES,
 } from '../../../ooxml/wordml';
 import type { Context } from './package';
 import type { Block } from './paragraphs';
@@ -162,13 +163,13 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     ];
 }
 
-// A cell's four sides, in tcBorders' order: a side it stores none of is Eigen's grey, and none is nil.
+// A cell's four sides, in tcBorders' order: a side it stores none of is Eigen's gray, and none is nil.
 function tcBorders(node: JSONContent): string {
     const sideXml = (side: (typeof BORDER_SIDES)[number], value: unknown) => {
         const border = readCellBorder(value);
         if (border === 'none') return `<w:${side} w:val="nil"/>`;
         if (!border) return bordersXml([side], { [side]: TABLE_LOOK.border });
-        const val = border.style === 'solid' ? 'single' : border.style;
+        const [val] = WORD_BORDER_STYLES[border.style];
         const sz = Math.round(border.width * BORDER_EIGHTHS_PER_PX);
         return `<w:${side} w:val="${val}" w:sz="${sz}" w:space="0" w:color="${border.color.slice(1).toUpperCase()}"/>`;
     };

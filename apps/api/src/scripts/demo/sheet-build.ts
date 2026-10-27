@@ -1,4 +1,4 @@
-// Builds a demo workbook from its typed spec (content.ts), such as the budget sheet or the quote a seeded mail attaches.
+// Builds a demo workbook from its typed spec, such as the budget sheet or the quote a seeded mail attaches.
 // The seeder writes the budget straight into its container's Y.Doc, as it builds the site plan and the deck, because
 // frozen bytes cannot survive a change to the stored sheet shape and a spec can. The cells, rules and charts are the
 // shapes the editor stores, and the formulas are computed here once, as the xlsx importer does, so the snapshot is
@@ -17,11 +17,11 @@ import type {
     SingleRange,
 } from '@workspace/lib/sheets';
 import { encodeSheetsSnapshot, nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
-import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
+import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { normalizeSheetConfig, numberDisplay, parseA1Range, recalcSheets } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
 import { writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
-import type { SheetCellSpec, SheetChartSpec, SheetRowSpec, SheetSpec } from './content';
+import type { SheetCellSpec, SheetRowSpec, SheetSpec } from './content';
 
 const RULE: BorderSide = { style: 1, color: '#000000' };
 
@@ -103,10 +103,21 @@ function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): S
         dataVerification,
         charts,
     };
-    // Each chart is stacked above the ones before it, as a second Insert would put it.
+    // Each chart is a one-series range chart at Insert's default size, stacked above the ones before it, as a second
+    // Insert would put it. One series needs no legend, and a pie names its own slices.
     for (const [i, chart] of (spec.charts ?? []).entries()) {
         const id = `chart-${i + 1}`;
-        charts[id] = buildChart(chart, id, nextFloatingIndex(sheet), ids);
+        const defaults = defaultChartSpec(chart.type, {
+            source: 'range',
+            categories: chartRef(chart.categories, ids),
+            series: [{ id: 's-1', name: chart.seriesName, values: chartRef(chart.values, ids) }],
+        });
+        charts[id] = {
+            id,
+            index: nextFloatingIndex(sheet),
+            ...sheetFloatingBox({ x: chart.x, y: chart.y, ...CHART_DEFAULT_SIZE }),
+            ...newSheetChartSpecParts({ ...defaults, title: { text: chart.title }, legend: { position: 'none' } }),
+        };
     }
     normalizeSheetConfig(sheet);
     return sheet;
@@ -119,22 +130,6 @@ function buildCell(value: SheetCellSpec, format: string | undefined, style: Cell
     if (typeof value === 'number') return { ...style, v: value, m: numberDisplay(value, fa), ct: { fa, t: 'n' } };
     if (value.startsWith('=')) return { ...style, f: value, ct: { fa, t: 'n' } };
     return { ...style, v: value, m: value, ct: { fa: 'General', t: 's' } };
-}
-
-// A one-series range chart at Insert's default size. One series needs no legend, and a pie names its own slices.
-function buildChart(spec: SheetChartSpec, id: string, index: string, ids: Map<string, string>): SheetChart {
-    const defaults = defaultChartSpec(spec.type, {
-        source: 'range',
-        categories: chartRef(spec.categories, ids),
-        series: [{ id: 's-1', name: spec.seriesName, values: chartRef(spec.values, ids) }],
-    });
-    const chartSpec: ChartSpec = { ...defaults, title: { text: spec.title }, legend: { position: 'none' } };
-    return {
-        id,
-        index,
-        ...sheetFloatingBox({ x: spec.x, y: spec.y, ...CHART_DEFAULT_SIZE }),
-        ...newSheetChartSpecParts(chartSpec),
-    };
 }
 
 function range(a1: string): SingleRange {

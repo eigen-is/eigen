@@ -1,6 +1,6 @@
 # ooxml
 
-ooxml is the Office Open XML core that Eigen's docx, xlsx and pptx readers and writers run on. It opens a zip from an untrusted upload, reads it as an OPC package and parses its parts under one budget. It knows the vocabulary the three formats share: namespaces, markup compatibility, units, DrawingML colours and themes, and charts. It also writes: a zip that is the same bytes for the same input, a package with its content types and relationships, a plain theme and a chart part. Each format's own vocabulary has a module here too, so a format's reader and writer share one source of truth without importing each other. The format readers and writers live outside this folder and build on it.
+ooxml is the Office Open XML core that Eigen's docx, xlsx and pptx readers and writers run on. It opens a zip from an untrusted upload, reads it as an OPC package and parses its parts under one budget. It knows the vocabulary the three formats share: namespaces, markup compatibility, units, DrawingML colors and themes, and charts. It also writes: a zip that is the same bytes for the same input, a package with its content types and relationships, a plain theme and a chart part. Each format's own vocabulary has a module here too, so a format's reader and writer share one source of truth without importing each other. The format readers and writers live outside this folder and build on it.
 
 ## What it reads and writes
 
@@ -9,7 +9,7 @@ ooxml is the Office Open XML core that Eigen's docx, xlsx and pptx readers and w
 | Zip | Stored and deflated entries, ZIP64, one disk | Stored and deflated entries, no ZIP64 |
 | Package | `[Content_Types].xml`, relationships, parts, media | `[Content_Types].xml`, `_rels/.rels`, `docProps/core.xml`, a part's relationships |
 | XML | Transitional and Strict OOXML, `mc:AlternateContent` | Nothing: writers build their XML as strings |
-| DrawingML | Colours with their transforms, themes, colour maps, blips, text bodies, a SmartArt graphic's drawing and text | Colours, fills, a plain theme, blips |
+| DrawingML | Colors with their transforms, themes, color maps, blips, text bodies, a SmartArt graphic's drawing and text | Colors, fills, a plain theme, blips |
 | Charts | A `c:chartSpace` as a `ChartSpec` and its look | A `ChartSpec` as a `c:chartSpace`, and the sheet of its embedded workbook |
 
 ## Layering
@@ -187,7 +187,7 @@ Signatures are as the code declares them. Types the signatures name but the modu
 - `chartPart(pkg, rels, id, folder): XmlElement | undefined`: the chart part an r:id names, or nothing.
 - `chartCost(root: XmlElement): number`: what to charge before `readChart`.
 - `readChart(root, { theme, data }): ChartRead`: `data` is `'cache'` or `{ ranges: (sheetName) => sheetId | undefined }`. The result is `{ spec }` or `{ unsupported: { title, name } }`.
-- `readChartPartLook(root, { theme, emuPerPx, host }): Pick<ChartLook, …>`: the background, label colour, stroke and line series width.
+- `readChartPartLook(root, { theme, emuPerPx, host }): Pick<ChartLook, …>`: the background, label color, stroke and line series width.
 - `droppedChart({ title, name }): string[]`, `CHART_NOT_IMPORTED`, `KIND_NOT_IMPORTED`: what a format shows in place of an unsupported chart. A chart past the spec's caps names no kind.
 - `CHART_CONTENT_TYPE`, `STACKING_BY_GROUPING`, `LEGEND_BY_POSITION`, `PERCENT_AXIS_FORMAT`, `ChartHost`.
 
@@ -243,7 +243,7 @@ Past all of these, the transform process's memory limit is the backstop. Inflati
 - It doesn't write ZIP64, so an archive past 4 GB or 65,534 entries throws.
 - It doesn't validate parts against the schemas. A reader takes what it understands and leaves the rest.
 - It finds a part's entry in the zip by its exact name. Only content types compare part names as OPC does, decoded and case-insensitively.
-- DrawingML colour transforms beyond alpha, lumMod, lumOff, satMod, tint and shade are ignored.
+- DrawingML color transforms beyond alpha, lumMod, lumOff, satMod, tint and shade are ignored.
 - A chart is read only when the spec draws it as the file does: a column, bar, line or pie chart with one group, at most one category and one value axis, and no stacked line, log scale or reversed value axis. Excel 2016's chartEx parts are not read.
 - It renders nothing.
 

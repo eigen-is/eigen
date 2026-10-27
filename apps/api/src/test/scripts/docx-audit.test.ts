@@ -1033,4 +1033,43 @@ describe('round trip', () => {
             3,
         );
     });
+
+    // The body anchors a figure in front of or behind the text at its paragraph's start, where the reader reads it back
+    // at its offsets. A table cell draws it in line, so there it splits its paragraph as a block figure does.
+    test('a figure in front of the text keeps its paragraph whole in the body and splits it in a cell', async () => {
+        const anchor =
+            '<w:r><w:drawing><wp:anchor behindDoc="0"><wp:positionH relativeFrom="column"><wp:posOffset>952500</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>190500</wp:posOffset></wp:positionV><wp:extent cx="381000" cy="381000"/><wp:wrapNone/><wp:docPr id="1" name="Picture 1"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:blipFill><a:blip r:embed="rId4"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>';
+        const over = `<w:p><w:r><w:t>Before</w:t></w:r>${anchor}<w:r><w:t>after</w:t></w:r></w:p>`;
+        const a = docxToPmJson(
+            Buffer.from(
+                await buildDocxWithBody(`${over}<w:tbl><w:tr><w:tc>${over}</w:tc></w:tr></w:tbl>`, {
+                    media: { 'word/media/pixel.png': PIXEL_PNG },
+                }),
+            ),
+        );
+        expect(a.json.content?.[0].content?.map((node) => [node.type, node.attrs?.['layout']])).toEqual([
+            ['figure', 'front'],
+            ['text', undefined],
+        ]);
+        const media = a.media.map(({ name, data }) => ({
+            name,
+            contentType: 'image/png',
+            data: data.slice().buffer,
+            width: 1,
+            height: 1,
+        }));
+        const b = docxToPmJson(Buffer.from(writeDocx(a, { title: 'Anchors', media, lost: () => {} })));
+        const picture = { contentType: 'image/png', width: 1, height: 1 };
+        const pictures = (images: { name: string }[]) => new Map(images.map(({ name }) => [name, picture]));
+        const groups = classifyDocx({
+            a,
+            b,
+            pictures: { a: pictures(a.media), b: pictures(b.media) },
+            prepared: pictures(a.media),
+        });
+        expect(groups.filter(({ listed }) => !listed).map(({ kind }) => kind)).toEqual([]);
+        expect(groups.find(({ kind }) => kind === 'figures and display equations split their textblock')?.count).toBe(
+            1,
+        );
+    });
 });

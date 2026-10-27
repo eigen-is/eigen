@@ -63,7 +63,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const extent = xmlChild(frame, WP_NS, 'extent');
         const pictures = descendants(frame, PIC_NS, 'pic');
         const charts = chartsIn(frame, extent);
-        const layout = anchored ? anchorPlacement(frame, reader, context, isLoneGraphic(frame)) : {};
+        const layout = anchored ? anchorPlacement(frame, reader, context) : {};
         // A picture in front of or behind the text may span the paper.
         const room = layout.offsetX === undefined ? reader.columnPx : Math.floor(mmToPx(reader.page.width));
         const docPr = xmlChild(frame, WP_NS, 'docPr');
@@ -299,20 +299,11 @@ function onShapeFill(scope: Scope): Scope {
     return { ...scope, onFill: true };
 }
 
-// An anchor whose graphic is one picture or one chart. One anchor has one place, so a group or a canvas can't take it:
-// its pictures would stack there, and its text boxes and shapes would draw elsewhere.
-function isLoneGraphic(anchor: XmlElement): boolean {
-    const graphic = xmlChild(anchor, A_NS, 'graphic');
-    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
-    const [only, ...others] = data ? xmlElements(data) : [];
-    return !!only && others.length === 0 && (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart'));
-}
-
 // Where Word places an anchor, as the doc holds it. Wrapped beside the text, it sits on the side its alignment or its
 // offset puts it. Over or under the text, alone in its anchor and in the body outside a table, it is in front of or
 // behind the text, at its offsets from the text column and from the paragraph's first line, which placeAnchors counts
 // from the paragraph's box. Any other is a block, aligned if Word aligns it.
-function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext, lone: boolean): FigureFrameAttrs {
+function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext): FigureFrameAttrs {
     const { story, tables } = context.scope;
     const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
@@ -322,7 +313,16 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     const cx = roundedInt(extent && xmlAttr(extent, '', 'cx')) ?? 0;
     const area = areaOf(reader, positionH && xmlAttr(positionH, '', 'relativeFrom'));
     const placed = align ? alignedIn(xmlText(align).trim(), area.width, cx) : roundedInt(offset && xmlText(offset));
-    const x = onPaper(reader, area.start + (placed ?? 0), cx);
+    // The offset from the text column's left edge, kept on the paper.
+    const { width, margin } = pageTwips(reader.page);
+    const marginLeft = margin.left * EMU_PER_TWIP;
+    const x = Math.min(Math.max(area.start + (placed ?? 0), -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
+    // One anchor has one place, so only a lone picture or chart can take it. A group's or a canvas's pictures would
+    // stack there, and its text boxes and shapes would draw elsewhere.
+    const graphic = xmlChild(anchor, A_NS, 'graphic');
+    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
+    const [only, ...others] = data ? xmlElements(data) : [];
+    const lone = !!only && others.length === 0 && (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart'));
     if (xmlChild(anchor, WP_NS, 'wrapNone') && lone && story === 'body' && tables === 0) {
         const layout = isOn(xmlAttr(anchor, '', 'behindDoc')) ? 'behind' : 'front';
         return { layout, offsetX: x / EMU_PER_PX, offsetY: lineOffset(anchor, context) };
@@ -356,13 +356,6 @@ function areaOf(reader: Reader, relativeFrom: string | undefined): { start: numb
 function alignedIn(align: string, area: number, cx: number): number {
     if (align === 'center') return (area - cx) / 2;
     return align === 'right' || align === 'outside' ? area - cx : 0;
-}
-
-// An offset from the text column's left edge, kept on the paper.
-function onPaper(reader: Reader, x: number, cx: number): number {
-    const { width, margin } = pageTwips(reader.page);
-    const marginLeft = margin.left * EMU_PER_TWIP;
-    return Math.min(Math.max(x, -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
 }
 
 // The vertical offset from the paragraph's first line, in px. Word counts one from the paragraph from the top of the

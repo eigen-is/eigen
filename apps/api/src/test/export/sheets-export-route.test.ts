@@ -53,7 +53,7 @@ describe('Sheets export route — response contract', () => {
         // Full workbook, not the budgeted preview: every sheet renders, computed
         // formulas included, and hostile fixture content stays sanitized.
         expect(html).toContain('Region 1');
-        expect(html).toContain(`>${GOLDEN_ROW1_TOTAL}</div></div></td>`);
+        expect(html).toContain(`>${GOLDEN_ROW1_TOTAL}</td>`);
         expect(html).toContain('SHEET2-ONLY-CONTENT');
         expect(html).not.toMatch(/<script/i);
     }, 60_000);

@@ -1,14 +1,24 @@
 import { describe, expect, test } from 'bun:test';
+import { inlineNames } from '@workspace/sheet/engine';
 import { lossCounter } from '../../../lib/document/transform/protocol';
 import { nameInliner } from '../../../lib/import/sheets/names';
 import type { DefinedName } from '../../../lib/import/sheets/package';
 import { MAX_FORMULA_LENGTH } from '../../../lib/ooxml/spreadsheetml';
+import { cpuClock } from '../../cpu-time';
 
 // A workbook's defined names inlined into the formulas that use them, on the sheet each formula sits on.
 
 function inliner(names: DefinedName[]) {
     const losses = lossCounter();
-    return { inline: nameInliner(names, losses.lost), warnings: () => losses.warnings() };
+    let walked = 0;
+    const charge = (chars: number) => {
+        walked += chars;
+    };
+    return {
+        inline: nameInliner(names, losses.lost, charge),
+        warnings: () => losses.warnings(),
+        walked: () => walked,
+    };
 }
 
 describe('a defined name', () => {
@@ -69,5 +79,30 @@ describe('a defined name', () => {
         const { inline, warnings } = inliner([{ name: 'Rate', text: '0.2' }]);
         expect(inline('=Unknown*2', 'Data')).toBe('=Unknown*2');
         expect(warnings()).toEqual([]);
+    });
+
+    test("keeps Excel's prefixes off the functions in its own text, as off a cell's", () => {
+        const { inline } = inliner([{ name: 'Distinct', text: '_xlfn.UNIQUE(Data!$A$1:$A$9)' }]);
+        expect(inline('=SUM(Distinct)', 'Data')).toBe('=SUM((UNIQUE(Data!$A$1:$A$9)))');
+    });
+});
+
+describe('the walk over a formula', () => {
+    test('is charged for a formula that names one, and for the name it inlines', () => {
+        const { inline, walked } = inliner([{ name: 'Rate', text: '0.2' }]);
+        inline('=A1*Rate', 'Data');
+        expect(walked()).toBe('=A1*Rate'.length + '0.2'.length);
+    });
+
+    test('is skipped, uncharged, for a formula that names none, so a defined name costs other formulas nothing', () => {
+        const formulas = Array.from({ length: 200 }, (_, i) => `=${Array(1_000).fill(`A${i}+Sum`).join('+')}`);
+        const { inline, walked } = inliner([{ name: 'Sales', text: 'Data!$A$1:$A$9' }]);
+        const walking = cpuClock();
+        for (const formula of formulas) inlineNames(formula, () => undefined);
+        const walk = walking();
+        const inlining = cpuClock();
+        for (const formula of formulas) expect(inline(formula, 'Data')).toBe(formula);
+        expect(inlining()).toBeLessThan(walk / 4);
+        expect(walked()).toBe(0);
     });
 });
