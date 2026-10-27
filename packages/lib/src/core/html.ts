@@ -1,6 +1,7 @@
 // HTML as strings, for browser and server code alike: escaping, plain text to paragraphs and back, and the tags and
-// attributes a LightEditor body keeps, which the canvas and the API's exports filter to. A node guard such as
-// isElement reads only the node, so it lives here too; the helpers that need a `document` live in html-dom.
+// attributes a LightEditor body keeps, which the canvas and the API's exports filter to, and how many items of a
+// task list are checked. A node guard such as isElement reads only the node, so it lives here too; the helpers
+// that need a `document` live in html-dom.
 
 export function escapeHtml(text: string): string {
     return text
@@ -94,6 +95,16 @@ export const LIGHT_EDITOR_ATTRS = ['href', 'target', 'rel'];
 // vector, and the sanitized HTML is rendered through dangerouslySetInnerHTML by the canvas' rich-text
 // layer and the comment-card notes, and injected as live DOM in the drive hero.
 export const LIGHT_EDITOR_HREF = /^(https?:|mailto:)/i;
+
+// TipTap's TaskItem writes `data-checked="true|false"` on every task-list <li>, nested lists included.
+// Anchoring on `<li` keeps a data-checked attribute anywhere else, or the words in text, out of the count.
+const TASK_ITEM = /<li[^>]*\bdata-checked=/g;
+const CHECKED_TASK_ITEM = /<li[^>]*\bdata-checked="true"/g;
+
+// How far a task list is done, such as a card's checklist: its progress bar and the moment it completes.
+export function countTaskItems(html: string): { checked: number; total: number } {
+    return { checked: html.match(CHECKED_TASK_ITEM)?.length ?? 0, total: html.match(TASK_ITEM)?.length ?? 0 };
+}
 
 // A DOM walk meets text and comments too; the element nodes are the ones with tags and attributes.
 export function isElement(node: Node): node is Element {
