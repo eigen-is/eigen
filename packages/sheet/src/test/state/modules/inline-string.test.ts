@@ -193,7 +193,6 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
         { fc: 'red;background:url(//evil)' },
         { fc: 'rgb(1, 2, 3);background:url(//evil)' },
         { fs: '12pt;background:url(//evil)' },
-        { fs: 1e9 },
         { ff: 'x;background:url(//evil)' },
         { ff: 'x\nbackground:url(//evil)' },
         { ff: 'expression(alert(1))' },
@@ -222,6 +221,7 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
             ff: 'Source Serif 4',
         });
         expect(runStyleOf({ fc: '#f00' }).fc).toBe('#f00');
+        expect(runStyleOf({ fs: 1e9 }).fs).toBe(400);
     });
 });
 

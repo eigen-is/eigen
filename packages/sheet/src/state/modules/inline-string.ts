@@ -4,6 +4,7 @@
 // characters, writes the runs back as spans and puts the selection back. updateCell commits what
 // committedRuns reads, so the cell gets what the editor shows.
 
+import { readCssFontSize, readFontSize } from '@workspace/lib/constants/fonts';
 import { escapeHtml } from '@workspace/lib/html';
 import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import type { Cell, CellStyle, InlineStringSegment } from '../../engine/types';
@@ -26,9 +27,6 @@ type PendingStyle = { at: number; base: RunStyle; style: Partial<RunStyle> };
 const DEFAULT_COLOR = '#000000';
 
 const HEX_COLOR = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/;
-
-// The largest size Excel takes. A larger one is no font size a user picked.
-const MAX_FONT_SIZE = 409;
 
 const TAG_STYLES: Record<string, Partial<RunStyle>> = {
     B: { bl: 1 },
@@ -60,7 +58,6 @@ export function isRunStyleKey(key: string): key is RunStyleKey {
 // xlsx wrote, and runsHtml writes it into a style attribute. So a flag reads as a number, and a color,
 // size or font that is not a plain value falls back to the default.
 export function runStyleOf(style: CellStyle | null | undefined): RunStyle {
-    const size = Number(style?.fs);
     const font = cellFontName(style?.ff);
     return {
         bl: Number(style?.bl) || 0,
@@ -68,7 +65,7 @@ export function runStyleOf(style: CellStyle | null | undefined): RunStyle {
         un: Number(style?.un) || 0,
         cl: Number(style?.cl) || 0,
         fc: hexColor(style?.fc),
-        fs: size > 0 && size <= MAX_FONT_SIZE ? size : SHEET_DEFAULT_FONT_SIZE,
+        fs: readFontSize(style?.fs) ?? SHEET_DEFAULT_FONT_SIZE,
         ff: font && !/[;\n("']|url/i.test(font) ? font : SHEET_DEFAULT_FONT.name,
     };
 }
@@ -202,7 +199,7 @@ function isElement(node: Node): node is HTMLElement {
 }
 
 // The style an element gives its text: its tag, as the browser's own bold writes <b>, then its inline
-// CSS, as a span of ours or a pasted one carries it.
+// CSS, as a span of ours or one the browser wrote carries it.
 function elementStyle(element: HTMLElement, inherited: RunStyle): RunStyle {
     const style = { ...inherited, ...TAG_STYLES[element.tagName] };
     const { fontWeight, fontStyle, color, fontSize, fontFamily } = element.style;
@@ -214,18 +211,10 @@ function elementStyle(element: HTMLElement, inherited: RunStyle): RunStyle {
         style.cl = decoration.includes('line-through') ? 1 : 0;
     }
     if (color) style.fc = hexColor(color);
-    const points = cssPoints(fontSize);
+    const points = readCssFontSize(fontSize);
     if (points) style.fs = points;
     if (fontFamily) style.ff = cellFontName(fontFamily) ?? style.ff;
     return style;
-}
-
-// The size box writes points. A pasted span may carry pixels, which round to the half point.
-function cssPoints(size: string): number | undefined {
-    const match = /^([\d.]+)(pt|px)$/.exec(size);
-    if (!match) return undefined;
-    const value = Number.parseFloat(match[1]);
-    return match[2] === 'pt' ? value : Math.round(value * 1.5) / 2;
 }
 
 // The browser hands a color back as rgb(), and runs store the hex the color picker writes. Anything else
