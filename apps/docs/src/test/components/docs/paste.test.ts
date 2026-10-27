@@ -279,18 +279,19 @@ test("a KaTeX equation's drawn glyphs are not pasted beside its <math>", () => {
     );
 });
 
-// A positioned image keeps to the paper: 800 px, its paragraph taken at the column's left, 100 px in.
+// A positioned image keeps to the paper: 800 px, its paragraph taken at the column's left, 100 px in, and below the
+// page's top, its paragraph taken at the column's top, 100 px down.
 test.each([
-    [900, 50, 800, -100],
-    [300, 600, 300, 400],
-    [300, -500, 300, -100],
-])('a pasted %d px image in front of the text at x %d is %d px wide at x %d', (width, offset, capped, clamped) => {
-    const html = `<p><span class="figure" data-layout="front" data-offset-x="${offset}" data-offset-y="30"><img src="data:image/png;base64," width="${width}"></span>x</p>`;
+    [900, 50, 30, 800, -100, 30],
+    [300, 600, 30, 300, 400, 30],
+    [300, -500, -500, 300, -100, -100],
+])('a pasted %d px image in front of the text at %d, %d is %d px wide at %d, %d', (width, x, y, capped, cx, cy) => {
+    const html = `<p><span class="figure" data-layout="front" data-offset-x="${x}" data-offset-y="${y}"><img src="data:image/png;base64," width="${width}"></span>x</p>`;
     const found: object[] = [];
     createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
         if (node.type.name === 'figure') found.push(node.attrs);
     });
-    expect(found).toMatchObject([{ layout: 'front', width: capped, offsetX: clamped, offsetY: 30 }]);
+    expect(found).toMatchObject([{ layout: 'front', width: capped, offsetX: cx, offsetY: cy }]);
 });
 
 test('a pasted image in the flow still caps at the column', () => {

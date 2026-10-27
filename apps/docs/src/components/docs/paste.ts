@@ -11,8 +11,8 @@ const POSITIONED = '[data-layout="front"], [data-layout="behind"]';
 // Pasted HTML before the schema parses it: a drawn equation as its <math> alone, foreign fonts onto the bundled ones,
 // no font or size the doc draws already, images, charts and tables no wider than the column, no anchor for a comment
 // card this document lacks, in an italic heading an upright run as the mark, and no footnote where none goes. A
-// positioned image or chart keeps to the paper instead, its width and its offset from the left. Its paragraph's
-// indent isn't known here, so an indented one may overhang by it until it is dragged.
+// positioned image or chart keeps to the paper instead: its width, its offset from the left, and below the page's top.
+// Its paragraph's place isn't known here, so an indented one may overhang by its indent until it is dragged.
 // page: the doc's page map in px. normalFont: the doc's Normal font.
 export function cleanPastedHTML(
     html: string,
@@ -88,13 +88,17 @@ export function cleanPastedHTML(
         }
     }
 
-    // Offsets count from the paragraph, taken as starting at the column's left edge.
+    // Offsets count from the paragraph, taken as starting at the column's top left corner.
     for (const el of doc.querySelectorAll<HTMLElement>(POSITIONED)) {
-        const offset = Number(el.getAttribute('data-offset-x'));
-        if (!el.hasAttribute('data-offset-x') || !Number.isFinite(offset)) continue;
-        const width = Number(el.getAttribute('data-width') ?? el.querySelector('img')?.getAttribute('width')) || 0;
-        const right = Math.max(-page.margin.left, page.width - page.margin.left - width);
-        el.setAttribute('data-offset-x', String(Math.max(-page.margin.left, Math.min(right, offset))));
+        const x = Number(el.getAttribute('data-offset-x'));
+        if (el.hasAttribute('data-offset-x') && Number.isFinite(x)) {
+            const width = Number(el.getAttribute('data-width') ?? el.querySelector('img')?.getAttribute('width')) || 0;
+            const right = Math.max(-page.margin.left, page.width - page.margin.left - width);
+            el.setAttribute('data-offset-x', String(Math.max(-page.margin.left, Math.min(right, x))));
+        }
+        const y = Number(el.getAttribute('data-offset-y'));
+        if (el.hasAttribute('data-offset-y') && Number.isFinite(y))
+            el.setAttribute('data-offset-y', String(Math.max(-page.margin.top, y)));
     }
 
     return doc.body.innerHTML;
