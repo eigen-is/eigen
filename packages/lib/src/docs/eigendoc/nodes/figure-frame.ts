@@ -1,6 +1,7 @@
-// The frame an image and a chart share in Docs: where the box sits (in line, wrapped, or in front of or behind the
-// text at an offset from its paragraph), its caption and its comment card. The figure and chart nodes take its
-// attributes and HTML, the editor's node view and the export's renderer its box style, so every surface draws one box.
+// The frame a Docs figure sits in, such as an image or a chart: where its box sits (in line, wrapped, or in front of or
+// behind the text at an offset from its paragraph), its caption and its comment card. Each figure node takes its
+// attributes and HTML from here. Every surface that draws one, such as the editor or the export, takes its box style,
+// so they all draw the same box.
 
 import type { CommandProps } from '@tiptap/core';
 import type { DOMOutputSpec } from '@tiptap/pm/model';

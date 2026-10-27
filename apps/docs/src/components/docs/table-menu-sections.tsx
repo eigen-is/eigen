@@ -7,9 +7,9 @@ import { readCellBackground } from '@workspace/lib/docs/eigendoc';
 import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { ColorPickerMenuItem } from '@workspace/ui/components/media';
-import { Grid3x3, PaintBucket, Square, SquareDashed } from 'lucide-react';
+import { PaintBucket } from 'lucide-react';
 import type { ToolbarState } from './hooks/use-toolbar-state';
-import { TABLE_ACTION_ICONS } from './table-action-icons';
+import { BORDER_SET_LOOKS, TABLE_ACTION_ICONS } from './table-action-icons';
 
 // The table rows of Format › Table, in MenuSections' groups, for any menu about the table the caret is in.
 export function tableMenuSections(
@@ -64,15 +64,11 @@ export function tableMenuSections(
                         editor.chain().focus().setCellAttribute('backgroundColor', readCellBackground(color)).run()
                     }
                 />
-                <DropdownMenuItem onClick={() => editor.chain().focus().setCellBorders('all').run()}>
-                    <Grid3x3 className="h-4 w-4" /> All borders
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().setCellBorders('outer').run()}>
-                    <Square className="h-4 w-4" /> Outer borders
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().setCellBorders('none').run()}>
-                    <SquareDashed className="h-4 w-4" /> No borders
-                </DropdownMenuItem>
+                {BORDER_SET_LOOKS.map(({ set, label, icon: Icon }) => (
+                    <DropdownMenuItem key={set} onClick={() => editor.chain().focus().setCellBorders(set).run()}>
+                        <Icon className="h-4 w-4" /> {label}
+                    </DropdownMenuItem>
+                ))}
             </>
         ),
         destructive: (
