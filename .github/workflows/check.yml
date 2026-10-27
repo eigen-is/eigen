@@ -2,7 +2,8 @@ name: Check
 
 on:
   push:
-    branches: [main, develop, "release-*"]
+    # A `ci-*` branch runs the checks without a pull request, for work on this workflow itself.
+    branches: [main, develop, "release-*", "ci-*"]
   pull_request:
     branches: [main, develop]
 
@@ -12,6 +13,64 @@ permissions:
   contents: read
 
 jobs:
+  # Every gate `bun run check` runs except the API suite, beside the job that runs it.
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+
+      - name: One version per package
+        run: bun dedupe --check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Home imports
+        run: bun scripts/check-home-imports.ts
+
+      - name: Test layout
+        run: bun scripts/check-test-layout.ts
+
+      - name: Docs links
+        run: bun scripts/check-docs-links.ts
+
+      - name: Code standards
+        run: bun run standards
+
+      - name: Primitives index
+        run: bun run primitives:check
+
+      # Every workspace but the API at once, each in its own process. `bun --filter` would run them in dependency order,
+      # math, lib, ui, docs one after another, and `bun run --parallel` passes a script no arguments.
+      - name: Test packages
+        run: |
+          pids=() logs=()
+          for dir in packages/* apps/*; do
+            [ "$dir" = apps/api ] && continue
+            jq -e '.scripts.test' "$dir/package.json" > /dev/null || continue
+            log="$RUNNER_TEMP/test-${dir//\//-}.log"
+            (cd "$dir" && bun run test --timeout 30000) > "$log" 2>&1 &
+            pids+=($!) logs+=("$log")
+          done
+          failed=0
+          for i in "${!pids[@]}"; do
+            if wait "${pids[$i]}"; then status=pass; else status=FAIL failed=1; fi
+            echo "::group::${logs[$i]##*/test-} $status"
+            cat "${logs[$i]}"
+            echo "::endgroup::"
+          done
+          exit $failed
+
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -33,21 +92,6 @@ jobs:
           "$RUNNER_TEMP/weasyprint/bin/pip" install --require-hashes --only-binary :all: -r docker/api/weasyprint-requirements.txt
           sudo ln -s "$RUNNER_TEMP/weasyprint/bin/weasyprint" /usr/local/bin/weasyprint
           weasyprint --version
-
-      - name: One version per package
-        run: bun dedupe --check
-
-      - name: Lint
-        run: bun run lint
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Primitives index
-        run: bun run primitives:check
-
-      - name: Test packages
-        run: bun --filter '!@apps/api' test --timeout 30000
 
       - name: Test API
         run: bun --filter '@apps/api' test --parallel=4 --timeout 30000
