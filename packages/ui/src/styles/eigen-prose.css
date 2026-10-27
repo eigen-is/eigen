@@ -513,6 +513,12 @@
         text-decoration: underline;
     }
 
+    /* A note's number and its link back, in the HTML download and the drive preview, are links but not text. */
+    sup > a[href^="#fn-"],
+    a[href^="#fnref-"] {
+        text-decoration: none;
+    }
+
     ul,
     ol {
         margin-bottom: 1em;
