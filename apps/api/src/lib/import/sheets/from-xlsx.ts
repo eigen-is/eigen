@@ -128,11 +128,12 @@ export function readXlsx(
             const rowHeight = sheetDefaultRowHeight(worksheet.sheet);
             const tallest = new Map<number, number>();
             for (const { r, c, v } of grid.celldata) {
-                const height = estimateCellHeight(v, r, c, merge, columnlen, columnWidth);
+                // Excel fits a row to its content only when the row's height is not custom.
+                if (grid.custom.has(r)) continue;
+                const height = Math.round(estimateCellHeight(v, r, c, merge, columnlen, columnWidth));
                 if (height > Math.max(rowHeight, tallest.get(r) ?? 0)) tallest.set(r, height);
             }
-            const rowlen: NonNullable<SheetConfig['rowlen']> = {};
-            for (const [r, height] of tallest) rowlen[r] = Math.round(height);
+            const rowlen: NonNullable<SheetConfig['rowlen']> = Object.fromEntries(tallest);
             // A row at the sheet's default height has none of its own.
             for (const [r, points] of grid.heights) {
                 const pixels = Math.round(ptToPx(points));
