@@ -167,9 +167,13 @@ describe('SSE', () => {
             if (!root) throw new Error('no root');
             const { data: folder } = await drive.folder({ pathId: root.id }).post({ folderName: 'sse-payload' });
             if (!folder) throw new Error('no folder');
+            const isShared = (e: SSEvent): e is SSEventDrive => e.type === SSEventType.DRIVE_ACL_SHARED;
+            const bobSSE = await collectSSE(ctx.bob.user.id);
             await drive.path({ pathId: folder.id }).acl.put({
                 add: [{ id: ctx.bob.user.email, read: true, write: false }],
             });
+            await bobSSE.next(isShared);
+            bobSSE.stop();
 
             const isRename = (e: SSEvent): e is SSEventDrive => e.type === SSEventType.DRIVE_PATH_RENAMED;
             const aliceSSE = await collectSSE(ctx.alice.user.id);
@@ -185,6 +189,10 @@ describe('SSE', () => {
                 parentId: root.id,
                 mimeType: folder.mimeType,
             });
+            // The share mirror delivers the same event to the sharee's tabs, which must not see the ACL either.
+            expect(Object.keys(bobSSE.events.find(isShared)?.path ?? {}).sort()).toEqual(
+                ['id', 'mimeType', 'mountId', 'ownerId', 'parentId'].sort(),
+            );
         });
     });
 });
