@@ -152,7 +152,8 @@ export function figureFrameHTML(
 ): DOMOutputSpec {
     const attrs = { ...frame };
     if (alignment && alignment !== 'center') attrs['data-alignment'] = alignment;
-    if (layout && layout !== 'block') attrs['data-layout'] = layout;
+    // Every layout, block too: the prose stylesheet gives a figure its own line by it.
+    attrs['data-layout'] = layout ?? 'block';
     if (offsetX != null) attrs['data-offset-x'] = offsetX;
     if (offsetY != null) attrs['data-offset-y'] = offsetY;
     // Spelled like the comment mark's, so a cut figure keeps its card the way cut text does.
