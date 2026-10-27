@@ -857,7 +857,11 @@ test("in a band, Insert, Format and the style picker offer only what the band's 
     const disabled = [...document.querySelectorAll('[role="menuitem"][aria-disabled="true"]')].map((item) =>
         item.textContent?.trim(),
     );
-    expect(disabled.filter((item) => item?.startsWith('Page break') || item === 'Code block').length).toBe(2);
+    expect(
+        disabled.filter(
+            (item) => item?.startsWith('Page break') || item === 'Code block' || item === 'Table of contents',
+        ).length,
+    ).toBe(3);
     expect(disabled).not.toContain('Table');
 
     await openMenu('Format');
@@ -1344,7 +1348,18 @@ test('Insert greys out, rather than hides, what a note or a band can’t hold', 
     const greyed = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
         .filter((item) => item.getAttribute('aria-disabled') === 'true')
         .map((item) => item.textContent?.trim());
-    expect(greyed).toEqual(expect.arrayContaining(['Chart', 'Horizontal rule', 'Table', 'Code block']));
+    expect(greyed).toEqual(
+        expect.arrayContaining(['Chart', 'Horizontal rule', 'Table', 'Code block', 'Table of contents']),
+    );
+});
+
+test('Insert › Table of contents puts one in the body where the caret is', async () => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(2);
+    await render(1920, true);
+    await openMenu('Insert');
+    await clickItem('Table of contents');
+    expect(editor.getJSON().content?.map((block) => block.type)).toEqual(['paragraph', 'tableOfContents', 'paragraph']);
 });
 
 // Print is the server's PDF in a tab of its own, so the headers and footers print; browser print is the fallback.
