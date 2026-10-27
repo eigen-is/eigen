@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 // Cut a release: `bun run release [patch|minor|major]` bumps package.json and lists the commits since the last
-// tag for the CHANGELOG, and `bun run release publish` creates the GitHub Release. The branch flow and the release
-// notes: docs/TESTING.md.
+// tag for the CHANGELOG, and `bun run release publish` creates the GitHub Release from the version's CHANGELOG intro.
 
 import { join } from 'node:path';
 import { $ } from 'bun';
@@ -35,9 +34,8 @@ if (arg === 'publish') {
         console.error(`No CHANGELOG.md section for [${version}]. Fill it in before publishing.`);
         process.exit(1);
     }
-    // The notes are the section's intro, the paragraph before its first `###`, and a link to the whole
-    // section: a reader new to Eigen gets the release in a few lines (docs/TESTING.md § A GitHub release says
-    // what changed in a few lines).
+    // The notes are the section's intro, the lines before its first `###`, and a link to the CHANGELOG, so a reader
+    // new to Eigen gets the release in a few lines.
     const intro: string[] = [];
     for (const line of lines.slice(start + 1)) {
         if (line.startsWith('#')) break;

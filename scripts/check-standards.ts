@@ -1,9 +1,6 @@
-// Ratchet the mechanical CODE-STANDARDS rules that Biome can't express.
-//
-// Two kinds of metric: hard zeros (any hit fails) and ratcheted counts, whose allowance lives in
-// scripts/standards-baseline.json. A count may never rise; every run writes a count that fell into the
-// baseline, so a cleanup lowers it without a second step. `--verbose` prints the per-file breakdown.
-// See docs/CODE-STANDARDS.md.
+// Counts the mechanical code standards that Biome can't express, over apps and packages, for `bun run check`. A hard
+// zero fails on any hit. A ratcheted count fails when it rises above its allowance in the baseline file. Every run
+// lowers an allowance to a count that fell, so a cleanup needs no second step. `--verbose` prints the per-file breakdown.
 
 import { LanguageVariant, SyntaxKind } from 'typescript/unstable/ast';
 import { createScanner } from 'typescript/unstable/ast/scanner';
