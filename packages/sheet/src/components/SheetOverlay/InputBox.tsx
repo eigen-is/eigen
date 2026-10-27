@@ -1,7 +1,7 @@
 // The in-cell editor: a contenteditable over the cell being edited. It opens with the cell's text, its
 // formula as colored references or its rich-text runs as spans, and the grid's keyboard handlers commit
-// it. While it is open on text, ⌘B, ⌘I and ⌘U format its selected characters, and a format on a bare
-// caret styles the text typed there next.
+// it. While it is open on text, ⌘B, ⌘I and ⌘U format its selected characters, a format on a bare caret
+// styles the text typed there next, and a paste inserts plain text.
 
 import { escapeHtml } from '@workspace/lib/html';
 import { isEqual } from 'es-toolkit/compat';
@@ -14,6 +14,7 @@ import type { Context } from '../../state';
 import {
     cancelNormalSelected,
     createRangeHightlight,
+    forgetEditorSelection,
     getFlowdata,
     getFormulaHtml,
     getInlineStringHTML,
@@ -130,10 +131,10 @@ export const InputBox: React.FC = () => {
     }, [context.editingCellPosition, context.sheets, context.currentSheetId, firstSelection]);
 
     useEffect(() => {
-        if (context.editingCellPosition.length === 0) {
-            if (inputRef.current) {
-                inputRef.current.innerHTML = '';
-            }
+        const input = inputRef.current;
+        if (context.editingCellPosition.length === 0 && input) {
+            input.innerHTML = '';
+            forgetEditorSelection(input);
         }
     }, [context.editingCellPosition]);
 
@@ -258,11 +259,16 @@ export const InputBox: React.FC = () => {
         [refs.cellInput, refs.fxInput, setContext],
     );
 
+    // A paste into the open editor is its plain text, as in Google Sheets: the style at the caret types it,
+    // and the browser's undo keeps it. The grid pastes a closed cell.
     const onPaste = useCallback(
         (e: React.ClipboardEvent<HTMLDivElement>) => {
-            if (context.editingCellPosition.length === 0) {
-                e.preventDefault();
-            }
+            e.preventDefault();
+            const input = inputRef.current;
+            if (context.editingCellPosition.length === 0 || !input) return;
+            const text = e.clipboardData.getData('text/plain');
+            if (typeWithPendingStyle(input, text)) input.dispatchEvent(new Event('input', { bubbles: true }));
+            else document.execCommand('insertText', false, text);
         },
         [context.editingCellPosition],
     );
