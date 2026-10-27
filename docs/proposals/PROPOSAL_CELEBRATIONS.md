@@ -2,7 +2,7 @@
 
 This proposal adds a small surprise when you finish something in Eigen: a burst of confetti or a cheering stick figure when you tick the last box of a sticky's checklist.
 
-**Status:** not started. Nothing here is built.
+**Status:** Phase 1 is built: `useCelebrate`, the confetti burst, the setting and the checklist trigger ([STICKIES.md](../STICKIES.md#ticking-the-last-box-of-a-checklist-celebrates-now-and-then)). Phases 2 and 3 are not started.
 
 > **TLDR**: One shared `useCelebrate()` hook in `packages/ui` draws a short burst from the point where you finished something, then removes itself. The first trigger is the last checkbox of a sticky's task list, in `NoteCardDialog`. It fires only for your own click, only now and then, and never for a teammate's edit. Later celebrations can show a stick figure from the clipart catalog ([PROPOSAL_CLIPART.md](PROPOSAL_CLIPART.md)) instead of confetti. One personal setting turns it all off. No package, no new route, no migration.
 
@@ -24,22 +24,22 @@ The apps that do this well (Asana's flying unicorn, Apple's activity rings, Thin
 1. **Only your own action.** A celebration fires from the click that completed something, in your tab. An edit that arrives from a teammate, a page load or a refetch never fires one.
 2. **Only now and then.** Something that just happens to be complete, like a checklist, celebrates with a chance of one in three. A goal you set yourself (the word goal under Later) always celebrates, because you asked for it.
 3. **Once per completion.** The chance is rolled once per dialog opening. Unticking and re-ticking the last box in the same dialog does nothing, so it can't be farmed.
-4. **Reduced motion is respected.** With `prefers-reduced-motion: reduce`, there is no burst and no hop. The card's progress bar gives a short glow instead.
+4. **Reduced motion is respected.** With `prefers-reduced-motion: reduce`, there is no burst and no hop. The ticked box gives a short glow instead.
 5. **One switch.** The personal setting below turns everything off.
 
 ## Design
 
 ### The burst
 
-`useCelebrate()` in `packages/ui/src/components/celebrate/` returns `celebrate(origin: DOMRect)`. The hook reads the setting and `prefers-reduced-motion`, and applies the chance, so a call site is one line and never checks anything itself.
+`useCelebrate()` in `packages/ui/src/components/celebrate/` returns `celebrate(origin: HTMLElement)`, the element that was clicked. The hook reads the setting and `prefers-reduced-motion`, and applies the chance, so a call site is one line and never checks anything itself.
 
 A burst is a fixed, full-viewport `<canvas>` with `pointer-events: none`, appended to `document.body`. About 80 particles spray up from the top of `origin` and fall under gravity for about 1.5 seconds. Then the canvas removes itself. A second burst while one is running is dropped. It is about 60 lines of our own code. `canvas-confetti` would do the same, but a new package needs its own approval, and this is small enough to write.
 
 ### The first trigger: a sticky's checklist
 
-`NoteCardDialog` (`packages/ui/src/components/notes/note-card-dialog.tsx`) toggles a task-list checkbox in `handleDescriptionClick` and passes the new HTML to `onDescriptionChange`. That is where it fires: if the click checked a box, and the list now has at least two items and all of them are checked, call `celebrate(input.getBoundingClientRect())`. The confetti comes out of the box you just ticked.
+`NoteCardDialog` (`packages/ui/src/components/notes/note-card-dialog.tsx`) toggles a task-list checkbox in `handleDescriptionClick` and passes the new HTML to `onDescriptionChange`. That is where it fires: if the click checked a box, and the list now has at least two items and all of them are checked, call `celebrate(input)`. The confetti comes out of the box you just ticked.
 
-`NoteCard` counts checked and total items with two regexes. The dialog needs the same count, so the counting moves into one exported helper that both use. `NoteCardDialog` also serves `CardDialog` (`packages/ui/src/components/cards/card-dialog.tsx`), so cards outside the Stickies app get the same behavior.
+`countTaskItems` (`packages/lib/src/core/html.ts`) counts checked and total items for both `NoteCard` and the dialog. `NoteCardDialog` also serves `CardDialog` (`packages/ui/src/components/cards/card-dialog.tsx`), so cards outside the Stickies app get the same behavior.
 
 A checklist with one item is a toggle, not a list, so it doesn't count.
 
@@ -51,7 +51,7 @@ When a celebration fires, it is usually confetti. About one in four is a stick f
 
 ### The setting
 
-`UserSettings` (`packages/lib/src/types/settings.ts`) gets `celebrations?: boolean`, where missing means on. The `PUT /space/:ownerId/settings` body schema in `apps/api/src/routes/space.ts` gains the field, and the hook reads it through `useSpaceSettings`. A switch in the Space app's preferences reads "Celebrations: a small surprise now and then when you finish something". Existing route, existing `settings.json`, no migration.
+`UserSettings` (`packages/lib/src/types/settings.ts`) gets `celebrations?: boolean`, where missing means on. The `PUT /space/:ownerId/settings` body schema in `apps/api/src/routes/space.ts` gains the field, and the hook reads it through `useSpaceSettings`. A **Celebrations** switch under **Preferences** on Space's Personal info page reads "A small surprise now and then when you finish something". Existing route, existing `settings.json`, no migration.
 
 It is on by default. A delight that's off by default is never found.
 
@@ -65,7 +65,7 @@ It is on by default. A delight that's off by default is never found.
 
 | | Phase | Delivers | Size |
 |---|---|---|---|
-| **1** | `useCelebrate`, the burst, the setting, the sticky checklist trigger | Confetti on a finished checklist | S |
+| **1** | `useCelebrate`, the burst, the setting, the sticky checklist trigger (built) | Confetti on a finished checklist | S |
 | **2** | Stick figure celebrations | Needs clipart Phase 2 | S |
 | **3** | Docs word goal | Goal, progress ring, celebration | S–M |
 
@@ -74,5 +74,5 @@ After Phase 1, use it for two weeks before building more. If it still makes you 
 ## Open questions
 
 1. Is one in three right? Too rare and nobody finds it; too often and it becomes noise. Easy to tune.
-2. Should the very first completion on a device always celebrate, so people learn it exists? That needs a `localStorage` flag.
-3. Checkboxes can probably also be ticked in the card's edit form (`editForm`, a TipTap editor). That path needs a before-and-after count instead of the click handler. Check whether it's common enough to bother.
+2. Should the very first completion on a device always celebrate, so people learn it exists? That needs a `localStorage` flag. Phase 1 has none.
+3. Checkboxes can probably also be ticked in the card's edit form (`editForm`, a TipTap editor). That path needs a before-and-after count instead of the click handler. Check whether it's common enough to bother. Phase 1 celebrates only the click.

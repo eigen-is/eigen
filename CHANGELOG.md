@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Added
+
+- **Celebrations** — tick the last box of a card's checklist in Stickies, or of a comment card elsewhere, and now and then confetti bursts from it. Turn it off under **Preferences** on the Personal info page in Space
+
 ### Fixed
 
 - **Excel files** — a row Excel shows at normal height comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows

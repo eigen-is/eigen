@@ -69,6 +69,14 @@ Most of `board.tsx` wires shared comment modules rather than board code:
 - One `useContextMenu` opens on right-click and on long-press. Cards are `touch-none` for the drag sensor, which suppresses the native context menu on touch.
 - `DocSearchProvider` with `useStickiesDocSearch` highlights matching cards and columns. The palette's comment search reveals a card by its `chatName`.
 
+## Ticking the last box of a checklist celebrates now and then
+
+A card's description can hold a task list, and the card shows how far it is done. `countTaskItems` (`packages/lib/src/core/html.ts`) is the one count, for the card's progress bar and for the dialog. When a click in `NoteCardDialog` ticks the last open box of a list with at least two items, it calls `celebrate` from `useCelebrate` (`packages/ui/src/components/celebrate/`), and confetti sprays from the box. Because `CardDialog` renders `NoteCardDialog`, a comment card in a doc or a sheet gets the same.
+
+The reward should stay a surprise and never turn into a chore, so the rules are strict. Only the user's own click fires it: a peer's edit or a refetch changes the description without a click. The hook rolls a one-in-three chance, and the dialog calls it once per opening, so unticking and re-ticking the last box can't farm it. A list of one item is a toggle, not a list. Under `prefers-reduced-motion` the ticked box glows instead of the burst. The personal setting `UserSettings.celebrations` turns it off, and missing means on, because a delight that's off by default is never found. Ticking a box in the card's edit form doesn't celebrate. The design and the later triggers are in [PROPOSAL_CELEBRATIONS.md](proposals/PROPOSAL_CELEBRATIONS.md).
+
+The burst is our own code, one canvas over the page that clicks pass through, rather than a package. It takes its colors from the theme's chart tokens, so it follows dark mode, and a second burst while one runs is dropped.
+
 ## See also
 
 - [COMMENTS.md](COMMENTS.md): the card model, lifecycle hooks and shared components
