@@ -4,7 +4,7 @@
 // such as getRangeByTxt, live here too.
 
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
-import { cellFontName, columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import { columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
@@ -29,7 +29,7 @@ import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
 import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
 import type { RunStyleKey } from './inline-string';
-import { committedRuns, isInlineStringCell, runStyleOf, runsHtml, sameRunStyle } from './inline-string';
+import { committedRuns, cssFontName, isInlineStringCell, runStyleOf, runsHtml, sameRunStyle } from './inline-string';
 import { getCellTextInfo } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 
@@ -885,25 +885,25 @@ export function isAllSelectedCellsInStatus(ctx: Context, attr: RunStyleKey, stat
 }
 
 // The font part of a cell's CSS, for the editor box and the copied HTML. Only the keys the cell sets
-// write CSS, so the box inherits the rest. An older or imported cell may hold a flag as a string, such
-// as bl: "0", and a color as rgba(), so both are read through Number and normalizedCellAttr.
+// write CSS, so the box inherits the rest. The cell is read as its runs are, so a legacy string flag or
+// size reads as its number, the box and the runs typed in it agree, and a color or font that is not a
+// plain value writes no CSS.
 export function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: CellFormatStyle | null) {
     const style: Record<string, string> = {};
     if (!cell) {
         return style;
     }
-    if (Number(cell.bl)) style.fontWeight = 'bold';
-    if (Number(cell.it)) style.fontStyle = 'italic';
-    const font = cellFontName(cell.ff);
+    const { bl, it, cl, fs, fc } = runStyleOf(cell);
+    if (bl) style.fontWeight = 'bold';
+    if (it) style.fontStyle = 'italic';
+    const font = cssFontName(cell.ff);
     if (font) style.fontFamily = `'${font}', sans-serif`;
-    const size = Number(cell.fs) || SHEET_DEFAULT_FONT_SIZE;
-    if (size !== SHEET_DEFAULT_FONT_SIZE) style.fontSize = `${size}pt`;
-    const fc: string = normalizedCellAttr(cell, 'fc');
+    if (fs !== SHEET_DEFAULT_FONT_SIZE) style.fontSize = `${fs}pt`;
     const color = checksCF?.textColor ?? fc;
     if (color && color !== '#000000') style.color = color;
-    if (Number(cell.cl)) style.textDecoration = 'line-through';
+    if (cl) style.textDecoration = 'line-through';
     const underline = Number(cell.un);
-    if (underline === 1 || underline === 3) style.borderBottom = `${Math.floor(size / 9)}px solid ${fc}`;
+    if (underline === 1 || underline === 3) style.borderBottom = `${Math.floor(fs / 9)}px solid ${fc}`;
     return style;
 }
 

@@ -119,6 +119,19 @@ describe('a format on selected characters', () => {
         expect(getFontStyleByCell(bold)).toEqual({ fontWeight: 'bold' });
     });
 
+    // The editor box and its runs read a size the same way, so a cell's own text commits at its size.
+    test("a legacy cell's string size reads as its number in the box and in its runs", () => {
+        const cell: Cell = JSON.parse('{"fs":"14"}');
+        expect(getFontStyleByCell(cell)).toEqual({ fontSize: '14pt' });
+        const edit = editing('hello big', cell);
+        select(edit.input, 6, 9);
+        handleBold(edit.ctx, edit.input);
+        expect(runs(commit(edit), 'fs')).toEqual([
+            ['hello ', 14],
+            ['big', 14],
+        ]);
+    });
+
     test('text with &, < and > keeps every character', () => {
         const edit = editing('a &amp; b &lt;c&gt;');
         select(edit.input, 4, 5);
@@ -196,7 +209,6 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
         { ff: 'x;background:url(//evil)' },
         { ff: 'x\nbackground:url(//evil)' },
         { ff: 'expression(alert(1))' },
-        { ff: 'url' },
     ];
 
     test('a color, size or font that is not a plain value falls back to the default', () => {
@@ -214,6 +226,14 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
         expect(html).toContain('x');
     });
 
+    // The copied table's HTML writes a cell's own color and font as CSS, read the way the runs are read.
+    test("a cell's own color and font that are not plain values give the copied HTML no CSS", () => {
+        for (const style of hostile) {
+            const css = Object.values(getFontStyleByCell(JSON.parse(JSON.stringify(style)))).join(';');
+            expect(css).not.toMatch(/url|background|expression/);
+        }
+    });
+
     test('a valid color, size and font still style the run', () => {
         expect(runStyleOf({ fc: '#FF0000', fs: 14, ff: 'Source Serif 4' })).toMatchObject({
             fc: '#ff0000',
@@ -222,6 +242,7 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
         });
         expect(runStyleOf({ fc: '#f00' }).fc).toBe('#f00');
         expect(runStyleOf({ fs: 1e9 }).fs).toBe(400);
+        expect(runStyleOf({ ff: 'Curlz MT' }).ff).toBe('Curlz MT');
     });
 });
 

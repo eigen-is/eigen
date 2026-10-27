@@ -55,19 +55,24 @@ export function isRunStyleKey(key: string): key is RunStyleKey {
 }
 
 // A run's style with every key filled in. The style comes from a stored cell, which a collaborator or an
-// xlsx wrote, and runsHtml writes it into a style attribute. So a flag reads as a number, and a color,
-// size or font that is not a plain value falls back to the default.
+// xlsx wrote, and runsHtml writes it into a style attribute. So a flag or a legacy string size reads as
+// its number, and a color, size or font that is not a plain value falls back to the default.
 export function runStyleOf(style: CellStyle | null | undefined): RunStyle {
-    const font = cellFontName(style?.ff);
     return {
         bl: Number(style?.bl) || 0,
         it: Number(style?.it) || 0,
         un: Number(style?.un) || 0,
         cl: Number(style?.cl) || 0,
         fc: hexColor(style?.fc),
-        fs: readFontSize(style?.fs) ?? SHEET_DEFAULT_FONT_SIZE,
-        ff: font && !/[;\n("']|url/i.test(font) ? font : SHEET_DEFAULT_FONT.name,
+        fs: readFontSize(Number(style?.fs) || undefined) ?? SHEET_DEFAULT_FONT_SIZE,
+        ff: cssFontName(style?.ff) ?? SHEET_DEFAULT_FONT.name,
     };
+}
+
+// A stored font's name, or undefined when there is none or it could break out of a CSS font-family.
+export function cssFontName(ff: CellStyle['ff']): string | undefined {
+    const font = cellFontName(ff);
+    return font && !/[;\n("']/.test(font) ? font : undefined;
 }
 
 // A format applied to a whole cell outside the editor reaches each of its runs too.
