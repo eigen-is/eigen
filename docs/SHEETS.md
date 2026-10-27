@@ -6,7 +6,7 @@ A workbook is a `.eigensheets` file. It holds one or more sheets, the tabs. A sh
 
 In the browser the fork keeps the whole workbook as one plain object, the context, and changes it only through immer. An edit is a recipe, a function that changes a draft of the context, and immer reports the change as patches: small records of a path and a value.
 
-A workbook is a collab document ([COLLAB.md](COLLAB.md)), but its Yjs document holds no Yjs grid. It has two roots: `state.snapshot`, the whole workbook encoded as one value, and `ops`, a Yjs array of op batches. An op is an immer patch in a form a peer can apply, and a batch holds the ops of one edit. So an edit travels like this. The recipe runs on the local context, its patches become one batch, the batch is pushed onto `ops`, Yjs carries it to the other browsers, and each applies it to its own context. A browser that opens the workbook decodes the snapshot and replays the batches on top. An editor that closes with edits pending writes a fresh snapshot and empties the log.
+A workbook is a collab document ([COLLAB.md](COLLAB.md)), but its Yjs document holds no Yjs grid. It has two roots: `state.snapshot`, the whole workbook encoded as one value, and `ops`, a Yjs array of op batches. An op is an immer patch in a form a peer can apply, and a batch holds the ops of one edit. So an edit travels like this. The recipe runs on the local context, its patches become one batch, the batch is pushed onto `ops`, Yjs carries it to the other browsers, and each applies it to its own context. A browser that opens the workbook decodes the snapshot and replays the batches on top. The last editor to close, while connected, writes a fresh snapshot and empties the log.
 
 The op log is the idea the design rests on. Writing the whole snapshot on every edit would make the last writer win for the whole workbook, while two ops on different cells merge cleanly.
 
@@ -16,7 +16,7 @@ The sections run from storage (ops, config collections, borders, the snapshot co
 
 - A sheet's config collections always exist, because creating one ships it whole ([§ Creating a collection ships it whole](#creating-a-collection-ships-it-whole-so-every-collection-exists)).
 - The snapshot moves only through one codec ([§ The snapshot is interned](#the-snapshot-is-interned-and-written-only-through-the-codec)).
-- Undo is per tab and blind to peers ([§ Undo is per tab and blind to peers](#undo-is-per-tab-and-blind-to-peers)).
+- Undo is per tab, but it follows a peer's row, column and sheet changes and never overwrites a peer's later edit ([§ Undo is per tab and follows a peer's rows and sheets](#undo-is-per-tab-and-follows-a-peers-rows-and-sheets)).
 - The editor computes formula values as it writes, so the server recalculates only a workbook nobody computed ([§ The editor computes on write](#the-editor-computes-on-write-the-server-only-what-nobody-computed)).
 
 ## `packages/sheet` is a fork we own
@@ -27,11 +27,11 @@ We own the code, so sheet code you touch gets simplified and its broken windows 
 
 ## An edit is an op in a Y.Array
 
-`use-sheet.ts` (`apps/sheets/src/components/sheets/hooks/`) pushes each local batch to `ops`. A peer applies it with `applyOp()` (`components/Workbook/api.ts`), which patches the context without remounting the grid.
+`use-sheet.ts` (`apps/sheets/src/components/sheets/hooks/`) pushes each local batch to `ops`. A peer applies it with `applyOp()` (`components/Workbook/api.ts`), which patches the context without remounting the grid. A batch that arrives while a grid mounts, on first load or on a remount for a new snapshot, waits in a queue that `loadSnapshot` opens and an effect in `useSheet` drains into the grid that mounted. The Workbook seeds its sheets in its own effect, which runs before the host's, so the queued batches land on the seed. Handing them to the grid on its way out would lose them at the remount, and handing them to a grid not yet seeded would apply them to an empty workbook.
 
 Two clients editing the *same* cell still diverge, because each applies its own op optimistically. Applying batches in array order would close that ([the proposal](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md#what-to-do-first)).
 
-A joiner decodes the snapshot and replays the pending ops through `replaySheetsOps` (`engine/replay-ops.ts`). The API's document reader calls the same function, so every consumer agrees on what snapshot plus ops means. A batch that can't apply is rolled back and skipped, so one bad op never makes the doc unreadable. `applyOp` applies a peer's batch the same way, whole or not at all, on a copy of the context it commits only when every op applied, so a live client and a joiner agree.
+A joiner decodes the snapshot and replays the pending ops through `replaySheetsOps` (`engine/replay-ops.ts`). The API's document reader calls the same function, so every consumer agrees on what snapshot plus ops means. A batch that can't apply is rolled back and skipped, so one bad op never makes the doc unreadable. `applyOpBatch` (`state/modules/apply-ops.ts`) applies a batch in the editor the same way: the sheet and row or column ops first, then the cell and field patches, resolved against the sheets those ops left, whole or not at all, on a copy of the context it commits only when every op applied. A peer's batch, the queued batches and every structural undo or redo go through it, so the tab that sends a batch, the tabs that take it and a joiner agree. The formula map lives outside immer, so it learns an added sheet's formulas only once the batch applied. `packages/sheet/src/test/components/Workbook/api.test.ts` pins each batch shape against the replay.
 
 ## Creating a collection ships it whole, so every collection exists
 
@@ -79,7 +79,7 @@ Everything that is the cell (value, formula, number format, colors, font, rotati
 - `calcChain` is never stored. The envelope's `computed` flag tells the decoder to seed it, which is the signal the server's recalc gate reads ([§ The editor computes on write](#the-editor-computes-on-write-the-server-only-what-nobody-computed)).
 - `images` and `charts` ride verbatim, since there is nothing to intern. An `images` array, the form before images became a map, decodes as no images: sheets keep no backward compatibility, and no per-image write could resolve on an array. `opToPatchOnSheets` drops the whole-array write a tab still open on that build sends, for the same reason.
 
-The editor flushes a snapshot and clears the op log on unmount, and on `beforeunload` only while connected. A flush with no pending ops is skipped, because every edit is an op and rewriting the snapshot would send the whole workbook to every peer on each close. A tab closed offline flushes nothing, so the log grows until a connected tab flushes ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
+The editor writes a fresh snapshot and clears the op log on unmount and on `beforeunload`, but only when it is connected and alone: no other client in the document's awareness, viewers included (`flushSnapshot` in `use-sheet.ts`). A flush reaches every open tab as a new snapshot, and that tab remounts its grid on it, which throws away its undo stacks; so closing one tab must not cost the others their undo. A flush with no pending ops is skipped, because every edit is an op. So the log grows while any tab stays open, a tab closed offline flushes nothing, and two tabs that close together each see the other and leave the log for the next close. Nothing is lost: a joiner and the server replay the log ([ROADMAP.md](ROADMAP.md), "Sheets: fold the op log while editors are connected" and "Sheets: a tab closed offline leaves the op log for the next close").
 
 ## An undecodable snapshot locks the editor and never overwrites
 
@@ -87,11 +87,27 @@ Anything that is not a v2 envelope throws, and so does a dictionary index past i
 
 Version history keeps snapshots in older encodings. Restoring one answers 409 and changes nothing (`apps/api/src/lib/versioning/restore.ts`), because every connected editor would lock.
 
-## Undo is per tab and blind to peers
+## Undo is per tab and follows a peer's rows and sheets
 
-Undo is the engine's own stack of inverse immer patches (`handleUndo`/`handleRedo` in `components/Workbook/index.tsx`). An undo is broadcast as an ordinary op batch, so peers see an edit. A peer's batch applies with `noHistory` and is never undoable locally.
+Undo is the tab's own pair of stacks of immer patch entries (`globalCache.undoList`/`redoList`, kept by `components/Workbook/index.tsx`). The steps are pure functions in `state/modules/history.ts`: `undoEntry` and `redoEntry` take the context and an entry and return the next context and the batch to send, and never change the entry. An undo is broadcast as an ordinary op batch, so peers see an edit. A peer's batch is never undoable locally.
 
-The stack's paths are absolute and nothing corrects them for a peer's changes. So an undo after a peer's row insert lands one row off, and one after a peer's sheet deletion can land on the wrong sheet. Undoing your own row insert puts back every field the insert rewrote, `data` among them, locally but ships a `deleteRowCol` marker, so a peer's later cell edits on that sheet vanish on your side only. All three are open in [SHEETS-TODO.md](SHEETS-TODO.md). Whether to move to Yjs structures and `Y.UndoManager` is answered in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md): only with stable row and column ids, and not first.
+An entry names its sheet by id, `['sheets', id, field, …]` (`recordEntry`), so a peer adding or deleting another sheet moves nothing, and a write to a sheet that is gone is dropped. A peer's row or column op shifts both stacks through `shiftEntries`, as it shifts the live cells: cell paths, the `"r_c"` keys of merges, borders, links and validation, the row and column size maps on the op's axis, `mc` references, and formula text on every sheet that points at the moved rows, through the same `functionStrChange` the engine uses. An entry the op makes meaningless is dropped instead: one that writes inside deleted rows or columns or cuts through a merge, a whole field or range-valued field on that sheet (a whole `config`, conditional formats, filter, frozen panes), a chart's data or points on a chart that reads that sheet, and your own row or column op on that sheet. Your own ops never shift your stacks, because last in, first out already fits them. `calcChain` patches are neither shifted nor checked: the chain is the tab's recalc list and is never stored.
+
+The shift happens in `applyOp` at call time, before the batch's `setContext`, and `handleUndo`/`handleRedo` move the entry between stacks at call time too. React re-runs an updater when it rebases a skipped update, so stack bookkeeping inside an updater would run twice. Call order is the order React applies the updaters in, so an entry is shifted by every batch called before it. Two rare cases slip, an undo that overtakes a peer batch still waiting to render and an async local edit still in flight when a peer batch arrives ([ROADMAP.md](ROADMAP.md), "Sheets: apply every edit to one eager context").
+
+## Undo skips a cell a peer changed since
+
+Before an undo writes a cell or field back, it checks that the target still holds what the entry wrote there, and skips it otherwise, as Google Sheets does; redo checks against what the undo restored (`stillWritten`). For a formula cell it compares what a person wrote, not the value, display text or value type the engine computed, so a formula whose precedent a peer changed still undoes. A merge and its cells' `mc`, and a link and its cell, pass or skip together, so an undo never leaves half a merge. A skipped patch is not sent. The check runs only on the client that undoes, so two peers undoing at once, or an offline tab rejoining, still settle by arrival order ([§ An edit is an op in a Y.Array](#an-edit-is-an-op-in-a-yarray)). An undone formula keeps the value the entry recorded, since nothing recalculates it ([ROADMAP.md](ROADMAP.md), "Sheets: an undone formula keeps its old value").
+
+## A structural undo applies exactly the ops it sends
+
+An undo or redo that adds or deletes a sheet, rows or columns builds a batch of ops and applies that batch through `applyOpBatch`, as its peers will. Applying the entry's own patches would differ from the wire: a row op records whole fields, `data` among them, and a sheet delete records the whole sheet list, so a local undo would put back the old matrix or workbook over every peer edit since while peers only took the marker.
+
+- A sheet delete keeps the deleted sheet in the entry's options. Its undo is an `addSheet` op with that value plus the order ops, which also gives the restored sheet its `data`. Its redo, and the undo of an add or a copy, is a `deleteSheet` op by id plus the order ops.
+- A row or column entry puts its whole-field patches on a scratch copy of the context, which `patchToOp` reads the marker's metadata from as it does for the op itself. The marker alone would not bring back a formula a delete made `#REF!` or shrank, on any sheet, or the cells a delete took, so the batch also carries a repair: a `replace data/r/c` for each cell where the entry's matrix differs from what the marker makes of the matrix the op left, unless a peer changed that cell since (`repairOps`). The repair lands before the merge stamps, which need the cells.
+- The metadata still ships whole (`sheetMetadataOps`), so a peer's edit to row heights, merges, validation or conditional formats since the op is undone on every client alike: convergent, and lossy.
+
+`packages/sheet/src/test/state/modules/history.test.ts` runs every case on two tabs and a joiner, and pins the shifter's paths. Whether to move to Yjs structures and `Y.UndoManager` is answered in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md): only with stable row and column ids, and not first.
 
 ## Every sheet switch goes through `changeSheet`
 
