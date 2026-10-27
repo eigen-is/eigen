@@ -70,6 +70,21 @@ describe('engine/conditional-format — colorGradation', () => {
         expect(mid).toBe('rgb(128, 128, 0)');
     });
 
+    test('interpolates between rgb() stops, their alpha dropped', () => {
+        const data = buildMatrix([[0], [5], [10]]);
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'colorGradation',
+                    cellrange: [{ row: [0, 2], column: [0, 0] }],
+                    format: ['rgb(255, 0, 0)', 'rgba(0, 255, 0, 0.5)'],
+                },
+            ],
+            data,
+        );
+        expect(styles['1_0']?.cellColor).toBe('rgb(128, 128, 0)');
+    });
+
     test('overlapping rules layer onto existing computeMap entries (regression for the format.cellColor-on-array bug)', () => {
         // Bug: when a prior rule populated computeMap[`${r}_${c}`], the colorGradation if-arm read
         // `format.cellColor` on an array-shaped format and blanked the cell color. The else-arm used

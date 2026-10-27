@@ -284,6 +284,39 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
     });
 });
 
+// A run's color, a cell's fill and a rule's colors read through one check, and each stored spelling reads as before.
+describe('a stored color', () => {
+    const fill = (bg: string) => getStyleByCell(workbookContextFactory(), [[{ v: 'x', bg }]], 0, 0, {})['background'];
+    const rule = (cellColor: string) =>
+        getStyleByCell(workbookContextFactory(), [[{ v: 'x' }]], 0, 0, { '0_0': { cellColor, textColor: cellColor } });
+
+    test.each([
+        ['#ABC', '#abc'],
+        ['#abcd', '#abcd'],
+        ['#AABBCC', '#aabbcc'],
+        ['#aabbccdd', '#aabbccdd'],
+        ['rgb(1, 2, 3)', '#010203'],
+        ['rgb(1,2,3)', '#010203'],
+        ['rgba(1, 2, 3, 0.5)', '#010203'],
+        ['rgba(1, 2, 3, 0)', '#010203'],
+        ['rgb(1 2 3)', '#010203'],
+        ['rgb(1.6, 2, 3)', '#020203'],
+    ])('%p reads as %p in a run, a fill and a rule', (color, hex) => {
+        expect(runStyleOf({ fc: color }).fc).toBe(hex);
+        expect(fill(color)).toBe(hex);
+        expect(rule(color)).toEqual({ background: hex, color: hex });
+    });
+
+    test.each(['red', '#ab', '#abcde', '#aabbccd', ' #abc', 'RGB(1, 2, 3)', 'rgb(300, 0, 0)', 'rgb(foo)', 'url(#x)'])(
+        '%p is no color: a run takes the default, a fill and a rule draw none',
+        (color) => {
+            expect(runStyleOf({ fc: color }).fc).toBe(runStyleOf(null).fc);
+            expect(fill(color)).toBeUndefined();
+            expect(rule(color)).toEqual({});
+        },
+    );
+});
+
 describe('the editor DOM read into runs', () => {
     test("the browser's own bold markup and bare text commit with all their text", () => {
         expect(runs(commit(editing('hello <b>world</b>')))).toEqual([
