@@ -8,7 +8,7 @@ This proposal adds a bundled library of 2000s-era vector clipart to Eigen's canv
 
 ## Goals
 
-1. **Nostalgic, AI-slop-free illustration library**: Ship a curated, searchable, categorized catalog of ~150–300 human-crafted vector illustrations inspired by 2000s Microsoft Office Clip Organizer (Screen Beans, isometric office equipment, expressive metaphors, banners, badges and stickers), bundled locally with zero external network requests.
+1. **Nostalgic, AI-slop-free illustration library**: Ship a curated, searchable, categorized catalog of ~150–300 human-crafted vector illustrations inspired by 2000s Microsoft Office Clip Organizer (xkcd-like stick people, isometric office equipment, expressive metaphors, banners, badges and stickers), bundled locally with zero external network requests.
 2. **First-class canvas styling on every clipart**: A clipart on a slide or drawing is not a dead `<image>` or opaque SVG blob. Changing its Sketch style (Architect `roughness: 0`, Artist `1`, Cartoonist `2`), Fill style (`solid`, `hachure`, `cross-hatch`, `zigzag`), Stroke width/style/color, or palette re-renders the clipart through the canvas engine's `roughjs` pipeline.
 3. **One-click unpack into native canvas primitives**: "Convert to shapes" (and `⌘⇧G` / Ungroup) replaces a clipart element with its native constituent canvas elements in one sealed undo step, using the exact `KindSpec.toShapes` and `replaceElementInDoc` mechanism introduced for charts.
 4. **Identical rendering everywhere**: Live canvas, slide thumbnails, present mode, server previews, standalone SVG download, HTML, PDF (WeasyPrint) and PPTX export all render from the same pure, DOM-free layout and painter.
@@ -36,7 +36,7 @@ This proposal adds a bundled library of 2000s-era vector clipart to Eigen's canv
 What made Office 97 / 2000 / XP clipart (`.wmf` / `.emf` vector metafile art) iconic, joyful and immediately distinct from modern corporate Memphis or AI-generated imagery:
 
 1. **Three signature visual idioms**:
-   - **Screen Beans**: Expressive, ink-black silhouette figures with oversized rubber-hose hands and feet, interacting with crisp colored props (holding a giant magnet, puzzling over a question mark, sprinting with a briefcase, celebrating at a finish line).
+   - **Stick people**: xkcd-like figures in black ink: a circle for a head, one line per limb, no face or at most two dots. They interact with the crisp colored props of the other categories (holding a giant magnet, puzzling over a question mark, sprinting with a briefcase, cheering at a finish line). The 2000s original were Screen Beans, but those are someone else's characters. Stick figures are ours to draw, and they suit the engine: a figure is a few `line` and `ellipse` parts, so Convert to shapes gives clean primitives, and roughjs jitter makes them look hand-drawn at Vector's default roughness. They are also cheap to draw, so the catalog can have many poses. We draw our own in this style; xkcd itself is licensed CC BY-NC 2.5, so nothing is traced or copied from it.
    - **Warm Isometric Office & Tech**: Slightlytilted 3/4 perspective objects—CRT monitors, beige towers, 3.5" floppy disks, rotary and mobile phones, filing cabinets, manila folders, coffee mugs, pushpins, clipboards, globes and trophies—drawn with bold outer contours and stepped 2–3 tone cel shading.
    - **Graphic Badges, Ribbons & Callouts**: Starbursts ("NEW!"), curled scroll banners, wax seals, checkmarks, warning triangles, directional hands, puzzle pieces and lightbulb/gear metaphors.
 2. **Flat cel-shaded fills + stepped highlights, not complex meshes**: Because WMF/EMF predated SVG filters and mesh gradients, artists created depth by layering 2 to 4 discrete filled polygons (base color, shadow shape, highlight crescent) under a darker ink outline. This maps 1:1 to a stack of canvas primitives!
@@ -80,9 +80,9 @@ export type ClipartPart =
       };
 
 export type ClipartAsset = {
-    id: string; // e.g. 'bean-idea', 'retro-pc', 'floppy-disk', 'trophy-gold', 'banner-scroll'
+    id: string; // e.g. 'person-idea', 'retro-pc', 'floppy-disk', 'trophy-gold', 'banner-scroll'
     title: string;
-    category: 'beans' | 'office' | 'tech' | 'metaphors' | 'badges' | 'arrows-callouts';
+    category: 'people' | 'office' | 'tech' | 'metaphors' | 'badges' | 'arrows-callouts';
     keywords: readonly string[]; // feeds picker search and canvas ⌘F searchText
     aspectRatio: number; // default width / height
     defaultSlots: Partial<Record<ClipartColorSlot, string>>; // nostalgic 2000s default hex colors
@@ -139,8 +139,8 @@ Because `layoutClipart(el)` produces real `VectorElement` records that `renderCl
 1. **Toolbar & Insert Menu (`CanvasToolbar`)**:
    - In `Insert`, add **Clipart…** (icon: `Sparkles` or `Sticker`, below `Image` and `Chart`).
    - Clicking opens a lightweight **Clipart Picker Dialog** (or popover) with:
-     - Search input matching `title`, `category` and `keywords` (e.g. "computer", "bean", "floppy", "idea", "trophy").
-     - Category tabs: *All*, *Screen Beans*, *Office & Business*, *Retro Tech*, *Metaphors*, *Badges & Banners*, *Callouts*.
+     - Search input matching `title`, `category` and `keywords` (e.g. "computer", "person", "floppy", "idea", "trophy").
+     - Category tabs: *All*, *People*, *Office & Business*, *Retro Tech*, *Metaphors*, *Badges & Banners*, *Callouts*.
      - A preview toggle in the corner (**Classic flat** vs **Hand-drawn**) or automatic preview in the host's style (`VECTOR_STYLE_DEFAULTS` in Vector, `SLIDES_STYLE_DEFAULTS` in Slides).
      - Clicking an item calls `canvasRef.current?.insertClipart(asset.id)`, placing it at the viewport center at a sensible default size (e.g. `240 × 240` scaled by `aspectRatio` on infinite canvas, `360 × 360` on a slide) and selecting it.
 2. **Properties Panel (`ClipartPanelSection`)**:
@@ -158,7 +158,7 @@ To guarantee an authentic, cohesive 2000s aesthetic with zero AI artifacts (no s
    - Every hole must use opposite winding so `fill-rule="nonzero"` works in roughjs, browsers, WeasyPrint and PowerPoint alike.
    - Prefer native `ellipse`, `rectangle`, `diamond`, `pie` and `line` parts wherever a sub-shape is geometric, reserving `path` for true Bézier contours. This makes **Convert to shapes** yield clean ellipses and rectangles for wheels, screens, buttons and papers!
 2. **Initial ~60-asset starter pack across 6 categories**:
-   - *Screen Beans (12)*: Idea (lightbulb overhead), Confused (`?`), Sprinting with briefcase, Lifting heavy weight, Celebrating/Trophy, Presenting at board, Magnifying glass detective, Tightrope walker, Juggling, Crossroad sign, Megaphone announcer, Teamwork handshake.
+   - *Stick people (12)*: Idea (lightbulb overhead), Confused (`?`), Sprinting with briefcase, Lifting heavy weight, Cheering (arms up), Jumping, Holding a trophy, Presenting at board, Magnifying glass detective, Juggling, Megaphone announcer, High-five pair. Cheering, Jumping and Holding a trophy double as rewards in [PROPOSAL_CELEBRATIONS.md](PROPOSAL_CELEBRATIONS.md).
    - *Retro Tech (12)*: Beige CRT monitor, 3.5" floppy disk, CD-ROM with rainbow glint, Dot-matrix printer, Flip phone, Classic mouse, Server rack, Dial-up modem / globe-on-wire, Keyboard, Cassette tape, Battery, Retro laptop.
    - *Office & Desk (12)*: Rolodex, Red swingline stapler, Coffee mug ("#1"), Manila folder, Clipboard with checklist, Filing cabinet, Calculator, Pushpin, Paperclip (non-trademarked loop), Desk lamp, Hourglass, Briefcase.
    - *Metaphors & Targets (10)*: Bullseye with dart, Key & padlock, Magnet pulling coins, Puzzle pieces locking, Lightbulb, Gear pair, Trophy cup, Rocket launch, Anchor, Compass.
