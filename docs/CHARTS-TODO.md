@@ -33,7 +33,8 @@ These ride on charts Eigen does read, and the import drops them silently. Each n
 
 - **Data tables** (`c:dTable`): 4 files.
 - **Error bars**: 2 files.
-- **Data labels**: `c:dLbls` appears in 302 files, but Excel writes it even when every label is off. Count the files where a label shows (`c:showVal` or `c:showPercent` at 1) before ranking it; it could be the widest gap of all.
+- **Data labels, per point**: a point's own `c:dLbl` is not read, so a nudged label (291 points in the corpus carry a `c:layout`), a custom text (about 40) and a deleted one (10, in 7 parts) read as their series' label. One gov.uk part shows labels only through per-point `c:dLbl showVal=1` under a series `showVal=0`, and reads as unlabelled.
+- **Data labels, their position, format and text style**: the position is derived from the kind, so 13 imported clustered series at `inEnd` or `inBase` and 31 gov.uk stacked series at `inBase` draw at Eigen's position. A label's own `c:numFmt` (31 parts) reads as the values' format, and its `c:txPr` (492 labelled series, often white text inside dark segments) as the chart's label color, so the gov.uk 100% stacks draw dark text on the palette's dark accents. A `labels.position` key, and a label color that contrasts with its segment, which lib has no helper for yet, would close these.
 - **Date axis** (`c:dateAx`): 26 files, read as a category axis. Check whether the spacing between dates matters in those files.
 
 ## Drawing as Office and Google do

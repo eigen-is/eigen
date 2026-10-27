@@ -20,6 +20,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Celebrations** — tick the last box of a card's checklist in Stickies, or of a comment card elsewhere, and now and then confetti bursts from it. Turn it off under **Preferences** on the Personal info page in Space
 - **What a download left out** — after you download a document, spreadsheet, deck or drawing, a message counts what the file left out, cut short or drew simpler, such as a hatched fill a PowerPoint file draws solid. It also says when part of the document couldn't be read
 - **What a printout left out** — printing a Docs document gives the same message once the PDF opens
+- **Chart data labels** — in Docs, Sheets, Slides and Vector, the **Data labels** box in a chart's **Series** section writes each value on a column, bar or line chart, in the values' number format. Labels that would overlap hide, and the bigger bar keeps its own
+- **Data labels in Office files** — a chart's data labels come in from Excel, Word and PowerPoint files and go out when you download one
 
 ### Changed
 
@@ -37,6 +39,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Shared with me in Drive** — a text file or folder someone shared with you shows its full path at the top, starting with Shared with me, then the shared folder and every folder below it. Click Shared with me to go back to the list
 - **Public files in Drive** — a public file or folder that nobody shared with you shows its path from the first folder you can open, without Shared with me
+- **100% stacked charts in Office files** — a 100% stacked chart downloaded as Excel, Word or PowerPoint shows its axis from 0% to 100%, also when its numbers have a format of their own
 - **Closing a shared text file** — closing a text file that was shared with you on its own takes you back to Shared with me instead of a page asking for access to its folder
 - **Text files on a team drive** — the path above the file starts with the team drive's name, as its folder does, and each folder in it opens that folder
 - **Excel named ranges** — a formula that uses a named range, such as `=SUM(Sales)`, keeps working after you edit the cells it reads, and a dropdown list from a named range comes in as a list. Sheets writes the cells the name stands for into the formula, so the name itself isn't kept. A named range that points at another workbook or at several separate ranges is counted in the message after the import
