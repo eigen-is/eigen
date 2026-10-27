@@ -1,3 +1,7 @@
+// Every docs editor, the body's, each header and footer band's and the open footnote's, is built here from one set of
+// options: the schema, the node views, the collaboration and its caret, and the copy, paste and drop paths. The image
+// uploads they share are useDocMedia's, and the editor page builds the editors through useDocEditor and useBandEditors.
+
 import type { Extensions } from '@tiptap/core';
 import { Extension, Node } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
@@ -59,6 +63,7 @@ import type { FigureFrameOptions } from './extensions/figure-frame';
 import type { FootnoteOptions } from './extensions/footnote';
 import { Footnote, NOTE_EDIT, NoteDecorations, NoteFormatting } from './extensions/footnote';
 import { PageNumber } from './extensions/page-number';
+import { PositionedFigures } from './extensions/positioned-figure';
 import { cellPosAt, EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { cleanPastedHTML } from './paste';
@@ -287,9 +292,11 @@ export function docEditorOptions({
     const note = 'body' in target;
     const cardIds = band || note ? () => NO_CARDS : target.cardIds;
     // The page map, not the page on screen: an update that changes the content and the page together reaches the
-    // editor before React draws the new page. A band prints in the body's column. Tables and indents keep within it.
+    // editor before React draws the new page. A band prints in the body's column. Tables and indents keep within it,
+    // and a positioned figure on its paper.
+    const page = () => pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
     const textColumnWidth = () => {
-        const { width, margin } = pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
+        const { width, margin } = page();
         return width - margin.left - margin.right;
     };
     // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one. A note's
@@ -339,6 +346,7 @@ export function docEditorOptions({
             PageNumber,
             ...(band || note ? [] : [Footnote.configure(footnote), NoteFormatting]),
             TableWidthClamp.configure({ textColumnWidth }),
+            PositionedFigures.configure({ page, blockOnly: band || note }),
             AtomMarks,
             ...extensions,
             ...(band ? [leave(target.onLeave)] : []),

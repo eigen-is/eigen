@@ -16,7 +16,7 @@ export const isFigureFrameNode = (name: string | undefined): name is FigureFrame
 
 // In front of and behind the text are out of the flow: the box sits at its offsets from its anchor paragraph.
 const POSITIONED_LAYOUTS = ['front', 'behind'] as const;
-type PositionedLayout = (typeof POSITIONED_LAYOUTS)[number];
+export type PositionedLayout = (typeof POSITIONED_LAYOUTS)[number];
 const FIGURE_LAYOUTS = ['block', 'wrap-left', 'wrap-right', ...POSITIONED_LAYOUTS] as const;
 export type FigureLayout = (typeof FIGURE_LAYOUTS)[number];
 const FIGURE_ALIGNMENTS = ['left', 'center', 'right'] as const;

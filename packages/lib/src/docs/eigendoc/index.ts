@@ -19,7 +19,13 @@ export type { Equation } from './nodes/equation-paste';
 export { mathAsText, unlessRefused, unwrapRenderedMath } from './nodes/equation-paste';
 export type { FigureAttrs } from './nodes/figure';
 export { FigureNode, readFigureAttrs } from './nodes/figure';
-export type { FigureAlignment, FigureFrameAttrs, FigureFrameNode, FigureLayout } from './nodes/figure-frame';
+export type {
+    FigureAlignment,
+    FigureFrameAttrs,
+    FigureFrameNode,
+    FigureLayout,
+    PositionedLayout,
+} from './nodes/figure-frame';
 export {
     BLOCK_ONLY_FIGURE_PARENTS,
     FIGURE_FRAME_NODES,

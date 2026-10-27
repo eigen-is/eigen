@@ -1,0 +1,452 @@
+// A figure in front of or behind the text takes no room on its line, so the keyboard never lands on it: it always
+// leads its paragraph, the caret rests after it, and ArrowLeft, Backspace, Delete and Enter there act as at a plain
+// paragraph's start, a join keeping the image where it is drawn. It is selected with the pointer only, a behind one by
+// where the pointer is. A drop re-anchors it on the paragraph under its top and clamps it on the page map's paper, a
+// switch to front or behind keeps it in place, and outside the body it draws in line.
+import { afterEach, expect, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
+import type { PageSetup } from '@workspace/lib/docs/eigendoc';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { renderInDocument } from '@workspace/ui/test/render-in-document';
+
+installHappyDom();
+
+const Y = await import('yjs');
+const { act, createElement } = await import('react');
+const { default: Collaboration } = await import('@tiptap/extension-collaboration');
+const { Editor, EditorContent } = await import('@tiptap/react');
+const { DEFAULT_PAGE_SETUP, getDocExtensions, pagePx } = await import('@workspace/lib/docs/eigendoc');
+const { Figure } = await import('../../../../components/docs/extensions/figure');
+const { PositionedFigures } = await import('../../../../components/docs/extensions/positioned-figure');
+const { createDocUndoManager } = await import('../../../../components/docs/page-setup');
+
+type TestEditor = InstanceType<typeof Editor>;
+
+let unmount = async () => {};
+afterEach(() => unmount());
+
+// An 800 px paper with 100 px margins: a 600 px text column from x 100.
+const PAGE: PageSetup = {
+    ...DEFAULT_PAGE_SETUP,
+    width: 800,
+    height: 1000,
+    margin: { top: 100, right: 100, bottom: 100, left: 100 },
+};
+
+const image = (attrs: object = {}) => ({
+    type: 'figure',
+    attrs: { src: 'data:image/png;base64,', width: 200, ...attrs },
+});
+const front = (attrs: object = {}) => image({ layout: 'front', offsetX: 10, offsetY: 20, ...attrs });
+const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
+const text = (t: string) => ({ type: 'text', text: t });
+
+// `undoManager` binds the editor to a Yjs doc, whose undo steps the test counts.
+async function mount(
+    content: object[],
+    options: {
+        blockOnly?: boolean;
+        editable?: boolean;
+        page?: PageSetup;
+        undoManager?: InstanceType<typeof Y.UndoManager>;
+    } = {},
+) {
+    const { undoManager } = options;
+    const editor = new Editor({
+        editable: options.editable ?? true,
+        extensions: [
+            ...getDocExtensions({ exclude: ['figure', 'comment'] }),
+            Figure,
+            PositionedFigures.configure({ page: () => options.page ?? PAGE, blockOnly: options.blockOnly ?? false }),
+            ...(undoManager
+                ? [Collaboration.configure({ document: undoManager.doc, yUndoOptions: { undoManager } })]
+                : []),
+        ],
+        content: undoManager ? undefined : { type: 'doc', content },
+    });
+    if (undoManager) {
+        editor.commands.setContent({ type: 'doc', content });
+        undoManager.clear();
+    }
+    const rendered = await renderInDocument(
+        createElement('div', { 'data-document': '' }, createElement(EditorContent, { editor })),
+    );
+    unmount = async () => {
+        await rendered.unmount();
+        editor.destroy();
+    };
+    await act(async () => {});
+    return editor;
+}
+
+// The doc as each block's children: text, or the node's type with its layout when it has one.
+const blocks = (editor: TestEditor) =>
+    editor.state.doc
+        .toJSON()
+        .content.map((block: JSONContent) =>
+            (block.content ?? []).map((node) =>
+                node.type === 'text'
+                    ? node.text
+                    : node.attrs?.['layout']
+                      ? `${node.type}:${node.attrs['layout']}`
+                      : node.type,
+            ),
+        );
+
+const press = (editor: TestEditor, key: string, init: KeyboardEventInit = {}) =>
+    act(async () => {
+        editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
+    });
+
+const place = (element: Element | null | undefined, x: number, y: number, width = 200, height = 100) => {
+    if (!element) throw new Error('nothing to place');
+    element.getBoundingClientRect = () => DOMRect.fromRect({ x, y, width, height });
+};
+
+// The drawn box of the figure at `pos`: the frame's content, inside the node view's wrapper.
+const figureBox = (editor: TestEditor, pos: number) => {
+    const dom = editor.view.nodeDOM(pos);
+    return dom instanceof Element ? dom.firstElementChild?.firstElementChild : null;
+};
+const blockDom = (editor: TestEditor, pos: number) => {
+    const dom = editor.view.nodeDOM(pos);
+    return dom instanceof Element ? dom : null;
+};
+
+// "xy" in the first paragraph (1 to 3), the second at 4 leading with the figure at 5, "abc" from 6.
+const twoParagraphs = () => [paragraph(text('xy')), paragraph(front(), text('abc'))];
+
+test('a caret placed before the leading run rests after it', async () => {
+    const editor = await mount(twoParagraphs());
+    await act(async () => {
+        editor.commands.setTextSelection(5);
+    });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 6, head: 6 });
+});
+
+test('ArrowLeft at the visual start goes to the end of the paragraph above and never selects the image', async () => {
+    const editor = await mount(twoParagraphs());
+    await act(async () => {
+        editor.commands.setTextSelection(6);
+    });
+    await press(editor, 'ArrowLeft');
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 3, head: 3 });
+});
+
+test.each(['Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'])(
+    '%s on a selected positioned image puts the caret at the visual start of its paragraph',
+    async (key) => {
+        const editor = await mount(twoParagraphs());
+        await act(async () => {
+            editor.commands.setNodeSelection(5);
+        });
+        await press(editor, key);
+        expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 6, head: 6 });
+    },
+);
+
+test.each(['Backspace', 'Delete'])('%s on a selected positioned image deletes it', async (key) => {
+    const editor = await mount(twoParagraphs());
+    await act(async () => {
+        editor.commands.setNodeSelection(5);
+    });
+    await press(editor, key);
+    expect(blocks(editor)).toEqual([['xy'], ['abc']]);
+});
+
+// The paragraph above is drawn 40 px higher than the image's own, so the kept place is 40 px further down from it.
+test.each([
+    ['Backspace at the visual start', 6, 'Backspace'],
+    ['Delete at the end of the paragraph above', 3, 'Delete'],
+])('%s joins the paragraphs and keeps the image where it is drawn', async (_name, caret, key) => {
+    const editor = await mount(twoParagraphs());
+    place(blockDom(editor, 0), 100, 60, 600, 20);
+    place(blockDom(editor, 4), 100, 100, 600, 20);
+    place(figureBox(editor, 5), 110, 120);
+    await act(async () => {
+        editor.commands.setTextSelection(caret);
+    });
+    await press(editor, key);
+    expect(blocks(editor)).toEqual([['figure:front', 'xyabc']]);
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ offsetX: 10, offsetY: 60 });
+    // The caret stays at the join, between "xy" and "abc".
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 4, head: 4 });
+});
+
+test('Backspace at the visual start of the first paragraph keeps the image', async () => {
+    const editor = await mount([paragraph(front(), text('abc'))]);
+    await act(async () => {
+        editor.commands.setTextSelection(2);
+    });
+    await press(editor, 'Backspace');
+    expect(blocks(editor)).toEqual([['figure:front', 'abc']]);
+});
+
+test('Enter at the visual start opens an empty paragraph above, and the image goes down with its text', async () => {
+    const editor = await mount(twoParagraphs());
+    await act(async () => {
+        editor.commands.setTextSelection(6);
+    });
+    await press(editor, 'Enter');
+    expect(blocks(editor)).toEqual([['xy'], [], ['figure:front', 'abc']]);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 8, head: 8 });
+});
+
+test('Enter in the middle of an anchor paragraph leaves the image in the upper part', async () => {
+    const editor = await mount(twoParagraphs());
+    await act(async () => {
+        editor.commands.setTextSelection(7);
+    });
+    await press(editor, 'Enter');
+    expect(blocks(editor)).toEqual([['xy'], ['figure:front', 'a'], ['bc']]);
+});
+
+test('a positioned image inserted mid-paragraph moves to the start, after the leading run', async () => {
+    const editor = await mount(twoParagraphs());
+    await act(async () => {
+        editor.commands.insertContentAt(8, front({ layout: 'behind' }));
+    });
+    expect(blocks(editor)).toEqual([['xy'], ['figure:front', 'figure:behind', 'abc']]);
+});
+
+test("a peer's positioned image mid-paragraph is left to the peer, and so is a viewer's", async () => {
+    const editor = await mount(twoParagraphs());
+    await act(async () => {
+        const { state, schema } = editor;
+        const node = schema.nodeFromJSON(front());
+        editor.view.dispatch(state.tr.insert(8, node).setMeta(ySyncPluginKey, { isChangeOrigin: true }));
+    });
+    expect(blocks(editor)).toEqual([['xy'], ['figure:front', 'ab', 'figure:front', 'c']]);
+
+    const viewer = await mount(twoParagraphs(), { editable: false });
+    await act(async () => {
+        viewer.view.dispatch(viewer.state.tr.insert(8, viewer.schema.nodeFromJSON(front())));
+    });
+    expect(blocks(viewer)).toEqual([['xy'], ['figure:front', 'ab', 'figure:front', 'c']]);
+});
+
+const cellTable = (...content: object[]) => ({
+    type: 'table',
+    content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [paragraph(...content)] }] }],
+});
+
+test('a positioned image that lands in a table cell, or is switched to in a note, draws in line', async () => {
+    const editor = await mount([
+        cellTable(text('cell')),
+        paragraph(text('a'), { type: 'footnote', content: [paragraph(image(), text('n'))] }),
+    ]);
+    // The cell's paragraph starts at 3, and once the cell holds the figure the note's figure is at 17.
+    await act(async () => {
+        editor.commands.insertContentAt(4, front());
+    });
+    expect(editor.state.doc.nodeAt(17)?.type.name).toBe('figure');
+    await act(async () => {
+        editor.view.dispatch(editor.state.tr.setNodeAttribute(17, 'layout', 'behind'));
+    });
+    const layouts: unknown[] = [];
+    editor.state.doc.descendants((node) => {
+        if (node.type.name === 'figure') layouts.push(node.attrs['layout']);
+    });
+    expect(layouts).toEqual(['block', 'block']);
+});
+
+test("in a band's or a note's editor every positioned image draws in line", async () => {
+    const editor = await mount([paragraph(text('a'))], { blockOnly: true });
+    await act(async () => {
+        editor.commands.insertContentAt(2, front());
+    });
+    expect(blocks(editor)).toEqual([['a', 'figure:block']]);
+});
+
+test('a switch to in front of the text keeps the image where it is drawn, leads it and keeps it selected', async () => {
+    // "ab" at 1 to 3, the block figure at 3.
+    const editor = await mount([paragraph(text('ab'), image())]);
+    place(blockDom(editor, 0), 100, 100, 600, 120);
+    place(figureBox(editor, 3), 300, 130);
+    await act(async () => {
+        editor.commands.setNodeSelection(3);
+    });
+    await act(async () => {
+        editor.commands.positionFigure('front');
+    });
+    expect(blocks(editor)).toEqual([['figure:front', 'ab']]);
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ offsetX: 200, offsetY: 30 });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
+});
+
+test('a switch between front and behind moves nothing', async () => {
+    const editor = await mount(twoParagraphs());
+    await act(async () => {
+        editor.commands.setNodeSelection(5);
+    });
+    await act(async () => {
+        editor.commands.positionFigure('behind');
+    });
+    expect(blocks(editor)).toEqual([['xy'], ['figure:behind', 'abc']]);
+    expect(editor.state.doc.nodeAt(5)?.attrs).toMatchObject({ offsetX: 10, offsetY: 20 });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 5 });
+});
+
+// The text column at x 100 holds the first paragraph from y 100 to 120 and the second from y 120 to 140.
+async function twoLaidOut(page = PAGE, column = { x: 100, width: 600 }) {
+    const editor = await mount(
+        [paragraph(text('xy')), paragraph(front({ commentCardId: 'card' }), text('abc')), paragraph(text('z'))],
+        { page },
+    );
+    place(editor.view.dom, column.x, 100, column.width, 300);
+    place(blockDom(editor, 0), column.x, 100, column.width, 20);
+    place(blockDom(editor, 4), column.x, 120, column.width, 20);
+    place(blockDom(editor, 10), column.x, 140, column.width, 20);
+    await act(async () => {
+        editor.commands.setNodeSelection(5);
+    });
+    return editor;
+}
+
+test('a drop under another paragraph anchors the image there, kept selected with its comment', async () => {
+    const editor = await twoLaidOut();
+    await act(async () => {
+        editor.commands.moveFigure(5, { left: 150, top: 150 });
+    });
+    expect(blocks(editor)).toEqual([['xy'], ['abc'], ['figure:front', 'z']]);
+    expect(editor.state.doc.nodeAt(10)?.attrs).toMatchObject({ offsetX: 50, offsetY: 10, commentCardId: 'card' });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 10 });
+});
+
+test('a drop within its own paragraph writes the offsets alone', async () => {
+    const editor = await twoLaidOut();
+    const before = editor.state.doc.nodeAt(5);
+    await act(async () => {
+        editor.commands.moveFigure(5, { left: 130, top: 125 });
+    });
+    expect(blocks(editor)).toEqual([['xy'], ['figure:front', 'abc'], ['z']]);
+    expect(editor.state.doc.nodeAt(5)?.attrs).toMatchObject({ offsetX: 30, offsetY: 5 });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 5 });
+    expect(before).not.toBe(editor.state.doc.nodeAt(5));
+});
+
+test("a drop keeps the image on the paper: within its edges, and below the page's top", async () => {
+    const editor = await twoLaidOut();
+    // The paragraph's left edge is the paper's x 100; a 200 px image fits up to the paper's x 600.
+    await act(async () => {
+        editor.commands.moveFigure(5, { left: 2000, top: 125 });
+    });
+    expect(editor.state.doc.nodeAt(5)?.attrs).toMatchObject({ offsetX: 500 });
+    await act(async () => {
+        editor.commands.moveFigure(5, { left: -500, top: -500 });
+    });
+    // Above the first paragraph it anchors there, on the page's top.
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ offsetX: -100, offsetY: -100 });
+});
+
+// The page-less contract with J3: the stored place never depends on the column a screen lays out.
+test("on an A4 page map with the column laid out 360 px wide, a drop clamps at the paper's edge, not the column's", async () => {
+    const a4 = pagePx(DEFAULT_PAGE_SETUP);
+    const editor = await twoLaidOut(a4, { x: 0, width: 360 });
+    await act(async () => {
+        editor.commands.moveFigure(5, { left: 5000, top: 125 });
+    });
+    expect(editor.state.doc.nodeAt(5)?.attrs['offsetX']).toBe(Math.round(a4.width - 200 - a4.margin.left));
+});
+
+// Behind-image selection by geometry: the paragraph's box lies over the image, its text only where its lines are.
+async function behindUnderText() {
+    const editor = await mount([paragraph(front({ layout: 'behind' }), text('abc'))]);
+    const paragraphDom = blockDom(editor, 0);
+    const box = editor.view.dom.querySelector('.figure[data-layout="behind"]');
+    if (!paragraphDom || !box) throw new Error('not drawn');
+    const hits = [paragraphDom, editor.view.dom, box.querySelector('img') ?? box, box];
+    const restore = { points: document.elementsFromPoint, rects: Range.prototype.getClientRects };
+    document.elementsFromPoint = () => hits;
+    // One line of text, 50 px wide at the paragraph's left.
+    const line = DOMRect.fromRect({ x: 0, y: 0, width: 50, height: 20 });
+    Range.prototype.getClientRects = () => ({
+        0: line,
+        length: 1,
+        item: (index: number) => (index === 0 ? line : null),
+        [Symbol.iterator]: () => [line][Symbol.iterator](),
+    });
+    const unmountEditor = unmount;
+    unmount = async () => {
+        document.elementsFromPoint = restore.points;
+        Range.prototype.getClientRects = restore.rects;
+        await unmountEditor();
+    };
+    const mousedown = (clientX: number, altKey = false) =>
+        act(async () => {
+            paragraphDom.dispatchEvent(
+                new MouseEvent('mousedown', {
+                    bubbles: true,
+                    cancelable: true,
+                    button: 0,
+                    clientX,
+                    clientY: 10,
+                    altKey,
+                }),
+            );
+        });
+    return { editor, mousedown };
+}
+
+test('a press on a bare part of a paragraph over a behind image selects the image', async () => {
+    const { editor, mousedown } = await behindUnderText();
+    await mousedown(300);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
+});
+
+test('a press on the text over a behind image is the text’s, and Alt takes the image', async () => {
+    const { editor, mousedown } = await behindUnderText();
+    const before = editor.state.selection.toJSON();
+    await mousedown(20);
+    expect(editor.state.selection.toJSON()).toEqual(before);
+    await mousedown(20, true);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
+});
+
+test('the body grows under the lowest positioned image, and only while one is there', async () => {
+    const editor = await mount([paragraph(front(), text('abc'))]);
+    place(editor.view.dom, 100, 100, 600, 50);
+    place(editor.view.dom.querySelector('.figure'), 110, 120, 200, 400);
+    await act(async () => {
+        editor.commands.insertContentAt(3, 'd');
+    });
+    expect(editor.view.dom.style.minHeight).toBe('420px');
+    await act(async () => {
+        editor.commands.setNodeSelection(1);
+        editor.commands.deleteSelection();
+    });
+    expect(editor.view.dom.style.minHeight).toBe('');
+});
+
+test('a re-anchor and a Backspace join are one undo step each', async () => {
+    const undoManager = createDocUndoManager(new Y.Doc());
+    const editor = await mount(twoParagraphs(), { undoManager });
+    const original = blocks(editor);
+    place(editor.view.dom, 100, 100, 600, 300);
+    place(blockDom(editor, 0), 100, 100, 600, 20);
+    place(blockDom(editor, 4), 100, 120, 600, 20);
+    place(figureBox(editor, 5), 110, 140);
+
+    await act(async () => {
+        editor.commands.moveFigure(5, { left: 110, top: 105 });
+    });
+    expect(blocks(editor)).toEqual([['figure:front', 'xy'], ['abc']]);
+    expect(undoManager.undoStack.length).toBe(1);
+    await act(async () => {
+        undoManager.undo();
+    });
+    expect(blocks(editor)).toEqual(original);
+
+    undoManager.clear();
+    await act(async () => {
+        editor.commands.setTextSelection(6);
+    });
+    await press(editor, 'Backspace');
+    expect(blocks(editor)).toEqual([['figure:front', 'xyabc']]);
+    expect(undoManager.undoStack.length).toBe(1);
+    await act(async () => {
+        undoManager.undo();
+    });
+    expect(blocks(editor)).toEqual(original);
+});
