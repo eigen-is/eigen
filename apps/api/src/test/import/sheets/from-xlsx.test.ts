@@ -3,7 +3,7 @@ import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { ApiError } from '../../../lib/core/errors';
 import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { openZip, writeZip } from '../../../lib/ooxml/zip';
-import { OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
+import { OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
 // The reader end to end, on workbooks that each hold one family of what it reads: values, types, dates, formulas,
@@ -207,6 +207,30 @@ describe('the reader', () => {
         );
         expect(sheet).toMatchObject({ defaultColWidth: 70, defaultRowHeight: 17 });
         expect(sheet.config?.rowlen).toEqual({ 1: 20 });
+    });
+
+    test('a row whose estimated height rounds to the default stores none', () => {
+        // One wrapped line in 10.2 pt is estimated at 24.4 px, which rounds to the 18 pt default's 24 px.
+        const styles = styleSheet({
+            fonts: ['<font><sz val="10.2"/><name val="Calibri"/></font>'],
+            xfs: ['<xf numFmtId="0" fontId="1" fillId="0" borderId="0"><alignment wrapText="1"/></xf>'],
+        });
+        const data = rowsXml([['A1', 'short', 1]]);
+        const before = '<sheetFormatPr defaultRowHeight="18"/>';
+        const [sheet] = xlsxToSheets(xlsxFixture({ sheets: [{ data, before }], styles }));
+        expect(sheet.defaultRowHeight).toBe(24);
+        expect(sheet.config?.rowlen).toBeUndefined();
+    });
+
+    test('an empty wrapped cell grows no row, as LibreOffice draws it at the default', () => {
+        // A coloured font, so the reader keeps the cell without a value.
+        const styles = styleSheet({
+            fonts: ['<font><sz val="11"/><color rgb="FF333399"/><name val="Calibri"/></font>'],
+            xfs: ['<xf numFmtId="0" fontId="1" fillId="0" borderId="0"><alignment wrapText="1"/></xf>'],
+        });
+        const [sheet] = xlsxToSheets(xlsxFixture({ sheets: [{ data: '<row r="1"><c r="A1" s="1"/></row>' }], styles }));
+        expect(sheet.celldata?.[0]?.v).toMatchObject({ tb: '2', fc: '#333399' });
+        expect(sheet.config?.rowlen).toBeUndefined();
     });
 
     test('columns, frozen panes, gridlines and the filter', () => {

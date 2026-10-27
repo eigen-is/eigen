@@ -12,7 +12,7 @@ import { parseOoxml, SML_NS } from '../../lib/ooxml/ooxml';
 import { openZip } from '../../lib/ooxml/zip';
 import { seedDocumentMedia } from '../fixtures/golden-documents';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
-import { exportXlsx } from '../fixtures/xlsx';
+import { exportXlsx, rowsXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import { driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // The raw XML, for what the import doesn't read back: the form a part is written in.
@@ -277,6 +277,64 @@ describe('Sheets xlsx export — hidden rows/cols', () => {
         expect(sheet.config?.rowhidden).toEqual({ '1': 0, '4': 0 });
         expect(sheet.config?.colhidden).toEqual({ '2': 0, '3': 0 });
         expect(sheet.config?.rowlen).toBeUndefined();
+    });
+});
+
+describe('Sheets xlsx export — a row Excel would refit', () => {
+    const long = 'A long wrapped sentence that needs several lines at the default column width. '.repeat(3);
+
+    test('a custom row at the default height imports at the default, and stays there through our writer', () => {
+        // Font 1 is large, xf 1 wraps and xf 2 is in the large font. The default row is 15 pt.
+        const styles = styleSheet({
+            fonts: ['<font><sz val="20"/><name val="Calibri"/></font>'],
+            xfs: [
+                '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"><alignment wrapText="1"/></xf>',
+                '<xf numFmtId="0" fontId="1" fillId="0" borderId="0"/>',
+            ],
+        });
+        const data = rowsXml(
+            [
+                ['A1', long, 1],
+                ['A2', long, 1],
+                ['A3', 'large', 2],
+            ],
+            { 1: 'ht="15" customHeight="1"', 2: 'ht="15"', 3: 'ht="15" customHeight="1"' },
+        );
+        const [imported] = xlsxToSheets(xlsxFixture({ sheets: [{ data }], styles }));
+        // Excel draws a custom row at its height. Row 2 is not custom, so it grows to its text, as a LibreOffice file's rows do.
+        expect(Object.keys(imported.config?.rowlen ?? {})).toEqual(['1']);
+
+        const buffer = exportXlsx([imported]);
+        const xml = readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+        expect(xml).toContain('<row r="1" ht="15" customHeight="1">');
+        expect(xml).toContain('<row r="3" ht="15" customHeight="1">');
+        expect(xlsxToSheets(buffer)[0].config?.rowlen).toEqual(imported.config?.rowlen);
+    });
+
+    test('a wrapped or large row the sheet leaves at the default is written custom at the default', () => {
+        // Larger means above Excel's 11 pt default, in the cell's font or a rich run's. A wrapped cell counts when it holds text.
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: long, m: long, tb: '2' } },
+                    { r: 1, c: 0, v: { v: 'large', m: 'large', fs: 20 } },
+                    { r: 2, c: 0, v: { v: 'plain', m: 'plain' } },
+                    { r: 3, c: 0, v: { ct: { t: 'inlineStr', s: [{ v: 'large run', fs: 24 }] } } },
+                    { r: 4, c: 0, v: { v: 'eleven', m: 'eleven', fs: 11 } },
+                    { r: 5, c: 0, v: { tb: '2' } },
+                ],
+            },
+        ];
+        const buffer = exportXlsx(sheets);
+        const xml = readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+        expect(xml).toContain('<row r="1" ht="15" customHeight="1">');
+        expect(xml).toContain('<row r="2" ht="15" customHeight="1">');
+        expect(xml).toContain('<row r="3">');
+        expect(xml).toContain('<row r="4" ht="15" customHeight="1">');
+        expect(xml).toContain('<row r="5">');
+        expect(xml).toContain('<row r="6">');
+        expect(xlsxToSheets(buffer)[0].config?.rowlen).toBeUndefined();
     });
 });
 

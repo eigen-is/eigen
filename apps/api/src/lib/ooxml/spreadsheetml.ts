@@ -31,6 +31,8 @@ export const DAYS_1904 = 1462;
 // digits, and the row is Excel's at Calibri 11, in points.
 export const DEFAULT_BASE_COL_WIDTH = 8;
 export const DEFAULT_ROW_HEIGHT_PT = 15;
+// Excel's default font size, Calibri 11's. Excel and LibreOffice grow a row that isn't custom for a font above it.
+export const DEFAULT_FONT_SIZE_PT = 11;
 
 // The default font's widest digit in pixels, as Excel for Windows draws it at 96 dpi. Each entry holds from its point
 // size up. These are GDI's hinted advances, not the outline's, so they are measured: EPPlus' FontSize table, which the

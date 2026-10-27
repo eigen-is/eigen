@@ -4,11 +4,22 @@
 
 import { pxToPt } from '@workspace/lib/docs/eigendoc';
 import type { Cell, CellBorderSides, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
-import { columnIndexToLabel, parseCellKey, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import {
+    columnIndexToLabel,
+    parseCellKey,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    sheetDefaultRowHeight,
+} from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { rangeToA1, valueIsError } from '@workspace/sheet/engine';
+import { cellDisplay, cellWrapsText, rangeToA1, valueIsError } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
-import { MAX_FORMULA_LENGTH, withFuturePrefixes } from '../../../ooxml/spreadsheetml';
+import {
+    cellFontSize,
+    DEFAULT_FONT_SIZE_PT,
+    MAX_FORMULA_LENGTH,
+    withFuturePrefixes,
+} from '../../../ooxml/spreadsheetml';
 import type { SharedStringTable } from './strings';
 import { BATCH_CHARS, cutText } from './strings';
 import type { StyleRegistry } from './styles';
@@ -92,9 +103,13 @@ export function sheetGrid(sheet: Sheet, context: GridContext): Grid {
             ? `<c r="${labels[c]}${r + 1}"${attributes}>${value.xml}</c>`
             : `<c r="${labels[c]}${r + 1}"${attributes}/>`;
     };
-    const rowAttributes = (r: number): string => {
-        const px = Number(rowlen[r]);
-        const height = px > 0 && Number.isFinite(px) ? ` ht="${pxToPt(px)}" customHeight="1"` : '';
+    // The editor draws a row without a height of its own at the default. Excel and LibreOffice fit a row that isn't
+    // custom to its content on open, so a row whose content they would grow is written custom at the default.
+    const defaultHeight = sheetDefaultRowHeight(sheet);
+    const rowAttributes = (r: number, refits: boolean): string => {
+        const stored = Number(rowlen[r]);
+        const px = stored > 0 && Number.isFinite(stored) ? stored : refits ? defaultHeight : 0;
+        const height = px ? ` ht="${pxToPt(px)}" customHeight="1"` : '';
         return `${height}${rowhidden[r] != null ? ' hidden="1"' : ''}`;
     };
 
@@ -115,6 +130,7 @@ export function sheetGrid(sheet: Sheet, context: GridContext): Grid {
             const end = keyOf(r + 1, 0);
             let content = '';
             let written = -1;
+            let refits = false;
             for (;;) {
                 const cellKey = nextCell();
                 const borderKey = nextBorder();
@@ -124,10 +140,11 @@ export function sheetGrid(sheet: Sheet, context: GridContext): Grid {
                 if (borderKey === key) bi++;
                 if (key === written) continue;
                 written = key;
+                if (cell && !refits) refits = refitsOnOpen(cell);
                 const c = key - r * REFERENCE_COLUMN_COUNT;
                 content += cellXml(r, c, cell ?? undefined, borderKey === key ? borderInfo[`${r}_${c}`] : undefined);
             }
-            const attributes = rowAttributes(r);
+            const attributes = rowAttributes(r, refits);
             if (content || attributes) batch += `<row r="${r + 1}"${attributes}>${content}</row>`;
             if (batch.length >= BATCH_CHARS) {
                 yield batch;
@@ -138,6 +155,14 @@ export function sheetGrid(sheet: Sheet, context: GridContext): Grid {
     }
 
     return { dimension, rows };
+}
+
+// Whether Excel and LibreOffice would fit a row that isn't custom to this cell on open: it wraps text it holds, as the
+// editor's own auto-grow asks, or its font or one of its runs' is larger than Excel's default.
+function refitsOnOpen(cell: Cell): boolean {
+    if (cellWrapsText(cell) && cellDisplay(cell)) return true;
+    if (cellFontSize(cell.fs) > DEFAULT_FONT_SIZE_PT) return true;
+    return cell.ct?.s?.some((run) => cellFontSize(run.fs) > DEFAULT_FONT_SIZE_PT) ?? false;
 }
 
 function sortedKeys(keys: string[], keyOfEntry: (key: string) => number | undefined): Float64Array {

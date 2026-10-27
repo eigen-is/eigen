@@ -206,11 +206,15 @@ describe('the grid', () => {
         expect([grid.rows, grid.columns]).toEqual([5, 6]);
     });
 
-    test('row heights as written, and hidden rows, with cells or without; a height that draws no pixel is hidden', () => {
+    test('row heights as written and which are custom, and hidden rows, with cells or without; a height that draws no pixel is hidden', () => {
         const { grid } = read(
-            '<row r="1" ht="30" customHeight="1"><c r="A1"><v>1</v></c></row><row r="3" hidden="1" ht="0"/><row r="4" hidden="true" ht="abc"><c r="A4"><v>1</v></c></row><row r="5" ht="0" customHeight="1"/><row r="6" ht="0.05" customHeight="1"/>',
+            '<row r="1" ht="30" customHeight="1"><c r="A1"><v>1</v></c></row><row r="2" ht="15"/><row r="3" hidden="1" ht="0"/><row r="4" hidden="true" ht="abc"><c r="A4"><v>1</v></c></row><row r="5" ht="0" customHeight="1"/><row r="6" ht="0.05" customHeight="1"/>',
         );
-        expect([...grid.heights]).toEqual([[0, 30]]);
+        expect([...grid.heights]).toEqual([
+            [0, 30],
+            [1, 15],
+        ]);
+        expect([...grid.custom]).toEqual([0]);
         expect(grid.rowhidden).toEqual({ 2: 0, 3: 0, 4: 0, 5: 0 });
     });
 
