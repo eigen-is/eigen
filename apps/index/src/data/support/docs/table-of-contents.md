@@ -24,7 +24,7 @@ Click a line in the table of contents. Your cursor moves to the start of that he
 
 ## Remove a table of contents
 
-Put your cursor at the start of the line right after the table of contents and press **Backspace**. The first press selects the table of contents, and the second removes it.
+Click to the right of the lines in the table of contents to select it. A blue outline shows around it. Press **Backspace** to remove it.
 
 ## Good to know
 

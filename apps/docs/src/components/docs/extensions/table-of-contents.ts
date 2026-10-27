@@ -78,6 +78,8 @@ class TableOfContentsView implements NodeView {
             if (level > levels) return [];
             const line = document.createElement('a');
             line.setAttribute('data-level', String(level));
+            // As wide as its text, so a press beside an entry selects the table of contents instead of jumping.
+            line.className = 'w-fit';
             line.textContent = text;
             // A press would select the node; the jump puts the caret in the heading instead.
             line.addEventListener('mousedown', (event) => {
