@@ -1,9 +1,7 @@
-// Regression net for the collab/Yjs audit's chat-restore-wipe P1 (deep-dive doc removed — see git history):
+// Regression net for the collab/Yjs audit's chat-restore-wipe P1:
 // restoreContainer's replaceContainerDataDb rewrites a chat's data.db in place under the container
 // lock, while ChatRoom.init (built fresh per request by Drive.getChat) provisions a missing data.db
 // under that same lock. Posts racing a restore must leave one data.db and a coherent message set.
-// (The broader collab restore/close/snapshot race matrix that verified the sound Yjs core lives
-// in docs/superpowers/api-audit-deepdive-tests/collab-restore-race.test.ts.)
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getHome } from '../../lib/home';
