@@ -1,3 +1,7 @@
+// The deployment's identity, kept in the server data folder: the org and its default team, the auth secret,
+// the mail domain and whether setup has run. The auth layer, setup and the mail code read it, and its
+// public slice, the org and default team ids included, goes to every app through the public config route.
+
 import { randomBytes } from 'node:crypto';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { ROLE_MAILBOX_LOCAL_PARTS } from '@workspace/lib/validation';
@@ -131,6 +135,7 @@ export function getPublicConfig() {
         mailDomain: getMailDomain(),
         orgName: config.orgName,
         orgId: config.orgId,
+        defaultTeamId: config.defaultTeamId,
         version: VERSION,
         commit: COMMIT,
         builtAt: BUILT_AT,

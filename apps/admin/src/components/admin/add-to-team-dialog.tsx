@@ -1,9 +1,10 @@
 // The dialog that adds one or more users to a team, such as the selection the users list's "Add to
 // team…" menu entry passes, or the one user whose detail shows it. The admin searches the
 // organization's teams and clicks one, and every user joins it through useAddTeamMembers. A team
-// every user is already in is left out.
+// every user is already in is left out, and so is the default team, which every user joins.
 
 import { useAddTeamMembers, useTeams } from '@workspace/lib/admin';
+import { usePublicConfig } from '@workspace/lib/public';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -46,9 +47,14 @@ type TeamPickerProps = {
 
 function TeamPicker({ users, organizationId, onAdded }: TeamPickerProps) {
     const [search, setSearch] = useState('');
-    const { data: teams = [] } = useTeams(organizationId);
+    const { data: orgTeams = [] } = useTeams(organizationId);
+    const { data: config } = usePublicConfig();
     const addMembers = useAddTeamMembers();
 
+    const teams = useMemo(
+        () => orgTeams.filter((team) => team.id !== config?.defaultTeamId),
+        [orgTeams, config?.defaultTeamId],
+    );
     const available = useMemo(
         () =>
             teams
