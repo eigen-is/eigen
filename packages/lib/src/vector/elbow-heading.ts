@@ -1,6 +1,7 @@
 // The shape helpers an elbow arrow's router needs, ported from Excalidraw: which side the arrow leaves a
 // bound shape from (a Heading), where its rest endpoint is, and the padded bounds around a shape.
-// elbow-route and elbow-pins call it. Everything is in scene space, and shape angles are degrees.
+// Its callers include the router itself, the arrow's renderer and the canvas's drawing tools, which
+// dock an elbow arrow to a shape. Everything is in scene space, and shape angles are degrees.
 
 import type { Point } from './geometry';
 import {
