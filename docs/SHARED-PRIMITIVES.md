@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2023 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2030 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -538,7 +538,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (459)
+## Types (460)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -583,6 +583,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureFrameNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `NormalStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
+| `OutlineHeading` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `PageMargin` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `PageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -1002,7 +1003,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1057)
+## Utilities & constants (1063)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1409,6 +1410,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `insertFootnote` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
 | `isFigureFrameNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
+| `isOutlineHeading` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `isPositioned` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `ITALIC_HEADING_LEVELS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `ITALIC_HEADING_SELECTOR` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
@@ -1424,6 +1426,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mmToPx` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mmToTwips` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `normalStyleProperties` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
+| `outlineText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `PAGE_BAND_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `PAGE_BREAK_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-break.ts |
 | `PAGE_NUMBER_KINDS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
@@ -1452,6 +1455,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readFigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `readFigureFrameAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `readNormalStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
+| `readOutline` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `readPageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `readPageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `readParagraphFormat` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
@@ -1477,6 +1481,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `PENDING_PREFIX` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
+| `toastExportSummary` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-export-document.ts |
 | `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
 | `FILE_ACTIONS` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
 | `fileActionsFor` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
@@ -1491,6 +1496,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `isRecord` | `@workspace/lib/guards` | packages/lib/src/core/guards.ts |
 | `handleHomeSSEvent` | `@workspace/lib/home` | packages/lib/src/core/home/sse-handlers.ts |
+| `countTaskItems` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `isElement` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `LIGHT_EDITOR_ATTRS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
@@ -1608,6 +1614,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EMPTY_S3` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `EXPORT_FORMAT_LABELS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EXPORT_FORMATS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `EXPORT_SUMMARY_HEADER` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `exportFormatsFor` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
