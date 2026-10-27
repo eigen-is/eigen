@@ -3,13 +3,14 @@
 // applyOp turns a peer's ops back into patches. Kept together because a test that uses one
 // almost always uses the other, and because the pair is what makes divergence visible.
 
+import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { replaySheetsOps } from '../../../engine';
 import type { Context } from '../../../state/context';
 import { FormulaCache } from '../../../state/modules/formula-cache';
 import { groupValuesRefresh } from '../../../state/modules/formula-exec';
-import { recordEntry, redoEntry, undoEntry } from '../../../state/modules/history';
+import { pushEntry, recordEntry, redoEntry, undoEntry } from '../../../state/modules/history';
 import type { History, Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
 import { filterPatch, opToPatch, patchToOp } from '../../../state/utils/patch';
@@ -42,7 +43,7 @@ export function syncablePaths(base: Context, recipe: (ctx: Context) => void) {
 // One edit as setContextWithProduce records it: the new state, its ops and its undo entry.
 export function author(base: Context, recipe: (ctx: Context) => void, options: PatchOptions = {}) {
     const [next, patches, inverse] = produceWithPatches(base, recipe);
-    const entry = recordEntry(base, next, filterPatch(patches), filterPatch(inverse), { ...options });
+    const entry = recordEntry(base, next, filterPatch(patches), filterPatch(inverse), options);
     return {
         next,
         ops: patchToOp(next, filterPatch(patches), entry.options),
@@ -88,7 +89,7 @@ export function tabEdit(t: Tab, recipe: (ctx: Context) => void, options?: PatchO
     };
     const { next, ops, entry } = author(t.ctx, recalculated, options);
     t.ctx = next;
-    t.history.undoList.push(entry);
+    pushEntry(t.history.undoList, entry);
     t.history.redoList = [];
     return ops;
 }
@@ -116,5 +117,7 @@ export function tabRedo(t: Tab): Op[] {
     return ops;
 }
 
-// A joiner replays the batches on the base's stored sheets.
-export const join = (base: Context, batches: Op[][]) => replaySheetsOps(structuredClone(base.sheets), batches);
+// A joiner decodes the stored snapshot, stored cells and no matrix, and replays the batches on it, as a browser that
+// opens the workbook and the server's read do.
+export const join = (base: Context, batches: Op[][]) =>
+    replaySheetsOps(decodeSheetsSnapshot(encodeSheetsSnapshot(base.sheets, { computed: true })), batches);

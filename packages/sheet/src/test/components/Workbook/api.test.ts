@@ -34,8 +34,16 @@ function makeCtx(b1: Cell | null, currentSheetId = 'id_1'): Context {
         currentSheetId,
         selections: sel(0, 0, 0, 0),
         sheets: [
-            { name: 'first', id: 'id_1', order: 0, data, calcChain: b1?.f ? [{ r: 0, c: 1, id: 'id_1' }] : [] },
-            { name: 'second', id: 'id_2', order: 1, data: makeData(null), calcChain: [] },
+            {
+                name: 'first',
+                id: 'id_1',
+                order: 0,
+                row: 4,
+                column: 4,
+                data,
+                calcChain: b1?.f ? [{ r: 0, c: 1, id: 'id_1' }] : [],
+            },
+            { name: 'second', id: 'id_2', order: 1, row: 4, column: 4, data: makeData(null), calcChain: [] },
         ],
     }) as Context;
 }
@@ -172,7 +180,7 @@ describe('applyOp and a batch that fails halfway', () => {
         const peer = applyPeerOps(ctx, ops);
         const [joiner] = join(ctx, [ops]);
         expect(peer.sheets[0].data).toEqual(ctx.sheets[0].data);
-        expect(joiner.data).toEqual(ctx.sheets[0].data);
+        expect(joiner.celldata).toEqual(dataToCelldata(ctx.sheets[0].data));
     });
 });
 
@@ -253,7 +261,8 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         ];
         const ctx = makeCtx({ v: 1, m: '1' });
         const next = applyPeerOps(ctx, ops);
-        expect(next.sheets.map((s) => s.data?.length)).toEqual(join(ctx, [ops]).map((s) => s.data?.length));
+        expect(next.sheets.map((s) => s.data?.length)).toEqual([4, 5]);
+        expect(join(ctx, [ops])[1].data?.length).toBe(5);
     });
 
     it('skips an insert into a read-only row and applies the rest, as the replay does', () => {

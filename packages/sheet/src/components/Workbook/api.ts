@@ -55,17 +55,20 @@ export function generateAPIs(
 ) {
     return {
         applyOp: (ops: Op[]) => {
-            // A peer's row or column op moves the cells under this tab's undo and redo entries. They shift now, in
-            // call order, so an undo called before this batch keeps the entry it was called with.
-            for (const op of ops) {
-                if (op.op !== 'insertRowCol' && op.op !== 'deleteRowCol') continue;
-                history.undoList = shiftEntries(history.undoList, op, context.sheets);
-                history.redoList = shiftEntries(history.redoList, op, context.sheets);
-            }
+            // A peer's row or column op moves the cells under this tab's undo and redo entries. They shift by the ops
+            // the batch applied, against the sheets it applied them to, once: React may run an updater twice.
+            let shifted = false;
             setContext(
                 (ctx_) => {
-                    const next = applyOpBatch(current(ctx_), ops);
-                    if (next) Object.assign(ctx_, next);
+                    const applied = applyOpBatch(current(ctx_), ops);
+                    if (!applied) return;
+                    Object.assign(ctx_, applied.ctx);
+                    if (shifted) return;
+                    shifted = true;
+                    for (const { op, sheets } of applied.moved) {
+                        history.undoList = shiftEntries(history.undoList, op, sheets, 'undo');
+                        history.redoList = shiftEntries(history.redoList, op, sheets, 'redo');
+                    }
                 },
                 { noHistory: true },
             );

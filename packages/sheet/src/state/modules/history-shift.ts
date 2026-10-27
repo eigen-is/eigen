@@ -19,9 +19,10 @@ import {
     shiftMergeForDelete,
     shiftMergeForInsert,
 } from '../../engine/rowcol';
-import type { Cell, CellMatrix } from '../../engine/types';
+import type { CalcChainEntry, Cell, CellMatrix } from '../../engine/types';
 import type { History, Op, Sheet } from '../types';
 import type { PatchOptions } from '../utils';
+import { inverseRowColOptions } from '../utils';
 
 // What one row or column op does to the indices on its axis, with the engine's shifter for each kind of map.
 type RowColMove = {
@@ -39,7 +40,7 @@ type RowColMove = {
 };
 
 // The move of an undo entry's own row or column op.
-export function rowColMove({ insertRowColOp, deleteRowColOp }: PatchOptions): RowColMove | undefined {
+export function rowColMove({ insertRowColOp, deleteRowColOp }: PatchOptions = {}): RowColMove | undefined {
     if (insertRowColOp) return insertMove(insertRowColOp);
     if (deleteRowColOp) return deleteMove(deleteRowColOp);
     return undefined;
@@ -82,8 +83,12 @@ function deleteMove(op: DeleteRowColOp): RowColMove {
 // A peer's row or column op moves your entries' cells, merges, borders, links, validation and row or column sizes on
 // its sheet, and the formula text that points at it on any sheet, a deleted sheet's included. An entry the op makes
 // meaningless is dropped: one that writes inside deleted rows or columns or cuts a merge, a range or a whole config on
-// the op's sheet, a chart's data on that sheet, or your own row or column op there. calcChain is left as it is.
-export function shiftEntries(entries: History[], marker: Op, sheets: Sheet[]): History[] {
+// the op's sheet, a chart's data on that sheet, or your own row or column op there.
+//
+// Each entry fits the grid as the entries above it on its stack leave it: an undo entry was recorded before the row
+// ops above it were made, and a redo entry after the row ops above it are redone. So once your own row or column op
+// is dropped, the entries below it first take that op's move on an undo stack, or its inverse on a redo stack.
+export function shiftEntries(entries: History[], marker: Op, sheets: Sheet[], stack: 'undo' | 'redo'): History[] {
     const { id } = marker;
     const target = sheets.find((sheet) => sheet.id === id);
     if (id == null || !target) return entries;
@@ -91,13 +96,21 @@ export function shiftEntries(entries: History[], marker: Op, sheets: Sheet[]): H
     if (marker.op === 'insertRowCol') move = insertMove({ ...marker.value, id });
     else if (marker.op === 'deleteRowCol') move = deleteMove({ ...marker.value, id });
     else return entries;
-    const shifter = new Shifter(move, target.name, sheets);
+    let shifters = [new Shifter(move, target.name, sheets)];
     const shifted: History[] = [];
-    for (const entry of entries) {
-        const next = shifter.entry(entry);
+    for (let i = entries.length - 1; i >= 0; i -= 1) {
+        const entry = entries[i];
+        const own = entry.options?.insertRowColOp ?? entry.options?.deleteRowColOp;
+        if (own?.id === id) {
+            const dropped = rowColMove(stack === 'undo' ? entry.options : inverseRowColOptions(entry.options));
+            if (dropped) shifters = [new Shifter(dropped, target.name, sheets), ...shifters];
+            continue;
+        }
+        let next: History | null = entry;
+        for (const shifter of shifters) next = next && shifter.entry(next);
         if (next) shifted.push(next);
     }
-    return shifted;
+    return shifted.reverse();
 }
 
 function axisName(type: 'row' | 'column') {
@@ -151,6 +164,7 @@ class Shifter {
         if (field === 'data') return this.dataPatch(patch, rest);
         if (field === 'config') return this.configPatch(patch, rest);
         if (field === 'hyperlink' || field === 'dataVerification') return this.cellKeyed(patch, rest);
+        if (field === 'calcChain') return this.calcChain(patch, rest);
         return POSITION_FREE_FIELDS.has(field) ? patch : null;
     }
 
@@ -350,6 +364,33 @@ class Shifter {
         return at(patch, [...patch.path.slice(0, depth), moved, ...below], patch.value);
     }
 
+    // The recalc list names each formula cell by its place, so an entry moves with its cell, and a whole list moves as
+    // one. A write of the list's length moves nothing.
+    private calcChain(patch: Patch, [index]: (string | number)[]): Patch | null {
+        if (!('value' in patch) || patch.value == null || index === 'length') return patch;
+        if (index != null) {
+            const moved = this.chainEntry(patch.value);
+            return moved && at(patch, patch.path, moved);
+        }
+        const list: CalcChainEntry[] = patch.value;
+        const moved: CalcChainEntry[] = [];
+        for (const entry of list) {
+            const next = this.chainEntry(entry);
+            if (!next) return null;
+            moved.push(next);
+        }
+        return moved.every((entry, i) => entry === list[i]) ? patch : { ...patch, value: moved };
+    }
+
+    private chainEntry(entry: CalcChainEntry): CalcChainEntry | null {
+        const row = this.move.type === 'row';
+        const position = row ? entry.r : entry.c;
+        const moved = this.move.to(position);
+        if (moved == null) return null;
+        if (moved === position) return entry;
+        return row ? { ...entry, r: moved } : { ...entry, c: moved };
+    }
+
     private formula(f: string, onTargetSheet: boolean): string {
         const text = f.startsWith('=') ? f.slice(1) : f;
         const shifted = `=${this.move.formula(text, this.name, onTargetSheet)}`;
@@ -412,7 +453,6 @@ const POSITION_FREE_FIELDS = new Set<string | number>([
     'defaultRowHeight',
     'defaultColWidth',
     'images',
-    'calcChain',
 ]);
 
 const ROW_MAPS = new Set(['rowlen', 'rowhidden', 'customHeight', 'rowReadOnly']);

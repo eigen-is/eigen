@@ -317,6 +317,20 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
                 }
             }
             if (newData) newSheet = { ...newSheet, data: newData };
+        } else if (sheet.celldata) {
+            // A sheet nobody opened, such as a copy or any sheet a joiner's batch doesn't name, holds only its
+            // stored cells. Its formulas move too, or a joiner and the server read them at the old rows.
+            let newCelldata: typeof sheet.celldata | null = null;
+            for (let i = 0; i < sheet.celldata.length; i += 1) {
+                const entry = sheet.celldata[i];
+                const f = entry.v?.f;
+                if (!f) continue;
+                const newF = `=${shift(f.startsWith('=') ? f.slice(1) : f)}`;
+                if (newF === f) continue;
+                newCelldata ??= [...sheet.celldata];
+                newCelldata[i] = { ...entry, v: { ...entry.v, f: newF } };
+            }
+            if (newCelldata) newSheet = { ...newSheet, celldata: newCelldata };
         }
 
         const rules = sheet.conditionalFormatRules;

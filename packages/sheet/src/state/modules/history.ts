@@ -1,29 +1,44 @@
 // What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id. Undo and
 // redo take the context and an entry and return the next context and the batch to send. A cell or field entry skips a
-// target a peer changed since. A sheet, row or column entry builds ops and applies exactly those, through
-// applyOpBatch, as its peers will. The Workbook keeps the stacks and calls these from, for example, handleUndo.
+// target a peer changed since and recalculates the formulas it touches. A sheet, row or column entry builds ops and
+// applies exactly those, through applyOpBatch, as its peers will. The Workbook keeps the stacks and calls these from,
+// for example, handleUndo.
 
+import { isRecord } from '@workspace/lib/guards';
 import type { MergeCell } from '@workspace/lib/sheets';
 import { parseCellKey } from '@workspace/lib/sheets';
 import { cloneDeep, get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
-import { applyPatches, produce } from 'immer';
+import { applyPatches, produce, produceWithPatches } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
 import { RowColError } from '../../engine/rowcol';
-import type { Cell, CellMatrix } from '../../engine/types';
+import type { CalcChainEntry, Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
-import type { History, Op, Sheet } from '../types';
+import { getFlowdata } from '../context';
+import type { FormulaCell, History, Op, Sheet } from '../types';
 import type { PatchOptions } from '../utils';
-import { addSheetOps, deleteSheetOps, getSheetIndex, inverseRowColOptions, patchToOp } from '../utils';
+import {
+    addSheetOps,
+    deleteSheetOps,
+    filterPatch,
+    getSheetIndex,
+    inverseRowColOptions,
+    patchToOp,
+    rowColMarker,
+} from '../utils';
 import { applyOpBatch } from './apply-ops';
+import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
+import { createContextResolver, snapshotContext } from './formula-cache';
+import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-exec';
 import { rowColMove } from './history-shift';
 import { settleCurrentSheet } from './sheet';
 
 type Step = { ctx: Context; ops: Op[] };
 
-// What setContextWithProduce keeps of one edit. It fills in the options the edit's ops need too. A sheet delete keeps
-// only the deleted sheet: its undo and redo are ops, and its patches would hold the whole sheet list twice.
+// What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from: a sheet delete
+// adds the deleted sheet, and keeps only that: its undo and redo are ops, and its patches would hold the whole sheet
+// list twice.
 export function recordEntry(
     before: Context,
     after: Context,
@@ -34,14 +49,40 @@ export function recordEntry(
     if (options.deleteSheetOp) {
         const { id } = options.deleteSheetOp;
         const sheet = before.sheets.find((s) => s.id === id);
-        if (sheet) options.deletedSheet = storedCopy(sheet);
-        return { patches: [], inversePatches: [], options };
+        return {
+            patches: [],
+            inversePatches: [],
+            options: sheet ? { ...options, deletedSheet: storedCopy(sheet) } : options,
+        };
     }
     return {
         patches: bySheetId(patches, after.sheets),
         inversePatches: bySheetId(inversePatches, before.sheets),
         options,
     };
+}
+
+// How far back undo reaches. A row, column or sheet entry holds whole cell matrices, so fewer of those stay.
+const MAX_ENTRIES = 200;
+const MAX_WHOLE_MATRIX_ENTRIES = 10;
+
+// Puts an edit's entry on the undo stack and drops the oldest entries past those limits. Only the oldest ever go: an
+// entry fits the grid as the entries above it leave it, so one dropped from the middle would misplace the rest.
+export function pushEntry(stack: History[], entry: History) {
+    stack.push(entry);
+    let keep = Math.min(stack.length, MAX_ENTRIES);
+    let whole = 0;
+    for (let i = stack.length - 1; i >= stack.length - keep; i -= 1) {
+        if (!holdsWholeMatrices(stack[i])) continue;
+        whole += 1;
+        if (whole > MAX_WHOLE_MATRIX_ENTRIES) keep = stack.length - 1 - i;
+    }
+    stack.splice(0, stack.length - keep);
+}
+
+function holdsWholeMatrices({ patches, inversePatches, options }: History): boolean {
+    const whole = ({ path }: Patch) => path.length === 2 || (path.length === 3 && path[2] === 'data');
+    return options?.deletedSheet != null || patches.some(whole) || inversePatches.some(whole);
 }
 
 export function undoEntry(ctx: Context, entry: History): Step {
@@ -57,7 +98,7 @@ export function undoEntry(ctx: Context, entry: History): Step {
         return sheet ? sheetStep(ctx, (sheets) => deleteSheetOps(sheet, sheets)) : { ctx, ops: [] };
     }
     if (options?.insertRowColOp || options?.deleteRowColOp) {
-        return rowColStep(ctx, entry.patches, entry.inversePatches, inverseRowColOptions(options) ?? {}, true);
+        return rowColStep(ctx, entry.patches, entry.inversePatches, inverseRowColOptions(options) ?? {});
     }
     return patchStep(ctx, entry.inversePatches, entry.patches);
 }
@@ -82,7 +123,7 @@ export function redoEntry(ctx: Context, entry: History): Step {
         return sheetStep(ctx, (sheets) => addSheetOps(added, sheets));
     }
     if (options?.insertRowColOp || options?.deleteRowColOp) {
-        return rowColStep(ctx, entry.inversePatches, entry.patches, options, false);
+        return rowColStep(ctx, entry.inversePatches, entry.patches, options);
     }
     return patchStep(ctx, entry.patches, entry.inversePatches);
 }
@@ -128,36 +169,139 @@ function atSheetIndex(ctx: Context, patches: Patch[]): Patch[] {
 
 function applyBatch(ctx: Context, ops: Op[]): Step {
     if (ops.length === 0) return { ctx, ops };
-    const next = applyOpBatch(ctx, ops);
-    return next ? { ctx: produce(next, settleCurrentSheet), ops } : { ctx, ops: [] };
+    const applied = applyOpBatch(ctx, ops);
+    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
 }
 
 // A sheet comes back, or goes, through applyOpBatch. The batch it sends also carries the tab order the sheet op left
 // behind, which the edit's own batch carries too; here those order ops would change nothing.
 function sheetStep(ctx: Context, batch: (sheets: Sheet[]) => Op[]): Step {
-    const next = applyOpBatch(ctx, batch(ctx.sheets).slice(0, 1));
-    return next ? { ctx: produce(next, settleCurrentSheet), ops: batch(next.sheets) } : { ctx, ops: [] };
+    const applied = applyOpBatch(ctx, batch(ctx.sheets).slice(0, 1));
+    if (!applied) return { ctx, ops: [] };
+    return { ctx: produce(applied.ctx, settleCurrentSheet), ops: batch(applied.ctx.sheets) };
 }
 
 // A cell or field entry: `apply` goes in, and `written`, the entry's other side, says what the targets should hold.
+// The formula values the entry recorded were right for the inputs of their time, so the step recalculates them.
 function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
-    const patches = stillWritten(
+    const kept = stillWritten(
         ctx,
         withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, apply)),
         atSheetIndex(ctx, written),
     );
+    const patches = withoutComputedValues(ctx, kept);
     if (patches.length === 0) return { ctx, ops: [] };
-    const next = produce(applyPatches(ctx, patches), settleCurrentSheet);
-    next.formulaCache.updateFormulaCache(next, { patches, inversePatches: [] }, 'redo');
-    return { ctx: next, ops: patchToOp(next, patches) };
+    const restored = produce(applyPatches(ctx, patches), settleCurrentSheet);
+    restored.formulaCache.updateFormulaCache(restored, { patches, inversePatches: [] }, 'redo');
+    const [next, recalculated] = produceWithPatches(restored, (draft: Context) => recalculate(draft, patches));
+    return { ctx: next, ops: patchToOp(next, [...patches, ...filterPatch(recalculated)]) };
 }
 
-// A row or column entry, `from` what the op left to `to`. Its whole-field patches set up a scratch context, which
-// patchToOp reads the marker's metadata from as it does for the op itself; the live context gets only the ops.
-function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOptions, undo: boolean): Step {
+// The patches without the value and display text the engine computed for a cell that holds a formula once they
+// apply. A peer may have changed that formula's inputs, or the formula itself, since.
+function withoutComputedValues(ctx: Context, patches: Patch[]): Patch[] {
+    const after = applyPatches(ctx, patches);
+    return patches.filter(({ path }) => {
+        const [, index, field, r, c, key] = path;
+        if (field !== 'data' || path.length !== 6 || (key !== 'v' && key !== 'm')) return true;
+        if (typeof index !== 'number' || typeof r !== 'number' || typeof c !== 'number') return true;
+        return after.sheets[index].data?.[r]?.[c]?.f == null;
+    });
+}
+
+// Recomputes each formula the patches wrote, then every formula that reads a cell they wrote, as an edit does.
+function recalculate(ctx: Context, patches: Patch[]) {
+    const cells = new Map<string, FormulaCell>();
+    for (const { path } of patches) {
+        const [, index, field, r, c] = path;
+        if (field !== 'data' || typeof index !== 'number' || typeof r !== 'number' || typeof c !== 'number') continue;
+        const { id } = ctx.sheets[index];
+        if (id != null) cells.set(`${r}_${c}_${id}`, { r, c, id });
+    }
+    if (cells.size === 0) return;
+    const resolver = createContextResolver(snapshotContext(ctx));
+    for (const { r, c, id } of cells.values()) {
+        const data = getFlowdata(ctx, id);
+        const f = data?.[r]?.[c]?.f;
+        if (!data || f == null) continue;
+        const [, v] = execfunction(ctx, f, r, c, id, undefined, false, true, resolver);
+        setCellValue(ctx, r, c, data, { v, f });
+    }
+    ctx.formulaCache.execFunctionExist = [...cells.values()];
+    execFunctionGroup(ctx, null, null, null);
+    groupValuesRefresh(ctx);
+    ctx.formulaCache.execFunctionGlobalData = null;
+}
+
+// A row or column entry, `from` what the op left to `to`. The batch is the marker, the edited sheet's fields and a
+// repair of the cells. The fields are what the marker makes of the live sheet, so a peer's edit since survives, with
+// what the entry restores beyond that. The live context gets only the ops.
+function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOptions): Step {
+    const marker = rowColMarker(options);
+    const index = marker?.id == null ? undefined : getSheetIndex(ctx, marker.id);
+    if (!marker || index == null) return { ctx, ops: [] };
+    const left = withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, from));
     const target = withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, to));
-    const repair = repairOps(ctx, atSheetIndex(ctx, from), target, options);
-    return applyBatch(ctx, patchToOp(applyPatches(ctx, target), target, options, undo, repair));
+    const restored = applyPatches(ctx, target);
+    // What the marker alone makes of the sheet the op left, and of the live sheet.
+    const made = applyOpBatch(applyPatches(ctx, left), [marker]);
+    const live = applyOpBatch(ctx, [marker]);
+    if (!made || !live) return { ctx, ops: [] };
+    const fields = restoredFields(index, target, restored, made.ctx, live.ctx);
+    const step = { fields, repair: repairOps(ctx, left, target, options) };
+    return applyBatch(ctx, patchToOp(restored, target, options, step));
+}
+
+// The edited sheet's fields as a row or column step leaves them: each as the marker makes it of the live sheet, but a
+// field the entry recorded takes the entry's value wherever the marker alone would not bring that back, such as a
+// deleted row's height or link. A map merges key by key, `config` one level deeper, so a key a peer changed since
+// keeps the peer's value.
+function restoredFields(index: number, recorded: Patch[], restored: Context, made: Context, live: Context) {
+    const fields: Record<string, unknown> = { ...live.sheets[index] };
+    const wanted: Record<string, unknown> = restored.sheets[index];
+    const marked: Record<string, unknown> = made.sheets[index];
+    for (const { path } of recorded) {
+        const [, sheet, field] = path;
+        if (path.length !== 3 || sheet !== index || typeof field !== 'string' || field === 'data') continue;
+        if (field === 'calcChain') {
+            fields.calcChain = restoredChain(
+                restored.sheets[index].calcChain ?? [],
+                made.sheets[index].calcChain ?? [],
+                live.sheets[index].calcChain ?? [],
+            );
+            continue;
+        }
+        const depth = field === 'config' ? 2 : field === 'hyperlink' || field === 'dataVerification' ? 1 : 0;
+        fields[field] = restoredValue(wanted[field], marked[field], fields[field], depth);
+    }
+    return fields;
+}
+
+// `wanted` is the entry's value, `made` what the marker makes of the value the op left, and `live` what it makes of
+// the live value. Where `made` and `live` differ, a peer changed the value since.
+function restoredValue(wanted: unknown, made: unknown, live: unknown, depth: number): unknown {
+    if (isEqual(wanted, made)) return live;
+    if (depth === 0 || !isRecord(wanted) || !isRecord(made) || !isRecord(live)) {
+        return isEqual(live, made) ? wanted : live;
+    }
+    const merged = { ...live };
+    for (const key of new Set([...Object.keys(wanted), ...Object.keys(made)])) {
+        const value = restoredValue(wanted[key], made[key], live[key], depth - 1);
+        if (value === undefined) delete merged[key];
+        else merged[key] = value;
+    }
+    return merged;
+}
+
+// The recalc list is a set of formula cells: the entry's cells the marker would not bring back join the live list.
+function restoredChain(wanted: CalcChainEntry[], made: CalcChainEntry[], live: CalcChainEntry[]) {
+    const key = ({ r, c, id }: CalcChainEntry) => `${r}_${c}_${id}`;
+    const wantedKeys = new Set(wanted.map(key));
+    const madeKeys = new Set(made.map(key));
+    const chain = live.filter((cell) => wantedKeys.has(key(cell)) || !madeKeys.has(key(cell)));
+    const kept = new Set(chain.map(key));
+    for (const cell of wanted) if (!madeKeys.has(key(cell)) && !kept.has(key(cell))) chain.push(cell);
+    return chain;
 }
 
 // The cells the marker alone leaves different from what the entry restores: rows a delete took, and a formula it made

@@ -29,7 +29,7 @@ import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
 import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
-import type { ChartPanelState, Context, GlobalCache, Op, Settings, Sheet as SheetType } from '../../state';
+import type { ChartPanelState, Context, GlobalCache, History, Op, Settings, Sheet as SheetType } from '../../state';
 import {
     api,
     applySheetView,
@@ -50,6 +50,7 @@ import {
     insertRowCol,
     pasteChart,
     patchToOp,
+    pushEntry,
     recordEntry,
     redoEntry,
     runStyleOf,
@@ -220,11 +221,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                         last.inversePatches.unshift(...entry.inversePatches);
                                     }
                                 } else {
-                                    undoList.push({ ...entry, gesture: undoGesture });
+                                    pushEntry(undoList, { ...entry, gesture: undoGesture });
                                 }
                                 globalCache.current.redoList = [];
                             }
-                            onOp?.(patchToOp(result, filteredPatches, options));
+                            onOp?.(patchToOp(result, filteredPatches, entry.options));
                         }
                     }
                     return result;
@@ -233,14 +234,20 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             [onOp],
         );
 
-        // The entry moves to the other stack now, in call order, so a peer batch called after it shifts it there.
+        // The entry moves to the other stack in the updater, as a peer batch shifts the stacks in its own, so the two
+        // happen in call order. React may run an updater twice, and the entry moves once.
         const handleUndo = useCallback(() => {
             if (context.allowEdit === false) return;
-            const { undoList, redoList } = globalCache.current;
-            const entry = undoList.pop();
-            if (!entry) return;
-            redoList.push(entry);
+            let moved = false;
+            let entry: History | undefined;
             setContext((ctx_) => {
+                if (!moved) {
+                    moved = true;
+                    const { undoList, redoList } = globalCache.current;
+                    entry = undoList.pop();
+                    if (entry) redoList.push(entry);
+                }
+                if (!entry) return ctx_;
                 const { ctx, ops } = undoEntry(ctx_, entry);
                 if (ops.length > 0) onOp?.(ops);
                 return ctx;
@@ -249,11 +256,16 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const handleRedo = useCallback(() => {
             if (context.allowEdit === false) return;
-            const { undoList, redoList } = globalCache.current;
-            const entry = redoList.pop();
-            if (!entry) return;
-            undoList.push(entry);
+            let moved = false;
+            let entry: History | undefined;
             setContext((ctx_) => {
+                if (!moved) {
+                    moved = true;
+                    const { undoList, redoList } = globalCache.current;
+                    entry = redoList.pop();
+                    if (entry) undoList.push(entry);
+                }
+                if (!entry) return ctx_;
                 const { ctx, ops } = redoEntry(ctx_, entry);
                 if (ops.length > 0) onOp?.(ops);
                 return ctx;
