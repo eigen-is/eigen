@@ -148,25 +148,31 @@ describe('Editor', () => {
 
         // A tab opened before the editor sent an etag still sends the updatedAt it loaded. It gets the
         // conflict dialog, whose Download and Overwrite keep its edits.
-        test('a save from a tab that sends updatedAt is a conflict, and its forced save lands', async () => {
+        test('a save from a tab that sends updatedAt is a conflict', async () => {
             const uploaded = await uploadTextFile('no-etag.txt', 'original');
-            const { updatedAt } = uploaded;
 
             const { status, data } = await editorPut(uploaded.id, {
                 content: 'unguarded',
-                expectedUpdatedAt: updatedAt,
+                expectedUpdatedAt: uploaded.updatedAt,
             });
             expect(status).toBe(200);
             expect(data?.conflict).toBe(true);
             expect((await editorGet(uploaded.id)).data.content).toBe('original');
+        });
 
-            const { data: forced } = await editorPut(uploaded.id, {
-                content: 'forced',
-                expectedUpdatedAt: updatedAt,
-                force: true,
-            });
-            expect(forced?.conflict).toBe(false);
-            expect((await editorGet(uploaded.id)).data.content).toBe('forced');
+        // expectedEtag is one etag, not an If-Match value, so `*` doesn't act as force, nor a list with
+        // the file's etag in it.
+        test.each([
+            ['*', () => '*'],
+            ['a list', (etag: string) => `"stale", ${etag}`],
+        ])('a save with expectedEtag %s is a conflict', async (_, ifMatchValue) => {
+            const uploaded = await uploadTextFile('wildcard-etag.txt', 'original');
+            const { data: initial } = await editorGet(uploaded.id);
+
+            const expectedEtag = ifMatchValue(initial.etag);
+            const { data } = await editorPut(uploaded.id, { content: 'unguarded', expectedEtag });
+            expect(data?.conflict).toBe(true);
+            expect((await editorGet(uploaded.id)).data.content).toBe('original');
         });
 
         // Another writer, such as a WebDAV PUT without If-Match, lands after the save lets go of the

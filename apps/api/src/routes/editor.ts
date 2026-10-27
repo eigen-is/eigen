@@ -6,7 +6,7 @@
 import type { EditorSaveResult } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import { enforceMountQuota } from '../lib/config/enforcement';
-import { ApiError, computeEtag, matchesIfMatch, StaleWriteError } from '../lib/core';
+import { ApiError, computeEtag, StaleWriteError } from '../lib/core';
 import { getSharedDrive } from '../lib/drive';
 import { getEditableContent, prepareSaveContent } from '../lib/drive/inline-edit';
 import { betterAuth } from './auth';
@@ -33,20 +33,18 @@ export const editorRouter = new Elysia({ name: 'editor' })
                 throw new ApiError(403, 'No write permission');
             }
             const data = prepareSaveContent(path, body.content, body.frontmatter ?? null);
-            // Without force a save needs the etag it loaded. A tab opened before the editor sent one has
-            // none, and gets the conflict dialog, whose Download and Overwrite keep its edits. The write
-            // checks the etag again under the file's lock, where two saves can't both pass.
-            const ifMatch = body.force ? undefined : body.expectedEtag;
+            // Without force a save needs the etag it loaded, the one value and not an If-Match list or `*`.
+            // A tab opened before the editor sent one has none, and gets the conflict dialog, whose
+            // Download and Overwrite keep its edits. The write checks the etag again under the file's
+            // lock, where two saves can't both pass.
             const etag = computeEtag(path);
-            if (!body.force && (ifMatch === undefined || !matchesIfMatch(ifMatch, etag))) {
-                return { conflict: true, currentEtag: etag };
-            }
+            if (!body.force && body.expectedEtag !== etag) return { conflict: true, currentEtag: etag };
             // Quota pre-check at the route boundary, where the Buffer length is known (mirrors WebDAV PUT).
             await enforceMountQuota(params.ownerId, params.mountId, data.length, path.size);
             try {
                 const written = await drive.writeFileContent(params.mountId, params.pathId, data, {
                     user,
-                    ifMatch,
+                    ifMatch: body.force ? undefined : body.expectedEtag,
                     event: 'edited',
                 });
                 return { conflict: false, etag: written.etag };
