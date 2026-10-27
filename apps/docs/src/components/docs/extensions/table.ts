@@ -1,8 +1,10 @@
 // The docs editor's table, EditorTable: TipTap's table with Google Docs' column drag, which moves width between two
 // columns, and the commands Format › Table and the table panel run, such as Distribute columns and the border rows.
-// The server's schema keeps the plain table node; this one adds behavior and no attribute.
+// A page-less doc's table in the body may grow past the text column, each column up to the paper's width. The server's
+// schema keeps the plain table node; this one adds behavior and no attribute.
 
 import type { CommandProps } from '@tiptap/core';
+import type { TableOptions } from '@tiptap/extension-table';
 import { Table } from '@tiptap/extension-table';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
@@ -35,19 +37,26 @@ declare module '@tiptap/core' {
 
 const sum = (widths: number[]) => widths.reduce((total, width) => total + width, 0);
 
+type TableLimits = { maxTableWidth: number; maxColumnWidth: number };
+
 // Google Docs' column drag, by dx on column `col`'s right border: a border between two columns moves width from one to
-// the other, each kept at the floor, so the table keeps its width; the last column's border sets the table's width, up
-// to maxTableWidth. A column already past a limit is never pushed further past it.
-function draggedWidths(start: number[], col: number, dx: number, maxTableWidth: number): number[] {
+// the other, each kept between the floor and the widest column, so the table keeps its width; the last column's border
+// sets the table's width, up to the widest table. A column already past a limit is never pushed further past it.
+function draggedWidths(start: number[], col: number, dx: number, limits: TableLimits): number[] {
+    const { maxTableWidth, maxColumnWidth } = limits;
     const widths = [...start];
     const own = start[col] ?? 0;
     const next = start[col + 1];
     if (next === undefined) {
-        const room = maxTableWidth - (sum(start) - own);
+        const room = Math.min(maxTableWidth - (sum(start) - own), maxColumnWidth);
         widths[col] = Math.round(clamp(own + dx, Math.min(own, MIN_TABLE_COLUMN_PX), Math.max(own, room)));
     } else {
         const moved = Math.round(
-            clamp(dx, Math.min(0, MIN_TABLE_COLUMN_PX - own), Math.max(0, next - MIN_TABLE_COLUMN_PX)),
+            clamp(
+                dx,
+                Math.min(0, Math.max(MIN_TABLE_COLUMN_PX - own, next - maxColumnWidth)),
+                Math.max(0, Math.min(next - MIN_TABLE_COLUMN_PX, maxColumnWidth - own)),
+            ),
         );
         widths[col] = own + moved;
         widths[col + 1] = next - moved;
@@ -55,13 +64,20 @@ function draggedWidths(start: number[], col: number, dx: number, maxTableWidth: 
     return widths;
 }
 
-// The widest the table at `tablePos` draws: the content box of the block it sits in, a list item or a cell, within
+// The width the table at `tablePos` fills: the content box of the block it sits in, a list item or a cell, within
 // the text column. Null when neither is laid out.
-function maxTableWidth(view: EditorView, tablePos: number): number | null {
+function blockWidth(view: EditorView, tablePos: number): number | null {
     const container = view.nodeDOM(tablePos)?.parentElement;
     const fits = container ? contentWidth(container) : null;
     const column = textColumnWidth(view.dom);
     return fits !== null && column !== null ? Math.min(fits, column) : (fits ?? column);
+}
+
+// The widest the table at `tablePos` grows: the block it fills, or no limit for a page-less doc's table in the body,
+// which scrolls sideways past the text. Infinity when nothing is laid out.
+function maxTableWidth(view: EditorView, tablePos: number, options: EditorTableOptions): number {
+    if (options.pageless() && view.state.doc.resolve(tablePos).depth === 0) return Number.POSITIVE_INFINITY;
+    return blockWidth(view, tablePos) ?? Number.POSITIVE_INFINITY;
 }
 
 // Every column's stored width, read off its first-row cell, 0 for none.
@@ -143,7 +159,7 @@ export function cellPosAt(view: EditorView, event: MouseEvent): number | null {
 // mouseleave ahead of it. Its own drag sets one column, so a table that fills the text column could only grow; this
 // one moves width between the border's two columns instead. The first drag stores every column's width, so none is
 // left to the layout; a drag that changes nothing, a click, writes nothing.
-function columnDrag(cellMinWidth: number) {
+function columnDrag(options: EditorTableOptions) {
     let dragging = false;
     return new Plugin({
         props: {
@@ -166,11 +182,14 @@ function columnDrag(cellMinWidth: number) {
                     if (!(dom instanceof HTMLTableElement)) return false;
 
                     const start = columnWidths(view, table, tablePos + 1, map);
-                    const maxWidth = maxTableWidth(view, tablePos) ?? Infinity;
+                    const limits = {
+                        maxTableWidth: maxTableWidth(view, tablePos, options),
+                        maxColumnWidth: options.paperWidth(),
+                    };
                     // The page may be drawn scaled; widths are in the page's own pixels.
                     const scale = dom.offsetWidth > 0 ? dom.getBoundingClientRect().width / dom.offsetWidth : 1;
                     const widthsAt = (clientX: number) =>
-                        draggedWidths(start, col, (clientX - event.clientX) / scale, maxWidth);
+                        draggedWidths(start, col, (clientX - event.clientX) / scale, limits);
 
                     const win = view.dom.ownerDocument.defaultView ?? window;
                     // A move with no button down means the mouseup was lost, outside the window or to a native menu,
@@ -200,7 +219,7 @@ function columnDrag(cellMinWidth: number) {
                         }
                         const colgroup = dom.firstChild;
                         if (colgroup instanceof HTMLTableColElement) {
-                            updateColumnsOnResize(found.table, colgroup, dom, cellMinWidth);
+                            updateColumnsOnResize(found.table, colgroup, dom, options.cellMinWidth);
                         }
                     };
 
@@ -215,10 +234,23 @@ function columnDrag(cellMinWidth: number) {
     });
 }
 
+type EditorTableOptions = TableOptions & {
+    // Read off the page map at each gesture, as a peer may switch the doc meanwhile.
+    pageless: () => boolean;
+    paperWidth: () => number;
+};
+
 // The docs editor's table. prosemirror-tables' own TableView, not TipTap's, because TipTap's leaves a column's dragged
 // width drawn when an undo takes its colwidth back to none. The editor turns `resizable` off for a coarse pointer. A row
 // or column it adds takes its neighbor's look.
-export const EditorTable = Table.extend({
+export const EditorTable = Table.extend<EditorTableOptions>({
+    addOptions() {
+        return {
+            ...(this.parent?.() ?? Table.options),
+            pageless: () => false,
+            paperWidth: () => Number.POSITIVE_INFINITY,
+        };
+    },
     addCommands() {
         return {
             ...this.parent?.(),
@@ -254,9 +286,10 @@ export const EditorTable = Table.extend({
                     if (!isInTable(state)) return false;
                     const { map, table, tableStart } = selectedRect(state);
                     const stored = storedWidths(table, map);
-                    const maxWidth = maxTableWidth(view, tableStart - 1);
-                    const tableWidth = stored.every((width) => width > 0) ? sum(stored) : (maxWidth ?? 0);
-                    const total = Math.min(tableWidth, maxWidth ?? Infinity);
+                    const tableWidth = stored.every((width) => width > 0)
+                        ? sum(stored)
+                        : (blockWidth(view, tableStart - 1) ?? 0);
+                    const total = Math.min(tableWidth, maxTableWidth(view, tableStart - 1, this.options));
                     if (total <= 0) return false;
                     const width = Math.max(MIN_TABLE_COLUMN_PX, Math.floor(total / map.width));
                     if (dispatch)
@@ -272,8 +305,6 @@ export const EditorTable = Table.extend({
     },
     addProseMirrorPlugins() {
         const plugins = this.parent?.() ?? [];
-        return this.options.resizable && this.editor.isEditable
-            ? [columnDrag(this.options.cellMinWidth), ...plugins]
-            : plugins;
+        return this.options.resizable && this.editor.isEditable ? [columnDrag(this.options), ...plugins] : plugins;
     },
 }).configure({ resizable: true, cellMinWidth: MIN_TABLE_COLUMN_PX, View: TableView });

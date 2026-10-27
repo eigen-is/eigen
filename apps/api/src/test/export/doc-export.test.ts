@@ -131,6 +131,53 @@ describe('doc export — the page', () => {
     });
 });
 
+// A table drawn past the text column, as a page-less doc's may be, is fitted to the column on paper and in the
+// download, each column by one factor, as the docx writer fits a paged doc's.
+describe('doc export — a table wider than the column', () => {
+    const cell = (width: number | null) => ({
+        type: 'tableCell',
+        attrs: { colwidth: width === null ? null : [width] },
+        content: [paragraph('x')],
+    });
+    const wideDoc = (pageless: boolean, ...widths: (number | null)[]) => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [{ type: 'table', content: [{ type: 'tableRow', content: widths.map(cell) }] }],
+        });
+        const map = doc.getMap(PAGE_ROOT);
+        for (const [key, value] of Object.entries(pageRecord({ ...DEFAULT_PAGE_SETUP, pageless }))) map.set(key, value);
+        return doc;
+    };
+    const exported = async (format: 'html' | 'pdf-html', doc: Y.Doc) =>
+        new TextDecoder().decode(
+            (await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined)).data,
+        );
+
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws a 1334 px table at the column, 642.5 px on A4',
+        async (format) => {
+            const html = await exported(format, wideDoc(true, 667, 667));
+            expect(html).toContain(
+                '<table style="width: 642px"><colgroup><col style="width: 321px"><col style="width: 321px">',
+            );
+        },
+    );
+
+    test('a table that fits, or one with a column of no width, keeps its widths', async () => {
+        const html = await exported('pdf-html', wideDoc(true, 300, 300));
+        expect(html).toContain('<col style="width: 300px"><col style="width: 300px">');
+        expect(await exported('pdf-html', wideDoc(true, 300, null))).toContain(
+            '<col style="width: 300px"><col style="min-width: 25px">',
+        );
+    });
+
+    test("a page-less doc's PDF is its paged twin's", async () => {
+        expect(await exported('pdf-html', wideDoc(true, 667, 667))).toBe(
+            await exported('pdf-html', wideDoc(false, 667, 667)),
+        );
+    });
+});
+
 describe('doc export — the Normal', () => {
     test.each(['html', 'pdf-html'] as const)(
         '%s draws the body in the Normal the doc stores, on its page',

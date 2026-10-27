@@ -1,6 +1,9 @@
-// The page's geometry as the Docs editor lays it out on screen: the text column's width, which caps a figure in the
-// flow, and the scale the page draws at, which turns a pointer's screen px into the page px the doc stores. Node
-// views and editor plugins read them.
+// The page's geometry in the Docs editor: the text column's width as laid out on screen, which caps a figure in the
+// flow, the scale the page draws at, which turns a pointer's screen px into the page px the doc stores, and the paper
+// and column of the page map, which a page-less doc's wide content and a new chart are measured against. Node views,
+// menus and editor plugins read them.
+
+import type { Editor } from '@tiptap/core';
 
 // The width inside an element's padding, or null for one not laid out.
 export function contentWidth(element: Element): number | null {
@@ -21,4 +24,11 @@ export function textColumnWidth(inside: Node | null): number | null {
 export function pageScale(inside: HTMLElement): number {
     const { offsetWidth } = inside;
     return offsetWidth > 0 ? inside.getBoundingClientRect().width / offsetWidth : 1;
+}
+
+// The page map's paper width and text column in page px, never the screen's, as every stored width is page px. A
+// page-less doc draws its text in the reader's own column, so its caps read these instead.
+export function pageWidths(editor: Editor): { paper: number; column: number; pageless: boolean } {
+    const { width, margin, pageless } = editor.storage.positionedFigures.page();
+    return { paper: width, column: width - margin.left - margin.right, pageless };
 }

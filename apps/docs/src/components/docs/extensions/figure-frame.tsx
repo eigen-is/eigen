@@ -33,7 +33,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PaperRoom } from './positioned-figure';
 import { roomOnPaper } from './positioned-figure';
-import { pageScale, textColumnWidth } from './text-column';
+import { pageScale, pageWidths, textColumnWidth } from './text-column';
 
 // The resize floor of a figure's width (px). An image's height has none but a pixel, so a thin divider keeps its shape,
 // and a chart's has the width's, as an axis and its labels need the room.
@@ -42,11 +42,14 @@ const IMAGE_MIN_HEIGHT = 1;
 export const CHART_MIN_HEIGHT = 100;
 
 // The widest a resize makes a figure: the text column, half of it for a wrapped figure, and the paper of the page map
-// for one in front of or behind the text.
+// for one in front of or behind the text. A page-less doc's block figure may grow past the reader's column up to the
+// paper, and its wrap keeps half the page map's column, so neither depends on the reader's text width.
 export function figureMaxWidth(editor: Editor, layout: FigureLayout | null | undefined) {
-    if (isPositioned(layout)) return editor.storage.positionedFigures.page().width;
-    const fullWidth = textColumnWidth(editor.view.dom) ?? Infinity;
-    return layout === 'wrap-left' || layout === 'wrap-right' ? fullWidth * 0.5 : fullWidth;
+    const { paper, column, pageless } = pageWidths(editor);
+    const wrap = layout === 'wrap-left' || layout === 'wrap-right';
+    if (isPositioned(layout) || (pageless && !wrap)) return paper;
+    const fullWidth = pageless ? column : (textColumnWidth(editor.view.dom) ?? Infinity);
+    return wrap ? fullWidth * 0.5 : fullWidth;
 }
 
 // The whole width a resize writes, such as a grip's or Shift and an arrow's.
@@ -113,6 +116,15 @@ export const setImageLayout = (editor: Editor, attributes: FigureFrameAttrs) =>
     setFigureLayout(editor, attributes, readFigureAttrs(editor.getAttributes('figure')), (written) =>
         editor.commands.updateFigure(written),
     );
+
+// A positioned box's place: its top inline, and its left and width as custom properties, which one prose rule draws.
+// A page-less doc's rule draws the box clamped into its text column and the strip beside it from them instead, so the
+// stored place, which only the page map clamps, draws again on pages. The export writes the place inline.
+const placeStyle = (top: number, left: number, width: number | undefined): Record<string, string | number> => ({
+    top,
+    '--figure-left': `${left}px`,
+    ...(width !== undefined && { '--figure-width': `${width}px` }),
+});
 
 // A grip's readout, in cm as Docs' fields show a size.
 const figureSize = ({ width, height }: Box) => `${cmText(pxToMm(width), 1)} × ${cmText(pxToMm(height), 1)} cm`;
@@ -321,15 +333,18 @@ export function FigureFrame({
     const isEditable = editor.isEditable;
     const frame = readFigureFrameAttrs(node.attrs);
     // The ring insets over the content, shrink-wrapped by the relative wrapper. A figure's size is in the page's pixels,
-    // and the page draws scaled below its width, so a grip's delta divides by the scale, measured as it is pressed.
+    // and it draws smaller than that on a page drawn scaled, or when it is wider than the room it has, so a grip's
+    // delta divides by its drawn width over its stored one, measured as it is pressed.
     const boxToStyle = useCallback((): React.CSSProperties => ({ inset: 0 }), []);
     const scale = useRef(1);
     const screenDeltaToScene = useCallback(
         (dx: number, dy: number) => ({ dx: dx / scale.current, dy: dy / scale.current }),
         [],
     );
+    const contentRef = useRef<HTMLDivElement | null>(null);
     const measureScale = () => {
-        scale.current = pageScale(editor.view.dom);
+        const drawn = contentRef.current?.getBoundingClientRect().width ?? 0;
+        scale.current = box && box.width > 0 && drawn > 0 ? drawn / box.width : pageScale(editor.view.dom);
     };
 
     const { travel, startMove } = useFigureMove({ editor, getPos, selected });
@@ -382,7 +397,9 @@ export function FigureFrame({
                 // A positioned figure moves by the pointer gesture above, never by the browser's drag and drop.
                 data-drag-handle={place ? undefined : ''}
                 draggable={!place && isEditable}
-                style={place ?? { cursor: isEditable ? 'grab' : undefined }}
+                style={
+                    place ? placeStyle(place.top, place.left, place.width) : { cursor: isEditable ? 'grab' : undefined }
+                }
                 onPointerDown={place ? startMove : undefined}
                 // ProseMirror never sees a node view's right-click (stopEvent), so the figure asks here.
                 onContextMenu={(e: React.MouseEvent) => {
@@ -395,6 +412,7 @@ export function FigureFrame({
                     takes no focus: the editor's keymap resizes the selected figure, and a press stays free to start a
                     drag. */}
                 <div
+                    ref={contentRef}
                     className={cn('relative', className, selected && !box && 'eigen-selection-ring')}
                     onPointerDownCapture={measureScale}
                     role={selected && isEditable ? 'group' : undefined}
@@ -409,10 +427,15 @@ export function FigureFrame({
             </NodeViewWrapper>
             {chrome && (
                 // Why: the grips sit above the front layer's 1, the Docs figure layer of the z-index scale. The
-                // paragraph makes no stacking context, so both stack in the page's.
+                // paragraph makes no stacking context, so both stack in the page's. Its height follows the width it
+                // draws at, as the figure's does, where a page-less column draws it narrower.
                 <span
                     className="absolute z-2 cursor-move touch-none"
-                    style={{ left: place.left, top: place.top, width: box.width, height: box.height }}
+                    data-figure-chrome=""
+                    style={{
+                        ...placeStyle(place.top, place.left, box.width),
+                        aspectRatio: `${box.width} / ${box.height}`,
+                    }}
                     onPointerDownCapture={measureScale}
                     onPointerDown={startMove}
                 >

@@ -955,6 +955,7 @@ describe('document transform (eigendoc)', () => {
             headerDistance: 8,
             footerDistance: 10,
             differentFirstPage: false,
+            pageless: false,
         };
         const { mount, path: seeded } = await seedGoldenDocument('letter-doc', 'doc', (doc) => {
             const map = doc.getMap(PAGE_ROOT);

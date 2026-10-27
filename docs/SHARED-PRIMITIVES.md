@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2045 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2052 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -236,7 +236,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (299)
+## Hooks (300)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -369,6 +369,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateLabel` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
 | `useUploadContactAvatar` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
+| `useDocsTextWidth` | `@workspace/lib/docs` | packages/lib/src/core/docs/hooks/use-docs-text-width.ts |
 | `useFileDownload` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `useAggregateMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useAllWatches` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
@@ -540,7 +541,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (461)
+## Types (463)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -657,6 +658,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CreateEventInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `DeepPartial` | `@workspace/lib/types` | packages/lib/src/types/util.ts |
 | `DirectAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DocsTextWidth` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `DocsViewPreferences` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `DocumentImportOptions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DraftAttachmentUpload` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `DraftInput` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -1006,7 +1009,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1075)
+## Utilities & constants (1079)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1400,6 +1403,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `cellBorderValue` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `chartSvg` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `cmText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `columnFit` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `DEFAULT_NORMAL_STYLE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
 | `DEFAULT_PAGE_SETUP` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `DOC_PROSE_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
@@ -1408,6 +1412,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FIGURE_FRAME_NODES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `figureLayoutStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FIRST_PAGE_BAND` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
+| `fitColumnWidths` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `flattenNestedFootnotes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
 | `FOOTNOTE_PARAGRAPH` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
 | `FOOTNOTE_SELECTOR` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
@@ -1600,6 +1605,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `CONVERT_SOURCES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `describeFileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
+| `DOCS_TEXT_WIDTHS` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `docsTextWidth` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `DRIVE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_DOC` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

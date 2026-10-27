@@ -3,6 +3,7 @@
 // fields it changes, and they merge into the stored settings.
 
 import type { UserSettings } from '@workspace/lib/types/settings';
+import { DOCS_TEXT_WIDTHS } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/auth/access';
 import { getUserHome } from '../lib/home';
@@ -56,6 +57,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
                     }),
                 ),
                 celebrations: t.Optional(t.Boolean()),
+                docsView: t.Optional(t.Object({ textWidth: t.Optional(t.UnionEnum(DOCS_TEXT_WIDTHS)) })),
             }),
             auth: true,
         },

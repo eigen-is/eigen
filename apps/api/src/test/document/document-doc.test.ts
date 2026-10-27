@@ -86,6 +86,8 @@ describe('document/doc', () => {
         }
         doc.getMap(PAGE_ROOT).set('marginLeft', 50);
         doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
+        // A paged file into a page-less doc: every key is the file's, so the doc is paged again.
+        doc.getMap(PAGE_ROOT).set('pageless', true);
         doc.getMap(STYLE_ROOT).set('font', 'JetBrains Mono');
         doc.getMap(STYLE_ROOT).set('color', '#ff0000');
 
@@ -101,6 +103,7 @@ describe('document/doc', () => {
             headerDistance: 8,
             footerDistance: 10,
             differentFirstPage: false,
+            pageless: false,
         };
         let transactions = 0;
         doc.on('afterTransaction', () => transactions++);

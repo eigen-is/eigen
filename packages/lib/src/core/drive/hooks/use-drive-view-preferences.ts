@@ -1,9 +1,13 @@
+// A user's Drive view, list or grid and its sort, kept in their settings so it follows them to every device. A copy in
+// this browser draws the folder before the settings load, and is all a guest has.
+
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { spaceApi } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import type { DriveSortDir, DriveSortKey, DriveViewMode, DriveViewPreferences } from '@workspace/lib/types/drive';
 import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
 import type { UserSettings } from '@workspace/lib/types/settings';
+import { useEffect } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateSpaceSettings, spaceKeys } from '../../space/hooks/keys';
 import { useSpaceSettings } from '../../space/hooks/use-space-settings';
@@ -55,6 +59,10 @@ export function useDriveViewPreferences() {
         sortKey: sv?.sortKey ?? cached.sortKey,
         sortDir: sv?.sortDir ?? cached.sortDir,
     };
+    // The settings replace the copy, so a view chosen on another device is what this browser draws first next time.
+    useEffect(() => {
+        if (sv) writeCache(cacheKey, { mode: prefs.mode, sortKey: prefs.sortKey, sortDir: prefs.sortDir });
+    }, [cacheKey, sv, prefs.mode, prefs.sortKey, prefs.sortDir]);
 
     const mutation = useMutation({
         mutationFn: async (next: DriveViewPreferences) => {

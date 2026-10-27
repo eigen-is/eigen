@@ -1,6 +1,8 @@
 // A writer always has the Format and Insert menus; the icon row beside them folds from its right end as the window narrows.
 // View and Tools reach everyone, viewers included.
+
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { collapseSeparators } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -38,6 +40,7 @@ const onReplaceImage = mock(() => {});
 const onEnterBand = mock((_band: unknown) => {});
 const onPageNumbers = mock((_preset: unknown) => {});
 const onToggleOutline = mock(() => {});
+const onPageSetupChange = mock((_from: PageSetup, _to: PageSetup) => {});
 
 async function render(
     width: number,
@@ -49,6 +52,8 @@ async function render(
         inNote = false,
         sync = { offline: false, unsyncedEdits: false },
         outlineShown = false,
+        pageSetup = DEFAULT_PAGE_SETUP,
+        bands = true,
     }: {
         active?: typeof editor;
         onInsertEquation?: () => void;
@@ -56,6 +61,9 @@ async function render(
         inNote?: boolean;
         sync?: { offline: boolean; unsyncedEdits: boolean };
         outlineShown?: boolean;
+        pageSetup?: PageSetup;
+        // A page-less doc's editor hands the toolbar no way into a band.
+        bands?: boolean;
     } = {},
 ) {
     window.happyDOM.setViewport({ width, height: 1000 });
@@ -70,14 +78,16 @@ async function render(
         storageUnavailable: false,
         canUndo: false,
         canRedo: false,
-        pageSetup: DEFAULT_PAGE_SETUP,
-        onPageSetupChange: () => {},
+        pageSetup,
+        onPageSetupChange,
+        textWidth: 'narrow',
+        onTextWidthChange: () => {},
         onUpdateNormalStyle: () => {},
         onAccessDialogOpen: () => {},
         onImageUpload: () => {},
         onReplaceImage,
-        onEnterBand,
-        onPageNumbers,
+        onEnterBand: bands ? onEnterBand : undefined,
+        onPageNumbers: bands ? onPageNumbers : undefined,
         outlineShown,
         onToggleOutline,
         path: drivePath({ name: 'Notes', mimeType: DRIVE_MIME_DOC }),
@@ -194,6 +204,7 @@ test("Format's submenus follow Google Docs' names and order", async () => {
         'Headers and footers',
         'Page numbers',
         'Page orientation',
+        'Switch to page-less format',
         '—',
         'Table',
         'Image',
@@ -901,6 +912,34 @@ test("in a band, Line & paragraph spacing and Increase indent act on the band's 
 });
 
 // Google has Format › Page orientation beside File › Page setup; both open the one dialog.
+test("a page-less doc's Insert has no Page break, and its Page elements only Footnote, as Google's", async () => {
+    const pageless = { ...DEFAULT_PAGE_SETUP, pageless: true };
+    await render(1920, true, { pageSetup: pageless, bands: false, onInsertFootnote: () => {} });
+    await openMenu('Insert');
+    expect(menuItems()).not.toContain(`Page break${formatForDisplay('Mod+Enter')}`);
+    expect(menuItems()).toContain('Table');
+    await openSubmenu('Page elements');
+    expect(openMenuEntries()).toEqual([`Footnote${formatForDisplay('Mod+Alt+F')}`]);
+});
+
+test('Format switches a doc to page-less and back, and a page-less one has no Page orientation', async () => {
+    onPageSetupChange.mockClear();
+    await render(1920, true);
+    await openMenu('Format');
+    expect(menuItems()).toContain('Page orientation');
+    await clickItem('Switch to page-less format');
+    expect(onPageSetupChange.mock.calls).toEqual([[DEFAULT_PAGE_SETUP, { ...DEFAULT_PAGE_SETUP, pageless: true }]]);
+    await unmount();
+
+    const pageless = { ...DEFAULT_PAGE_SETUP, pageless: true };
+    await render(1920, true, { pageSetup: pageless, bands: false });
+    await openMenu('Format');
+    expect(menuItems()).not.toContain('Page orientation');
+    expect(menuItems()).not.toContain('Headers and footers');
+    await clickItem('Switch to pages format');
+    expect(onPageSetupChange.mock.calls.at(-1)).toEqual([pageless, DEFAULT_PAGE_SETUP]);
+});
+
 test('Format › Page orientation opens Page setup', async () => {
     await render(1920, true);
     await openMenu('Format');

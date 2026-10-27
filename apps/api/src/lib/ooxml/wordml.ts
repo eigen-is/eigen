@@ -12,6 +12,9 @@ export const WML = 'application/vnd.openxmlformats-officedocument.wordprocessing
 // The uri of Word's compatibility settings, which looks like a namespace but is not one.
 export const WORD_SETTINGS_URI = 'http://schemas.microsoft.com/office/word';
 
+// w:view's Web Layout, ST_View's "Web Page View": the view a page-less doc's docx opens in, and imports page-less from.
+export const WEB_VIEW = 'web';
+
 // ── Styles ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 // Word lists a style by its name. A re-save keeps the name, while the id may change.

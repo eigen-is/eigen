@@ -134,7 +134,7 @@ export function createReader(
     const fontTable = readFontTable(pkg.fontTable);
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
     const size = sectionPage(sectPr);
-    const page = { ...size, differentFirstPage: pkg.titlePg };
+    const page = { ...size, differentFirstPage: pkg.titlePg, pageless: pkg.webView };
     const px = pagePx(page);
     const twips = pageTwips(page);
     // A size past the range lands in it, as a run's does.

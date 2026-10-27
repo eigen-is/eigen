@@ -596,8 +596,10 @@
 
     /* A figure in front of or behind the text is placed from its paragraph's padding box. That box holds the indent
        and the space before. The paragraph makes no stacking context, so the two layers stack in the page's. The
-       renderers write the offsets and the width inline, through figureLayoutStyle. Within a layer, document order
-       breaks the tie. The two layouts are lib's POSITIONED_LAYOUTS, written out here as CSS can't import that list. */
+       renderers write the offsets and the width inline, through figureLayoutStyle; the editor's node view writes the
+       left and the width as custom properties instead, which the docs app's globals.css draws, out of the exports.
+       Within a layer, document order breaks the tie. The two layouts are lib's POSITIONED_LAYOUTS, written out here
+       as CSS can't import that list. */
     p,
     h1,
     h2,

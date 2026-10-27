@@ -415,6 +415,32 @@ test("on an A4 page map with the column laid out 360 px wide, a drop clamps at t
     expect(editor.state.doc.nodeAt(5)?.attrs['offsetX']).toBe(Math.round(a4.width - 200 - a4.margin.left));
 });
 
+// The page-less side of the J1 contract: a page-less doc lays its column out at the reader's width, a phone's 360 px or
+// a desktop's Narrow 696 px, and the same drag stores the same offsets on both, clamped only at the page map's paper.
+// The box draws clamped into the column and the strip beside it by CSS, from the place its node view writes as custom
+// properties, so drawing it there writes nothing.
+test('on a page-less doc, a drag stores the same offsets in a 360 px column and a 696 px one', async () => {
+    const a4 = { ...pagePx(DEFAULT_PAGE_SETUP), pageless: true };
+    const stored: unknown[] = [];
+    for (const width of [360, 696]) {
+        const editor = await twoLaidOut(a4, { x: 0, width });
+        await act(async () => {
+            editor.commands.moveFigure(5, { dx: 300, dy: -15 });
+        });
+        const box = blockDom(editor, 5)?.querySelector<HTMLElement>('.figure');
+        stored.push({
+            offsets: editor.state.doc.nodeAt(5)?.attrs['offsetX'],
+            left: box?.style.getPropertyValue('--figure-left'),
+            width: box?.style.getPropertyValue('--figure-width'),
+        });
+        await unmount();
+    }
+    expect(stored).toEqual([
+        { offsets: 310, left: '310px', width: '200px' },
+        { offsets: 310, left: '310px', width: '200px' },
+    ]);
+});
+
 // Behind-image selection by geometry: the paragraph's box lies over the image, its text only where its lines are.
 async function behindUnderText() {
     const editor = await mount([paragraph(front({ layout: 'behind' }), text('abc'))]);
