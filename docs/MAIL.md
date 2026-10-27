@@ -72,6 +72,12 @@ The client chooses a draft's id, and that id names a file. So the domain answers
 
 The composer seeds its HTML the way TipTap writes it: an empty paragraph is `<p><br></p>` (`EMPTY_PARA` in `use-draft.ts`), never a bare `<br>` between blocks. Otherwise TipTap's first normalization reads as an edit, and `useDraft` auto-saves a draft the user never touched. The plain text works the same way: `plainSignature` mirrors how `getText()` joins blocks, so a new block type in the LightEditor goes into it too.
 
+## A forward carries the original's parts through the browser
+
+Forward attaches every part the reader shows as a chip, an inline `cid:` image and a calendar part included, since the quote carries no images. A part has no Drive path, so `useAttachMailPart` fetches it from its download route and uploads it to the draft's upload route, the way an import reads a mail part. From there it is a staged upload like a file the user picked: the same chip, the same removal, the same send. The bytes cross the network twice, and a part over the user's mail upload limit is toasted and left out. An inline image goes out as a plain attachment, without its `Content-ID`.
+
+The forwarded chips are prefill, like the quoted body (`add-prefill-attachment` in `useDraft`), so a forward the user leaves saves no draft. A chip that lands after the user edited, or after a save gave the draft an id, is an edit, and the next save embeds it.
+
 ## Delivery attempts every copy and retries none
 
 `messageSend` full-saves the draft and hands each copy to `sendMail` (`lib/core/mailer.ts`). That save pins From to the account, so a crafted draft can't send as anyone else. The route needs hosted mail, so user mail leaves through the bundled Postfix ([SERVER-SETTINGS.md § Hosted mail and the relay are environment, not settings](SERVER-SETTINGS.md#hosted-mail-and-the-relay-are-environment-not-settings)).

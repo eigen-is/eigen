@@ -1,7 +1,12 @@
+// The actions the mail route offers on messages: open, move, delete, flag and read, with a one-step
+// undo, plus reply, reply all and forward, which open the composer prefilled through history state.
+// The route and its keyboard shortcuts both call them, so a button and a key do the same thing.
+
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { formatFullDateTime } from '@workspace/lib/date';
+import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import { escapeHtml } from '@workspace/lib/html';
 import {
     createDraftEmail,
@@ -14,6 +19,7 @@ import {
     useToggleReadEmail,
     useUpdateDraft,
 } from '@workspace/lib/mail';
+import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { DraftInput, DraftUpdateOptions, Email, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -152,12 +158,12 @@ export function useMailActions() {
     // POST only fires once the user actually edits (triggering the auto-save). The fresh
     // composeSessionKey remounts any composer that was already open (so clicking Reply
     // while typing a different message gives a clean composer with the new quoted body).
-    const openPrefilledCompose = (prefillDraft: NewDraft) => {
+    const openPrefilledCompose = (prefillDraft: NewDraft, forwardedParts?: FileSubject[]) => {
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
             search: { mode: 'compose' },
-            state: { prefillDraft, composeSessionKey: crypto.randomUUID() },
+            state: { prefillDraft, forwardedParts, composeSessionKey: crypto.randomUUID() },
         });
     };
 
@@ -395,12 +401,16 @@ export function useMailActions() {
 
     const handleForwardEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (!email) return;
+        if (!email || !user) return;
+        // Every part the reader shows as a chip goes along, an inline image included: the quote drops images.
         openPrefilledCompose(
             createDraftEmail({
                 subject: `FW: ${email.subject}`,
                 html: formatEmailQuote(email),
             }),
+            email.attachments.map(({ index, filename, contentType, size }) =>
+                subjectFromMailAttachment(user.id, email.id, index, { filename, contentType, size }),
+            ),
         );
     };
 

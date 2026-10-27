@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, reply, forward]
 related: [mail/compose-and-send, mail/get-started]
 order: 20
-updated: 2026-10-12
+updated: 2026-10-27
 ---
 
 Once an email arrives, you can read it, write back to the sender, write back to everyone on the thread, or pass it along to someone new. This page covers all four.
@@ -17,7 +17,7 @@ Click any message in the list to open it. It opens in the reading pane next to t
 
 Opening a message marks it as read.
 
-Images that a message loads from the internet are hidden when you open it, so the sender can't tell when you read it. A line above the message says **Remote images are hidden.** Click **Load images** to show them for that message. When you reply or forward, the quoted message keeps its text and links but never its images.
+Images that a message loads from the internet are hidden when you open it, so the sender can't tell when you read it. A line above the message says **Remote images are hidden.** Click **Load images** to show them for that message. When you reply or forward, the quoted message keeps its text and links but never its images. A forward attaches the message's pictures as files instead.
 
 On a narrow screen the message fills the window. Use the back arrow at the top to return to the list.
 
@@ -48,9 +48,11 @@ Forwarding sends a copy of a message to someone who was not part of it.
 
 1. Open the message.
 2. Click **Forward** in the toolbar.
-3. A new message opens with the subject set to **FW:** followed by the original subject, and the original message quoted below. The **To** field is empty.
+3. A new message opens with the subject set to **FW:** followed by the original subject, and the original message quoted below. The **To** field is empty. The original's attachments appear as chips above the message, pictures from inside the message included, a moment after it opens.
 4. Type the address of the person you want to send it to in the **To** field. Add **Cc** or **Bcc** recipients if you need them.
 5. Add anything you want to say above the quoted message, then click **Send**.
+
+The attachments go out with your forward. To leave one out, click the **X** on its chip. An attachment larger than your server's attachment limit is left out, and a message tells you so. See [Attach files to an email](/support/mail/attach-files).
 
 ## Nothing sends until you click Send
 

@@ -1,11 +1,22 @@
+// The mail composer: recipients, subject, body and attachments of one draft, and the send. Its state
+// and auto-save live in useDraft. Files come in from the disk, from Drive or from a forwarded message,
+// and each is staged on the server before a save embeds it. At send time it offers to share the Drive
+// documents the mail links with recipients who cannot open them yet.
+
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { wasToasted } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { checkPathAccess } from '@workspace/lib/drive';
-import { canonicalRecipients, useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mail';
+import {
+    canonicalRecipients,
+    useAttachFromDrive,
+    useAttachMailPart,
+    useUploadDraftAttachment,
+} from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, isContainerType, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ConfirmDialog, FileDropOverlay, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -81,6 +92,9 @@ type EmailDraftProps = {
     // Quoted body / subject / recipients for reply/forward. useDraft reads it once on mount
     // and seeds its fingerprint from it, so no save fires until the user actually edits.
     prefillDraft?: NewDraft;
+    // The parts of the message a forward carries. Each is fetched and uploaded once per compose
+    // session, and its chip is part of the prefill, so they alone save no draft.
+    forwardedParts?: FileSubject[];
     to?: string;
     // Drive paths to attach when the composer opens (e.g. palette "Mail to…" passes the
     // selection through the URL). Routed through the same handleDriveAttach the in-app
@@ -107,6 +121,7 @@ type EmailDraftProps = {
 export function EmailDraft({
     email,
     prefillDraft,
+    forwardedParts,
     to,
     initialDriveAttachments,
     signatureHtml,
@@ -130,11 +145,13 @@ export function EmailDraft({
     const { user } = useAuth();
     const uploadMutation = useUploadDraftAttachment();
     const attachFromDriveMutation = useAttachFromDrive();
+    const attachMailPartMutation = useAttachMailPart();
 
     const {
         state,
         setField,
         addAttachment,
+        addPrefillAttachment,
         addDriveReference,
         removeAttachment,
         removeDriveReference,
@@ -240,6 +257,30 @@ export function EmailDraft({
         didApplyInitialAttachmentsRef.current = true;
         applyInitialAttachments(initialDriveAttachments);
     }, [initialDriveAttachments]);
+
+    // The forwarded parts arrive with the composer, so they are attached once on mount. The results are
+    // added in the original's order, and a part that fails was toasted by the hook and is left out.
+    const didAttachForwardedPartsRef = useRef(false);
+    const attachForwardedParts = useEffectEvent(async (parts: FileSubject[]) => {
+        const results = await Promise.all(
+            parts.map((part) => attachMailPartMutation.mutateAsync(part).catch(() => null)),
+        );
+        for (const result of results) {
+            if (!result) continue;
+            addPrefillAttachment({
+                key: `forward-${result.tempId}`,
+                tempId: result.tempId,
+                filename: result.filename,
+                size: result.size,
+                contentType: result.contentType,
+            });
+        }
+    });
+    useEffect(() => {
+        if (didAttachForwardedPartsRef.current || !forwardedParts?.length) return;
+        didAttachForwardedPartsRef.current = true;
+        void attachForwardedParts(forwardedParts);
+    }, [forwardedParts]);
 
     // Every actual send funnels through here: stop auto-saving (we're leaving this draft behind) then
     // dispatch. Deferring disableSaves() to dispatch time is what keeps the draft editable when the

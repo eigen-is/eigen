@@ -1,3 +1,7 @@
+// The mail app's one page: a mailbox's message list beside the open message or the composer. It reads
+// the mailbox and message from the URL and the compose prefill from history state, and hands both to
+// the list, the reader and the composer, which share one set of mail actions and shortcuts.
+
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
@@ -64,9 +68,10 @@ function MailRoute() {
     const navigate = useNavigate();
     const { isTablet } = useLayout();
     // Reply/Forward/Compose all write to history state (see use-mail-actions.ts). prefillDraft
-    // seeds the composer; composeSessionKey is a nonce that flips the EmailDraft remount key
-    // each time a new compose session starts, so an in-progress composer is unmounted cleanly.
-    const { prefillDraft, composeSessionKey } = useLocation().state;
+    // seeds the composer and forwardedParts are a forward's attachments; composeSessionKey is a nonce
+    // that flips the EmailDraft remount key each time a new compose session starts, so an
+    // in-progress composer is unmounted cleanly.
+    const { prefillDraft, forwardedParts, composeSessionKey } = useLocation().state;
 
     // Cross-app drive attachments (palette "Mail to…") arrive via ?attach=. Resolve each
     // tuple to a DrivePath via the shared driveKeys.path cache, then hand the resolved list
@@ -397,6 +402,7 @@ function MailRoute() {
                                     }
                                     email={isEmailDraft(selectedEmail) ? selectedEmail : null}
                                     prefillDraft={prefillDraft}
+                                    forwardedParts={forwardedParts}
                                     to={to}
                                     initialDriveAttachments={initialDriveAttachments}
                                     signatureHtml={signatureHtml}

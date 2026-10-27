@@ -1,3 +1,8 @@
+// The composer's state for one draft and its auto-save. A save fires a short while after the fields
+// drift from what the server has, and once more when the composer closes. The prefill of a reply or
+// forward counts as saved, so a draft only reaches Drafts once the user changes something. The pure
+// pieces are exported, so their tests need no React.
+
 import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth } from '@workspace/lib/auth';
 import { flattenAddresses } from '@workspace/lib/mail';
@@ -44,6 +49,7 @@ type Action =
     | { type: 'set-field'; field: DraftEditableField; value: string }
     | { type: 'set-id'; id: string }
     | { type: 'add-attachment'; meta: AttachmentMeta }
+    | { type: 'add-prefill-attachment'; meta: AttachmentMeta }
     | { type: 'remove-attachment'; index: number }
     | { type: 'add-drive-ref'; ref: AttachmentReference }
     | { type: 'remove-drive-ref'; id: string }
@@ -172,6 +178,15 @@ export function initFields(
     };
 }
 
+// A state whose fields the server has, or that the prefill seeded: nothing in it is an edit yet.
+export function savedState(fields: DraftFields): DraftState {
+    return { fields, lastSavedFingerprint: fingerprintFields(fields) };
+}
+
+export function isDirty(state: DraftState): boolean {
+    return fingerprintFields(state.fields) !== state.lastSavedFingerprint;
+}
+
 function fingerprintFields(f: DraftFields): string {
     const attachments = f.attachments.map((a) => `${a.key}:${a.tempId ?? ''}:${a.index ?? ''}`).join('|');
     const refs = f.driveReferences.map((r) => r.id).join(',');
@@ -255,7 +270,7 @@ export function mergeServerAttachments(
     return { serverActual, localNext: [...withoutRemoved, ...inFlightAdditions] };
 }
 
-function reducer(state: DraftState, action: Action): DraftState {
+export function draftReducer(state: DraftState, action: Action): DraftState {
     switch (action.type) {
         case 'set-field':
             return { ...state, fields: { ...state.fields, [action.field]: action.value } };
@@ -266,6 +281,12 @@ function reducer(state: DraftState, action: Action): DraftState {
                 ...state,
                 fields: { ...state.fields, attachments: [...state.fields.attachments, action.meta] },
             };
+        case 'add-prefill-attachment': {
+            // A forwarded part is prefill, like the quoted body, so a forward the user leaves saves no draft.
+            // Once the user edited or a save gave the draft an id, it is an edit the next save must embed.
+            const fields = { ...state.fields, attachments: [...state.fields.attachments, action.meta] };
+            return !state.fields.id && !isDirty(state) ? savedState(fields) : { ...state, fields };
+        }
         case 'remove-attachment':
             return {
                 ...state,
@@ -296,8 +317,7 @@ function reducer(state: DraftState, action: Action): DraftState {
             // fingerprint to match. Without this, TipTap's normalization of the seeded body
             // (or its emission of the quoted-content text via getText) drifts from the seed
             // on first interaction and tricks the auto-save into firing without any user edit.
-            const fields = { ...state.fields, body: action.html, bodyText: action.text };
-            return { fields, lastSavedFingerprint: fingerprintFields(fields) };
+            return savedState({ ...state.fields, body: action.html, bodyText: action.text });
         }
         case 'save-completed': {
             const { serverActual, localNext } = mergeServerAttachments(
@@ -333,10 +353,9 @@ export function useDraft({
     onDraftIdAssigned,
 }: UseDraftOptions) {
     const { user } = useAuth();
-    const [state, dispatch] = useReducer(reducer, undefined, () => {
-        const fields = initFields(email, prefillTo, prefillDraft, signatureHtml);
-        return { fields, lastSavedFingerprint: fingerprintFields(fields) };
-    });
+    const [state, dispatch] = useReducer(draftReducer, undefined, () =>
+        savedState(initFields(email, prefillTo, prefillDraft, signatureHtml)),
+    );
 
     // Non-reactive control flow: the in-flight save promise (for serialization), a kill switch
     // for the send/delete path, and a "anything ever saved" flag (drives the unmount-save
@@ -393,7 +412,7 @@ export function useDraft({
     useEffect(() => {
         if (disabledRef.current) return;
         if (!isSaveable(state.fields)) return;
-        if (fingerprintFields(state.fields) === state.lastSavedFingerprint) return;
+        if (!isDirty(state)) return;
         const timer = setTimeout(() => void runSave(), AUTO_SAVE_DEBOUNCE_MS);
         return () => clearTimeout(timer);
     }, [state]);
@@ -405,8 +424,7 @@ export function useDraft({
             if (disabledRef.current) return;
             const { state: s, user: u, onSave: cb } = latestRef.current;
             if (!isSaveable(s.fields)) return;
-            const dirty = fingerprintFields(s.fields) !== s.lastSavedFingerprint;
-            if (!dirty && !everSavedRef.current) return;
+            if (!isDirty(s) && !everSavedRef.current) return;
             cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields, true)).catch((err) =>
                 console.warn('draft unmount save failed', err),
             );
@@ -427,6 +445,7 @@ export function useDraft({
         setField: <K extends DraftEditableField>(field: K, value: string) =>
             dispatch({ type: 'set-field', field, value }),
         addAttachment: (meta: AttachmentMeta) => dispatch({ type: 'add-attachment', meta }),
+        addPrefillAttachment: (meta: AttachmentMeta) => dispatch({ type: 'add-prefill-attachment', meta }),
         removeAttachment: (index: number) => dispatch({ type: 'remove-attachment', index }),
         addDriveReference: (ref: AttachmentReference) => dispatch({ type: 'add-drive-ref', ref }),
         removeDriveReference: (id: string) => dispatch({ type: 'remove-drive-ref', id }),
@@ -452,7 +471,7 @@ export function useDraft({
         // disableSaves() only once it commits to sending.
         flushAndGetDraft: async (): Promise<NewDraft> => {
             let result: EmailDraft | null | undefined = null;
-            if (fingerprintFields(state.fields) !== state.lastSavedFingerprint) {
+            if (isDirty(state)) {
                 result = await runSave();
             } else if (inFlightRef.current) {
                 await inFlightRef.current.catch(() => {});
