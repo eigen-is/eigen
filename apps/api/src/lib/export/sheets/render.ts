@@ -59,6 +59,11 @@ type StyleRegistry = Map<string, string>;
 
 export const PREVIEW_SHEET_BUDGET: SheetBudget = { maxRows: 200, maxCols: 50, maxCells: 10_000 };
 
+// The cells the preview's images and charts spend, apart from the window's, so a window that spends all of its own
+// still draws its first charts. As many as the window holds draws four charts of 2,000 points, about 1 MB of SVG, so
+// a full window and its charts stay well under the preview's 8 MB byte guard.
+export const PREVIEW_FLOATING_CELLS = 10_000;
+
 // The most cells, rows times columns, an export walks of all its sheets together. A peer can write a merge or a border
 // key at XFD1048576 on as many sheets as it likes, and the sanitizer and WeasyPrint pay for every cell the walk writes.
 // A row whose every column is hidden still costs one, and a sheet whose every row is hidden costs its columns once.
@@ -123,16 +128,16 @@ export function sheetsHtmlDocument({
     });
 }
 
-// A preview is a glance, so it renders only the first shown sheet, cut to the budget. Its images and charts spend what
-// the window left of that budget's cells, so a crowded preview draws the ones that fit instead of a body the byte
-// guard throws away. `truncated` is true when rows, columns, cells, images, charts or other sheets were left out, and
-// the caller then adds the shared marker. The resolver spans every sheet, so a rule's formula can read another sheet.
+// A preview is a glance, so it renders only the first shown sheet, cut to the budget. Its images and charts spend
+// PREVIEW_FLOATING_CELLS, so a crowded preview draws the ones that fit instead of a body the byte guard throws away.
+// `truncated` is true when rows, columns, cells, images, charts or other sheets were left out, and the caller then
+// adds the shared marker. The resolver spans every sheet, so a rule's formula can read another sheet.
 export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
     const shown = shownSheets(sheets);
     if (shown.length === 0) return { html: '', truncated: false };
     const windowed = windowedSheet(shown[0], () => PREVIEW_SHEET_BUDGET);
     if (!windowed) return { html: '', truncated: true };
-    const floating = chargeFloating(windowed.floating, mediaUrls, PREVIEW_SHEET_BUDGET.maxCells - windowed.cells);
+    const floating = chargeFloating(windowed.floating, mediaUrls, PREVIEW_FLOATING_CELLS);
     const first = renderSheet({ ...windowed, floating: floating.kept }, new FormulaEngine(), sheetsResolver(sheets), {
         budget: PREVIEW_SHEET_BUDGET,
         mediaUrls,

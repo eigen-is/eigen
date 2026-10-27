@@ -71,7 +71,7 @@ A preview is a glance, so each type stops at its natural unit and leaves the exp
 | eigendoc | first 20 top-level blocks |
 | eigenslides | first 8 slides, 500 elements |
 | eigenvector | 500 elements in reading order, one page |
-| eigensheets | first sheet, 200 rows × 50 columns, 10,000 cells; its images and charts spend what its window left of those cells |
+| eigensheets | first sheet, 200 rows × 50 columns, 10,000 cells; its images and charts spend 10,000 cells of their own |
 
 A sheets preview never recalculates and renders stored values ([SHEETS.md § The editor computes on write](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). The sheet window also bounds declared spans: one merge or conditional-format range can name millions of cells, so both clip to the window, through the export's `windowedSheet` ([EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-charts-and-pictures)). So an aggregate rule (data bars, color scales, top-N, duplicates) takes its extremes over the window, not over the range it declares. The preview also draws a font size held to Excel's 1 to 409 points and a color that is no string as none, as the export does: both are safer in a body embedded in a page.
 

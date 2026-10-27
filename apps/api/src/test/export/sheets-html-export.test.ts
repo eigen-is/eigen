@@ -29,6 +29,7 @@ import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
     MAX_EXPORT_CELLS,
+    PREVIEW_FLOATING_CELLS,
     PREVIEW_SHEET_BUDGET,
     renderSheetsHtml,
     renderSheetsPreviewHtml,
@@ -1573,14 +1574,26 @@ describe('Sheets HTML export — charts', () => {
         expect(drawn).toBeGreaterThan(0);
         expect(drawn).toBeLessThan(200);
         expect(lost).toEqual(Array(200 - drawn).fill('charts-dropped'));
-        // The preview's charts spend what its 200 rows left of its own budget, and it says it left some out. The
-        // export's cap drew 99 here, 22 MB that the preview's byte guard threw away whole.
+        // The preview's charts spend an allowance of their own, and it says it left some out. The export's cap drew
+        // 99 here, 22 MB that the preview's byte guard threw away whole.
         const preview = renderSheetsPreviewHtml([sheet], NO_MEDIA);
-        const fit = Math.floor((PREVIEW_SHEET_BUDGET.maxCells - 200) / (500 + points));
+        const fit = Math.floor(PREVIEW_FLOATING_CELLS / (500 + points));
         expect(fit).toBeGreaterThan(0);
         expect(preview.html.match(/<svg /g)).toHaveLength(fit);
         expect(preview.truncated).toBe(true);
     }, 60_000);
+
+    test('a preview whose window spends all its cells still draws its first chart', () => {
+        const { maxRows, maxCols, maxCells } = PREVIEW_SHEET_BUDGET;
+        const cells = Array.from({ length: maxRows * maxCols }, (_, i) => ({
+            r: Math.floor(i / maxCols),
+            c: i % maxCols,
+            v: { v: i, m: String(i) },
+        }));
+        expect(cells).toHaveLength(maxCells);
+        const sheet: Sheet = { ...makeSheet(cells), id: 'data', charts: { c1: chartOn('data') } };
+        expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html.match(/<svg /g)).toHaveLength(1);
+    });
 });
 
 describe('Sheets HTML export — the cell cap', () => {
