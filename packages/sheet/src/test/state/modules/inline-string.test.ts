@@ -9,9 +9,11 @@ import type { Context } from '../../../state/context';
 import { getFontStyleByCell, getInlineStringHTML, updateCell } from '../../../state/modules/cell';
 import type { RunStyleKey } from '../../../state/modules/inline-string';
 import {
-    editorRuns,
+    committedRuns,
     editorSelectionStyle,
+    forgetEditorSelection,
     rememberEditorSelection,
+    runStyleOf,
     typeWithPendingStyle,
 } from '../../../state/modules/inline-string';
 import {
@@ -23,15 +25,15 @@ import {
     handleTextSize,
     handleUnderline,
 } from '../../../state/modules/toolbar';
-import { contextFactory, selectionFactory } from '../factories/context';
+import { selectionFactory, workbookContextFactory } from '../factories/context';
 
 installHappyDom();
 
 function editing(html: string, cell: Cell | null = null) {
-    const ctx = contextFactory({
+    const ctx = workbookContextFactory({
         editingCellPosition: [0, 0],
         selections: selectionFactory([0, 0], [0, 0], 0, 0),
-    }) as Context;
+    });
     ctx.sheets[0].data = [[cell, null]];
     const input = document.createElement('div');
     input.innerHTML = html;
@@ -109,6 +111,14 @@ describe('a format on selected characters', () => {
         expect(getFontStyleByCell({ ff: 'Source Serif 4' })).toEqual({ fontFamily: "'Source Serif 4', sans-serif" });
     });
 
+    // An older or imported cell may hold a flag as a string and a color as rgba().
+    test("a legacy cell's string flags and rgba color read as the values they mean", () => {
+        const legacy: Cell = JSON.parse('{"bl":"0","it":"0","cl":"0","un":"0","fc":"rgba(255, 0, 0, 1)"}');
+        expect(getFontStyleByCell(legacy)).toEqual({ color: '#ff0000' });
+        const bold: Cell = JSON.parse('{"bl":"1"}');
+        expect(getFontStyleByCell(bold)).toEqual({ fontWeight: 'bold' });
+    });
+
     test('text with &, < and > keeps every character', () => {
         const edit = editing('a &amp; b &lt;c&gt;');
         select(edit.input, 4, 5);
@@ -177,6 +187,44 @@ describe('a format on selected characters', () => {
     });
 });
 
+// Runs come from a collaborator or an xlsx, so a value that could leave the style attribute is dropped.
+describe('a stored run is checked before the editor writes it as CSS', () => {
+    const hostile = [
+        { fc: 'red;background:url(//evil)' },
+        { fc: 'rgb(1, 2, 3);background:url(//evil)' },
+        { fs: '12pt;background:url(//evil)' },
+        { fs: 1e9 },
+        { ff: 'x;background:url(//evil)' },
+        { ff: 'x\nbackground:url(//evil)' },
+        { ff: 'expression(alert(1))' },
+        { ff: 'url' },
+    ];
+
+    test('a color, size or font that is not a plain value falls back to the default', () => {
+        for (const style of hostile) {
+            const run: Cell = JSON.parse(JSON.stringify(style));
+            expect(runStyleOf(run)).toEqual(runStyleOf(null));
+        }
+    });
+
+    test('a cell of such runs opens with no CSS from them', () => {
+        const runs = hostile.map((style) => ({ ...style, v: 'x' }));
+        const data = [[JSON.parse(JSON.stringify({ ct: { fa: 'General', t: 'inlineStr', s: runs } }))]];
+        const html = getInlineStringHTML(0, 0, data);
+        expect(html).not.toMatch(/url|background|expression/);
+        expect(html).toContain('x');
+    });
+
+    test('a valid color, size and font still style the run', () => {
+        expect(runStyleOf({ fc: '#FF0000', fs: 14, ff: 'Source Serif 4' })).toMatchObject({
+            fc: '#ff0000',
+            fs: 14,
+            ff: 'Source Serif 4',
+        });
+        expect(runStyleOf({ fc: '#f00' }).fc).toBe('#f00');
+    });
+});
+
 describe('the editor DOM read into runs', () => {
     test("the browser's own bold markup and bare text commit with all their text", () => {
         expect(runs(commit(editing('hello <b>world</b>')))).toEqual([
@@ -198,7 +246,7 @@ describe('the editor DOM read into runs', () => {
             '<span style="color: rgb(255, 0, 0); font-family: &quot;source serif 4&quot;, serif; text-decoration: none">a</span>b',
             { v: 'ab', m: 'ab', cl: 1 },
         );
-        const [run] = editorRuns(edit.input, edit.ctx.sheets[0].data?.[0][0]);
+        const [run] = committedRuns(edit.input, edit.ctx.sheets[0].data?.[0][0]);
         expect(run).toMatchObject({ v: 'a', fc: '#ff0000', ff: 'Source Serif 4', cl: 0 });
     });
 
@@ -212,7 +260,7 @@ describe('the editor DOM read into runs', () => {
         // A family name with a digit in it is no CSS identifier, so it is a quoted string.
         expect(html).toContain('font-family:&quot;Source Serif 4&quot;, sans-serif');
         const edit = editing(html, data[0][0]);
-        expect(editorRuns(edit.input, data[0][0])).toEqual(stored);
+        expect(committedRuns(edit.input, data[0][0])).toEqual(stored);
     });
 });
 
@@ -241,6 +289,34 @@ describe('the style at the caret', () => {
             ['big ', 1],
             ['world', 0],
         ]);
+    });
+
+    test('a caret after a line break the browser wrote as <br> keeps its place', () => {
+        const edit = editing('ab<br>cd');
+        const cd = edit.input.lastChild;
+        if (!cd) throw new Error('the editor holds no text');
+        const range = document.createRange();
+        range.setStart(cd, 1);
+        document.getSelection()?.removeAllRanges();
+        document.getSelection()?.addRange(range);
+        handleBold(edit.ctx, edit.input);
+        expect(typeWithPendingStyle(edit.input, 'X')).toBe(true);
+        expect(runs(commit(edit))).toEqual([
+            ['ab\r\nc', 0],
+            ['X', 1],
+            ['d', 0],
+        ]);
+    });
+
+    test('a closed editor forgets its selection and its pending style', () => {
+        const edit = editing('hello world');
+        select(edit.input, 6);
+        handleBold(edit.ctx, edit.input);
+        forgetEditorSelection(edit.input);
+        document.getSelection()?.removeAllRanges();
+        expect(editorSelectionStyle(edit.input, null)).toBeNull();
+        select(edit.input, 6);
+        expect(typeWithPendingStyle(edit.input, 'x')).toBe(false);
     });
 
     test('a caret moved away drops the pending style', () => {

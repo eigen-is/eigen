@@ -16,7 +16,7 @@ export type RunStyleKey = (typeof RUN_STYLE_KEYS)[number];
 // A run's whole look. A key a stored run leaves out is the default, as the canvas draws it.
 export type RunStyle = { bl: number; it: number; un: number; cl: number; fc: string; fs: number; ff: string };
 
-export type TextRun = RunStyle & { v: string };
+type TextRun = RunStyle & { v: string };
 
 type InlineStringCell = Cell & { ct: { t: 'inlineStr'; s: InlineStringSegment[] } };
 
@@ -24,6 +24,11 @@ type InlineStringCell = Cell & { ct: { t: 'inlineStr'; s: InlineStringSegment[] 
 type PendingStyle = { at: number; base: RunStyle; style: Partial<RunStyle> };
 
 const DEFAULT_COLOR = '#000000';
+
+const HEX_COLOR = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/;
+
+// The largest size Excel takes. A larger one is no font size a user picked.
+const MAX_FONT_SIZE = 409;
 
 const TAG_STYLES: Record<string, Partial<RunStyle>> = {
     B: { bl: 1 },
@@ -51,15 +56,20 @@ export function isRunStyleKey(key: string): key is RunStyleKey {
     return RUN_STYLE_KEYS.some((runKey) => runKey === key);
 }
 
+// A run's style with every key filled in. The style comes from a stored cell, which a collaborator or an
+// xlsx wrote, and runsHtml writes it into a style attribute. So a flag reads as a number, and a color,
+// size or font that is not a plain value falls back to the default.
 export function runStyleOf(style: CellStyle | null | undefined): RunStyle {
+    const size = Number(style?.fs);
+    const font = cellFontName(style?.ff);
     return {
-        bl: style?.bl ?? 0,
-        it: style?.it ?? 0,
-        un: style?.un ?? 0,
-        cl: style?.cl ?? 0,
+        bl: Number(style?.bl) || 0,
+        it: Number(style?.it) || 0,
+        un: Number(style?.un) || 0,
+        cl: Number(style?.cl) || 0,
         fc: hexColor(style?.fc),
-        fs: style?.fs ?? SHEET_DEFAULT_FONT_SIZE,
-        ff: cellFontName(style?.ff) ?? SHEET_DEFAULT_FONT.name,
+        fs: size > 0 && size <= MAX_FONT_SIZE ? size : SHEET_DEFAULT_FONT_SIZE,
+        ff: font && !/[;\n("']|url/i.test(font) ? font : SHEET_DEFAULT_FONT.name,
     };
 }
 
@@ -68,16 +78,11 @@ export function updateInlineStringFormatOutside(cell: Cell, key: RunStyleKey, va
     for (const run of cell.ct?.s ?? []) Object.assign(run, styleValue(key, value));
 }
 
-// The runs in the editor. Text outside any styled element has the cell's own style, which the editor
-// box shows.
-export function editorRuns(input: HTMLElement, cell: Cell | null | undefined): TextRun[] {
-    return readRuns(input, runStyleOf(cell));
-}
-
-// The runs updateCell stores. A cell keeps a line break as \r\n. A contenteditable keeps one trailing
-// break to show an empty last line, and that one is not the user's.
+// The runs in the editor, as updateCell stores them. Text outside any styled element has the cell's own
+// style, which the editor box shows. A cell keeps a line break as \r\n. A contenteditable keeps one
+// trailing break to show an empty last line, and that one is not the user's.
 export function committedRuns(input: HTMLElement, cell: Cell | null | undefined): TextRun[] {
-    const runs = editorRuns(input, cell);
+    const runs = readRuns(input, runStyleOf(cell));
     const last = runs.at(-1);
     if (last?.v.endsWith('\n') && !last.v.endsWith('\n\n')) last.v = last.v.slice(0, -1);
     return mergeRuns(runs.map((run) => ({ ...run, v: run.v.replace(/\n/g, '\r\n') })));
@@ -106,6 +111,12 @@ export function rememberEditorSelection(input: HTMLElement) {
     savedSelections.set(input, offsets);
     const pending = pendingStyles.get(input);
     if (pending && (offsets[0] !== pending.at || offsets[1] !== pending.at)) pendingStyles.delete(input);
+}
+
+// A closed editor's selection and caret format don't carry into the next cell it opens on.
+export function forgetEditorSelection(input: HTMLElement) {
+    savedSelections.delete(input);
+    pendingStyles.delete(input);
 }
 
 // Applies one format to the selected characters, or to the text typed next when only a caret is there.
@@ -217,10 +228,12 @@ function cssPoints(size: string): number | undefined {
     return match[2] === 'pt' ? value : Math.round(value * 1.5) / 2;
 }
 
-// The browser hands a color back as rgb(), and runs store the hex the color picker writes.
+// The browser hands a color back as rgb(), and runs store the hex the color picker writes. Anything else
+// is no color a run can hold.
 function hexColor(color: string | undefined): string {
     if (!color) return DEFAULT_COLOR;
-    return color.startsWith('rgb') ? rgbToHex(color) : color.toLowerCase();
+    const hex = color.startsWith('rgb') ? rgbToHex(color) : color.toLowerCase();
+    return HEX_COLOR.test(hex) ? hex : DEFAULT_COLOR;
 }
 
 function styleValue(key: RunStyleKey, value: string | number): Partial<RunStyle> {
@@ -310,23 +323,36 @@ function setSelectionOffsets(input: HTMLElement, start: number, end: number) {
     selection?.addRange(range);
 }
 
-// The point `at` characters into the editor's text. A point between two spans is the end of the left
-// one, so typing there continues the run on the left.
+// The point `at` characters into the editor's text, counted the way readRuns reads, so a <br> or a block
+// is one character. A point between two spans is the end of the left one, so typing there continues the
+// run on the left.
 function textPoint(input: HTMLElement, at: number): [Node, number] {
     let left = at;
-    let last: [Node, number] = [input, 0];
-    for (const node of textNodes(input)) {
-        const length = node.textContent?.length ?? 0;
-        if (left <= length) return [node, left];
-        left -= length;
-        last = [node, length];
-    }
-    return last;
-}
-
-function* textNodes(node: Node): Generator<Node> {
-    for (const child of node.childNodes) {
-        if (child.nodeType === child.TEXT_NODE) yield child;
-        else yield* textNodes(child);
-    }
+    let read = false;
+    let point: [Node, number] = [input, 0];
+    const visit = (node: Node): boolean => {
+        for (const [index, child] of [...node.childNodes].entries()) {
+            if (isElement(child)) {
+                if (child.tagName === 'BR' || (BLOCK_TAGS.has(child.tagName) && read)) {
+                    if (left === 0) return true;
+                    left -= 1;
+                    read = true;
+                    point = child.tagName === 'BR' ? [node, index + 1] : [child, 0];
+                }
+                if (visit(child)) return true;
+            } else if (child.nodeType === child.TEXT_NODE) {
+                const length = child.textContent?.length ?? 0;
+                if (left <= length) {
+                    point = [child, left];
+                    return true;
+                }
+                left -= length;
+                read ||= length > 0;
+                point = [child, length];
+            }
+        }
+        return false;
+    };
+    visit(input);
+    return point;
 }

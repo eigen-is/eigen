@@ -885,23 +885,25 @@ export function isAllSelectedCellsInStatus(ctx: Context, attr: RunStyleKey, stat
 }
 
 // The font part of a cell's CSS, for the editor box and the copied HTML. Only the keys the cell sets
-// write CSS, so the box inherits the rest.
+// write CSS, so the box inherits the rest. An older or imported cell may hold a flag as a string, such
+// as bl: "0", and a color as rgba(), so both are read through Number and normalizedCellAttr.
 export function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: CellFormatStyle | null) {
     const style: Record<string, string> = {};
     if (!cell) {
         return style;
     }
-    if (cell.bl) style.fontWeight = 'bold';
-    if (cell.it) style.fontStyle = 'italic';
+    if (Number(cell.bl)) style.fontWeight = 'bold';
+    if (Number(cell.it)) style.fontStyle = 'italic';
     const font = cellFontName(cell.ff);
     if (font) style.fontFamily = `'${font}', sans-serif`;
-    if (cell.fs && cell.fs !== SHEET_DEFAULT_FONT_SIZE) style.fontSize = `${cell.fs}pt`;
-    const color = checksCF?.textColor ?? cell.fc;
+    const size = Number(cell.fs) || SHEET_DEFAULT_FONT_SIZE;
+    if (size !== SHEET_DEFAULT_FONT_SIZE) style.fontSize = `${size}pt`;
+    const fc: string = normalizedCellAttr(cell, 'fc');
+    const color = checksCF?.textColor ?? fc;
     if (color && color !== '#000000') style.color = color;
-    if (cell.cl) style.textDecoration = 'line-through';
-    if (cell.un === 1 || cell.un === 3) {
-        style.borderBottom = `${Math.floor((cell.fs ?? SHEET_DEFAULT_FONT_SIZE) / 9)}px solid ${cell.fc ?? '#000000'}`;
-    }
+    if (Number(cell.cl)) style.textDecoration = 'line-through';
+    const underline = Number(cell.un);
+    if (underline === 1 || underline === 3) style.borderBottom = `${Math.floor(size / 9)}px solid ${fc}`;
     return style;
 }
 

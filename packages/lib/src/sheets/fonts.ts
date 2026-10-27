@@ -1,3 +1,7 @@
+// The fonts of a spreadsheet: the one a cell with no font draws in, the default digit width that column
+// widths count in an xlsx, and the font name a cell's `ff` stands for. Code that needs a cell's font,
+// such as the cell editor and the xlsx export, reads it here, so they agree on it.
+
 import type { EigenFont } from '../constants/fonts';
 import { EIGEN_FONTS } from '../constants/fonts';
 import { getFontMetrics } from '../vector/font-metrics';

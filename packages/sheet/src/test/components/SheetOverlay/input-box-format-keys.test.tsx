@@ -11,7 +11,7 @@ const { createRoot } = await import('react-dom/client');
 const { produce } = await import('immer');
 const { WorkbookContext } = await import('../../../context');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
-const { defaultContext, defaultSettings, editorRuns, FormulaCache } = await import('../../../state');
+const { defaultContext, defaultSettings, committedRuns, FormulaCache } = await import('../../../state');
 type Context = import('../../../state').Context;
 
 const refs = {
@@ -109,7 +109,7 @@ test('⌘B, ⌘I and ⌘U format the selected word, not the browser', async () =
     const { input } = await openEditor('hello big world');
     select(input, 6, 9);
     for (const code of ['KeyB', 'KeyI', 'KeyU']) expect(press(input, code).defaultPrevented).toBe(true);
-    expect(editorRuns(input, null).map(({ v, bl, it, un }) => [v, bl, it, un])).toEqual([
+    expect(committedRuns(input, null).map(({ v, bl, it, un }) => [v, bl, it, un])).toEqual([
         ['hello ', 0, 0, 0],
         ['big', 1, 1, 1],
         [' world', 0, 0, 0],
@@ -125,7 +125,7 @@ test('⌘B on a caret bolds what is typed next', async () => {
         input.dispatchEvent(typing);
     });
     expect(typing.defaultPrevented).toBe(true);
-    expect(editorRuns(input, null).map(({ v, bl }) => [v, bl])).toEqual([
+    expect(committedRuns(input, null).map(({ v, bl }) => [v, bl])).toEqual([
         ['hello ', 0],
         ['big ', 1],
         ['world', 0],
