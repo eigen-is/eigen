@@ -195,8 +195,12 @@ export type ChartPaint = {
 // One line of chart text, turned 0, -45 or -90 degrees; Convert to shapes takes its y as a rich-text box's top.
 export type ChartLabel = TextLine;
 
+// A value-axis label for a tick and the step between ticks.
+export type ChartTickFormat = (value: number, step: number) => string;
+
 // The chart's box is width × height from (0, 0); every shape and label is in those local coordinates.
-// formatTick draws a value-axis label for a tick and the step between ticks.
+// Without a formatTick, a tick reads in the value axis's own format, or with as many decimals as the step when the
+// axis has none.
 export type ChartLayoutInput = {
     id: string;
     spec: ChartSpec;
@@ -204,7 +208,7 @@ export type ChartLayoutInput = {
     width: number;
     height: number;
     paint: ChartPaint;
-    formatTick: (value: number, step: number) => string;
+    formatTick?: ChartTickFormat;
 };
 
 // The box and paint every layout starts from, a message's included.
@@ -219,7 +223,7 @@ export type ChartSpecSvgInput = {
     width: number;
     height: number;
     look?: ChartLook;
-    formatTick?: ChartLayoutInput['formatTick'];
+    formatTick?: ChartTickFormat;
 };
 
 // The elements a chart draws with: rectangles, lines, marker ellipses and pie slices.

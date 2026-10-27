@@ -23,8 +23,10 @@ import { fit, label } from './labels';
 import type { LegendItem } from './legend';
 import { placeLegend } from './legend';
 import { inlineRowCount } from './limits';
+import { numberDisplay } from './number-display';
 import { layoutPie, sliceColor } from './pie';
 import { rectangle } from './shapes';
+import { formatTickValue } from './ticks';
 
 // Every line a chart draws in place of a plot.
 export const CHART_MESSAGES = {
@@ -46,6 +48,9 @@ export const MAX_SKETCH_POINTS = 200;
 const MAX_VALUE = 1e100;
 
 export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput): ChartLayout {
+    const { format } = spec.axes.y.labels;
+    const tickText =
+        formatTick ?? (format === null ? formatTickValue : (value: number) => numberDisplay(value, format));
     const ctx = chartContext(box, spec.chart.fontFamily);
     const background = backgroundShapes(ctx);
     const message = (text: string): ChartLayout => ({ shapes: background, labels: messageLabel(ctx, text) });
@@ -91,7 +96,7 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     const plot =
         type === 'pie'
             ? layoutPie(marks, spec, pieId, categories, values[0], frame)
-            : layoutCartesian(ctx, marks, spec, categories, series, values, frame, formatTick);
+            : layoutCartesian(ctx, marks, spec, categories, series, values, frame, tickText);
     if (!plot) return message(CHART_MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
 }

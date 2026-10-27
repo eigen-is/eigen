@@ -1,3 +1,8 @@
+// A cell's value as text: what the grid shows, how General aligns it, and the type and format that typed input
+// infers, such as "25%" read as 0.25 in a percent format. The grid, recalc, paste and the xlsx import call it. The
+// number format itself is lib's numberDisplay, which a chart's ticks share, passed on from here.
+
+import { numberDisplay } from '@workspace/lib/charts';
 import numeral from 'numeral';
 import { format, isDateFormat } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
@@ -308,17 +313,7 @@ export function update(fmt: string, v: string | number | boolean | null | undefi
     return format(fmt, v);
 }
 
-// Every writer's display string for a cell value; General is Excel's default-width General (1.23457E+11).
-export function numberDisplay(value: Cell['v'] | null, fa = 'General'): string {
-    if (typeof value === 'number' && !Number.isFinite(value)) return value.toString();
-    try {
-        return update(fa, value);
-    } catch {
-        // numfmt throws on a malformed format, which an xlsx numFmt can carry into ct.fa.
-        return update('General', value);
-    }
-}
-
+export { numberDisplay } from '@workspace/lib/charts';
 export { isValidFormat as isValidNumberFormat } from 'numfmt';
 
 export function is_date(fmt: number | string): boolean {

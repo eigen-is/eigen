@@ -41,6 +41,7 @@ export {
     newChartSeriesId,
 } from './limits';
 export { chartPaintOf, FLAT_CHART_LOOK, readChartLook } from './look';
+export { numberDisplay } from './number-display';
 export { chartLabel, chartSearchText, holdsUnknownChartData, isCellRangeShape } from './resolve';
 export { BAR_GROUP_WIDTH } from './scales';
 export {

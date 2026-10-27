@@ -5,10 +5,10 @@
 
 import type {
     ChartLabel,
-    ChartLayoutInput,
     ChartSeriesStyle,
     ChartShape,
     ChartSpec,
+    ChartTickFormat,
     InlineChartSeries,
 } from '../types/chart';
 import { isStackingChartType } from '../types/chart';
@@ -46,7 +46,7 @@ export function layoutCartesian(
     series: PaintedSeries[],
     raw: (number | null)[][],
     frame: Frame,
-    sourceFormat: ChartLayoutInput['formatTick'],
+    sourceFormat: ChartTickFormat,
 ): ChartShape[] | null {
     const { lineHeight: lh, gap, fontSize } = ctx;
     const { type, blanks } = spec.chart;
