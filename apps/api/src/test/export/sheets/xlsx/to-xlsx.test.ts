@@ -137,6 +137,23 @@ describe('an xlsx export read back by the import', () => {
         );
         expect(cellAt(sheet, 0, 0)?.ct).toMatchObject({ t: 'inlineStr', s: [runs[0], runs[1]] });
     });
+
+    test('keeps the runs the cell editor commits, a font family included', async () => {
+        const plain = { bl: 0, it: 0, un: 0, cl: 0, fc: '#000000', fs: 10, ff: 'Inter' };
+        const runs = [
+            { ...plain, v: 'Hello ' },
+            { ...plain, v: 'world', bl: 1, fc: '#ff0000', fs: 14, ff: 'Source Serif 4' },
+        ];
+        const [sheet] = xlsxToSheets(
+            exportXlsx([
+                { name: 'Sheet1', celldata: [{ r: 0, c: 0, v: { ct: { fa: 'General', t: 'inlineStr', s: runs } } }] },
+            ]),
+        );
+        const [hello, world] = cellAt(sheet, 0, 0)?.ct?.s ?? [];
+        expect(hello).toMatchObject({ v: 'Hello ', ff: 'Inter', fs: 10 });
+        expect(world).toMatchObject({ v: 'world', bl: 1, fs: 14, ff: 'Source Serif 4' });
+        expect(world?.fc?.toLowerCase()).toBe('#ff0000');
+    });
 });
 
 // Each read back through the import.
