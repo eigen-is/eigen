@@ -745,14 +745,25 @@ test('Format › Image › In front of text places the selected image and checks
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
 });
 
-test('in a band, Format › Image offers no place in front of or behind the text', async () => {
+// The menu offers what the band's and the note's Image panels offer.
+test('in a band, Format › Image offers no layout, as a band holds no float', async () => {
     const band = new Editor({ extensions: bandExtensions(), content: TABLE_AND_FIGURE });
     band.commands.setNodeSelection(2);
     await render(1920, true, { active: band });
     await openMenu('Format');
     await openSubmenu('Image');
-    expect(openMenuEntries()).toEqual(['Replace image', '—', 'In line', 'Wrap left', 'Wrap right']);
+    expect(openMenuEntries()).toEqual(['Replace image']);
     band.destroy();
+});
+
+test('in a note, Format › Image offers no place in front of or behind the text', async () => {
+    const note = new Editor({ extensions: bandExtensions(), content: TABLE_AND_FIGURE });
+    note.commands.setNodeSelection(2);
+    await render(1920, true, { active: note, inNote: true });
+    await openMenu('Format');
+    await openSubmenu('Image');
+    expect(openMenuEntries()).toEqual(['Replace image', '—', 'In line', 'Wrap left', 'Wrap right']);
+    note.destroy();
 });
 
 test('Format › Headers and footers puts the caret in the header', async () => {

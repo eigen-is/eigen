@@ -58,14 +58,18 @@ export function FigureField({
     );
 }
 
-// Each layout's name and icon, in Google's order, which the panel's toggles and Format › Image share.
-export const FIGURE_LAYOUT_LOOK: { layout: FigureLayout; label: string; icon: LucideIcon }[] = [
+// Each layout's name and icon, in Google's order.
+const FIGURE_LAYOUT_LOOK: { layout: FigureLayout; label: string; icon: LucideIcon }[] = [
     { layout: 'block', label: 'In line', icon: Rows3 },
     { layout: 'wrap-left', label: 'Wrap left', icon: PanelLeft },
     { layout: 'wrap-right', label: 'Wrap right', icon: PanelRight },
     { layout: 'behind', label: 'Behind text', icon: SendToBack },
     { layout: 'front', label: 'In front of text', icon: BringToFront },
 ];
+
+// The layouts the panel's toggles and Format › Image offer: those in the flow alone where every figure draws in line.
+export const figureLayoutLooks = (inFlowOnly: boolean) =>
+    FIGURE_LAYOUT_LOOK.filter(({ layout }) => !inFlowOnly || !isPositioned(layout));
 
 // Where a figure sits: in its own line, aligned, wrapped by the text on one side, or behind or in front of the text. A
 // band holds no float, as a docx import reads a header's anchored picture as one in its own line, so a band's offers
@@ -89,19 +93,17 @@ export function FigureLayoutSection({
             {!blockOnly && (
                 <PropertyRow label="Style">
                     <div className="flex items-center gap-1">
-                        {FIGURE_LAYOUT_LOOK.filter((look) => !inFlowOnly || !isPositioned(look.layout)).map(
-                            ({ layout: option, label, icon: Icon }) => (
-                                <PropertyToggle
-                                    key={option}
-                                    aria-label={label}
-                                    title={label}
-                                    pressed={layout === option}
-                                    onPressedChange={() => onChange({ layout: option })}
-                                >
-                                    <Icon className="h-4 w-4" />
-                                </PropertyToggle>
-                            ),
-                        )}
+                        {figureLayoutLooks(inFlowOnly).map(({ layout: option, label, icon: Icon }) => (
+                            <PropertyToggle
+                                key={option}
+                                aria-label={label}
+                                title={label}
+                                pressed={layout === option}
+                                onPressedChange={() => onChange({ layout: option })}
+                            >
+                                <Icon className="h-4 w-4" />
+                            </PropertyToggle>
+                        ))}
                     </div>
                 </PropertyRow>
             )}

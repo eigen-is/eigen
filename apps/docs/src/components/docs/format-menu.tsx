@@ -5,8 +5,7 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
-import type { BandEdge } from '@workspace/lib/docs/eigendoc';
-import { isPositioned } from '@workspace/lib/docs/eigendoc';
+import type { BandEdge, FigureLayout } from '@workspace/lib/docs/eigendoc';
 import type { TextAlign } from '@workspace/lib/vector';
 import { TEXT_ALIGNS } from '@workspace/lib/vector';
 import { ToolbarMenu } from '@workspace/ui';
@@ -67,7 +66,7 @@ import {
     UnfoldVertical,
 } from 'lucide-react';
 import { setImageLayout } from './extensions/figure-frame';
-import { FIGURE_LAYOUT_LOOK } from './figure-properties-panel';
+import { figureLayoutLooks } from './figure-properties-panel';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
 import type { PageNumberPreset } from './page-numbers';
@@ -119,6 +118,8 @@ type FormatMenuProps = {
     onReplaceImage: () => void;
     onEnterBand?: (edge: BandEdge) => void;
     onPageNumbers?: (preset: PageNumberPreset) => void;
+    // A band's editor: its image takes the alignment alone, as a band holds no float.
+    inBand: boolean;
 };
 
 export const FormatMenu = ({
@@ -136,6 +137,7 @@ export const FormatMenu = ({
     onReplaceImage,
     onEnterBand,
     onPageNumbers,
+    inBand,
 }: FormatMenuProps) => (
     <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
         <DropdownMenuSub>
@@ -399,25 +401,27 @@ export const FormatMenu = ({
                 <DropdownMenuItem onClick={onReplaceImage}>
                     <ImagePlus className="h-4 w-4" /> Replace image
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {/* The Image panel's layouts, which a phone has no panel for. A note's and a band's image draws in line. */}
-                <ChoiceMenuItems<string>
-                    value={active.figureLayout}
-                    options={FIGURE_LAYOUT_LOOK.filter(
-                        ({ layout }) => !isPositioned(layout) || !editor.storage.positionedFigures.blockOnly,
-                    ).map(({ layout, label, icon: Icon }) => ({
-                        value: layout,
-                        label: (
-                            <>
-                                <Icon className="h-4 w-4" /> {label}
-                            </>
-                        ),
-                    }))}
-                    onChange={(layout) => {
-                        const look = FIGURE_LAYOUT_LOOK.find((option) => option.layout === layout);
-                        if (look) setImageLayout(editor, look.layout);
-                    }}
-                />
+                {/* The Image panel's layouts, which a phone has no panel for: none in a band, as the band's panel
+                    offers none, and those in the flow alone in a note. */}
+                {!inBand && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <ChoiceMenuItems<FigureLayout>
+                            value={active.figureLayout}
+                            options={figureLayoutLooks(editor.storage.positionedFigures.blockOnly).map(
+                                ({ layout, label, icon: Icon }) => ({
+                                    value: layout,
+                                    label: (
+                                        <>
+                                            <Icon className="h-4 w-4" /> {label}
+                                        </>
+                                    ),
+                                }),
+                            )}
+                            onChange={(layout) => setImageLayout(editor, layout)}
+                        />
+                    </>
+                )}
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
