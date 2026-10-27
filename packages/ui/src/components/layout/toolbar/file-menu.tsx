@@ -34,7 +34,7 @@ import { DriveDeleteItem } from '../../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../../drive/drive-email-collaborators';
 import { DriveFilePicker } from '../../drive/drive-file-picker';
 import { DriveRenameItem } from '../../drive/drive-rename-item';
-import { ToolbarMenu } from './toolbar-menu';
+import { AppBarMenu } from './app-bar-menu';
 import { RestoreVersionDialog, VersionHistoryMenu } from './version-history-menu';
 
 const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
@@ -104,7 +104,7 @@ export function FileMenu({
 
     return (
         <>
-            <ToolbarMenu label="File" onCloseAutoFocus={onCloseAutoFocus}>
+            <AppBarMenu label="File" onCloseAutoFocus={onCloseAutoFocus}>
                 <DropdownMenuItem onClick={() => setCreateOpen(true)}>
                     <CreateIcon className="h-4 w-4" /> {createLabel}
                 </DropdownMenuItem>
@@ -164,7 +164,7 @@ export function FileMenu({
                         </DropdownMenuItem>
                     </>
                 )}
-            </ToolbarMenu>
+            </AppBarMenu>
 
             <DriveCreateEigenDoc
                 open={createOpen}

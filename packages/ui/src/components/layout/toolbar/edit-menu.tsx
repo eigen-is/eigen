@@ -1,9 +1,14 @@
+// The Edit menu of every document app's bar: Undo and Redo, a host's own entries such as Cut and Copy, and Find.
+// Each app has its own undo machinery, such as a Yjs UndoManager or Tiptap's history, so the handlers come in as
+// props. The Find entries come from the DocSearchProvider the bar sits under, and a Find pick hands the focus to the
+// find bar rather than to the host's editor.
+
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut } from '@workspace/ui/components/dropdown-menu';
 import { Redo, Search, TextSearch, Undo } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useFindBarRefocus } from '../../search/find-in-document-button';
-import { ToolbarMenu } from './toolbar-menu';
+import { AppBarMenu } from './app-bar-menu';
 
 type EditMenuProps = {
     // Gates the undo/redo section — pass the same condition the surface used for its icon
@@ -23,9 +28,6 @@ type EditMenuProps = {
     onCloseAutoFocus?: (event: Event) => void;
 };
 
-// The 'Edit' menubar entry next to FileMenu, shared by all eigendoc toolbars. Undo machinery is
-// per-app (Yjs UndoManager, TipTap history), so handlers come in as props; the find entries come
-// from the DocSearchProvider the toolbar is mounted under (null-safe: absent provider → no items).
 export function EditMenu({
     canEdit,
     canUndo,
@@ -39,7 +41,7 @@ export function EditMenu({
     const { docSearchBar, focusFindBarRef, onCloseAutoFocus: refocusFindBar } = useFindBarRefocus();
 
     return (
-        <ToolbarMenu
+        <AppBarMenu
             label="Edit"
             onCloseAutoFocus={(event) => {
                 refocusFindBar(event);
@@ -84,6 +86,6 @@ export function EditMenu({
                     <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+H')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
-        </ToolbarMenu>
+        </AppBarMenu>
     );
 }

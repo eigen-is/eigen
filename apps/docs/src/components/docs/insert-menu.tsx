@@ -1,7 +1,11 @@
+// Docs' Insert menu: links, images, charts, tables, page elements, equations, footnotes and comments. It asks the
+// editor it acts on what its schema holds, so a band's or a note's editor greys out what it can't take. An equation
+// or a footnote goes in once the menu has closed, so the focus lands in the new field rather than on the menu.
+
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import type { BandEdge } from '@workspace/lib/docs/eigendoc';
-import { ToolbarMenu } from '@workspace/ui';
+import { AppBarMenu } from '@workspace/ui';
 import { CHART_TYPE_OPTIONS } from '@workspace/ui/components/charts';
 import {
     DropdownMenuItem,
@@ -71,7 +75,7 @@ export function InsertMenu({
     // away from the new equation's field or note.
     const afterCloseRef = useRef<(() => void) | null>(null);
     return (
-        <ToolbarMenu
+        <AppBarMenu
             label="Insert"
             onCloseAutoFocus={(e) => {
                 const insert = afterCloseRef.current;
@@ -198,6 +202,6 @@ export function InsertMenu({
                     </DropdownMenuItem>
                 </>
             )}
-        </ToolbarMenu>
+        </AppBarMenu>
     );
 }

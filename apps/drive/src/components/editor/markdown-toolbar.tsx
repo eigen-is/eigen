@@ -1,6 +1,10 @@
+// The markdown editor's formatting controls in Drive's edit toolbar. A wide bar shows them as icon buttons; a compact
+// one folds them into a Format and an Insert menu, a bar of their own. Source mode shows only the toggle back to the
+// rich editor. Each pick runs its command on the editor, which takes the focus back.
+
 import type { Editor } from '@tiptap/react';
 import { useIsCompactToolbar } from '@workspace/lib/media';
-import { ToolbarMenu, TooltipButton } from '@workspace/ui';
+import { AppBarMenu, TooltipButton } from '@workspace/ui';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -8,6 +12,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { Menubar } from '@workspace/ui/components/menubar';
 import { Separator } from '@workspace/ui/components/separator';
 import {
     Bold,
@@ -45,8 +50,8 @@ export function MarkdownToolbarButtons({ editor, sourceMode, onToggleSource }: M
             {!sourceMode &&
                 editor &&
                 (isCompact ? (
-                    <>
-                        <ToolbarMenu label="Format">
+                    <Menubar>
+                        <AppBarMenu label="Format">
                             <DropdownMenuItem
                                 disabled={!editor.can().undo()}
                                 onClick={() => editor.chain().focus().undo().run()}
@@ -130,9 +135,9 @@ export function MarkdownToolbarButtons({ editor, sourceMode, onToggleSource }: M
                             <DropdownMenuItem onClick={onToggleSource}>
                                 <Code2 className="h-4 w-4" /> Source mode
                             </DropdownMenuItem>
-                        </ToolbarMenu>
+                        </AppBarMenu>
 
-                        <ToolbarMenu label="Insert">
+                        <AppBarMenu label="Insert">
                             <DropdownMenuItem
                                 onClick={() => {
                                     const url = window.prompt('URL');
@@ -151,8 +156,8 @@ export function MarkdownToolbarButtons({ editor, sourceMode, onToggleSource }: M
                             >
                                 <Table className="h-4 w-4" /> Table
                             </DropdownMenuItem>
-                        </ToolbarMenu>
-                    </>
+                        </AppBarMenu>
+                    </Menubar>
                 ) : (
                     <>
                         <TooltipButton

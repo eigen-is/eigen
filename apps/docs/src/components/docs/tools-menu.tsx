@@ -3,7 +3,7 @@
 // outline opens the outline's pane.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
-import { ToolbarMenu } from '@workspace/ui';
+import { AppBarMenu } from '@workspace/ui';
 import {
     DropdownMenuCheckboxItem,
     DropdownMenuItem,
@@ -34,10 +34,10 @@ type ToolsMenuProps = {
 };
 
 export const ToolsMenu = ({ keepEditorFocus, onWordCount, outlineShown, onToggleOutline }: ToolsMenuProps) => (
-    <ToolbarMenu label="Tools" onCloseAutoFocus={keepEditorFocus}>
+    <AppBarMenu label="Tools" onCloseAutoFocus={keepEditorFocus}>
         <WordCountItem onClick={onWordCount} />
         <DropdownMenuCheckboxItem checked={outlineShown} onCheckedChange={onToggleOutline}>
             Show outline
         </DropdownMenuCheckboxItem>
-    </ToolbarMenu>
+    </AppBarMenu>
 );

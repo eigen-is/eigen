@@ -1,3 +1,7 @@
+// The font dropdown of a formatting toolbar, such as Docs' and Sheets': it shows the current font and lists every
+// font Eigen ships, each row drawn in its own font. It opens without blocking the page, so one press on a bar menu
+// moves on from it, and a host can hand the focus back to its editor as it closes.
+
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { ChevronDown } from 'lucide-react';
 import { Button } from '../button';
@@ -13,7 +17,7 @@ type FontPickerProps = {
 
 export function FontPicker({ value, onChange, className, onCloseAutoFocus }: FontPickerProps) {
     return (
-        <DropdownMenu>
+        <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
                 <Button
                     variant="ghost"

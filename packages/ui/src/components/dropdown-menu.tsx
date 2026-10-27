@@ -1,7 +1,12 @@
-import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+// shadcn's DropdownMenu on Radix, and the rows every menu in the app is built from, such as a kebab, a context menu or
+// a bar menu. A row takes the Radix parts of the menu it sits in: a DropdownMenu's by default, the Menubar's inside a
+// bar menu, which MenuRows provides. On a phone a submenu opens as a page of its menu, with a back row, instead of a
+// panel beside it. ChoiceMenuSub and ChoiceMenuItems draw a choice as a submenu with a check on the current option.
+
 import { useIsMobile } from '@workspace/lib/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, MinusIcon } from 'lucide-react';
+import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
 import type * as React from 'react';
 import {
     Children,
@@ -38,6 +43,24 @@ const PageContext = createContext<{ id: string | null }>({ id: null });
 // A sub's id + the label lifted from its trigger, shared by its trigger and its content.
 const SubContext = createContext<{ id: string; label: React.ReactNode } | null>(null);
 
+// The Radix parts a row renders. Radix gives each kind of menu its own contexts, so a DropdownMenu row inside a Menubar
+// menu would find no menu around it.
+type MenuParts = Pick<
+    typeof DropdownMenuPrimitive,
+    | 'Group'
+    | 'Item'
+    | 'CheckboxItem'
+    | 'RadioGroup'
+    | 'RadioItem'
+    | 'ItemIndicator'
+    | 'Label'
+    | 'Separator'
+    | 'Sub'
+    | 'SubTrigger'
+    | 'SubContent'
+>;
+const MenuPartsContext = createContext<MenuParts>(DropdownMenuPrimitive);
+
 const subTriggerClassName =
     "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground flex cursor-default items-center gap-4 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 
@@ -57,8 +80,8 @@ function subTriggerLabel(children: React.ReactNode): React.ReactNode {
     return null;
 }
 
-function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-    const isMobile = useIsMobile();
+// The drill-in stack of one menu. reset() sends the next open back to the root page.
+function useMobileMenu(): { value: MobileMenuState; reset: () => void } {
     const [stack, setStack] = useState<string[]>([]);
     const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
     const value = useMemo<MobileMenuState>(
@@ -79,14 +102,21 @@ function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrim
         }),
         [stack, focusTarget],
     );
+    const reset = () => {
+        setStack((s) => (s.length ? [] : s));
+        setFocusTarget(null);
+    };
+    return { value, reset };
+}
+
+function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+    const isMobile = useIsMobile();
+    const { value, reset } = useMobileMenu();
 
     // A controlled root can close via an external open→false flip that never fires onOpenChange
     // (e.g. context menus whose plain-button rows call close()); reset so the next open is root.
     useEffect(() => {
-        if (props.open === false) {
-            setStack((s) => (s.length ? [] : s));
-            setFocusTarget(null);
-        }
+        if (props.open === false) reset();
     }, [props.open]);
 
     if (!isMobile) {
@@ -101,13 +131,22 @@ function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrim
                 onOpenChange={(open) => {
                     props.onOpenChange?.(open);
                     // Reset on close so reopening lands on root (forceMount keeps Content mounted, so unmount can't).
-                    if (!open) {
-                        setStack([]);
-                        setFocusTarget(null);
-                    }
+                    if (!open) reset();
                 }}
             />
         </MobileMenuContext.Provider>
+    );
+}
+
+// Hands the rows inside a menu's content the Radix parts of that menu, such as the Menubar's, with the drill-in stack a
+// phone needs. The content unmounts as its menu closes, so the next open starts at the root page.
+function MenuRows({ parts, children }: { parts: MenuParts; children: React.ReactNode }) {
+    const isMobile = useIsMobile();
+    const { value } = useMobileMenu();
+    return (
+        <MenuPartsContext.Provider value={parts}>
+            <MobileMenuContext.Provider value={isMobile ? value : null}>{children}</MobileMenuContext.Provider>
+        </MenuPartsContext.Provider>
     );
 }
 
@@ -140,9 +179,10 @@ function DropdownMenuContent({
 }
 
 function DropdownMenuGroup({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
+    const Parts = useContext(MenuPartsContext);
     const hidden = useRowHidden();
     return (
-        <DropdownMenuPrimitive.Group
+        <Parts.Group
             data-slot="dropdown-menu-group"
             className={cn(className, hidden && 'hidden') || undefined}
             {...props}
@@ -159,9 +199,10 @@ function DropdownMenuItem({
     inset?: boolean;
     variant?: 'default' | 'destructive';
 }) {
+    const Parts = useContext(MenuPartsContext);
     const hidden = useRowHidden();
     return (
-        <DropdownMenuPrimitive.Item
+        <Parts.Item
             data-slot="dropdown-menu-item"
             data-inset={inset}
             data-variant={variant}
@@ -182,9 +223,10 @@ function DropdownMenuCheckboxItem({
     checked,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+    const Parts = useContext(MenuPartsContext);
     const hidden = useRowHidden();
     return (
-        <DropdownMenuPrimitive.CheckboxItem
+        <Parts.CheckboxItem
             data-slot="dropdown-menu-checkbox-item"
             className={cn(
                 "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-4 rounded-sm py-1.5 pr-2 pl-10 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -195,12 +237,12 @@ function DropdownMenuCheckboxItem({
             {...props}
         >
             <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
-                <DropdownMenuPrimitive.ItemIndicator>
+                <Parts.ItemIndicator>
                     {checked === 'indeterminate' ? <MinusIcon className="size-4" /> : <CheckIcon className="size-4" />}
-                </DropdownMenuPrimitive.ItemIndicator>
+                </Parts.ItemIndicator>
             </span>
             {children}
-        </DropdownMenuPrimitive.CheckboxItem>
+        </Parts.CheckboxItem>
     );
 }
 
@@ -208,9 +250,10 @@ function DropdownMenuRadioGroup({
     className,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
+    const Parts = useContext(MenuPartsContext);
     const hidden = useRowHidden();
     return (
-        <DropdownMenuPrimitive.RadioGroup
+        <Parts.RadioGroup
             data-slot="dropdown-menu-radio-group"
             className={cn(className, hidden && 'hidden') || undefined}
             {...props}
@@ -223,9 +266,10 @@ function DropdownMenuRadioItem({
     children,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+    const Parts = useContext(MenuPartsContext);
     const hidden = useRowHidden();
     return (
-        <DropdownMenuPrimitive.RadioItem
+        <Parts.RadioItem
             data-slot="dropdown-menu-radio-item"
             className={cn(
                 "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-4 rounded-sm py-1.5 pr-2 pl-10 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -235,12 +279,12 @@ function DropdownMenuRadioItem({
             {...props}
         >
             <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
-                <DropdownMenuPrimitive.ItemIndicator>
+                <Parts.ItemIndicator>
                     <CheckIcon className="size-4" />
-                </DropdownMenuPrimitive.ItemIndicator>
+                </Parts.ItemIndicator>
             </span>
             {children}
-        </DropdownMenuPrimitive.RadioItem>
+        </Parts.RadioItem>
     );
 }
 
@@ -251,9 +295,10 @@ function DropdownMenuLabel({
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Label> & {
     inset?: boolean;
 }) {
+    const Parts = useContext(MenuPartsContext);
     const hidden = useRowHidden();
     return (
-        <DropdownMenuPrimitive.Label
+        <Parts.Label
             data-slot="dropdown-menu-label"
             data-inset={inset}
             className={cn('px-2 py-1.5 text-sm font-medium data-[inset]:pl-10', className, hidden && 'hidden')}
@@ -263,11 +308,12 @@ function DropdownMenuLabel({
 }
 
 function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+    const Parts = useContext(MenuPartsContext);
     const hidden = useRowHidden();
     // Hides itself when it opens the menu, follows another separator or has no row after it, so a group whose rows
     // all render nothing leaves no line behind.
     return (
-        <DropdownMenuPrimitive.Separator
+        <Parts.Separator
             data-slot="dropdown-menu-separator"
             className={cn(
                 'bg-border -mx-1 my-1 h-px first:hidden [[data-slot=dropdown-menu-separator]+&]:hidden [&:not(:has(~:not([data-slot=dropdown-menu-separator])))]:hidden',
@@ -290,15 +336,16 @@ function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<'spa
 }
 
 function DropdownMenuSub({ children, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
+    const Parts = useContext(MenuPartsContext);
     const menu = useContext(MobileMenuContext);
     const id = useId();
     const value = useMemo(() => (menu ? { id, label: subTriggerLabel(children) } : null), [menu, id, children]);
 
     if (!menu) {
         return (
-            <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props}>
+            <Parts.Sub data-slot="dropdown-menu-sub" {...props}>
                 {children}
-            </DropdownMenuPrimitive.Sub>
+            </Parts.Sub>
         );
     }
 
@@ -313,6 +360,7 @@ function DropdownMenuSubTrigger({
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger> & {
     inset?: boolean;
 }) {
+    const Parts = useContext(MenuPartsContext);
     const menu = useContext(MobileMenuContext);
     const sub = useContext(SubContext);
     const hidden = useRowHidden();
@@ -329,7 +377,7 @@ function DropdownMenuSubTrigger({
     if (menu && sub) {
         // A root-collection Item; opening a page must not close the menu, so preventDefault.
         return (
-            <DropdownMenuPrimitive.Item
+            <Parts.Item
                 {...props}
                 ref={triggerRef}
                 data-slot="dropdown-menu-sub-trigger"
@@ -342,12 +390,12 @@ function DropdownMenuSubTrigger({
             >
                 {children}
                 <ChevronRightIcon className="ml-auto size-4" />
-            </DropdownMenuPrimitive.Item>
+            </Parts.Item>
         );
     }
 
     return (
-        <DropdownMenuPrimitive.SubTrigger
+        <Parts.SubTrigger
             data-slot="dropdown-menu-sub-trigger"
             data-inset={inset}
             className={cn(subTriggerClassName, className)}
@@ -355,7 +403,7 @@ function DropdownMenuSubTrigger({
         >
             {children}
             <ChevronRightIcon className="ml-auto size-4" />
-        </DropdownMenuPrimitive.SubTrigger>
+        </Parts.SubTrigger>
     );
 }
 
@@ -364,6 +412,7 @@ function DropdownMenuSubContent({
     children,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
+    const Parts = useContext(MenuPartsContext);
     const menu = useContext(MobileMenuContext);
     const sub = useContext(SubContext);
     const pageValue = useMemo(() => ({ id: sub?.id ?? null }), [sub?.id]);
@@ -409,7 +458,7 @@ function DropdownMenuSubContent({
     }
 
     return (
-        <DropdownMenuPrimitive.SubContent
+        <Parts.SubContent
             data-slot="dropdown-menu-sub-content"
             className={cn(
                 'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-md border p-1 shadow-lg',
@@ -418,7 +467,7 @@ function DropdownMenuSubContent({
             {...props}
         >
             {children}
-        </DropdownMenuPrimitive.SubContent>
+        </Parts.SubContent>
     );
 }
 
@@ -493,4 +542,5 @@ export {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
+    MenuRows,
 };

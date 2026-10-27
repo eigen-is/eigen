@@ -248,6 +248,22 @@ test('Enter on an unchanged size still hands the focus back to the editor', asyn
     expect(selectedText()).toBe('big');
 });
 
+// Moving from Format to Edit closes Format, which would hand the cell editor the focus, and Edit would close as the
+// focus left it.
+test('with a cell open, a move from Format to Edit opens Edit and leaves the focus in it', async () => {
+    const { container, input } = await openEditor('hello big world');
+    await select(input, 6, 9);
+    await openMenu(container, 'Format');
+    const edit = [...container.querySelectorAll<HTMLElement>('button[aria-haspopup="menu"]')].find(
+        (button) => button.textContent?.trim() === 'Edit',
+    );
+    await act(async () => {
+        edit?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    });
+    await settle();
+    expect(document.activeElement?.closest('[role="menu"]')?.getAttribute('aria-labelledby')).toBe(edit?.id);
+});
+
 // A menu item can open a dialog, such as Data verification, that takes the focus as the menu closes. The
 // editor leaves the focus there.
 test('a closing menu leaves the focus in a dialog that took it', async () => {

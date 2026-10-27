@@ -1,3 +1,7 @@
+// The paragraph-style dropdown at the start of Docs' formatting row: Normal text, the headings and the other styles
+// the active editor's schema holds, each drawn as it looks. It opens without blocking the page, as the bar's menus
+// do, and hands the focus back to the editor as it closes.
+
 import type { Editor } from '@tiptap/react';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -18,7 +22,7 @@ type StylePickerProps = {
 };
 
 export const StylePicker = ({ editor, active, keepEditorFocus }: StylePickerProps) => (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="h-8 px-2 gap-1" onMouseDown={(e) => e.preventDefault()}>
                 <span className="text-xs whitespace-nowrap">

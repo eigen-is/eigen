@@ -1,3 +1,7 @@
+// The right end of a document app's bar: the offline badge, the share, comments and activity buttons, and a kebab
+// menu. On a phone the buttons fold into the kebab, with the rows a host has no room for in its own menus, such as
+// Docs' Word count. The kebab opens without blocking the page, as the bar's menus do, so one press moves on from it.
+
 import { useIsMobile } from '@workspace/lib/media';
 import { Activity, MessageSquare, Pencil, UserRoundPlus, WifiOff } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -125,7 +129,7 @@ function MobileClusterKebab({
 
     return (
         <div className="relative">
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
                 <KebabTrigger />
                 <DropdownMenuContent align="end" onCloseAutoFocus={onCloseAutoFocus}>
                     <MenuSections

@@ -36,6 +36,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
+import { Menubar } from '@workspace/ui/components/menubar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import {
@@ -75,11 +76,13 @@ import { WordCountDialog } from './word-count-dialog';
 
 // A closing menu hands focus to the editor the caret is in, whether a pick, Esc or a press outside closed it, rather than
 // back to its trigger, which would swallow the next keystrokes; a pick's own command focuses it a frame later. A dialog
-// the pick opened keeps focus, and a viewer's menu returns it to the trigger, as the editor can't take it. Radix hands
-// focus back a tick after the menu unmounts, when Tiptap has destroyed the editors of a document that closed with it,
-// which still read as editable.
+// the pick opened keeps focus, and a viewer's menu returns it to the trigger, as the editor can't take it. A menu the
+// user moved on to, such as the next bar menu or the Align dropdown, keeps focus too, or it would close at once. Radix
+// hands focus back a tick after the menu unmounts, when Tiptap has destroyed the editors of a document that closed with
+// it, which still read as editable.
 export const keepEditorFocus = (editor: Editor) => (e: Event) => {
     if (editor.isDestroyed || !editor.isEditable) return;
+    if (document.activeElement?.closest('[role="menu"]')) return;
     e.preventDefault();
     if (!document.activeElement?.closest('[role="dialog"]')) editor.commands.focus(null, { scrollIntoView: false });
 };
@@ -254,7 +257,7 @@ export const EditorToolbar = ({
         <>
             <CenteredToolbar
                 left={
-                    <div className="flex items-center">
+                    <Menubar>
                         <FileMenu
                             path={path}
                             canWrite={canWrite}
@@ -356,7 +359,7 @@ export const EditorToolbar = ({
                                 onToggleOutline={onToggleOutline}
                             />
                         )}
-                    </div>
+                    </Menubar>
                 }
                 center={
                     canWrite &&
@@ -467,7 +470,7 @@ export const EditorToolbar = ({
                                     <ToolbarSeparator />
 
                                     {/* Alignment, one dropdown as Google's */}
-                                    <DropdownMenu>
+                                    <DropdownMenu modal={false}>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <DropdownMenuTrigger asChild>
