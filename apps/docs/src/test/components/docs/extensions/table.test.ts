@@ -33,10 +33,16 @@ const row = (...cells: object[]) => ({ type: 'tableRow', content: cells });
 const widthRow = (...widths: (number | null)[]) =>
     row(...widths.map((width) => cell({ colwidth: width === null ? null : [width] })));
 
-// Mounted on a page whose text column is COLUMN_PX wide, as the editor mounts it.
-async function mountDoc(content: object[]) {
+const PAPER_PX = 800;
+
+// Mounted on a page whose text column is COLUMN_PX wide, as the editor mounts it, on PAPER_PX of paper.
+async function mountDoc(content: object[], pageless = false) {
     const editor = new Editor({
-        extensions: [...getDocExtensions({ exclude: ['table'] }), EditorTable, TableWidthClamp],
+        extensions: [
+            ...getDocExtensions({ exclude: ['table'] }),
+            EditorTable.configure({ pageless: () => pageless, paperWidth: () => PAPER_PX }),
+            TableWidthClamp.configure({ paperWidth: () => PAPER_PX }),
+        ],
         content: { type: 'doc', content },
     });
     editor.registerPlugin(history());
@@ -53,7 +59,7 @@ async function mountDoc(content: object[]) {
     return editor;
 }
 
-const mount = (rows: object[]) => mountDoc([{ type: 'table', content: rows }]);
+const mount = (rows: object[], pageless = false) => mountDoc([{ type: 'table', content: rows }], pageless);
 
 const widths = (editor: InstanceType<typeof Editor>) => {
     const found: (number[] | null)[] = [];
@@ -338,6 +344,50 @@ test("a table in a list item grows up to the list item's width", async () => {
     Object.defineProperty(item, 'clientWidth', { value: 400 });
     drag(editor, 16, 1000);
     expect(widths(editor)).toEqual([[100], [100], [200]]);
+});
+
+test("a page-less doc's table grows past the text column by its right edge, each column up to the paper", async () => {
+    const editor = await mount([widthRow(100, 100, 100)], true);
+    drag(editor, third, 500);
+    expect(widths(editor)).toEqual([[100], [100], [600]]);
+    // The drag itself stops at the paper, so what it draws is what it writes.
+    press(editor, third);
+    move(1000);
+    expect(colStyles(editor)).toEqual(['100px', '100px', `${PAPER_PX}px`]);
+    release(1000);
+    expect(widths(editor)).toEqual([[100], [100], [PAPER_PX]]);
+    // A border between two columns still moves width between them, neither past the paper.
+    drag(editor, second, 1000);
+    expect(widths(editor)).toEqual([[100], [PAPER_PX], [100]]);
+});
+
+test("a page-less doc's table in a list item still grows only up to the list item's width", async () => {
+    const editor = await mountDoc(
+        [
+            {
+                type: 'bulletList',
+                content: [
+                    {
+                        type: 'listItem',
+                        content: [{ type: 'paragraph' }, { type: 'table', content: [widthRow(100, 100, 100)] }],
+                    },
+                ],
+            },
+        ],
+        true,
+    );
+    const item = editor.view.dom.querySelector('li');
+    if (!item) throw new Error('no list item');
+    Object.defineProperty(item, 'clientWidth', { value: 400 });
+    drag(editor, 16, 1000);
+    expect(widths(editor)).toEqual([[100], [100], [200]]);
+});
+
+test('Distribute columns keeps a wide page-less table at its own width', async () => {
+    const editor = await mount([row(cell({ colwidth: [700] }), cell({ colwidth: [500] }))], true);
+    editor.commands.setTextSelection(first + 2);
+    expect(editor.commands.distributeColumns()).toBe(true);
+    expect(widths(editor)).toEqual([[600], [600]]);
 });
 
 test('Distribute columns splits the width of a table whose columns all have one', async () => {
