@@ -1218,6 +1218,36 @@ describe('Drive', () => {
             expect(Array.isArray(breadcrumb)).toBe(true);
             expect(breadcrumb.some((item: DrivePath) => item.name === 'Breadcrumb L2')).toBe(true);
         });
+
+        // The file view asks for the file's own chain: its folder's chain is empty to a viewer shared only the file.
+        test('a file shared on its own has a chain of itself, and its folder has none', async () => {
+            const file = new File(['gate code'], 'site access notes.txt', { type: 'text/plain' });
+            const notes = await driveUpload(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                nestedFolderId,
+                file,
+            );
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${notes.id}/acl`, {
+                add: [{ id: CHARLIE_EMAIL, read: true, write: false }],
+            });
+
+            const own = await driveGetList(
+                ctx.charlie.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `path/${notes.id}/breadcrumb`,
+            );
+            const folder = await driveGetList(
+                ctx.charlie.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `path/${nestedFolderId}/breadcrumb`,
+            );
+            expect(own.map((item: DrivePath) => item.name)).toEqual(['site access notes.txt']);
+            expect(folder).toEqual([]);
+        });
     });
 
     describe('ACL Email Validation', () => {

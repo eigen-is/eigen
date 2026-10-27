@@ -8,6 +8,16 @@ A plain file is not an Eigen document. It has no Yjs document behind it ([COLLAB
 
 Drive opens a file at the inline-edit route when `isInlineEditable(mimeType, name)` accepts it (`getDriveItemUrl`). The page starts in view mode, which renders the server's text preview, the same body the Drive preview shows. The preview stops at 1 MiB ([PREVIEWS.md](PREVIEWS.md)) and the editor at 5 MiB, so a file between the two shows "This file is too large to preview." in view mode and still opens in Edit. The Edit button shows only when `useCheckPermissions` reports write access and `GET /editor/.../content` has answered. Edit mode mounts the editor on that content, and the heavy editors load lazily (`native-file-editor.tsx`).
 
+## The crumbs read the file's own chain
+
+The view toolbar asks for the breadcrumb of the file itself, not of its folder, and draws it with `DriveBreadcrumb`, the folder list's component. The server cuts another owner's chain at the first folder the viewer can't read (`SharedDrive.breadCrumb`), so a file shared on its own has a folder whose chain is empty to that viewer. The folder's chain would leave only the file name.
+
+A chain from a mount root starts with the mount's name. A cut chain leads with Shared with me only when the viewer's Shared with me feed holds a path in it, because a public file reaches anyone signed in, a guest who signed up from the link included, and was shared with none of them. Such a chain starts at its first folder instead. The Shared with me crumb is a link only where the caller passes `onOpenSharedWithMe`, as Drive's folder list and the view toolbar do. The Location line in the other apps' dialogs has no such page and shows it as text.
+
+## Closing a file shared on its own returns to Shared with me
+
+Closing goes to the file's folder, unless the file heads its own chain: then the viewer can't read the folder, and the folder route would only show a request for access. The edit route reads the same breadcrumb query as the toolbar and goes to Shared with me instead.
+
 ## Two lists decide what is editable
 
 The client asks `isInlineEditable` (`packages/lib/src/types/drive.ts`): a MIME list plus `INLINE_EDITABLE_EXTENSIONS`, which is the code preview's `CODE_EXTENSIONS` plus `.md`, `.markdown` and `.txt`. The server asks `getBytesTextPreviewMode` (`packages/lib/src/constants/preview.ts`), and the mode it answers is the edit mode the content GET returns (`markdown`, `plaintext` or `code`). The client never computes a mode: it mounts the markdown editor for `markdown` and the code editor for anything else. Both refuse a vCard, a calendar and a saved message (`.vcf`, `.ics`, `.eml`) whatever their mime, because those preview as cards, events and a message in their own viewers. The server refuses a file it has no mode for with a 400. It checks on save as well as on read, because otherwise a write collaborator could overwrite a binary, such as a container's `data.db`, with text.

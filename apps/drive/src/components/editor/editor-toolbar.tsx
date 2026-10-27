@@ -1,52 +1,49 @@
+// The toolbars of Drive's inline text view: the view toolbar with the file's crumbs and an Edit
+// button, and the edit toolbar with back, find, Cancel and Save. The crumbs are the folder list's own,
+// read from the file's chain, so a file opened from Shared with me, a team drive or search reads the
+// same path its folder would.
+
+import { useNavigate } from '@tanstack/react-router';
 import { useBreadcrumb } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Toolbar, TooltipButton } from '@workspace/ui';
-import {
-    Breadcrumb,
-    BreadcrumbItem,
-    BreadcrumbLink,
-    BreadcrumbList,
-    BreadcrumbPage,
-    BreadcrumbSeparator,
-} from '@workspace/ui/components/breadcrumb';
 import { Button } from '@workspace/ui/components/button';
+import { useMountLabel } from '@workspace/ui/components/drive';
+import { DriveBreadcrumb } from '@workspace/ui/components/drive/drive-breadcrumb';
 import { FindInDocumentButton } from '@workspace/ui/components/search/find-in-document-button';
 import { ArrowLeft } from 'lucide-react';
-import { Fragment } from 'react';
 
 type ViewToolbarProps = {
     path: DrivePath;
     canWrite: boolean;
     onEdit: () => void;
-    onClose: () => void;
 };
 
-export function ViewToolbar({ path, canWrite, onEdit, onClose }: ViewToolbarProps) {
-    const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, path.parentId ?? undefined);
+export function ViewToolbar({ path, canWrite, onEdit }: ViewToolbarProps) {
+    const navigate = useNavigate();
+    // The file's own chain, not its folder's: a file shared on its own has a folder the viewer can't read.
+    const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, path.id);
+    const mountLabel = useMountLabel(path.ownerId, path.mountId);
+
+    const handleBreadcrumbClick = (folder: DrivePath) => {
+        navigate({
+            to: '/fs/$ownerId/$mountId/$pathId',
+            params: { ownerId: folder.ownerId, mountId: folder.mountId, pathId: folder.id },
+        });
+    };
+
+    const handleOpenSharedWithMe = () => {
+        navigate({ to: '/shared/$to', params: { to: 'with-me' } });
+    };
 
     return (
         <Toolbar>
-            <div className="flex items-center gap-1 overflow-hidden">
-                <Breadcrumb className="overflow-hidden">
-                    <BreadcrumbList>
-                        {breadcrumbPaths.map((p, index) => (
-                            <Fragment key={p.id}>
-                                {index > 0 && <BreadcrumbSeparator />}
-                                <BreadcrumbItem>
-                                    <BreadcrumbLink onClick={onClose} className="cursor-pointer">
-                                        {stripEigenExtension(p.name)}
-                                    </BreadcrumbLink>
-                                </BreadcrumbItem>
-                            </Fragment>
-                        ))}
-                        <BreadcrumbSeparator />
-                        <BreadcrumbItem>
-                            <BreadcrumbPage>{stripEigenExtension(path.name)}</BreadcrumbPage>
-                        </BreadcrumbItem>
-                    </BreadcrumbList>
-                </Breadcrumb>
-            </div>
+            <DriveBreadcrumb
+                paths={breadcrumbPaths}
+                mountLabel={mountLabel}
+                onNavigate={handleBreadcrumbClick}
+                onOpenSharedWithMe={handleOpenSharedWithMe}
+            />
             {canWrite && (
                 <Button size="sm" onClick={onEdit}>
                     Edit

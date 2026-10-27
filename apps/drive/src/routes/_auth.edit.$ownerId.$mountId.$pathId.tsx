@@ -1,5 +1,8 @@
+// Drive's inline view and editor of a text file. Closing it returns to the file's folder, or to Shared
+// with me when the file was shared on its own and the viewer can't read that folder.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { usePathInfo } from '@workspace/lib/drive';
+import { useBreadcrumb, usePathInfo } from '@workspace/lib/drive';
 import { NativeFileEditor } from '../components/editor/native-file-editor';
 
 export const Route = createFileRoute('/_auth/edit/$ownerId/$mountId/$pathId')({
@@ -10,15 +13,19 @@ function EditRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
     const navigate = useNavigate();
     const { data: path } = usePathInfo(ownerId, mountId, pathId);
+    // The file heads its own chain when the viewer can't read its folder (the view toolbar reads the same chain).
+    const { data: crumbs = [] } = useBreadcrumb(ownerId, mountId, pathId);
 
     if (!path) return null;
 
     const handleClose = () => {
-        const parentId = path.parentId;
-        if (parentId) {
-            navigate({ to: '/fs/$ownerId/$mountId/$pathId', params: { ownerId, mountId, pathId: parentId } });
+        if (crumbs[0]?.id === path.id) {
+            navigate({ to: '/shared/$to', params: { to: 'with-me' } });
         } else {
-            navigate({ to: '/fs/$ownerId/$mountId/$pathId', params: { ownerId, mountId, pathId: 'root' } });
+            navigate({
+                to: '/fs/$ownerId/$mountId/$pathId',
+                params: { ownerId, mountId, pathId: path.parentId ?? 'root' },
+            });
         }
     };
 
