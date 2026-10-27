@@ -1397,6 +1397,31 @@ describe('Sheets HTML export — floating images', () => {
         expect(html.length).toBeLessThan(20_000_000);
         expect(lost).toEqual(Array(100 - drawn).fill('images-dropped'));
     });
+
+    // A tag and its style rule write about 180 bytes around the source, so 80,000 tiny pictures wrote 22 MB.
+    test('an image spends the cap with its tag as well as its source, so many tiny pictures write what the cap holds', () => {
+        const tiny = `data:image/png;base64,${'A'.repeat(68)}`;
+        const images = Array.from({ length: 80_000 }, (_, i) => ({
+            id: `img_${i}`,
+            mediaName: 'dot.png',
+            x: (i % 100) * 12,
+            y: Math.floor(i / 100) * 12,
+            width: 10,
+            height: 10,
+        }));
+        const lost: string[] = [];
+        const html = sheetsHtmlDocument({
+            title: 'Dots',
+            sheets: [withImages(images)],
+            mediaUrls: new Map([['dot.png', tiny]]),
+            mode: 'pdf',
+            lost: (code) => lost.push(code),
+        });
+        const drawn = html.match(/<img /g)?.length ?? 0;
+        // The cap's cells at the 50 bytes a cell writes.
+        expect(html.length).toBeLessThan(MAX_EXPORT_CELLS * 50);
+        expect(lost).toEqual(Array(80_000 - drawn).fill('images-dropped'));
+    }, 60_000);
 });
 
 // A chart draws as the painter's inline SVG in the same overlay, its range read from the materialized sheets.

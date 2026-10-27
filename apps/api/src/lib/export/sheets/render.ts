@@ -79,9 +79,14 @@ const PDF_PAGE_CELLS = 125;
 const CHART_CELLS = 500;
 
 // The bytes of HTML a cell with a value writes: a grid of numbers or of short text writes about 50 a cell. An image's
-// tag writes its whole source, a data: URI in an export, so it costs the source's length at this rate. The cap then
-// holds about 12 MB of pictures, and 1,000 images over one 1 MB picture no longer write a 1 GB document.
+// tag writes its whole source, a data: URI in an export, so it costs its tag and source at this rate. The cap then
+// holds about 12 MB of pictures instead of cells, and 1,000 images over one 1 MB picture no longer write a 1 GB
+// document.
 const CELL_BYTES = 50;
+
+// The bytes an image writes around its source: its tag, and its own style rule for where it sits. 80,000 tiny pictures
+// cost only their sources before, and wrote 22 MB.
+const IMAGE_TAG_BYTES = 200;
 
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.
 const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
@@ -277,8 +282,8 @@ function printedPages({ sheet, rows, offset, floating }: WindowedSheet, most: nu
 }
 
 // The images and charts that fit `cellsLeft`, in paint order, and the ones left out. A chart costs CHART_CELLS and
-// the points it draws. An image costs its source's bytes at CELL_BYTES a cell, since every tag repeats the whole
-// source. One whose media resolves to nothing draws nothing and costs nothing.
+// the points it draws. An image costs the bytes of its tag and source at CELL_BYTES a cell, since every tag repeats
+// the whole source. One whose media resolves to nothing draws nothing and costs nothing.
 function chargeFloating(
     floating: FloatingObject[],
     mediaUrls: MediaUrls,
@@ -289,10 +294,10 @@ function chargeFloating(
     let cells = 0;
     for (const object of floating) {
         const { item } = object;
-        const cost =
-            item.kind === 'chart'
-                ? CHART_CELLS + sheetChartPoints(item.object)
-                : Math.ceil((mediaUrls.get(item.object.mediaName)?.length ?? 0) / CELL_BYTES);
+        const src = item.kind === 'image' ? mediaUrls.get(item.object.mediaName) : undefined;
+        let cost = 0;
+        if (item.kind === 'chart') cost = CHART_CELLS + sheetChartPoints(item.object);
+        else if (src !== undefined) cost = Math.ceil((IMAGE_TAG_BYTES + src.length) / CELL_BYTES);
         if (cells + cost > cellsLeft) {
             leftOut.push(item);
             continue;
