@@ -14,7 +14,7 @@ import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { Fragment, useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { useEditorSelectionStyle } from '../../hooks/useEditorSelectionStyle';
+import type { RunStyle } from '../../state';
 import {
     applyColorScalePreset,
     applyDataBarPreset,
@@ -101,10 +101,10 @@ function NumberFormatSubmenu() {
     );
 }
 
-function TextSubmenu() {
+function TextSubmenu({ caretColor }: { caretColor: string | undefined }) {
     const { setContext, refs } = useContext(WorkbookContext);
     const anchorColor = useAnchorCell()?.fc;
-    const textColor = useEditorSelectionStyle()?.fc ?? anchorColor ?? '';
+    const textColor = caretColor ?? anchorColor ?? '';
 
     return (
         <DropdownMenuSub>
@@ -649,13 +649,14 @@ function ConditionalFormattingSubmenu() {
     );
 }
 
-export function FormatMenu() {
+// `caret` is the style at the open cell editor's caret, null while no cell is open.
+export function FormatMenu({ caret }: { caret: RunStyle | null }) {
     const { setContext } = useContext(WorkbookContext);
 
     return (
         <>
             <NumberFormatSubmenu />
-            <TextSubmenu />
+            <TextSubmenu caretColor={caret?.fc} />
             <AlignmentSubmenu />
             <WrappingSubmenu />
 

@@ -10,7 +10,7 @@ import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
-import { useEditorSelectionStyle } from '../../hooks/useEditorSelectionStyle';
+import type { RunStyle } from '../../state';
 import {
     handleBold,
     handleFont,
@@ -23,12 +23,11 @@ import {
 } from '../../state';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 
-export function FormatToolbar() {
+// The controls show the anchor cell's colors, font and alignment. While a cell is open, they show the
+// run at its `caret` instead, as the docs toolbar does.
+export function FormatToolbar({ caret }: { caret: RunStyle | null }) {
     const { context, setContext, refs } = useContext(WorkbookContext);
-    // The controls show the anchor cell's colors, font and alignment. While a cell is open, they show the
-    // run at its caret instead, as the docs toolbar does.
     const cell = useAnchorCell();
-    const caret = useEditorSelectionStyle();
     const refocusCellEditor = useCellEditorRefocus();
 
     if (!context.allowEdit) return null;

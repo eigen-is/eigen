@@ -312,10 +312,8 @@ function selectionOffsets(input: HTMLElement): [number, number] | null {
     if (!selection || selection.rangeCount === 0) return null;
     const range = selection.getRangeAt(0);
     if (!input.contains(range.startContainer) || !input.contains(range.endContainer)) return null;
-    return [
-        textOffset(input, range.startContainer, range.startOffset),
-        textOffset(input, range.endContainer, range.endOffset),
-    ];
+    const start = textOffset(input, range.startContainer, range.startOffset);
+    return [start, range.collapsed ? start : textOffset(input, range.endContainer, range.endOffset)];
 }
 
 // Counted the way readRuns reads, so a <br> or a block is the one character it reads as.

@@ -1,11 +1,12 @@
-// The style at the open cell editor's caret or selection, so the toolbar's Bold, font, size and color
-// show the run the user is in rather than the cell's own style. It follows the selection as it moves.
-// Null while no cell is open, or while one is open on a formula, where the toolbar shows the cell.
+// The style at the open cell editor's caret or selection, so the format controls, such as the toolbar's
+// Bold, font, size and color, show the run the user is in rather than the cell's own style. It follows
+// the selection as it moves. Null while no cell is open, or while one is open on a formula, where the
+// controls show the cell. The menu bar reads it once and hands it to each control.
 
 import { useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../context';
 import type { RunStyle } from '../state';
-import { editorSelectionStyle, getFlowdata } from '../state';
+import { editorSelectionStyle, getFlowdata, sameRunStyle } from '../state';
 
 export function useEditorSelectionStyle(): RunStyle | null {
     const { context, refs } = useContext(WorkbookContext);
@@ -23,7 +24,11 @@ export function useEditorSelectionStyle(): RunStyle | null {
             setStyle(null);
             return;
         }
-        const read = () => setStyle(input.innerText.startsWith('=') ? null : editorSelectionStyle(input, cell));
+        // A caret that moves inside one run keeps the style object, so the controls don't re-render.
+        const read = () => {
+            const next = input.textContent?.startsWith('=') ? null : editorSelectionStyle(input, cell);
+            setStyle((style) => (style && next && sameRunStyle(style, next) ? style : next));
+        };
         read();
         document.addEventListener('selectionchange', read);
         return () => document.removeEventListener('selectionchange', read);
