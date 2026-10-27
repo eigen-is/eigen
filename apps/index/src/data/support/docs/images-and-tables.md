@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, images, charts, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 You can insert images, charts, and tables anywhere in a document. Images can come from your device or from Drive. Charts start with sample data you then edit. Tables start as a 3×3 grid and you can grow them from there.
@@ -42,14 +42,32 @@ Click an image to select it. Resize handles appear at the edges. Drag a handle t
 
 On a wide screen, selecting an image also opens the **Image** panel on the right side of the editor. From there you can:
 
-- **Width**: type the image's width in centimeters and press Enter. The height follows, and the image stays between 2.6 cm and the width of the text (half of it for a floating image).
-- **Style**: set the image to sit on its own line (the default), float to the left, or float to the right with text wrapping around it. An image wider than half the text shrinks to half when it starts to float, so the text has room beside it.
+- **Width**: type the image's width in centimeters and press Enter. The height follows, and the image stays between 2.6 cm and the width of the text (half of it for a floating image, the width of the paper for an image behind or in front of the text).
+- **Style**: set the image to sit on its own line (the default), float to the left, or float to the right with text wrapping around it, or place it behind or in front of the text (see below). An image wider than half the text shrinks to half when it starts to float, so the text has room beside it.
 - **Align**: when the image is on its own line, choose left, center, or right alignment.
 - **Alt**: add alternative text, which is used by screen readers and shown if the image fails to load.
-- **Cap**: add a caption that appears beneath the image.
+- **Cap**: add a caption that appears beneath the image. An image behind or in front of the text has no caption.
 - **Replace image**: swap the image for a different file from your device or Drive, keeping the same position in the document.
 
-**Replace image** is also under **Format → Image**, which works on any screen, a phone included. The **Image** item is greyed out until you select an image.
+**Format → Image** has **Replace image** and the same styles: **In line**, **Wrap left**, **Wrap right**, **Behind text**, and **In front of text**. It works on any screen, a phone included. The **Image** item is greyed out until you select an image.
+
+## Put an image behind or in front of the text
+
+An image behind or in front of the text sits anywhere on the page you drag it to, and the text runs over it or under it, without making room.
+
+1. Click the image to select it.
+2. In the **Image** panel, click **Behind text** or **In front of text** under **Style**. Or choose **Format → Image**, then **Behind text** or **In front of text**.
+3. Drag the image to where you want it. It stays on the paper, so you can drag it into the margins but not off the page.
+
+The image stays where it was when you switch. It belongs to the paragraph it sits on, so it moves down when you type above that paragraph, and it goes when you delete the paragraph. Drop it over another paragraph to attach it there. Indenting its paragraph moves the image along with it.
+
+To select an image in front of the text, click it. To select one behind the text, click a part of it that no text covers, or hold Alt (Option on a Mac) and click it. Once it's selected, you can drag it or its handles even where text covers it. On a phone, drag a selected image with your finger. A finger on an image that isn't selected scrolls the page, and an image fully under text can't be selected there.
+
+An image behind or in front of the text can't be selected with the keyboard, and the arrow keys don't move it. With the image selected, Shift and an arrow key still resize it.
+
+An image in a table, a footnote, or a header or footer can't go behind or in front of the text. One you paste or drag there sits on a line of its own.
+
+In a PDF or a printout, an image near the end of a page can be cut off at the paper's edge, or left out, since it doesn't continue on the next page. An image whose paragraph runs over two pages prints on the first.
 
 ## Download an image
 
@@ -67,7 +85,7 @@ Drag a handle to resize the chart. Its width and height change on their own, so 
 
 On a wide screen, selecting a chart opens the **Chart** panel on the right side of the editor. It sets the **Type**, the **Stacking** of a bar or column chart (**None**, **Standard** or **100%**), the **Title**, where the **Legend** goes, the **Font** of all the chart's text, each axis's **Title** and **Show axis**, the category axis's **Reverse axis order**, the **Min**, **Max**, and **Gridlines** of the axis with the numbers, and the color of each series, or of each slice of a pie chart. **Min** and **Max** pick their own values while they're empty and are percents on a **100%** stack; switching **Stacking** to or from **100%** empties them. A color reads **Automatic** until you pick one; **Automatic** in a picked color's list puts it back. Below them, **Labels** sets the **Color** of all the chart's text. **Fill** sets the chart's background, and its **Style** how the bars and slices are drawn: **Solid**, **Hachure**, **Cross-hatch**, or **Zigzag**. Solid bars and slices have no outline; hatched ones get an outline in their own color. **Stroke** sets the color, width, and style of the axes and gridlines, and the width of a line chart's lines, except in a chart imported from Office, which keeps its own, and **Sketch** how rough the chart looks, from **Architect** (clean) to **Cartoonist**. A new chart starts clean and solid, like a Google Docs chart. A chart with more than 200 values (for a pie, more than 200 slices) draws its bars, lines, and slices smooth and solid whatever the sketch, so it stays quick to show; the **Sketch** section says so.
 
-Below those, **Style** and **Align** place the chart as they place an image, and **Caption** adds a caption beneath it.
+Below those, **Style** and **Align** place the chart as they place an image, behind or in front of the text included, and **Caption** adds a caption beneath it, unless the chart is behind or in front of the text.
 
 ### Edit the numbers
 

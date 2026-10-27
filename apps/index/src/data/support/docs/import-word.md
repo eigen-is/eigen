@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit, docs/page-setup]
 order: 100
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, images, charts, and equations.
@@ -47,6 +47,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Checkboxes become a checklist, ticked or not.
 - Tables keep their merged cells, column widths, and cell colors. A table wider than the page shrinks to fit.
 - Images keep their size and caption. An image that floats left or right of the text floats there in Eigen too.
+- An image or a chart behind or in front of the text stays behind or in front of it, at its place relative to its paragraph. One that Word places from the top of the page or a margin goes to the top of its paragraph. One in a table, or a group of several pictures, sits on a line of its own. Where pictures overlap, a later one draws over an earlier one in the same layer. See [Insert images, charts, and tables](/support/docs/images-and-tables).
 - Column, bar, line, and pie charts become charts you can edit, with their data, colors, title, background, text and line colors, size, and caption. A chart floats as an image does, and a 3-D chart comes in flat. See [Insert images, charts, and tables](/support/docs/images-and-tables).
 - Footnotes stay footnotes, with their formatting and links, and endnotes become footnotes. A footnote with a custom mark, such as *, gets a number instead.
 - The header and footer come across, with page numbers and page counts, and the first page's own header and footer when the Word file has them. An image that floats in a header or footer comes in on a line of its own.
