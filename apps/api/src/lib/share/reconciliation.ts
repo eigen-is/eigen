@@ -1,3 +1,8 @@
+// Reconciliation: when an account or a team membership appears, it reads the share registry and pulls what each
+// listed owner currently shares with the newcomer into the newcomer's home, such as shared paths, calendars and
+// invitations. It runs on account creation, on every guest sign-in and when someone joins a team. An owner's
+// current shares decide what arrives, so an entry left by a revoked share delivers nothing.
+
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import { getHome } from '../home';
 import { pullCalendarShares, pullPendingInvitations, pullSharedPaths, sendToHome } from '../home/home-relay';
@@ -10,14 +15,13 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
     const fromUserIds = await getEntriesForTarget(user.email);
     if (fromUserIds.length === 0) return;
 
-    const targetHome = await getHome(user.id); // own home: called during new user's signup
+    // The newcomer's own home, so no relay is needed.
+    const targetHome = await getHome(user.id);
 
     for (const fromUserId of fromUserIds) {
         try {
-            // A team-owned source (e.g. a mail-grant on a team drive path) has no user row and
-            // shares only drive paths — no calendars or invitations. Deliver its shared paths
-            // attributed to the team, then move on. Without this, guests granted a team-owned
-            // doc never receive their shared-path mirror.
+            // A team source, such as a mail grant on a team drive path, has no user row. A team shares
+            // drive paths only, so they arrive attributed to the team and nothing else is pulled.
             const parsed = parseOwnerId(fromUserId);
             if (parsed.type === 'team') {
                 const team = await getTeam(parsed.id);
@@ -95,7 +99,7 @@ export async function reconcileSharesForNewTeamMember(userId: string, teamId: st
 
     for (const fromUserId of fromUserIds) {
         try {
-            // Team-owned source (see reconcileSharesForNewUser): drive paths only, attributed to the team.
+            // A team source shares drive paths only, as in reconcileSharesForNewUser.
             const parsed = parseOwnerId(fromUserId);
             if (parsed.type === 'team') {
                 const team = await getTeam(parsed.id);

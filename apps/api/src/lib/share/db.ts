@@ -1,3 +1,6 @@
+// The share registry's database, eigen.db in the server data folder, opened once and shared by the process. The
+// registry reads and writes it, and the server backup copies it through the same handle.
+
 import { createAsyncSingleton } from '../../utils/singleton';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import { openLocalDatabase } from '../core';
