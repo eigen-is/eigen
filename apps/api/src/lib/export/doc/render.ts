@@ -94,14 +94,16 @@ function withTrailingBreaks(node: JSONContent): JSONContent {
 }
 
 // A positioned figure or chart anchors on a body paragraph. In a table cell, a note or a band, where a forged doc can
-// hold one, it draws in line, as the editor resets it there.
+// hold one, it draws in line, as the editor resets it there. A node with no such figure inside comes back as it was.
 function withBodyOnlyPositions(node: JSONContent, inFlow: boolean): JSONContent {
     if (inFlow && isFigureFrameNode(node.type) && isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout)) {
         return { ...node, attrs: { ...node.attrs, layout: 'block' } };
     }
+    const { content } = node;
+    if (!content) return node;
     const nested = inFlow || BLOCK_ONLY_FIGURE_PARENTS.includes(node.type ?? '');
-    const content = node.content?.map((child) => withBodyOnlyPositions(child, nested));
-    return content ? { ...node, content } : node;
+    const kept = content.map((child) => withBodyOnlyPositions(child, nested));
+    return kept.every((child, index) => child === content[index]) ? node : { ...node, content: kept };
 }
 
 // A peer can store any JSON as the language.
