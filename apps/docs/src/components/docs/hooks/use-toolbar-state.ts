@@ -9,6 +9,7 @@ import { useEditorState } from '@tiptap/react';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import {
+    canInsertTableOfContents,
     insertFootnote,
     readCellBackground,
     readFigureAttrs,
@@ -164,8 +165,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 selectionEmpty: selection.empty,
                 canComment: canAnchorComment(editor.state),
                 canInsertFootnote: insertFootnote(editor.state.tr) !== null,
-                canInsertTableOfContents:
-                    'tableOfContents' in editor.schema.nodes && editor.can().insertTableOfContents(),
+                canInsertTableOfContents: canInsertTableOfContents(editor.state),
                 table,
                 figureLayout: active('figure')
                     ? (readFigureAttrs(getAttributes(state, 'figure')).layout ?? 'block')

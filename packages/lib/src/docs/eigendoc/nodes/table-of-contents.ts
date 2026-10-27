@@ -4,6 +4,7 @@
 
 import type { CommandProps } from '@tiptap/core';
 import { canInsertNode, mergeAttributes, Node } from '@tiptap/core';
+import type { EditorState } from '@tiptap/pm/state';
 import { TextSelection } from '@tiptap/pm/state';
 import { caretAfterInsertedBlock } from './page-break';
 
@@ -26,6 +27,16 @@ export function readTocLevels(value: unknown): number {
     return typeof value === 'number' && Number.isFinite(value)
         ? Math.min(6, Math.max(1, Math.round(value)))
         : DEFAULT_TOC_LEVELS;
+}
+
+// Whether one goes in at the selection: in a textblock between the body's blocks, as a cell or a list item would need
+// another tab stop for the docx's page numbers, and in a schema that holds one, which a band's doesn't. No dry run, so
+// the toolbar reads it on every change.
+export function canInsertTableOfContents(state: EditorState): boolean {
+    const { selection } = state;
+    const type = state.schema.nodes[NAME];
+    const top = selection.$from.depth === 1 && selection.$to.depth === 1;
+    return !!type && selection instanceof TextSelection && top && canInsertNode(state, type);
 }
 
 export const TableOfContentsNode = Node.create({
@@ -59,15 +70,11 @@ export const TableOfContentsNode = Node.create({
 
     addCommands() {
         return {
-            // As a page break goes in, but only between the body's blocks: in a cell or a list item the docx would need
-            // another tab stop for the page numbers.
+            // As a page break goes in, but only where canInsertTableOfContents allows.
             insertTableOfContents:
                 () =>
                 ({ chain, state }: CommandProps) => {
-                    const { selection } = state;
-                    const top = selection.$from.depth === 1 && selection.$to.depth === 1;
-                    if (!(selection instanceof TextSelection) || !top) return false;
-                    if (!canInsertNode(state, state.schema.nodes[this.name])) return false;
+                    if (!canInsertTableOfContents(state)) return false;
                     return chain()
                         .insertContent({ type: this.name })
                         .command(caretAfterInsertedBlock)

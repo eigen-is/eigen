@@ -62,7 +62,7 @@ export {
     readCellBackground,
     readCellBorder,
 } from './nodes/table-cell';
-export { readTocLevels, TableOfContentsNode } from './nodes/table-of-contents';
+export { canInsertTableOfContents, readTocLevels, TableOfContentsNode } from './nodes/table-of-contents';
 export type { TitleType } from './nodes/title';
 export type { NormalStyle } from './normal-style';
 export { DEFAULT_NORMAL_STYLE, normalStyleProperties, readNormalStyle, STYLE_ROOT } from './normal-style';
