@@ -60,6 +60,20 @@ const POSITIONED_BOXES = '.figure[data-layout="front"], .figure[data-layout="beh
 const isPositionedFigure = (node: PMNode | null | undefined): boolean =>
     !!node && isFigureFrameNode(node.type.name) && isPositioned(node.attrs.layout);
 
+// A figure at `$pos` draws in line whatever its layout in a band's or a note's editor, and in a table cell or a note.
+function drawsInLine($pos: ResolvedPos, blockOnly: boolean): boolean {
+    return (
+        blockOnly ||
+        Array.from({ length: $pos.depth + 1 }, (_, depth) => $pos.node(depth).type.name).some((name) =>
+            BLOCK_ONLY_FIGURE_PARENTS.includes(name),
+        )
+    );
+}
+
+// Where the selected figure draws in line, its panel and Format › Image offer no place in front of or behind the text.
+export const selectionDrawsInLine = (editor: Editor): boolean =>
+    drawsInLine(editor.state.selection.$from, editor.storage.positionedFigures.blockOnly);
+
 // How many positioned figures a textblock starts with. Each is one position long.
 function leadingRun(textblock: PMNode): number {
     let run = 0;
@@ -489,12 +503,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     if (fixes) {
                         for (const pos of changedTextblocks(transactions, newState.doc)) {
                             const $inside = tr.doc.resolve(pos + 1);
-                            const inLine =
-                                blockOnly ||
-                                Array.from({ length: $inside.depth }, (_, d) => $inside.node(d).type.name).some(
-                                    (name) => BLOCK_ONLY_FIGURE_PARENTS.includes(name),
-                                );
-                            if (!inLine) leadFigures(tr, pos);
+                            if (!drawsInLine($inside, blockOnly)) leadFigures(tr, pos);
                             else
                                 $inside.parent.forEach((child, offset) => {
                                     if (isPositionedFigure(child))

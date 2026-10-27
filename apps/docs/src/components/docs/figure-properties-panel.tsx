@@ -1,4 +1,4 @@
-// The Docs Image panel for the selected picture: its width, where it sits on the page, its alt text and caption, and
+// The Docs Image panel for the selected picture: its width, where it sits on the page and its caption, its alt text, and
 // Replace image. It writes through the editor that holds the picture, the body's, a band's or a note's, and every
 // write keeps the picture selected so the panel stays open. Its layout rows serve the Chart panel too.
 
@@ -20,6 +20,7 @@ import type { LucideIcon } from 'lucide-react';
 import { BringToFront, ImagePlus, PanelLeft, PanelRight, Rows3, SendToBack } from 'lucide-react';
 import { useState } from 'react';
 import { clampFigureWidth, figureMaxWidth, setImageLayout } from './extensions/figure-frame';
+import { selectionDrawsInLine } from './extensions/positioned-figure';
 
 // Alt, Cap or Width. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
 // from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit writes
@@ -71,21 +72,24 @@ const FIGURE_LAYOUT_LOOK: { layout: FigureLayout; label: string; icon: LucideIco
 export const figureLayoutLooks = (inFlowOnly: boolean) =>
     FIGURE_LAYOUT_LOOK.filter(({ layout }) => !inFlowOnly || !isPositioned(layout));
 
-// Where a figure sits: in its own line, aligned, wrapped by the text on one side, or behind or in front of the text. A
-// band holds no float, as a docx import reads a header's anchored picture as one in its own line, so a band's offers
-// the alignment alone, which puts a pasted wrap in its own line. A note's figure draws in line, so a note's offers no
-// place behind or in front of the text (inFlowOnly).
+// Where a figure sits: in its own line, aligned, wrapped by the text on one side, or behind or in front of the text,
+// and its caption, which one behind or in front of the text doesn't draw. A band holds no float, as a docx import reads
+// a header's anchored picture as one in its own line, so a band's offers the alignment alone, which puts a pasted wrap
+// in its own line. A figure in a note or a table cell draws in line, so there it offers no place behind or in front of
+// the text (inFlowOnly).
 export function FigureLayoutSection({
     layout,
     alignment,
+    caption,
     blockOnly = false,
-    inFlowOnly = false,
+    inFlowOnly,
     onChange,
 }: {
     layout: FigureLayout;
     alignment: FigureAlignment;
+    caption: string;
     blockOnly?: boolean;
-    inFlowOnly?: boolean;
+    inFlowOnly: boolean;
     onChange: (attributes: FigureFrameAttrs) => void;
 }) {
     return (
@@ -117,6 +121,15 @@ export function FigureLayoutSection({
                     />
                 </PropertyRow>
             )}
+            {!isPositioned(layout) && (
+                <PropertyRow label="Cap">
+                    <FigureField
+                        value={caption}
+                        placeholder="Caption"
+                        onCommit={(value) => onChange({ caption: value || null })}
+                    />
+                </PropertyRow>
+            )}
         </PropertySection>
     );
 }
@@ -124,14 +137,13 @@ export function FigureLayoutSection({
 type FigurePropertiesPanelProps = {
     editor: Editor;
     blockOnly?: boolean;
-    inFlowOnly?: boolean;
     onReplaceImage: () => void;
 };
 
-export function FigurePropertiesPanel({ editor, blockOnly, inFlowOnly, onReplaceImage }: FigurePropertiesPanelProps) {
+export function FigurePropertiesPanel({ editor, blockOnly, onReplaceImage }: FigurePropertiesPanelProps) {
     const { resolveMediaUrl } = useMediaResolver();
     // useEditor re-renders on no transaction, and a write that keeps the figure selected fires no selectionUpdate.
-    const { width, layout, alignment, alt, caption, mediaName } = useEditorState({
+    const { width, layout, alignment, alt, caption, mediaName, inFlowOnly } = useEditorState({
         editor,
         selector: ({ editor: e }) => {
             const attrs = readFigureAttrs(e.getAttributes('figure'));
@@ -142,6 +154,7 @@ export function FigurePropertiesPanel({ editor, blockOnly, inFlowOnly, onReplace
                 alt: attrs.alt || '',
                 caption: attrs.caption || '',
                 mediaName: attrs.mediaName,
+                inFlowOnly: selectionDrawsInLine(e),
             };
         },
     });
@@ -179,13 +192,10 @@ export function FigurePropertiesPanel({ editor, blockOnly, inFlowOnly, onReplace
             <FigureLayoutSection
                 layout={layout}
                 alignment={alignment}
+                caption={caption}
                 blockOnly={blockOnly}
                 inFlowOnly={inFlowOnly}
-                onChange={(attributes) =>
-                    attributes.layout && !attributes.alignment
-                        ? setImageLayout(editor, attributes.layout)
-                        : editor.commands.updateFigure(attributes)
-                }
+                onChange={(attributes) => setImageLayout(editor, attributes)}
             />
 
             <PropertySection title="Image">
@@ -196,16 +206,6 @@ export function FigurePropertiesPanel({ editor, blockOnly, inFlowOnly, onReplace
                         onCommit={(value) => editor.commands.updateFigure({ alt: value || null })}
                     />
                 </PropertyRow>
-                {/* A figure in front of or behind the text draws no caption. */}
-                {!isPositioned(layout) && (
-                    <PropertyRow label="Cap">
-                        <FigureField
-                            value={caption}
-                            placeholder="Caption"
-                            onCommit={(value) => editor.commands.updateFigure({ caption: value || null })}
-                        />
-                    </PropertyRow>
-                )}
                 <Button variant="outline" size="sm" className="w-full mt-1" onClick={onReplaceImage}>
                     <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
                     Replace image

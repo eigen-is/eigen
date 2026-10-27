@@ -12,7 +12,7 @@ import {
     readChartSpec,
 } from '@workspace/lib/charts';
 import type { ChartAttrs } from '@workspace/lib/docs/eigendoc';
-import { isPositioned, readChartAttrs } from '@workspace/lib/docs/eigendoc';
+import { readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { ChartSections, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
@@ -20,13 +20,13 @@ import {
     PropertiesPanel,
     PropertyGestureContext,
     PropertyHistoryContext,
-    PropertySection,
     sealed,
 } from '@workspace/ui/components/properties-panel';
 import { useCallback, useMemo } from 'react';
 import type * as Y from 'yjs';
-import { widthWithinLayout } from './extensions/figure-frame';
-import { FigureField, FigureLayoutSection } from './figure-properties-panel';
+import { setFigureLayout } from './extensions/figure-frame';
+import { selectionDrawsInLine } from './extensions/positioned-figure';
+import { FigureLayoutSection } from './figure-properties-panel';
 
 // The selected chart's attributes. useEditor re-renders on no transaction, and a write that keeps the chart selected
 // fires no selectionUpdate.
@@ -43,6 +43,7 @@ function useSelectedChart(editor: Editor) {
                 width: attrs.width ?? CHART_DEFAULT_SIZE.width,
                 height: attrs.height ?? CHART_DEFAULT_SIZE.height,
                 look: readChartLook(attrs),
+                inFlowOnly: selectionDrawsInLine(e),
             };
         },
     });
@@ -61,7 +62,7 @@ type ChartPropertiesPanelProps = {
 };
 
 export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartPropertiesPanelProps) {
-    const { stored, spec, layout, alignment, caption, width, height, look } = useSelectedChart(editor);
+    const { stored, spec, layout, alignment, caption, width, height, look, inFlowOnly } = useSelectedChart(editor);
     const beginGesture = useCallback(() => holdCapture(undoManager), [undoManager]);
     // A field that writes as the user types keeps the caret out of the editor's keymap, so it hands ⌘Z to the doc.
     const history = useMemo(
@@ -88,31 +89,16 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                     <FigureLayoutSection
                         layout={layout}
                         alignment={alignment}
-                        onChange={(attributes) => {
-                            if (isPositioned(attributes.layout)) {
-                                const { layout: positioned } = attributes;
-                                sealed(undoManager, () => editor.commands.positionFigure(positioned));
-                                return;
-                            }
-                            // A chart shrunk to a wrap keeps its shape.
-                            const fitted = widthWithinLayout(editor, attributes.layout, width);
-                            write(
-                                fitted === undefined
-                                    ? attributes
-                                    : { ...attributes, width: fitted, height: Math.round((height * fitted) / width) },
-                            );
-                        }}
+                        caption={caption}
+                        inFlowOnly={inFlowOnly}
+                        onChange={(attributes) =>
+                            sealed(undoManager, () =>
+                                setFigureLayout(editor, attributes, { width, height }, (written) =>
+                                    editor.commands.updateChart(written),
+                                ),
+                            )
+                        }
                     />
-                    {/* A chart in front of or behind the text draws no caption. */}
-                    {!isPositioned(layout) && (
-                        <PropertySection title="Caption">
-                            <FigureField
-                                value={caption}
-                                placeholder="Caption"
-                                onCommit={(value) => write({ caption: value || null })}
-                            />
-                        </PropertySection>
-                    )}
                 </PropertiesPanel>
             </PropertyHistoryContext.Provider>
         </PropertyGestureContext.Provider>

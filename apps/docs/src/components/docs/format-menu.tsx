@@ -66,6 +66,7 @@ import {
     UnfoldVertical,
 } from 'lucide-react';
 import { setImageLayout } from './extensions/figure-frame';
+import { selectionDrawsInLine } from './extensions/positioned-figure';
 import { figureLayoutLooks } from './figure-properties-panel';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
@@ -402,13 +403,13 @@ export const FormatMenu = ({
                     <ImagePlus className="h-4 w-4" /> Replace image
                 </DropdownMenuItem>
                 {/* The Image panel's layouts, which a phone has no panel for: none in a band, as the band's panel
-                    offers none, and those in the flow alone in a note. */}
+                    offers none, and those in the flow alone where the image draws in line, in a note or a cell. */}
                 {!inBand && (
                     <>
                         <DropdownMenuSeparator />
                         <ChoiceMenuItems<FigureLayout>
                             value={active.figureLayout}
-                            options={figureLayoutLooks(editor.storage.positionedFigures.blockOnly).map(
+                            options={figureLayoutLooks(selectionDrawsInLine(editor)).map(
                                 ({ layout, label, icon: Icon }) => ({
                                     value: layout,
                                     label: (
@@ -418,7 +419,7 @@ export const FormatMenu = ({
                                     ),
                                 }),
                             )}
-                            onChange={(layout) => setImageLayout(editor, layout)}
+                            onChange={(layout) => setImageLayout(editor, { layout })}
                         />
                     </>
                 )}

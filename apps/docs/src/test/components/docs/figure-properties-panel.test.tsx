@@ -17,8 +17,16 @@ const { FigurePropertiesPanel } = await import('../../../components/docs/figure-
 let unmount = async () => {};
 afterEach(() => unmount());
 
-// "a" at 1, the figure at 2, on a page whose text column is 600 px.
-async function mount(attrs: object = {}, blockOnly = false, inFlowOnly = false) {
+// "a" at 1, the figure at 2, on a page whose text column is 600 px. `inLineEditor` is a note's editor, where every
+// figure draws in line; `inCell` puts the paragraph in a table cell, its figure at 5.
+async function mount(attrs: object = {}, blockOnly = false, { inLineEditor = false, inCell = false } = {}) {
+    const paragraph = {
+        type: 'paragraph',
+        content: [
+            { type: 'text', text: 'a' },
+            { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 200, ...attrs } },
+        ],
+    };
     const editor = new Editor({
         extensions: [
             ...getDocExtensions({ exclude: ['figure', 'comment'] }),
@@ -30,22 +38,22 @@ async function mount(attrs: object = {}, blockOnly = false, inFlowOnly = false) 
                     width: 800,
                     margin: { top: 100, right: 100, bottom: 100, left: 100 },
                 }),
+                blockOnly: inLineEditor,
             }),
         ],
         content: {
             type: 'doc',
             content: [
-                {
-                    type: 'paragraph',
-                    content: [
-                        { type: 'text', text: 'a' },
-                        { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 200, ...attrs } },
-                    ],
-                },
+                inCell
+                    ? {
+                          type: 'table',
+                          content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [paragraph] }] }],
+                      }
+                    : paragraph,
             ],
         },
     });
-    editor.commands.setNodeSelection(2);
+    editor.commands.setNodeSelection(inCell ? 5 : 2);
     const rendered = await renderInDocument(
         createElement(
             'div',
@@ -55,7 +63,7 @@ async function mount(attrs: object = {}, blockOnly = false, inFlowOnly = false) 
                 { 'data-document': '', style: { padding: 0 } },
                 createElement(EditorContent, { editor }),
             ),
-            createElement(FigurePropertiesPanel, { editor, blockOnly, inFlowOnly, onReplaceImage: () => {} }),
+            createElement(FigurePropertiesPanel, { editor, blockOnly, onReplaceImage: () => {} }),
         ),
     );
     const page = document.querySelector('[data-document]');
@@ -329,8 +337,11 @@ test('an image in front of or behind the text has no caption row', async () => {
     expect(document.querySelector('input[placeholder="Caption"]')).toBeNull();
 });
 
-test("a note's panel offers no place in front of or behind the text", async () => {
-    await mount({}, false, true);
+test.each([
+    ['a note', { inLineEditor: true }],
+    ['a table cell', { inCell: true }],
+])("%s's panel offers no place in front of or behind the text", async (_where, options) => {
+    await mount({}, false, options);
     const labels = [...document.querySelectorAll('button[aria-pressed]')].map((t) => t.getAttribute('aria-label'));
     expect(labels).toEqual(['In line', 'Wrap left', 'Wrap right', 'Align left', 'Align center', 'Align right']);
 });

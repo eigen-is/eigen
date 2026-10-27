@@ -44,25 +44,28 @@ export function clampFigureWidth(width: number, maxWidth: number) {
     return Math.round(Math.max(FIGURE_MIN_SIZE, Math.min(maxWidth, width)));
 }
 
-// A wrap halves the cap, so a switch to one shrinks a wider figure to it in the same write, or nothing wraps beside it.
-// The width to write with `layout`, none when the figure fits.
-export function widthWithinLayout(
+// A layout or an alignment for the selected image or chart, from its panel or Format › Image, which `write` writes. A
+// place in front of or behind the text keeps the figure where it is drawn instead. A wrap halves the cap, so a switch
+// to one shrinks a wider figure to it in the same write, or nothing wraps beside it, and a chart keeps its shape.
+export function setFigureLayout(
     editor: Editor,
-    layout: FigureLayout | null | undefined,
-    width: number | null | undefined,
-): number | undefined {
-    if (!layout || !width) return undefined;
-    const maxWidth = figureMaxWidth(editor, layout);
-    return width > maxWidth ? clampFigureWidth(width, maxWidth) : undefined;
+    attributes: FigureFrameAttrs,
+    { width, height }: { width?: number | null; height?: number | null },
+    write: (attributes: FigureFrameAttrs & { width?: number; height?: number }) => boolean,
+): boolean {
+    const { layout } = attributes;
+    if (isPositioned(layout)) return editor.commands.positionFigure(layout);
+    const maxWidth = layout ? figureMaxWidth(editor, layout) : Infinity;
+    if (!width || width <= maxWidth) return write(attributes);
+    const fitted = clampFigureWidth(width, maxWidth);
+    return write({ ...attributes, width: fitted, ...(height && { height: Math.round((height * fitted) / width) }) });
 }
 
-// A layout for the selected image, from the Image panel or Format › Image. A place in front of or behind the text
-// keeps the image where it is drawn, and a wrap shrinks a wider image to half the column in the same write.
-export function setImageLayout(editor: Editor, layout: FigureLayout): boolean {
-    if (isPositioned(layout)) return editor.commands.positionFigure(layout);
-    const fitted = widthWithinLayout(editor, layout, readFigureAttrs(editor.getAttributes('figure')).width);
-    return editor.commands.updateFigure(fitted === undefined ? { layout } : { layout, width: fitted });
-}
+// The Image panel's and Format › Image's write of a layout or an alignment.
+export const setImageLayout = (editor: Editor, attributes: FigureFrameAttrs) =>
+    setFigureLayout(editor, attributes, readFigureAttrs(editor.getAttributes('figure')), (written) =>
+        editor.commands.updateFigure(written),
+    );
 
 // A grip's readout, in cm as Docs' fields show a size.
 const figureSize = ({ width, height }: Box) => `${cmText(pxToMm(width), 1)} × ${cmText(pxToMm(height), 1)} cm`;

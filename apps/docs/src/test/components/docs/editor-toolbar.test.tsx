@@ -766,6 +766,17 @@ test('in a note, Format › Image offers no place in front of or behind the text
     note.destroy();
 });
 
+test('in a table cell, Format › Image offers no place in front of or behind the text', async () => {
+    editor.commands.setContent(TABLE_AND_FIGURE);
+    // Into the first cell's paragraph, which opens at 7.
+    editor.commands.insertContentAt(8, { type: 'figure', attrs: { mediaName: 'chart.png' } });
+    editor.commands.setNodeSelection(8);
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Image');
+    expect(openMenuEntries()).toEqual(['Replace image', '—', 'In line', 'Wrap left', 'Wrap right']);
+});
+
 test('Format › Headers and footers puts the caret in the header', async () => {
     onEnterBand.mockClear();
     await render(1920, true);
