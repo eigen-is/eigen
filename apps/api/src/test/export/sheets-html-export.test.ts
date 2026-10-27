@@ -1212,6 +1212,44 @@ describe('Sheets HTML export — floating images', () => {
         });
     });
 
+    // A box turned past A1 moves back onto the page, and its bounds can come out a few ulps below 0.
+    test('an image turned past A1 opens no row or column before A1', () => {
+        for (const angle of [30, 45, 60, 135]) {
+            const sheet: Sheet = {
+                ...makeSheet([{ r: 2, c: 2, v: { v: 'C3', m: 'C3' } }]),
+                images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 200, height: 100, angle }),
+            };
+            const out = renderSheetsHtml([sheet], MEDIA);
+            expect(out.html.match(/<col /g)).toHaveLength(3);
+            expect(out.html.match(/<tr /g)).toHaveLength(3);
+        }
+    });
+
+    // The editor and the import write whole pixels, so a length under one is no size a sheet has.
+    test('a track size under a pixel draws as the default, so a turned image at A1 still finds its cells', () => {
+        for (const tiny of [0.5, 1e-20, 1e-300]) {
+            const sheet: Sheet = {
+                ...makeSheet([{ r: 2, c: 2, v: { v: 'C3', m: 'C3' } }]),
+                defaultColWidth: tiny,
+                defaultRowHeight: tiny,
+                images: imagesOf({
+                    id: 'img_1',
+                    mediaName: 'chart.png',
+                    x: 0,
+                    y: 0,
+                    width: 200,
+                    height: 100,
+                    angle: 45,
+                }),
+            };
+            const out = renderSheetsHtml([sheet], MEDIA);
+            expect(out.html).toContain('>C3<');
+            expect(out.html.match(/<col /g)).toHaveLength(3);
+            expect(classesFor(out, `width:${SHEET_DEFAULT_COL_WIDTH}px`)).toHaveLength(1);
+            expect(classesFor(out, `height:${SHEET_DEFAULT_ROW_HEIGHT}px`)).toHaveLength(1);
+        }
+    });
+
     test('a workbook without floating images emits the bare table it always did', () => {
         const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }])], MEDIA);
         expect(out.html).not.toContain('position:relative;width:');

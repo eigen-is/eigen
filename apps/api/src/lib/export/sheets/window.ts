@@ -48,6 +48,10 @@ export type WindowedSheet = {
 // A track longer than the largest PDF page is no length a sheet has: Excel's widest column is under 2,000 px.
 const MAX_TRACK_PX = MAX_PDF_PAGE_PX;
 
+// The editor and the import write whole pixels, so a track shorter than one is no length a sheet has either. The editor
+// draws a stored 0 at the default, and a length like 1e-300 would take the window to a track no count reaches.
+const MIN_TRACK_PX = 1;
+
 // The longest span of tracks read by a lookup each, well under a millisecond. Enumerating a map's keys costs about
 // 250 ms for a million of them, so a short span is never read through the map.
 const MAX_TRACK_WALK = 65_536;
@@ -162,7 +166,7 @@ export function floatingObjects(sheet: Sheet) {
 // store a string, a negative or a length no page holds.
 function trackLength(value: unknown): number | undefined {
     const length = Number(value ?? Number.NaN);
-    return Number.isFinite(length) && length >= 0 && length <= MAX_TRACK_PX ? length : undefined;
+    return length >= MIN_TRACK_PX && length <= MAX_TRACK_PX ? length : undefined;
 }
 
 // The tracks from first to last that a map has a key for, ascending. A span of up to MAX_TRACK_WALK tracks is walked
@@ -266,9 +270,9 @@ function trackAt(
     for (const track of tracksIn(hidden, 0, limit - 1)) named.set(track, 0);
     let index = 0;
     let start = 0;
-    // A track is passed while the pixel lies at or past its end.
+    // A track is passed while the pixel lies at or past its end. A box turned past A1 can start a few ulps before 0.
     const passDefaults = (count: number) => {
-        const passed = fallback > 0 ? Math.min(count, Math.floor((px - start) / fallback)) : count;
+        const passed = Math.min(count, Math.floor(Math.max(0, px - start) / fallback));
         index += passed;
         start += passed * fallback;
         return passed === count;
