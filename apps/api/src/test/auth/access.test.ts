@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { _setRouteTableForTests, clientIpKey, isIpTrusted, requireLocalhost } from '../../lib/core/access';
-import { parseRouteTable, readRouteTable } from '../../lib/core/trusted-networks';
+import { _setRouteTableForTests, clientIpKey, isIpTrusted, requireLocalhost } from '../../lib/auth/access';
+import { parseRouteTable, readRouteTable } from '../../lib/auth/trusted-networks';
 
 function mkRequest(headers: Record<string, string> = {}): Request {
     return new Request('http://localhost/internal/auth/verify', { method: 'POST', headers });

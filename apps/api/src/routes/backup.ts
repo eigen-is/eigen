@@ -3,6 +3,7 @@ import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
+import { requireAdmin } from '../lib/auth/access';
 import { deleteArtifact, landUpload, listArtifacts, resolveArtifact } from '../lib/backup/artifacts';
 import { requireBackableHome } from '../lib/backup/home-dir';
 import {
@@ -20,7 +21,6 @@ import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies, resolveSafetyCopy } from '../lib/backup/safety-copy';
 import type { SnapshotProgress } from '../lib/backup/snapshot-home';
 import { ApiError } from '../lib/core';
-import { requireAdmin } from '../lib/core/access';
 import { contentDisposition } from '../lib/core/http';
 import { getHome } from '../lib/home';
 import { getTeam } from '../lib/team/team';

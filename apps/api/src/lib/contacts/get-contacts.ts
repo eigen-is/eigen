@@ -1,4 +1,4 @@
-import { requireSelf } from '../core';
+import { requireSelf } from '../auth/access';
 import { getHome } from '../home';
 import type { User } from '../user';
 import type { Contacts } from './contacts';

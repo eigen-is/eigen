@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { renderEigenEmail } from '../../lib/core/mail-template';
+import { renderEigenEmail } from '../../lib/mailer/mail-template';
 
 describe('renderEigenEmail', () => {
     test('renders title in an h2', () => {

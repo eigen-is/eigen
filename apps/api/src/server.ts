@@ -12,11 +12,11 @@ import { assertMailDomainUnchanged, isSetupRequired } from './lib/config/server-
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainDeliveriesWithin } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
+import { setShutdownDrainDeadline } from './lib/mount/upload-limits';
 import { pinDefaultTeam } from './lib/org';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
 import { createSetupLink } from './lib/setup/setup-token';
-import { setShutdownDrainDeadline } from './lib/sync';
 import { startControlSocket } from './routes/control';
 
 // How long a shutdown may spend uploading the pending S3 writes. With the waits for the backup jobs

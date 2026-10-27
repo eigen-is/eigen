@@ -5,9 +5,9 @@
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
-import { composeShareEmail } from '../core/mail-composers';
-import { sendMail } from '../core/mailer';
 import { countHomeDeliveries, drainHomeDeliveries, sendToUserHomes } from '../home/home-relay';
+import { composeShareEmail } from '../mailer/mail-composers';
+import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getUserByEmail } from '../user/';

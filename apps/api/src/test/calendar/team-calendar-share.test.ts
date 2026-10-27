@@ -7,9 +7,9 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { getServerConfig } from '../../lib/config/server-config';
-import * as mailer from '../../lib/core/mailer';
 import { getHome } from '../../lib/home';
 import * as relay from '../../lib/home/home-relay';
+import * as mailer from '../../lib/mailer/mailer';
 import { addMember, assertJson, authedRequest, createTeam, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Team Calendar Share (push to existing members)', () => {

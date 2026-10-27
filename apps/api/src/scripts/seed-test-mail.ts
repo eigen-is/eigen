@@ -35,8 +35,7 @@ import {
     mailboxRouteSegment,
     STANDARD_MAILBOXES,
 } from '@workspace/lib/constants/mailboxes';
-import { SERVER_DATABASES, SERVER_DIR } from '../lib/config/paths';
-import { PATHS } from '../lib/core/constants';
+import { PATHS, SERVER_DATABASES, SERVER_DIR } from '../lib/config/paths';
 import { buildMaildirFilename, createUniqueMessageId, maildirFolder } from '../lib/mail/mailutils';
 
 // Data root: honor EIGEN_DATA_ROOT (as the server does), else the repo's ./data resolved from

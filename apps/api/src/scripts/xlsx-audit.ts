@@ -26,7 +26,7 @@ import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { parseA1Range, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
-import { peakRss } from '../lib/core/peak-rss';
+import { peakRss } from '../lib/document/transform/peak-rss';
 import { lossCounter } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/office-image';

@@ -2,11 +2,11 @@ import type { ServerArchiveList } from '@workspace/lib/types/backup';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
 import { BACKUP_LEVELS } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
+import { requireOwner } from '../lib/auth/access';
 import { hasS3Mounts } from '../lib/backup/enumerate-homes';
 import { deleteServerArchive, listServerArchives } from '../lib/backup/server-archives';
 import { startArchiveUpload, startServerBackup } from '../lib/backup/server-job';
 import { checkBackupDestination, withSavedSecret } from '../lib/backup/upload';
-import { requireOwner } from '../lib/core/access';
 import { betterAuth } from './auth';
 import { s3DestinationBody } from './shared-schemas';
 

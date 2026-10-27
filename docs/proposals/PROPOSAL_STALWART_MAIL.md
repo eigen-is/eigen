@@ -135,7 +135,7 @@ Key facts that constrain any swap:
   `apps/api/src/lib/mail/mail-domain.ts` re-parses the message after delivery to feed
   `processInboundImip(home, parsed)`. That coupling has to move when delivery moves out of the
   API process.
-- **Outbound is nodemailer.** `../../apps/api/src/lib/core/mailer.ts` uses nodemailer with either
+- **Outbound is nodemailer.** `../../apps/api/src/lib/mailer/mailer.ts` uses nodemailer with either
   `SMTP_HOST` or local `/usr/sbin/sendmail`. Stalwart would simply *be* the SMTP host.
 - **Mail is per-user only.** `home.mail` is a singleton per `UserHome`. No `TeamHome` or
   `OrgHome` mail exists. The proposal preserves that.
@@ -421,7 +421,7 @@ during the EventSource handler. Acceptable for v1.
 
 ## Outbound mail
 
-Today: `../../apps/api/src/lib/core/mailer.ts` uses nodemailer with `SMTP_HOST` or
+Today: `../../apps/api/src/lib/mailer/mailer.ts` uses nodemailer with `SMTP_HOST` or
 `/usr/sbin/sendmail`. The same path is used for *both* the welcome mail
 (`Maildir.welcomeMail`), system emails (shares, password resets in `mail-composers.ts`), and
 user-composed mail (`Maildir.messageSend`).

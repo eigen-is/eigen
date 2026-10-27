@@ -107,7 +107,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
     });
 
     test('sending a draft preserves attachments into the Sent mailbox', async () => {
-        // In test env (localhost domain, non-production), sendMail() in ../lib/core/mailer
+        // In test env (localhost domain, non-production), sendMail() in ../lib/mailer/mailer
         // short-circuits to a console.log and returns true — no SMTP mock needed.
         const file = new File(['sent-bytes'], 'report.csv', { type: 'text/csv' });
         const uploaded = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, file);

@@ -4,7 +4,7 @@ import { SETUP_LINK_PARAM } from '@workspace/lib/constants/setup';
 import { getServerDataPath, SERVER_RUNTIME_FILES } from '../config/paths';
 import { isSetupRequired } from '../config/server-config';
 import { ApiError } from '../core/errors';
-import { adminUrl } from '../core/mail-template';
+import { adminUrl } from '../mailer/mail-template';
 
 export type SetupLink = { setupUrl: string | null; signInUrl: string };
 

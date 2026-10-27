@@ -53,7 +53,7 @@ Full architecture in [IMAP.md](../IMAP.md). The facts that drive this design:
   → `Mail.mailboxDeliver` (`apps/api/src/lib/mail/mail-domain.ts`), which **always** does
   `store.append('', message)` — INBOX.
 - **Outbound from the API uses the same listener.** `sendMail` relays via `SMTP_HOST=postfix`
-  port 25 (`createTransport` in `apps/api/src/lib/core/mailer.ts`, `SMTP_HOST` in `docker-compose.yml`) — so port 25
+  port 25 (`createTransport` in `apps/api/src/lib/mailer/mailer.ts`, `SMTP_HOST` in `docker-compose.yml`) — so port 25
   carries both internet mail and Eigen's own outbound, and the design must exempt the latter.
 - **Submission listeners inherit milters.** `submission` (587) and `smtps` (465) are separate
   `smtpd` services in `../../docker/postfix/master.cf.template` with no `-o smtpd_milters` override —

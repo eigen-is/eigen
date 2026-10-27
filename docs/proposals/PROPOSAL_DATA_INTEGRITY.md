@@ -80,7 +80,7 @@ What already exists, so the design extends rather than reinvents:
   tracking via `total_changes()`, the `mustExist` guard (refuses missing/0-byte working copies on
   "open existing"), `stageCopy` (`VACUUM INTO` — WAL-complete frozen copy), `markDirty` crash
   recovery. A staged copy is enqueued unexamined; only the queue's drain checks its SQLite header.
-- **Write-behind pipeline** (`lib/mount/upload-queue.ts`, `lib/sync/`, `lib/mount/document-db.ts`):
+- **Write-behind pipeline** (`lib/mount/upload-queue.ts`, `lib/mount/upload-limits.ts`, `lib/mount/document-db.ts`):
   per-mount durable queue in `metadata.db.pending_uploads`, per-destination semaphore, backoff,
   replay on reopen. `performUpload` treats a resolved PUT as an ack — no post-PUT verification that
   the object landed whole. A row can back off indefinitely; `pendingCount` exists but nothing reads

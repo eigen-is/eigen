@@ -4,10 +4,10 @@ import * as path from 'node:path';
 import { and, asc, count, eq, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { StorageBackend } from '../storage';
-import { getUploadSemaphore, uploadBackoffMs } from '../sync';
 import { isSqliteFile } from './helpers';
 import type * as schema from './schema';
 import { pendingUploads } from './schema';
+import { getUploadSemaphore, uploadBackoffMs } from './upload-limits';
 
 type Db = BunSQLiteDatabase<typeof schema>;
 

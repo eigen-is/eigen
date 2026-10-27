@@ -1,9 +1,9 @@
 import { Elysia } from 'elysia';
+import { clientIpKey } from '../lib/auth/access';
 import { getDemoPersonaPool } from '../lib/auth/demo-persona-pool';
 import { signInWithScopedPassword } from '../lib/auth/guest-auth';
 import { isDemo } from '../lib/config/env';
 import { getServerConfig } from '../lib/config/server-config';
-import { clientIpKey } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import { WindowLimiter } from '../lib/core/window-limiter';
 

@@ -3,8 +3,8 @@
 // any other owner.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { getOrgDataPath } from '../config/paths';
-import { ApiError, JsonStore, PATHS } from '../core';
+import { getOrgDataPath, PATHS } from '../config/paths';
+import { ApiError, JsonStore } from '../core';
 import type { User } from '../user';
 import { makeSyntheticUser } from '../user';
 import type { HomeSettings } from './home';

@@ -1,9 +1,7 @@
-// Process-global coordination for the write-behind upload pipeline.
-//
-// Everything here is genuinely process-level and holds NO per-user/per-mount data: a concurrency
-// limiter keyed by S3 destination, the backoff function, and the shutdown deadline. The durable
-// queue + drain logic is per-mount (see lib/mount/upload-queue.ts) and self-schedules its own
-// retries — there is deliberately no global registry of mounts.
+// The part of the S3 upload pipeline the whole server shares: a limit on parallel uploads per bucket, the
+// wait between retries, and the deadline for uploads when the server shuts down. Each mount's upload queue
+// is its own and schedules its own retries, but these three must be the same for every mount, so they
+// live here. Nothing here holds user data, only bucket keys and one deadline.
 
 import { Semaphore } from '../../utils/semaphore';
 

@@ -31,7 +31,7 @@ This proposal lets Eigen's Mail app work on a mailbox the user already has at an
 | Store construction | `apps/api/src/lib/home/user-home.ts` | `new Mail(this, new MaildirStore(this))`, unconditional — the single line backend selection touches |
 | Summary index | `emails` table, `apps/api/src/lib/mail/schema.ts` | Subject, addresses, a short text excerpt, flags, mailbox. Lists and search run on it; full messages are parsed lazily. An IMAP store fills the same table from `ENVELOPE` + a body excerpt |
 | Hosted-mailboxes switch | `isMailEnabled()`, `apps/api/src/lib/config/env.ts` | Rides to the FE as `mailEnabled` on `GET /p/config`; every Mail entry point disappears when off |
-| Outbound | `createTransport()`, `apps/api/src/lib/core/mailer.ts` | One global `SMTP_*` relay with optional user/password. No per-user transport, no OAuth |
+| Outbound | `createTransport()`, `apps/api/src/lib/mailer/mailer.ts` | One global `SMTP_*` relay with optional user/password. No per-user transport, no OAuth |
 | Inbound iMIP | `Mail.mailboxDeliver`, `apps/api/src/lib/mail/mail-domain.ts` | Runs `processInboundImip` on **delivered bytes only** — a message that arrives any other way never reaches the Calendar |
 | iMIP sender trust | `verifyImipSender`, `apps/api/src/lib/mail/imip-auth.ts` | Requires an `Authentication-Results` header stamped with **our** authserv-id (`getMailDomain()`) carrying an aligned `dkim=pass` |
 | OAuth token storage | `account` table, the `account` table in `apps/api/auth-schema.ts` | `access_token`, `refresh_token`, `scope` and both expiry columns exist; better-auth fills them for social sign-ins. Nothing reads them yet |

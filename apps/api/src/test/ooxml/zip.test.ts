@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import * as zlib from 'node:zlib';
 import JSZip from 'jszip';
 import { ApiError } from '../../lib/core';
-import { peakRss } from '../../lib/core/peak-rss';
+import { peakRss } from '../../lib/document/transform/peak-rss';
 import type { ZipErrorCode } from '../../lib/ooxml/zip';
 import { MAX_DECOMPRESSED_BYTES, MAX_ZIP_ENTRIES, openZip, writeZip, ZipError } from '../../lib/ooxml/zip';
 import type { RawPart } from '../fixtures/raw-zip';
@@ -762,7 +762,7 @@ describe('a bomb stays within its peak RSS', () => {
             env: {
                 ...process.env,
                 ZIP_MODULE: Bun.resolveSync('../../lib/ooxml/zip', import.meta.dir),
-                PEAK_RSS: Bun.resolveSync('../../lib/core/peak-rss', import.meta.dir),
+                PEAK_RSS: Bun.resolveSync('../../lib/document/transform/peak-rss', import.meta.dir),
                 ZIP_PATH: path,
             },
         });

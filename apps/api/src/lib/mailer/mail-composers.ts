@@ -1,3 +1,7 @@
+// Builds the ready-made emails Eigen sends for its own features, such as a share notice, an access request
+// or a sign-in code. Each returns an OutboundMail for sendMail: the HTML in the shared email shell, and a
+// plain-text version of the same message.
+
 import { escapeHtml, stripTagsServer } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';

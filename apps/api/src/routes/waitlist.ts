@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
-import { requireOwner } from '../lib/core/access';
+import { requireOwner } from '../lib/auth/access';
 import { ApiError } from '../lib/core/errors';
-import { sendMail } from '../lib/core/mailer';
+import { sendMail } from '../lib/mailer/mailer';
 import {
     acceptWaitlistEntry,
     buildInviteEmail,

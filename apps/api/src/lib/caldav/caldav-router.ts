@@ -1,7 +1,7 @@
 import Elysia from 'elysia';
+import { requireSelf } from '../auth/access';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { EVENT_MAX_BYTES } from '../calendar/resource-store';
-import { requireSelf } from '../core/access';
 import { readBoundedBody, readBoundedBodyBytes } from '../core/http';
 import { DAV_BODY_MAX_BYTES } from '../dav/body';
 import { parseCollectionPath } from '../dav/href';

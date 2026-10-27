@@ -3,7 +3,7 @@ import { readdirSync } from 'node:fs';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { Email, EmailDraft, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { MaildirStore } from '../../lib/mail/maildir-store';
-// Static import of '../lib/core/mailer' would trigger server-config module evaluation
+// Static import of '../lib/mailer/mailer' would trigger server-config module evaluation
 // before './setup' sets EIGEN_DATA_ROOT. Dynamic-import it inside the test instead.
 import { mailRootOf, seedMaildirFolder } from '../mail-test-helpers';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
@@ -395,7 +395,7 @@ describe.skipIf(isWindows)('Mail', () => {
         });
         const draft = await assertJson<EmailSummary>(draftRes);
 
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValueOnce(false);
 
         try {

@@ -500,7 +500,7 @@ describe('ACL Bubbling', () => {
                 add: [{ id: email, read: true, write: true }],
             });
 
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             try {
                 const res = await invite(guestToken, ctx.alice.user.id, aliceMountId, chat.id, 'outsider@external.com');

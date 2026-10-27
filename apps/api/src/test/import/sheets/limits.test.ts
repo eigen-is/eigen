@@ -120,7 +120,7 @@ function measuredImport(file: Buffer): Measured {
         env: {
             ...process.env,
             READER: Bun.resolveSync('../../../lib/import/sheets/from-xlsx', import.meta.dir),
-            PEAK_RSS: Bun.resolveSync('../../../lib/core/peak-rss', import.meta.dir),
+            PEAK_RSS: Bun.resolveSync('../../../lib/document/transform/peak-rss', import.meta.dir),
         },
         stdin: new Uint8Array(file),
         timeout: 20_000,

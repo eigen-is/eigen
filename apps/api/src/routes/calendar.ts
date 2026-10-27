@@ -11,10 +11,10 @@ import type {
 import { ICS_CONTENT_TYPE, isIcsFile } from '@workspace/lib/types/drive';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { Elysia, t } from 'elysia';
+import { requireNonGuest, requireSelf, requireTeamAdmin } from '../lib/auth/access';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { EVENT_MAX_BYTES } from '../lib/calendar/resource-store';
 import { ApiError, ICS_IMPORT_MAX_EVENTS, NOT_A_CALENDAR_FILE } from '../lib/core';
-import { requireNonGuest, requireSelf, requireTeamAdmin } from '../lib/core/access';
 import { contentDisposition, readBoundedBodyBytes } from '../lib/core/http';
 import { readImportSourceBytes } from '../lib/drive';
 import { getHome } from '../lib/home';

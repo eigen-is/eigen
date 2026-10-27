@@ -1,3 +1,9 @@
+// Sends the email Eigen itself sends, such as share notices, invites, sign-in codes and mail from the mail app.
+// sendMail goes through the bundled Postfix when this server hosts mail, else through the operator's SMTP
+// relay, and only logs the message in demo mode or in dev without a mail host. It also writes the From header:
+// a person on the mail domain sends as themselves, anyone else goes out "via" the organisation.
+// composeRfc822 builds the same bytes without sending them, for delivery straight into a local mailbox.
+
 import { DEFAULT_RELAY_PORT, defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { ImipMethod } from '@workspace/lib/types/calendar';
 import { ICS_MIME } from '@workspace/lib/types/drive';
@@ -9,7 +15,7 @@ import type Mail from 'nodemailer/lib/mailer';
 import { getRelayHost, isDemo, isMailEnabled, isProduction } from '../config/env';
 import { getMailDomain, getOrgName, isInternalAddress } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
-import { ApiError } from './errors';
+import { ApiError } from '../core/errors';
 
 // Outbound email types — the inbound parsing types live in packages/lib/types/mail.ts
 type OutboundAddress = {

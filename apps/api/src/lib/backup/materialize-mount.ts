@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
-import { PATHS } from '../core/constants';
+import { PATHS } from '../config/paths';
 import { ApiError } from '../core/errors';
 import type { DatabaseConfig, SchemaType } from '../core/managed-database';
 import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config';

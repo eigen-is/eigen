@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { ApiError, PATHS } from '../core';
+import { PATHS } from '../config/paths';
+import { ApiError } from '../core';
 import { generateImagePreview } from '../shared/thumbnails';
 import type { ParsedCardPhoto } from '../vcard/types';
 import type { EmbedFormat } from './card-store';

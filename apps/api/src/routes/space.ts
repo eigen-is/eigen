@@ -1,6 +1,6 @@
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
-import { requireNonGuest, requireSelf } from '../lib/core/access';
+import { requireNonGuest, requireSelf } from '../lib/auth/access';
 import { getUserHome } from '../lib/home';
 import { betterAuth } from './auth';
 

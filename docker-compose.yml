@@ -70,7 +70,7 @@ services:
       SMTP_PORT: 25
       # Loopback plus the docker bridge subnet (same EIGEN_SUBNET the network and postfix use), so
       # Postfix/Dovecot bridge callers are trusted without the whole 172.16/12 range. The API leaves out
-      # the subnet's gateway, which a user on the host arrives from (lib/core/trusted-networks.ts).
+      # the subnet's gateway, which a user on the host arrives from (lib/auth/trusted-networks.ts).
       TRUSTED_NETWORKS: "127.0.0.0/8,::1,${EIGEN_SUBNET}"
     restart: unless-stopped
     # On SIGTERM the API gives a running backup job 30 s (SHUTDOWN_JOB_BUDGET_MS, jobs.ts), then

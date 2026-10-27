@@ -15,8 +15,8 @@ import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import type { ElysiaCustomStatusResponse, Static } from 'elysia';
 import { Elysia, t } from 'elysia';
+import { requireLocalhost, requireMailEnabled, requireNonGuest, requireSelf } from '../lib/auth/access';
 import { ApiError, contentDisposition, NOT_AN_EMAIL_FILE, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
-import { requireLocalhost, requireMailEnabled, requireNonGuest, requireSelf } from '../lib/core/access';
 import { readImportSourceBytes } from '../lib/drive';
 import {
     attachFromDrive,

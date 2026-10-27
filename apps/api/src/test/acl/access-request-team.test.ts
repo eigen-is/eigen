@@ -74,7 +74,7 @@ async function rowsTagged(user: TestUser, tag: string): Promise<Notification[]> 
 }
 
 async function catchMail() {
-    const mailer = await import('../../lib/core/mailer');
+    const mailer = await import('../../lib/mailer/mailer');
     const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
     spy.mockClear();
     return {

@@ -1,5 +1,5 @@
 import type { EmailDraft } from '@workspace/lib/types/mail';
-import type { OutboundAttachment, OutboundMail } from '../core/mailer';
+import type { OutboundAttachment, OutboundMail } from '../mailer/mailer';
 import { buildMessageId } from './mailutils';
 import { canonicalizeRecipients } from './recipients';
 

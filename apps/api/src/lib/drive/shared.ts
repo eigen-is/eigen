@@ -1,4 +1,4 @@
-import { PATHS } from '../core';
+import { PATHS } from '../config/paths';
 import type { Home } from '../home';
 import { SHARED_DB_CONFIG } from './db-config';
 

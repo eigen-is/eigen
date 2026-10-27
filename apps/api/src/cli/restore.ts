@@ -44,12 +44,12 @@ import {
     getDataRoot,
     homeDirUnder,
     ORG_HOMES_DIR,
+    PATHS,
     SERVER_DIR,
     TEAM_HOMES_DIR,
     USER_HOMES_DIR,
 } from '../lib/config/paths';
 import { API_IMAGE_KEY, PIN_KEYS } from '../lib/config/release';
-import { PATHS } from '../lib/core/constants';
 import { readEnvFile } from './env-file';
 import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
 import type { Ui } from './ui';

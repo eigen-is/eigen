@@ -1,13 +1,18 @@
+// The guards a route calls before it acts. requireSelf, requireAdmin, requireTeamAccess and the like throw
+// a 403 ApiError when the caller may not do this. requireLocalhost admits only callers on a trusted network,
+// such as the mail containers that call the internal routes directly. clientIpKey is the one way to read
+// the real client IP behind Caddy, which every rate limit keys on.
+
 import { isMailAppEnabled } from '../config/env';
+import { ApiError } from '../core/errors';
 import type { User } from '../user';
 import { getMemberships, getOrgRole } from '../user';
-import { ApiError } from './errors';
 import type { Route, TrustedNetworks } from './trusted-networks';
 import { matchesCidr, normalizeIp, readRouteTable, scopeTrustedNetworks } from './trusted-networks';
 
 const DEFAULT_TRUSTED = '127.0.0.0/8,::1';
 
-// Read once, on first use rather than at import, since the core barrel re-exports this module.
+// Read on first use rather than at import, so a module that only needs a guard reads no route table.
 let routes: Route[] | null = null;
 let trust: (TrustedNetworks & { source: string }) | null = null;
 

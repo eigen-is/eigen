@@ -123,7 +123,7 @@ if (existsSync(join(DATA_ROOT, 'server', 'config.json'))) {
 mkdirSync(join(DATA_ROOT, 'server'), { recursive: true });
 mkdirSync(join(DATA_ROOT, 'home'), { recursive: true });
 
-// Same MIME engine the real app uses for outbound mail (composeRfc822 in lib/core/mailer.ts) —
+// Same MIME engine the real app uses for outbound mail (composeRfc822 in lib/mailer/mailer.ts) —
 // used directly rather than through composeRfc822/OutboundMail so the thread-linking headers
 // (Message-ID/In-Reply-To/References) stay under our control. HTML is optional: when given, this
 // produces a real multipart/alternative message so the mail client renders lists/paragraphs
@@ -236,7 +236,7 @@ async function main(): Promise<void> {
     const { docSchema } = await import('../lib/document/doc-schema');
     const { pushTeamAvatar, sendToHome } = await import('../lib/home/home-relay');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
-    const { renderAttachmentPills } = await import('../lib/core/mail-template');
+    const { renderAttachmentPills } = await import('../lib/mailer/mail-template');
     const { createVCard } = await import('../lib/vcard');
 
     // Tiny quotas + no signups; local-id storage came from the setup call. Apply before any home

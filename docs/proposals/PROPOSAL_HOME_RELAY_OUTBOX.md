@@ -417,7 +417,7 @@ staged uploads).
   endpoint. *Recommendation:* logs + `GET /settings/outbox` — infra state belongs on the operator
   surface; a bell notification for a retry-exhausted delivery would itself ride the machinery
   being reported broken.
-- **Q5 — Backoff fact placement?** Import `uploadBackoffMs` from `lib/sync` (couples home → sync)
+- **Q5 — Backoff fact placement?** Import `uploadBackoffMs` from `lib/mount/upload-limits` (couples home → mount)
   vs duplicate vs lift. *Recommendation:* lift the full-jitter function to `utils/` and have both
   queues import it — one source of truth per fact, and the sync module's comment already frames it
   as generic.

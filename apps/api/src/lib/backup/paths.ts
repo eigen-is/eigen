@@ -17,8 +17,7 @@ import {
     SERVER_ARCHIVE_EXTENSION,
     SERVER_ARCHIVE_PREFIX,
 } from '@workspace/lib/validation';
-import { CERT_FILES, CERTS_DIR, DKIM_DIR, getDataRoot, SERVER_DIR } from '../config/paths';
-import { PATHS } from '../core/constants';
+import { CERT_FILES, CERTS_DIR, DKIM_DIR, getDataRoot, PATHS, SERVER_DIR } from '../config/paths';
 import { ApiError } from '../core/errors';
 
 // Why the disk of `dir` has no room for `needed` bytes, or null: the one wording of every backup's and stage's room

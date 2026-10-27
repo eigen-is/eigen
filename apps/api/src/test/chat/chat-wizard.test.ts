@@ -490,7 +490,7 @@ describe('Chat wizard — create with members', () => {
     test('notifies added members in-app but suppresses the share email', async () => {
         // Turn userOnAclAdd on so a plain share WOULD email bob — the wizard must still not.
         await setUserAclEmail(true);
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -519,7 +519,7 @@ describe('Chat wizard — create with members', () => {
         await setGuestAclEmail(true);
         const outsiderEmail = `outsider-${randomUUID()}@example.org`;
 
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
@@ -663,7 +663,7 @@ describe('Chat wizard — create with members', () => {
 
     test('a plain PUT acl share still emails when userOnAclAdd is on (suppression is opt-in)', async () => {
         await setUserAclEmail(true);
-        const mailer = await import('../../lib/core/mailer');
+        const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 

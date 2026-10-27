@@ -556,7 +556,7 @@ describe('Share Registry', () => {
             const { updateServerSettings } = await import('../../lib/config/server-settings');
             await updateServerSettings({ guests: { openSignup: false } });
 
-            const mailer = await import('../../lib/core/mailer');
+            const mailer = await import('../../lib/mailer/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
             try {
                 // Mail-grant the team-owned doc to the unknown external email (Task 9 send path).

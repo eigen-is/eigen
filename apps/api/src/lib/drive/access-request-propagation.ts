@@ -1,10 +1,10 @@
 import { parseOwnerId } from '@workspace/lib/types';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
-import { composeAccessRequestEmail } from '../core/mail-composers';
-import { sendMail } from '../core/mailer';
 import { WindowLimiter } from '../core/window-limiter';
 import { pullDrivePath, pullTeamMembersToNotify, sendToHome } from '../home/home-relay';
+import { composeAccessRequestEmail } from '../mailer/mail-composers';
+import { sendMail } from '../mailer/mailer';
 import { getUserById } from '../user';
 
 // One mail per requester, path and recipient an hour: the notification folds a repeat on its tag, a mail
