@@ -7,6 +7,7 @@ import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { debouncePerOwner } from '../debounce-per-owner';
 import {
+    calendarKeys,
     invalidateCalendarCreated,
     invalidateCalendarDeleted,
     invalidateCalendarShared,
@@ -44,6 +45,8 @@ export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, 
 
         case SSEventType.CALENDAR_SHARED:
             invalidateCalendarShared(queryClient, userId);
+            // The event names the sharing owner, whose share dialog lists who has access.
+            queryClient.invalidateQueries({ queryKey: calendarKeys.accessAll(event.ownerId) });
             return true;
 
         case SSEventType.CALENDAR_UNSHARED:

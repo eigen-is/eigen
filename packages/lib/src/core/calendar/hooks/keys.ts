@@ -20,7 +20,8 @@ export const calendarKeys = {
     event: (ownerId: string, calendarId: string, id: string) =>
         [...calendarKeys.events(ownerId), calendarId, id] as const,
     sharedCalendars: (ownerId: string) => [...calendarKeys.owner(ownerId), 'shared'] as const,
-    access: (ownerId: string, calendarId: string) => [...calendarKeys.owner(ownerId), 'access', calendarId] as const,
+    accessAll: (ownerId: string) => [...calendarKeys.owner(ownerId), 'access'] as const,
+    access: (ownerId: string, calendarId: string) => [...calendarKeys.accessAll(ownerId), calendarId] as const,
 };
 
 // --- Invalidation functions (ownerId-scoped, used from mutation onSuccess) ---

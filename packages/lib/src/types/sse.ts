@@ -1,7 +1,7 @@
 // The events the server sends on a tab's event stream, shared by the API that builds them and the
-// handlers in the browser that read them. An event carries only the ids a handler needs to know which
-// queries to refetch, never the changed data itself. A new event type gets its name in SSEventType and
-// its shape in the SSEvent union.
+// handlers in the browser that read them. An event carries the ids a handler needs to know which queries
+// to refetch, and rarely data (a notification's display text, the home's data epochs). A new event type
+// gets its name in SSEventType and its shape in the SSEvent union.
 
 import type { NotificationType } from './notification';
 

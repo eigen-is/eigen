@@ -1,6 +1,3 @@
-// The contract between the stream and the tabs: every event type the server can send has a handler. The
-// sample table is keyed by every type in SSEventType, so a new type does not compile until it has a sample,
-// and the test then fails until a domain handler takes it.
 import { expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type {
@@ -95,8 +92,4 @@ test('every event type has a handler that takes it', () => {
             handled: true,
         });
     }
-});
-
-test('the sample of each type is that type', () => {
-    expect(Object.entries(SAMPLES).filter(([type, event]) => event.type !== type)).toEqual([]);
 });

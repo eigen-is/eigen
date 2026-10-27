@@ -1,5 +1,5 @@
 // Handles the notification events from the stream: each refreshes the bell, and notification:created
-// also raises the toast. This is the only handler that toasts, so every toast has a row in the bell.
+// also raises the toast. Every toast has a row in the bell.
 
 import type { QueryClient } from '@tanstack/react-query';
 import { publicUserKeys } from '@workspace/lib/public';

@@ -37,7 +37,7 @@ export function useSSE(): void {
                 try {
                     handleSSEvent(JSON.parse(message.data) as SSEvent, queryClient, userId);
                 } catch (e) {
-                    console.error('Failed to parse SSE event', e);
+                    console.error('SSE event failed', e);
                 }
             };
 
@@ -46,7 +46,6 @@ export function useSSE(): void {
                 // EventSource reconnects by itself after a network error, but not after an HTTP error such as a 502.
                 if (es.readyState === EventSource.CLOSED) {
                     es.close();
-                    eventSource = null;
                     const jitter = retryDelay * 0.2 * Math.random();
                     retryTimer = setTimeout(connect, retryDelay + jitter);
                     retryDelay = Math.min(retryDelay * 2, 30000);
@@ -60,7 +59,6 @@ export function useSSE(): void {
             stopped = true;
             clearTimeout(retryTimer);
             eventSource?.close();
-            eventSource = null;
         };
     }, [isAuthenticated, userId, queryClient]);
 }
