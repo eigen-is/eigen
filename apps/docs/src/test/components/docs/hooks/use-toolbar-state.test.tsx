@@ -135,12 +135,20 @@ test('a long selection draws what its first 10,000 positions are, a short one wh
     await act(async () => long.commands.selectAll());
     expect(seen.at(-1)).toMatchObject({ bold: false, selectionEmpty: false });
 
-    // CPU time, not the wall clock, which a loaded machine stretches past the bound.
-    const started = process.cpuUsage();
-    for (let index = 0; index < 20; index++)
-        await act(async () => long.view.dispatch(long.state.tr.setMeta('remote', index)));
-    const { user, system } = process.cpuUsage(started);
-    expect((user + system) / 1000 / 20).toBeLessThan(10);
+    // CPU time against a selection under the cap, so load slows both. Capped, the whole document costs about five times
+    // what 9,000 positions do, and read whole, over a hundred times. A first round warms the JIT.
+    const cost = async () => {
+        const started = process.cpuUsage();
+        for (let index = 0; index < 20; index++)
+            await act(async () => long.view.dispatch(long.state.tr.setMeta('remote', index)));
+        const { user, system } = process.cpuUsage(started);
+        return user + system;
+    };
+    await cost();
+    const all = await cost();
+    await act(async () => long.commands.setTextSelection({ from: 1, to: 9000 }));
+    const short = await cost();
+    expect(all).toBeLessThan(20 * short);
     long.destroy();
 });
 
