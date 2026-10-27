@@ -108,6 +108,9 @@ type EmailDraftProps = {
         options?: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[]; forceFullSave?: boolean },
     ) => Promise<EmailDraftType | null | undefined>;
     onDraftIdAssigned?: (id: string) => void;
+    // A forward's parts stay in history state until a saved draft holds them all, so a reload before
+    // then attaches them again.
+    onForwardedPartsSaved?: () => void;
     isSending: boolean;
     // The draft flush and the access probe run before the send mutation starts; the route folds
     // that earlier window into the isSending it feeds back here and to the toolbar.
@@ -128,6 +131,7 @@ export function EmailDraft({
     sendDraft,
     onAutoSave,
     onDraftIdAssigned,
+    onForwardedPartsSaved,
     isSending,
     onPreparingSendChange,
     filePickerOpen,
@@ -262,6 +266,7 @@ export function EmailDraft({
     // added in the original's order, and a part that fails was toasted by the hook and is left out.
     // A composer that opens on the saved draft finds them already in it and attaches none again.
     const didAttachForwardedPartsRef = useRef(false);
+    const [forwardedPartsAttached, setForwardedPartsAttached] = useState(false);
     const attachForwardedParts = useEffectEvent(async (parts: FileSubject[]) => {
         const results = await Promise.all(
             parts.map((part) => attachMailPartMutation.mutateAsync(part).catch(() => null)),
@@ -276,12 +281,24 @@ export function EmailDraft({
                 contentType: result.contentType,
             });
         }
+        setForwardedPartsAttached(true);
     });
     useEffect(() => {
         if (email || didAttachForwardedPartsRef.current || !forwardedParts?.length) return;
         didAttachForwardedPartsRef.current = true;
         void attachForwardedParts(forwardedParts);
     }, [forwardedParts]);
+
+    // A save embeds a chip's upload and drops its tempId. The first save can run while a part still
+    // uploads, so the parts are saved only once the draft has an id and no forwarded chip waits.
+    const forwardedPartsSaved =
+        forwardedPartsAttached &&
+        !!state.id &&
+        !state.attachments.some((a) => a.key.startsWith('forward-') && a.tempId);
+    const reportForwardedPartsSaved = useEffectEvent(() => onForwardedPartsSaved?.());
+    useEffect(() => {
+        if (forwardedPartsSaved) reportForwardedPartsSaved();
+    }, [forwardedPartsSaved]);
 
     // Every actual send funnels through here: stop auto-saving (we're leaving this draft behind) then
     // dispatch. Deferring disableSaves() to dispatch time is what keeps the draft editable when the

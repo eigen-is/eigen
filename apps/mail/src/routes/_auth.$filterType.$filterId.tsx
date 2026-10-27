@@ -409,6 +409,7 @@ function MailRoute() {
                                     sendDraft={actions.handleSendEmail}
                                     onAutoSave={actions.saveDraft}
                                     onDraftIdAssigned={actions.handleDraftIdAssigned}
+                                    onForwardedPartsSaved={actions.handleForwardedPartsSaved}
                                     isSending={isSending}
                                     onPreparingSendChange={setPreparingSend}
                                     filePickerOpen={filePickerOpen}

@@ -165,14 +165,25 @@ export function useMailActions() {
     };
 
     // After the first auto-save of a fresh compose, add ?mailId=... to the URL so a reload lands
-    // back on the same draft. Keep mode='compose' and composeSessionKey, or the EmailDraft remount key
-    // would flip and lose the typing in progress. The forwarded parts go: the draft holds them now,
-    // and a reload must not attach them a second time.
+    // back on the same draft. Keep mode='compose' and the history state, or the EmailDraft remount key
+    // would flip and lose the typing in progress. The forwarded parts stay: that save may have run while
+    // one still uploaded.
     const handleDraftIdAssigned = (id: string) => {
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
             search: (prev) => ({ ...prev, mailId: id, mode: 'compose' }),
+            state: true,
+            replace: true,
+        });
+    };
+
+    // A saved draft holds every part the forward carries, so a reload must not attach them a second time.
+    const handleForwardedPartsSaved = () => {
+        navigate({
+            to: Route.fullPath,
+            params: { filterType, filterId },
+            search: true,
             state: (prev) => ({ ...prev, forwardedParts: undefined }),
             replace: true,
         });
@@ -448,6 +459,7 @@ export function useMailActions() {
                 forceFullSave: options.forceFullSave,
             }),
         handleDraftIdAssigned,
+        handleForwardedPartsSaved,
         isSendPending: sendDraftMutation.isPending,
         imagesLoadedFor,
         loadRemoteImages: setImagesLoadedFor,
