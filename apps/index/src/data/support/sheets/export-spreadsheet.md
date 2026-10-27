@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, export, download, excel, xlsx, pdf]
 related: [sheets/import-excel, sheets/get-started]
 order: 160
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 You can download a copy of any spreadsheet to your computer without removing it from Eigen. Three formats are available: Excel, PDF, and web page.
@@ -23,7 +23,9 @@ You can download a copy of any spreadsheet to your computer without removing it 
 
 The downloaded file takes the name of the spreadsheet.
 
-A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells and sheets past a size limit. To keep every cell, download it as Excel.
+A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells, charts, images, and sheets past a size limit. A sheet cut short in the PDF keeps the columns one page holds, 192 at the default width, because the page would cut off the rest. The web page keeps more columns while all of the sheet's rows fit. To keep everything, download it as Excel.
+
+In the PDF and the web page, text that doesn't fit its cell's row is cut off at the row's edge, as it is in the spreadsheet.
 
 ## What carries over to Excel
 

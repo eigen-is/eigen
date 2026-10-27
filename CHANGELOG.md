@@ -4,10 +4,17 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Changed
+
+- **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, about 190 at the default width, because the page cuts off the rest. A web page download keeps more columns while all of the sheet's rows fit
+- **Spreadsheet downloads** — a cell's text stays inside its row in a web page or PDF download, as it does in the editor. A wrapped cell taller than its row shows the part that fits
+
 ### Fixed
 
 - **Excel files** — a row Excel shows at normal height comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
 - **Spreadsheet PDF** — a spreadsheet with thousands of small sheets prints its first 2,000 sheets instead of failing
+- **Spreadsheet PDF** — a sheet with one cell of thousands of lines prints on one page instead of thousands
+- **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads as a web page or PDF with the ones that fit and leaves the rest out, instead of failing. Its preview shows the charts that fit instead of nothing
 
 ## [0.4.0] - 2026-10-26
 
