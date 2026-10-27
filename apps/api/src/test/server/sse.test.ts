@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { SSEventDrive } from '@workspace/lib/types/sse';
+import type { SSEvent, SSEventDrive } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
 import { authedRequest, collectSSE, getTestContext } from '../setup';
 
@@ -154,6 +155,36 @@ describe('SSE', () => {
             // Bob should receive DRIVE_ACL_UPDATED (not just SHARED/UNSHARED) since the path was already shared
             const aclUpdated = bobSSE.events.filter((e) => e.type === 'drive:acl-updated');
             expect(aclUpdated.length).toBeGreaterThanOrEqual(1);
+        });
+    });
+
+    describe('SSE Drive Events', () => {
+        // An event names the path for invalidation and nothing more: the ACL lists every sharee's email, and the
+        // relayed copy reaches every member's tab.
+        test('a drive event carries the path ids, not the path row', async () => {
+            const drive = ctx.alice.api.drive({ ownerId: ctx.alice.user.id })({ mountId: 'default' });
+            const { data: root } = await drive.root.get();
+            if (!root) throw new Error('no root');
+            const { data: folder } = await drive.folder({ pathId: root.id }).post({ folderName: 'sse-payload' });
+            if (!folder) throw new Error('no folder');
+            await drive.path({ pathId: folder.id }).acl.put({
+                add: [{ id: ctx.bob.user.email, read: true, write: false }],
+            });
+
+            const isRename = (e: SSEvent): e is SSEventDrive => e.type === SSEventType.DRIVE_PATH_RENAMED;
+            const aliceSSE = await collectSSE(ctx.alice.user.id);
+            await drive.path({ pathId: folder.id }).rename.put({ newName: 'sse-payload-renamed' });
+            await aliceSSE.next(isRename);
+            aliceSSE.stop();
+
+            const renamed = aliceSSE.events.find(isRename);
+            expect(renamed?.path).toEqual({
+                ownerId: ctx.alice.user.id,
+                mountId: 'default',
+                id: folder.id,
+                parentId: root.id,
+                mimeType: folder.mimeType,
+            });
         });
     });
 });
