@@ -189,6 +189,7 @@
     p[data-type="subtitle"],
     hr,
     .page-break,
+    nav[data-type="table-of-contents"],
     blockquote,
     pre,
     table,
@@ -265,6 +266,37 @@
         color: var(--color-muted-foreground);
         text-align: center;
         padding-top: 0.25em;
+    }
+
+    /* Table of contents: the outline's headings, a line each, indented by level. The docx writer reads the indents */
+
+    nav[data-type="table-of-contents"] {
+        margin: 1em 0;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level] {
+        display: block;
+        padding: 0.15em 0;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level="2"] {
+        padding-left: 1.5em;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level="3"] {
+        padding-left: 3em;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level="4"] {
+        padding-left: 4.5em;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level="5"] {
+        padding-left: 6em;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level="6"] {
+        padding-left: 7.5em;
     }
 
     /* Images */

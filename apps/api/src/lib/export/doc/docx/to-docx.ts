@@ -22,6 +22,7 @@ import type { Context, Package } from './package';
 import { BAND_TAGS, DOCUMENT_NAMESPACES, sectionXml, separatorXml, settingsXml, withNoteNumber } from './package';
 import { blocksOf, blocksXml, withoutAfter } from './paragraphs';
 import { styleDefinitions, stylesXml } from './styles';
+import { docxOutline } from './table-of-contents';
 
 // Every look comes from eigen-prose.css. No schema checked the CRDT's JSON, so attrs are checked where they are used.
 export function writeDocx(
@@ -54,6 +55,7 @@ export function writeDocx(
         charts: officeCharts('word'),
         lastDrawingId: 0,
         footnotes: [],
+        outline: docxOutline(json),
         // A Spacer's and a figure's mark draw in the Normal's Regular.
         faces: new Map([[normal.font, new Set<FontSlot>(['Regular'])]]),
         normal,

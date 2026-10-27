@@ -15,6 +15,7 @@ import type { FontSlot } from './fonts';
 import type { List } from './numbering';
 import type { Block, NumberingRef } from './paragraphs';
 import type { Styles } from './styles';
+import type { DocxOutline } from './table-of-contents';
 
 export const DOCUMENT_NAMESPACES = [
     `xmlns:w="${W_NS}"`,
@@ -50,6 +51,8 @@ export type Package = {
     faces: Map<string, Set<FontSlot>>;
     // The notes the body references, note n at index n - 1.
     footnotes: JSONContent[];
+    // The body's headings that a table of contents lists and links to.
+    outline: DocxOutline;
     // The doc's Normal, which docDefaults and the Normal style write, and the styles built on it.
     normal: NormalStyle;
     styles: Styles;

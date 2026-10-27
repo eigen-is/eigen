@@ -27,10 +27,10 @@ import {
     TITLE_SELECTORS,
     twips,
 } from '../../../document/looks';
-import { proseValue } from '../../../document/prose-css';
+import { proseValue, proseValueIfSet } from '../../../document/prose-css';
 import { W_NS } from '../../../ooxml/ooxml';
 import type { StyleId } from '../../../ooxml/wordml';
-import { codeBlockStyle, headingStyleName, JUSTIFICATION, STYLE_NAMES } from '../../../ooxml/wordml';
+import { codeBlockStyle, headingStyleName, JUSTIFICATION, STYLE_NAMES, tocStyleName } from '../../../ooxml/wordml';
 import type { Package } from './package';
 import type { ParagraphProps } from './paragraphs';
 import { pPrXml, TITLE_STYLES } from './paragraphs';
@@ -87,6 +87,8 @@ function styleXml(style: StyleDef): string {
         .filter(Boolean)
         .join('');
 }
+
+const TOC_ENTRY = '.eigen-prose nav[data-type="table-of-contents"]';
 
 // A 1 pt line for paragraphs that hold no text of their own: a bare one is a full Normal line.
 export const HAIRLINE_TWIPS = 20;
@@ -160,6 +162,25 @@ export function styleDefinitions(normal: NormalStyle): StyleDef[] {
             rPr: { spacing: tracking, size: halfPoints(sizePt), ...look },
         };
     });
+    // Word's own, as its Update Table rewrites the entries in them: spaced and indented by level as the editor draws them.
+    const entryPadding = proseValue(`${TOC_ENTRY} > [data-level]`, 'padding');
+    const tocs = HEADING_LOOKS.map((_look, index): StyleDef => {
+        const level = index + 1;
+        const indent = proseValueIfSet(`${TOC_ENTRY} > [data-level="${level}"]`, 'padding-left');
+        return {
+            type: 'paragraph',
+            id: `TOC${level}`,
+            name: tocStyleName(level),
+            basedOn: 'Normal',
+            next: 'Normal',
+            uiPriority: 39,
+            unhideWhenUsed: true,
+            pPr: {
+                spacing: { before: 0, after: twips(2 * cssPt(boxSide(entryPadding, 'top'), BODY.sizePt)) },
+                ...(indent && { ind: { left: twips(cssPt(indent, BODY.sizePt)) } }),
+            },
+        };
+    });
     return [
         {
             type: 'paragraph',
@@ -199,6 +220,7 @@ export function styleDefinitions(normal: NormalStyle): StyleDef[] {
         },
         ...titles,
         ...headings,
+        ...tocs,
         {
             type: 'paragraph',
             id: 'Quote',
