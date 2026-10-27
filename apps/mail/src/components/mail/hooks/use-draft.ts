@@ -1,7 +1,7 @@
 // The composer's state for one draft and its auto-save. A save fires a short while after the fields
 // drift from what the server has, and once more when the composer closes. The prefill of a reply or
-// forward counts as saved, so a draft only reaches Drafts once the user changes something. The pure
-// pieces are exported, so their tests need no React.
+// forward counts as saved, so a draft only reaches Drafts once the user changes something. The field
+// conversions and the attachment reconcile are exported for their own tests.
 
 import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth } from '@workspace/lib/auth';
@@ -179,11 +179,11 @@ export function initFields(
 }
 
 // A state whose fields the server has, or that the prefill seeded: nothing in it is an edit yet.
-export function savedState(fields: DraftFields): DraftState {
+function savedState(fields: DraftFields): DraftState {
     return { fields, lastSavedFingerprint: fingerprintFields(fields) };
 }
 
-export function isDirty(state: DraftState): boolean {
+function isDirty(state: DraftState): boolean {
     return fingerprintFields(state.fields) !== state.lastSavedFingerprint;
 }
 
@@ -270,7 +270,7 @@ export function mergeServerAttachments(
     return { serverActual, localNext: [...withoutRemoved, ...inFlightAdditions] };
 }
 
-export function draftReducer(state: DraftState, action: Action): DraftState {
+function draftReducer(state: DraftState, action: Action): DraftState {
     switch (action.type) {
         case 'set-field':
             return { ...state, fields: { ...state.fields, [action.field]: action.value } };
