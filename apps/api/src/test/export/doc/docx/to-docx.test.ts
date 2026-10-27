@@ -3193,6 +3193,67 @@ describe('docx writer — the page', () => {
     });
 });
 
+// A page-less doc opens in Word's Web Layout, where a wide table fits, and keeps the widths the editor draws past the
+// text. A paged doc writes neither, so its file is the one it was.
+describe('docx writer — a page-less doc', () => {
+    const PAGELESS: PageSetup = { ...DEFAULT_PAGE_SETUP, pageless: true };
+    const wideTable = (...widths: number[]) => table(tr(...widths.map((width) => td({ colwidth: [width] }, p()))));
+    const gridOf = (tbl: XmlElement | undefined) => {
+        const grid = child(tbl, 'tblGrid');
+        return grid ? xmlChildren(grid, W, 'gridCol').map((gridCol) => Number(w(gridCol, 'w'))) : [];
+    };
+
+    test('settings open it in Web Layout, w:view the first of the settings, as CT_Settings orders them', async () => {
+        const settings = await part(
+            await unzip(doc(p(text('x'))), undefined, undefined, PAGELESS),
+            'word/settings.xml',
+        );
+        expect(shape(settings)).toEqual(['view', 'embedTrueTypeFonts', 'defaultTabStop', 'compat']);
+        expect(w(child(settings, 'view'), 'val')).toBe('web');
+    });
+
+    test('a table in the body keeps its widths past the text column, each column within the paper', async () => {
+        const [wide, past] = xmlChildren(
+            await bodyOf(doc(wideTable(667, 667), wideTable(900, 100)), undefined, undefined, PAGELESS),
+            W,
+            'tbl',
+        );
+        expect(gridOf(wide)).toEqual([10005, 10005]);
+        expect(w(child(child(wide, 'tblPr'), 'tblW'), 'w')).toBe('20010');
+        // A4's 210 mm is 11906 twips.
+        expect(gridOf(past)).toEqual([11906, 1500]);
+    });
+
+    test('a table in a list, a quote or a cell still fits its column, as the editor fits it', async () => {
+        const tables = descendants(
+            await bodyOf(
+                doc(
+                    ul(li(p(), wideTable(667, 667))),
+                    quote(wideTable(667, 667)),
+                    table(tr(td({ colwidth: [700] }, wideTable(667, 667)))),
+                ),
+                undefined,
+                undefined,
+                PAGELESS,
+            ),
+            W,
+            'tbl',
+        );
+        const totals = tables.map((tbl) => gridOf(tbl).reduce((sum, width) => sum + width, 0));
+        // The list's, the quote's and the outer table's 700 px column hold their table; the cell's table fits the cell.
+        expect(totals[0]).toBeLessThanOrEqual(9915);
+        expect(totals[1]).toBeLessThanOrEqual(9915);
+        expect(totals[2]).toBe(10500);
+        expect(totals[3]).toBeLessThan(10500);
+    });
+
+    test('a paged doc writes no view and fits the same table to its column', async () => {
+        const settings = await part(await unzip(doc(p(text('x')))), 'word/settings.xml');
+        expect(shape(settings)).toEqual(['embedTrueTypeFonts', 'defaultTabStop', 'compat']);
+        expect(gridOf(only(xmlChildren(await bodyOf(doc(wideTable(667, 667))), W, 'tbl')))).toEqual([4815, 4815]);
+    });
+});
+
 describe('docx writer — headers and footers', () => {
     const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
     const page = (value: string) => ({ type: 'pageNumber', attrs: { kind: value } });

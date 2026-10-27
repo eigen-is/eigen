@@ -106,6 +106,7 @@ describe('the page', () => {
             headerDistance: mm(567),
             footerDistance: mm(567),
             differentFirstPage: false,
+            pageless: false,
         });
         expect(warnings).toEqual([]);
     });

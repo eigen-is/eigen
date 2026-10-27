@@ -249,6 +249,7 @@ describe('the page', () => {
             headerDistance: 8,
             footerDistance: 5,
             differentFirstPage: false,
+            pageless: false,
         };
         const source = buildAllFeaturesDocJson();
         const { page: read } = docxToPmJson(

@@ -101,6 +101,7 @@ describe('document/doc', () => {
             headerDistance: 8,
             footerDistance: 10,
             differentFirstPage: false,
+            pageless: false,
         };
         let transactions = 0;
         doc.on('afterTransaction', () => transactions++);
