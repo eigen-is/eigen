@@ -30,6 +30,7 @@ import {
     BUDGET,
     KANBAN,
     MAILS,
+    PERSONAS,
     PHOTOS,
     personaByRole,
     SHIFTS,
@@ -212,6 +213,19 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 "SELECT count(*) AS n FROM emails WHERE isReplied = 1 AND mailbox = 'INBOX'",
             );
             expect(replied[0].n).toBeGreaterThanOrEqual(1);
+
+            // Each persona's inbox holds one unread message, the newest; the seed marked the rest read.
+            for (const persona of PERSONAS) {
+                const user = query<{ id: string }>(
+                    usersDb,
+                    `SELECT id FROM user WHERE email = '${persona.key}@${MAIL_DOMAIN}'`,
+                );
+                const inbox = query<{ id: string; isRead: number }>(
+                    join(root, 'home', user[0].id, 'eigen.mail', 'mail.db'),
+                    "SELECT id, isRead FROM emails WHERE mailbox = 'INBOX' ORDER BY date DESC, id DESC",
+                );
+                expect(inbox.filter((email) => !email.isRead).map((email) => email.id)).toEqual([inbox[0].id]);
+            }
 
             // A reply quotes the message it answers below its own text, in the HTML and the text part alike, as
             // Eigen's composer quotes on reply.

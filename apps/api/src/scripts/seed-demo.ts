@@ -29,7 +29,7 @@ import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
-import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { stripTagsServer } from '@workspace/lib/html';
@@ -1028,6 +1028,19 @@ async function main(): Promise<void> {
         for (const doc of personalDocs) {
             const docPath = await createDoc(ownerHome.drive, 'default', ownerRoot.id, doc.name, doc.json, owner);
             await uploadMedia(ownerHome.drive, 'default', docPath, doc.media, owner);
+        }
+    }
+
+    // --- Unread: only the newest message in each persona's inbox, the rest read as if they had opened it. Runs last,
+    // after every delivery, through the store's mark-read path, which sets the message's Maildir seen flag. ---
+    for (const persona of PERSONAS) {
+        const owner = userByKey.get(persona.key);
+        if (!owner) throw new Error(`No user for persona ${persona.key}`);
+        const ownerMail = (await getHome(owner.id)).mail;
+        // Newest first, so everything after the head is older.
+        const [, ...older] = await ownerMail.mailboxGet(MAILBOX_INBOX);
+        for (const email of older) {
+            if (!email.isRead) await ownerMail.messageSetRead(email.id, true);
         }
     }
 
