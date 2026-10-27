@@ -165,14 +165,15 @@ export function useMailActions() {
     };
 
     // After the first auto-save of a fresh compose, add ?mailId=... to the URL so a reload lands
-    // back on the same draft. Keep mode='compose' and preserve history state so composeSessionKey
-    // survives — otherwise the EmailDraft remount key would flip and nuke the in-progress typing.
+    // back on the same draft. Keep mode='compose' and composeSessionKey, or the EmailDraft remount key
+    // would flip and lose the typing in progress. The forwarded parts go: the draft holds them now,
+    // and a reload must not attach them a second time.
     const handleDraftIdAssigned = (id: string) => {
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
             search: (prev) => ({ ...prev, mailId: id, mode: 'compose' }),
-            state: true,
+            state: (prev) => ({ ...prev, forwardedParts: undefined }),
             replace: true,
         });
     };
