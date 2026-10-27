@@ -1,3 +1,7 @@
+// The Members section of a team's detail in the Admin app: the team's members, each with a button that
+// takes them out, and an Add button that picks one of the organization's members to join. A user's
+// detail has the same section the other way round, the teams that user is in.
+
 import { useAddTeamMembers, useMembers, useRemoveTeamMember } from '@workspace/lib/admin';
 import { useTeamMembers } from '@workspace/lib/team';
 import { EmptyState, TooltipButton } from '@workspace/ui';

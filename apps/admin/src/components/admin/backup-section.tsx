@@ -1,3 +1,7 @@
+// The Backup section of one home in the Admin app's user and team details: its archives and safety
+// copies, the job that runs now, and the buttons that back up, upload, verify, restore and delete.
+// Guests never reach it: the admin user list leaves them out and guest homes have their own route.
+
 import {
     useBackupArtifacts,
     useBackupJobs,
@@ -65,8 +69,6 @@ type BackupSectionProps = {
     ownerId: string;
 };
 
-// The backup pane of one home, in the admin user and team detail panes. Guests never reach it: the
-// admin user list excludes them and guest homes have their own route.
 export function BackupSection({ ownerId }: BackupSectionProps) {
     const [confirm, setConfirm] = useState<BackupConfirm | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
@@ -110,7 +112,7 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-muted-foreground">Backup</h3>
+                <h3 className="text-sm font-medium">Backup</h3>
                 <div className="flex items-center gap-1">
                     <Button
                         variant="ghost"

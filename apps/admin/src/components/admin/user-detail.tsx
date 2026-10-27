@@ -1,6 +1,7 @@
-// The detail of one account on the Admin app's users and guests pages: its role, teams, activity,
-// storage and backups, with a danger zone that deletes it. The toolbar above it resets a password.
-// The users page shows it beside the list when the URL names an account.
+// The detail of one account on the Admin app's users and guests pages: its role and activity, then its
+// teams, storage and backups as sections like a team's detail, and a danger zone that deletes it. The
+// toolbar above it resets a password. The users page shows it beside the list when the URL names an
+// account.
 
 import { useNavigate } from '@tanstack/react-router';
 import { useDeleteUser, useUpdateMemberRole } from '@workspace/lib/admin';
@@ -95,54 +96,37 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
 
             <div className="space-y-4">
                 {!guest && (
-                    <>
-                        <div>
-                            <h3 className="text-sm font-medium text-muted-foreground mb-2">Role</h3>
-                            {user.role === null ? (
-                                <p className="text-sm text-muted-foreground">
-                                    No organization — this user is not a member of the organization
-                                </p>
-                            ) : user.role === 'owner' ? (
-                                <Badge variant="default">owner</Badge>
-                            ) : (
-                                <Select
-                                    value={draftRole ?? undefined}
-                                    // The two items below are the whole of what this can hand back.
-                                    onValueChange={(value) => setDraftRole(value === 'admin' ? 'admin' : 'member')}
-                                >
-                                    <SelectTrigger className="w-40">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="admin">Admin</SelectItem>
-                                        <SelectItem value="member">Member</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            )}
-                        </div>
-
-                        {/* Only a member of the organization can join one of its teams. */}
-                        {user.role !== null && <UserTeamsSection user={user} organizationId={organizationId} />}
-                    </>
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-muted-foreground">Role</span>
+                        {user.role === null ? (
+                            <span className="text-sm text-muted-foreground">No organization</span>
+                        ) : user.role === 'owner' ? (
+                            <Badge variant="default">owner</Badge>
+                        ) : (
+                            <Select
+                                value={draftRole ?? undefined}
+                                // The two items below are the whole of what this can hand back.
+                                onValueChange={(value) => setDraftRole(value === 'admin' ? 'admin' : 'member')}
+                            >
+                                <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="admin">Admin</SelectItem>
+                                    <SelectItem value="member">Member</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
                 )}
-
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <h3 className="text-sm font-medium text-muted-foreground mb-2">Last active</h3>
-                        <p className="text-sm">{user.lastActiveAt ? formatTimeAgo(user.lastActiveAt) : '—'}</p>
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-medium text-muted-foreground mb-2">Joined</h3>
-                        <p className="text-sm">{formatDate(user.createdAt)}</p>
-                    </div>
+                <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-muted-foreground">Last active</span>
+                    <span className="text-sm">{user.lastActiveAt ? formatTimeAgo(user.lastActiveAt) : '—'}</span>
                 </div>
-
-                {!guest && (
-                    <div>
-                        <h3 className="text-sm font-medium text-muted-foreground mb-2">Storage</h3>
-                        {usage ? <StorageUsageBars data={usage} /> : <p className="text-sm text-muted-foreground">—</p>}
-                    </div>
-                )}
+                <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-muted-foreground">Joined</span>
+                    <span className="text-sm">{formatDate(user.createdAt)}</span>
+                </div>
             </div>
 
             {hasChanges && (
@@ -156,14 +140,28 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
                 </div>
             )}
 
-            {/* DangerZone below brings its own top rule, so this section needs only a leading one. */}
+            {/* Only a member of the organization can join one of its teams. */}
+            {!guest && user.role !== null && (
+                <>
+                    <Separator />
+                    <UserTeamsSection user={user} organizationId={organizationId} />
+                </>
+            )}
+
             {!guest && (
                 <>
+                    <Separator />
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-medium">Storage</h3>
+                        {usage ? <StorageUsageBars data={usage} /> : <p className="text-sm text-muted-foreground">—</p>}
+                    </div>
+
                     <Separator />
                     <BackupSection ownerId={user.id} />
                 </>
             )}
 
+            {/* DangerZone brings its own top rule. */}
             {user.role !== 'owner' && (
                 <DangerZone
                     description="Permanently delete this user account and all associated data."
