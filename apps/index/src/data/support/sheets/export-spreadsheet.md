@@ -23,7 +23,7 @@ You can download a copy of any spreadsheet to your computer without removing it 
 
 The downloaded file takes the name of the spreadsheet.
 
-A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells past a size limit. To keep every cell, download it as Excel.
+A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells and sheets past a size limit. To keep every cell, download it as Excel.
 
 ## What carries over to Excel
 
