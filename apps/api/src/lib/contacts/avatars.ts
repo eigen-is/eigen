@@ -1,6 +1,7 @@
 // Contact photos for the Contacts part of a Home. An upload is resized to a WebP and kept in the avatars folder, a
 // photo inside a vCard is cached there too, and a sweep removes images that nothing uses any more. The contacts
-// routes call it to store and serve these images.
+// routes call it to store and serve these images. The avatars folder is a second source of truth beside the
+// cards, not a cache.
 
 import { randomUUID } from 'node:crypto';
 import { PATHS } from '../config/paths';
@@ -18,9 +19,6 @@ import {
 } from './card-store';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
-
-// Avatar staging and the served photos over the Contacts facade. See docs/CONTACTS.md § The avatars folder is a second
-// source of truth, not a cache.
 
 // A staged upload has no card referencing it yet, so the sweep must leave it alone while the user is still filling in the form.
 const AVATAR_STAGE_GRACE_MS = 60 * 60 * 1000;

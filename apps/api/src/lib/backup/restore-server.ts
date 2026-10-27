@@ -27,9 +27,7 @@ import {
 } from './paths';
 import { requireVerified, verifyFolder } from './verify';
 
-// ./eigen restore stages a whole-server archive into data/.restoring while the API runs on data/, then swaps it in
-// with the API stopped. This is the stage's work on the tree; cli/restore.ts asks, refuses and swaps. Nothing it
-// imports opens a file on load: the API's own users3.db sits beside the tree it writes.
+// Nothing this file imports opens a file on load: the API's own users3.db sits beside the tree it writes.
 export const RESTORING_DIR = '.restoring';
 // Inside it, the new data/, with the archive's .env.production beside it.
 export const RESTORING_DATA_DIR = 'data';
