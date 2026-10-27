@@ -3,6 +3,7 @@
 // applyOp turns a peer's ops back into patches. Kept together because a test that uses one
 // almost always uses the other, and because the pair is what makes divergence visible.
 
+import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { replaySheetsOps } from '../../../engine';
@@ -116,5 +117,7 @@ export function tabRedo(t: Tab): Op[] {
     return ops;
 }
 
-// A joiner replays the batches on the base's stored sheets.
-export const join = (base: Context, batches: Op[][]) => replaySheetsOps(structuredClone(base.sheets), batches);
+// A joiner decodes the stored snapshot, stored cells and no matrix, and replays the batches on it, as a browser that
+// opens the workbook and the server's read do.
+export const join = (base: Context, batches: Op[][]) =>
+    replaySheetsOps(decodeSheetsSnapshot(encodeSheetsSnapshot(base.sheets, { computed: true })), batches);

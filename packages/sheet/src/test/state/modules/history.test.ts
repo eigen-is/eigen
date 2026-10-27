@@ -248,6 +248,29 @@ describe("undo after a peer's row op on another sheet keeps formulas pointing at
     });
 });
 
+// A joiner and the server read the stored cells of every sheet a batch doesn't name, so a row op must move the
+// formulas there as the live tabs move them in their matrices.
+describe("a row op moves another sheet's formulas for every reader", () => {
+    const pointing = () =>
+        workbook({ B10: text('x') }, { A1: { f: '=One!B10', v: 'x' }, A2: { f: '=SUM(One!B1:B20)', v: 0 } });
+
+    test('a row delete moves them on both tabs and for a joiner', () => {
+        const s = session(pointing());
+        s.edit(s.b, ...deleteRows(2, 3));
+        expect(cellAt(s.a, 'A1', TWO)?.f).toBe('=One!B8');
+        expect(cellAt(s.a, 'A2', TWO)?.f).toBe('=SUM(One!B1:B18)');
+        expectAgree(s);
+    });
+
+    test('a row insert moves them in a copy nobody opened', () => {
+        const s = session(pointing());
+        s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
+        s.edit(s.b, ...insertRows(2, 2));
+        expect(cells(s.a.ctx.sheets[3])[0].v?.f).toBe('=One!B12');
+        expectAgree(s);
+    });
+});
+
 test("an edit to a linked cell after a peer's row insert keeps its link everywhere", () => {
     const s = session(workbook({ B5: text('link') }));
     s.edit(s.a, (ctx) => saveHyperlink(ctx, 4, 1, 'link', 'webpage', 'https://eigen.is'));
