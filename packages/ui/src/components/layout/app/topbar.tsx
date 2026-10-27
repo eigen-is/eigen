@@ -1,3 +1,7 @@
+// The bar across the top of every app: the app switcher and the app's logo on the left, the command palette
+// in the middle, and the notification bell and the account menu on the right. The account menu links to
+// Space's pages, picks the theme and logs out; a guest gets a shorter one.
+
 import { useRouter } from '@tanstack/react-router';
 import { useIsAdmin } from '@workspace/lib/admin';
 import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl, getSupportUrl } from '@workspace/lib/api';
@@ -5,6 +9,7 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useEnabledApps } from '@workspace/lib/public';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
+import { THEMES, themeOf } from '@workspace/lib/types/settings';
 import { cn } from '@workspace/ui/lib/utils';
 import { Grip, LifeBuoy, LogOut, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -35,12 +40,6 @@ type TopbarProps = {
         useNavigate: () => NavigateFunction;
     };
 };
-
-const THEMES = [
-    { value: 'light', label: 'Light' },
-    { value: 'dark', label: 'Dark' },
-    { value: 'system', label: 'System' },
-] as const;
 
 const GUEST_APPS = new Set(['Drive', 'Docs', 'Stickies', 'Slides', 'Vector', 'Sheets', 'Chat']);
 
@@ -241,7 +240,7 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                                 Theme
                             </>
                         }
-                        value={settings?.theme ?? 'light'}
+                        value={themeOf(settings)}
                         options={THEMES}
                         onChange={(theme) => updateSettings.mutate({ theme })}
                     />

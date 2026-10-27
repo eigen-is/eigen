@@ -1,9 +1,21 @@
+// Space's nav: the account's own pages first, such as Personal info and Preferences, then security, the
+// per-app settings when the app is on, and Admin for an admin. The storage meter sits at the bottom.
+
 import { useIsAdmin } from '@workspace/lib/admin';
 import { getAdminAppUrl } from '@workspace/lib/api';
 import { useMailEnabled } from '@workspace/lib/public';
 import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
-import { BookUser, KeySquare, LockKeyholeIcon, Mail, MonitorSmartphone, Shield, UserRound } from 'lucide-react';
+import {
+    BookUser,
+    KeySquare,
+    LockKeyholeIcon,
+    Mail,
+    MonitorSmartphone,
+    Shield,
+    SlidersHorizontal,
+    UserRound,
+} from 'lucide-react';
 
 type SpaceSidebarProps = {
     condensed?: boolean;
@@ -29,6 +41,13 @@ export function SpaceSidebar({ condensed = false }: SpaceSidebarProps) {
                     label="Personal info"
                     condensed={condensed}
                     to="/user"
+                    params={{}}
+                />
+                <SidebarItem
+                    icon={<SlidersHorizontal className="h-4 w-4" />}
+                    label="Preferences"
+                    condensed={condensed}
+                    to="/preferences"
                     params={{}}
                 />
                 <SidebarItem
