@@ -105,3 +105,63 @@ describe('state/modules/text — font sets', () => {
         );
     });
 });
+
+// A rich cell wraps between words, inside a run too, and the runs on one line share its baseline.
+describe('state/modules/text — rich text wrap', () => {
+    beforeEach(() => {
+        clearMeasureTextCache();
+    });
+
+    // Glyphs as wide and as tall as the font set's point size says, so two sizes measure apart.
+    function sizedCanvas(): CanvasRenderingContext2D {
+        const canvas = {
+            font: '10pt Inter',
+            textAlign: 'start',
+            textBaseline: 'alphabetic',
+            measureText: (text: string) => {
+                const size = Number.parseFloat(canvas.font.match(/([\d.]+)pt/)?.[1] ?? '10');
+                return {
+                    width: text.length * size * 0.7,
+                    actualBoundingBoxAscent: size,
+                    actualBoundingBoxDescent: size * 0.25,
+                };
+            },
+        };
+        return canvas as unknown as CanvasRenderingContext2D;
+    }
+
+    function lines(runs: { v: string; fs: number }[], cellWidth: number) {
+        const cell: Cell = { tb: '2', ct: { fa: 'General', t: 'inlineStr', s: runs } };
+        const info = getCellTextInfo(cell, sizedCanvas(), contextFactory() as Context, {
+            cellWidth,
+            cellHeight: 200,
+            r: 0,
+            c: 0,
+        });
+        const byLine = new Map<number, { text: string; tops: Set<number> }>();
+        for (const word of info?.values ?? []) {
+            const line = byLine.get(word.splitIndex ?? 0) ?? { text: '', tops: new Set<number>() };
+            line.text += word.content;
+            line.tops.add(word.top);
+            byLine.set(word.splitIndex ?? 0, line);
+        }
+        return [...byLine.values()];
+    }
+
+    test('one run too wide for the cell breaks at its spaces', () => {
+        expect(lines([{ v: 'aa bb cc dd', fs: 10 }], 50).map((line) => line.text.trim())).toEqual(['aa bb', 'cc dd']);
+    });
+
+    test('two sizes on one wrapped line share its baseline', () => {
+        const wrapped = lines(
+            [
+                { v: 'aa bb ', fs: 10 },
+                { v: 'CC', fs: 20 },
+                { v: ' dd ee ff gg', fs: 10 },
+            ],
+            100,
+        );
+        expect(wrapped.map((line) => line.text.trim())).toEqual(['aa bb CC dd', 'ee ff gg']);
+        for (const line of wrapped) expect(line.tops.size).toBe(1);
+    });
+});

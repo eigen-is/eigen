@@ -1,3 +1,7 @@
+// Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
+// and where each piece of text sits, a rich cell's runs included. The painter and the row's auto height
+// read the layout, which is cached per cell until clearMeasureTextCache.
+
 import { cellFontName, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cellWrapsText } from '../../engine/format';
@@ -37,9 +41,13 @@ type InlineRun = {
     wrap?: boolean;
     fs: number;
     v?: string;
-    si?: number;
     measureText?: MeasureTextMetrics;
 };
+
+// What a rich cell wraps between: a space, one CJK character, or a run of anything else. The wrap pass
+// breaks a line after a space or a wide character, as it does in plain text.
+const CJK = '\\u3000-\\u9fff\\uac00-\\ud7af\\uf900-\\ufaff\\uff00-\\uffef';
+const WRAP_WORDS = new RegExp(` |[${CJK}]|[^ ${CJK}]+`, 'g');
 
 // One styled run produced by the layout pass. `style` is either an InlineRun
 // (when wordGroup.inline === true) or the resolved fontset string for plain text;
@@ -376,61 +384,22 @@ export function getCellTextInfo(
     let value: string | number | boolean | undefined;
     const inlineStringArr: InlineRun[] = [];
     if (isInlineStringCell(cell)) {
-        const sharedStrings = cell.ct.s;
-        let similarIndex = 0;
-        for (let i = 0; i < sharedStrings.length; i += 1) {
-            const shareCell = sharedStrings[i];
-            const scfontset = getFontSet(shareCell, sheetCtx.defaultFontSize);
-            const { fc } = shareCell;
-            const { cl } = shareCell;
-            const { un } = shareCell;
-            let { v } = shareCell;
-            const { fs } = shareCell;
-            v = (v ?? '')
-                .replace(/\r\n/g, '_x000D_')
-                .replace(/&#13;&#10;/g, '_x000D_')
-                .replace(/\r/g, '_x000D_')
-                .replace(/\n/g, '_x000D_');
-            const splitArr = v.split('_x000D_');
-            for (let x = 0; x < splitArr.length; x += 1) {
-                const newValue = splitArr[x];
-
-                if (newValue === '' && x !== splitArr.length - 1) {
-                    inlineStringArr.push({
-                        fontset: scfontset,
-                        fc: !fc ? '#000' : fc,
-                        cl: !cl ? 0 : cl,
-                        un: !un ? 0 : un,
-                        wrap: true,
-                        fs: !fs ? 11 : fs,
-                    });
-                    similarIndex += 1;
-                } else {
-                    inlineStringArr.push({
-                        fontset: scfontset,
-                        fc: !fc ? '#000' : fc,
-                        cl: !cl ? 0 : cl,
-                        un: !un ? 0 : un,
-                        v: newValue,
-                        si: similarIndex,
-                        fs: !fs ? 11 : fs,
-                    });
-
-                    if (x !== splitArr.length - 1) {
-                        inlineStringArr.push({
-                            fontset: scfontset,
-                            fc: !fc ? '#000' : fc,
-                            cl: !cl ? 0 : cl,
-                            un: !un ? 0 : un,
-                            wrap: true,
-                            fs: !fs ? 11 : fs,
-                        });
-                        similarIndex += 1;
-                    }
+        for (const run of cell.ct.s) {
+            const style = {
+                fontset: getFontSet(run, sheetCtx.defaultFontSize),
+                fc: run.fc || '#000',
+                cl: run.cl || 0,
+                un: run.un || 0,
+                fs: run.fs || 11,
+            };
+            const lines = (run.v ?? '').split(/\r\n|&#13;&#10;|\r|\n/);
+            for (const [index, line] of lines.entries()) {
+                const isLast = index === lines.length - 1;
+                if (line !== '' || isLast) {
+                    for (const word of line.match(WRAP_WORDS) ?? [line]) inlineStringArr.push({ ...style, v: word });
                 }
+                if (!isLast) inlineStringArr.push({ ...style, wrap: true });
             }
-
-            similarIndex += 1;
         }
         isInline = true;
     } else {
@@ -751,7 +720,7 @@ export function getCellTextInfo(
                         const sc = shareCells[s];
                         const m = measureRun(sc);
                         textWidth += m.width;
-                        textHeight = Math.max(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent);
+                        textHeight = Math.max(textHeight, m.actualBoundingBoxAscent + m.actualBoundingBoxDescent);
                     }
 
                     const width =
