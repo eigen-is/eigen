@@ -133,21 +133,37 @@ export function sheetsHtmlDocument({
     });
 }
 
-// A preview is a glance, so it renders only the first shown sheet, cut to the budget. Its images and charts spend
-// PREVIEW_FLOATING_CELLS, so a crowded preview draws the ones that fit instead of a body the byte guard throws away.
-// `truncated` is true when rows, columns, cells, images, charts or other sheets were left out, and the caller then
-// adds the shared marker. The resolver spans every sheet, so a rule's formula can read another sheet.
+// A preview is a glance, so it renders only the first shown sheet, cut to the budget. It clips the overlay to the
+// budget's box, since an image parked outside it would stretch the body and shrink the thumbnail scaled from it. The
+// images and charts inside the box spend PREVIEW_FLOATING_CELLS, so a crowded preview draws the ones that fit instead
+// of a body the byte guard throws away. `truncated` is true when rows, columns, cells, images, charts or other sheets
+// were left out, and the caller then adds the shared marker. The resolver spans every sheet, so a rule's formula can
+// read another sheet.
 export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
     const shown = shownSheets(sheets);
     if (shown.length === 0) return { html: '', truncated: false };
     const windowed = windowedSheet(shown[0], () => PREVIEW_SHEET_BUDGET);
     if (!windowed) return { html: '', truncated: true };
-    const floating = chargeFloating(windowed.floating, mediaUrls, PREVIEW_FLOATING_CELLS);
+    const { sheet, range, offset } = windowed;
+    const [firstRow, , firstCol] = range ?? [0, 0, 0, 0];
+    const clip = {
+        width: sheetColumnsWidth(sheet, firstCol, firstCol + PREVIEW_SHEET_BUDGET.maxCols - 1),
+        height: sheetRowsHeight(sheet, firstRow, firstRow + PREVIEW_SHEET_BUDGET.maxRows - 1),
+    };
+    const inClip = windowed.floating.filter(
+        ({ bounds }) =>
+            bounds.minX - offset.left < clip.width &&
+            bounds.minY - offset.top < clip.height &&
+            bounds.maxX > offset.left &&
+            bounds.maxY > offset.top,
+    );
+    const floating = chargeFloating(inClip, mediaUrls, PREVIEW_FLOATING_CELLS);
     const first = renderSheet({ ...windowed, floating: floating.kept }, new FormulaEngine(), sheetsResolver(sheets), {
-        budget: PREVIEW_SHEET_BUDGET,
+        clip,
         mediaUrls,
     });
-    const truncated = windowed.truncated || floating.leftOut.length > 0 || shown.length > 1;
+    const leftOut = floating.leftOut.length > 0 || inClip.length < windowed.floating.length;
+    const truncated = windowed.truncated || leftOut || shown.length > 1;
     return { html: `<div class="sheet">\n${first.html}\n</div>`, truncated };
 }
 
@@ -299,23 +315,18 @@ function floatingExtent(floating: FloatingObject[], offset: { left: number; top:
 }
 
 // The sheet's table and overlay, for the caller to wrap in its .sheet div. With `styles` this is the export, with
-// interned classes. Without it this is the preview, inline-styled, whose `budget` also clips the overlay. `size` is
+// interned classes. Without it this is the preview, inline-styled, whose `clip` box also clips the overlay. `size` is
 // the table and its overlay as rendered: the overlay draws at the stored grid coordinate, so an image or chart parked
 // past the used range is still on the page.
 function renderSheet(
     { sheet, rows, cols, range, offset, floating }: WindowedSheet,
     engine: FormulaEngine,
     resolver: CellResolver,
-    { budget, styles, mediaUrls }: { budget?: SheetBudget; styles?: StyleRegistry; mediaUrls: MediaUrls },
+    { clip, styles, mediaUrls }: { clip?: ContentSize; styles?: StyleRegistry; mediaUrls: MediaUrls },
 ): { html: string; size: ContentSize } {
     const forStylesheet = styles !== undefined;
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
-    const [firstRow, , firstCol] = range ?? [0, 0, 0, 0];
-    const clip = budget && {
-        width: sheetColumnsWidth(sheet, firstCol, firstCol + budget.maxCols - 1),
-        height: sheetRowsHeight(sheet, firstRow, firstRow + budget.maxRows - 1),
-    };
     const extent = floatingExtent(floating, offset);
     const overlay = { floating, extent, styles, mediaUrls, resolver };
     if (!range) {
@@ -503,9 +514,8 @@ function exportWindow(mode: HtmlExportMode, cellsLeft: number, rows: number, col
 }
 
 // The table inside a box that reaches the farthest image or chart, so what follows in the flow, the next sheet or the
-// preview's marker, starts below them. The preview clips the overlay to its budget's box: an image parked outside it
-// would stretch the body and shrink the thumbnail scaled from it. A sheet with no images or charts writes the bare
-// table.
+// preview's marker, starts below them. The preview's box stops at its clip. A sheet with no images or charts writes
+// the bare table.
 function withFloatingOverlay(
     table: string,
     tableWidth: number,
@@ -525,7 +535,7 @@ function withFloatingOverlay(
         resolver: CellResolver;
     },
 ): string {
-    const overlay = renderFloatingObjects(floating, mediaUrls, resolver, offset, styles, clip);
+    const overlay = renderFloatingObjects(floating, mediaUrls, resolver, offset, styles);
     if (!overlay) return table;
     const width = Math.max(tableWidth, clip ? Math.min(extent.width, clip.width) : extent.width);
     const height = clip ? Math.min(extent.height, clip.height) : extent.height;
@@ -690,13 +700,9 @@ function renderFloatingObjects(
     resolver: CellResolver,
     offset: { left: number; top: number },
     styles?: StyleRegistry,
-    clip?: ContentSize,
 ): string {
     const parts: string[] = [];
-    for (const { item, box, bounds } of floating) {
-        const [minX, minY] = [bounds.minX - offset.left, bounds.minY - offset.top];
-        const [maxX, maxY] = [bounds.maxX - offset.left, bounds.maxY - offset.top];
-        if (clip && (minX >= clip.width || minY >= clip.height || maxX <= 0 || maxY <= 0)) continue;
+    for (const { item, box } of floating) {
         const rotate = box.angle ? `;transform:rotate(${box.angle}deg);transform-origin:center center` : '';
         const place = (extra = '') =>
             styleAttr(

@@ -1597,6 +1597,21 @@ describe('Sheets HTML export — charts', () => {
         const sheet: Sheet = { ...makeSheet(cells), id: 'data', charts: { c1: chartOn('data') } };
         expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html.match(/<svg /g)).toHaveLength(1);
     });
+
+    // A chart below the preview's rows draws nothing there, so it must not spend the allowance the chart on top needs.
+    test('a preview charges only the charts it shows, so charts far below its rows leave the one on top drawn', () => {
+        // The chart on top is painted last, after 25 that cost more than the allowance together.
+        const top = { ...chartOn('data', { x: 0, y: 60, width: 200, height: 100 }), id: 'top', index: 'a99' };
+        const charts: Record<string, SheetChart> = { top };
+        for (let i = 0; i < 25; i++) {
+            const far = chartOn('data', { x: 0, y: 40_000 + i * 120, width: 200, height: 100 });
+            charts[`far${i}`] = { ...far, id: `far${i}`, index: `a${String(i).padStart(2, '0')}` };
+        }
+        const sheet: Sheet = { ...makeSheet(cells), id: 'data', charts };
+        const preview = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(preview.html.match(/<svg /g)).toHaveLength(1);
+        expect(preview.truncated).toBe(true);
+    });
 });
 
 describe('Sheets HTML export — the cell cap', () => {
