@@ -297,7 +297,7 @@ function mouseRender(
     }
 
     // Check if range dialog is in single-select mode
-    if (ctx.rangeDialog?.singleSelect) {
+    if (ctx.rangeDialog.singleSelect) {
         return;
     }
 

@@ -419,8 +419,6 @@ describe('isDropdownChevronClick', () => {
 function regulationContext(regulation: Partial<DataRegulationProps>) {
     const ctx = contextFactory() as Context;
     ctx.dataVerification = {
-        selectStatus: false,
-        selectRange: [],
         dataRegulation: {
             type: 'dropdown',
             type2: '',

@@ -287,7 +287,7 @@ export const InputBox: React.FC = () => {
         <div
             className="sheet-input-box"
             style={
-                firstSelection && !context.rangeDialog?.show
+                firstSelection && !context.rangeDialog.show
                     ? {
                           left: firstSelection.left,
                           top: firstSelection.top,
