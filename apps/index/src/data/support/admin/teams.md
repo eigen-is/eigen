@@ -25,8 +25,17 @@ The new team appears in the list. Click it to open its detail panel on the right
 1. On the **Teams** page, click the team in the list.
 2. In the **Members** section of the detail panel, click **Add**.
 3. In the **Add Member to Team** dialog, search by name or email address.
-4. Click a person to add them. You can add one person at a time.
+4. Click a person to add them. The dialog stays open, so you can add the next one.
 5. Close the dialog when you are done.
+
+## Add several people at once
+
+1. Open the **Users** page from the sidebar.
+2. Select the people. Hold Shift and click to select a range, or hold Ctrl (Command on a Mac) and click to add people one by one.
+3. Right-click the selection and choose **Add to team…**. On a phone or tablet, press and hold a person's row to add that one person.
+4. In the **Add to Team** dialog, search for the team and click it.
+
+Everyone you selected joins that team. An account marked **no organization** can't be selected, because only members of your organization can join a team.
 
 ## Remove a member from a team
 

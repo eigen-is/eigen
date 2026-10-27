@@ -8,7 +8,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Contacts** — the contact list fills the page until you open a contact. Its details then open beside a narrower list, and **Close** returns to the full list
 - **Admin teams** — teams have their own list page, like users, instead of a list in the sidebar. Create a team with the **+** next to the search bar, and click a team to open its details
-- **Adding people to a team** — dragging users onto a team is gone with the sidebar list. Add members from the team's **Members** section instead
+- **Adding people to a team** — dragging users onto a team is gone with the sidebar list. To add several people at once, select them on the **Users** page, right-click and choose **Add to team…**. A team's **Members** section still adds one person at a time
 
 ### Fixed
 
