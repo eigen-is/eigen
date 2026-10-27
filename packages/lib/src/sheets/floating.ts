@@ -19,10 +19,15 @@ export type SheetFloatingItem = { kind: 'image'; object: SheetImage } | { kind: 
 export type SheetFloatingKind = SheetFloatingItem['kind'];
 
 // A sheet's images and charts in one paint order, bottom first: the editor's overlay, the export and a z-order move read it.
+// A peer can store anything under an id, so an entry that is no object is no image or chart.
 export function floatingItems(sheet: Sheet): SheetFloatingItem[] {
     const items: SheetFloatingItem[] = [
-        ...Object.values(sheet.images ?? {}).map((object) => ({ kind: 'image' as const, object })),
-        ...Object.values(sheet.charts ?? {}).map((object) => ({ kind: 'chart' as const, object })),
+        ...Object.values(sheet.images ?? {})
+            .filter((object) => isRecord(object))
+            .map((object) => ({ kind: 'image' as const, object })),
+        ...Object.values(sheet.charts ?? {})
+            .filter((object) => isRecord(object))
+            .map((object) => ({ kind: 'chart' as const, object })),
     ];
     return orderByFractionalIndex(items.map((item) => ({ id: item.object.id, index: item.object.index, item }))).map(
         ({ item }) => item,

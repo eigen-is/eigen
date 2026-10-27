@@ -3,6 +3,7 @@
 // windowedSheet reads each stored map once, places the window from the keys clamped to Excel's grid, and drops or clips
 // every key outside it, so the renderer only ever walks the window. The export and the preview both render through it.
 
+import { isRecord } from '@workspace/lib/guards';
 import type {
     Cell,
     CellBorderSides,
@@ -254,13 +255,13 @@ function usedBounds(
     return minRow <= maxRow && minCol <= maxCol ? { minRow, minCol, maxRow, maxCol } : null;
 }
 
+// A merge's first cell holds its size in `mc`. A peer can store any value there, and `in` throws on one that is no object.
 function hasVisibleContent(v: Cell | null): boolean {
     if (!v) return false;
     if (v.v != null || v.m != null || richText(v) !== undefined) return true;
     if (v.bg || v.fc) return true;
     if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1) return true;
-    if (v.mc && 'rs' in v.mc) return true; // merge anchor
-    return false;
+    return isRecord(v.mc) && 'rs' in v.mc;
 }
 
 // The track that `px` falls in, at most `limit`, and the pixels before it. The tracks no map names are all `fallback`

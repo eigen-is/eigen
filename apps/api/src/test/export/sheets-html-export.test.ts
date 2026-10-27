@@ -2079,6 +2079,25 @@ describe('Sheets HTML export — the window over forged keys', () => {
         expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('background:#00ff00');
     });
 
+    test('a merge marker or an image a peer stored as no object is skipped, and the export and the preview still render', () => {
+        const sheet: Sheet = JSON.parse(
+            JSON.stringify({
+                id: 'forged',
+                name: 'forged',
+                order: 0,
+                celldata: [
+                    { r: 0, c: 0, v: { mc: 1 } },
+                    { r: 0, c: 1, v: { mc: 'x' } },
+                    { r: 1, c: 0, v: { v: 'kept', m: 'kept' } },
+                ],
+                images: { a: null },
+                charts: { b: 7 },
+            }),
+        );
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').html).toContain('>kept<');
+        expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('>kept<');
+    });
+
     // The editor stores an empty list for a rule that takes no value, and the evaluator reads the first one.
     test('a date rule with no value draws nothing and fails nothing', () => {
         const date = { v: 46_000, m: '2025-12-09', ct: { fa: 'yyyy-mm-dd', t: 'd' } };
