@@ -22,7 +22,6 @@ import type {
 } from '@workspace/lib/types/clipboard';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cloneDeep, isEqual } from 'es-toolkit/compat';
-import type { Patch } from 'immer';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
@@ -166,15 +165,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             return () => clearTimeout(id);
         }, [dataReady]);
 
-        const emitOp = useCallback(
-            (ctx: Context, patches: Patch[], options?: SetContextOptions, undo: boolean = false) => {
-                if (onOp) {
-                    onOp(patchToOp(ctx, patches, options, undo));
-                }
-            },
-            [onOp],
-        );
-
         const setContextWithProduce = useCallback(
             (recipe: (ctx: Context) => void, options: SetContextOptions = {}) => {
                 setContext((ctx_) => {
@@ -233,13 +223,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 }
                                 globalCache.current.redoList = [];
                             }
-                            emitOp(result, filteredPatches, options);
+                            onOp?.(patchToOp(result, filteredPatches, options));
                         }
                     }
                     return result;
                 });
             },
-            [emitOp],
+            [onOp],
         );
 
         // The entry moves to the other stack now, in call order, so a peer batch called after it shifts it there.

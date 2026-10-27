@@ -14,7 +14,7 @@ import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import type { History, Op, Sheet } from '../types';
 import type { PatchOptions } from '../utils';
-import { getSheetIndex, inverseRowColOptions, patchToOp } from '../utils';
+import { addSheetOps, deleteSheetOps, getSheetIndex, inverseRowColOptions, patchToOp } from '../utils';
 import { applyOpBatch } from './apply-ops';
 import { withoutDeletedFloatingEdits } from './floating';
 import { rowColMove } from './history-shift';
@@ -31,12 +31,12 @@ export function recordEntry(
     inversePatches: Patch[],
     options: PatchOptions,
 ): History {
-    options.id = before.currentSheetId;
     if (options.deleteSheetOp) {
-        options.deletedSheet = deletedSheet(before, options.deleteSheetOp.id);
+        const { id } = options.deleteSheetOp;
+        const sheet = before.sheets.find((s) => s.id === id);
+        if (sheet) options.deletedSheet = storedCopy(sheet);
         return { patches: [], inversePatches: [], options };
     }
-    if (options.addSheetOp) options.addSheet = { id: after.sheets[after.sheets.length - 1].id };
     return {
         patches: bySheetId(patches, after.sheets),
         inversePatches: bySheetId(inversePatches, before.sheets),
@@ -46,9 +46,16 @@ export function recordEntry(
 
 export function undoEntry(ctx: Context, entry: History): Step {
     const { options } = entry;
-    if (options?.deleteSheetOp && options.deletedSheet?.value)
-        return applyBatch(ctx, addSheetOps(ctx, options.deletedSheet.value));
-    if (options?.addSheetOp && options.addSheet?.id) return applyBatch(ctx, deleteSheetOps(ctx, options.addSheet.id));
+    if (options?.deleteSheetOp) {
+        const deleted = options.deletedSheet;
+        if (!deleted || ctx.sheets.some((sheet) => sheet.id === deleted.id)) return { ctx, ops: [] };
+        return sheetStep(ctx, (sheets) => addSheetOps(deleted, sheets));
+    }
+    if (options?.addSheetOp) {
+        const added = addedSheet(entry);
+        const sheet = added && ctx.sheets.find((s) => s.id === added.id);
+        return sheet ? sheetStep(ctx, (sheets) => deleteSheetOps(sheet, sheets)) : { ctx, ops: [] };
+    }
     if (options?.insertRowColOp || options?.deleteRowColOp) {
         return rowColStep(ctx, entry.patches, entry.inversePatches, inverseRowColOptions(options) ?? {}, true);
     }
@@ -58,14 +65,17 @@ export function undoEntry(ctx: Context, entry: History): Step {
 export function redoEntry(ctx: Context, entry: History): Step {
     const { options } = entry;
     if (options?.deleteSheetOp) {
+        const sheet = ctx.sheets.find((s) => s.id === options.deleteSheetOp?.id);
+        if (!sheet) return { ctx, ops: [] };
         // The undo after this redo brings back the sheet as the redo found it, a peer's edits since the first delete
         // included. Only this state knows it, so the entry keeps it.
-        options.deletedSheet = deletedSheet(ctx, options.deleteSheetOp.id) ?? options.deletedSheet;
-        return applyBatch(ctx, deleteSheetOps(ctx, options.deleteSheetOp.id));
+        options.deletedSheet = storedCopy(sheet);
+        return sheetStep(ctx, (sheets) => deleteSheetOps(sheet, sheets));
     }
     if (options?.addSheetOp) {
-        const added = entry.patches.find((patch) => patch.op === 'add' && patch.path.length === 2);
-        return applyBatch(ctx, added ? addSheetOps(ctx, added.value) : []);
+        const added = addedSheet(entry);
+        if (!added || ctx.sheets.some((sheet) => sheet.id === added.id)) return { ctx, ops: [] };
+        return sheetStep(ctx, (sheets) => addSheetOps(added, sheets));
     }
     if (options?.insertRowColOp || options?.deleteRowColOp) {
         return rowColStep(ctx, entry.inversePatches, entry.patches, options, false);
@@ -74,13 +84,16 @@ export function redoEntry(ctx: Context, entry: History): Step {
 }
 
 // A sheet about to be deleted, kept with its cells as stored cells so its undo can add it back.
-function deletedSheet(ctx: Context, id: string) {
-    const sheet = ctx.sheets.find((s) => s.id === id);
-    if (!sheet) return undefined;
+function storedCopy(sheet: Sheet): Sheet {
     const { data, ...value } = cloneDeep(sheet);
     if (data) value.celldata = dataToCelldata(data);
     value.status = 0;
-    return { id, value };
+    return value;
+}
+
+// The sheet an add or copy entry put in, as its redo adds it back.
+function addedSheet(entry: History): Sheet | undefined {
+    return entry.patches.find((patch) => patch.op === 'add' && patch.path.length === 2)?.value;
 }
 
 // ['sheets', index, …] → ['sheets', id, …] for a cell or field path. Shorter paths, a whole sheet or the sheet list,
@@ -115,27 +128,11 @@ function applyBatch(ctx: Context, ops: Op[]): Step {
     return next ? { ctx: produce(next, settleCurrentSheet), ops } : { ctx, ops: [] };
 }
 
-// A sheet comes back from its stored value, after the sheets that now sit at or past its place in the tab order.
-function addSheetOps(ctx: Context, value: Sheet): Op[] {
-    if (getSheetIndex(ctx, value.id as string) != null) return [];
-    const ops: Op[] = [{ op: 'addSheet', id: value.id, path: [], value }];
-    for (const sheet of ctx.sheets) {
-        if ((sheet.order ?? 0) < (value.order ?? 0)) continue;
-        ops.push({ op: 'replace', id: sheet.id, path: ['order'], value: (sheet.order ?? 0) + 1 });
-    }
-    return ops;
-}
-
-function deleteSheetOps(ctx: Context, id: string): Op[] {
-    const index = getSheetIndex(ctx, id);
-    if (index == null) return [];
-    const order = ctx.sheets[index].order ?? 0;
-    const ops: Op[] = [{ op: 'deleteSheet', id, path: [], value: { id } }];
-    for (const sheet of ctx.sheets) {
-        if ((sheet.order ?? 0) <= order) continue;
-        ops.push({ op: 'replace', id: sheet.id, path: ['order'], value: (sheet.order ?? 0) - 1 });
-    }
-    return ops;
+// A sheet comes back, or goes, through applyOpBatch. The batch it sends also carries the tab order the sheet op left
+// behind, which the edit's own batch carries too; here those order ops would change nothing.
+function sheetStep(ctx: Context, batch: (sheets: Sheet[]) => Op[]): Step {
+    const next = applyOpBatch(ctx, batch(ctx.sheets).slice(0, 1));
+    return next ? { ctx: produce(next, settleCurrentSheet), ops: batch(next.sheets) } : { ctx, ops: [] };
 }
 
 // A cell or field entry: `apply` goes in, and `written`, the entry's other side, says what the targets should hold.

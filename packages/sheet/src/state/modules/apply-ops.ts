@@ -60,7 +60,7 @@ export function applyOpBatch(ctx: Context, ops: Op[]): Context | null {
     }
     // The formula map lives outside immer, so it follows the batch only once the batch applied.
     for (const id of materialized) {
-        const data = next.sheets[getSheetIndex(next, id) ?? -1]?.data;
+        const data = next.sheets.find((sheet) => sheet.id === id)?.data;
         if (data) registerSheetFormulas(next, id, data);
     }
     if (patches.length > 0) next.formulaCache.updateFormulaCache(next, { patches, inversePatches: [] }, 'redo');

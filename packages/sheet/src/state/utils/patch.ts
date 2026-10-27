@@ -11,13 +11,6 @@ import { getFlowdata } from '../context';
 import type { Op, Sheet } from '../types';
 import { getSheetIndex } from '.';
 
-export type ChangedSheet = {
-    index?: number;
-    id?: string;
-    value?: Sheet;
-    order?: number;
-};
-
 export type PatchOptions = {
     insertRowColOp?: {
         type: 'row' | 'column';
@@ -36,9 +29,8 @@ export type PatchOptions = {
     deleteSheetOp?: {
         id: string;
     };
-    addSheet?: ChangedSheet;
-    deletedSheet?: ChangedSheet;
-    id?: string;
+    // The deleted sheet as it stood, with its cells stored, which recordEntry keeps for the delete's undo.
+    deletedSheet?: Sheet;
 };
 
 const addtionalMergeOps = (ops: Op[], id: string) => {
@@ -252,39 +244,33 @@ export function patchToOp(
         ops = [...ops, ...sheetMetadataOps(ctx, options.deleteRowColOp.id, false), ...repair];
         ops = [...ops, ...addtionalMergeOps(ops, options.deleteRowColOp.id)];
     } else if (options?.addSheetOp) {
-        const [addSheetOps, otherOps] = partition(ops, (op) => op.path.length === 0 && op.op === 'add');
-        options.id = options.addSheet!.id as string;
-        ops = otherOps;
-        ops.push({
-            op: 'addSheet',
-            id: options.addSheet?.id,
-            path: [],
-            value: addSheetOps[0]?.value,
-        });
-    } else if (options?.deleteSheetOp) {
-        options.id = options.deleteSheetOp!.id as string;
-        ops = [
-            {
-                op: 'deleteSheet',
-                id: options.deleteSheetOp.id,
-                path: [],
-                value: options.deletedSheet,
-            },
-        ];
-        const order = options.deletedSheet?.value?.order as number;
-        if (options.deletedSheet?.order !== ctx.sheets.length) {
-            const sheetsRight = ctx.sheets.filter((sheet) => (sheet?.order as number) >= (order as number));
-            for (const sheet of sheetsRight) {
-                ops.push({
-                    id: sheet.id,
-                    op: 'replace',
-                    path: ['order'],
-                    value: sheet?.order as number,
-                });
-            }
-        }
+        // A copy moves the sheets after it, and the batch carries their orders.
+        const [[added], rest] = partition(ops, (op) => op.op === 'add' && op.path.length === 0);
+        ops = rest.filter((op) => op.path[0] !== 'order');
+        if (added) ops.push(...addSheetOps(added.value, ctx.sheets));
+    } else if (options?.deletedSheet) {
+        ops = deleteSheetOps(options.deletedSheet, ctx.sheets);
     }
     return ops;
+}
+
+// A sheet add as a batch: the sheet, then the order of each sheet at or past its place, as `sheets` hold them once it
+// was added. A peer's addSheet moves those orders itself, but a joiner's replay only appends the sheet. The edit, its
+// undo and its redo all send this batch.
+export function addSheetOps(added: Sheet, sheets: Sheet[]): Op[] {
+    return [{ op: 'addSheet', id: added.id, path: [], value: added }, ...orderOps(added, sheets)];
+}
+
+// A sheet delete as a batch, for the same reason with the orders `sheets` hold once it was deleted.
+export function deleteSheetOps(deleted: Sheet, sheets: Sheet[]): Op[] {
+    return [{ op: 'deleteSheet', id: deleted.id, path: [], value: { id: deleted.id } }, ...orderOps(deleted, sheets)];
+}
+
+function orderOps(changed: Sheet, sheets: Sheet[]): Op[] {
+    const from = changed.order ?? 0;
+    return sheets
+        .filter((sheet) => sheet.id !== changed.id && (sheet.order ?? 0) >= from)
+        .map((sheet): Op => ({ op: 'replace', id: sheet.id, path: ['order'], value: sheet.order }));
 }
 
 export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {

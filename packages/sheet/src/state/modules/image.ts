@@ -48,8 +48,7 @@ export function replaceMediaNameInHistory(
     for (const entry of [...history.undoList, ...history.redoList]) {
         entry.patches = entry.patches.map(rename);
         entry.inversePatches = entry.inversePatches.map(rename);
-        const deleted = entry.options?.deletedSheet;
-        if (deleted?.value) deleted.value = sheet(deleted.value);
+        if (entry.options?.deletedSheet) entry.options.deletedSheet = sheet(entry.options.deletedSheet);
     }
 }
 

@@ -167,11 +167,9 @@ class Shifter {
     // A deleted sheet keeps its cells in the entry's options, for its undo; their formulas may point at the op's sheet.
     private deletedSheet(options: PatchOptions | undefined) {
         const deleted = options?.deletedSheet;
-        const value = deleted?.value;
-        if (!options || !deleted || !value?.celldata) return options;
-        const celldata = this.celldata(value.celldata);
-        if (celldata === value.celldata) return options;
-        return { ...options, deletedSheet: { ...deleted, value: { ...value, celldata } } };
+        if (!options || !deleted?.celldata) return options;
+        const celldata = this.celldata(deleted.celldata);
+        return celldata === deleted.celldata ? options : { ...options, deletedSheet: { ...deleted, celldata } };
     }
 
     private celldata(celldata: NonNullable<Sheet['celldata']>) {
