@@ -41,14 +41,17 @@ export type FloatingObject = { item: SheetFloatingItem; box: Box; bounds: Bounds
 
 // `rows` and `cols` are the shown tracks the window renders, in order. `range` is the rectangle they span, the hidden
 // tracks inside it included, and null for a sheet with nothing but images or charts. `offset` is the pixels from A1 to
-// the window's first cell, which the overlay subtracts from each stored box. `floating` is the sheet's images and
-// charts in paint order. `cells` is what the window costs.
+// the window's first cell, which the overlay subtracts from each stored box. `budgetEnd` is the last row and column of
+// the budget's box: as many shown tracks from the window's first as the budget holds, past a small sheet too. The track
+// maps reach it, and the preview clips its overlay there. `floating` is the sheet's images and charts in paint order.
+// `cells` is what the window costs.
 export type WindowedSheet = {
     sheet: Sheet;
     rows: number[];
     cols: number[];
     range: GridRange | null;
     offset: { left: number; top: number };
+    budgetEnd: { row: number; col: number };
     floating: FloatingObject[];
     truncated: boolean;
     cells: number;
@@ -91,14 +94,17 @@ export function windowedSheet(
     const floating = floatingObjects(sheet);
     const empty = budgetFor(0, 0);
     if (!bounds) {
-        const { maxRows, maxCols } = empty;
-        const blank = tracksOf([0, maxRows - 1], [0, maxCols - 1]);
+        const budgetEnd = {
+            row: lastShownTrack(0, empty.maxRows, config.rowhidden, REFERENCE_ROW_COUNT),
+            col: lastShownTrack(0, empty.maxCols, config.colhidden, REFERENCE_COLUMN_COUNT),
+        };
         return {
-            sheet: blank,
+            sheet: tracksOf([0, budgetEnd.row], [0, budgetEnd.col]),
             rows: [],
             cols: [],
             range: null,
             offset: { left: 0, top: 0 },
+            budgetEnd,
             floating,
             truncated: false,
             cells: 0,
@@ -136,11 +142,13 @@ export function windowedSheet(
         firstCol,
         keptCols < shownCols ? (cols.at(-1) ?? firstCol) : bounds.maxCol,
     ];
-    // The track sizes reach a budget's worth of tracks past a small sheet, as far as the preview's overlay box.
-    const tracks = tracksOf(
-        [firstRow, Math.min(REFERENCE_ROW_COUNT - 1, Math.max(range[1], firstRow + budget.maxRows - 1))],
-        [firstCol, Math.min(REFERENCE_COLUMN_COUNT - 1, Math.max(range[3], firstCol + budget.maxCols - 1))],
-    );
+    // The budget's box counts shown tracks as the window does, so it holds every one the window keeps. A budget of no
+    // columns or rows, where every one is hidden, still reaches the range's hidden ones.
+    const budgetEnd = {
+        row: Math.max(range[1], lastShownTrack(firstRow, budget.maxRows, config.rowhidden, REFERENCE_ROW_COUNT)),
+        col: Math.max(range[3], lastShownTrack(firstCol, budget.maxCols, config.colhidden, REFERENCE_COLUMN_COUNT)),
+    };
+    const tracks = tracksOf([firstRow, budgetEnd.row], [firstCol, budgetEnd.col]);
     const windowed: Sheet = {
         ...tracks,
         celldata: sheet.celldata?.filter(({ r, c }) => inRange(range, r, c)),
@@ -157,6 +165,7 @@ export function windowedSheet(
         cols,
         range,
         offset: { left: left.start, top: top.start },
+        budgetEnd,
         floating,
         truncated: keptRows < shownRows || keptCols < shownCols,
         cells: Math.max(1, keptRows) * rowCells,
@@ -317,6 +326,22 @@ function shownTracks(first: number, last: number, count: number, hidden: Record<
         if (!isRecord(hidden) || hidden[track] == null) tracks.push(track);
     }
     return tracks;
+}
+
+// The last of the first `count` shown tracks from `first`, at most the grid's last. The hidden tracks come from the
+// map's keys, so a million hidden rows past a small sheet cost what the map holds, not a walk over them.
+function lastShownTrack(
+    first: number,
+    count: number,
+    hidden: Record<string, number> | undefined,
+    gridSize: number,
+): number {
+    let last = first + count - 1;
+    for (const track of tracksIn(hidden, first, gridSize - 1)) {
+        if (track > last) break;
+        last += 1;
+    }
+    return Math.min(last, gridSize - 1);
 }
 
 function inRange([firstRow, lastRow, firstCol, lastCol]: GridRange, r: number, c: number): boolean {
