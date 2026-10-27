@@ -10,6 +10,7 @@ import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
+import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
 import { useEditorSelectionStyle } from '../../hooks/useEditorSelectionStyle';
 import {
     handleBold,
@@ -28,6 +29,7 @@ export function FormatToolbar() {
     // is open the run at its caret, the way the docs toolbar follows the caret.
     const cell = useAnchorCell();
     const caret = useEditorSelectionStyle();
+    const refocusCellEditor = useCellEditorRefocus();
 
     if (!context.allowEdit) return null;
 
@@ -50,6 +52,7 @@ export function FormatToolbar() {
         <div className="hidden @[1360px]:flex items-center gap-0.5">
             <FontPicker
                 value={fontName}
+                onCloseAutoFocus={refocusCellEditor}
                 onChange={(name) => {
                     setContext((ctx) => {
                         handleFont(ctx, refs.cellInput.current!, name);
@@ -59,11 +62,18 @@ export function FormatToolbar() {
 
             <ToolbarSeparator />
 
-            <FontSizeStepper
-                value={fontSize}
-                onChange={setFontSize}
-                onStep={(by) => setFontSize(nextFontSize(fontSize, by))}
-            />
+            {/* The size box hands the focus back as it blurs on Enter or Escape, with nowhere else to go. */}
+            <div
+                onBlur={(e) => {
+                    if (!e.relatedTarget) refocusCellEditor(e.nativeEvent);
+                }}
+            >
+                <FontSizeStepper
+                    value={fontSize}
+                    onChange={setFontSize}
+                    onStep={(by) => setFontSize(nextFontSize(fontSize, by))}
+                />
+            </div>
 
             <ToolbarSeparator />
 
@@ -99,6 +109,7 @@ export function FormatToolbar() {
                 resetLabel="Default"
                 showSwatch
                 popoverClassName="sheet-mousedown-cancel"
+                onCloseAutoFocus={refocusCellEditor}
                 onChange={(color) => {
                     setContext((ctx) => {
                         handleTextColor(ctx, refs.cellInput.current!, color);
@@ -113,6 +124,7 @@ export function FormatToolbar() {
                 resetLabel="Default"
                 showSwatch
                 popoverClassName="sheet-mousedown-cancel"
+                onCloseAutoFocus={refocusCellEditor}
                 onChange={(color) => {
                     setContext((ctx) => {
                         handleTextBackground(ctx, refs.cellInput.current!, color);

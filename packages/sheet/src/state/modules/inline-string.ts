@@ -110,6 +110,13 @@ export function rememberEditorSelection(input: HTMLElement) {
     if (pending && (offsets[0] !== pending.at || offsets[1] !== pending.at)) pendingStyles.delete(input);
 }
 
+// Puts the focus back in the editor with the selection it last had, after a toolbar control took it.
+export function restoreEditorSelection(input: HTMLElement) {
+    const offsets = selectionOffsets(input) ?? savedSelections.get(input);
+    if (offsets) setSelectionOffsets(input, ...offsets);
+    else input.focus({ preventScroll: true });
+}
+
 // A closed editor's selection and caret format don't carry into the next cell it opens on.
 export function forgetEditorSelection(input: HTMLElement) {
     savedSelections.delete(input);
