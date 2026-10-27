@@ -35,20 +35,25 @@ import { inBand, selectionDrawsInLine } from './extensions/positioned-figure';
 
 // Alt, Cap, W or H. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
 // from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit writes
-// nothing back, and an unchanged W keeps the stored px its cm rounds. A draft stays through a transaction that
-// moves the figure, a collaborator typing above it.
+// nothing back, and an unchanged W keeps the stored px its cm rounds. A number field shows as many decimals as its
+// step has, and a draft as typed. A draft stays through a transaction that moves the figure, a collaborator typing
+// above it.
 export function FigureField({
     value,
     placeholder,
     type,
+    step,
     onCommit,
 }: {
     value: string;
     placeholder?: string;
     type?: 'number';
+    step?: number;
     onCommit: (value: string) => void;
 }) {
     const [draft, setDraft] = useState<{ text: string; base: string } | null>(null);
+    const decimals = step === undefined ? null : (String(step).split('.')[1]?.length ?? 0);
+    const shown = decimals === null || value === '' ? value : Number(value).toFixed(decimals);
     const commit = (next: string) => {
         if (draft !== null && next !== draft.base) onCommit(next);
         setDraft(null);
@@ -57,9 +62,10 @@ export function FigureField({
         <Input
             className="h-7 text-xs"
             type={type}
-            value={draft?.text ?? value}
+            step={step}
+            value={draft?.text ?? shown}
             placeholder={placeholder}
-            onChange={(e) => setDraft({ text: e.target.value, base: draft?.base ?? value })}
+            onChange={(e) => setDraft({ text: e.target.value, base: draft?.base ?? shown })}
             onBlur={(e) => commit(e.target.value)}
             onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing) return;
@@ -70,13 +76,14 @@ export function FigureField({
     );
 }
 
-// A side in cm to 0.1, written in whole px. An edit below the resize floor is raised to it.
+// A side in cm to 0.01, written in whole px. An edit below the resize floor is raised to it.
 function CmField({ px, onCommit }: { px: number | undefined; onCommit: (px: number) => void }) {
     return (
         <div className="flex items-center gap-1.5">
             <FigureField
                 type="number"
-                value={px === undefined ? '' : cmText(pxToMm(px), 1)}
+                step={0.01}
+                value={px === undefined ? '' : cmText(pxToMm(px), 2)}
                 onCommit={(value) => {
                     const mm = readCm(value);
                     if (Number.isFinite(mm)) onCommit(Math.round(Math.max(FIGURE_MIN_SIZE, mmToPx(mm))));

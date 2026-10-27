@@ -236,9 +236,12 @@ const key = (input: HTMLInputElement, key: string) =>
         input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
     });
 
-test('the Width field shows the figure width in cm, to one decimal', async () => {
-    await mount();
-    expect(widthField().value).toBe('5.3');
+// The field's step of 0.01 gives its decimals, so a size reads alike in every field: 10 cm shows 10.00.
+test('the Width field shows the figure width in cm, to two decimals, and a draft as typed', async () => {
+    await mount({ width: 378 });
+    expect(widthField().value).toBe('10.00');
+    await type(widthField(), '8.5');
+    expect(widthField().value).toBe('8.5');
     expect(widthField().parentElement?.textContent).toBe('cm');
 });
 
@@ -249,7 +252,7 @@ test('Enter in the Width field writes the width in px and keeps the figure selec
 
     expect(widthAt2(editor)).toBe(302);
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
-    expect(widthField().value).toBe('8');
+    expect(widthField().value).toBe('7.99');
 });
 
 test('a blur writes the Width field', async () => {
@@ -260,7 +263,7 @@ test('a blur writes the Width field', async () => {
     expect(widthAt2(editor)).toBe(302);
 });
 
-// 300 px shows as 7.9 cm, which is 298.6 px.
+// 300 px shows as 7.94 cm, which is 300.1 px.
 test.each(['Enter', 'blur'])('an untouched Width field keeps the stored width on %s', async (end) => {
     const editor = await mount({ width: 300 });
     await act(async () => widthField().focus());
@@ -268,14 +271,14 @@ test.each(['Enter', 'blur'])('an untouched Width field keeps the stored width on
     await act(async () => widthField().blur());
 
     expect(widthAt2(editor)).toBe(300);
-    expect(widthField().value).toBe('7.9');
+    expect(widthField().value).toBe('7.94');
 });
 
 test.each([
-    ['block', '30', 600, '15.9'],
-    ['wrap-left', '30', 300, '7.9'],
-    ['block', '1', 100, '2.6'],
-    ['block', '6.63', 251, '6.6'],
+    ['block', '30', 600, '15.88'],
+    ['wrap-left', '30', 300, '7.94'],
+    ['block', '1', 100, '2.65'],
+    ['block', '6.63', 251, '6.64'],
 ])('a %s figure set to %s cm gets %d px, as a grip would leave it', async (layout, value, width, shown) => {
     const editor = await mount({ layout });
     await type(widthField(), value);
@@ -292,7 +295,7 @@ test('Escape drops a typed width', async () => {
     await act(async () => widthField().blur());
 
     expect(widthAt2(editor)).toBe(200);
-    expect(widthField().value).toBe('5.3');
+    expect(widthField().value).toBe('5.29');
 });
 
 test('an emptied Width field writes nothing', async () => {
@@ -302,7 +305,7 @@ test('an emptied Width field writes nothing', async () => {
     await act(async () => widthField().blur());
 
     expect(widthAt2(editor)).toBe(200);
-    expect(widthField().value).toBe('5.3');
+    expect(widthField().value).toBe('5.29');
 });
 
 test('a resize by Shift and an arrow key or by a grip shows in the Width field', async () => {
@@ -313,7 +316,7 @@ test('a resize by Shift and an arrow key or by a grip shows in the Width field',
         );
     });
     expect(widthAt2(editor)).toBe(210);
-    expect(widthField().value).toBe('5.6');
+    expect(widthField().value).toBe('5.56');
 
     // A grip's drag ends in this write.
     await act(async () => {
@@ -322,20 +325,20 @@ test('a resize by Shift and an arrow key or by a grip shows in the Width field',
             return true;
         });
     });
-    expect(widthField().value).toBe('6.6');
+    expect(widthField().value).toBe('6.61');
 });
 
 // With no height stored, the picture draws at its own ratio: 200 px wide is 100 px tall.
 test('W and H show the drawn size in cm, and Keep aspect ratio starts checked', async () => {
     await mount();
-    expect([widthField().value, heightField().value]).toEqual(['5.3', '2.6']);
+    expect([widthField().value, heightField().value]).toEqual(['5.29', '2.65']);
     expect(heightField().parentElement?.textContent).toBe('cm');
     expect(aspectBox().getAttribute('aria-checked')).toBe('true');
 });
 
 test('a stored height shows in H', async () => {
     await mount({ height: 300 });
-    expect(heightField().value).toBe('7.9');
+    expect(heightField().value).toBe('7.94');
 });
 
 // A picture at its own ratio stores no height, so it stays at that ratio wherever it is drawn.
@@ -348,7 +351,7 @@ test.each([
     await type(input, value);
     await key(input, 'Enter');
     expect(sizeAt2(editor)).toEqual(size);
-    expect(heightField().value).toBe('4');
+    expect(heightField().value).toBe('4.00');
 });
 
 test('a locked W edit of a stretched picture scales its height', async () => {
@@ -402,7 +405,7 @@ test('Escape drops a typed height', async () => {
     await key(heightField(), 'Escape');
     await act(async () => heightField().blur());
     expect(sizeAt2(editor)).toEqual({ width: 200, height: null });
-    expect(heightField().value).toBe('2.6');
+    expect(heightField().value).toBe('2.65');
 });
 
 // The lock lasts while its figure stays selected: nodes have no id to remember it by.

@@ -214,7 +214,7 @@ const commitSize = async (index: number, value: string) => {
 // 10 cm is 378 px. The sample is 600 x 371 px.
 test('a W edit of an unlocked chart writes the width alone, in one undo step', async () => {
     const { editor, undoManager } = await mount();
-    expect([sizeField(0)?.value, sizeField(1)?.value]).toEqual(['15.9', '9.8']);
+    expect([sizeField(0)?.value, sizeField(1)?.value]).toEqual(['15.88', '9.82']);
     await commitSize(0, '10');
     expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: 378, height: 371 });
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
