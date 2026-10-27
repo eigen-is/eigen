@@ -14,6 +14,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FigureFrameOptions } from './figure-frame';
 import { clampFigureWidth, FigureFrame, figureFramePlugins, figureMaxWidth, useFigureResize } from './figure-frame';
+import { pageWidths } from './text-column';
 
 // The width a figure draws at when neither it nor its page gives one (px).
 const FIGURE_DEFAULT_WIDTH = 400;
@@ -85,7 +86,8 @@ function FigureView(props: NodeViewProps) {
         // that happens while the editor is hidden.
         if (hasIntrinsicSize) setAspectRatio(nw / nh);
 
-        const maxWidth = getMaxWidth();
+        // A new image fits the page's column, though a page-less doc's may then be grown past it.
+        const maxWidth = Math.min(getMaxWidth(), pageWidths(editor).column);
         // A hidden editor measures 0 while the padding subtracts, and that negative width would land in
         // the doc. Load fires once per src, so un-hiding brings no second chance: the width stays unset
         // until the node view remounts, which max-w-full renders fine.
@@ -110,7 +112,7 @@ function FigureView(props: NodeViewProps) {
             const h = imageRef.current.clientHeight;
             if (w > 0 && h > 0) setAspectRatio(w / h);
         });
-    }, [getMaxWidth, setAttributes, width]);
+    }, [editor, getMaxWidth, setAttributes, width]);
 
     const displayWidth = resize.preview?.size.width ?? width;
     // A picture no browser draws (WMF, EMF) shows its alt text, which a small width squeezes, so its box takes 10rem,

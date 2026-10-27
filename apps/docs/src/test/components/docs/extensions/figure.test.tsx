@@ -25,7 +25,7 @@ const text = (t: string) => ({ type: 'text', text: t });
 
 // By default "a" at 1, the figure at 2, "b" at 3: the image box spans x 200 to 400 in the 600 px wide figure box,
 // on a page whose text column is 600 px.
-async function mount(content: object[] = [paragraph(text('a'), figure, text('b'))]) {
+async function mount(content: object[] = [paragraph(text('a'), figure, text('b'))], pageless = false, columnPx = 600) {
     const editor = new Editor({
         extensions: [
             ...getDocExtensions({ exclude: ['figure', 'comment'] }),
@@ -36,6 +36,7 @@ async function mount(content: object[] = [paragraph(text('a'), figure, text('b')
                     ...DEFAULT_PAGE_SETUP,
                     width: 800,
                     margin: { top: 100, right: 100, bottom: 100, left: 100 },
+                    pageless,
                 }),
             }),
         ],
@@ -45,7 +46,7 @@ async function mount(content: object[] = [paragraph(text('a'), figure, text('b')
         createElement('div', { 'data-document': '', style: { padding: 0 } }, createElement(EditorContent, { editor })),
     );
     const page = document.querySelector('[data-document]');
-    if (page) Object.defineProperty(page, 'clientWidth', { value: 600 });
+    if (page) Object.defineProperty(page, 'clientWidth', { value: columnPx });
     unmount = async () => {
         await rendered.unmount();
         editor.destroy();
@@ -186,7 +187,7 @@ test.each([
     [1, 250],
     [0.5, 300],
 ])('a grip dragged 50 screen px on a page drawn at %p makes a 200 px figure %d px wide', async (scale, width) => {
-    const { editor, box } = await mount([paragraph(text('a'), figure)]);
+    const { editor, box, image } = await mount([paragraph(text('a'), figure)]);
     await act(async () => {
         editor.commands.setNodeSelection(2);
     });
@@ -199,6 +200,7 @@ test.each([
     Object.defineProperty(editor.view.dom, 'offsetWidth', { value: 600 });
     editor.view.dom.getBoundingClientRect = () =>
         DOMRect.fromRect({ x: 0, y: 0, width: 600 * scale, height: 100 * scale });
+    image.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 0, width: 200 * scale, height: 100 * scale });
 
     const grip = box.querySelectorAll('.eigen-selection-handle')[3];
     if (!grip) throw new Error('no south-east grip');
@@ -274,6 +276,56 @@ test.each([
     await press(editor, key);
     await press(editor, key);
     expect(widthAt2(editor)).toBe(limit);
+});
+
+// A page-less doc's column is the reader's, so a block figure grows past it up to the paper, and a wrap keeps half of the
+// page map's column, whatever the column on screen.
+test.each([
+    ['block', 795, 800],
+    ['wrap-left', 295, 300],
+])('on a page-less doc, a %s figure of %d px, Shift-ArrowRight twice, stops at %d px', async (layout, width, limit) => {
+    const { editor } = await mount(
+        [paragraph(text('a'), { ...figure, attrs: { ...figure.attrs, layout, width } })],
+        true,
+        // The reader's Wide column on screen.
+        1056,
+    );
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+
+    await press(editor, 'ArrowRight');
+    await press(editor, 'ArrowRight');
+    expect(widthAt2(editor)).toBe(limit);
+});
+
+// A page-less doc's wide image shrinks to the room beside its column, so it draws narrower than it is stored, and a
+// grip's travel counts in stored px all the same.
+test('a grip on a figure drawn at 350 px of its stored 700 px moves it twice its screen travel', async () => {
+    const wide = { ...figure, attrs: { ...figure.attrs, width: 700 } };
+    const { editor, box, image } = await mount([paragraph(text('a'), wide)], true);
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+    const img = box.querySelector('img');
+    if (!img) throw new Error('no img');
+    Object.defineProperties(img, { naturalWidth: { value: 1400 }, naturalHeight: { value: 700 } });
+    await act(async () => {
+        img.dispatchEvent(new Event('load'));
+    });
+    image.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 0, width: 350, height: 175 });
+
+    const grip = box.querySelectorAll('.eigen-selection-handle')[3];
+    if (!grip) throw new Error('no south-east grip');
+    Object.defineProperty(grip, 'setPointerCapture', { value: () => {} });
+    await act(async () => {
+        grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0, clientX: 100 }));
+    });
+    await act(async () => {
+        document.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: 140 }));
+        document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: 140 }));
+    });
+    expect(widthAt2(editor)).toBe(780);
 });
 
 // A figure with no width draws at its image's own width, capped at the column.
