@@ -389,8 +389,7 @@ export function docEditorOptions({
                     return true;
                 },
             },
-            transformPastedHTML: (html: string) =>
-                cleanPastedHTML(html, textColumnWidth(), cardIds(), normalStyle().font, !band),
+            transformPastedHTML: (html: string) => cleanPastedHTML(html, page(), cardIds(), normalStyle().font, !band),
             // A note pasted into a note is nested in it: its text stays, in its place.
             transformPasted: note
                 ? (slice, view) =>

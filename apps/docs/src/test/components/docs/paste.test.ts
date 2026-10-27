@@ -6,7 +6,10 @@ installHappyDom();
 
 const { DOCUMENT_FONT, getFontName } = await import('@workspace/lib/constants/fonts');
 const { cleanPastedHTML } = await import('../../../components/docs/paste');
-const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+
+// An 800 px paper with 100 px margins: a 600 px text column.
+const PAGE = { ...DEFAULT_PAGE_SETUP, width: 800, margin: { top: 100, right: 100, bottom: 100, left: 100 } };
 
 const schema = getSchema(getDocExtensions());
 
@@ -14,7 +17,7 @@ const schema = getSchema(getDocExtensions());
 function pastedFont(fontFamily: string, normalFont = DOCUMENT_FONT): string {
     const html = cleanPastedHTML(
         `<p><span style="font-family: ${fontFamily}">x</span></p>`,
-        600,
+        PAGE,
         new Set(),
         normalFont,
     );
@@ -77,7 +80,7 @@ describe('paste keeps caps', () => {
         ['font-family:Calibri;font-variant:small-caps', 'small'],
         ['font-variant:normal;text-transform:none', null],
     ])('%s pastes as caps %s', (style, caps) => {
-        const html = cleanPastedHTML(`<p><span style="${style}">x</span></p>`, 600, new Set(), DOCUMENT_FONT);
+        const html = cleanPastedHTML(`<p><span style="${style}">x</span></p>`, PAGE, new Set(), DOCUMENT_FONT);
         const marks = createDocument(html, schema).firstChild?.firstChild?.marks ?? [];
         expect(marks.find((mark) => mark.type.name === 'textStyle')?.attrs['caps'] ?? null).toBe(caps);
     });
@@ -87,7 +90,7 @@ describe('paste keeps caps', () => {
 describe('paste keeps a size the doc does not draw', () => {
     const pastedSizes = (html: string) => {
         const sizes: [string, unknown][] = [];
-        createDocument(cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+        createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
             if (node.isText)
                 sizes.push([
                     node.text ?? '',
@@ -149,7 +152,7 @@ test('an upright run in a pasted Google Docs Heading 6 is italic, its italic run
         `<b style="font-weight:normal;" id="docs-internal-guid-1"><h6 dir="ltr">${span('Fine ', 'italic')}${span('print', 'normal')}</h6>` +
         `<p dir="ltr">${span('Said ', 'italic')}${span('plainly', 'normal')}</p></b>`;
     const runs: [string, string[]][] = [];
-    createDocument(cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+    createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
         if (node.isText) runs.push([node.text ?? '', node.marks.map((mark) => mark.type.name)]);
     });
     expect(runs.map(([text, marks]) => [text, marks.includes('italic')])).toEqual([
@@ -166,7 +169,7 @@ test.each([
     ['an upright run', '<h6><span style="font-style:normal">a<span style="font-style:italic">b</span>c</span></h6>'],
 ])('an italic run inside %s of a pasted Heading 6 stays plain', (_name, html) => {
     const runs: [string, boolean][] = [];
-    createDocument(cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+    createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
         if (node.isText) runs.push([node.text ?? '', node.marks.some((mark) => mark.type.name === 'italic')]);
     });
     expect(runs).toEqual([
@@ -182,7 +185,7 @@ test("a paragraph pasted from Google Docs takes the doc's spacing and indents", 
     const html =
         '<b id="docs-internal-guid-1"><p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;margin-left:36pt;text-indent:-18pt"><span style="font-size:11pt">a</span></p></b>';
     const formats: Record<string, unknown>[] = [];
-    createDocument(cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+    createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
         if (node.type.name === 'paragraph')
             formats.push(
                 Object.fromEntries(
@@ -224,7 +227,7 @@ describe('a docs copy pastes back as it was copied', () => {
         const { dom } = source.view.serializeForClipboard(source.state.doc.slice(0, source.state.doc.content.size));
         const target = new Editor({
             extensions: getDocExtensions(),
-            editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT) },
+            editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT) },
         });
         target.view.pasteHTML(dom.innerHTML);
         expect(target.getJSON()).toEqual(source.getJSON());
@@ -236,7 +239,7 @@ test('a pasted chart wider than the column shrinks to it, keeping its shape', ()
         '<p><span class="chart" data-chart="{}" data-width="1200" data-height="742"></span>' +
         '<span class="chart" data-chart="{}" data-width="400" data-height="300"></span></p>';
     const sizes: unknown[][] = [];
-    createDocument(cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+    createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
         if (node.type.name === 'chart') sizes.push([node.attrs.width, node.attrs.height]);
     });
     expect(sizes).toEqual([
@@ -252,7 +255,7 @@ test('paste keeps the comment anchors this document has cards for and strips the
         '<p><span class="figure" data-comment-id="here"><img data-media-name="a.png"></span>' +
         '<span class="figure" data-comment-id="elsewhere"><img data-media-name="b.png"></span></p>';
     const anchors: unknown[][] = [];
-    createDocument(cleanPastedHTML(html, 600, new Set(['here']), DOCUMENT_FONT), schema).descendants((node) => {
+    createDocument(cleanPastedHTML(html, PAGE, new Set(['here']), DOCUMENT_FONT), schema).descendants((node) => {
         const mark = node.marks.find((m) => m.type.name === 'comment');
         if (node.isLeaf)
             anchors.push([node.text ?? node.attrs.mediaName, node.attrs.commentCardId, mark?.attrs.cardId]);
@@ -271,7 +274,30 @@ test("a KaTeX equation's drawn glyphs are not pasted beside its <math>", () => {
     const math =
         '<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>';
     const drawn = `<span class="katex"><span class="katex-mathml">${math}</span><span class="katex-html" aria-hidden="true"><span class="mord mathnormal">x</span></span></span>`;
-    expect(cleanPastedHTML(`<p>a ${drawn} b</p>`, 600, new Set(), DOCUMENT_FONT)).toBe(
-        cleanPastedHTML(`<p>a ${math} b</p>`, 600, new Set(), DOCUMENT_FONT),
+    expect(cleanPastedHTML(`<p>a ${drawn} b</p>`, PAGE, new Set(), DOCUMENT_FONT)).toBe(
+        cleanPastedHTML(`<p>a ${math} b</p>`, PAGE, new Set(), DOCUMENT_FONT),
     );
+});
+
+// A positioned image keeps to the paper: 800 px, its paragraph taken at the column's left, 100 px in.
+test.each([
+    [900, 50, 800, -100],
+    [300, 600, 300, 400],
+    [300, -500, 300, -100],
+])('a pasted %d px image in front of the text at x %d is %d px wide at x %d', (width, offset, capped, clamped) => {
+    const html = `<p><span class="figure" data-layout="front" data-offset-x="${offset}" data-offset-y="30"><img src="data:image/png;base64," width="${width}"></span>x</p>`;
+    const found: object[] = [];
+    createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+        if (node.type.name === 'figure') found.push(node.attrs);
+    });
+    expect(found).toMatchObject([{ layout: 'front', width: capped, offsetX: clamped, offsetY: 30 }]);
+});
+
+test('a pasted image in the flow still caps at the column', () => {
+    const html = '<p><img src="data:image/png;base64," width="700"></p>';
+    const found: unknown[] = [];
+    createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+        if (node.type.name === 'figure') found.push(node.attrs['width']);
+    });
+    expect(found).toEqual([600]);
 });

@@ -11,7 +11,10 @@ installHappyDom();
 const { buildTextClipboardItem, classifyPaste } = await import('@workspace/lib/clipboard');
 const { FLAT_CHART_LOOK, MAX_CHART_SPEC_BYTES } = await import('@workspace/lib/charts');
 const { DOCUMENT_FONT, EIGEN_FONTS } = await import('@workspace/lib/constants/fonts');
-const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+
+// An 800 px paper with 100 px margins: a 600 px text column.
+const PAGE = { ...DEFAULT_PAGE_SETUP, width: 800, margin: { top: 100, right: 100, bottom: 100, left: 100 } };
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { insertEigenItems, runClipboardCommand, writeDocsClipboard } = await import(
     '../../../components/docs/clipboard'
@@ -57,7 +60,7 @@ async function paste(
 ) {
     const target = new Editor({
         extensions: getDocExtensions(),
-        editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600, cardIds, DOCUMENT_FONT) },
+        editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, PAGE, cardIds, DOCUMENT_FONT) },
     });
     await insertEigenItems(target, clipboard.eigen?.items ?? [], clipboard.html, pastedMediaName, 600);
     return target;
