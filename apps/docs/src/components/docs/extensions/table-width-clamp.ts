@@ -1,7 +1,8 @@
 // TableWidthClamp keeps every table's stored widths within the page after any change in a writer's tab, a paste's or a
 // collaborator's included. A table in the body keeps its widths, each column at most the paper's width, as a page-less
 // doc's wide table scrolls sideways and keeps them when the doc goes back to pages. A table nested in a list item or a
-// cell is fitted to the text column, every column scaled by one factor to a floor.
+// cell, or one in a header or a footer, which has no such strip, is fitted to the text column, every column scaled by
+// one factor to a floor.
 
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
@@ -12,18 +13,20 @@ const DEFAULT_CELL_WIDTH = 100;
 type TableWidthClampOptions = {
     textColumnWidth: () => number;
     paperWidth: () => number;
+    // A header's or a footer's editor, whose tables are all fitted.
+    band: boolean;
 };
 
 export const TableWidthClamp = Extension.create<TableWidthClampOptions>({
     name: 'tableWidthClamp',
 
     addOptions() {
-        return { textColumnWidth: () => Infinity, paperWidth: () => Infinity };
+        return { textColumnWidth: () => Infinity, paperWidth: () => Infinity, band: false };
     },
 
     addProseMirrorPlugins() {
         const editor = this.editor;
-        const { textColumnWidth, paperWidth } = this.options;
+        const { textColumnWidth, paperWidth, band } = this.options;
 
         return [
             new Plugin({
@@ -46,7 +49,7 @@ export const TableWidthClamp = Extension.create<TableWidthClampOptions>({
                         if (!firstRow) return;
                         const tableContentStart = pos + 1;
 
-                        if (newState.doc.resolve(pos).depth === 0) {
+                        if (!band && newState.doc.resolve(pos).depth === 0) {
                             maxColumnWidth ??= paperWidth();
                             const cap = maxColumnWidth;
                             node.descendants((child, childPos) => {

@@ -363,7 +363,7 @@ export function docEditorOptions({
             Equation.configure(equation),
             PageNumber,
             ...(band || note ? [] : [Footnote.configure(footnote), NoteFormatting]),
-            TableWidthClamp.configure({ textColumnWidth, paperWidth }),
+            TableWidthClamp.configure({ textColumnWidth, paperWidth, band }),
             noPageBreaksWhenPageless(pageless),
             PositionedFigures.configure({ page, band, note }),
             AtomMarks,

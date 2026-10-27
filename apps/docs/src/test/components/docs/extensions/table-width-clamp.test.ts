@@ -1,6 +1,6 @@
 // A table in the body keeps the widths it is given, each column at most the paper's width, as a page-less doc's wide
-// table scrolls sideways and keeps its widths when the doc goes back to pages. A table nested in a list item or a cell
-// is fitted to the text column after any change that takes it past.
+// table scrolls sideways and keeps its widths when the doc goes back to pages. A table nested in a list item or a cell,
+// or in a header or a footer, is fitted to the text column after any change that takes it past.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -26,12 +26,13 @@ const cell = (attrs: CellAttrs, text = 'x') => ({
 });
 const row = (...cells: object[]) => ({ type: 'tableRow', content: cells });
 
-async function mountDoc(content: object[], editable = true) {
+// A band's editor, a header's or a footer's, is mounted with `band`.
+async function mountDoc(content: object[], editable = true, band = false) {
     const editor = new Editor({
         editable,
         extensions: [
             ...getDocExtensions(),
-            TableWidthClamp.configure({ textColumnWidth: () => COLUMN_PX, paperWidth: () => PAPER_PX }),
+            TableWidthClamp.configure({ textColumnWidth: () => COLUMN_PX, paperWidth: () => PAPER_PX, band }),
         ],
         content: { type: 'doc', content },
     });
@@ -81,6 +82,22 @@ test('a change that takes a nested table past the text column scales every colum
     );
     const { state, view } = editor;
     view.dispatch(state.tr.setNodeMarkup(6, null, { ...state.doc.nodeAt(6)?.attrs, colwidth: [400] }));
+    expect(widths(editor)).toEqual([[300], [150], [150]]);
+});
+
+test("a band's table is fitted to the text column, as a band has no page-less strip to scroll in", async () => {
+    const editor = await mountDoc(
+        [
+            {
+                type: 'table',
+                content: [row(cell({ colwidth: [200] }), cell({ colwidth: [200] }), cell({ colwidth: [200] }))],
+            },
+        ],
+        true,
+        true,
+    );
+    const { state, view } = editor;
+    view.dispatch(state.tr.setNodeMarkup(first, null, { ...state.doc.nodeAt(first)?.attrs, colwidth: [400] }));
     expect(widths(editor)).toEqual([[300], [150], [150]]);
 });
 
