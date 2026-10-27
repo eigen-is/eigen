@@ -104,10 +104,10 @@ describe('renderEigendocPreviewBody', () => {
             ],
         });
         expect(body).toContain(
-            '<span class="figure" data-layout="behind" data-alignment="center" style="left: 12px; top: 8px; width: 300px"><img',
+            '<span class="figure" data-layout="behind" data-alignment="center" data-offset-x="12" data-offset-y="8" style="left: 12px; top: 8px; width: 300px"><img',
         );
         expect(body).toContain(
-            '<span class="figure" data-layout="front" data-alignment="center" style="left: 0px; top: -40px; width: 480px"><svg',
+            '<span class="figure" data-layout="front" data-alignment="center" data-offset-x="0" data-offset-y="-40" style="left: 0px; top: -40px; width: 480px"><svg',
         );
     });
 

@@ -436,11 +436,12 @@ describe('doc export — figures in front of and behind the text', () => {
         return new TextDecoder().decode(data);
     }
 
-    // The sanitized download carries the box's place and width inline; the stylesheet gives it its layer.
+    // The sanitized download carries the box's place and width inline, and the offsets a paste back into Docs reads;
+    // the stylesheet gives it its layer.
     test.each(['front', 'behind'])('a %s figure is a box at its offsets from its paragraph', async (layout) => {
         const html = await exportHtml({ type: 'doc', content: [anchored(layout)] });
         expect(html).toContain(
-            `<p><span class="figure" data-layout="${layout}" data-alignment="center" style="left: -24px; top: 130.5px; width: 320px"><img`,
+            `<p><span class="figure" data-layout="${layout}" data-alignment="center" data-offset-x="-24" data-offset-y="130.5" style="left: -24px; top: 130.5px; width: 320px"><img`,
         );
     });
 
@@ -480,8 +481,12 @@ describe('doc export — figures in front of and behind the text', () => {
                 { type: 'blockquote', content: [anchored('behind')] },
             ],
         });
-        expect(html).toContain('data-layout="front" data-alignment="center" style="left: -24px');
-        expect(html).toContain('data-layout="behind" data-alignment="center" style="left: -24px');
+        expect(html).toContain(
+            'data-layout="front" data-alignment="center" data-offset-x="-24" data-offset-y="130.5" style="left: -24px',
+        );
+        expect(html).toContain(
+            'data-layout="behind" data-alignment="center" data-offset-x="-24" data-offset-y="130.5" style="left: -24px',
+        );
     });
 });
 
