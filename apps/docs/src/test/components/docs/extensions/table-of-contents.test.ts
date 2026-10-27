@@ -2,6 +2,7 @@
 // collaborator's too, and a click that jumps to the heading.
 import { afterEach, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { Plugin } from '@tiptap/pm/state';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -138,4 +139,37 @@ test('a press on an entry jumps to its heading, counted past the deeper headings
     line?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     const pos = jumps.at(0);
     expect(pos === undefined ? null : editor.state.doc.nodeAt(pos)?.textContent).toBe('Intro');
+});
+
+// ProseMirror's own press handling would select the table of contents on the release, once the jump put the caret in
+// the heading, and the next key typed would replace it. Its mousedown handler is what watches for that release.
+test('ProseMirror leaves a press on an entry to the entry, and handles one beside the entries', () => {
+    const editor = body();
+    editor.commands.setContent({ type: 'doc', content: [toc(), heading(1, 'Intro')] });
+    // The tag of each press ProseMirror handles.
+    const seen: string[] = [];
+    const mousedown = (_: unknown, event: MouseEvent) => {
+        seen.push(event.target instanceof Element ? event.target.tagName : '');
+        return false;
+    };
+    // Ahead of the editor's own plugins, as one of them takes a press on the node.
+    editor.registerPlugin(new Plugin({ props: { handleDOMEvents: { mousedown } } }), (plugin, plugins) => [
+        plugin,
+        ...plugins,
+    ]);
+    const press = () => new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    nav(editor)?.querySelector('[data-level]')?.dispatchEvent(press());
+    expect(seen).toEqual([]);
+    nav(editor)?.dispatchEvent(press());
+    expect(seen).toEqual(['NAV']);
+});
+
+// A paste can put one in a quote or a list item, and the PDF and the docx list the headings wherever it is.
+test('one inside another block lists the headings too', () => {
+    const editor = body();
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'blockquote', content: [toc()] }, heading(1, 'Intro')],
+    });
+    expect(entries(editor)).toEqual([['1', 'Intro']]);
 });
