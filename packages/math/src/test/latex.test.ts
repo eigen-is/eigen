@@ -5,7 +5,7 @@ import type { LatexCommand } from '../latex-commands';
 import { LATEX_COMMANDS } from '../latex-commands';
 import { readMathml, readMathmlLatex, writeMathml } from '../mathml';
 import { ACCENTS, LARGE_OPERATORS, naryLimits } from '../notation';
-import { readOmml } from '../omml';
+import { readOmml, writeOmml } from '../omml';
 import type { MathNode, MathRow } from '../tree';
 import { MATH_ENCLOSURES, MATH_LIMITS, MATH_SPACES, MATH_VARIANTS } from '../tree';
 import { canonicalIssue } from './canonical';
@@ -615,6 +615,129 @@ describe('readLatex', () => {
         ['\\begin{matrix}a\\\\[{2pt}]b\\end{matrix}', 17],
     ])('%p is a MathError at offset %p', (latex, offset) => {
         expect(thrown(() => readLatex(latex))?.offset).toBe(offset);
+    });
+});
+
+describe('bra-ket notation reads as fenced rows', () => {
+    const fenced = (open: string, close: string, parts: MathRow[]): MathNode => ({
+        kind: 'fenced',
+        open,
+        close,
+        separator: parts.length > 1 ? '|' : '',
+        parts,
+    });
+    const [a, b, A, psi] = [letter('a'), letter('b'), letter('A'), letter('ψ')];
+    const half: MathRow = [{ kind: 'fraction', numerator: one, denominator: two, line: 'bar' }];
+    const bar: MathNode = { kind: 'operator', text: '|' };
+
+    test.each<[string, MathRow]>([
+        ['\\bra{a}', [fenced('⟨', '|', [a])]],
+        ['\\Bra{\\frac12}', [fenced('⟨', '|', [half])]],
+        ['\\ket{\\psi}', [fenced('|', '⟩', [psi])]],
+        ['\\Ket{a}', [fenced('|', '⟩', [a])]],
+        // physics's star keeps a bra or ket from growing, a size the tree doesn't hold.
+        ['\\bra*{a}\\ket*{b}', [fenced('⟨', '|', [a]), fenced('|', '⟩', [b])]],
+        ['\\ket\\psi', [fenced('|', '⟩', [psi])]],
+        ['\\ket{\\psi}^2', [{ kind: 'scripts', base: [fenced('|', '⟩', [psi])], sup: two }]],
+        // braket's \braket and \set: each | at the top of the argument is a separator, as \Braket's \middle| is.
+        ['\\braket{a|b}', [fenced('⟨', '⟩', [a, b])]],
+        ['\\braket{a|A|b}', [fenced('⟨', '⟩', [a, A, b])]],
+        ['\\Braket{a|\\frac12|b}', [fenced('⟨', '⟩', [a, half, b])]],
+        ['\\braket{a}', [fenced('⟨', '⟩', [a])]],
+        ['\\braket{}', [fenced('⟨', '⟩', [[]])]],
+        ['\\braket{|}', [fenced('⟨', '⟩', [[], []])]],
+        // A | inside a group, after \left or as a \big delimiter is no separator, and \| is the character ‖.
+        ['\\braket{a|{b|a}}', [fenced('⟨', '⟩', [a, [...b, bar, ...a]])]],
+        [
+            '\\braket{\\left|a\\right|}',
+            [fenced('⟨', '⟩', [[{ kind: 'fenced', open: '|', close: '|', separator: '', parts: [a] }]])],
+        ],
+        ['\\braket{\\big|a}', [fenced('⟨', '⟩', [[bar, ...a]])]],
+        ['\\braket{a\\|b}', [fenced('⟨', '⟩', [[...a, { kind: 'operator', text: '‖' }, ...b]])]],
+        [
+            '\\set{x|x>0}',
+            [
+                {
+                    kind: 'fenced',
+                    open: '{',
+                    close: '}',
+                    separator: '|',
+                    parts: [x, [...x, { kind: 'operator', text: '>' }, { kind: 'number', text: '0' }]],
+                },
+            ],
+        ],
+        ['\\Set{a}', [{ kind: 'fenced', open: '{', close: '}', separator: '', parts: [a] }]],
+        // physics: ⟨A⟩, and with a state ⟨ψ|A|ψ⟩; one or two stars only size it.
+        ['\\expval{A}', [fenced('⟨', '⟩', [A])]],
+        ['\\expval{A}{\\psi}', [fenced('⟨', '⟩', [psi, A, psi])]],
+        ['\\expval**{A} {\\psi}', [fenced('⟨', '⟩', [psi, A, psi])]],
+        ['\\expval{A}\\psi', [fenced('⟨', '⟩', [A]), ...psi]],
+        ['\\mel{a}{A}{b}', [fenced('⟨', '⟩', [a, A, b])]],
+        ['\\mel*{a}{A}{b}', [fenced('⟨', '⟩', [a, A, b])]],
+        ['\\ketbra{a}{b}', [fenced('|', '⟩', [a]), fenced('⟨', '|', [b])]],
+        ['\\ketbra*{a}', [fenced('|', '⟩', [a]), fenced('⟨', '|', [a])]],
+        [
+            '\\mathbf{eigen}\\,\\ket{\\text{docs}}',
+            [
+                ...[...'eigen'].map((text): MathNode => ({ kind: 'identifier', text, variant: 'bold' })),
+                { kind: 'space', width: 'thin' },
+                fenced('|', '⟩', [[{ kind: 'text', text: 'docs' }]]),
+            ],
+        ],
+    ])('%p', (latex, tree) => {
+        const read = readLatex(latex);
+        expect(read).toStrictEqual(tree);
+        expect(canonicalIssue(read)).toBeUndefined();
+        expect(viaMathml(read)).toStrictEqual(read);
+        expect(viaOmml(read)).toStrictEqual(read);
+        expect(viaLatex(read)).toStrictEqual(read);
+    });
+
+    test('MathML draws the bars as fences and separators, Word as a delimiter object', () => {
+        const tree = readLatex('\\braket{a|b}');
+        expect(writeMathml(tree)).toBe(
+            '<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mo fence="true">⟨</mo><mi>a</mi>' +
+                '<mo separator="true">|</mo><mi>b</mi><mo fence="true">⟩</mo></mrow></math>',
+        );
+        expect(writeOmml(tree)).toContain('<m:begChr m:val="⟨"/><m:sepChr m:val="|"/><m:endChr m:val="⟩"/>');
+    });
+
+    // \left and \middle are in every LaTeX, KaTeX and MathJax; \braket needs a package, and physics reads it otherwise.
+    test('writeLatex writes a bra-ket as \\left … \\middle| … \\right', () => {
+        expect(writeLatex(readLatex('\\braket{a|A|b}'))).toBe('\\left\\langle a\\middle|A\\middle|b\\right\\rangle');
+        expect(writeLatex(readLatex('\\ketbra{a}{b}'))).toBe('\\left|a\\right\\rangle\\left\\langle b\\right|');
+    });
+
+    // A state ψ is one row in both parts of ⟨ψ|A|ψ⟩, but the tree holds it twice: so does the size bound.
+    test('a repeated state counts twice toward the size bound, as the same tree typed out does', () => {
+        const largest = (latex: (state: string) => string) => {
+            let [low, high] = [0, MATH_LIMITS.size];
+            while (low < high) {
+                const n = Math.ceil((low + high) / 2);
+                if (thrown(() => readLatex(latex(`\\text{${'x'.repeat(n)}}`)))) high = n - 1;
+                else low = n;
+            }
+            return low;
+        };
+        const expval = largest((state) => `\\expval{A}{${state}}`);
+        expect(expval).toBeGreaterThan(MATH_LIMITS.size / 3);
+        expect(expval).toBe(largest((state) => `\\left\\langle ${state}\\middle|A\\middle|${state}\\right\\rangle`));
+        expect(largest((state) => `\\ketbra{${state}}`)).toBe(
+            largest((state) => `\\left|${state}\\right\\rangle\\left\\langle ${state}\\right|`),
+        );
+    });
+
+    test.each<[string, number, string]>([
+        ['\\braket', 7, 'An argument is missing'],
+        ['\\braket{a|b', 7, 'A { without its }'],
+        ['\\ket*', 5, 'An argument is missing'],
+        ['\\mel{a}{A}', 10, 'An argument is missing'],
+        ['\\expval', 7, 'An argument is missing'],
+        ['\\braket{a\\middle|b}', 9, 'Unexpected \\middle'],
+        ['\\braket{a&b}', 9, 'Unexpected &'],
+        ['\\left\\langle\\braket{a\\right\\rangle}', 21, 'A \\right without its \\left'],
+    ])('%p is a MathError at offset %p', (latex, offset, message) => {
+        expect(thrown(() => readLatex(latex))).toMatchObject({ offset, message });
     });
 });
 

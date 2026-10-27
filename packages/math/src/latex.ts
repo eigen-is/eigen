@@ -136,6 +136,18 @@ function delimiterOf(token: Token): string | undefined {
     return command?.kind === 'symbol' && command.class === 'delimiter' ? command.char : undefined;
 }
 
+const LANGLE = '⟨';
+const RANGLE = '⟩';
+
+// A bra-ket's fenced row, its parts between bars.
+const barred = (open: string, close: string, parts: MathRow[]): MathNode => ({
+    kind: 'fenced',
+    open,
+    close,
+    separator: parts.length > 1 ? '|' : '',
+    parts,
+});
+
 // The units KaTeX and MathJax share.
 const DIMENSION = /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:pt|mm|cm|in|pc|px|em|ex|mu)\s*$/;
 
@@ -256,8 +268,23 @@ class LatexReader {
                 break;
             case 'operatorname':
                 if (this.#isChar(end, '*')) end++;
+                break;
+            case 'expectation':
+            case 'outerProduct':
+                end = this.#argumentEnd(this.#starred(end, command.stars), nesting);
+                return this.#isChar(end, '{') ? this.#argumentEnd(end, nesting) : end;
+            case 'braket':
+            case 'matrixElement':
+                end = this.#starred(end, command.stars);
         }
         for (let argument = 0; argument < command.arguments; argument++) end = this.#argumentEnd(end, nesting);
+        return end;
+    }
+
+    // Where up to `stars` stars after a physics command end; they only size its fences.
+    #starred(index: number, stars: number): number {
+        let end = index;
+        while (end < index + stars && this.#isChar(end, '*')) end++;
         return end;
     }
 
@@ -585,6 +612,34 @@ class LatexReader {
         return { kind: 'fenced', open, close, separator: parts.length > 1 ? (separator ?? '') : '', parts };
     }
 
+    // A bra-ket's argument as the parts of a fenced row. Where it splits, each | at the argument's top is a separator,
+    // as \Braket makes it a \middle|; one in a group or a delimiter's own stays a character.
+    #braket(open: string, close: string, split: boolean, style: Style, depth: number): MathNode {
+        const parts: MathRow[] = [];
+        this.#window(() => {
+            const bars: number[] = [];
+            for (let index = this.#pos; split && index < this.#end; index = this.#atomEnd(index, 0))
+                if (this.#isChar(index, '|')) bars.push(index);
+            let current = style;
+            for (const bar of [...bars, this.#end]) {
+                const pieces: Piece[] = [];
+                this.#within(this.#pos, bar, () => {
+                    current = this.#atoms(pieces, current, depth + 1);
+                });
+                parts.push(this.#build(pieces, depth + 1));
+                this.#pos = Math.min(bar + 1, this.#end);
+            }
+        });
+        return barred(open, close, parts);
+    }
+
+    // physics repeats an argument, such as the state in ⟨ψ|A|ψ⟩. Both parts hold the one row, read once, so it counts
+    // again toward the size bound, as in the tree a writer writes.
+    #again(row: MathRow, before: number, depth: number): MathRow {
+        bound(this.#budget, depth, this.#budget.size - before);
+        return row;
+    }
+
     // A row gap: the tree keeps none, but it must be a dimension KaTeX and MathJax both read.
     #gap(): void {
         const open = this.#pos;
@@ -768,6 +823,38 @@ class LatexReader {
                 this.#spliced(into, style, depth);
                 into.push({ chars: ')', style });
                 return;
+            case 'braket':
+                this.#pos = this.#starred(this.#pos, command.stars);
+                into.push({ node: this.#braket(command.open, command.close, command.split, style, depth) });
+                return;
+            case 'expectation': {
+                this.#pos = this.#starred(this.#pos, command.stars);
+                const operator = this.#row(style, depth + 1);
+                if (!this.#isChar(this.#pos, '{')) {
+                    into.push({ node: barred(LANGLE, RANGLE, [operator]) });
+                    return;
+                }
+                const before = this.#budget.size;
+                const state = this.#row(style, depth + 1);
+                into.push({ node: barred(LANGLE, RANGLE, [this.#again(state, before, depth + 1), operator, state]) });
+                return;
+            }
+            case 'matrixElement': {
+                this.#pos = this.#starred(this.#pos, command.stars);
+                const parts = [this.#row(style, depth + 1), this.#row(style, depth + 1), this.#row(style, depth + 1)];
+                into.push({ node: barred(LANGLE, RANGLE, parts) });
+                return;
+            }
+            case 'outerProduct': {
+                this.#pos = this.#starred(this.#pos, command.stars);
+                const before = this.#budget.size;
+                const ket = this.#row(style, depth + 1);
+                const bra = this.#isChar(this.#pos, '{')
+                    ? this.#row(style, depth + 1)
+                    : this.#again(ket, before, depth + 1);
+                into.push({ node: barred('|', RANGLE, [ket]) }, { node: barred(LANGLE, '|', [bra]) });
+                return;
+            }
             case 'left':
                 into.push({ node: this.#fenced(style, depth) });
                 return;

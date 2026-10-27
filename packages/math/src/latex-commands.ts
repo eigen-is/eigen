@@ -31,6 +31,13 @@ type LatexRow =
     | { kind: 'enclose'; notation: readonly MathEnclosure[] }
     | { kind: 'notation' }
     | { kind: 'pmod' }
+    // The braket package's commands, such as \ket and \braket: a fenced row around the argument. With `split`, each |
+    // in the argument is a separator.
+    | { kind: 'braket'; open: string; close: string; split: boolean; stars: number }
+    // The physics package's \expval, \mel and \ketbra. Their stars only size the fences, which the tree doesn't keep.
+    | { kind: 'expectation'; stars: number }
+    | { kind: 'matrixElement'; stars: number }
+    | { kind: 'outerProduct'; stars: number }
     | { kind: 'left' }
     | { kind: 'middle' }
     | { kind: 'right' }
@@ -40,7 +47,7 @@ type LatexRow =
     | { kind: 'end' }
     | { kind: 'noop' };
 
-// `arguments` counts braced arguments; an optional [argument], a star or a `\left` delimiter comes on top.
+// `arguments` counts braced arguments; an optional [argument] or group, a star or a `\left` delimiter comes on top.
 export type LatexCommand = Readonly<LatexRow & { arguments: number }>;
 
 const ARGUMENTS: Readonly<Record<LatexRow['kind'], number>> = {
@@ -66,6 +73,10 @@ const ARGUMENTS: Readonly<Record<LatexRow['kind'], number>> = {
     enclose: 1,
     notation: 2,
     pmod: 1,
+    braket: 1,
+    expectation: 1,
+    matrixElement: 3,
+    outerProduct: 1,
     left: 0,
     middle: 0,
     right: 0,
@@ -421,6 +432,18 @@ const ROWS: [string, LatexRow][] = [
     ['xcancel', { kind: 'enclose', notation: ['updiagonalstrike', 'downdiagonalstrike'] }],
     ['enclose', { kind: 'notation' }],
     ['pmod', { kind: 'pmod' }],
+    // physics takes a star on \bra and \ket. The braket package's capitals grow, as every fence in the tree does.
+    ['bra', { kind: 'braket', open: '⟨', close: '|', split: false, stars: 1 }],
+    ['Bra', { kind: 'braket', open: '⟨', close: '|', split: false, stars: 0 }],
+    ['ket', { kind: 'braket', open: '|', close: '⟩', split: false, stars: 1 }],
+    ['Ket', { kind: 'braket', open: '|', close: '⟩', split: false, stars: 0 }],
+    ['braket', { kind: 'braket', open: '⟨', close: '⟩', split: true, stars: 0 }],
+    ['Braket', { kind: 'braket', open: '⟨', close: '⟩', split: true, stars: 0 }],
+    ['set', { kind: 'braket', open: '{', close: '}', split: true, stars: 0 }],
+    ['Set', { kind: 'braket', open: '{', close: '}', split: true, stars: 0 }],
+    ['expval', { kind: 'expectation', stars: 2 }],
+    ['mel', { kind: 'matrixElement', stars: 2 }],
+    ['ketbra', { kind: 'outerProduct', stars: 1 }],
     ['left', { kind: 'left' }],
     ['middle', { kind: 'middle' }],
     ['right', { kind: 'right' }],

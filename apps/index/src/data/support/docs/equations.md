@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, equations, math, latex, editor]
 related: [docs/images-and-tables, docs/export, docs/comments]
 order: 56
-updated: 2026-10-23
+updated: 2026-10-27
 ---
 
 You can put math in a document, from a quick x² in a sentence to a formula on a line of its own. You write each equation in LaTeX, the notation most math tools use, and a preview shows how it will look as you type.
@@ -25,7 +25,7 @@ Leaving the field, for example by clicking back in the document, saves the equat
 
 ## Write LaTeX
 
-Eigen reads the common LaTeX math commands: `\frac{a}{b}` for a fraction, `\sqrt{x}` for a root, `x_i` and `x^2` for scripts, `\sum`, `\int`, Greek letters such as `\alpha`, and environments such as `cases` and `pmatrix`.
+Eigen reads the common LaTeX math commands: `\frac{a}{b}` for a fraction, `\sqrt{x}` for a root, `x_i` and `x^2` for scripts, `\sum`, `\int`, Greek letters such as `\alpha`, and environments such as `cases` and `pmatrix`. For quantum states, the bra-ket commands `\bra{\phi}`, `\ket{\psi}`, `\braket{\phi|\psi}`, `\expval{A}`, `\mel{a}{A}{b}` and `\ketbra{a}{b}` draw angle brackets and bars that grow with what's inside them.
 
 Type a command's name and a space, and Eigen adds the braces it needs. `\frac` and a space becomes `\frac{}{}`, with the cursor in the first pair. An empty part of a fraction, a root, or another template shows as a dotted box in the preview, so you can see what's left to fill in.
 
