@@ -56,6 +56,11 @@ export const PREVIEW_SHEET_BUDGET: SheetBudget = { maxRows: 200, maxCols: 50, ma
 // A row whose every column is hidden still costs one, and a sheet whose every row is hidden costs its columns once.
 export const MAX_EXPORT_CELLS = 250_000;
 
+// The cells a sheet costs a PDF at least, since each sheet that draws prints a page of its own and WeasyPrint pays for
+// pages as well as cells: the cap then holds 2,000 pages. One-cell sheets printed in 6.4 s for 1,000, 18.8 s for 2,000
+// and 47.9 s for 3,000, and 4,000 reached WeasyPrint's 60 s timeout.
+const PDF_PAGE_CELLS = 125;
+
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.
 const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
 
@@ -68,6 +73,7 @@ const PAGE_SLACK = 20;
 
 // The workbook as one document. The screen's prints landscape. The PDF's page fits its widest and tallest sheet as
 // rendered, so WeasyPrint never clips a wide grid. A sheet cut to MAX_EXPORT_CELLS, or left out for it, is counted.
+// Only the PDF charges a sheet its page.
 export function sheetsHtmlDocument({
     title,
     sheets,
@@ -81,7 +87,7 @@ export function sheetsHtmlDocument({
     mode: HtmlExportMode;
     lost: LossCounter['lost'];
 }): string {
-    const { html, css, cut, leftOut, size } = renderSheetsHtml(sheets, mediaUrls);
+    const { html, css, cut, leftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode === 'pdf' ? PDF_PAGE_CELLS : 0);
     for (const sheet of cut) lost('sheets-cut', sheet);
     for (const sheet of leftOut) lost('sheets-left-out', sheet);
     const page = mode === 'pdf' ? pdfPageCss(size) : '@page { size: landscape; margin: 1.5cm; }';
@@ -109,11 +115,13 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
 
 // One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
 // The resolver reads the stored values: only a rule's own formula is evaluated. The sheets spend one MAX_EXPORT_CELLS
-// in tab order, so a sheet gets the cells the ones before it left. `cut` holds the sheets cut to it, `leftOut` the
-// sheets it left no row of, and `size` is the widest and tallest sheet as rendered.
+// in tab order, so a sheet gets the cells the ones before it left, and one that draws costs at least `pageCells`.
+// `cut` holds the sheets cut to it, `leftOut` the sheets it left no row or page of, and `size` is the widest and
+// tallest sheet as rendered.
 export function renderSheetsHtml(
     sheets: Sheet[],
     mediaUrls: MediaUrls,
+    pageCells = 0,
 ): { html: string; css: string; cut: Sheet[]; leftOut: Sheet[]; size: ContentSize } {
     const engine = new FormulaEngine();
     const resolver = sheetsResolver(sheets);
@@ -129,7 +137,14 @@ export function renderSheetsHtml(
             leftOut.push(sheet);
             continue;
         }
-        cellsLeft -= windowed.cells;
+        // A sheet with cells, images or charts prints a page of its own. A blank one takes no page.
+        const draws = windowed.range !== null || floatingObjects(windowed.sheet).length > 0;
+        const cells = draws ? Math.max(windowed.cells, pageCells) : windowed.cells;
+        if (cells > cellsLeft) {
+            leftOut.push(sheet);
+            continue;
+        }
+        cellsLeft -= cells;
         if (windowed.truncated) cut.push(sheet);
         const rendered = renderSheet(windowed, engine, resolver, { styles, mediaUrls });
         size.width = Math.max(size.width, rendered.size.width);
