@@ -3,6 +3,7 @@
 // there is one copy of each conversion.
 
 import type { CellMatrix, CellWithRowAndCol } from '@workspace/lib/sheets';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { maxBy, times } from 'es-toolkit/compat';
 
 export function dataToCelldata(data: CellMatrix | undefined): CellWithRowAndCol[] {
@@ -17,10 +18,10 @@ export function dataToCelldata(data: CellMatrix | undefined): CellWithRowAndCol[
     return celldata;
 }
 
-// A peer can store any number as a cell's row or column, and the matrix has no slot for one that is not an index, so
-// such a cell is dropped rather than failing every read of the workbook.
+// A peer can store any number as a cell's row or column, and the matrix has no slot for one that is not an index into
+// the grid, so such a cell is dropped rather than failing every read of the workbook.
 export function celldataToData(celldata: CellWithRowAndCol[], rowCount: number, colCount: number): CellMatrix {
-    const placed = celldata.filter((d) => isIndex(d.r) && isIndex(d.c));
+    const placed = celldata.filter((d) => isIndex(d.r, REFERENCE_ROW_COUNT) && isIndex(d.c, REFERENCE_COLUMN_COUNT));
     const lastRow = maxBy<CellWithRowAndCol>(placed, 'r');
     const lastCol = maxBy<CellWithRowAndCol>(placed, 'c');
     const lastRowNum = Math.max((lastRow?.r ?? 0) + 1, rowCount);
@@ -32,6 +33,6 @@ export function celldataToData(celldata: CellWithRowAndCol[], rowCount: number, 
     return expandedData;
 }
 
-function isIndex(value: number): boolean {
-    return Number.isInteger(value) && value >= 0;
+function isIndex(value: number, count: number): boolean {
+    return Number.isInteger(value) && value >= 0 && value < count;
 }
