@@ -114,15 +114,7 @@ export function addSheet(
     const order = ctx.sheets.length;
     const id = newSheetID ?? settings?.generateSheetId() ?? uuidv4();
     const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable);
-    if (!isNil(sheetData)) {
-        delete sheetData.data;
-        // A sheet without an order sorts as 0, as the tab strip sorts it.
-        const insertAt = sheetData.order ?? 0;
-        for (const sheet of ctx.sheets) {
-            const order = sheet.order ?? 0;
-            sheet.order = order < insertAt ? sheet.order : order + 1;
-        }
-    }
+    if (!isNil(sheetData)) delete sheetData.data;
     const sheetconfig: Sheet = isNil(sheetData)
         ? {
               name: sheetName === undefined ? sheetname : sheetName,
@@ -138,9 +130,19 @@ export function addSheet(
         : sheetData;
     normalizeSheetConfig(sheetconfig);
     if (sheetName !== undefined) sheetconfig.name = sheetName;
-    if (sheetconfig.id === undefined) sheetconfig.id = uuidv4();
+    // A sheet that comes without an id takes the one the add switches to.
+    sheetconfig.id ??= id;
     if (ctx.hooks.beforeAddSheet?.(sheetconfig) === false) {
         return;
+    }
+    // Only an add that goes ahead moves the other sheets along. A sheet without an order sorts as 0, as the tab
+    // strip sorts it.
+    if (!isNil(sheetData)) {
+        const insertAt = sheetData.order ?? 0;
+        for (const sheet of ctx.sheets) {
+            const order = sheet.order ?? 0;
+            sheet.order = order < insertAt ? sheet.order : order + 1;
+        }
     }
 
     ctx.sheets.push(sheetconfig);
