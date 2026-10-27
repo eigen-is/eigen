@@ -19,6 +19,7 @@ import type {
     FormulaCellInfoMap,
     FormulaDependency,
 } from '../../engine/types';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { FormulaCell } from '../types';
@@ -280,10 +281,10 @@ export function isFunctionRange(
             } else {
                 str = str.trim();
 
-                const regx = /{.*?}/;
-                if (regx.test(str) && str.substring(0, 1) !== '"' && str.substring(str.length - 1, 1) !== '"') {
-                    const arraytxt = regx.exec(str)?.[0];
-                    const arraystart = str.search(regx);
+                const arrayMatch = /{.*?}/.exec(str);
+                if (arrayMatch && str.substring(0, 1) !== '"' && str.substring(str.length - 1, 1) !== '"') {
+                    const [arraytxt] = arrayMatch;
+                    const arraystart = arrayMatch.index;
 
                     if (arraystart > 0) {
                         endstr += str.substring(0, arraystart);
@@ -291,8 +292,8 @@ export function isFunctionRange(
 
                     endstr += `luckysheet_getarraydata('${arraytxt}')`;
 
-                    if (arraystart + arraytxt!.length < str.length) {
-                        endstr += str.substring(arraystart + arraytxt!.length, str.length);
+                    if (arraystart + arraytxt.length < str.length) {
+                        endstr += str.substring(arraystart + arraytxt.length, str.length);
                     }
                 } else {
                     endstr = str;
@@ -309,8 +310,8 @@ export function isFunctionRange(
                     function_str = '';
                 }
 
-                while (cal1.length > 0) {
-                    cal2.unshift(cal1.shift()!);
+                for (const operator of cal1.splice(0)) {
+                    cal2.unshift(operator);
                 }
             }
 
@@ -354,7 +355,7 @@ export function delFunctionGroup(ctx: Context, r: number, c: number, id?: string
         id = ctx.currentSheetId;
     }
 
-    const file = ctx.sheets[getSheetIndex(ctx, id)!];
+    const file = getSheet(ctx, { id });
 
     const { calcChain } = file;
     if (calcChain != null) {
@@ -466,7 +467,7 @@ export function execfunction(
     ctx.calculateSheetId = id;
 
     resolver ??= createContextResolver(snapshotContext(ctx));
-    const evalResult = ctx.formulaCache.engine.evaluate(txt, id!, resolver);
+    const evalResult = ctx.formulaCache.engine.evaluate(txt, id, resolver);
     const result = evalResult.value;
 
     if (r != null && c != null) {

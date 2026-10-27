@@ -176,7 +176,7 @@
     "packages/sheet/src/state/modules/cell.ts": 5,
     "packages/sheet/src/state/modules/drop-cell.ts": 3,
     "packages/sheet/src/state/modules/formula-editor.ts": 1,
-    "packages/sheet/src/state/modules/formula-exec.ts": 7,
+    "packages/sheet/src/state/modules/formula-exec.ts": 2,
     "packages/sheet/src/state/modules/formula-range.ts": 2,
     "packages/sheet/src/state/modules/merge.ts": 1,
     "packages/sheet/src/state/modules/move-cells.ts": 1,
