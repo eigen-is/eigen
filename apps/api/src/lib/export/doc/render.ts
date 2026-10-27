@@ -122,13 +122,13 @@ function renderTaskItemNode(node: Node, children: string | string[] | undefined)
 }
 
 // The box a figure and a chart share: spans, which a paragraph can hold, drawn by eigen-prose.css's .figure rules as the
-// editor's node view is. A box in front of or behind the text carries its place and width inline, and its offsets as
-// the editor's HTML writes them, so a paste of the download back into Docs keeps its place.
+// editor's node view is. A box in front of or behind the text carries its place and width inline, and its offsets and
+// width as data attributes, so a paste of the download back into Docs keeps its place on the paper.
 function renderFigureFrame(attrs: FigureFrameAttrs & { width?: number | null }, content: string): string {
     const cap = attrs.caption ? `<span class="figcaption">${escapeHtml(attrs.caption)}</span>` : '';
     const place = figureLayoutStyle(attrs);
     const style = place
-        ? ` data-offset-x="${place.left}" data-offset-y="${place.top}" style="left: ${place.left}px; top: ${place.top}px${place.width ? `; width: ${place.width}px` : ''}"`
+        ? ` data-offset-x="${place.left}" data-offset-y="${place.top}"${place.width ? ` data-width="${place.width}"` : ''} style="left: ${place.left}px; top: ${place.top}px${place.width ? `; width: ${place.width}px` : ''}"`
         : '';
     return `<span class="figure" data-layout="${attrs.layout ?? 'block'}" data-alignment="${attrs.alignment ?? 'center'}"${style}>${content}${cap}</span>`;
 }

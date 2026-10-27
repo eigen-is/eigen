@@ -294,6 +294,17 @@ test.each([
     expect(found).toMatchObject([{ layout: 'front', width: capped, offsetX: cx, offsetY: cy }]);
 });
 
+// The HTML download writes the box's width as data-width and the image's only as a style, so the paste reads the box's.
+test('a pasted image from the HTML download keeps on the paper by its width', () => {
+    const html =
+        '<p><span class="figure" data-layout="front" data-alignment="center" data-offset-x="550" data-offset-y="0" data-width="300" style="left: 550px; top: 0px; width: 300px"><img src="data:image/png;base64," alt="" style="width: 300px; max-width: 100%" /></span>x</p>';
+    const found: object[] = [];
+    createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+        if (node.type.name === 'figure') found.push(node.attrs);
+    });
+    expect(found).toMatchObject([{ layout: 'front', width: 300, offsetX: 400 }]);
+});
+
 test('a pasted image in the flow still caps at the column', () => {
     const html = '<p><img src="data:image/png;base64," width="700"></p>';
     const found: unknown[] = [];
