@@ -8,6 +8,7 @@ import { spaceApi } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import type { DocsTextWidth, UserSettings } from '@workspace/lib/types/settings';
 import { DOCS_TEXT_WIDTHS, docsTextWidth } from '@workspace/lib/types/settings';
+import { useEffect } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateSpaceSettings, spaceKeys } from '../../space/hooks/keys';
 import { useSpaceSettings } from '../../space/hooks/use-space-settings';
@@ -37,7 +38,12 @@ export function useDocsTextWidth(): { textWidth: DocsTextWidth; setTextWidth: (w
     const ownerId = user?.id || '';
     const cacheKey = cacheKeyFor(ownerId);
     const { data: settings } = useSpaceSettings();
-    const textWidth = settings?.docsView?.textWidth ? docsTextWidth(settings) : (readCache(cacheKey) ?? 'narrow');
+    const loaded = settings?.docsView?.textWidth ? docsTextWidth(settings) : undefined;
+    const textWidth = loaded ?? readCache(cacheKey) ?? 'narrow';
+    // The settings replace the copy, so a choice made on another device is what this browser draws first next time.
+    useEffect(() => {
+        if (loaded) writeCache(cacheKey, loaded);
+    }, [cacheKey, loaded]);
 
     const mutation = useMutation({
         mutationFn: async (next: DocsTextWidth) => {

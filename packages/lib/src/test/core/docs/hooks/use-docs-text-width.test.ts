@@ -80,6 +80,25 @@ describe('useDocsTextWidth', () => {
         await reopened.unmount();
     });
 
+    test("the loaded settings replace this browser's copy, so another device's choice draws first on the next open", async () => {
+        window.localStorage.clear();
+        stored = {};
+        const before = await renderHook(() => useDocsTextWidth(), client());
+        await act(async () => {
+            before.latest.setTextWidth('wide');
+        });
+        await before.unmount();
+
+        // Chosen on another device meanwhile.
+        stored = { docsView: { textWidth: 'medium' } };
+        const loaded = await renderHook(() => useDocsTextWidth(), client(stored));
+        expect(loaded.latest.textWidth).toBe('medium');
+        await loaded.unmount();
+        const reopened = await renderHook(() => useDocsTextWidth(), client());
+        expect(reopened.latest.textWidth).toBe('medium');
+        await reopened.unmount();
+    });
+
     test('is Narrow with nothing stored or cached', async () => {
         window.localStorage.clear();
         stored = {};
