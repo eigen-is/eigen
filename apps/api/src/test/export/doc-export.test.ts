@@ -405,6 +405,19 @@ describe('doc export — figures', () => {
         );
     });
 
+    // A stretched picture draws at its stored box, which the column may still shrink in shape.
+    test('a stretched figure draws its stored box, and one at its own ratio is unchanged', async () => {
+        const figure = (attrs: object) => ({
+            type: 'paragraph',
+            content: [{ type: 'figure', attrs: { mediaName: 'chart.png', width: 320, ...attrs } }],
+        });
+        const html = await exportHtml({ type: 'doc', content: [figure({ height: 80 }), figure({})] });
+        expect(html).toContain(
+            '<img src="data:image/png;base64,AA==" alt="" style="width: 320px; aspect-ratio: 320 / 80; max-width: 100%">',
+        );
+        expect(html).toContain(IMG.replace(' />', '>'));
+    });
+
     test("a wrapped figure floats by the stylesheet's rule, which the docx writer reads too", async () => {
         const figure = (layout: string) => ({
             type: 'paragraph',
@@ -1457,6 +1470,22 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 }
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — positioned figures (WeasyPrint)', () => {
+    // The PDF stretches a picture to its stored box, as the editor draws it.
+    test('a stretched image prints at its stored width and height', async () => {
+        const png = await sharp({ create: { width: 200, height: 100, channels: 3, background: '#888' } })
+            .png()
+            .toBuffer();
+        const figure = {
+            type: 'figure',
+            attrs: { src: `data:image/png;base64,${png.toString('base64')}`, width: 300, height: 60 },
+        };
+        const html = await pdfHtml({ type: 'paragraph', content: [figure] });
+        const boxes = await laidOut(html, "if tag == 'img': print(box.width, box.height)");
+        const [width, height] = (boxes[0] ?? '').split(' ').map(Number);
+        expect(width).toBeCloseTo(300, 3);
+        expect(height).toBeCloseTo(60, 3);
+    }, 60_000);
+
     // WeasyPrint draws an absolute box from its paragraph's padding box, in front of the text or behind it.
     test.each(['front', 'behind'])(
         'a %s image prints at its offsets from its paragraph',
@@ -2227,6 +2256,19 @@ describe('doc export — footnotes', () => {
         const { body } = new JSDOM(await exported('pdf-html', doc)).window.document;
         expect(body.querySelector('span.footnote')).toBeNull();
         expect(body.querySelector('section.footnotes')).not.toBeNull();
+    });
+
+    // A stretched picture counts at its stored height, not as tall as it is wide.
+    test('a note of two wide, short pictures stays at its foot', async () => {
+        const figure = (mediaName: string) => ({
+            type: 'paragraph',
+            content: [{ type: 'figure', attrs: { mediaName, width: 600, height: 40 } }],
+        });
+        const html = await pdfHtml({
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Claim' }, note(paragraph('Pictured'), figure('a.png'), figure('b.png'))],
+        });
+        expect(html).toContain('<span class="footnote"');
     });
 
     test('a note just within a page stays at its foot', async () => {

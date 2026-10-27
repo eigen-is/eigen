@@ -143,12 +143,18 @@ function renderFigureFrame(attrs: FigureFrameAttrs & { width?: number | null }, 
 function renderFigureNode(
     attrs: FigureAttrs,
     resolveImgSrc: FigureImgSrcResolver,
-    options?: { lazy?: boolean },
+    options?: { lazy?: boolean; print?: boolean },
 ): string {
     const imgSrc = resolveImgSrc(attrs.mediaName ?? null, attrs.src ?? null);
     const alt = escapeHtml(attrs.alt ?? '');
     const width = Math.round(attrs.width ?? 0);
-    const imgStyle = width ? `width: ${width}px; ` : '';
+    const height = Math.round(attrs.height ?? 0);
+    // A stretched picture draws at its stored box. On screen it keeps that shape when a narrow window shrinks it.
+    // WeasyPrint ignores aspect-ratio on an image, so the paper takes the height itself, which the editor's cap at the
+    // column keeps in shape.
+    const box = options?.print ? `height: ${height}px` : `aspect-ratio: ${width} / ${height}`;
+    const stretch = width && height ? `${box}; ` : '';
+    const imgStyle = width ? `width: ${width}px; ${stretch}` : '';
     const lazy = options?.lazy ? ' loading="lazy"' : '';
     const img = imgSrc
         ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}"${lazy} style="${imgStyle}max-width: 100%" />`

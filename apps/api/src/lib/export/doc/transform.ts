@@ -15,6 +15,8 @@ import {
     PAGE_BREAK_CLASS,
     pageStylesheet,
     pxToPt,
+    readChartAttrs,
+    readFigureAttrs,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import type { EigendocBands } from '../../document/doc';
@@ -164,7 +166,8 @@ function printedBands(bands: EigendocBands): { printed: EigendocBands; cut: numb
 export const MAX_PAGE_NOTES = 1500;
 
 // A note's lines at 10 pt in the tallest bundled face, as its runs may draw in any, a character at most 0.6 em wide on
-// average, and a picture as tall as it is wide, or as the column where it stores no width, a chart at its height:
+// average, and a picture at its stored height, else as tall as it is wide, or as the column where it stores no width,
+// a chart at its height:
 // against the page's text less the reference's line and the rule above the notes.
 function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
     if (notes.length > MAX_PAGE_NOTES) return false;
@@ -174,9 +177,15 @@ function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
     const lineChars = columnPt / (0.6 * sizePt);
     const pageLines = mmToPt(page.height - page.margin.top - page.margin.bottom) / linePt - 3;
     const pictureLines = (node: JSONContent): number => {
-        const { width, height } = node.attrs ?? {};
-        const tall = node.type === 'chart' ? height : node.type === 'figure' ? width : undefined;
-        const own = typeof tall === 'number' && tall > 0 ? Math.min(pxToPt(tall), columnPt) : columnPt;
+        const attrs = node.attrs ?? {};
+        const figure = readFigureAttrs(attrs);
+        const tall =
+            node.type === 'chart'
+                ? readChartAttrs(attrs).height
+                : node.type === 'figure'
+                  ? (figure.height ?? figure.width)
+                  : null;
+        const own = tall ? Math.min(pxToPt(tall), columnPt) : columnPt;
         const lines = node.type === 'chart' || node.type === 'figure' ? Math.ceil(own / linePt) : 0;
         return lines + (node.content ?? []).reduce((sum, child) => sum + pictureLines(child), 0);
     };
