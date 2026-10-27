@@ -1,3 +1,8 @@
+// The formula bar above the grid: the name box and the fx box. The fx box shows the focus cell's formula as
+// colored references, its rich text or its value, and editing in it edits that cell: Enter commits, Escape
+// cancels, F4 cycles the reference at the caret, and a typed key reruns handleFormulaInput so the cell
+// editor and the reference highlights follow.
+
 import { escapeHtml } from '@workspace/lib/html';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -36,6 +41,8 @@ export function FxEditor() {
         // An open edit owns the box: the text in it is the user's, and a collaborative update
         // landing mid-keystroke must not overwrite it with the cell's stored content.
         if (context.editingCellPosition.length > 0) return;
+        const fxInput = refs.fxInput.current;
+        if (!fxInput) return;
         const d = getFlowdata(context);
         let value = '';
         if (firstSelection) {
@@ -58,9 +65,9 @@ export function FxEditor() {
                     value = shown == null ? '' : String(shown);
                 }
             }
-            refs.fxInput.current!.innerHTML = isGeneratedHtml ? value : escapeHtml(value);
+            fxInput.innerHTML = isGeneratedHtml ? value : escapeHtml(value);
         } else {
-            refs.fxInput.current!.innerHTML = '';
+            fxInput.innerHTML = '';
         }
     }, [context.sheets, context.currentSheetId, context.selections, context.editingCellPosition]);
 
@@ -76,9 +83,8 @@ export function FxEditor() {
         ) {
             setFocused(true);
             setContext((draftCtx) => {
-                const last = draftCtx.selections![draftCtx.selections!.length - 1];
-
-                if (last.row_focus == null || last.column_focus == null) return;
+                const last = draftCtx.selections?.at(-1);
+                if (last?.row_focus == null || last.column_focus == null) return;
                 draftCtx.editingCellPosition = [last.row_focus, last.column_focus];
                 refs.globalCache.doNotFocus = true;
             });
@@ -94,7 +100,10 @@ export function FxEditor() {
             }
             lastKeyDownEventRef.current = new KeyboardEvent(e.type, e.nativeEvent);
             const { key } = e;
-            recentText.current = refs.fxInput.current!.innerText;
+            // The key arrives on the fx box itself, so its ref is set.
+            const fxInput = refs.fxInput.current;
+            if (!fxInput) return;
+            recentText.current = fxInput.innerText;
             if (key === 'ArrowLeft' || key === 'ArrowRight') {
                 e.stopPropagation();
             }
@@ -105,7 +114,7 @@ export function FxEditor() {
                 // Cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1); keep the
                 // browser default suppressed even when the caret isn't on a reference.
                 e.preventDefault();
-                cycleReferenceInEditor(refs.fxInput.current!, refs.cellInput.current, setContext);
+                cycleReferenceInEditor(fxInput, refs.cellInput.current, setContext);
                 return;
             }
 
@@ -118,7 +127,7 @@ export function FxEditor() {
                                 draftCtx,
                                 draftCtx.editingCellPosition[0],
                                 draftCtx.editingCellPosition[1],
-                                refs.fxInput.current!,
+                                fxInput,
                             );
                             draftCtx.selections = [
                                 {
@@ -141,11 +150,11 @@ export function FxEditor() {
                             break;
                         }
                         case 'ArrowLeft': {
-                            rangeHightlightselected(draftCtx, refs.fxInput.current!);
+                            rangeHightlightselected(draftCtx, fxInput);
                             break;
                         }
                         case 'ArrowRight': {
-                            rangeHightlightselected(draftCtx, refs.fxInput.current!);
+                            rangeHightlightselected(draftCtx, fxInput);
                             break;
                         }
                         default:
@@ -186,7 +195,9 @@ export function FxEditor() {
             (e.ctrlKey && kcode === 86)
         ) {
             setContext((draftCtx) => {
-                handleFormulaInput(draftCtx, refs.cellInput.current!, refs.fxInput.current!, kcode, recentText.current);
+                const fxInput = refs.fxInput.current;
+                if (!fxInput) return;
+                handleFormulaInput(draftCtx, refs.cellInput.current, fxInput, kcode, recentText.current);
             });
         }
     }, [refs.cellInput, refs.fxInput, setContext]);
