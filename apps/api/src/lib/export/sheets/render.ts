@@ -56,9 +56,9 @@ export const PREVIEW_SHEET_BUDGET: SheetBudget = { maxRows: 200, maxCols: 50, ma
 // A row whose every column is hidden still costs one, and a sheet whose every row is hidden costs its columns once.
 export const MAX_EXPORT_CELLS = 250_000;
 
-// The cells a sheet costs a PDF at least, since each sheet that draws prints a page of its own and WeasyPrint pays for
-// pages as well as cells: the cap then holds 2,000 pages. One-cell sheets printed in 6.4 s for 1,000, 18.8 s for 2,000
-// and 47.9 s for 3,000, and 4,000 reached WeasyPrint's 60 s timeout.
+// The cells each page a PDF prints costs, since WeasyPrint pays for pages as well as cells: the cap then holds 2,000
+// pages. One-cell sheets, a page each, printed in 6.4 s for 1,000, 18.8 s for 2,000 and 47.9 s for 3,000, and 4,000
+// reached WeasyPrint's 60 s timeout. A sheet of 4,000 rows each a page tall reached it too.
 const PDF_PAGE_CELLS = 125;
 
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.
@@ -70,6 +70,9 @@ const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
 
 const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
+
+// The height a page prints a sheet on once a sheet is as tall as the largest page. A shorter sheet fits one page.
+const PAGE_CONTENT_HEIGHT = MAX_PDF_PAGE_PX - 2 * PAGE_MARGIN;
 
 // The workbook as one document. The screen's prints landscape. The PDF's page fits its widest and tallest sheet as
 // rendered, so WeasyPrint never clips a wide grid. A sheet cut to MAX_EXPORT_CELLS, or left out for it, is counted.
@@ -132,14 +135,25 @@ export function renderSheetsHtml(
     const bodies: string[] = [];
     let cellsLeft = MAX_EXPORT_CELLS;
     for (const sheet of shownSheets(sheets)) {
-        const windowed = windowedSheet(sheet, (rows, cols) => exportWindow(mode, cellsLeft, rows, cols));
+        const budget = (rows: number, cols: number) => exportWindow(mode, cellsLeft, rows, cols);
+        let windowed = windowedSheet(sheet, budget);
+        // A sheet with cells, images or charts prints a page of its own. A blank one takes no page.
+        const draws = windowed !== null && (windowed.range !== null || floatingObjects(windowed.sheet).length > 0);
+        let pages = 0;
+        if (windowed && draws && mode === 'pdf') {
+            const printed = printedPages(windowed, Math.floor(cellsLeft / PDF_PAGE_CELLS));
+            pages = printed.pages;
+            if (printed.rows < windowed.rows.length) {
+                const kept = printed.rows;
+                windowed =
+                    kept > 0 ? windowedSheet(sheet, (rows, cols) => ({ ...budget(rows, cols), maxRows: kept })) : null;
+            }
+        }
         if (!windowed) {
             leftOut.push(sheet);
             continue;
         }
-        // A sheet with cells, images or charts prints a page of its own. A blank one takes no page.
-        const draws = windowed.range !== null || floatingObjects(windowed.sheet).length > 0;
-        const cells = draws && mode === 'pdf' ? Math.max(windowed.cells, PDF_PAGE_CELLS) : windowed.cells;
+        const cells = Math.max(windowed.cells, pages * PDF_PAGE_CELLS);
         if (cells > cellsLeft) {
             leftOut.push(sheet);
             continue;
@@ -171,6 +185,27 @@ function shownSheets(sheets: Sheet[]): Sheet[] {
 function pdfPageCss({ width, height }: ContentSize): string {
     const side = (content: number) => Math.min(content + 2 * PAGE_MARGIN + PAGE_SLACK, MAX_PDF_PAGE_PX);
     return `@page { size: ${side(width)}px ${side(height)}px; margin: ${PAGE_MARGIN}px; }`;
+}
+
+// The pages the PDF prints a sheet on, and how many of its rows the first `most` pages hold. A row that doesn't fit
+// what is left of a page starts the next one, as WeasyPrint breaks a table between rows, so rows taller than half a
+// page print a page each. The overlay's box stretches the sheet to its farthest image or chart. A sheet whose overlay
+// alone takes more than `most` pages has no row to keep.
+function printedPages({ sheet, rows, offset }: WindowedSheet, most: number): { pages: number; rows: number } {
+    const overlay = Math.ceil(floatingExtent(sheet, offset).height / PAGE_CONTENT_HEIGHT);
+    if (overlay > most) return { pages: overlay, rows: 0 };
+    let pages = 1;
+    let filled = 0;
+    for (const [i, r] of rows.entries()) {
+        const height = sheetRowsHeight(sheet, r, r);
+        if (filled > 0 && filled + height > PAGE_CONTENT_HEIGHT) {
+            if (pages === most) return { pages, rows: i };
+            pages++;
+            filled = 0;
+        }
+        filled += height;
+    }
+    return { pages: Math.max(pages, overlay), rows: rows.length };
 }
 
 // The far corner of a sheet's images and charts as they turn, in the table's space, as the overlay places them.

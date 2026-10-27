@@ -1796,6 +1796,53 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(tds(screen.html)).toBe(2005);
     }, 30_000);
 
+    // A row starts the next page when it doesn't fit what is left of one, so a row taller than half a page prints a
+    // page of its own.
+    test('in a PDF a sheet costs a page of cells for each page it prints, so tall rows are cut to the pages the cap holds', () => {
+        const tall = (id: string, rowHeight: number): Sheet => ({
+            id,
+            name: id,
+            order: 0,
+            defaultRowHeight: rowHeight,
+            celldata: [
+                { r: 0, c: 0, v: { v: 'first', m: 'first' } },
+                { r: 3999, c: 0, v: { v: 'last', m: 'last' } },
+            ],
+        });
+        const next: Sheet = {
+            id: 'next',
+            name: 'next',
+            order: 1,
+            celldata: [{ r: 0, c: 0, v: { v: 'next', m: 'next' } }],
+        };
+        for (const height of [19_200, 10_000]) {
+            const pdf = renderSheetsHtml([tall('tall', height), next], NO_MEDIA, 'pdf');
+            expect(trs(pdf.html)).toBe(2000);
+            expect(pdf.cut.map((sheet) => sheet.id)).toEqual(['tall']);
+            expect(pdf.leftOut).toEqual([next]);
+            // The HTML download has no pages to pay for.
+            expect(trs(renderSheetsHtml([tall('tall', height), next], NO_MEDIA, 'screen').html)).toBe(4001);
+        }
+        // Two rows of 9,000 px share a page, so 4,000 of them print on the 2,000 pages the cap holds.
+        const shared = renderSheetsHtml([tall('shared', 9000)], NO_MEDIA, 'pdf');
+        expect(trs(shared.html)).toBe(4000);
+        expect(shared.cut).toEqual([]);
+    }, 30_000);
+
+    test('in a PDF an image parked far below the cells costs the pages it stretches the sheet over', () => {
+        const parked = (id: string): Sheet => ({
+            id,
+            name: id,
+            order: 0,
+            celldata: [{ r: 0, c: 0, v: { v: id, m: id } }],
+            images: imagesOf({ id: 'img', mediaName: 'm', x: 0, y: 30_000_000, width: 10, height: 10 }),
+        });
+        // Clamped to the bottom of Excel's grid, each image stretches its sheet over 1,097 pages.
+        const pdf = renderSheetsHtml([parked('a'), parked('b')], NO_MEDIA, 'pdf');
+        expect(pdf.leftOut.map((sheet) => sheet.id)).toEqual(['b']);
+        expect(renderSheetsHtml([parked('a'), parked('b')], NO_MEDIA, 'screen').leftOut).toEqual([]);
+    }, 30_000);
+
     test('a sheet under the cap is not cut and carries no warning', async () => {
         const sheet: Sheet = { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [{ r: 0, c: 0, v: { v: 'x' } }] };
         expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').cut).toEqual([]);
