@@ -1669,18 +1669,18 @@ describe('docx writer — tables', () => {
                         ),
                         td({ colwidth: [100], borderRight: '1px dotted #1f3864', borderBottom: 'red' }, p(text('b'))),
                     ),
-                    tr(td({ colwidth: [100] }, p(text('c')))),
+                    tr(td({ colwidth: [100], borderLeft: '1px solid #00ff00' }, p(text('c')))),
                 ),
                 table(tr(td({ colwidth: [100] }, p(text('d'))))),
             ),
         );
-        const grey = (side: string) => `<w:${side} w:val="single" w:sz="6" w:space="0" w:color="D1D5DB"/>`;
-        const first = `<w:tcBorders><w:top w:val="dashed" w:sz="4" w:space="0" w:color="FF0000"/><w:left w:val="nil"/><w:bottom w:val="double" w:sz="12" w:space="0" w:color="000000"/>${grey('right')}</w:tcBorders>`;
-        const allGrey = `<w:tcBorders>${['top', 'left', 'bottom', 'right'].map(grey).join('')}</w:tcBorders>`;
+        const gray = (side: string) => `<w:${side} w:val="single" w:sz="6" w:space="0" w:color="D1D5DB"/>`;
+        const first = `<w:tcBorders><w:top w:val="dashed" w:sz="4" w:space="0" w:color="FF0000"/><w:left w:val="nil"/><w:bottom w:val="double" w:sz="12" w:space="0" w:color="000000"/>${gray('right')}</w:tcBorders>`;
+        const solidLeft = `<w:tcBorders>${gray('top')}<w:left w:val="single" w:sz="6" w:space="0" w:color="00FF00"/>${gray('bottom')}${gray('right')}</w:tcBorders>`;
         expect(child(child(own, 'tblPr'), 'tblBorders')).toBeUndefined();
         expect(xmlChildren(own, W, 'tr').map(xmlOf)).toEqual([
-            `<w:tr>${cell(1500, run('a'), `<w:vMerge w:val="restart"/>${first}`)}${cell(1500, run('b'), `<w:tcBorders>${grey('top')}${grey('left')}${grey('bottom')}<w:right w:val="dotted" w:sz="6" w:space="0" w:color="1F3864"/></w:tcBorders>`)}</w:tr>`,
-            `<w:tr><w:tc><w:tcPr><w:tcW w:w="1500" w:type="dxa"/><w:vMerge/>${first}</w:tcPr><w:p/></w:tc>${cell(1500, run('c'), allGrey)}</w:tr>`,
+            `<w:tr>${cell(1500, run('a'), `<w:vMerge w:val="restart"/>${first}`)}${cell(1500, run('b'), `<w:tcBorders>${gray('top')}${gray('left')}${gray('bottom')}<w:right w:val="dotted" w:sz="6" w:space="0" w:color="1F3864"/></w:tcBorders>`)}</w:tr>`,
+            `<w:tr><w:tc><w:tcPr><w:tcW w:w="1500" w:type="dxa"/><w:vMerge/>${first}</w:tcPr><w:p/></w:tc>${cell(1500, run('c'), solidLeft)}</w:tr>`,
         ]);
         expect(descendants(plain ?? own, W, 'tcBorders')).toEqual([]);
         expect(child(child(plain, 'tblPr'), 'tblBorders')).toBeDefined();
