@@ -25,8 +25,8 @@ import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 
 export function FormatToolbar() {
     const { context, setContext, refs } = useContext(WorkbookContext);
-    // Reflect the anchor cell so the swatches + active alignment track the selection, and while a cell
-    // is open the run at its caret, the way the docs toolbar follows the caret.
+    // The controls show the anchor cell's colors, font and alignment. While a cell is open, they show the
+    // run at its caret instead, as the docs toolbar does.
     const cell = useAnchorCell();
     const caret = useEditorSelectionStyle();
     const refocusCellEditor = useCellEditorRefocus();
@@ -55,7 +55,8 @@ export function FormatToolbar() {
                 onCloseAutoFocus={refocusCellEditor}
                 onChange={(name) => {
                     setContext((ctx) => {
-                        handleFont(ctx, refs.cellInput.current!, name);
+                        const input = refs.cellInput.current;
+                        if (input) handleFont(ctx, input, name);
                     });
                 }}
             />
@@ -84,7 +85,8 @@ export function FormatToolbar() {
                 preventFocusLoss
                 onClick={() => {
                     setContext((ctx) => {
-                        handleBold(ctx, refs.cellInput.current!);
+                        const input = refs.cellInput.current;
+                        if (input) handleBold(ctx, input);
                     });
                 }}
             />
@@ -95,7 +97,8 @@ export function FormatToolbar() {
                 preventFocusLoss
                 onClick={() => {
                     setContext((ctx) => {
-                        handleItalic(ctx, refs.cellInput.current!);
+                        const input = refs.cellInput.current;
+                        if (input) handleItalic(ctx, input);
                     });
                 }}
             />
@@ -112,7 +115,8 @@ export function FormatToolbar() {
                 onCloseAutoFocus={refocusCellEditor}
                 onChange={(color) => {
                     setContext((ctx) => {
-                        handleTextColor(ctx, refs.cellInput.current!, color);
+                        const input = refs.cellInput.current;
+                        if (input) handleTextColor(ctx, input, color);
                     });
                 }}
             />
@@ -127,7 +131,8 @@ export function FormatToolbar() {
                 onCloseAutoFocus={refocusCellEditor}
                 onChange={(color) => {
                     setContext((ctx) => {
-                        handleTextBackground(ctx, refs.cellInput.current!, color);
+                        const input = refs.cellInput.current;
+                        if (input) handleTextBackground(ctx, input, color);
                     });
                 }}
             />
@@ -141,7 +146,8 @@ export function FormatToolbar() {
                 preventFocusLoss
                 onClick={() => {
                     setContext((ctx) => {
-                        handleHorizontalAlign(ctx, refs.cellInput.current!, 'left');
+                        const input = refs.cellInput.current;
+                        if (input) handleHorizontalAlign(ctx, input, 'left');
                     });
                 }}
             />
@@ -152,7 +158,8 @@ export function FormatToolbar() {
                 preventFocusLoss
                 onClick={() => {
                     setContext((ctx) => {
-                        handleHorizontalAlign(ctx, refs.cellInput.current!, 'center');
+                        const input = refs.cellInput.current;
+                        if (input) handleHorizontalAlign(ctx, input, 'center');
                     });
                 }}
             />
@@ -163,7 +170,8 @@ export function FormatToolbar() {
                 preventFocusLoss
                 onClick={() => {
                     setContext((ctx) => {
-                        handleHorizontalAlign(ctx, refs.cellInput.current!, 'right');
+                        const input = refs.cellInput.current;
+                        if (input) handleHorizontalAlign(ctx, input, 'right');
                     });
                 }}
             />
