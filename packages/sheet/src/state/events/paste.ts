@@ -1,3 +1,8 @@
+// A paste into the grid: cells copied in this tab with their formulas and formats, a cut that moves them,
+// an HTML table from another program, plain text or a formula. The Workbook's paste listener calls
+// handlePaste for a ⌘V on the grid, and the context menu and the Edit menu call handlePasteByClick. The
+// open cell editor takes its own paste, so none of it comes here.
+
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
 import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
@@ -1332,15 +1337,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                     pasteHandler(ctx, txtdata);
                 }
             }
-        }
-    } else if (ctx.editingCellPosition.length > 0) {
-        // prevent default paste behavior
-        e.preventDefault();
-
-        const { clipboardData } = e;
-        const text = clipboardData?.getData('text/plain');
-        if (text) {
-            document.execCommand('insertText', false, text);
         }
     }
 }
