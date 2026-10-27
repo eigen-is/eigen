@@ -43,6 +43,15 @@ Everyone you selected joins that team. An account marked **no organization** can
 2. In the **Members** section, find the person you want to remove.
 3. Click the **×** button to the right of their name.
 
+## Change one person's teams
+
+1. On the [**Users**](/admin/users) page, click the person's name to open their detail panel.
+2. The **Teams** section, under **Role**, lists the teams the person is in.
+3. To add them to a team, click **Add to team**, then click the team in the **Add to team** dialog. Teams the person is already in are not listed.
+4. To take them out of a team, click the **×** button to the right of the team's name.
+
+An account marked **no organization** has no **Teams** section.
+
 ## Edit team settings
 
 1. On the **Teams** page, click the team in the list.
