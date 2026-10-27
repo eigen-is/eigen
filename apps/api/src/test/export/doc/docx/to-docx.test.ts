@@ -3275,8 +3275,10 @@ describe('docx writer — table of contents', () => {
         expect(bookmarks(body)).toEqual([['_Toc1', 'Body']]);
     });
 
-    test('a doc with no table of contents bookmarks no heading, as Word writes it', async () => {
-        expect(descendants(await bodyOf(doc(heading(1, text('Intro')))), W, 'bookmarkStart')).toEqual([]);
+    test('a doc with no table of contents bookmarks no heading and has no toc styles, as Word writes it', async () => {
+        const json = doc(heading(1, text('Intro')));
+        expect(descendants(await bodyOf(json), W, 'bookmarkStart')).toEqual([]);
+        expect([...(await styles(json)).keys()].filter((id) => id.startsWith('TOC'))).toEqual([]);
     });
 
     test('two exports of one doc are the same bytes', () => {

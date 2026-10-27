@@ -40,6 +40,7 @@ export function writeDocx(
     }: { title: string; media: OfficeMedia[]; publicOrigin?: string; lost: LossCounter['lost'] },
 ): Uint8Array {
     const page = pageTwips(setup);
+    const outline = docxOutline(json);
     const document = partRelationships();
     for (const type of ['styles', 'numbering', 'settings', 'fontTable']) document.relate(type, `${type}.xml`);
     const pkg: Package = {
@@ -55,11 +56,13 @@ export function writeDocx(
         charts: officeCharts('word'),
         lastDrawingId: 0,
         footnotes: [],
-        outline: docxOutline(json),
+        outline,
         // A Spacer's and a figure's mark draw in the Normal's Regular.
         faces: new Map([[normal.font, new Set<FontSlot>(['Regular'])]]),
         normal,
-        styles: new Map(styleDefinitions(normal).map((style) => [style.id, style])),
+        styles: new Map(
+            styleDefinitions(normal, { contents: outline.entries.length > 0 }).map((style) => [style.id, style]),
+        ),
         paper: page.width,
         lost,
     };

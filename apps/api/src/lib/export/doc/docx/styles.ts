@@ -116,7 +116,8 @@ export function stylesXml({ normal, styles, languages }: Package): string {
 }
 
 // Built per export on the doc's Normal. A quote's paragraphs take none of its space before, as the editor draws them.
-export function styleDefinitions(normal: NormalStyle): StyleDef[] {
+// Word's table of contents styles come only with a table of contents that lists something, as Word writes them.
+export function styleDefinitions(normal: NormalStyle, { contents }: { contents: boolean }): StyleDef[] {
     const body = normalTextLook(normal);
     const note = noteTextLook(normal);
     const before = normal.spaceBefore > 0 ? { before: 0 } : {};
@@ -164,7 +165,7 @@ export function styleDefinitions(normal: NormalStyle): StyleDef[] {
     });
     // Word's own, as its Update Table rewrites the entries in them: spaced and indented by level as the editor draws them.
     const entryPadding = proseValue(`${TOC_ENTRY} > [data-level]`, 'padding');
-    const tocs = HEADING_LOOKS.map((_look, index): StyleDef => {
+    const tocs = (contents ? HEADING_LOOKS : []).map((_look, index): StyleDef => {
         const level = index + 1;
         const indent = proseValueIfSet(`${TOC_ENTRY} > [data-level="${level}"]`, 'padding-left');
         return {
