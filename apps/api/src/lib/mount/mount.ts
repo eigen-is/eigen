@@ -1153,9 +1153,7 @@ export class Mount {
             .returning({ trashedAt: paths.trashedAt })
             .get();
         if (!committed) {
-            if (!(await this.storage.delete(storageKey))) {
-                console.warn(`[Mount] overwrite of deleted ${pathId} left its object ${storageKey} behind`);
-            }
+            await this.removeObject(pathId, storageKey);
             throw new ApiError(404, 'File not found');
         }
         await this.invalidateAncestorsOf(pathId);
