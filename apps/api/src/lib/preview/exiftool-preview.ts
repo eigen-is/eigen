@@ -1,7 +1,7 @@
 // The preview a camera or an editor embedded in a file, such as a RAW photo or a PSD, pulled out with exiftool. The
-// thumbnail Worker calls extractEmbeddedPreview as its fallback when sharp can't read the file, and the preview and the
-// export ask isExiftoolCandidate whether a file can try it. The binary is the system's exiftool, else the one the
-// exiftool-vendored package ships.
+// thumbnail Worker calls extractEmbeddedPreview as its fallback when sharp can't read the file, with a deadline before
+// its own end, and the preview and the export ask isExiftoolCandidate whether a file can try it. The binary is the
+// system's exiftool, else the one the exiftool-vendored package ships.
 
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -11,11 +11,6 @@ import { isExiftoolExtension } from '@workspace/lib/constants';
 
 const execFileAsync = promisify(execFile);
 
-// execFile kills an exiftool that runs past this with SIGKILL, so a hostile file can't keep one running. Its timer lives
-// in the thumbnail Worker, though. When that Worker is terminated at its own timeout, a call still running is left to
-// finish on its own, as terminate() doesn't stop a child process.
-const EXIFTOOL_TIMEOUT_MS = 20_000;
-
 export function isExiftoolCandidate(mimeType: string, fileName: string): boolean {
     if (mimeType.startsWith('image/')) return true;
     return isExiftoolExtension(fileName);
@@ -23,14 +18,14 @@ export function isExiftoolCandidate(mimeType: string, fileName: string): boolean
 
 let cachedExiftoolPath: string | null = null;
 
-async function getExiftoolPath(): Promise<string> {
+// Null when the deadline passed before the system's exiftool could be asked: execFile reads a timeout of 0 as none.
+async function getExiftoolPath(deadline: number): Promise<string | null> {
     if (cachedExiftoolPath) return cachedExiftoolPath;
+    const left = deadline - Date.now();
+    if (left <= 0) return null;
 
     try {
-        const { stdout } = await execFileAsync('exiftool', ['-ver'], {
-            timeout: EXIFTOOL_TIMEOUT_MS,
-            killSignal: 'SIGKILL',
-        });
+        const { stdout } = await execFileAsync('exiftool', ['-ver'], { timeout: left, killSignal: 'SIGKILL' });
         if (stdout.trim()) {
             cachedExiftoolPath = 'exiftool';
             return cachedExiftoolPath;
@@ -44,18 +39,29 @@ async function getExiftoolPath(): Promise<string> {
     return cachedExiftoolPath;
 }
 
-export async function extractEmbeddedPreview(filePath: string, tmpDir: string, pathId: string): Promise<string | null> {
+// execFile kills an exiftool still running at `deadline`, a Date.now() time, with SIGKILL, so a hostile file can't keep
+// one running. Its timer lives in the caller's thread, which terminate() stops without stopping the child, so the
+// deadline must fall before the thread's own end. No call starts after it.
+export async function extractEmbeddedPreview(
+    filePath: string,
+    tmpDir: string,
+    pathId: string,
+    deadline: number,
+): Promise<string | null> {
     try {
-        const bin = await getExiftoolPath();
+        const bin = await getExiftoolPath(deadline);
+        if (!bin) return null;
         const extractPath = path.join(tmpDir, `${pathId}-extract.jpg`);
 
         // Try PreviewImage (largest), then JpgFromRaw, then ThumbnailImage
         for (const tag of ['-PreviewImage', '-JpgFromRaw', '-ThumbnailImage']) {
+            const left = deadline - Date.now();
+            if (left <= 0) return null;
             try {
                 const { stdout } = await execFileAsync(bin, ['-b', tag, filePath], {
                     encoding: 'buffer',
                     maxBuffer: 20 * 1024 * 1024,
-                    timeout: EXIFTOOL_TIMEOUT_MS,
+                    timeout: left,
                     killSignal: 'SIGKILL',
                 });
                 if (stdout && stdout.length > 0) {

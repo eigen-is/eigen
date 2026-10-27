@@ -17,6 +17,8 @@ import {
     pagePx,
     pageStylesheet,
     pxToPt,
+    readChartAttrs,
+    readFigureAttrs,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import type { EigendocBands } from '../../document/doc';
@@ -33,14 +35,19 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
+import { isDataUri } from '../../shared/data-uri';
 import { exportHtmlDocument } from '../html-document';
 import { withSvgFallbacks } from '../office-image';
 import { renderEquations, svgEquations } from './equations';
+import { figureMediaKey, pastedFigureMedia } from './pasted-media';
 import { renderDocHtml, withAbsoluteLinks } from './render';
+
+// A percent-encoded or plain-text SVG, which draws as it is. The media type matches in any case, as splitDataUri reads it.
+const SVG_DATA_URI = /^data:image\/svg\+xml[;,]/i;
 
 // HTML and PDF render the same document: WeasyPrint prints what the HTML download serves, but for the small caps the
 // PDF fakes and the equations it draws as SVG. The docx writer loads lazily, so an HTML export never evaluates it, its
-// styles or its fonts.
+// styles or its fonts. Every format draws a pasted data: image re-encoded, without its EXIF.
 export async function renderEigendocExport(
     doc: Y.Doc,
     format: EigendocExportFormat,
@@ -53,11 +60,10 @@ export async function renderEigendocExport(
     const style = readEigendocStyle(doc);
     const bands = readEigendocBands(doc);
     const media = await loadMedia(mediaNamesIn([json, bands]));
+    const pasted = await pastedFigureMedia([json, ...Object.values(bands)]);
     if (format === 'docx') {
         const { writeDocx } = await import('./docx/to-docx');
-        const { pastedFigureMedia } = await import('./docx/drawings');
-        const drawn = await pastedFigureMedia([json, ...Object.values(bands)]);
-        const docxMedia = await withSvgFallbacks([...media, ...drawn]);
+        const docxMedia = await withSvgFallbacks([...media, ...pasted]);
         const losses = lossCounter();
         const docx = writeDocx(
             { json, bands, page, style },
@@ -65,7 +71,7 @@ export async function renderEigendocExport(
         );
         return { data: toTransferableBuffer(docx), warnings: losses.warnings() };
     }
-    const dataUriMap = toDataUriMap(media);
+    const dataUriMap = toDataUriMap([...media, ...pasted]);
     const pdf = htmlExportMode(format) === 'pdf';
     const { printed, cut } = pdf ? printedBands(bands) : { printed: bands, cut: 0 };
     const warnings: TransformWarning[] = cut > 0 ? [{ code: 'bands-cut', count: cut }] : [];
@@ -87,7 +93,13 @@ export async function renderEigendocExport(
         .map(({ part, content }) => {
             const html = renderDocHtml(
                 withTablesFitted(withAbsoluteLinks(content, publicOrigin), columnPx),
-                (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
+                (mediaName, src) => {
+                    const key = figureMediaKey({ mediaName, src });
+                    if (key) return dataUriMap.get(key) ?? null;
+                    // Only a base64 src is re-encoded, so any other data: src but an SVG's would carry its bytes, EXIF
+                    // included, out as pasted: it draws nothing, as a src no image decodes from does.
+                    return src && isDataUri(src) && !SVG_DATA_URI.test(src) ? null : src;
+                },
                 {
                     ...(pdf && { smallCapsFont: style.font }),
                     print: pdf,
@@ -189,7 +201,8 @@ function printedBands(bands: EigendocBands): { printed: EigendocBands; cut: numb
 export const MAX_PAGE_NOTES = 1500;
 
 // A note's lines at 10 pt in the tallest bundled face, as its runs may draw in any, a character at most 0.6 em wide on
-// average, and a picture as tall as it is wide, or as the column where it stores no width, a chart at its height:
+// average, and a picture at its stored height, else as tall as it is wide, or as the column where it stores no width,
+// a chart at its height:
 // against the page's text less the reference's line and the rule above the notes.
 function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
     if (notes.length > MAX_PAGE_NOTES) return false;
@@ -199,9 +212,15 @@ function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
     const lineChars = columnPt / (0.6 * sizePt);
     const pageLines = mmToPt(page.height - page.margin.top - page.margin.bottom) / linePt - 3;
     const pictureLines = (node: JSONContent): number => {
-        const { width, height } = node.attrs ?? {};
-        const tall = node.type === 'chart' ? height : node.type === 'figure' ? width : undefined;
-        const own = typeof tall === 'number' && tall > 0 ? Math.min(pxToPt(tall), columnPt) : columnPt;
+        const attrs = node.attrs ?? {};
+        const figure = readFigureAttrs(attrs);
+        const tall =
+            node.type === 'chart'
+                ? readChartAttrs(attrs).height
+                : node.type === 'figure'
+                  ? (figure.height ?? figure.width)
+                  : null;
+        const own = tall ? Math.min(pxToPt(tall), columnPt) : columnPt;
         const lines = node.type === 'chart' || node.type === 'figure' ? Math.ceil(own / linePt) : 0;
         return lines + (node.content ?? []).reduce((sum, child) => sum + pictureLines(child), 0);
     };
@@ -311,9 +330,11 @@ h1, h2, h3, h4, h5, h6 { font-size: inherit; }
     z-index: 0;
 }
 
-/* A block holding a page break must split: avoid pushes it whole to a new page and breaks inside it anyway */
-.figure, table, pre, blockquote { page-break-inside: avoid; }
-table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
+/* A block holding a page break must split: avoid pushes it whole to a new page and breaks inside it anyway. A table
+   and each of its rows split, as Word, whose "Allow row to break across pages" is on by default, and Google Docs print
+   one, rather than leaving a page half empty */
+.figure, pre, blockquote { page-break-inside: avoid; }
+blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
 
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 

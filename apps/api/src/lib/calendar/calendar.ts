@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { CALENDAR_NAME_MAX_LENGTH, DEFAULT_CALENDAR_COLOR } from '@workspace/lib/constants/calendar';
-import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
+import { EIGEN_ACCENT_COLORS_SHUFFLED, isHexColor } from '@workspace/lib/constants/colors';
 import type {
     Attendee,
     CalendarEvent,
@@ -55,15 +55,13 @@ import { exportEvents, importEvents } from './transfer';
 
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
 
-// Apple writes the eight-digit form, so all three hex lengths are valid.
-const CALENDAR_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-
 // The one rule for what a calendar may be called and colored: REST, MKCALENDAR and PROPPATCH all land here.
 function validateCalendarProps(props: { name?: string; color?: string }): void {
     if (props.name !== undefined && props.name.trim().length > CALENDAR_NAME_MAX_LENGTH) {
         throw new ApiError(400, `Calendar name is longer than ${CALENDAR_NAME_MAX_LENGTH} characters`);
     }
-    if (props.color !== undefined && !CALENDAR_COLOR.test(props.color)) {
+    // Apple writes the eight-digit form, so all three hex lengths are valid.
+    if (props.color !== undefined && !isHexColor(props.color, [3, 6, 8])) {
         throw new ApiError(400, 'Calendar color must be a hex color');
     }
 }

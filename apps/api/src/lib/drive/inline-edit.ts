@@ -1,7 +1,11 @@
+// The server side of Drive's inline text editor. getEditableContent reads a text file for the editor:
+// its edit mode, its text with any markdown frontmatter split off, and the etag a save sends back.
+// prepareSaveContent turns a save back into the file's bytes. The editor routes call both.
+
 import { getBytesTextPreviewMode } from '@workspace/lib/constants';
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
 import type { DrivePath, FileEditorContent } from '@workspace/lib/types/drive';
-import { ApiError } from '../core';
+import { ApiError, computeEtag } from '../core';
 import type { Mount } from '../mount';
 
 export const MAX_INLINE_EDIT_SIZE = 5 * 1024 * 1024;
@@ -43,7 +47,7 @@ export async function getEditableContent(mount: Mount, path: DrivePath): Promise
                   frontmatter: null,
                   body: content,
               };
-    return { editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt };
+    return { editMode, content: body, frontmatter, mimeType: path.mimeType, etag: computeEtag(path) };
 }
 
 export function prepareSaveContent(path: DrivePath, content: string, frontmatter: string | null): Buffer {

@@ -34,7 +34,7 @@ import type {
     SheetChartSpecWrite,
 } from '@workspace/lib/types/chart';
 import { renderChartSpecSvg } from '@workspace/lib/vector';
-import { cellDisplay, numberDisplay } from './format';
+import { cellDisplay } from './format';
 import type { Cell, CellResolver } from './types';
 
 // Reads a range chart's cells: values from the computed `v`, labels and names from the display
@@ -99,12 +99,11 @@ export function cellLabel(cell: Cell | null): string {
 }
 
 // A chart as the editor's overlay and the export draw it: its box clamped as stored, in the look it stores, its range
-// data read through the resolver, and value ticks in the axis's own format or else the first value cell's, Google's
-// "From source data".
+// data read through the resolver, and its value ticks and data labels in the axis's own format or else the first value
+// cell's, Google's "From source data". Cells without a format read as General, as the grid shows them.
 export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): string {
     const { spec } = readChartSpec(chart);
     const range = spec?.data.source === 'range' ? spec.data : null;
-    const format = spec ? valueFormat(spec, resolver) : undefined;
     const { width, height } = sheetFloatingBox(chart);
     return renderChartSpecSvg({
         id: chart.id,
@@ -113,7 +112,7 @@ export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): 
         width,
         height,
         look: readChartLook(chart),
-        formatTick: (value) => numberDisplay(value, format),
+        sourceFormat: (spec && valueFormat(spec, resolver)) ?? 'General',
     });
 }
 

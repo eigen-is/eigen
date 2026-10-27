@@ -1,11 +1,12 @@
+// The accounts a demo visitor can be signed in as, read from the org's members so the list cannot drift from the
+// seeder. A demo entry picks one at random.
+
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { member, user } from '../../../auth-schema';
 import { getAuthDrizzleDb } from './auth';
 
-// The demo visitor pool, discovered from org membership so it can't drift from the seeder.
-// role='member' excludes the setup admin (org 'owner'), keeping the admin surface out of a
-// visitor's reach. 2FA-enabled members are excluded: signInEmail would divert them into the 2FA
-// flow with no cookie. Exported so the demo-mode tests assert against THE query the route uses.
+// Plain members only, so the setup admin, the org owner, stays out of a visitor's reach. A member with 2FA is left
+// out too, because signInEmail would send it into the 2FA step without a cookie.
 export function getDemoPersonaPool(orgId: string): { id: string; email: string }[] {
     return getAuthDrizzleDb()
         .select({ id: user.id, email: user.email })

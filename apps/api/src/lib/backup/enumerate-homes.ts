@@ -44,6 +44,7 @@ export function enumerateHomes(usersDbPath: string): { homes: ServerHome[]; orph
             .all();
         const teams = db.select({ id: team.id, name: team.name }).from(team).orderBy(asc(team.id)).all();
         const homes: ServerHome[] = [
+            // Compared inline: importing isGuest from the user module would pull auth into this light module.
             ...users
                 .filter((row) => row.role !== 'guest' && fs.existsSync(getUserHomePath(row.id)))
                 .map((row): ServerHome => ({ ownerId: row.id, kind: 'user', name: row.name })),

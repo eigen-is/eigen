@@ -1,3 +1,7 @@
+// The CodeMirror editor for a plain text or source file in Drive, with the language read from the
+// file name and the app's light or dark theme. CodeEditorView is the bare editor, which the markdown
+// editor's source mode reuses. CodeEditor wraps it with the toolbar, the save and the find bar.
+
 import { defaultKeymap, history, historyKeymap, redo, undo } from '@codemirror/commands';
 import { css } from '@codemirror/lang-css';
 import { html } from '@codemirror/lang-html';
@@ -205,7 +209,7 @@ export const CodeEditorView = forwardRef<
 // Full standalone code editor
 type CodeEditorProps = {
     content: string;
-    updatedAt: Date;
+    etag: string;
     ownerId: string;
     mountId: string;
     pathId: string;
@@ -219,7 +223,7 @@ type CodeEditorProps = {
 
 export function CodeEditor({
     content,
-    updatedAt,
+    etag,
     ownerId,
     mountId,
     pathId,
@@ -252,7 +256,7 @@ export function CodeEditor({
         ownerId,
         mountId,
         pathId,
-        updatedAt,
+        etag,
         getContent,
     });
 

@@ -1,6 +1,7 @@
 // The grid's cell selection: normalizing a range around its merges, moving the highlight with the keyboard,
-// select all, the status bar's sum and count, and the format painter's paste. It also builds what a copy puts
-// on the clipboard: an HTML table of the cells' values and styles, and the same cells as TSV.
+// select all, clearing the selected cells' contents, the status bar's sum and count, and the format painter's
+// paste. It also builds what a copy puts on the clipboard: an HTML table of the cells' values and styles,
+// and the same cells as TSV.
 
 import { cellsToTsv } from '@workspace/lib/clipboard';
 import { escapeHtml } from '@workspace/lib/html';
@@ -1426,57 +1427,48 @@ export function deleteSelectedCellText(ctx: Context): string {
 
     const selection = ctx.selections;
     if (selection && !isEmpty(selection)) {
-        const d = getFlowdata(ctx);
-        if (!d) return 'dataNullError';
+        const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
+        const data = sheetIndex == null ? undefined : ctx.sheets[sheetIndex].data;
+        if (sheetIndex == null || !data) return 'dataNullError';
 
-        let has_PartMC = false;
-
-        for (let s = 0; s < selection.length; s += 1) {
-            const r1 = selection[s].row[0];
-            const r2 = selection[s].row[1];
-            const c1 = selection[s].column[0];
-            const c2 = selection[s].column[1];
-
-            if (hasPartMC(ctx, r1, r2, c1, c2)) {
-                has_PartMC = true;
-                break;
-            }
-        }
-        if (has_PartMC) {
-            return 'partMC';
+        for (const { row, column } of selection) {
+            if (hasPartMC(ctx, row[0], row[1], column[0], column[1])) return 'partMC';
         }
 
-        const hyperlinkMap = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].hyperlink;
-
-        for (let s = 0; s < selection.length; s += 1) {
-            const r1 = selection[s].row[0];
-            const r2 = selection[s].row[1];
-            const c1 = selection[s].column[0];
-            const c2 = selection[s].column[1];
-            const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-            if (sheetIndex !== null && ctx.sheets[sheetIndex].data) {
-                const { data = [] } = ctx.sheets[sheetIndex] ?? {};
-
-                for (let r = r1; r <= r2; r += 1) {
-                    for (let c = c1; c <= c2; c += 1) {
-                        // Ensure the row exists
-                        if (!data[r]) data[r] = [];
-
-                        // Replace the entire cell with an empty object
-                        if (data[r]?.[c]) {
-                            changed.push({ r, c, id: ctx.currentSheetId });
-                            data[r][c] = {}; // Fully replace cell with empty object
-                        }
-
-                        if (hyperlinkMap?.[`${r}_${c}`]) {
-                            delete hyperlinkMap[`${r}_${c}`];
-                        }
+        const hyperlinkMap = ctx.sheets[sheetIndex].hyperlink;
+        for (const { row, column } of selection) {
+            for (let r = row[0]; r <= row[1]; r += 1) {
+                data[r] ??= [];
+                for (let c = column[0]; c <= column[1]; c += 1) {
+                    const cell = data[r][c];
+                    const format = cell && cellFormat(cell);
+                    if (format) {
+                        changed.push({ r, c, id: ctx.currentSheetId });
+                        data[r][c] = format;
+                    }
+                    if (hyperlinkMap?.[`${r}_${c}`]) {
+                        delete hyperlinkMap[`${r}_${c}`];
                     }
                 }
             }
         }
     }
     return 'success';
+}
+
+// What Delete leaves of a cell: its format, as Excel and Google Sheets keep it. The value, the formula, a rich
+// cell's runs and a link go, and the link's blue underline goes with the link, as removeHyperlink does. Null
+// when the cell holds no contents, so a Delete over formatted empty cells writes nothing.
+function cellFormat(cell: Cell): Cell | null {
+    const { v, m, f, qp, hl, ct, ...format } = cell;
+    if (v == null && m == null && f == null && qp == null && hl == null && ct?.s == null) return null;
+    if (hl) {
+        delete format.fc;
+        delete format.un;
+    }
+    if (!ct) return format;
+    const { s: _runs, ...type } = ct;
+    return { ...format, ct: type.t === 'inlineStr' ? { ...type, t: 'g' } : type };
 }
 
 // Whether selections overlap. Accepts the editor `Selection[]` (default) or a

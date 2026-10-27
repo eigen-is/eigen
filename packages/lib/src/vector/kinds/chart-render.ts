@@ -42,7 +42,7 @@ export function renderChartSpecSvg({
     spec,
     data,
     look = FLAT_CHART_LOOK,
-    formatTick,
+    sourceFormat,
     ...rest
 }: ChartSpecSvgInput): string {
     const box = { ...rest, paint: chartPaintOf(look) };
@@ -51,7 +51,7 @@ export function renderChartSpecSvg({
     if (spec === null || resolved === null) body = chartBodySvg(box, null);
     else if (typeof resolved === 'string')
         body = layoutSvg(layoutChartMessage(box, DATA_ERROR_MESSAGES[resolved], spec.chart.fontFamily));
-    else body = layoutSvg(layoutChart({ ...box, spec, data: resolved, formatTick }));
+    else body = layoutSvg(layoutChart({ ...box, spec, data: resolved, sourceFormat }));
     const width = round(Math.max(0, box.width));
     const height = round(Math.max(0, box.height));
     return `<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;

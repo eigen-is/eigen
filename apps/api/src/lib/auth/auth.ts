@@ -1,6 +1,7 @@
-// The Better Auth instance: sessions, one-time codes, passkeys, two-factor, API keys and organizations, on the
-// server-wide users database. It also holds the small helpers that reach that database directly, such as adding its
-// extra columns, deleting a user's rows and copying it for a backup. Routes and the auth middleware use it.
+// The better-auth instance: password sign-in and sessions, two-factor codes, app passwords, admin actions and the
+// organization with its teams, on the server-wide users database. Its hooks keep Eigen in step, for example joining
+// a new account to the default org or tearing down a deleted user's data. The file also holds the helpers that reach
+// that database directly, such as adding its extra columns and copying it for a backup.
 
 import { Database } from 'bun:sqlite';
 import { apiKey } from '@better-auth/api-key';
@@ -40,33 +41,33 @@ import { sendMail } from '../mailer/mailer';
 import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
 import { getTeamExists } from '../team';
 import type { User } from '../user';
-import { getOrgRole } from '../user';
+import { getOrgRole, isGuest } from '../user';
 
 const publicOrigin = getPublicOrigin();
+// The dev apps each run on their own port, from 3000 to 3014.
 export const trustedOrigins = [
     'http://localhost',
     'https://localhost',
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
-    'http://localhost:3003',
-    'http://localhost:3004',
-    'http://localhost:3005',
-    'http://localhost:3006',
-    'http://localhost:3007',
-    'http://localhost:3008',
-    'http://localhost:3009',
-    'http://localhost:3010',
-    'http://localhost:3011',
-    'http://localhost:3012',
-    'http://localhost:3013',
-    'http://localhost:3014',
+    ...Array.from({ length: 15 }, (_, index) => `http://localhost:${3000 + index}`),
     ...(publicOrigin ? [publicOrigin] : []),
 ];
 
-// users3.db has no versioned-migration system (setup.ts only creates tables once), so
-// additive columns are ensured here at boot. Skip when the table doesn't exist yet —
-// setup's CREATE TABLE includes every column.
+const authSchema = {
+    user: userScheme,
+    session: sessionScheme,
+    account: accountScheme,
+    verification: verificationScheme,
+    twoFactor: twoFactorScheme,
+    organization: organizationScheme,
+    member: memberScheme,
+    invitation: invitationScheme,
+    team: teamScheme,
+    teamMember: teamMemberScheme,
+    apikey: apikeyScheme,
+};
+
+// users3.db has no versioned migrations: setup creates its tables once. So the columns added since are added
+// here at boot. A table that does not exist yet is skipped, because setup's CREATE TABLE has every column.
 export function ensureAuthSchemaColumns(db: Database): void {
     const missing = (table: string, column: string): boolean => {
         const cols = db.query<{ name: string }, []>(`PRAGMA table_info("${table}")`).all();
@@ -75,21 +76,22 @@ export function ensureAuthSchemaColumns(db: Database): void {
     if (missing('user', 'last_login_at')) {
         db.run(`ALTER TABLE "user" ADD COLUMN "last_login_at" integer`);
     }
-    // better-auth 1.7 keeps a member counter per team; seed it from the rows that exist
+    // better-auth 1.7 keeps a member count per team, so it is seeded from the rows that exist.
     if (missing('team', 'member_count')) {
         db.run(`ALTER TABLE "team" ADD COLUMN "member_count" integer NOT NULL DEFAULT 0`);
         db.run(
             `UPDATE "team" SET "member_count" = (SELECT count(*) FROM "team_member" WHERE "team_member"."team_id" = "team"."id")`,
         );
     }
-    // SQLite can't ALTER-add a UNIQUE column; old rows stay NULL and better-auth falls back to the (team, user) pair
+    // SQLite cannot add a UNIQUE column, so a unique index stands in. Old rows stay NULL, and better-auth then
+    // falls back to the team and user pair.
     if (missing('team_member', 'membership_key')) {
         db.run(`ALTER TABLE "team_member" ADD COLUMN "membership_key" text`);
         db.run(
             `CREATE UNIQUE INDEX IF NOT EXISTS "team_member_membership_key_unique" ON "team_member" ("membership_key")`,
         );
     }
-    // Both were in the 1.5 model too but never in the DDL; 1.7's startup schema check refuses the gap
+    // Both were in the 1.5 model but never in the DDL, and 1.7's startup schema check refuses the gap.
     if (missing('invitation', 'team_id')) {
         db.run(`ALTER TABLE "invitation" ADD COLUMN "team_id" text`);
         db.run(`ALTER TABLE "invitation" ADD COLUMN "created_at" integer`);
@@ -107,40 +109,29 @@ export function ensureAuthSchemaColumns(db: Database): void {
     db.close();
 }
 
-// RFC 2142 role addresses stay unclaimable on this server's mail domain; external guests are unaffected.
+// Nobody may claim an RFC 2142 role address, such as postmaster, on this server's mail domain. Guests on
+// external addresses are not affected.
 function rejectRoleAddress(email: string | undefined): void {
     if (email && isRoleAddress(email)) {
         throw new APIError('BAD_REQUEST', { message: 'This address is reserved' });
     }
 }
 
-// Every app password is this many ASCII letters (the plugin's generator, no prefix), which lets
-// protocol auth tell one from an account password without a key lookup.
+// Every app password is this many ASCII letters, from the plugin's generator with no prefix. So protocol auth can
+// tell one from an account password without a key lookup.
 export const APP_PASSWORD_LENGTH = 64;
 
 export const auth = betterAuth({
     database: drizzleAdapter(drizzle(getServerDataPath(SERVER_DATABASES.users)), {
         provider: 'sqlite',
-        schema: {
-            user: userScheme,
-            session: sessionScheme,
-            account: accountScheme,
-            verification: verificationScheme,
-            twoFactor: twoFactorScheme,
-            organization: organizationScheme,
-            member: memberScheme,
-            invitation: invitationScheme,
-            team: teamScheme,
-            teamMember: teamMemberScheme,
-            apikey: apikeyScheme,
-        },
+        schema: authSchema,
     }),
     databaseHooks: {
         session: {
             create: {
                 after: async (session) => {
-                    // Fires on sign-in only; session refresh is an update, not a create — so this is
-                    // genuinely "last login" rather than "last activity".
+                    // A session is created at sign-in and only updated when it refreshes, so this is the last
+                    // sign-in, not the last activity.
                     await getAuthDrizzleDb()
                         .update(userScheme)
                         .set({ lastLoginAt: new Date() })
@@ -160,14 +151,11 @@ export const auth = betterAuth({
                     rejectRoleAddress(user.email);
                 },
                 after: async (hookUser) => {
-                    // better-auth's hook type omits admin/twoFactor plugin fields,
-                    // but the runtime row has them. Cast to our User type at the
-                    // boundary so the rest of the app doesn't need to thread the
-                    // looser shape through.
+                    // better-auth's hook type leaves out the plugin fields, such as role, which the row has.
                     const user = hookUser as User;
-                    if (user.role === 'guest') return;
-                    // The row is committed; a failure here must not turn a created account into a 500.
-                    // Guard the two steps independently so an org-join failure still runs the reconcile.
+                    if (isGuest(user)) return;
+                    // The row is committed, so a failure here must not turn a created account into a 500. Each
+                    // step has its own guard, so a failed org join still reconciles.
                     try {
                         await authEnsureDefaultOrgMembership(user.id);
                     } catch (error) {
@@ -181,15 +169,15 @@ export const auth = betterAuth({
                 },
             },
             update: {
-                // Email may be absent (name/image-only change); rejectRoleAddress no-ops when so.
+                // An update that only changes the name or the image has no email.
                 before: async (user) => {
                     rejectRoleAddress(user.email);
                 },
             },
             delete: {
-                // Every better-auth deletion path passes here while the user row still exists, so the
-                // whole Eigen teardown runs here: a leftover member row 500s listMembers org-wide.
-                // Lazy import: delete-user → home/get-home → … → auth is a static cycle.
+                // Every better-auth deletion passes here while the user row still exists, so Eigen's whole
+                // teardown runs here. A member row left behind would break listMembers for the whole org.
+                // The import is lazy because delete-user imports this file directly, so a static import would be a cycle.
                 before: async (hookUser) => {
                     const user = hookUser as User;
                     const { teardownUserData } = await import('../user/delete-user');
@@ -227,16 +215,14 @@ export const auth = betterAuth({
         minPasswordLength: MIN_PASSWORD_LENGTH,
     },
     advanced: {
-        // Same X-Real-IP → X-Forwarded-For precedence as clientIpKey (lib/auth/access); better-auth
-        // extracts the IP itself from these header names, so it declares the precedence here rather
-        // than calling the helper. Caddy overwrites both on proxied routes, so they're not spoofable.
+        // The same order as clientIpKey, X-Real-IP first. better-auth reads the headers itself, so the order is
+        // declared here. Caddy overwrites both on proxied routes, so a client cannot fake them.
         ipAddress: { ipAddressHeaders: ['x-real-ip', 'x-forwarded-for'] },
     },
     rateLimit: {
-        // Eigen sets PRODUCTION=1, not NODE_ENV, so better-auth's prod auto-enable never fires.
-        // Force it on; keep the general window loose (the global limiter handles broad abuse, and
-        // a low default would throttle high-frequency get-session for NAT'd offices) and throttle
-        // the credential endpoints hard.
+        // Eigen sets PRODUCTION=1, not NODE_ENV, so better-auth would never turn this on by itself. The general
+        // limit stays loose, because the server's own limiter handles broad abuse and a low one would throttle
+        // get-session for an office behind one address. The credential endpoints get a hard limit.
         enabled: true,
         window: 60,
         max: 1000,
@@ -258,18 +244,12 @@ export const auth = betterAuth({
             },
         }),
         admin(),
-        // We use the organization plugin only for its data model (members, teams, RBAC) —
-        // not its invitation flow. New external users are onboarded via the waitlist
-        // (see apps/api/src/lib/waitlist), which is why no `sendInvitationEmail` hook is wired
-        // here. Existing users get auto-added to the default org via the user-create hook
-        // above, and to teams via `auth.api.addMember` (admin UI), which both bypass invites.
-        // The hook's org join also adds them to the default team.
+        // Eigen uses the organization plugin for its data model only, the members, teams and roles, and not for
+        // its invitations, so no sendInvitationEmail is wired. People arrive through the waitlist or an admin. The
+        // user-create hook joins them to the default org and team, and the admin UI adds them to other teams.
         organization({
-            // Single-org app: product code never calls /organization/create (the plugin is used
-            // only for its data model). Block user-initiated creation so a normal user can't spin
-            // up an org they own and escalate past requireAdmin. Setup creates the default org via
-            // a system action (auth.api.createOrganization with userId, no session), which bypasses
-            // this gate.
+            // Eigen has one org. A user who could create another would own it and get past requireAdmin.
+            // Setup creates the default org as a server call without a session, which this does not block.
             allowUserToCreateOrganization: false,
             // Default caps the org at 100 members and fails every later user creation in the create hook.
             // The function form lifts the cap without turning the plugin's list-query limit into Infinity.
@@ -280,6 +260,25 @@ export const auth = betterAuth({
             organizationHooks: {
                 afterAddTeamMember: async ({ teamMember }) => {
                     await reconcileSharesForNewTeamMember(teamMember.userId, teamMember.teamId);
+                },
+                // The team row still exists here, and a throw keeps it, as user.delete.before does for a user.
+                // better-auth answers any error but its own APIError with a 500, so a busy home becomes its 409.
+                // The default team holds the org-wide drive every member joins, and its teardown can't be undone.
+                beforeDeleteTeam: async ({ team }) => {
+                    if (team.id === getServerConfig()?.defaultTeamId) {
+                        throw new APIError('FORBIDDEN', {
+                            message: "The organisation's default team can't be deleted",
+                        });
+                    }
+                    const { teardownTeamData } = await import('../team/delete-team');
+                    try {
+                        await teardownTeamData(team.id);
+                    } catch (error) {
+                        if (error instanceof ApiError && error.status === 409) {
+                            throw new APIError('CONFLICT', { message: error.message });
+                        }
+                        throw error;
+                    }
                 },
                 afterDeleteTeam: async ({ team }) => {
                     // Lazy import to avoid the static cycle (home-relay → get-home → team → auth).
@@ -304,9 +303,8 @@ export const auth = betterAuth({
     secret: getAuthSecret(),
 });
 
-// Joins the default org (config.orgId, pinned at setup — not "the first org row", whose order is
-// unspecified) and its default team. Both the sign-up hook and every sign-in call this, so an account whose
-// sign-up join failed still reaches Admin → Users instead of staying outside the org with no repair path.
+// Joins the default org that setup pinned in the config, and its default team. The sign-up hook and every sign-in
+// call it, so an account whose join failed at sign-up gets in at its next sign-in instead of staying outside the org.
 async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
     const config = getServerConfig();
     if (!config) return;
@@ -322,7 +320,7 @@ async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
 
     // Guests hold accounts and sign in, but never join the org.
     const row = await db.select({ role: userScheme.role }).from(userScheme).where(eq(userScheme.id, userId)).get();
-    if (row?.role === 'guest') return;
+    if (isGuest(row)) return;
 
     // addMember refuses a team that is gone, org join included, so a deleted default team must not reach it.
     const teamId = defaultTeamId && (await getTeamExists(defaultTeamId)) ? defaultTeamId : undefined;
@@ -343,8 +341,8 @@ async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
     }
 }
 
-// Membership deletion also sweeps rows whose user is already gone, so instances that
-// collected orphans through past raw better-auth deletions self-heal on the next delete.
+// The memberships of users who are already gone go too, so a server that collected such rows from older raw
+// better-auth deletions heals at its next delete.
 export function authDeleteUserReferences(userId: string): void {
     const db = getAuthDrizzleDb();
     const userIds = db.select({ id: userScheme.id }).from(userScheme);
@@ -358,26 +356,14 @@ export function authDeleteUserReferences(userId: string): void {
     db.delete(apikeyScheme).where(eq(apikeyScheme.referenceId, userId)).run();
 }
 
-// Separate Drizzle instance from better-auth's internal one — better-auth controls its own
-// connection lifecycle, so we can't safely share the instance it creates via drizzleAdapter().
+// A Drizzle handle of our own beside better-auth's. better-auth runs the lifecycle of the one it gets through
+// drizzleAdapter, so that one is not shared.
 let authDrizzleDb: ReturnType<typeof drizzle> | undefined;
 
 export function getAuthDrizzleDb(): ReturnType<typeof drizzle> {
     if (!authDrizzleDb) {
         authDrizzleDb = drizzle(getServerDataPath(SERVER_DATABASES.users), {
-            schema: {
-                user: userScheme,
-                session: sessionScheme,
-                account: accountScheme,
-                verification: verificationScheme,
-                twoFactor: twoFactorScheme,
-                organization: organizationScheme,
-                member: memberScheme,
-                invitation: invitationScheme,
-                team: teamScheme,
-                teamMember: teamMemberScheme,
-                apikey: apikeyScheme,
-            },
+            schema: authSchema,
         });
     }
     return authDrizzleDb;

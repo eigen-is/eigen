@@ -2,6 +2,7 @@
 // and data bars. Beside the evaluator sit the rule edits a row op, a move or a paste makes, which keep a formula rule's
 // anchor, and the shape check every reader of a stored rule asks first, since a peer can store anything.
 
+import { parseRgb } from '@workspace/lib/constants/colors';
 import { isRecord } from '@workspace/lib/guards';
 import { isNil } from 'es-toolkit/compat';
 import { cellValue, parseCellInput } from './format';
@@ -97,14 +98,10 @@ function forEachCellInRanges(data: CellMatrix, ranges: SingleRange[], cb: (r: nu
     }
 }
 
-// Parse "#rrggbb" or "rgb(R, G, B)" into [r, g, b].
+// Parse "#rrggbb" or an rgb() into [r, g, b].
 function parseColorChannels(color: string): [number, number, number] {
-    if (color.startsWith('#')) {
-        const hex = color.slice(1);
-        return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
-    }
-    const parts = color.split(',');
-    return [parseInt(parts[0].split('(')[1], 10), parseInt(parts[1], 10), parseInt(parts[2].split(')')[0], 10)];
+    const hex = color.startsWith('#') ? color : (parseRgb(color)?.hex ?? '');
+    return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
 }
 
 function getColorGradation(color1: string, color2: string, value1: number, value2: number, value: number) {
@@ -483,7 +480,7 @@ export function isWellFormedCfRule(rule: ConditionalFormatRule | null): boolean 
             return (
                 Array.isArray(rule.format) &&
                 rule.format.every(
-                    (color) => typeof color === 'string' && (color.startsWith('#') || color.split(',').length >= 3),
+                    (color) => typeof color === 'string' && (color.startsWith('#') || parseRgb(color) !== undefined),
                 )
             );
         case 'icons':

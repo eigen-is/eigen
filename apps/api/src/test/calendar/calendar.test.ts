@@ -140,6 +140,17 @@ describe('Calendar', () => {
             expect(calendars.find((c) => c.name === 'Hostile')).toBeUndefined();
         });
 
+        // Apple writes the eight-digit form, so a calendar takes three, six or eight digits in either case.
+        test.each(['#abcd', '#aabbccd', 'aabbcc', 'rgb(1, 2, 3)'])('the color %p is refused', async (color) => {
+            const res = await createCalendarRequest({ name: 'Odd', color });
+            expect(res.status).toBe(400);
+        });
+
+        test.each(['#ABC', '#aabbcc', '#AABBCCDD'])('the color %p is taken', async (color) => {
+            const res = await createCalendarRequest({ name: `Hex ${color}`, color });
+            expect(res.status).toBe(200);
+        });
+
         test('a 3 000-character name is refused', async () => {
             const res = await createCalendarRequest({ name: 'x'.repeat(3000), color: '#34a853' });
             expect(res.status).toBeGreaterThanOrEqual(400);

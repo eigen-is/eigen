@@ -3,6 +3,7 @@
 // the image variant. Strict: '' or anything malformed reads back as the transparent solid fill, so a
 // corrupt peer write can never throw on a render path.
 
+import { isHexColor } from '../constants/colors';
 import type { BackgroundFill, Fill, FillPaint } from '../types/background';
 import { isSafeMediaName } from './media-refs';
 import { normalizeAngle, round4 } from './outline';
@@ -17,10 +18,8 @@ export const TRANSPARENT_FILL: Fill = { type: 'solid', color: TRANSPARENT_COLOR,
 
 // Colors come from the ColorPicker: hex (#rgb/#rrggbb/#rrggbbaa) or the 'transparent' sentinel.
 // Anything else is rejected; this closes `url(...)` paint-server smuggling into export.
-const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-
 export function isColorToken(v: unknown): v is string {
-    return typeof v === 'string' && (v === TRANSPARENT_COLOR || HEX_COLOR.test(v));
+    return typeof v === 'string' && (v === TRANSPARENT_COLOR || isHexColor(v, [3, 6, 8]));
 }
 
 // The scene background, an element's fill and a switched-off border all answer through this predicate.

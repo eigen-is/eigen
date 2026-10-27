@@ -67,3 +67,16 @@ describe('handleMailSSEvent — burst', () => {
         expect(countKey(touched, mailboxKeys.lists(owner))).toBe(1);
     });
 });
+
+// A sync that finds a flag changed on disk, such as a message read in another mail app, sends mail:flags-changed
+// and never mail:read-changed, so the unread counts must follow that event too.
+test('a flags change refetches the mailbox list with its unread counts', async () => {
+    const owner = 'owner-flags';
+    const { queryClient, touched } = trackingClient();
+
+    const event = { type: SSEventType.MAIL_FLAGS_CHANGED, mail: { messageId: 'msg-1', mailbox: MAILBOX_INBOX } };
+    expect(handleMailSSEvent(event, queryClient, owner)).toBe(true);
+
+    await settle();
+    expect(countKey(touched, mailboxKeys.lists(owner))).toBe(1);
+});

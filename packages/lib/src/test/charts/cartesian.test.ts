@@ -1,12 +1,15 @@
-import { describe, expect, test } from 'bun:test';
-import { formatTickValue, layoutChart, sampleChartSpec } from '../../charts';
+import { describe, expect, spyOn, test } from 'bun:test';
+import { CHART_MESSAGES, chartFontSize, layoutChart, sampleChartSpec } from '../../charts';
+import * as tickModule from '../../charts/ticks';
 import type { ChartData, ChartLabel, ChartLayout, ChartSeriesStyle, ChartSpec } from '../../types/chart';
 import { CHART_TYPES } from '../../types/chart';
+import { getLineHeightPx } from '../../vector/font-metrics';
 import { parsePoints } from '../../vector/points';
 import type { VectorLinearElement, VectorRectangleElement } from '../../vector/types';
 import type { AxisPatch, SpecPatch } from './layout-fixtures';
 import {
     labelBounds,
+    labelled,
     layout,
     lines,
     marked,
@@ -205,8 +208,8 @@ describe('column and bar', () => {
         expect(count(1200)).toBeGreaterThan(count(250));
     });
 
-    // A peer stores the box, so a huge one must not mean huge work. formatTick runs once per tick of
-    // every axis the layout tries, so its calls count the tick work; past the budget it throws.
+    // A peer stores the box, so a huge one must not mean huge work. A tick's text is formatted once per tick of every
+    // axis the layout tries, so those calls count the tick work; past the budget the spy throws.
     test.each([
         ['column', 600, 1e6],
         ['bar', 1e6, 600],
@@ -215,21 +218,26 @@ describe('column and bar', () => {
         ['line', 1e9, 1e9],
     ] as const)('a %s at %d × %d lays out in bounded work', (type, width, height) => {
         let calls = 0;
-        const out = layoutChart({
-            id: 'c1',
-            spec: sampleChartSpec(type),
-            data: sampleData(type),
-            width,
-            height,
-            paint: PAINT,
-            formatTick: (value, step) => {
-                calls++;
-                if (calls > 60) throw new Error('unbounded tick work');
-                return formatTickValue(value, step);
-            },
+        const format = spyOn(tickModule, 'formatTickValue').mockImplementation((value, step) => {
+            calls++;
+            if (calls > 60) throw new Error('unbounded tick work');
+            return String(value / step);
         });
-        expect(lines(out, 'gridline').length).toBeLessThanOrEqual(30);
-        expect(out.labels.length).toBeLessThanOrEqual(40);
+        try {
+            const out = layoutChart({
+                id: 'c1',
+                spec: sampleChartSpec(type),
+                data: sampleData(type),
+                width,
+                height,
+                paint: PAINT,
+            });
+            expect(calls).toBeGreaterThan(0);
+            expect(lines(out, 'gridline').length).toBeLessThanOrEqual(30);
+            expect(out.labels.length).toBeLessThanOrEqual(40);
+        } finally {
+            format.mockRestore();
+        }
     });
 
     test("a bar chart's value labels drop ticks until they stop touching", () => {
@@ -274,7 +282,7 @@ describe('column and bar', () => {
         expect(narrow.labels.filter(isTick).map((label) => label.text)).toContain('0');
     });
 
-    test('the caller formats the ticks', () => {
+    test("the caller's source format draws the ticks of an axis without a format of its own", () => {
         const out = layoutChart({
             id: 'c1',
             spec: sampleChartSpec('column'),
@@ -282,9 +290,9 @@ describe('column and bar', () => {
             width: 640,
             height: 400,
             paint: PAINT,
-            formatTick: (value, step) => `${value}/${step}`,
+            sourceFormat: '0.0" u"',
         });
-        expect(out.labels.some((label) => /^-?\d+\/\d+$/.test(label.text))).toBe(true);
+        expect(out.labels.some((label) => /^-?\d+\.0 u$/.test(label.text))).toBe(true);
     });
 });
 
@@ -772,5 +780,216 @@ describe('edge cases', () => {
                 }
             }
         }
+    });
+});
+
+describe('data labels', () => {
+    const data: ChartData = {
+        categories: ['A', 'B', 'C'],
+        series: [series('S1', [12.3, 45.6, null]), series('S2', [-7.5, 23.4, 31.2])],
+    };
+    const bare: SpecPatch = { ...UNTITLED, title: { text: '' }, legend: { position: 'none' } };
+    const on: SpecPatch = { ...bare, series: labelled(data) };
+    const big = { data, width: 800, height: 500 };
+    const fontSize = chartFontSize(800, 500);
+    const gap = fontSize / 2;
+    const textOf = (out: ChartLayout, text: string): ChartLabel => {
+        const found = out.labels.find((label) => label.text === text);
+        if (!found) throw new Error(`no label ${text}`);
+        return found;
+    };
+    const has = (out: ChartLayout, text: string) => out.labels.some((label) => label.text === text);
+    const bar = (out: ChartLayout, id: string) => {
+        const found = rects(out, 'bar').find((shape) => shape.id === `c1:bar:${id}`);
+        if (!found) throw new Error(`no bar ${id}`);
+        return found;
+    };
+    const plotTop = (out: ChartLayout) => Math.min(...lines(out, 'gridline').map((shape) => shape.y));
+
+    test('a labelled series shows each value in the values format, and a blank none, even one plotted as zero', () => {
+        const out = layout('column', on, big);
+        for (const text of ['12.3', '45.6', '-7.5', '23.4', '31.2']) expect(has(out, text)).toBe(true);
+        expect(layout('column', { ...on, chart: { blanks: 'zero' } }, big).labels).toEqual(out.labels);
+        const formatted = layout('column', { ...on, axes: { x: {}, y: { labels: { format: '#,##0.00' } } } }, big);
+        expect(has(formatted, '45.60')).toBe(true);
+    });
+
+    test('only the labelled series show labels', () => {
+        const out = layout('column', { ...bare, series: labelled(data, ['S2']) }, big);
+        expect(has(out, '23.4')).toBe(true);
+        expect(has(out, '45.6')).toBe(false);
+    });
+
+    test('a clustered column labels above its end and a negative one below it', () => {
+        const out = layout('column', on, big);
+        const up = bar(out, '0:1');
+        const above = labelBounds(textOf(out, '45.6'));
+        expect(textOf(out, '45.6').anchor).toBe('middle');
+        expect(textOf(out, '45.6').x).toBeCloseTo(up.x + up.width / 2);
+        expect(up.y - above.bottom).toBeCloseTo(gap);
+        const down = bar(out, '1:0');
+        expect(labelBounds(textOf(out, '-7.5')).top - (down.y + down.height)).toBeCloseTo(gap);
+        const names = out.labels.filter((label) => ['A', 'B', 'C'].includes(label.text)).map(labelBounds);
+        for (const name of names) expect(overlaps(name, labelBounds(textOf(out, '-7.5')))).toBe(false);
+    });
+
+    test('a clustered bar labels right of its end and a negative one left of it, inside the box', () => {
+        const out = layout('bar', on, big);
+        const right = bar(out, '0:1');
+        const label = textOf(out, '45.6');
+        expect(label.anchor).toBe('start');
+        expect(label.x - (right.x + right.width)).toBeCloseTo(gap);
+        expect(labelBounds(label).top + labelBounds(label).bottom).toBeCloseTo(2 * right.y + right.height);
+        const left = bar(out, '1:0');
+        expect(textOf(out, '-7.5').anchor).toBe('end');
+        expect(left.x - textOf(out, '-7.5').x).toBeCloseTo(gap);
+        for (const placed of out.labels) expect(within(labelBounds(placed), 800, 500)).toBe(true);
+    });
+
+    test('a line labels above each point, whatever its sign', () => {
+        const styles = Object.fromEntries(
+            data.series.map(({ id }) => [id, style({ labels: { visible: true }, marker: { visible: true } })]),
+        );
+        const out = layout('line', { ...bare, series: styles }, big);
+        for (const [id, text] of [
+            ['0:1', '45.6'],
+            ['1:0', '-7.5'],
+        ]) {
+            const marker = ofPart(out, 'marker').find((shape) => shape.id === `c1:marker:${id}`);
+            if (!marker) throw new Error(`no marker ${id}`);
+            const bounds = labelBounds(textOf(out, text));
+            expect((bounds.left + bounds.right) / 2).toBeCloseTo(marker.x + marker.width / 2);
+            expect(marker.y + marker.height / 2 - bounds.bottom).toBeCloseTo(gap);
+        }
+    });
+
+    test('a stacked or 100% segment labels its raw value in its middle, and a segment too small for it none', () => {
+        const stack: ChartData = {
+            categories: ['A', 'B'],
+            series: [series('S1', [30.5, 100.5]), series('S2', [60.5, 1.5]), series('S3', [9.5, 100.5])],
+        };
+        for (const stacking of ['stacked', 'percent'] as const) {
+            for (const type of ['column', 'bar'] as const) {
+                const out = layout(
+                    type,
+                    { ...bare, plots: plots(stacking), series: labelled(stack) },
+                    { ...big, data: stack },
+                );
+                const segment = bar(out, '0:0');
+                const bounds = labelBounds(textOf(out, '30.5'));
+                expect([(bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2]).toEqual([
+                    expect.closeTo(segment.x + segment.width / 2),
+                    expect.closeTo(segment.y + segment.height / 2),
+                ]);
+                expect(has(out, '100.5')).toBe(true);
+                expect(has(out, '1.5')).toBe(false);
+            }
+        }
+    });
+
+    test("of two colliding labels the bigger bar's keeps its place, whichever series comes first", () => {
+        for (const values of [
+            [7900.5, 8000.5],
+            [8000.5, 7900.5],
+        ]) {
+            const crowd: ChartData = { categories: ['A'], series: values.map((v, i) => series(`S${i}`, [v])) };
+            const out = layout(
+                'column',
+                { ...bare, series: labelled(crowd) },
+                { data: crowd, width: 140, height: 300 },
+            );
+            expect([has(out, '8000.5'), has(out, '7900.5')]).toEqual([true, false]);
+        }
+    });
+
+    test("of two colliding line labels the first series' keeps its place", () => {
+        for (const [first, second] of [
+            ['50.5', '50.6'],
+            ['50.6', '50.5'],
+        ]) {
+            const crowd: ChartData = {
+                categories: ['A', 'B'],
+                series: [series('S0', [Number(first), 10]), series('S1', [Number(second), 10])],
+            };
+            const out = layout(
+                'line',
+                { ...bare, series: labelled(crowd) },
+                { data: crowd, ...{ width: 400, height: 300 } },
+            );
+            expect([has(out, first), has(out, second)]).toEqual([true, false]);
+        }
+    });
+
+    test("a label that would run past the plot's side, into the tick labels, hides", () => {
+        const wide: ChartData = {
+            categories: Array.from({ length: 16 }, (_, i) => `C${i}`),
+            series: [series('S', [1234.5, ...Array.from({ length: 15 }, () => 10)])],
+        };
+        const patch = { ...bare, series: labelled(wide) };
+        expect(has(layout('column', patch, { data: wide, width: 400, height: 300 }), '1234.5')).toBe(false);
+        expect(has(layout('column', patch, { data: wide, width: 1200, height: 300 }), '1234.5')).toBe(true);
+    });
+
+    test("labels above the plot take a line and a gap there, in place of the end tick's half line", () => {
+        const lh = getLineHeightPx('Inter', fontSize);
+        const off = layout('column', bare, big);
+        expect(plotTop(layout('column', on, big)) - plotTop(off)).toBeCloseTo(lh / 2 + gap);
+        expect(plotTop(layout('line', on, big)) - plotTop(off)).toBeCloseTo(lh / 2 + gap);
+    });
+
+    test('a chart lays out as without labels when none show: no values, a pie, or past the sketch cap', () => {
+        const blank: ChartData = { ...data, series: [...data.series, series('S3', [null, null, null])] };
+        expect(layout('column', { ...bare, series: labelled(blank, ['S3']) }, { ...big, data: blank })).toEqual(
+            layout('column', bare, { ...big, data: blank }),
+        );
+        const pie = sampleData('pie');
+        expect(layout('pie', { series: labelled(pie) }, { data: pie })).toEqual(layout('pie', {}, { data: pie }));
+    });
+
+    test('a chart too small for its labels draws without them rather than give way to the message', () => {
+        const wide: ChartData = { categories: ['Revenue', 'Costs'], series: [series('S', [1234567, -987654])] };
+        for (const [format, width, height] of [
+            ['#,##0', 160, 120],
+            ['#,##0.00 "EUR"', 200, 180],
+        ] as const) {
+            const patch: SpecPatch = { axes: { x: {}, y: { labels: { format } } } };
+            const options = { data: wide, width, height };
+            const off = layout('bar', patch, options);
+            expect(has(off, CHART_MESSAGES.tooSmall)).toBe(false);
+            expect(layout('bar', { ...patch, series: labelled(wide) }, options)).toEqual(off);
+        }
+    });
+
+    test("a 100% stack labels each value in the values' own format, never the axis format, which formats shares", () => {
+        const stack: ChartData = { categories: ['A'], series: [series('S1', [1234]), series('S2', [766])] };
+        const patch: SpecPatch = {
+            ...bare,
+            plots: plots('percent'),
+            series: labelled(stack),
+            axes: { x: {}, y: { labels: { format: '0.0%' } } },
+        };
+        for (const type of ['column', 'bar'] as const) {
+            const general = layout(type, patch, { ...big, data: stack });
+            expect([has(general, '1234'), has(general, '123400.0%')]).toEqual([true, false]);
+            expect(has(layout(type, patch, { ...big, data: stack, sourceFormat: '#,##0' }), '1,234')).toBe(true);
+        }
+    });
+
+    test('200 labelled points draw labels and 201 draw none', () => {
+        const count = (points: number) => {
+            const many: ChartData = {
+                categories: Array.from({ length: points }, (_, i) => `${i}`),
+                series: [
+                    series(
+                        'S',
+                        Array.from({ length: points }, (_, i) => i + 0.5),
+                    ),
+                ],
+            };
+            const out = layout('column', { ...bare, series: labelled(many) }, { data: many, width: 2112, height: 300 });
+            return out.labels.filter((label) => label.text.endsWith('.5')).length;
+        };
+        expect(count(200)).toBeGreaterThan(0);
+        expect(count(201)).toBe(0);
     });
 });

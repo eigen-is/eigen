@@ -33,7 +33,7 @@ data/home/{userId}/
 └── eigen.notifications/    notifications.db
 ```
 
-The names come from `PATHS` in `apps/api/src/lib/config/paths.ts`. Mail, Contacts and Calendar reach their folders through `home.fs`, a `LocalFilesystem` with the atomic and durable write family those domains need. Contacts and calendar events live as BLOBs in their databases, with columns projected from them ([CONTACTS.md](CONTACTS.md), [CALENDAR.md](CALENDAR.md)). `staging/` sits outside `tmp/` so the stale-temp sweep can never purge an upload the bucket has not acknowledged ([SYNC.md](SYNC.md)).
+The names come from `PATHS` in `apps/api/src/lib/config/paths.ts`. Mail, Contacts and Calendar reach their folders through `home.fs`, a `LocalFilesystem` with the atomic and durable write family those domains need. Contacts and calendar events live as BLOBs in their databases, with columns projected from them ([CONTACTS.md](CONTACTS.md), [CALENDAR.md](CALENDAR.md)). `staging/` sits outside `tmp/` so the stale-temp sweep can never purge an upload the bucket has not acknowledged ([SYNC.md](SYNC.md)). A JSON file such as `settings.json` is written through `writeAtomic`, which stages a dotted `.tmp-` copy beside it and renames it over. A crash between the two leaves the copy, so `Home.init` sweeps the home's root of copies older than a day (`STALE_TEMP_MAX_AGE_MS`) before it loads the settings; a younger one may be a write still in flight.
 
 ## Containers name users by email, never by id
 

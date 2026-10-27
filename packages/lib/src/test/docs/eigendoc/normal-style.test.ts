@@ -53,6 +53,18 @@ describe('the Normal style', () => {
         expect(readNormalStyle({ font: 'Calibri', color: '#ABCDEF' })).toEqual(DEFAULT_NORMAL_STYLE);
     });
 
+    // Eigen's writers store six lower-case digits, and a stored Normal reads as it always has.
+    test.each(['#abc', '#abcd', '#aabbccdd', '#ABCDEF', 'rgb(1, 2, 3)', '#abcdef '])(
+        'the color %p reads as the default',
+        (color) => {
+            expect(readNormalStyle({ color }).color).toBe(DEFAULT_NORMAL_STYLE.color);
+        },
+    );
+
+    test('a color of six lower-case hex digits reads as itself', () => {
+        expect(readNormalStyle({ color: '#abcdef' }).color).toBe('#abcdef');
+    });
+
     test("each number is clamped and stepped as a paragraph's and a run's are", () => {
         expect(
             readNormalStyle({ size: 1000, lineSpacing: 9, spaceBefore: -5, spaceAfter: 500, color: '#123456' }),

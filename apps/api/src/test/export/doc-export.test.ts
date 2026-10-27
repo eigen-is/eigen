@@ -279,11 +279,12 @@ describe('doc export — the stylesheet', () => {
         expect(await exportStyle('pdf-html')).toContain('break-after: page');
     });
 
-    test('a table or quote holding a page break may split, and the figure box stays whole', async () => {
+    test('a table and its rows may split, a quote holding a page break may split, and the figure box stays whole', async () => {
         const css = await exportStyle('pdf-html');
 
-        expect(css).toContain('.figure, table, pre, blockquote { page-break-inside: avoid; }');
-        expect(css).toContain('table:has(.page-break), blockquote:has(.page-break) { page-break-inside: auto; }');
+        expect(css).toContain('.figure, pre, blockquote { page-break-inside: avoid; }');
+        expect(css).toContain('blockquote:has(.page-break) { page-break-inside: auto; }');
+        expect(css).not.toMatch(/(table|tr) \{ page-break-inside: avoid/);
     });
 });
 
@@ -380,6 +381,24 @@ describe('doc export — losses', () => {
         const html = await renderEigendocExport(doc, 'html', 'Report.eigendoc', async () => [], undefined);
         expect(html.warnings).toEqual([]);
     });
+
+    // Comments are not exported, so the HTML draws no highlight for one, as the PDF and the docx don't; the text stays.
+    test.each(['html', 'pdf-html'] as const)('%s keeps a commented text and drops its highlight', async (format) => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [{ type: 'text', text: 'Noted', marks: [{ type: 'comment', attrs: { cardId: 'c1' } }] }],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
+        const body = new TextDecoder().decode(data).split('<body>')[1] ?? '';
+        expect(body).toContain('Noted');
+        expect(body).not.toContain('comment-highlight');
+        expect(body).not.toContain('data-comment-id');
+    });
 });
 
 describe('doc export — tasks', () => {
@@ -450,6 +469,19 @@ describe('doc export — figures', () => {
         expect(html).toContain(
             `<p>before <span class="figure" data-layout="block" data-alignment="right">${IMG.replace(' />', '>')}<span class="figcaption">Sales</span></span> after</p>`,
         );
+    });
+
+    // A stretched picture draws at its stored box, which the column may still shrink in shape.
+    test('a stretched figure draws its stored box, and one at its own ratio is unchanged', async () => {
+        const figure = (attrs: object) => ({
+            type: 'paragraph',
+            content: [{ type: 'figure', attrs: { mediaName: 'chart.png', width: 320, ...attrs } }],
+        });
+        const html = await exportHtml({ type: 'doc', content: [figure({ height: 80 }), figure({})] });
+        expect(html).toContain(
+            '<img src="data:image/png;base64,AA==" alt="" style="width: 320px; aspect-ratio: 320 / 80; max-width: 100%">',
+        );
+        expect(html).toContain(IMG.replace(' />', '>'));
     });
 
     test("a wrapped figure floats by the stylesheet's rule, which the docx writer reads too", async () => {
@@ -1367,6 +1399,49 @@ describe('doc export — docx data: figures', () => {
     });
 });
 
+// A pasted data: src carries whatever the source wrote into it, such as a phone photo's GPS position, so the HTML and
+// the PDF draw it re-encoded, as the docx does.
+describe('doc export — HTML data: figures', () => {
+    const dataUri = (type: string, bytes: Buffer | string) =>
+        `data:${type};base64,${Buffer.from(bytes).toString('base64')}`;
+
+    async function imgSrcsOf(format: 'html' | 'pdf-html', ...srcs: string[]): Promise<string[]> {
+        const doc = seededDoc({
+            type: 'doc',
+            content: srcs.map((src) => ({ type: 'paragraph', content: [{ type: 'figure', attrs: { src } }] })),
+        });
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
+        return [...new TextDecoder().decode(data).matchAll(/<img src="([^"]*)"/g)].map(([, src]) => src ?? '');
+    }
+
+    test.each(['html', 'pdf-html'] as const)('%s draws a data: JPEG without its EXIF', async (format) => {
+        const photo = await sharp({ create: { width: 40, height: 30, channels: 3, background: '#c00' } })
+            .jpeg()
+            .withExif({ IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '52/1 5/1 0/1' } })
+            .toBuffer();
+        expect((await sharp(photo).metadata()).exif).toBeDefined();
+        const [src] = await imgSrcsOf(format, dataUri('image/jpeg', photo));
+        const drawn = Buffer.from(src?.split(',')[1] ?? '', 'base64');
+        const { format: type, width, exif } = await sharp(drawn).metadata();
+        expect([type, width, exif]).toEqual(['jpeg', 40, undefined]);
+    });
+
+    test('a data: src no image decodes from draws nothing, and a percent-encoded SVG draws as it is', async () => {
+        const svg = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%2F%3E';
+        expect(await imgSrcsOf('html', dataUri('image/png', 'not a png'), svg)).toEqual([svg]);
+    });
+
+    // Only a base64 src is decoded and re-encoded, so a percent-encoded raster would carry its EXIF out as it was pasted.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws nothing for a data: raster that is not base64',
+        async (format) => {
+            const jpeg = 'data:image/jpeg,%FF%D8%FF%E1%00%10Exif%00%00';
+            const svg = 'data:IMAGE/SVG+XML;charset=utf-8,%3Csvg%2F%3E';
+            expect(await imgSrcsOf(format, jpeg, 'data:,plain', svg)).toEqual([svg]);
+        },
+    );
+});
+
 // Worker.terminate() does not stop libvips, so only sharp's own timeout frees the one transform slot from a filter
 // librsvg grinds through for minutes.
 describe('doc export — docx SVG fallback timeout', () => {
@@ -1504,6 +1579,39 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 }
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — positioned figures (WeasyPrint)', () => {
+    // The PDF stretches a picture to its stored box, as the editor draws it.
+    test('a stretched image prints at its stored width and height', async () => {
+        const png = await sharp({ create: { width: 200, height: 100, channels: 3, background: '#888' } })
+            .png()
+            .toBuffer();
+        const figure = {
+            type: 'figure',
+            attrs: { src: `data:image/png;base64,${png.toString('base64')}`, width: 300, height: 60 },
+        };
+        const html = await pdfHtml({ type: 'paragraph', content: [figure] });
+        const boxes = await laidOut(html, "if tag == 'img': print(box.width, box.height)");
+        const [width, height] = (boxes[0] ?? '').split(' ').map(Number);
+        expect(width).toBeCloseTo(300, 3);
+        expect(height).toBeCloseTo(60, 3);
+    }, 60_000);
+
+    // A column narrower than the picture, as a later page setup leaves one, shrinks its width, and the box around it
+    // keeps the height in step.
+    test('a stretched image wider than the column prints in shape', async () => {
+        const png = await sharp({ create: { width: 200, height: 100, channels: 3, background: '#888' } })
+            .png()
+            .toBuffer();
+        const figure = {
+            type: 'figure',
+            attrs: { src: `data:image/png;base64,${png.toString('base64')}`, width: 1500, height: 300 },
+        };
+        const html = await pdfHtml({ type: 'paragraph', content: [figure] });
+        const boxes = await laidOut(html, "if tag == 'img': print(box.width, box.height)");
+        const [width = 0, height] = (boxes[0] ?? '').split(' ').map(Number);
+        expect(width).toBeLessThan(1000);
+        expect(height).toBeCloseTo(width / 5, 3);
+    }, 60_000);
+
     // WeasyPrint draws an absolute box from its paragraph's padding box, in front of the text or behind it.
     test.each(['front', 'behind'])(
         'a %s image prints at its offsets from its paragraph',
@@ -1537,6 +1645,37 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         },
         60_000,
     );
+});
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — tables across pages (WeasyPrint)', () => {
+    // As Word and Google Docs print one, a table taller than what is left of the page starts there and goes on over the
+    // next, rather than leaving the page half empty. Word's "Allow row to break across pages" is on by default, so a row
+    // does the same.
+    const intro = Array.from({ length: 10 }, (_, i) => paragraph(`Intro ${i + 1}`));
+    const cell = (...texts: string[]) => ({ type: 'tableCell', content: texts.map((text) => paragraph(text)) });
+    const firstPageTexts = async (rows: JSONContent[]) => {
+        const html = await pdfHtml(...intro, { type: 'table', content: rows });
+        const texts = await laidOut(html, "if type(box).__name__ == 'TextBox': print(id(page), box.text)");
+        const firstPage = texts[0]?.split(' ')[0];
+        return texts
+            .filter((line) => line.startsWith(`${firstPage} `))
+            .map((line) => line.slice(line.indexOf(' ') + 1));
+    };
+
+    test('a 60-row table after half a page starts on the first page', async () => {
+        const rows = Array.from({ length: 60 }, (_, i) => ({ type: 'tableRow', content: [cell(`Row ${i + 1}`)] }));
+        const onFirstPage = await firstPageTexts(rows);
+        expect(onFirstPage).toContain('Intro 1');
+        expect(onFirstPage).toContain('Row 1');
+    }, 60_000);
+
+    test('a row taller than what is left of the page starts on it and goes on over the next', async () => {
+        const lines = Array.from({ length: 60 }, (_, i) => `Line ${i + 1}`);
+        const onFirstPage = await firstPageTexts([{ type: 'tableRow', content: [cell(...lines)] }]);
+        expect(onFirstPage).toContain('Intro 1');
+        expect(onFirstPage).toContain('Line 1');
+        expect(onFirstPage).not.toContain('Line 60');
+    }, 60_000);
 });
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — ordered list numbers (WeasyPrint)', () => {
@@ -2224,6 +2363,37 @@ describe('doc export — footnotes', () => {
         expect(body.querySelector('article')?.lastElementChild?.className).toBe('footnotes');
     });
 
+    // eigen-prose.css underlines every link (`.eigen-prose a`); a rule that outranks it takes the line off the
+    // numbers. jsdom's computed style ignores specificity, so the test asks which links such a rule matches.
+    test('the HTML takes the underline off a note number and its link back, not off a link in a note', async () => {
+        const linked = (text: string) => ({
+            type: 'text',
+            text,
+            marks: [{ type: 'link', attrs: { href: 'https://eigen.is' } }],
+        });
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [linked('Body'), note({ type: 'paragraph', content: [linked('Source')] })],
+                },
+            ],
+        });
+        const { window } = new JSDOM(await exported('html', doc));
+        const undecorated = [...window.document.styleSheets]
+            .flatMap((sheet) => [...sheet.cssRules])
+            .filter(
+                (rule) =>
+                    rule instanceof window.CSSStyleRule && rule.style.getPropertyValue('text-decoration') === 'none',
+            )
+            .map((rule) => (rule instanceof window.CSSStyleRule ? rule.selectorText : ''));
+        const plain = [...window.document.querySelectorAll('article a')]
+            .filter((a) => undecorated.some((selector) => a.matches(selector)))
+            .map((a) => a.textContent);
+        expect(plain).toEqual(['1', '↩']);
+    });
+
     // A note floats whole to its page, so a taller one loses what doesn't fit, and WeasyPrint grows slow past about
     // 2,000 notes: past either, the PDF lists the notes after the body, as the download does.
     test.each<[string, JSONContent[]]>([
@@ -2274,6 +2444,19 @@ describe('doc export — footnotes', () => {
         const { body } = new JSDOM(await exported('pdf-html', doc)).window.document;
         expect(body.querySelector('span.footnote')).toBeNull();
         expect(body.querySelector('section.footnotes')).not.toBeNull();
+    });
+
+    // A stretched picture counts at its stored height, not as tall as it is wide.
+    test('a note of two wide, short pictures stays at its foot', async () => {
+        const figure = (mediaName: string) => ({
+            type: 'paragraph',
+            content: [{ type: 'figure', attrs: { mediaName, width: 600, height: 40 } }],
+        });
+        const html = await pdfHtml({
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Claim' }, note(paragraph('Pictured'), figure('a.png'), figure('b.png'))],
+        });
+        expect(html).toContain('<span class="footnote"');
     });
 
     test('a note just within a page stays at its foot', async () => {

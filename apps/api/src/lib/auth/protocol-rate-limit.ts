@@ -1,29 +1,22 @@
+// The limit on failed sign-ins over the mail and DAV protocols. verifyProtocolAuth calls better-auth directly, past
+// its HTTP rate limit, so without this the protocol servers would take unlimited password guesses. Only failures
+// count, per email and per IP, over a 15-minute window, because protocol clients sign in again on every poll and a
+// limit on every attempt would lock out busy clients and offices behind one address.
+
 import { ApiError } from '../core/errors';
 import { WindowLimiter } from '../core/window-limiter';
 
-// FAILURE limiter for protocol Basic auth (IMAP/CalDAV/WebDAV).
-// verifyProtocolAuth calls better-auth's signInEmail/verifyApiKey directly, bypassing the HTTP
-// rate-limit middleware, and the apiKey plugin has its own rate limit disabled — so the public
-// /dav + /webdav surface is otherwise an unlimited online password/app-password guessing oracle.
-//
-// We count FAILURES only. CalDAV/WebDAV/IMAP clients re-authenticate with Basic auth on every poll,
-// so throttling *all* attempts (the way otp-rate-limit does) would lock out legit high-frequency
-// clients and whole NAT'd offices. A run of failures is the brute-force signal; a success on an
-// email clears that email's bucket, so a client polling with a valid credential never accumulates
-// toward its own cap. The per-IP bucket is only aged out by the window, never cleared on success
-// (see clearProtocolAuthFailures) — otherwise an attacker holding one valid account could spray
-// guesses across many emails, then authenticate once to wipe the per-IP counter and repeat.
-// verifyProtocolAuth checks a valid app password BEFORE consulting this limiter, so a valid
-// credential is never refused by a saturated bucket; the cap only gates the expensive scrypt
-// primary-password path. The residual: a non-2FA account whose clients auth by primary password
-// only (no app password) can, worst case, have that path 429'd by a targeted flood until the window
-// ages out — the accepted fail2ban tradeoff, and app-password clients are immune.
+// A success clears its email's bucket, so a polling client never fills its own. The IP bucket only ages out: if a
+// success cleared it, an attacker with one valid account could guess across many emails, sign in once to reset
+// the count and go on. verifyProtocolAuth accepts a valid app password before it asks this limiter, so a full
+// bucket only blocks the account password. That leaves one accepted cost: a flood aimed at an account that signs
+// in with its account password, and has no app password, locks that account's clients out until the window passes.
 
 const WINDOW_MS = 15 * 60 * 1000;
 const emailFailures = new WindowLimiter(WINDOW_MS, 10);
 const ipFailures = new WindowLimiter(WINDOW_MS, 50);
 
-// Called at the START of every attempt — refuse before doing any credential work.
+// Called before any password work, so a full bucket costs no hash.
 export function checkProtocolAuthLimit(email: string, ip?: string): void {
     if (emailFailures.isFull(email.toLowerCase()) || (ip && ipFailures.isFull(ip))) {
         throw new ApiError(429, 'Too many failed authentication attempts — try again later');
@@ -36,8 +29,7 @@ export function recordProtocolAuthFailure(email: string, ip?: string): void {
     if (ip) ipFailures.record(ip);
 }
 
-// Called on a successful auth: a proven-real credential clears its own EMAIL bucket (unlocking the
-// account's other clients). The IP bucket is deliberately left to age out — see the header note.
+// A proven credential unlocks the account's other clients. The IP bucket is left to age out.
 export function clearProtocolAuthFailures(email: string): void {
     emailFailures.release(email.toLowerCase());
 }

@@ -173,8 +173,8 @@ export function useDocMedia(path: DrivePath) {
             const target = editor();
             if (!mediaFolderId || !file.type.startsWith('image/') || !target) return;
             const { pendingName, promise } = startUpload(file);
-            // Reset width so the new image's aspect ratio is recomputed on load
-            target.chain().focus().updateFigure({ mediaName: pendingName, width: null }).run();
+            // The new picture takes its own size and ratio on load, never the old one's stretched box.
+            target.chain().focus().updateFigure({ mediaName: pendingName, width: null, height: null }).run();
             const result = await promise;
             const settled = settle();
             if (settled && !settled.isDestroyed) swapFigureMediaName(settled, pendingName, result?.name ?? null);
@@ -187,7 +187,7 @@ export function useDocMedia(path: DrivePath) {
             const settled = editor();
             // The selection may have left the figure during the copy; the copied file then stays unreferenced in media/.
             if (result?.[0] && settled && !settled.isDestroyed && settled.isActive('figure', { mediaName: replaced })) {
-                settled.chain().focus().updateFigure({ mediaName: result[0].name, width: null }).run();
+                settled.chain().focus().updateFigure({ mediaName: result[0].name, width: null, height: null }).run();
             }
         },
         // The name a pasted image item is stored under: another document's file is re-uploaded into this

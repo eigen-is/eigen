@@ -2,7 +2,7 @@
 // and its ticks; the category axis gets one band per category. The cartesian layout asks for these and turns them into
 // pixels, labels and marks.
 
-import type { ChartSpec, ChartTickFormat } from '../types/chart';
+import type { ChartSpec } from '../types/chart';
 import type { Context } from './context';
 import { measure } from './labels';
 import { nice, tickStep, ticks } from './ticks';
@@ -19,6 +19,9 @@ const MIN_SPAN = 1e-300;
 // A line's axis takes in zero when its smallest magnitude is under this share of its largest, so when the spread is
 // over a sixth of the largest magnitude. That is Excel's rule, which LibreOffice's ScaleAutomatism mirrors.
 const WIDE_SPREAD = 5 / 6;
+
+// A tick's text from its value and the axis's step.
+export type ChartTickFormat = (value: number, step: number) => string;
 
 export type ValueAxis = { lo: number; hi: number; ticks: number[]; texts: string[]; widths: number[] };
 

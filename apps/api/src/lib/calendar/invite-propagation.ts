@@ -11,7 +11,7 @@ import { sendToHome } from '../home/home-relay';
 import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
 import type { User } from '../user';
-import { getUserByEmail } from '../user/';
+import { getUserByEmail, isGuest } from '../user/';
 import { composeCancelEmail, composeInviteEmail } from './imip';
 import { buildCalendarEvent } from './sse-events';
 
@@ -93,7 +93,7 @@ export async function propagateInvitation(
         if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser || targetUser.role === 'guest') {
+            if (!targetUser || isGuest(targetUser)) {
                 await addRegistryEntry(organizerHome.user.id, attendee.email);
                 // Send iMIP invite email to external attendee
                 const organizer = { userId: user.id, email: user.email, name: user.name };
@@ -145,7 +145,7 @@ export async function propagateInvitation(
         if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser || targetUser.role === 'guest') {
+            if (!targetUser || isGuest(targetUser)) {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeCancelEmail(event, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
@@ -166,7 +166,7 @@ export async function propagateInvitation(
         if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser || targetUser.role === 'guest') {
+            if (!targetUser || isGuest(targetUser)) {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeInviteEmail(event, organizer, [attendee], series, exceptions, true);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP update:', err));
@@ -229,7 +229,7 @@ export async function propagateCancellation(
     for (const attendee of attendees) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser || targetUser.role === 'guest') {
+            if (!targetUser || isGuest(targetUser)) {
                 // A team Home has no address, and a CANCEL with an empty organizer names no one a client could match.
                 if (!organizerHome.user.email) {
                     console.warn(`Skipped the iMIP cancel to ${attendee.email}: the organizer has no address`);

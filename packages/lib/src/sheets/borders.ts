@@ -1,3 +1,8 @@
+// A sheet's cell borders as every reader and writer sees them: what each stored style number draws, the CSS of a
+// cell's sides, and the walks over the `r_c`-keyed border map, such as its extent or a merge's sides folded onto its
+// first cell. The editor's canvas, the HTML and PDF exports and the xlsx writer share it, so none of them disagrees
+// about a border.
+
 import type { BorderStyleName, CellBorderSides, MergeCell } from './types';
 
 export const BORDER_SIDE_CSS = [
@@ -100,7 +105,7 @@ export function parseCellKey(key: string): [row: number, col: number] {
     return [Number(key.substring(0, sep)), Number(key.substring(sep + 1))];
 }
 
-// The row/col bounding box of a `borderInfo` map's raw keys — the bordered extent, shared by the
+// The row/col bounding box of a `borderInfo` map's keys — the bordered extent, shared by the
 // xlsx writer (which reads max only) and the HTML export's grid-bounds. Empty map → an inverted
 // box (`maxRow`/`maxCol` -1), which merges into a running extent as a no-op.
 export function borderInfoExtent(borderInfo: Record<string, CellBorderSides>): {
@@ -115,6 +120,9 @@ export function borderInfoExtent(borderInfo: Record<string, CellBorderSides>): {
     let maxCol = -1;
     for (const key in borderInfo) {
         const [r, c] = parseCellKey(key);
+        // A lookup builds the key from the cell's row and column, so a key spelled otherwise, such as `1e3_0`, borders
+        // no cell and must not stretch the extent.
+        if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0 || key !== `${r}_${c}`) continue;
         if (r < minRow) minRow = r;
         if (c < minCol) minCol = c;
         if (r > maxRow) maxRow = r;

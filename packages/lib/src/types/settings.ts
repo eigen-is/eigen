@@ -1,7 +1,7 @@
 // The settings types the API stores and the apps read, such as a user's personal settings, a team's,
 // a mount's and the server's, with the answers of the setup and S3 checks. A reader that decides what
-// a missing value means, such as celebrationsOn, sits beside its type, so the API and every app read
-// it the same way.
+// a missing value means, such as celebrationsOn or themeOf, sits beside its type, so the API and every
+// app read it the same way.
 
 import type { DriveViewPreferences } from './drive';
 import type { MountStorageType, S3Config } from './mount';
@@ -26,8 +26,21 @@ export type EmailSettings = {
     autoAdvance?: 'older' | 'newer' | 'list';
 };
 
+// The themes a user picks from, in the order every picker lists them.
+export const THEMES = [
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
+    { value: 'system', label: 'System' },
+] as const;
+export type UserTheme = (typeof THEMES)[number]['value'];
+
+export function isUserTheme(value: string): value is UserTheme {
+    return THEMES.some((theme) => theme.value === value);
+}
+
 export type UserSettings = {
-    theme?: 'light' | 'dark' | 'system';
+    // Read it through themeOf.
+    theme?: UserTheme;
     mounts?: Record<string, MountSettings>;
     email?: EmailSettings;
     driveView?: Partial<DriveViewPreferences>;
@@ -51,6 +64,11 @@ export function docsTextWidth(settings: UserSettings | undefined): DocsTextWidth
 // Celebrations are on until the user turns them off, so settings that never mention them have them on.
 export function celebrationsOn(settings: UserSettings | undefined): boolean {
     return settings?.celebrations !== false;
+}
+
+// A user who never picked a theme has the light one.
+export function themeOf(settings: UserSettings | undefined): UserTheme {
+    return settings?.theme ?? 'light';
 }
 
 export type TeamSettings = {

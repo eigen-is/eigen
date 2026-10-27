@@ -4,10 +4,7 @@
 // readCellBackground or readCellBorder, which keep only the stored form.
 
 import { TableCell, TableHeader } from '@tiptap/extension-table';
-
-const HEX_COLOR = /^#[0-9a-f]{6}$/;
-// A browser spells a style's color as rgb(), whatever the HTML wrote.
-const RGB_COLOR = /^rgb\((\d{1,3}), (\d{1,3}), (\d{1,3})\)$/;
+import { isHexColor, parseRgb } from '../../../constants/colors';
 
 export const CELL_BORDER_STYLES = ['solid', 'dashed', 'dotted', 'double'] as const;
 export type CellBorderStyle = (typeof CELL_BORDER_STYLES)[number];
@@ -34,7 +31,7 @@ const CELL_BORDER = /^(\d{1,3}(?:\.\d{1,2})?)px (solid|dashed|dotted|double) (#[
 // A cell's fill as stored: a peer or a paste writes any value, and it lands in a style and a docx's w:shd.
 export function readCellBackground(value: unknown): string | null {
     const color = typeof value === 'string' ? value.toLowerCase() : '';
-    return HEX_COLOR.test(color) ? color : null;
+    return isHexColor(color, [6]) ? color : null;
 }
 
 // A side as stored, "<px>px <style> <#rrggbb>" or "none": it lands in a style and a docx's w:tcBorders.
@@ -52,15 +49,12 @@ export function cellBorderValue(border: CellBorder): string {
     return border === 'none' ? 'none' : `${Number(border.width.toFixed(2))}px ${border.style} ${border.color}`;
 }
 
+// A browser spells a style's color as rgb(), whatever the HTML wrote. A see-through one is no color: a cell has no
+// alpha, and its rgb() alone would paint it opaque.
 function hexOf(color: string): string | null {
-    const rgb = RGB_COLOR.exec(color);
+    const rgb = parseRgb(color);
     if (!rgb) return readCellBackground(color);
-    return readCellBackground(
-        `#${rgb
-            .slice(1)
-            .map((channel) => Number(channel).toString(16).padStart(2, '0'))
-            .join('')}`,
-    );
+    return rgb.alpha === 1 ? rgb.hex : null;
 }
 
 // A pasted side, Google Docs' in points: one 0 wide, or of style none or hidden, draws none.

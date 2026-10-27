@@ -156,11 +156,11 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
     if (shown.length === 0) return { html: '', truncated: false };
     const windowed = windowedSheet(shown[0], () => PREVIEW_SHEET_BUDGET);
     if (!windowed) return { html: '', truncated: true };
-    const { sheet, range, offset } = windowed;
+    const { sheet, range, offset, budgetEnd } = windowed;
     const [firstRow, , firstCol] = range ?? [0, 0, 0, 0];
     const clip = {
-        width: sheetColumnsWidth(sheet, firstCol, firstCol + PREVIEW_SHEET_BUDGET.maxCols - 1),
-        height: sheetRowsHeight(sheet, firstRow, firstRow + PREVIEW_SHEET_BUDGET.maxRows - 1),
+        width: sheetColumnsWidth(sheet, firstCol, budgetEnd.col),
+        height: sheetRowsHeight(sheet, firstRow, budgetEnd.row),
     };
     const inClip = windowed.floating.filter(
         ({ bounds }) =>

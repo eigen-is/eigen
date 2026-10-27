@@ -10,7 +10,7 @@ import { DEG_TO_RAD } from '../vector/points';
 import type { Context, Frame } from './context';
 import { LABEL_SHARE } from './context';
 import { chartColor, chartPointColor } from './defaults';
-import { fit, label, labelBox, measure, touches } from './labels';
+import { fit, keepUntouched, label, labelBox, measure } from './labels';
 import { outlineOf, pieSlice } from './shapes';
 
 // A thin slice goes unlabeled rather than colliding.
@@ -81,16 +81,15 @@ export function layoutPie(
     });
     if (labeled) {
         // Largest slices first, as Highcharts ranks its data labels.
-        const boxes: Frame[] = [];
-        for (const entry of [...placed].sort((a, b) => b.share - a.share)) {
-            const x = cx + (radius + gap) * entry.cos;
-            const y = cy + (radius + gap) * entry.sin - lh / 2 + (lh / 2) * entry.sin;
-            const sliceLabel = label(ctx, entry.text, x, y, entry.anchor);
-            const box = labelBox(ctx, sliceLabel);
-            if (boxes.some((other) => touches(ctx, other, box))) continue;
-            boxes.push(box);
-            ctx.labels.push(sliceLabel);
-        }
+        const ranked = [...placed]
+            .sort((a, b) => b.share - a.share)
+            .map((entry) => {
+                const x = cx + (radius + gap) * entry.cos;
+                const y = cy + (radius + gap) * entry.sin - lh / 2 + (lh / 2) * entry.sin;
+                const sliceLabel = label(ctx, entry.text, x, y, entry.anchor);
+                return { label: sliceLabel, box: labelBox(ctx, sliceLabel, entry.right - entry.left) };
+            });
+        ctx.labels.push(...keepUntouched(ctx, ranked));
     }
     return shapes;
 }

@@ -7,7 +7,6 @@ import {
     chartColor,
     chartPaintOf,
     FLAT_CHART_LOOK,
-    formatTickValue,
     layoutChart,
     newChartSpecParts,
     sampleChartSpec,
@@ -102,7 +101,6 @@ describe('renderChartSpecSvg', () => {
             width: 600,
             height: 371,
             paint: chartPaintOf(FLAT_CHART_LOOK),
-            formatTick: (value) => String(value),
         });
         for (const shape of shapes) expect([shape.id, svg.includes(elementToSvg(shape))]).toEqual([shape.id, true]);
     });
@@ -140,15 +138,17 @@ describe('renderChartSpecSvg', () => {
         }
     });
 
-    test('the tick formatter draws the value axis', () => {
+    test("the source cells' format draws the ticks of an axis without a format of its own", () => {
         const svg = renderChartSpecSvg({
             id: 'c1',
             spec: sampleChartSpec('column'),
             width: 600,
             height: 371,
-            formatTick: (value) => `${value} pts`,
+            sourceFormat: '0" pts"',
         });
         expect(svg).toContain('>20 pts</text>');
+        const own = renderChartSpecSvg({ id: 'c1', spec: PERCENT_SPEC, width: 600, height: 371, sourceFormat: '0.0' });
+        expect(own).toContain('>25%</text>');
     });
 
     test('ticks draw in the axis format a chart copied from a sheet carries', () => {
@@ -157,11 +157,22 @@ describe('renderChartSpecSvg', () => {
         expect(svg).not.toContain('>0.25</text>');
     });
 
+    test("a series' data labels read in the axis format, else the source format, else General", () => {
+        const labelled = (spec: ChartSpec, values: number[]): ChartSpec => ({
+            ...spec,
+            series: { 's-1': { ...spec.series['s-1'], labels: { visible: true } } },
+            data: { source: 'inline', categories: ['North', 'South'], series: [{ id: 's-1', name: 'Share', values }] },
+        });
+        expect(svgOf(labelled(PERCENT_SPEC, [0.123, 0.25]))).toContain('>12%</text>');
+        const counts = labelled(SHARES_SPEC, [1234, 2345.6]);
+        expect(svgOf(counts)).toContain('>2345.6</text>');
+        const source = renderChartSpecSvg({ id: 'c1', spec: counts, width: 600, height: 371, sourceFormat: '#,##0' });
+        expect(source).toContain('>2,346</text>');
+        expect(source).toContain('>1,000</text>');
+    });
+
     test('ticks of an axis with no format draw as the step reads', () => {
         const svg = svgOf(SHARES_SPEC);
-        expect(svg).toBe(
-            renderChartSpecSvg({ id: 'c1', spec: SHARES_SPEC, width: 600, height: 371, formatTick: formatTickValue }),
-        );
         expect(svg).toContain('>0.00</text>');
         expect(svg).toContain('>0.25</text>');
     });
@@ -205,7 +216,6 @@ describe('renderChartSpecSvg', () => {
                 width: 600,
                 height: 371,
                 paint: chartPaintOf(look),
-                formatTick: formatTickValue,
             });
             const marks = shapes.filter((shape) => /:(bar|slice|legend):/.test(shape.id));
             expect(marks.some((shape) => shape.id.includes(':legend:'))).toBe(true);

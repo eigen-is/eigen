@@ -261,6 +261,26 @@ describe('eigensheets preview (floating images)', () => {
         origin.destroy();
     });
 
+    // The budget counts shown columns, so its box spans 50 of them. With B to K hidden, an image 4,500 px from A1 sits over
+    // the 46th shown column, beside a one-cell sheet or over one that renders.
+    test.each([
+        ['beside a one-cell sheet', [0]],
+        ['over a rendered column', [0, 59]],
+    ])('the budget box skips hidden columns: an image %s is drawn', (_, columns) => {
+        const cell = { v: 'Grid', m: 'Grid', ct: { fa: 'General', t: 'g' } };
+        const sheet: Sheet = {
+            id: 'hidden',
+            name: 'Hidden',
+            celldata: columns.map((c) => ({ r: 0, c, v: cell })),
+            config: { colhidden: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [i + 1, 0])) },
+            images: {
+                img_1: { id: 'img_1', index: 'a0', mediaName: 'chart.png', x: 4500, y: 0, width: 50, height: 20 },
+            },
+        };
+        const { html } = renderSheetsPreviewHtml([sheet], new Map([['chart.png', IMAGE_URL]]));
+        expect(html).toContain(`src="${IMAGE_URL}"`);
+    });
+
     test('a name the main thread could not resolve renders no img at all', () => {
         const doc = seedImageSheet();
         const { body } = renderEigensheetsPreviewBody(doc, NO_MEDIA);

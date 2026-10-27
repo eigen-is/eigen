@@ -1,3 +1,7 @@
+// Builds the chat events, which name a chat room by its owner, mount and id. A ChatRoom sends its message
+// events itself. This file also sends the event for a document's changed comment index, for example
+// after a comment in the document is resolved.
+
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import type { SSEventChat } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -12,8 +16,8 @@ export function buildCommentIndexUpdatedEvent(containerId: string, ownerId: stri
     return buildChatEvent(SSEventType.CHAT_COMMENT_INDEX_UPDATED, { chatId: containerId, ownerId, mountId });
 }
 
-// Mirrors ChatRoom's home.broadcast + notifySharedUsers pair: owner home + effective-member
-// fan-out. Callers that already resolved the members (route validation) pass them in.
+// Reaches the owner's tabs and every effective member's, the way a ChatRoom sends its own events. A
+// caller that already read the members passes them, so they aren't read twice.
 export async function broadcastCommentIndexUpdated(
     drive: DriveLike,
     ownerId: string,

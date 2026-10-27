@@ -114,3 +114,14 @@ describe('handleDriveSSEvent — DRIVE_FILE_HISTORY_UPDATED', () => {
         expect(hasKey(invalidated, driveKeys.history(OWNER))).toBe(true);
     });
 });
+
+// A delete is always a delete from the trash, so a Trash view open in another tab must drop the row.
+describe('handleDriveSSEvent — DRIVE_FILE_DELETED / DRIVE_FOLDER_DELETED', () => {
+    test("refreshes the mount's trash list", () => {
+        for (const type of [SSEventType.DRIVE_FILE_DELETED, SSEventType.DRIVE_FOLDER_DELETED] as const) {
+            const { queryClient, invalidated } = trackingClient();
+            expect(handleDriveSSEvent(driveEvent(type), queryClient)).toBe(true);
+            expect(hasKey(invalidated, driveKeys.trashList(OWNER, MOUNT))).toBe(true);
+        }
+    });
+});

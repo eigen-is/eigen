@@ -53,6 +53,20 @@ describe('renderEigendocPreviewBody', () => {
         doc.destroy();
     });
 
+    test('a commented text draws without its highlight, as the export does', () => {
+        const body = previewOf({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [{ type: 'text', text: 'Noted', marks: [{ type: 'comment', attrs: { cardId: 'c1' } }] }],
+                },
+            ],
+        });
+        expect(body).toContain('Noted');
+        expect(body).not.toContain('comment-highlight');
+    });
+
     test("a figure's prepared media URL reaches the viewer", () => {
         const body = previewOf(docWithFigure({ mediaName: GOLDEN_MEDIA_NAME, alt: 'A pixel' }));
         expect(body).toContain(`src="${MEDIA_URL}"`);

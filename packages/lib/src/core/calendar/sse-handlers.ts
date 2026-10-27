@@ -1,8 +1,13 @@
+// Handles the calendar events from the stream. A change to a calendar refetches the calendar list, and
+// a change to an event refetches the event ranges of the owner the event names. A burst of event changes
+// refetches once.
+
 import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { debouncePerOwner } from '../debounce-per-owner';
 import {
+    calendarKeys,
     invalidateCalendarCreated,
     invalidateCalendarDeleted,
     invalidateCalendarShared,
@@ -11,7 +16,7 @@ import {
     invalidateEventList,
 } from './hooks/keys';
 
-// Debounced for the fan-out of a whole-file import; the writing tab's own onSuccess invalidation still lands at once.
+// Debounced for the burst a whole-file import sends. The writing tab's own onSuccess still refetches at once.
 const invalidateEventsSoon = debouncePerOwner(invalidateEventList, 250);
 
 export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
@@ -40,13 +45,15 @@ export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, 
 
         case SSEventType.CALENDAR_SHARED:
             invalidateCalendarShared(queryClient, userId);
+            // The event names the sharing owner, whose share dialog lists who has access.
+            queryClient.invalidateQueries({ queryKey: calendarKeys.accessAll(event.ownerId) });
             return true;
 
         case SSEventType.CALENDAR_UNSHARED:
             invalidateCalendarUnshared(queryClient, userId);
             return true;
 
-        // An invitation event names the ORGANIZER's home, so these invalidate the reader's own ranges.
+        // An invitation event names the organizer's home, so these refetch the reader's own ranges.
         case SSEventType.CALENDAR_INVITE_RECEIVED:
         case SSEventType.CALENDAR_INVITE_UPDATED:
         case SSEventType.CALENDAR_INVITE_CANCELLED:

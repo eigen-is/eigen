@@ -15,6 +15,7 @@ import type {
 } from '../types/chart';
 import { isTransparentFill, parseFill, serializeFill, TRANSPARENT_COLOR } from '../vector/fill';
 import { getLineHeightPx } from '../vector/font-metrics';
+import type { PaintedSeries } from './cartesian';
 import { layoutCartesian } from './cartesian';
 import type { Context, Frame } from './context';
 import { CHART_TITLE_SCALE, chartContext } from './context';
@@ -23,10 +24,8 @@ import { fit, label } from './labels';
 import type { LegendItem } from './legend';
 import { placeLegend } from './legend';
 import { inlineRowCount } from './limits';
-import { numberDisplay } from './number-display';
 import { layoutPie, sliceColor } from './pie';
 import { rectangle } from './shapes';
-import { formatTickValue } from './ticks';
 
 // Every line a chart draws in place of a plot.
 export const CHART_MESSAGES = {
@@ -47,10 +46,7 @@ export const MAX_SKETCH_POINTS = 200;
 // Keeps sums and spans finite whatever a cell holds; nothing plots past it anyway.
 const MAX_VALUE = 1e100;
 
-export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput): ChartLayout {
-    const { format } = spec.axes.y.labels;
-    const tickText =
-        formatTick ?? (format === null ? formatTickValue : (value: number) => numberDisplay(value, format));
+export function layoutChart({ spec, data, sourceFormat, ...box }: ChartLayoutInput): ChartLayout {
     const ctx = chartContext(box, spec.chart.fontFamily);
     const background = backgroundShapes(ctx);
     const message = (text: string): ChartLayout => ({ shapes: background, labels: messageLabel(ctx, text) });
@@ -65,12 +61,15 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     );
     if (values.every((row) => row.every((value) => value === null))) return message(CHART_MESSAGES.noData);
     const categories = Array.from({ length: count }, (_, i) => data.categories[i] ?? '');
+    // Past the sketch cap a chart draws no data labels, which bounds their collision pass.
+    const capped = isSketchCapped(spec, data);
     // An automatic color is the palette's at the series' place in the spec, so a range series after one whose values
     // were deleted keeps the color the editor shows it in.
     const series = data.series.map((s, i) => {
         const style = chartSeriesStyle(spec, s.id);
         const place = spec.data.series.findIndex(({ id }) => id === s.id);
-        return { ...s, style, color: style.color ?? chartColor(place === -1 ? i : place) };
+        const color = style.color ?? chartColor(place === -1 ? i : place);
+        return { ...s, style, color, labelled: style.labels.visible && !capped };
     });
     const type = spec.chart.type;
     // A pie draws its first series, whose points are its slices.
@@ -90,13 +89,14 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     const frame = legend.frame;
 
     // Past MAX_SKETCH_POINTS the data marks draw unsketched and solid, their labels still the chart's.
-    const marks: Context = isSketchCapped(spec, data)
-        ? { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } }
-        : ctx;
+    const marks: Context = capped ? { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } } : ctx;
+    const cartesian = (painted: PaintedSeries[]) =>
+        layoutCartesian(ctx, marks, spec, categories, painted, values, frame, sourceFormat ?? null);
+    // Data labels are the first thing to give: a plot too small with them is laid out again without.
     const plot =
         type === 'pie'
             ? layoutPie(marks, spec, pieId, categories, values[0], frame)
-            : layoutCartesian(ctx, marks, spec, categories, series, values, frame, tickText);
+            : (cartesian(series) ?? cartesian(series.map((s) => ({ ...s, labelled: false }))));
     if (!plot) return message(CHART_MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
 }

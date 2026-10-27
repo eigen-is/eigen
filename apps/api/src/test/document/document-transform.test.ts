@@ -860,9 +860,9 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
-// Both last moved with the stylesheet's rules for figures in front of and behind the text; the preview body stayed.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '4d285c9d065e10041f712a2b52a750a18701753ca966003d87c926a75de41bfb';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '5d76bc00328ff873886f50f266d52a710b0e2b75272231dc664eb128e45fbfdc';
+// Both last moved with the always-underlined prose links and the plain footnote links; the preview body stayed.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '5f5e4b13fa7ac8bbaaff454ed29158b112f793156a41c83d172bda9b41fe03dd';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '457187f3fd30b0e34c27046ded362e4dec896262d3b92a8e4b2545db089d1ab8';
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
 // libdeflate.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'bd883985e840cef1ce64fb32910275793ad0ec43b10d20f87e9849ee90f9a491';
@@ -1277,15 +1277,17 @@ describe('document transform (eigendoc)', () => {
         120_000,
     );
 
-    // The prep runs inside the job, under its deadline, dialed down here so no test waits out 120 s.
+    // The prep runs inside the job, under its deadline, dialed down here so no test waits out 120 s. The first encode is
+    // held until the job has timed out, so a loaded machine that is slow to start the child cannot reorder the two.
     test("a docx's media prep spends from the export's deadline, and once it is spent queues no more media and times out", async () => {
         const doc = await seedFigureDoc('deadline-doc', ['a.png', 'b.png']);
         for (const name of ['a.png', 'b.png']) await seedDocumentMedia(doc.mount, doc.path, name, TEST_PNG_BYTES);
         const limits = TRANSFORM_LIMITS.export;
         const { deadlineMs } = limits;
-        limits.deadlineMs = 4_000;
+        limits.deadlineMs = 15_000;
+        const timedOut = Promise.withResolvers<void>();
         const encode = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
-            await Bun.sleep(4_500);
+            await timedOut.promise;
             return null;
         });
         let failure: unknown;
@@ -1294,6 +1296,7 @@ describe('document transform (eigendoc)', () => {
             failure = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, doc.mount, doc.path).catch(
                 (err: unknown) => err,
             );
+            timedOut.resolve();
             await Bun.sleep(600);
             calls = encode.mock.calls.length;
         } finally {
@@ -1411,7 +1414,8 @@ describe('document transform (docx round trip)', () => {
         const p = (...content: JSONContent[]) => ({ type: 'paragraph', content });
         const half = { colwidth: [321] };
         const item = (...content: JSONContent[]) => ({ type: 'listItem', content });
-        // The writer gives every column and image its width, so the source names the widths it would fill in.
+        // The writer gives every column and image its width, and an image the height its ratio draws, which the import
+        // keeps, so the source names the sizes it would fill in.
         const cell = (type: string, attrs: Record<string, unknown>, value: string) => ({
             type,
             attrs,
@@ -1469,7 +1473,7 @@ describe('document transform (docx round trip)', () => {
                             { type: 'tableRow', content: [cell('tableCell', half, 'y')] },
                         ],
                     },
-                    p({ type: 'figure', attrs: { mediaName: 'chart.png', width: 642 } }),
+                    p({ type: 'figure', attrs: { mediaName: 'chart.png', width: 642, height: 401 } }),
                     { type: 'pageBreak' },
                     p(text('After the break.')),
                 ],
@@ -1648,9 +1652,11 @@ describe('document transform (eigenvector)', () => {
 // The JSON hash moved when prose textblocks gained the six paragraph format attributes: each null on every paragraph,
 // heading, title and subtitle, as the golden docx sets no spacing or indent apart from its Normal, and nothing else (the
 // old hash comes back with them stripped). It moved again when the figure gained its offsets for in front of and behind
-// the text: both null on the golden image, which the Yjs commit drops, so the document's hash stayed.
-const GOLDEN_DOCX_PM_JSON_SHA256 = 'd19a97d53e86c73f54981e3a10ab5bf0dadd5bc953e5577529594e02c562741e';
-const GOLDEN_DOCX_DOCUMENT_SHA256 = '9f8f4cf82dfe57e683d68d449cf1cf65158ee2bfde59984c3f50bfb836136c70';
+// the text: both null on the golden image, which the Yjs commit drops, so the document's hash stayed. Both moved when the
+// import kept a picture's height off its extent: the golden image's 40, and nothing else (the old hashes come back with
+// it stripped).
+const GOLDEN_DOCX_PM_JSON_SHA256 = '70c996d006143417f21995ff709e88f2caad8a8c4fac5e29b482ceacab130d02';
+const GOLDEN_DOCX_DOCUMENT_SHA256 = 'eaba760e3a619afb9a1bbe4b63dbe1d91f5d26d44a778be108b7a9de5630841b';
 
 describe('document transform (docx import)', () => {
     async function runDocxImport(data: ArrayBuffer): Promise<DocumentTransformResponse> {

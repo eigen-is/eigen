@@ -188,6 +188,18 @@ describe('.parse() logical formulas', () => {
         expect(parser!.parse('ISERROR(1/0)')).toMatchObject({ error: null, result: true });
     });
 
+    // An error typed into a formula is a value, as in Excel, so a function can inspect it.
+    it('an error literal is a value', () => {
+        expect(parser!.parse('ISERROR(#N/A)')).toMatchObject({ error: null, result: true });
+        expect(parser!.parse('ISERROR(#NULL!)')).toMatchObject({ error: null, result: true });
+        expect(parser!.parse('ERROR.TYPE(#N/A)')).toMatchObject({ error: null, result: 7 });
+        expect(parser!.parse('IFERROR(#DIV/0!, 2)')).toMatchObject({ error: null, result: 2 });
+        expect(parser!.parse('IF(TRUE, 1, #REF!)')).toMatchObject({ error: null, result: 1 });
+        expect(parser!.parse('#N/A')).toMatchObject({ error: '#N/A', result: null });
+        expect(parser!.parse('#N/A + 1')).toMatchObject({ error: '#N/A', result: null });
+        expect(parser!.parse('#FOO!')).toMatchObject({ error: '#ERROR!', result: null });
+    });
+
     it('ISERR', () => {
         expect(parser!.parse('ISERR(NA())')).toMatchObject({ error: null, result: false });
         expect(parser!.parse('ISERR(1/0)')).toMatchObject({ error: null, result: true });

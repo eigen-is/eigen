@@ -9,7 +9,7 @@ import { createAsyncSingleton } from '../../utils/singleton';
 import { ApiError } from '../core';
 import { getOrgExists } from '../org';
 import { getTeam } from '../team';
-import { getUserById } from '../user';
+import { getUserById, isGuest } from '../user';
 import { GuestHome } from './guest-home';
 import type { Home } from './home';
 import { getSyntheticOrgUser, OrgHome } from './org-home';
@@ -123,7 +123,7 @@ async function createHome(ownerId: string, onClosed: () => void): Promise<Home> 
                 console.error(`[getHome] User not found for id=${parsed.id}, ownerId=${ownerId}`);
                 throw new ApiError(404, 'User not found');
             }
-            return user.role === 'guest' ? new GuestHome(user, onClosed) : new UserHome(user, onClosed);
+            return isGuest(user) ? new GuestHome(user, onClosed) : new UserHome(user, onClosed);
         }
         case 'team': {
             const team = await getTeam(parsed.id);
