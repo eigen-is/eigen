@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, FileEditorContent } from '@workspace/lib/types/drive';
 import type { FileEvent } from '@workspace/lib/types/file-history';
 import { describeFileEvent, toFileEventType } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
@@ -420,6 +420,25 @@ describe('Drive history recording', () => {
         const uploadedEvent = events.find((e) => e.eventType === 'uploaded');
         expect(uploadedEvent).toBeDefined();
         expect((uploadedEvent!.details as { size: number }).size).toBeGreaterThan(0);
+    });
+
+    test('an inline save records edited, not a second uploaded', async () => {
+        const file = new File(['draft'], 'inline-save.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(aliceToken, aliceOwnerId, aliceMountId, aliceRootId, file);
+        const contentUrl = `/editor/${aliceOwnerId}/${aliceMountId}/${uploaded.id}/content`;
+        const { etag } = await assertJson<FileEditorContent>(await authedRequest(aliceToken, contentUrl));
+        const save = await authedRequest(aliceToken, contentUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: 'final', expectedEtag: etag }),
+        });
+        expect(save.status).toBe(200);
+
+        const events = await assertJson<FileEvent[]>(
+            await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${uploaded.id}/history`),
+        );
+        expect(events.filter((e) => e.eventType === 'edited')).toHaveLength(1);
+        expect(events.filter((e) => e.eventType === 'uploaded')).toHaveLength(1);
     });
 
     test('move records moved with parent ids', async () => {

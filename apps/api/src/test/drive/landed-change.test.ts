@@ -73,7 +73,7 @@ describe('a change that has landed', () => {
         });
         try {
             const result = await home.drive
-                .writeFileContent(mount.id, file.id, new Blob(['two']).stream(), alice)
+                .writeFileContent(mount.id, file.id, new Blob(['two']).stream(), { user: alice })
                 .catch((e: unknown) => e);
 
             expect(result).toBeInstanceOf(ApiError);

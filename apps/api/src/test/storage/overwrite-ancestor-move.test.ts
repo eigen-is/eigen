@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
+import { computeEtag } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { writeTempWithHash } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
@@ -210,7 +211,8 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
         ['a plain overwrite', false],
     ])('%s queued behind its folder trash refuses and leaves the trashed bytes', async (_, guarded) => {
         const { mount, storage, folderId, fileId } = await fileInFolder(`behind-trash-${guarded}`);
-        const base = guarded ? (await mount.getPath(fileId))!.updatedAt : undefined;
+        const file = await mount.getPath(fileId);
+        const base = guarded && file ? computeEtag(file) : undefined;
         const hold = Promise.withResolvers<void>();
         const held = mount.withTreeShared(() => hold.promise);
         const trashQueued = mount.armTreeWait();

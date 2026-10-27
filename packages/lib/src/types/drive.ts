@@ -540,10 +540,11 @@ export type FileEditorContent = {
     content: string;
     frontmatter: string | null;
     mimeType: string;
-    updatedAt: Date;
+    // The file's HTTP etag when it was read. A save sends it back, and conflicts when the file moved on.
+    etag: string;
 };
 
-export type EditorSaveResult = { conflict: true; currentUpdatedAt: Date } | { conflict: false; updatedAt: Date };
+export type EditorSaveResult = { conflict: true; currentEtag: string } | { conflict: false; etag: string };
 
 export type EffectiveMember = { email: string; read: boolean; write: boolean };
 

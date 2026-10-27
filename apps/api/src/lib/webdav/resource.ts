@@ -1,3 +1,8 @@
+// The WebDAV methods on one file or folder: GET and HEAD read a file, PUT writes one, MKCOL makes a
+// folder and DELETE removes either. The WebDAV router calls them with the signed-in user, and each one
+// goes through getSharedDrive, so the Drive ACL decides access. They answer the HTTP preconditions
+// (If-Match, If-None-Match) and the WebDAV locks as the RFCs ask.
+
 import { isContainerType } from '@workspace/lib/types/drive';
 import { enforceMaxUploadSize, getMountRoom } from '../config/enforcement';
 import { ApiError } from '../core/errors';
@@ -99,7 +104,12 @@ export async function handlePut(args: {
         throw new ApiError(423, 'Container internals are read-only');
     }
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
+    if (!(await drive.canWrite(mountId, existing?.id ?? parent.id, user))) {
+        throw new ApiError(403, 'No write permission');
+    }
 
+    // A failed precondition answers before a byte is read. The write checks If-Match again under the
+    // file's lock, where two PUTs from one etag can't both pass.
     if (existing) {
         const etag = computeEtag(existing);
         if (ifMatch && !matchesIfMatch(ifMatch, etag)) {
@@ -133,7 +143,7 @@ export async function handlePut(args: {
 
     const mimeType = Bun.file(name).type || 'application/octet-stream';
     const path = existing
-        ? await drive.writeFileContent(mountId, existing.id, data, user)
+        ? await drive.writeFileContent(mountId, existing.id, data, { user, ifMatch: ifMatch || undefined })
         : await drive.createFileFromData(mountId, parent.id, name, mimeType, data, user);
 
     return new Response(null, {

@@ -1,8 +1,8 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getHome } from '../../lib/home';
 import type { TestContext } from '../setup';
-import { driveGet, driveUpload, getTestContext, setMaxUploadSizeMB, TEST_PNG_BYTES } from '../setup';
+import { driveGet, drivePut, driveUpload, getTestContext, setMaxUploadSizeMB, TEST_PNG_BYTES } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV GET/HEAD', () => {
@@ -116,6 +116,46 @@ describe('WebDAV PUT', () => {
         expect(res.status).toBe(412);
     });
 
+    test('of two PUTs with one If-Match, the one that writes second is a 412', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-race.txt`;
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'original' })).status).toBe(201);
+        const etag = (await webdavRequest(ctx.alice.user.email, 'HEAD', url)).headers.get('ETag') ?? '';
+        const drive = (await getHome(ctx.alice.user.id)).drive;
+        const file = await drive.resolvePath(mountId, '/put-race.txt');
+        if (!file) throw new Error('expected the file');
+        const { mount } = await drive.resolveFile(mountId, file.id);
+
+        // Hold the file's lock until both PUTs have passed every check before it and wait on it.
+        const hold = Promise.withResolvers<void>();
+        const held = mount.withPathLock(file.id, () => hold.promise);
+        const bothWaiting = Promise.withResolvers<void>();
+        let waiting = 0;
+        const withPathLock = mount.withPathLock.bind(mount);
+        const lock = spyOn(mount, 'withPathLock').mockImplementation(<T>(pathId: string, fn: () => Promise<T>) => {
+            if (pathId === file.id && ++waiting === 2) bothWaiting.resolve();
+            return withPathLock(pathId, fn);
+        });
+        let statuses: number[];
+        try {
+            const puts = Promise.all(
+                ['first', 'second'].map((body) =>
+                    webdavRequest(ctx.alice.user.email, 'PUT', url, { body, headers: { 'If-Match': etag } }),
+                ),
+            );
+            await bothWaiting.promise;
+            hold.resolve();
+            await held;
+            statuses = (await puts).map((res) => res.status);
+        } finally {
+            hold.resolve();
+            lock.mockRestore();
+        }
+
+        expect(statuses.toSorted()).toEqual([204, 412]);
+        const kept = await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text();
+        expect(kept).toBe(statuses[0] === 204 ? 'first' : 'second');
+    });
+
     test('PUT with If-None-Match: * on existing → 412', async () => {
         const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-new.txt`;
         const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
@@ -196,6 +236,32 @@ describe('WebDAV PUT', () => {
             await home.drive.updateMount(snapshot, true);
         }
         expect(await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text()).toBe('kept');
+    });
+
+    test("a reader's PUT on a full mount is refused with 403", async () => {
+        const dir = `/webdav/${ctx.alice.user.id}/${mountId}/put-reader-dir`;
+        const url = `${dir}/over-quota.txt`;
+        expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', dir)).status).toBe(201);
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'kept' })).status).toBe(201);
+        const home = await getHome(ctx.alice.user.id);
+        const folder = await home.drive.resolvePath(mountId, '/put-reader-dir');
+        if (!folder) throw new Error('expected the folder');
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${folder.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+        const snapshot = { ...home.drive.getMountConfig(mountId) };
+        const usedMB = (await home.drive.size(mountId)) / (1024 * 1024);
+        await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB + 0.5 }, true);
+        try {
+            const body = 'x'.repeat(1024 * 1024);
+            const res = await webdavRequest(ctx.bob.user.email, 'PUT', url, {
+                body,
+                headers: { 'Content-Length': String(body.length) },
+            });
+            expect(res.status).toBe(403);
+        } finally {
+            await home.drive.updateMount(snapshot, true);
+        }
     });
 
     test("a 0-byte PUT (Finder's name reservation) lands even in a mount past its cap", async () => {

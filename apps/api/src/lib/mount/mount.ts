@@ -21,7 +21,7 @@ import { RWLock } from '../../utils/rw-lock';
 import { PATHS } from '../config/paths';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
-import { ApiError, StaleWriteError, storageGone } from '../core';
+import { ApiError, computeEtag, matchesIfMatch, StaleWriteError, storageGone } from '../core';
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import type { StorageBackend, StorageFile } from '../storage';
@@ -1087,17 +1087,19 @@ export class Mount {
 
     // ---- Overwriting ----
 
+    // ifMatch is an If-Match value: one etag, a list of them or `*`. The write happens only when the
+    // file's etag matches it.
     public async writeFile(
         pathId: string,
         data: Buffer | Uint8Array | ArrayBuffer | BunFile,
-        expectedUpdatedAt?: Date,
+        ifMatch?: string,
     ): Promise<void> {
         const size = data instanceof Blob ? data.size : data.byteLength;
         const hash = await this.computeHash(data);
 
         await this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
-                await this.assertOverwritable(pathId, expectedUpdatedAt);
+                await this.assertOverwritable(pathId, ifMatch);
                 const storageKey = await this.getStorageKey(pathId);
                 await this.storage.write(storageKey, data);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
@@ -1112,11 +1114,11 @@ export class Mount {
         tempId: string,
         size: number,
         hash: string,
-        expectedUpdatedAt?: Date,
+        ifMatch?: string,
     ): Promise<void> {
         await this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
-                await this.assertOverwritable(pathId, expectedUpdatedAt);
+                await this.assertOverwritable(pathId, ifMatch);
                 const storageKey = await this.getStorageKey(pathId);
                 await this.uploadFromTemp(storageKey, tempId);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
@@ -1128,11 +1130,9 @@ export class Mount {
     // the path lock every overwrite takes, so of two saves from the same base only the first writes.
     // And it runs under the tree lock, so on `local` an ancestor's trash can't land between the check
     // and the write.
-    private async assertOverwritable(pathId: string, expectedUpdatedAt: Date | undefined): Promise<void> {
-        const { updatedAt } = await this.getActivePath(pathId);
-        if (expectedUpdatedAt && updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
-            throw new StaleWriteError(updatedAt);
-        }
+    private async assertOverwritable(pathId: string, ifMatch: string | undefined): Promise<void> {
+        const etag = computeEtag(await this.getActivePath(pathId));
+        if (ifMatch !== undefined && !matchesIfMatch(ifMatch, etag)) throw new StaleWriteError(etag);
     }
 
     // Runs under the path lock once the bytes landed. deletePath doesn't wait for that lock, so a delete
