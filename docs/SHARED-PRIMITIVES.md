@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2037 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2041 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -215,7 +215,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (16)
+## Contexts, schemas & classes (17)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -227,6 +227,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `FootnoteNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
 | `PageNumberNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
+| `TableOfContentsNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-of-contents.ts |
 | `CreateUnconfirmedError` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `MathError` | `@workspace/math` | packages/math/src/error.ts |
@@ -539,7 +540,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (461)
+## Types (462)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -585,6 +586,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureFrameNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `NormalStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
+| `OutlineEntry` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `OutlineHeading` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `PageMargin` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
@@ -1005,7 +1007,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1068)
+## Utilities & constants (1070)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1429,6 +1431,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mmToPx` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mmToTwips` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `normalStyleProperties` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
+| `outlineEntry` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `PAGE_BAND_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `PAGE_BREAK_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-break.ts |
 | `PAGE_NUMBER_KINDS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
@@ -1463,6 +1466,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readPageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `readPageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `readParagraphFormat` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
+| `readTocLevels` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-of-contents.ts |
 | `selectionFontSizes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/font-size.ts |
 | `selectionParagraphFormat` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
 | `setFigureAttributes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
