@@ -152,4 +152,28 @@ describe('exiftool deadline', () => {
         expect(started).toHaveLength(1);
         for (const pid of started) expect(() => process.kill(pid, 0)).toThrow();
     }, 10_000);
+
+    // execFile reads a timeout of 0 as none, so a call at or past the deadline is not made at all, not even the -ver probe.
+    test('a deadline already passed spawns nothing', async () => {
+        const script = `
+            const childProcess = require('node:child_process');
+            const execFile = childProcess.execFile;
+            const calls = [];
+            childProcess.execFile = (...args) => (calls.push(args[1]), execFile(...args));
+            const { extractEmbeddedPreview } = await import(process.env.EXIFTOOL_PREVIEW);
+            const extract = await extractEmbeddedPreview('photo.raw', process.env.TMP_DIR, 'id', Date.now() - 1);
+            console.log(JSON.stringify({ extract, calls }));
+        `;
+        const child = Bun.spawn([process.execPath, '-e', script], {
+            env: {
+                ...process.env,
+                EXIFTOOL_PREVIEW: Bun.resolveSync('../../lib/preview/exiftool-preview', import.meta.dir),
+                TMP_DIR,
+            },
+        });
+        const result = JSON.parse(await new Response(child.stdout).text());
+        await child.exited;
+
+        expect(result).toEqual({ extract: null, calls: [] });
+    }, 10_000);
 });

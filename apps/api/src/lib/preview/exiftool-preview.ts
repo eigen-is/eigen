@@ -18,15 +18,14 @@ export function isExiftoolCandidate(mimeType: string, fileName: string): boolean
 
 let cachedExiftoolPath: string | null = null;
 
-async function getExiftoolPath(deadline: number): Promise<string> {
+// Null when the deadline passed before the system's exiftool could be asked: execFile reads a timeout of 0 as none.
+async function getExiftoolPath(deadline: number): Promise<string | null> {
     if (cachedExiftoolPath) return cachedExiftoolPath;
+    const left = deadline - Date.now();
+    if (left <= 0) return null;
 
     try {
-        // execFile reads a timeout of 0 as none.
-        const { stdout } = await execFileAsync('exiftool', ['-ver'], {
-            timeout: Math.max(1, deadline - Date.now()),
-            killSignal: 'SIGKILL',
-        });
+        const { stdout } = await execFileAsync('exiftool', ['-ver'], { timeout: left, killSignal: 'SIGKILL' });
         if (stdout.trim()) {
             cachedExiftoolPath = 'exiftool';
             return cachedExiftoolPath;
@@ -51,6 +50,7 @@ export async function extractEmbeddedPreview(
 ): Promise<string | null> {
     try {
         const bin = await getExiftoolPath(deadline);
+        if (!bin) return null;
         const extractPath = path.join(tmpDir, `${pathId}-extract.jpg`);
 
         // Try PreviewImage (largest), then JpgFromRaw, then ThumbnailImage
