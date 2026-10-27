@@ -1,12 +1,10 @@
+// The media of eigen documents: the main thread lists a document's media folder and prepares its URLs or bytes, and
+// the transform process turns the bytes into the data: URIs the export renders. The transform process loads this
+// module, so it imports nothing heavy, such as the preview cache and the sheet engine behind it.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
 import type { ExportMedia, TransformMedia } from './transform/protocol';
-
-// Media helpers for eigen documents, shared by the main-thread transform wrappers
-// and the Worker-side converters. This module must stay light: the modules the
-// transform process imports (preview/export renderers) import it, so a static edge
-// from here into the preview cache would drag the whole screen-preview pipeline —
-// and the sheet engine behind it — into every document Worker.
 
 export async function listDocumentMedia(mount: Mount, drivePath: DrivePath): Promise<Map<string, DrivePath>> {
     const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
@@ -44,7 +42,7 @@ function resolvePublicApiUrl(): string {
 const PUBLIC_API_URL = resolvePublicApiUrl();
 
 // Preview media prep: the name → embed-URL map a preview transform carries. Previews
-// reference media by URL, so no bytes cross the Worker boundary. A Map, so a
+// reference media by URL, so no bytes cross into the transform process. A Map, so a
 // mediaName that is document data (`constructor`, `toString`) can never resolve to
 // something off Object.prototype.
 export async function buildPreviewUrlMap(mount: Mount, drivePath: DrivePath): Promise<Map<string, string>> {
@@ -57,8 +55,8 @@ export async function buildPreviewUrlMap(mount: Mount, drivePath: DrivePath): Pr
     );
 }
 
-// The Worker side of export media: the transferred buffers become the data: URIs the
-// export renderers embed.
+// The transform process's side of export media: the transferred buffers become the data: URIs the export renderers
+// embed.
 export function toDataUriMap(media: TransformMedia[]): Map<string, string> {
     return new Map(
         media.map((item) => [

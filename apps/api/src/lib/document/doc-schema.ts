@@ -1,3 +1,7 @@
+// The server's one eigendoc schema: the editor's extensions with the backend's lowlight, built once, on first use.
+// The doc import, the Yjs conversion and the export renderers read and write documents through it, so the server
+// accepts what the editor accepts.
+
 import type { Extensions, JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
@@ -7,7 +11,6 @@ import { lowlight } from './lowlight';
 
 type DocSchemas = { extensions: Extensions; schema: Schema; reversedMarks: Schema };
 
-// Built on first use: the code text preview loads the doc renderers only to highlight.
 let built: DocSchemas | undefined;
 
 function schemas(): DocSchemas {

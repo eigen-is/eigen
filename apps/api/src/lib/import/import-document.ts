@@ -1,7 +1,7 @@
 // Import into an open document and Convert to a new one, for xlsx, docx and pptx files: the main thread's half, which
 // admits the job, hands the bytes to the transform process, then writes the pictures and commits what came back.
-// Parsing, guards, recalc and serialization run in the transform process, so a failed import creates and changes
-// nothing. Drive's import and convert routes, for example, call it.
+// Parsing, guards, recalc and serialization run in the transform process, so an import whose transform fails creates
+// and changes nothing. Drive's import and convert routes, for example, call it.
 
 import type { ConvertTarget, DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
 import {
