@@ -1,3 +1,7 @@
+// Contact photos for the Contacts part of a Home. An upload is resized to a WebP and kept in the avatars folder, a
+// photo inside a vCard is cached there too, and a sweep removes images that nothing uses any more. The contacts
+// routes call it to store and serve these images.
+
 import { randomUUID } from 'node:crypto';
 import { PATHS } from '../config/paths';
 import { ApiError } from '../core';

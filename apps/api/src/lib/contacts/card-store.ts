@@ -1,3 +1,7 @@
+// The contact half of the store of vCard files. It checks the file names clients choose, limits the size of a card,
+// and names the avatar files that belong to a contact. The vCard stays the only source of truth, so lists read a
+// few columns and never the card itself. Contacts and the avatar code use it.
+
 import { randomUUID } from 'node:crypto';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import { eq, sql } from 'drizzle-orm';

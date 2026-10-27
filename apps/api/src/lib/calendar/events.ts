@@ -1,3 +1,7 @@
+// Creating, editing and deleting events for a Calendar. An edit changes the stored iCalendar file and then tells the
+// other side: guests hear about an invitation or a cancellation, and the organizer hears about an answer. Calendar
+// hands its event changes to it, so the routes and the invitation code share one path.
+
 import { randomUUID } from 'node:crypto';
 import { heldAttendees, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent, EventData } from '@workspace/lib/types/calendar';

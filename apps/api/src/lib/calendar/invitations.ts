@@ -1,3 +1,7 @@
+// The receiving side of an invitation, for a Home that holds a copy of someone else's event. It files a new
+// invitation, applies updates and cancellations, and ignores a message that is older than the one already applied.
+// Messages come from other Homes on this server and from inbound mail.
+
 import { heldAttendees, isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import { externalOwnerId, isExternalOwnerId } from '@workspace/lib/types/owner';

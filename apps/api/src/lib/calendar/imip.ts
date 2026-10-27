@@ -1,3 +1,7 @@
+// iMIP, the way calendar invitations travel by email. It builds the mails for an invitation, a cancellation and an
+// RSVP reply, with the calendar file attached, and it reads such a mail when one arrives. Inbound mail is only
+// trusted when the sender is verified, and a mail with too many events is ignored.
+
 import { formatEventWhen, isInvitationFromOthers, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
 import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/lib/types/calendar';

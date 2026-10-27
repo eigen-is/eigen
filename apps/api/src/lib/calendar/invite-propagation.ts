@@ -1,3 +1,7 @@
+// The sending side of an invitation. When the organizer of an event invites, changes, cancels or declines, this
+// tells each guest: a guest on this server gets the change in their own Home, and an external guest gets an email.
+// A repeating event also sends its changed or removed occurrences.
+
 import { heldAttendees } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
