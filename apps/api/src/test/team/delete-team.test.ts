@@ -7,7 +7,7 @@ import { PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { waitForHomeSlot } from '../../lib/backup/jobs';
 import { getTeamDataPath } from '../../lib/config/paths';
-import { getPublicConfig } from '../../lib/config/server-config';
+import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { evictHome, getTeamHome } from '../../lib/home/get-home';
 import { getEigenDb } from '../../lib/share/db';
@@ -117,6 +117,26 @@ describe('Delete team', () => {
         expect(existsSync(getTeamDataPath(kept.teamId))).toBe(true);
         expect(await fake.store.exists(kept.keys[0])).toBe(true);
         expect((await removeTeam(kept.teamId)).status).toBe(200);
+    });
+
+    test("the organisation's default team can't be deleted: 403, and its files stay", async () => {
+        const defaultTeamId = getServerConfig()?.defaultTeamId;
+        if (!defaultTeamId) throw new Error('setup pins a default team');
+        // A second team, so better-auth's own last-team guard (a 400) isn't what refuses.
+        const sibling = await createTeam(ctx, orgId, 'Sibling Team');
+        const ownerId = teamOwnerId(defaultTeamId);
+        const home = await getTeamHome(ownerId);
+        const mount = await home.addMount({ name: 'Org Drive', storageType: 'local' });
+        await evictHome(ownerId);
+        const teamDir = getTeamDataPath(defaultTeamId);
+        expect(existsSync(join(teamDir, 'mounts', mount.id))).toBe(true);
+
+        const res = await removeTeam(defaultTeamId);
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain("The organisation's default team can't be deleted");
+        expect(await getTeamExists(defaultTeamId)).toBe(true);
+        expect(existsSync(join(teamDir, 'mounts', mount.id))).toBe(true);
+        expect((await removeTeam(sibling)).status).toBe(200);
     });
 
     test("a deletion while the team's home slot is held answers 409 and keeps the team and its files", async () => {

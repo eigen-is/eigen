@@ -70,6 +70,8 @@ An account marked **no organization** has no **Teams** section.
 
 Deleting a team also deletes its drives with every file on them, and its calendar. It cannot be undone.
 
+The team named after your organization, which everyone joins, can't be deleted.
+
 <div class="eigen-callout">
 
 If you want to understand what access members gain or lose when a team is created or deleted, see [How team membership and shared content work](/support/admin/team-membership).
