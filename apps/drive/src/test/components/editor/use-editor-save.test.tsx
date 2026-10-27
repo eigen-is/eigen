@@ -1,22 +1,22 @@
-// A text file saves only what changed, against the version it was opened at: a save sends that version,
-// and the next save the one the server answered. A file someone else changed meanwhile opens the conflict
+// A text file saves only what changed, against the version it was opened at: a save sends that version's
+// etag, and the next save the one the server answered. A file someone else changed meanwhile opens the conflict
 // dialog instead of being overwritten, unless the user forces it. A failed save stays unsaved, and an
 // unsaved file asks before it closes or the tab unloads.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import type { EditorSaveResult } from '@workspace/lib/types/drive';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
 
-type SaveParams = { content: string; frontmatter?: string; expectedUpdatedAt: Date; force: boolean };
-type SaveResult = { conflict?: boolean; updatedAt?: Date };
-const opened = new Date('2026-10-27T09:00:00Z');
-const savedAt = new Date('2026-10-27T09:05:00Z');
-const answers: (SaveResult | Error)[] = [];
+type SaveParams = { content: string; frontmatter?: string; expectedEtag: string; force: boolean };
+const openedEtag = '"opened"';
+const savedEtag = '"saved"';
+const answers: (EditorSaveResult | Error)[] = [];
 // One object, so the hook's save callback keeps its identity across renders.
 const fileSave = {
-    mutateAsync: mock(async (_params: SaveParams): Promise<SaveResult> => {
-        const answer = answers.shift() ?? { updatedAt: savedAt };
+    mutateAsync: mock(async (_params: SaveParams): Promise<EditorSaveResult> => {
+        const answer = answers.shift() ?? { conflict: false, etag: savedEtag };
         if (answer instanceof Error) throw answer;
         return answer;
     }),
@@ -47,7 +47,7 @@ async function renderSave() {
             ownerId: 'owner-1',
             mountId: 'mount-1',
             pathId: 'file-1',
-            updatedAt: opened,
+            etag: openedEtag,
             getContent: () => content,
             getFrontmatter: () => 'title: Notes',
         });
@@ -87,13 +87,13 @@ test('a change saves against the opened version, and the next save against the s
         await save().doSave();
     });
     expect(fileSave.mutateAsync.mock.calls).toEqual([
-        [{ content: 'first draft', frontmatter: 'title: Notes', expectedUpdatedAt: opened, force: false }],
-        [{ content: 'second draft', frontmatter: 'title: Notes', expectedUpdatedAt: savedAt, force: false }],
+        [{ content: 'first draft', frontmatter: 'title: Notes', expectedEtag: openedEtag, force: false }],
+        [{ content: 'second draft', frontmatter: 'title: Notes', expectedEtag: savedEtag, force: false }],
     ]);
 });
 
 test('a file changed elsewhere opens the conflict dialog and stays unsaved', async () => {
-    answers.push({ conflict: true });
+    answers.push({ conflict: true, currentEtag: '"theirs"' });
     const save = await renderSave();
     await act(async () => save().markDirty());
     let saved = true;
@@ -110,7 +110,7 @@ test('a file changed elsewhere opens the conflict dialog and stays unsaved', asy
     });
     expect(saved).toBe(true);
     expect(fileSave.mutateAsync.mock.calls[1]).toEqual([
-        { content: 'first draft', frontmatter: 'title: Notes', expectedUpdatedAt: opened, force: true },
+        { content: 'first draft', frontmatter: 'title: Notes', expectedEtag: openedEtag, force: true },
     ]);
 });
 
