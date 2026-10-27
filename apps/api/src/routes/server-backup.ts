@@ -1,3 +1,7 @@
+// The admin routes for backing up the whole server: start a backup, list and delete the archives in the backups
+// folder, upload one to the backup destination, and check that the destination works. Only the owner of the server may
+// use them, because an archive holds everything on the server.
+
 import type { ServerArchiveList } from '@workspace/lib/types/backup';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
 import { BACKUP_LEVELS } from '@workspace/lib/validation';

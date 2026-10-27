@@ -1,3 +1,6 @@
+// The route that opens the live event stream of a user's own Home. The app listens to it for changes made elsewhere,
+// such as new mail or a file that someone else edited, so the screen stays current without a refresh.
+
 import { Elysia, sse } from 'elysia';
 import { requireSelf } from '../lib/auth/access';
 import { createSSEStream, getHome } from '../lib/home';

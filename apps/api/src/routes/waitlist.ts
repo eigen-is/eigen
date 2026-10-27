@@ -1,3 +1,6 @@
+// The admin routes for the waitlist: list the people who asked for an invitation, accept or reject them, send the
+// invitation again, and remove an entry. The waitlist belongs to the whole server, so only the owner may use them.
+
 import { Elysia, t } from 'elysia';
 import { requireOwner } from '../lib/auth/access';
 import { ApiError } from '../lib/core/errors';

@@ -1,3 +1,6 @@
+// The routes for a user's notifications: list them, count the unread ones, mark one or all as read, and delete one.
+// A notification belongs to a Home, so each route is for the owner of that Home.
+
 import type { Notification } from '@workspace/lib/types/notification';
 import { Elysia, t } from 'elysia';
 import { requireSelf } from '../lib/auth/access';

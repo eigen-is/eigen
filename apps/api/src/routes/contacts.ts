@@ -1,3 +1,6 @@
+// The routes of the contacts app: contacts, labels, avatars, the user's own card, and import and export. An address
+// book is personal, so each route first checks that the owner in the URL is the caller.
+
 import { VCARD_CONTENT_TYPE, VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { Contact } from '@workspace/lib/types/contact';
 import { isVCardFile } from '@workspace/lib/types/drive';

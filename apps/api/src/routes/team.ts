@@ -1,3 +1,6 @@
+// The routes to manage one team: its members, its settings, the drives it mounts, and its avatar. Members can read
+// them, and the admins of the team can change them. The team data lives in the Home of the team.
+
 import { MOUNT_STORAGE_TYPES } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';

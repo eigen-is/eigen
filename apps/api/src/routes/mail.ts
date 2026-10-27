@@ -1,3 +1,7 @@
+// The routes of the mail app: mailboxes, messages, drafts, sending, attachments with their previews, and import. They
+// also include the local delivery route that the mail server calls for each incoming message. A server without
+// hosted mail refuses all of them.
+
 import { EML_MAX_BYTES, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { EML_MIME, isEmlFile } from '@workspace/lib/types/drive';

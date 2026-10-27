@@ -1,3 +1,6 @@
+// The entry point of the public demo. A visitor opens one URL and is signed in as a demo persona, with no account to
+// make, and lands in the app. It only works on a demo server, and it limits how often one network can enter.
+
 import { Elysia } from 'elysia';
 import { clientIpKey } from '../lib/auth/access';
 import { getDemoPersonaPool } from '../lib/auth/demo-persona-pool';
