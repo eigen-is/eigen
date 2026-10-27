@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  # Every gate `bun run check` runs except the API suite, beside the job that runs it.
+  # Every gate `bun run check` runs except the API suite, beside the jobs that run it.
   checks:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -50,30 +50,20 @@ jobs:
       - name: Primitives index
         run: bun run primitives:check
 
-      # Every workspace but the API at once, each in its own process. `bun --filter` would run them in dependency order,
-      # math, lib, ui, docs one after another, and `bun run --parallel` passes a script no arguments.
+      # In dependency order, one workspace after another: run all at once, they finish only 15 s sooner on four cores,
+      # and the tests that time a run against a tenth of it fail.
       - name: Test packages
-        run: |
-          pids=() logs=()
-          for dir in packages/* apps/*; do
-            [ "$dir" = apps/api ] && continue
-            jq -e '.scripts.test' "$dir/package.json" > /dev/null || continue
-            log="$RUNNER_TEMP/test-${dir//\//-}.log"
-            (cd "$dir" && bun run test --timeout 30000) > "$log" 2>&1 &
-            pids+=($!) logs+=("$log")
-          done
-          failed=0
-          for i in "${!pids[@]}"; do
-            if wait "${pids[$i]}"; then status=pass; else status=FAIL failed=1; fi
-            echo "::group::${logs[$i]##*/test-} $status"
-            cat "${logs[$i]}"
-            echo "::endgroup::"
-          done
-          exit $failed
+        run: bun --filter '!@apps/api' test --timeout 30000
 
-  check:
+  # The API suite in three shards, balanced by the per-file times in apps/api/src/test/timings.json.
+  api:
+    name: api ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
 
@@ -93,8 +83,42 @@ jobs:
           sudo ln -s "$RUNNER_TEMP/weasyprint/bin/weasyprint" /usr/local/bin/weasyprint
           weasyprint --version
 
+      # The shard's file count and its measured times go to the api job below.
       - name: Test API
-        run: bun --filter '@apps/api' test --parallel=4 --timeout 30000
+        working-directory: apps/api
+        run: |
+          mkdir -p "$RUNNER_TEMP/shard"
+          bun run test --parallel=4 --timeout 30000 --shard=${{ matrix.shard }}/3 --timings=src/test/timings.json --update-timings 2>&1 | tee "$RUNNER_TEMP/api.log"
+          grep -oE 'across [0-9]+ files?' "$RUNNER_TEMP/api.log" | tail -1 | grep -oE '[0-9]+' > "$RUNNER_TEMP/shard/files-${{ matrix.shard }}"
+          cp src/test/timings.json "$RUNNER_TEMP/shard/timings-${{ matrix.shard }}.json"
+
+      - uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: api-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard
+          retention-days: 7
+
+  # The shards ran every API test file between them: a file in no shard would fail no run.
+  api-files:
+    needs: api
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: api-shard-*
+          merge-multiple: true
+          path: shards
+
+      - name: Every API test file ran once
+        run: |
+          total=$(find apps/api -name node_modules -prune -o -type f -regextype posix-extended -regex '.*[._](test|spec)\.[cm]?[jt]sx?' -print | wc -l)
+          ran=$(cat shards/files-* | paste -sd+ | bc)
+          echo "shards ran $ran of $total API test files"
+          [ "$ran" -eq "$total" ]
 
   # The launcher under dash, BusyBox and the runner's sh, with a stub docker: no stack, no Bun.
   launcher:
