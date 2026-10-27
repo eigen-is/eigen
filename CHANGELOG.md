@@ -35,7 +35,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Admin users** — a user's details list their teams under the role, leaving out the team named after your organization that everyone joins. Add the user to a team with **Add to team**, or take them out of one with its **×**
 - **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width, because the page cuts off the rest. A web page download keeps more columns while all of the sheet's rows fit
 - **Spreadsheet downloads** — a cell's text stays inside its row in a web page or PDF download, as it does in the editor. A wrapped cell taller than its row shows the part that fits
-- **Tables in Docs** — a table keeps its column widths when you narrow the margins, and scrolls sideways inside the page instead of shrinking. A table in a list or a cell still shrinks to fit. When you print or download a PDF, a table wider than the page shrinks to fit it
+- **Tables in Docs** — a table keeps its column widths when wider margins, a turn to portrait or a smaller paper size leave less room for the text, and scrolls sideways inside the page instead of shrinking. A table in a list or a cell still shrinks to fit. When you print or download a PDF, a table wider than the page shrinks to fit it
 - **Page setup in Docs** — the margins show two decimals, such as 2.00 cm
 
 ### Fixed

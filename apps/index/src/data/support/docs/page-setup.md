@@ -26,6 +26,8 @@ The window has two tabs. **Pages** holds the paper and margins described here. *
 
 A margin can be 0 cm or more, but it has to leave room for your text. If it doesn't, the window says so and **OK** stays off until you fix it.
 
+When wider margins, a turn of the page, or a smaller paper leaves less room for the text, a table keeps its column widths and scrolls sideways inside the page instead of shrinking. A table inside a list or inside another table still shrinks to fit the text.
+
 A document has one page setup, so it applies to every page. If the paper isn't one in the list, for example after you import a Word file, **Paper size** shows **Custom** until you pick another.
 
 If you can only view the document, the window shows the page setup but you can't change it, and it has a **Close** button instead of **OK**. In a page-less document you can still pick your own text width, which **OK** saves.
@@ -33,7 +35,6 @@ If you can only view the document, the window shows the page setup but you can't
 ## Related articles
 
 - Show the document without pages. See [Use page-less mode and set your text width](/support/docs/page-less).
-
 - Headers and footers sit inside the top and bottom margins. See [Add headers, footers, and page numbers](/support/docs/headers-and-footers).
 - The printout and the PDF use this page. See [Print a document](/support/docs/print).
 - A Word file brings its paper size, orientation, and margins along. See [Import a Word document](/support/docs/import-word).
