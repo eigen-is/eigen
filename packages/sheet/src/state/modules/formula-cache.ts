@@ -1,3 +1,7 @@
+// The editor's formula bookkeeping: FormulaCache, the per-workbook state of the formula engine and the reference
+// picker, the map of which cells hold formulas, and the resolver that lets the engine read cells from the live
+// context. setFormulaCellInfo keeps the map in step with each write, and an undo or redo replays its patches.
+
 import { isNil } from 'es-toolkit/compat';
 import { current, isDraft } from 'immer';
 import type { DependencyIndex } from '../../engine/dependency-index';
@@ -183,7 +187,7 @@ export class FormulaCache {
         for (const patch of type === 'undo' ? history.inversePatches : history.patches) {
             const [root, sheetIndex, field, r, c, cellField] = patch.path;
             if (root !== 'sheets' || (field != null && field !== 'data')) continue;
-            const id = ctx.sheets[sheetIndex as number]?.id;
+            const id = typeof sheetIndex === 'number' ? ctx.sheets[sheetIndex]?.id : undefined;
             if (typeof r === 'number' && typeof c === 'number') {
                 if (id != null && (cellField == null || cellField === 'f')) setFormulaCellInfo(ctx, { r, c, id });
                 continue;

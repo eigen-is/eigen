@@ -1,3 +1,7 @@
+// Editing a formula as text: functionHTMLGenerate colors its references, numbers and strings as spans, the caret
+// helpers read and restore the selection in the editor, and handleFormulaInput reruns that on each keystroke in
+// the cell editor or the formula bar, so the reference highlights on the grid follow.
+
 import { escapeHtml, unescapeHtml } from '@workspace/lib/html';
 import { indexOf, isEmpty, isNil, last, startsWith, trim } from 'es-toolkit/compat';
 import { iscelldata, operatorjson } from '../../engine/formula-utils';
@@ -156,11 +160,12 @@ function functionHTML(txt: string) {
             } else if (matchConfig.dquote > 0) {
                 function_str += `${escapeHtml(str)}</span>`;
             } else if (str.indexOf('</span>') === -1 && str.length > 0) {
-                const regx = /{.*?}/;
+                // Trimming moves no brace, so the match in the text is the one in its trimmed form.
+                const arrayMatch = /{.*?}/.exec(str);
 
-                if (regx.test(trim(str))) {
-                    const arraytxt = regx.exec(str)![0];
-                    const arraystart = str.search(regx);
+                if (arrayMatch) {
+                    const [arraytxt] = arrayMatch;
+                    const arraystart = arrayMatch.index;
                     let alltxt = '';
 
                     if (arraystart > 0) {
