@@ -24,7 +24,9 @@ function shiftRef(txt: string, rowOffset: number, colOffset: number): string {
     const prefix = txt.slice(0, sheetEnd);
     const [startTxt, endTxt] = txt.slice(sheetEnd).split(':');
     // walkFormulaRefs only hands over tokens `iscelldata` accepts, which extractLabel parses.
-    const [startRow, startColumn] = extractLabel(startTxt)!;
+    const start = extractLabel(startTxt);
+    if (!start) return txt;
+    const [startRow, startColumn] = start;
 
     if (endTxt == null) {
         const row = offsetCoordinate(startRow, rowOffset, 'row');
@@ -32,7 +34,9 @@ function shiftRef(txt: string, rowOffset: number, colOffset: number): string {
         return row == null || column == null ? error['r'] : prefix + toLabel(row, column);
     }
 
-    const [endRow, endColumn] = extractLabel(endTxt)!;
+    const end = extractLabel(endTxt);
+    if (!end) return txt;
+    const [endRow, endColumn] = end;
     const range = offsetRange([startRow, startColumn], [endRow, endColumn], rowOffset, colOffset);
     if (range == null) return error['r'];
     const [[rowStart, colStart], [rowEnd, colEnd]] = range;
@@ -305,8 +309,12 @@ function functionStrChange_range(
     if (sheetEnd > 0 ? unquoteSheetName(prefix.slice(0, -1)) !== targetSheet : !onTargetSheet) return txt;
 
     const [startTxt, endTxt = startTxt] = txt.slice(sheetEnd).split(':');
-    const [startRow, startColumn] = extractLabel(startTxt)!;
-    const [endRow, endColumn] = extractLabel(endTxt)!;
+    // As in shiftRef: every token walkFormulaRefs hands over parses.
+    const start = extractLabel(startTxt);
+    const end = extractLabel(endTxt);
+    if (!start || !end) return txt;
+    const [startRow, startColumn] = start;
+    const [endRow, endColumn] = end;
     const [row0, row1] = sortLegs(startRow, endRow);
     const [column0, column1] = sortLegs(startColumn, endColumn);
 
