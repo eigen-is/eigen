@@ -40,7 +40,7 @@ One cell can mix styles, such as a single bold word in a sentence.
 3. Press **Ctrl+B** (Mac: **⌘B**) for bold, **Ctrl+I** (Mac: **⌘I**) for italic or **Ctrl+U** (Mac: **⌘U**) for underline. The font, the font size, **Bold**, **Italic** and **Text color** in the quick-format bar work too, and so do **Format → Text** and **Format → Font size**.
 4. Press **Enter** to save the cell.
 
-With no words selected, a style applies to the text you type next. While you edit, the quick-format bar shows the style of the text at your cursor.
+With no words selected, a style applies to the text you type next. Text you paste while you edit comes in as plain text, in the style at your cursor. While you edit, the quick-format bar shows the style of the text at your cursor.
 
 ## Number format
 
