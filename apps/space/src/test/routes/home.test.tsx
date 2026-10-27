@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import type { ReactNode } from 'react';
 
-// The router and the UI read the window while they load, and every later test file in this run gets the
+// Radix decides at load time whether there is a document, and every later test file in this run gets the
 // modules this one loads, so they load in a browser here too.
 installHappyDom();
 
