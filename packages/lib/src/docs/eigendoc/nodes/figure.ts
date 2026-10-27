@@ -5,7 +5,13 @@
 import type { CommandProps } from '@tiptap/core';
 import { Node } from '@tiptap/core';
 import type { FigureFrameAttrs } from './figure-frame';
-import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
+import {
+    figureFrameAttributes,
+    figureFrameHTML,
+    readFigureFrameAttrs,
+    readFrameWidth,
+    updateFigureNodes,
+} from './figure-frame';
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null).
 export type FigureAttrs = FigureFrameAttrs & {
@@ -24,18 +30,18 @@ declare module '@tiptap/core' {
     }
 }
 
-// A figure's attributes off untyped ones (TipTap's getAttributes): a value of the wrong type reads as unset.
+// A figure's attributes off untyped ones (TipTap's getAttributes): a value of the wrong type reads as unset, and the
+// width reads as the frame reads every stored width.
 export function readFigureAttrs(attrs: Record<string, unknown>): FigureAttrs {
     const text = (key: keyof FigureAttrs) => {
         const value = attrs[key];
         return typeof value === 'string' ? value : null;
     };
-    const width = attrs['width'];
     return {
         mediaName: text('mediaName'),
         src: text('src'),
         alt: text('alt'),
-        width: typeof width === 'number' ? width : null,
+        width: readFrameWidth(attrs['width']),
         ...readFigureFrameAttrs(attrs),
     };
 }

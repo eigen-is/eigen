@@ -24,6 +24,7 @@ import {
     PAGE_NUMBER_TEXT,
     readChartAttrs,
     readEquation,
+    readFrameWidth,
 } from '@workspace/lib/docs/eigendoc';
 import type {
     EigenClipboardChartItem,
@@ -42,7 +43,7 @@ import { textOutsideNotes } from './extensions/footnote';
 // Height comes from the image's own intrinsic ratio rather than its laid-out height, so a mid-load
 // layout can't skew it. Nothing measurable (node view not mounted, image not loaded) → the stored
 // width at the shared default ratio, the single fallback.
-function figureClipboardBox(view: EditorView, pos: number, storedWidth: unknown): ClipboardBox {
+function figureClipboardBox(view: EditorView, pos: number, storedWidth: number | null): ClipboardBox {
     const dom = view.nodeDOM(pos);
     const img = dom instanceof HTMLElement ? dom.querySelector('img') : null;
     if (img && img.clientWidth > 0 && img.clientHeight > 0) {
@@ -52,7 +53,7 @@ function figureClipboardBox(view: EditorView, pos: number, storedWidth: unknown)
                 : img.clientWidth / img.clientHeight;
         return { width: img.clientWidth, height: img.clientWidth / ratio };
     }
-    const width = typeof storedWidth === 'number' && storedWidth > 0 ? storedWidth : DEFAULT_IMAGE_BOX.width;
+    const width = storedWidth ?? DEFAULT_IMAGE_BOX.width;
     return { width, height: (width * DEFAULT_IMAGE_BOX.height) / DEFAULT_IMAGE_BOX.width };
 }
 
@@ -120,7 +121,7 @@ function copiedClipboardItems(
             buildImageClipboardItem({
                 mediaName: node.attrs.mediaName,
                 source: mediaPath,
-                box: figureClipboardBox(view, pos, node.attrs.width),
+                box: figureClipboardBox(view, pos, readFrameWidth(node.attrs.width)),
                 caption: node.attrs.caption || undefined,
             }),
         );
