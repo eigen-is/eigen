@@ -39,6 +39,24 @@ describe('emptyTrash', () => {
         expect(await mount.getPath(other)).toBeNull();
     });
 
+    // The query asks the tree for the folders under it, so its size can't reach SQLite's variable cap.
+    test('a folder delete takes an item trashed on its own from a folder deep inside it', async () => {
+        const folder = await home.drive.createFolder(mount.id, rootId, 'Outer');
+        const middle = await home.drive.createFolder(mount.id, folder.id, 'Middle');
+        const inner = await home.drive.createFolder(mount.id, middle.id, 'Inner');
+        const loner = await createFile(inner.id, 'loner.txt');
+        const outside = await createFile(rootId, 'outside.txt');
+        await home.drive.deletePath(mount.id, loner);
+        await home.drive.deletePath(mount.id, outside);
+        await home.drive.deletePath(mount.id, folder.id);
+
+        expect(await mount.permanentlyDeleteFromTrash(folder.id)).toBe(true);
+
+        expect(await mount.getPath(inner.id)).toBeNull();
+        expect(await mount.getPath(loner)).toBeNull();
+        expect((await mount.getPath(outside))?.trashedAt).toBeInstanceOf(Date);
+    });
+
     test('an item restored before its turn is kept', async () => {
         const restored = await createFile(rootId, 'restored.txt');
         const deleted = await createFile(rootId, 'deleted.txt');
