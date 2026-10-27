@@ -87,7 +87,7 @@ export function sheetsHtmlDocument({
     mode: HtmlExportMode;
     lost: LossCounter['lost'];
 }): string {
-    const { html, css, cut, leftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode === 'pdf' ? PDF_PAGE_CELLS : 0);
+    const { html, css, cut, leftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode);
     for (const sheet of cut) lost('sheets-cut', sheet);
     for (const sheet of leftOut) lost('sheets-left-out', sheet);
     const page = mode === 'pdf' ? pdfPageCss(size) : '@page { size: landscape; margin: 1.5cm; }';
@@ -115,13 +115,13 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
 
 // One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
 // The resolver reads the stored values: only a rule's own formula is evaluated. The sheets spend one MAX_EXPORT_CELLS
-// in tab order, so a sheet gets the cells the ones before it left, and one that draws costs at least `pageCells`.
+// in tab order, so a sheet gets the cells the ones before it left, and in a PDF one that draws costs at least a page.
 // `cut` holds the sheets cut to it, `leftOut` the sheets it left no row or page of, and `size` is the widest and
 // tallest sheet as rendered.
 export function renderSheetsHtml(
     sheets: Sheet[],
     mediaUrls: MediaUrls,
-    pageCells = 0,
+    mode: HtmlExportMode,
 ): { html: string; css: string; cut: Sheet[]; leftOut: Sheet[]; size: ContentSize } {
     const engine = new FormulaEngine();
     const resolver = sheetsResolver(sheets);
@@ -132,14 +132,14 @@ export function renderSheetsHtml(
     const bodies: string[] = [];
     let cellsLeft = MAX_EXPORT_CELLS;
     for (const sheet of shownSheets(sheets)) {
-        const windowed = windowedSheet(sheet, (rows, cols) => exportWindow(cellsLeft, rows, cols));
+        const windowed = windowedSheet(sheet, (rows, cols) => exportWindow(mode, cellsLeft, rows, cols));
         if (!windowed) {
             leftOut.push(sheet);
             continue;
         }
         // A sheet with cells, images or charts prints a page of its own. A blank one takes no page.
         const draws = windowed.range !== null || floatingObjects(windowed.sheet).length > 0;
-        const cells = draws ? Math.max(windowed.cells, pageCells) : windowed.cells;
+        const cells = draws && mode === 'pdf' ? Math.max(windowed.cells, PDF_PAGE_CELLS) : windowed.cells;
         if (cells > cellsLeft) {
             leftOut.push(sheet);
             continue;
@@ -346,11 +346,13 @@ function firstAtOrAfter(tracks: number[], track: number): number {
     return low;
 }
 
-// The export's window keeps the columns from the left up to one PDF page wide, and more of them while every row still
-// fits, a sheet whose every row is hidden as one row. Then it keeps the rows that fit the cells left.
-function exportWindow(cellsLeft: number, rows: number, cols: number): SheetBudget {
+// The export's window keeps the columns from the left up to one PDF page wide. The HTML download keeps more of them
+// while every row still fits, a sheet whose every row is hidden as one row, where the PDF's page would cut them off.
+// Then it keeps the rows that fit the cells left.
+function exportWindow(mode: HtmlExportMode, cellsLeft: number, rows: number, cols: number): SheetBudget {
     const pageCols = Math.min(cols, PAGE_COLUMNS);
-    const maxCols = Math.min(cols, Math.max(pageCols, Math.floor(cellsLeft / Math.max(1, rows))));
+    const maxCols =
+        mode === 'pdf' ? pageCols : Math.min(cols, Math.max(pageCols, Math.floor(cellsLeft / Math.max(1, rows))));
     return { maxRows: Math.min(rows, Math.floor(cellsLeft / Math.max(1, maxCols))), maxCols, maxCells: cellsLeft };
 }
 

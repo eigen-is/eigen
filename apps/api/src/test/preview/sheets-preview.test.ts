@@ -203,7 +203,7 @@ describe('eigensheets preview (floating images)', () => {
         seedSheetsDoc(doc, [sheet], []);
         expect(renderEigensheetsPreviewBody(doc, media).body).toContain(`style="${geometry}"`);
         // The full export interns the very same declaration into its stylesheet.
-        expect(renderSheetsHtml([sheet], media).css).toContain(`{${geometry}}`);
+        expect(renderSheetsHtml([sheet], media, 'screen').css).toContain(`{${geometry}}`);
         doc.destroy();
     });
 
@@ -556,7 +556,7 @@ describe('eigensheets export and preview (hidden sheets)', () => {
             return { id, name: id, ...(hide && { hide }), celldata: [{ r: 0, c: 0, v: cell }], data: [[cell]] };
         };
         const sheets = [sheetOf('First', 'secret', 1), sheetOf('Second', 'shown'), sheetOf('Third', 'unseen', 1)];
-        const { html } = renderSheetsHtml(sheets, NO_MEDIA);
+        const { html } = renderSheetsHtml(sheets, NO_MEDIA, 'screen');
         expect(html).toContain('shown');
         expect(html).not.toContain('secret');
         expect(html).not.toContain('unseen');
