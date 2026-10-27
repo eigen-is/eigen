@@ -424,6 +424,22 @@ describe('placement', () => {
             expect([third?.type, third?.content?.[0]?.text]).toEqual(['paragraph', 'Not a caption']);
             expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['caption'])).toEqual([null, null]);
         });
+
+        // The figure in front is out of the flow, so the block figure is its line's only figure and takes the caption.
+        test('a block figure beside one in front of the text takes the Caption line after them', async () => {
+            const { json } = await importDocxBody(
+                paragraph(`${GOLDEN_DOCX_IMAGE_RUN}${front()}`) +
+                    '<w:p><w:pPr><w:pStyle w:val="Caption"/></w:pPr><w:r><w:t>Figure 1</w:t></w:r></w:p>',
+                { styles: '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>' },
+            );
+            expect(
+                nodesOfType(json, 'figure').map((node) => [node.attrs?.['layout'], node.attrs?.['caption']]),
+            ).toEqual([
+                ['front', null],
+                ['block', 'Figure 1'],
+            ]);
+            expect(nodesOfType(json, 'text')).toEqual([]);
+        });
     });
 
     // The store keeps marks on text only, so a figure's link would not survive saving.
