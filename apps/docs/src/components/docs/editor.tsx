@@ -1,8 +1,8 @@
 // The Docs editor page: the collaborative document opened from a route, drawn as one sheet of paper with its header
 // and footer bands, its body and its notes, scaled to fit a narrow window, or, for a page-less doc, as a column of
-// text at the reader's own width with room beside it for wide tables and images. Around the page it wires the toolbar and
-// menus, the outline, the selection's properties panel, comments, chat and search, all through the body's, a band's
-// or a note's editor, whichever holds the selection.
+// text at the reader's own width with room beside it for wide tables and images. Around the page it wires the
+// toolbar and menus, the outline, the selection's properties panel, comments, chat and search, all through the
+// body's, a band's or a note's editor, whichever holds the selection.
 
 import type { Node } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
@@ -113,6 +113,9 @@ type EquationMenuItem = NodeMenuItem & { display: boolean };
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
+// The outline's 15rem lies over the scroll box's left side, its p-4 gutter included, which a page-less column keeps
+// as room between the outline and the text.
+const OUTLINE_INTRUSION_PX = 240;
 // Room an outline jump leaves above its heading, in screen pixels.
 const JUMP_MARGIN = 24;
 // A page-less doc's Full text width leaves this much beside the column, past the scroll box's own gutter, as Google's.
@@ -600,19 +603,20 @@ const TiptapEditor = ({
     const needsScale = !pageless && canvasScale < 1;
 
     // A page-less column is the reader's text width, centred, or the screen on a phone. An open panel narrows it to
-    // end at the panel's edge, then moves it left below the floor. The room right of it, to the scroll box's edge or
-    // the panel's, is the breakout strip a wide table scrolls in and a wide image grows into (--breakout).
+    // end at the panel's edge, and the outline to start at its edge, then the panel moves it left below the floor. The
+    // room right of it, to the scroll box's edge or the panel's, is the breakout strip a wide table scrolls in and a
+    // wide image grows into (--breakout).
     const room = scrollSize.width;
     const textWidthPx = TEXT_WIDTHS.find(({ value }) => value === textWidth)?.px ?? null;
     const widest = isMobile ? room : (textWidthPx ?? room - 2 * FULL_WIDTH_GUTTER_PX);
+    const roomStart = outlineOverlayShown ? OUTLINE_INTRUSION_PX : 0;
     const roomEdge = showSidebar ? room - PANEL_INTRUSION_PX : room;
     const centredWidth = Math.min(widest, room);
     const centredLeft = (room - centredWidth) / 2;
-    const columnWidth =
-        centredLeft + centredWidth > roomEdge
-            ? Math.max(Math.min(centredWidth, PAGELESS_MIN_COLUMN_PX), roomEdge - centredLeft)
-            : centredWidth;
-    const columnLeft = Math.max(0, Math.min(centredLeft, roomEdge - columnWidth));
+    const clearLeft = Math.max(centredLeft, roomStart);
+    const clearRight = Math.min(centredLeft + centredWidth, roomEdge);
+    const columnWidth = Math.max(Math.min(centredWidth, PAGELESS_MIN_COLUMN_PX), clearRight - clearLeft);
+    const columnLeft = Math.max(0, Math.min(clearLeft, roomEdge - columnWidth));
     const breakout = Math.max(0, roomEdge - columnLeft - columnWidth);
     const breakoutProperty: Record<string, string> = pageless ? { '--breakout': `${breakout}px` } : {};
     // On paper the @page rule draws the margins, as for pages, so the column is laid out for the screen only.
@@ -929,7 +933,8 @@ const TiptapEditor = ({
                                     </div>
                                 </div>
                                 {/* Unmounted when closed. The stable gutter ends the panel left of the scrollbar. The
-                                    outline lies over the page's left side, so like a panel it moves nothing. */}
+                                    outline lies over the page's left side, so like a panel it moves no page; a
+                                    page-less column keeps clear of both. */}
                                 {(showSidebar || outlineOverlayShown) && (
                                     <div className="pointer-events-none absolute inset-0 overflow-hidden [scrollbar-gutter:stable]">
                                         {outlineOverlayShown && (

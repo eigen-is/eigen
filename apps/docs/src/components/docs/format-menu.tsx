@@ -1,6 +1,7 @@
 // The Docs Format menu: text, paragraph styles, alignment and spacing, lists, headers and page numbers, the switch
-// between pages and page-less, and the table and image submenus that a phone, which has no properties panel, reaches those options through. Every item acts on the
-// editor the toolbar follows: the body's, a band's being edited or the open note's.
+// between pages and page-less, and the table and image submenus that a phone, which has no properties panel, reaches
+// those options through. Every item acts on the editor the toolbar follows: the body's, a band's being edited or the
+// open note's.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';

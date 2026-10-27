@@ -11,7 +11,9 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
-const window = installHappyDom();
+// happy-dom lays nothing out: a test that needs the editor's width stubs it and fires these.
+let resizes: (() => void)[] = [];
+const window = installHappyDom({ onResizeObserver: (resize) => resizes.push(resize) });
 
 const Y = await import('yjs');
 const { WebsocketProvider } = await import('y-websocket');
@@ -117,6 +119,8 @@ async function render({
     width?: number;
 }) {
     window.happyDOM.setViewport({ width, height: 1000 });
+    // Only this render's observers, as an unmounted one observes nothing.
+    resizes = [];
     function Editor() {
         const [writer, setWriter] = useState(canWrite);
         setCanWrite = setWriter;
@@ -284,6 +288,38 @@ test('each reader draws a page-less doc at their own text width, which the doc n
     await render(WRITER);
     expect(pageStyles()).toContain('max-width: 1056px');
     expect(Object.keys(doc.getMap(PAGE_ROOT).toJSON())).toEqual(['pageless']);
+});
+
+// The page-less column the editor lays out in a scroll box `width` px wide, as its left edge and its width.
+async function pagelessColumnAt(width: number) {
+    const scrollBox = pageBox()?.parentElement;
+    if (!scrollBox) throw new Error('no scroll box');
+    scrollBox.getBoundingClientRect = () => new DOMRect(0, 0, width, 900);
+    await act(async () => {
+        for (const resize of resizes) resize();
+    });
+    const column = pageStyles().match(/\[data-pageless\] \{ width: (\d+)px; margin-left: (\d+)px/);
+    return { left: Number(column?.[2]), width: Number(column?.[1]) };
+}
+
+test('the outline over the left of a page-less doc narrows its column, at Wide and at Full', async () => {
+    doc.getMap(PAGE_ROOT).set('pageless', true);
+    localStorage.setItem('eigen-docs-text-width:u1', 'full');
+    await render(WRITER);
+    expect(await pagelessColumnAt(1440)).toEqual({ left: 48, width: 1344 });
+    await unmount();
+
+    localStorage.setItem('eigen-docs-outline', 'shown');
+    await render(WRITER);
+    // The outline's 240 px cover the scroll box's 16 px gutter too, which leaves that gutter between it and the text.
+    expect(await pagelessColumnAt(1440)).toEqual({ left: 240, width: 1152 });
+    await unmount();
+
+    localStorage.setItem('eigen-docs-text-width:u1', 'wide');
+    await render(WRITER);
+    expect(await pagelessColumnAt(1440)).toEqual({ left: 240, width: 1008 });
+    // Room enough beside it, a Wide column stays centred.
+    expect(await pagelessColumnAt(1920)).toEqual({ left: 432, width: 1056 });
 });
 
 test("a switch to page-less, a collaborator's too, leaves the band being edited and hides the bands", async () => {
