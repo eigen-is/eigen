@@ -18,6 +18,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Styling part of a cell in Sheets** — while you edit a cell, select some of its words and make them bold, italic, underlined, struck through, or another color, font or size. **Ctrl+B**, **Ctrl+I** and **Ctrl+U** (Mac: **⌘B**, **⌘I**, **⌘U**) work as you type, and a style you pick with no words selected applies to what you type next. Text you type or paste over selected words takes their style, and text you paste comes in as plain text, as in Google Sheets. The cell keeps its styles when you download it as Excel
 - **Outline in Docs** — **Tools → Show outline** lists the document's headings on the left, over the document, and a click jumps to one. It stays shown or hidden in your browser from one document to the next. On a phone it opens from the **⋮** menu
 - **Celebrations** — tick the last box of a card's checklist in Stickies, or of a comment card elsewhere, and now and then confetti bursts from it. Turn it off under **Preferences** on the Personal info page in Space
+- **Page-less documents in Docs** — **File → Page setup…** has **Pages** and **Page-less** tabs, as in Google Docs, and **Format** switches between them. A page-less document is one continuous column of text without page breaks, headers or footers, for everyone who opens it. It still prints on its paper
+- **Text width** — in a page-less document, pick **Narrow**, **Medium**, **Wide** or **Full** on the **Page-less** tab. The width is yours: it follows you to every page-less document and device, and the people you share with keep theirs
+- **Wide tables and images** — in a page-less document a table can grow past the text and scrolls sideways, and an image or a chart can be as wide as the paper. A Word file saved in Web Layout opens page-less with its tables at their widths, and a page-less document downloads as a Word file in Web Layout
 - **What a download left out** — after you download a document, spreadsheet, deck or drawing, a message counts what the file left out, cut short or drew simpler, such as a hatched fill a PowerPoint file draws solid. It also says when part of the document couldn't be read
 - **What a printout left out** — printing a Docs document gives the same message once the PDF opens
 
@@ -32,6 +35,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Admin users** — a user's details list their teams under the role, leaving out the team named after your organization that everyone joins. Add the user to a team with **Add to team**, or take them out of one with its **×**
 - **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width, because the page cuts off the rest. A web page download keeps more columns while all of the sheet's rows fit
 - **Spreadsheet downloads** — a cell's text stays inside its row in a web page or PDF download, as it does in the editor. A wrapped cell taller than its row shows the part that fits
+- **Tables in Docs** — a table keeps its column widths when you narrow the margins, and scrolls sideways inside the page instead of shrinking. A table in a list or a cell still shrinks to fit. When you print or download a PDF, a table wider than the page shrinks to fit it
+- **Page setup in Docs** — the margins show two decimals, such as 2.00 cm
 
 ### Fixed
 
