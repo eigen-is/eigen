@@ -232,12 +232,12 @@ describe('doc export — the stylesheet', () => {
         expect(await exportStyle('pdf-html')).toContain('break-after: page');
     });
 
-    test('a table splits between its rows, a row or quote holding a page break may split, and the figure box stays whole', async () => {
+    test('a table and its rows may split, a quote holding a page break may split, and the figure box stays whole', async () => {
         const css = await exportStyle('pdf-html');
 
         expect(css).toContain('.figure, pre, blockquote { page-break-inside: avoid; }');
-        expect(css).toContain('tr { page-break-inside: avoid; }');
-        expect(css).toContain('tr:has(.page-break), blockquote:has(.page-break) { page-break-inside: auto; }');
+        expect(css).toContain('blockquote:has(.page-break) { page-break-inside: auto; }');
+        expect(css).not.toMatch(/(table|tr) \{ page-break-inside: avoid/);
     });
 });
 
@@ -1370,6 +1370,16 @@ describe('doc export — HTML data: figures', () => {
         const svg = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%2F%3E';
         expect(await imgSrcsOf('html', dataUri('image/png', 'not a png'), svg)).toEqual([svg]);
     });
+
+    // Only a base64 src is decoded and re-encoded, so a percent-encoded raster would carry its EXIF out as it was pasted.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws nothing for a data: raster that is not base64',
+        async (format) => {
+            const jpeg = 'data:image/jpeg,%FF%D8%FF%E1%00%10Exif%00%00';
+            const svg = 'data:IMAGE/SVG+XML;charset=utf-8,%3Csvg%2F%3E';
+            expect(await imgSrcsOf(format, jpeg, 'data:,plain', svg)).toEqual([svg]);
+        },
+    );
 });
 
 // Worker.terminate() does not stop libvips, so only sharp's own timeout frees the one transform slot from a filter
@@ -1546,17 +1556,32 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — tables across pages (WeasyPrint)', () => {
     // As Word and Google Docs print one, a table taller than what is left of the page starts there and goes on over the
-    // next, rather than leaving the page half empty.
-    test('a 60-row table after half a page starts on the first page', async () => {
-        const intro = Array.from({ length: 10 }, (_, i) => paragraph(`Intro ${i + 1}`));
-        const cell = (text: string) => ({ type: 'tableCell', content: [paragraph(text)] });
-        const rows = Array.from({ length: 60 }, (_, i) => ({ type: 'tableRow', content: [cell(`Row ${i + 1}`)] }));
+    // next, rather than leaving the page half empty. Word's "Allow row to break across pages" is on by default, so a row
+    // does the same.
+    const intro = Array.from({ length: 10 }, (_, i) => paragraph(`Intro ${i + 1}`));
+    const cell = (...texts: string[]) => ({ type: 'tableCell', content: texts.map((text) => paragraph(text)) });
+    const firstPageTexts = async (rows: JSONContent[]) => {
         const html = await pdfHtml(...intro, { type: 'table', content: rows });
         const texts = await laidOut(html, "if type(box).__name__ == 'TextBox': print(id(page), box.text)");
         const firstPage = texts[0]?.split(' ')[0];
-        const onFirstPage = texts.filter((line) => line.startsWith(`${firstPage} `)).map((line) => line.split(' ')[1]);
-        expect(onFirstPage).toContain('Intro');
-        expect(texts).toContain(`${firstPage} Row 1`);
+        return texts
+            .filter((line) => line.startsWith(`${firstPage} `))
+            .map((line) => line.slice(line.indexOf(' ') + 1));
+    };
+
+    test('a 60-row table after half a page starts on the first page', async () => {
+        const rows = Array.from({ length: 60 }, (_, i) => ({ type: 'tableRow', content: [cell(`Row ${i + 1}`)] }));
+        const onFirstPage = await firstPageTexts(rows);
+        expect(onFirstPage).toContain('Intro 1');
+        expect(onFirstPage).toContain('Row 1');
+    }, 60_000);
+
+    test('a row taller than what is left of the page starts on it and goes on over the next', async () => {
+        const lines = Array.from({ length: 60 }, (_, i) => `Line ${i + 1}`);
+        const onFirstPage = await firstPageTexts([{ type: 'tableRow', content: [cell(...lines)] }]);
+        expect(onFirstPage).toContain('Intro 1');
+        expect(onFirstPage).toContain('Line 1');
+        expect(onFirstPage).not.toContain('Line 60');
     }, 60_000);
 });
 

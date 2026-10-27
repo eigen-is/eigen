@@ -1,6 +1,8 @@
-// The images a doc holds as a pasted data: src rather than as a media file. Every doc export draws them re-encoded,
-// the docx and the HTML and PDF alike, so a photo's EXIF, GPS included, never leaves in a download. It runs in the
-// transform process, as the main thread never reads the doc to prepare them with the media files.
+// The images a doc holds as a pasted data: src rather than as a media file. Every doc export draws a raster re-encoded,
+// the docx and the HTML and PDF alike, and draws nothing for a data: src that is not base64 unless it is an SVG, so a
+// photo's EXIF, GPS included, never leaves in a download. An SVG is sanitized, not re-encoded: a raster it embeds as an
+// <image href="data:…"> keeps its EXIF. It runs in the transform process, as the main thread never reads the doc to
+// prepare them with the media files.
 
 import type { JSONContent } from '@tiptap/core';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';

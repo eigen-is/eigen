@@ -31,11 +31,15 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
+import { isDataUri } from '../../shared/data-uri';
 import { exportHtmlDocument } from '../html-document';
 import { withSvgFallbacks } from '../office-image';
 import { renderEquations, svgEquations } from './equations';
 import { figureMediaKey, pastedFigureMedia } from './pasted-media';
 import { renderDocHtml, withAbsoluteLinks } from './render';
+
+// A percent-encoded or plain-text SVG, which draws as it is. The media type matches in any case, as splitDataUri reads it.
+const SVG_DATA_URI = /^data:image\/svg\+xml[;,]/i;
 
 // HTML and PDF render the same document: WeasyPrint prints what the HTML download serves, but for the small caps the
 // PDF fakes and the equations it draws as SVG. The docx writer loads lazily, so an HTML export never evaluates it, its
@@ -85,7 +89,10 @@ export async function renderEigendocExport(
                 withAbsoluteLinks(content, publicOrigin),
                 (mediaName, src) => {
                     const key = figureMediaKey({ mediaName, src });
-                    return key ? (dataUriMap.get(key) ?? null) : src;
+                    if (key) return dataUriMap.get(key) ?? null;
+                    // Only a base64 src is re-encoded, so any other data: src but an SVG's would carry its bytes, EXIF
+                    // included, out as pasted: it draws nothing, as a src no image decodes from does.
+                    return src && isDataUri(src) && !SVG_DATA_URI.test(src) ? null : src;
                 },
                 {
                     ...(pdf && { smallCapsFont: style.font }),
@@ -290,10 +297,10 @@ h1, h2, h3, h4, h5, h6 { font-size: inherit; }
 }
 
 /* A block holding a page break must split: avoid pushes it whole to a new page and breaks inside it anyway. A table
-   splits between its rows, as Word and Google Docs print one, rather than leaving a page half empty */
+   and each of its rows split, as Word, whose "Allow row to break across pages" is on by default, and Google Docs print
+   one, rather than leaving a page half empty */
 .figure, pre, blockquote { page-break-inside: avoid; }
-tr { page-break-inside: avoid; }
-tr:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
+blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
 
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 
