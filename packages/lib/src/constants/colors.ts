@@ -325,12 +325,15 @@ export function lightenColor(hex: string, amount: number): string {
 }
 
 // A hex color: `#` and then one of the digit counts the caller takes, in either case. Each reader names its own
-// counts, such as six for a doc's text color, so a stored value reads as it always has.
+// counts, such as six for a doc's text color.
 export function isHexColor(value: string, digits: readonly (3 | 4 | 6 | 8)[]): boolean {
     return /^#[0-9a-f]+$/i.test(value) && digits.some((count) => value.length === count + 1);
 }
 
-const RGB_COLOR = /^rgba?\(\s*(\d*\.?\d+)[\s,]+(\d*\.?\d+)[\s,]+(\d*\.?\d+)(?:\s*[,/]\s*(\d*\.?\d+)(%?))?\s*\)$/i;
+// A number is digits with an optional fraction, or a bare fraction. The two branches start on different characters, so
+// a long run of digits has one way to match and a hostile stored color costs a linear scan.
+const NUM = String.raw`(\d+(?:\.\d+)?|\.\d+)`;
+const RGB_COLOR = new RegExp(String.raw`^rgba?\(\s*${NUM}[\s,]+${NUM}[\s,]+${NUM}(?:\s*[,/]\s*${NUM}(%?))?\s*\)$`, 'i');
 
 // An rgb() or rgba() color, as a browser computes it or a stylesheet writes it: commas or spaces, channels
 // rounded to whole numbers, and an alpha as a number or a percent. It reads as #rrggbb and an alpha from 0 to 1.

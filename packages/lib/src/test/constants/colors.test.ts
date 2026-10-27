@@ -181,3 +181,16 @@ describe('parseRgb', () => {
         expect(parseRgb(color)).toBeUndefined();
     });
 });
+
+describe('parseRgb on hostile input', () => {
+    test.each([
+        ['a channel slot', `rgb(${'1'.repeat(100_000)}x`],
+        ['an alpha slot', `rgba(1, 2, 3, ${'1'.repeat(100_000)}x`],
+        ['a long fraction', `rgb(1, 2, 3.${'1'.repeat(100_000)}x`],
+    ])('a 100k-character run in %s costs little CPU', (_slot, color) => {
+        const started = process.cpuUsage();
+        expect(parseRgb(color)).toBeUndefined();
+        const { user, system } = process.cpuUsage(started);
+        expect((user + system) / 1000).toBeLessThan(100);
+    });
+});
