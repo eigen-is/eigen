@@ -61,7 +61,7 @@ The comments in `prerender.tsx`, `entry-server.tsx` and `main.tsx` explain each 
 
 `drive/share-a-file.md` is `/support/drive/share-a-file`. Both parts are permanent identifiers: renaming breaks deep links and search ranking. `section` is never a frontmatter field: the folder decides.
 
-`src/components/support/sections.ts` is the display registry: id (the folder name), title, description, icon and color, in display order. An app-backed section takes its icon and brand color from the shared `apps` registry, and an unknown app name throws at build. The sections without an app of their own (the folders `getting-started`, `connect`, `account`, `admin` and `self-hosting`) use the index app's color. `connect` is titled Integrations.
+`src/components/support/sections.ts` is the display registry: id (the folder name), title, description, icon and color, in display order. An app-backed section takes its icon and brand color from the shared `apps` registry, and an unknown app name throws at build. The Admin section takes `adminApp` from the same registry, which keeps it outside `apps` because only an admin gets a way in. The sections without an app of their own (the folders `getting-started`, `connect`, `account` and `self-hosting`) use the index app's color, Space teal. A section page shows its title in its section's color. `connect` is titled Integrations.
 
 The Self-hosting section is written for the person who runs the server, not for its users. It holds the operator's steps from requirements to troubleshooting. [SELF-HOSTING.md](SELF-HOSTING.md) is the technical reference beside the code and links into it rather than repeating them.
 
@@ -85,7 +85,7 @@ The search box on `/support` (`components/support/support-search.tsx`) and the c
 
 ## The apps link to the help center's landing
 
-`getSupportUrl()` resolves the index app's `/support`. The topbar links to it as "Support" with a `LifeBuoy` icon from the signed-in menu, the guest menu and the app switcher's footer, which shows it to every user, guests included, below an admin's "Admin". The Space landing grid ends with a muted "Help and support" card (`apps/space/src/routes/_auth.index.tsx`), outside the `apps` registry so it never shows up as an app tile. Every link lands on `/support`, and none opens a single article.
+`getSupportUrl()` resolves the index app's `/support`. The topbar links to it as "Support" with a `LifeBuoy` icon from the signed-in menu, the guest menu and the app switcher's footer, which shows it to every user, guests included, below an admin's "Admin". The Space landing grid ends with an Admin card that only an admin sees (`adminApp`, gated on the same `useIsAdmin` as the switcher's "Admin") and a "Help and support" card in Space teal, the help center's own color (`apps/space/src/routes/_auth.index.tsx`). Neither is in the `apps` list, so neither shows up as an app tile in the switcher. Every link lands on `/support`, and none opens a single article.
 
 The index app sends a signed-in visitor on to `/space/` from a `useEffect` in `routes/index.tsx`. The redirect belongs to that one route, so `/support/*` and `/blog/*` stay reachable while signed in with no exemption logic. It is an effect, not a router `beforeLoad`, because the landing is prerendered and `AuthProvider` doesn't block there, so a `beforeLoad` only ever sees a signed-out visitor.
 

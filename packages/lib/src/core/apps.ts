@@ -1,4 +1,10 @@
+// The registry of Eigen's apps: each app's name, color token, home URL, icon and one-line pitch.
+// Every place that shows an app, such as the app switcher, the space index tiles and the help
+// center, reads its color and icon from here, so an app looks the same everywhere. Admin stands
+// apart from the list, because only an admin gets a way in.
+
 import {
+    getAdminAppUrl,
     getCalendarAppUrl,
     getChatAppUrl,
     getContactsAppUrl,
@@ -21,6 +27,7 @@ import {
     MessageSquare,
     Presentation,
     Sheet,
+    Shield,
     SquareKanban,
     UsersRound,
 } from 'lucide-react';
@@ -107,8 +114,16 @@ const apps = [
 
 type AppEntry = (typeof apps)[number];
 
+const adminApp = {
+    name: 'Admin',
+    color: 'var(--app-admin-color)',
+    href: getAdminAppUrl(),
+    icon: Shield,
+    description: 'Manage users, teams and the server',
+} satisfies AppEntry;
+
 // Hosted mail is optional on a server, so useEnabledApps and the palette's nav commands need one
 // way to spot its entry.
 const isMailApp = (app: AppEntry) => app.name === 'Mail';
 
-export { apps, isMailApp };
+export { adminApp, apps, isMailApp };
