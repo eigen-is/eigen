@@ -9,6 +9,7 @@ import { produce } from 'immer';
 import { dataToCelldata } from '../../../engine/celldata';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell } from '../../../engine/types';
+import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { shiftEntries } from '../../../state/modules/history';
 import { mergeCells } from '../../../state/modules/merge';
@@ -313,6 +314,18 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         s.undo(s.a);
         s.edit(s.b, typedAt('B2', 'peer', TWO));
         expect(cellAt(s.a, 'B2', TWO)?.v).toBe('peer');
+        expectAgree(s);
+    });
+
+    // A copy keeps its cells as celldata until someone opens it.
+    test('undoing the delete of a copy nobody opened brings back its cells', () => {
+        const s = session(workbook({}, { A1: text('two') }));
+        s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
+        const copy = s.a.ctx.sheets[3];
+        expect(copy.data).toBeUndefined();
+        s.edit(s.a, ...removeSheet(copy.id as string));
+        s.undo(s.a);
+        expect(view(s.a.ctx.sheets)[3].cells).toEqual([{ r: 0, c: 0, v: text('two') }]);
         expectAgree(s);
     });
 
