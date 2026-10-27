@@ -4,13 +4,19 @@
 
 import type { JSONContent } from '@tiptap/core';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
-import { isFigureFrameNode, readParagraphFormat } from '@workspace/lib/docs/eigendoc';
+import {
+    isFigureFrameNode,
+    isPositioned,
+    readFigureFrameAttrs,
+    readParagraphFormat,
+} from '@workspace/lib/docs/eigendoc';
 import type { Border, RunFace } from '../../../document/looks';
 import {
     BLOCK_MARGINS,
     CODE_BLOCK_LOOK,
     cssPt,
     familyLineScale,
+    LIST_LEVEL,
     nodeLook,
     normalLine,
     proseTextLook,
@@ -26,9 +32,9 @@ import { highlightCode, lowlight } from '../../../document/lowlight';
 import { proseValueIfSet } from '../../../document/prose-css';
 import type { StyleId } from '../../../ooxml/wordml';
 import { BORDER_SIDES, codeBlockStyle, JUSTIFICATION, LIST_FORMATS, LIST_LEVELS } from '../../../ooxml/wordml';
-import { figureOf } from './drawings';
+import { anchoredFigure, figureOf } from './drawings';
 import { useFace } from './fonts';
-import { CLEAR_FLOATS, checkboxXml, itemOf, LIST_LEVEL, listOf } from './numbering';
+import { CLEAR_FLOATS, checkboxXml, itemOf, listOf } from './numbering';
 import type { Context, Package } from './package';
 import type { RunProps } from './runs';
 import { INLINES, LINE_BREAK, rPrXml, runsXml, textXml } from './runs';
@@ -133,7 +139,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
                 node.content ?? [],
                 formatted(node, textProps({ jc: justification(node) }, context), context),
                 context,
-                true,
+                node,
             ),
     ],
     [
@@ -157,7 +163,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
                 node.content ?? [],
                 formatted(node, props, context),
                 { ...context, blockPt: sizePt, upright },
-                true,
+                node,
             );
         },
     ],
@@ -174,7 +180,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         (node, context) => {
             const indent = context.indent + (context.quotes < LIST_LEVELS ? QUOTE_LOOK.indent : 0);
             const quote: Context = { ...context, indent, quotes: context.quotes + 1, style: 'Quote', after: undefined };
-            const blocks = blocksOf(node.content ?? [], textProps({}, quote), quote, false);
+            const blocks = blocksOf(node.content ?? [], textProps({}, quote), quote);
             return withAfter(blocks, BLOCK_MARGINS.blockquote, context.pkg.styles);
         },
     ],
@@ -241,17 +247,26 @@ function titleOf(type: TitleType, style: StyleId) {
             node.content ?? [],
             formatted(node, props, context),
             { ...context, blockPt: sizePt, upright },
-            true,
+            node,
         );
     };
 }
 
 // Never fails on structure: inline content where a block belongs is wrapped in a paragraph, a nested block hoisted out.
-export function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context, textblock: boolean): Block[] {
+// `textblock` is the paragraph, heading or title that holds `nodes`, if any.
+export function blocksOf(
+    nodes: JSONContent[],
+    props: ParagraphProps,
+    context: Context,
+    textblock?: JSONContent,
+): Block[] {
     const blocks: Block[] = [];
     let inline: JSONContent[] = [];
     // The in-flow pieces a figure or a display equation splits a textblock into, by index in blocks.
     const pieces: number[] = [];
+    // The runs of the figures in front of or behind the text, which open the textblock's first piece, as Word anchors
+    // a picture at its paragraph's start.
+    let anchors = '';
     const flush = () => {
         const faces: RunFace[] = [];
         const runs = runsXml(inline, context, props.style, faces);
@@ -266,6 +281,10 @@ export function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: C
     };
     for (const [index, node] of nodes.entries()) {
         if (isFigureFrameNode(node.type)) {
+            if (textblock && context.positions && isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout)) {
+                anchors += anchoredFigure(node, textblock, context);
+                continue;
+            }
             // A wrapped figure floats before the paragraph that holds it; a block one breaks the paragraph.
             const figure = figureOf(node, context);
             if (inline.length > 0 && figure.some((block) => !('float' in block))) flush();
@@ -313,9 +332,13 @@ export function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: C
         // A loop, not a spread: a code block of a million lines is a million arguments.
         for (const block of written) blocks.push(block);
     }
-    // A textblock its wrapped figures emptied keeps its line, as the editor's trailing break does.
+    // A textblock its wrapped or positioned figures emptied keeps its line, as the editor's trailing break does.
     if (inline.length > 0 || (textblock && pieces.length === 0)) flush();
     if (textblock) shareMargins(blocks, pieces, props, context.pkg.styles);
+    const [first] = pieces;
+    const opening = first === undefined ? undefined : blocks[first];
+    if (anchors && first !== undefined && opening && !('table' in opening))
+        blocks[first] = { ...opening, runs: anchors + opening.runs };
     return blocks;
 }
 
