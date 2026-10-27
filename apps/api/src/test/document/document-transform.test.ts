@@ -495,10 +495,10 @@ describe('document transform (eigensheets preview)', () => {
 });
 
 // The golden workbook's HTML download and the document fed to WeasyPrint, its @page fit to the widest and tallest
-// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved by a blank tab taking
-// no page, so the workbook's empty last sheet no longer prints a blank page).
-const GOLDEN_EXPORT_HTML_SHA256 = '5d8d4f9fb19e32dfb54b8141344ed24685f1a74987a4f52537defef9d91c79be';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = '195a8367e85db72cead4e0e4b3e0d6049cc741501e3241a698452e3abf77dcc9';
+// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved by a turned
+// cell's span inheriting the td's text decoration).
+const GOLDEN_EXPORT_HTML_SHA256 = '25d8e0c88c94f0b7e84539b0bb29d4823eece190afacf215294e25f098b2be39';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'd1df83268f181acc9ab36954aab6be83c71285d1d752c32c4b187d14a00d94bf';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };

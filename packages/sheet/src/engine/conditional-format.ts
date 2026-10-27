@@ -1,3 +1,8 @@
+// Conditional formats as the canvas and the HTML export draw them: a sheet's rules evaluated into each cell's colors
+// and data bars. Beside the evaluator sit the rule edits a row op, a move or a paste makes, which keep a formula rule's
+// anchor, and the shape check every reader of a stored rule asks first, since a peer can store anything.
+
+import { isRecord } from '@workspace/lib/guards';
 import { isNil } from 'es-toolkit/compat';
 import { cellValue, parseCellInput } from './format';
 import type { FormulaEngine } from './formula-engine';
@@ -324,13 +329,15 @@ export function evaluateConditionalFormat(
                         }
                     });
                 } else if (conditionName === 'occurrenceDate') {
+                    // A rule that takes no value stores an empty list.
+                    const dates = String(conditionValue0);
                     let dBig: string;
                     let dSmall: string;
-                    if (conditionValue0.toString().indexOf('-') === -1) {
-                        dBig = parseCellInput(conditionValue0)[2].toString();
-                        dSmall = parseCellInput(conditionValue0)[2].toString();
+                    if (dates.indexOf('-') === -1) {
+                        dBig = parseCellInput(dates)[2].toString();
+                        dSmall = parseCellInput(dates)[2].toString();
                     } else {
-                        const str = conditionValue0.toString().split('-');
+                        const str = dates.split('-');
                         dBig = parseCellInput(str[1].trim())[2].toString();
                         dSmall = parseCellInput(str[0].trim())[2].toString();
                     }
@@ -455,6 +462,39 @@ export function evaluateConditionalFormat(
         }
     }
     return computeMap;
+}
+
+// Whether a stored rule has the shape the evaluator and withCfRanges read. No reader checks the rules a peer or a file
+// stored, so every writer that reads them asks this first. Each range spans whole rows and columns in order. A rule's
+// values are strings or numbers, its looks an object, and a scale's stops colors parseColorChannels reads.
+export function isWellFormedCfRule(rule: ConditionalFormatRule | null): boolean {
+    if (!isRecord(rule) || !Array.isArray(rule.cellrange) || rule.cellrange.length === 0) return false;
+    if (!rule.cellrange.every((range) => isRecord(range) && isSpan(range.row) && isSpan(range.column))) return false;
+    switch (rule.type) {
+        case 'default':
+            return (
+                isRecord(rule.format) &&
+                Array.isArray(rule.conditionValue) &&
+                rule.conditionValue.every((value) => typeof value === 'string' || typeof value === 'number')
+            );
+        case 'dataBar':
+            return Array.isArray(rule.format) && rule.format.every((color) => typeof color === 'string');
+        case 'colorGradation':
+            return (
+                Array.isArray(rule.format) &&
+                rule.format.every(
+                    (color) => typeof color === 'string' && (color.startsWith('#') || color.split(',').length >= 3),
+                )
+            );
+        case 'icons':
+            return true;
+        default:
+            return false;
+    }
+}
+
+function isSpan(ends: unknown): boolean {
+    return Array.isArray(ends) && ends.length === 2 && ends.every(Number.isInteger) && ends[0] <= ends[1];
 }
 
 // A formula rule reads relative to its first range's top-left, so moving that corner re-expresses the formula and

@@ -1,6 +1,6 @@
 // The styles part read into one look per cell format (xf), resolved once: fonts, fills, alignment, borders, number
-// formats, theme colours and tints. It also reads the conditional formats' looks (dxf). The xlsx reader calls it once
-// per workbook. Other readers, such as the rich strings and the rules, reuse its font and colour readers.
+// formats, theme colors and tints. It also reads the conditional formats' looks (dxf). The xlsx reader calls it once
+// per workbook. Other readers, such as the rich strings and the rules, reuse its font and color readers.
 
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import type {
@@ -133,7 +133,7 @@ export function defaultFontDigitWidth(styleSheet: XmlElement | undefined): numbe
     return maxDigitWidth(value('name'), Number.parseFloat(value('sz') ?? ''));
 }
 
-// What a conditional format paints: its font's colour and its fill's.
+// What a conditional format paints: its font's color and its fill's.
 export type DxfLook = DefaultConditionalFormatRule['format'];
 
 export function readDxfs(styleSheet: XmlElement | undefined, palette: ThemePalette): DxfLook[] {
@@ -141,7 +141,7 @@ export function readDxfs(styleSheet: XmlElement | undefined, palette: ThemePalet
     return dxfs ? xmlChildren(dxfs, SML_NS, 'dxf').map((dxf) => dxfLook(dxf, palette)) : [];
 }
 
-// A dxf's solid fill names its colour in bgColor, as Excel writes it, or in both, as Google Sheets does; a pattern of
+// A dxf's solid fill names its color in bgColor, as Excel writes it, or in both, as Google Sheets does; a pattern of
 // none is a font-only dxf, and a gradient paints nothing.
 export function dxfLook(dxf: XmlElement | undefined, palette: ThemePalette): DxfLook {
     const font = dxf && xmlChild(dxf, SML_NS, 'font');
@@ -224,14 +224,14 @@ function bordersOf(border: XmlElement, palette: ThemePalette): CellBorderSides |
     return Object.keys(sides).length > 0 ? sides : undefined;
 }
 
-// An rgb colour, else a theme colour and its tint. An indexed colour is none.
+// An rgb color, else a theme color, shifted by its tint: ECMA-376 tints a color of any kind. An indexed color is none.
 export function resolveColor(element: XmlElement | undefined, palette: ThemePalette): string | null {
     const rgb = element && xmlAttr(element, '', 'rgb');
-    if (rgb) return argbToHex(rgb);
     const theme = Number.parseInt((element && xmlAttr(element, '', 'theme')) ?? '', 10);
-    if (!(theme >= 0 && theme < palette.length)) return null;
+    const color = rgb ? argbToHex(rgb) : theme >= 0 && theme < palette.length ? palette[theme] : undefined;
+    if (color === undefined) return null;
     const tint = Number.parseFloat((element && xmlAttr(element, '', 'tint')) ?? '');
-    return Number.isFinite(tint) ? tinted(palette[theme], tint) : palette[theme];
+    return Number.isFinite(tint) ? tinted(color, tint) : color;
 }
 
 function argbToHex(argb: string): string {
@@ -239,7 +239,7 @@ function argbToHex(argb: string): string {
     return `#${rgb.toUpperCase()}`;
 }
 
-// SpreadsheetML's tint shifts the colour's HLS luminance (ECMA-376 Part 1 § 18.3.1.15), as Excel draws it: toward black
+// SpreadsheetML's tint shifts the color's HLS luminance (ECMA-376 Part 1 § 18.3.1.15), as Excel draws it: toward black
 // by the share a negative tint names, toward white by a positive one.
 function tinted(hex: string, tint: number): string {
     const value = Number.parseInt(hex.slice(1, 7), 16);

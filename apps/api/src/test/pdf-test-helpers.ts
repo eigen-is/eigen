@@ -2,10 +2,11 @@ import { expect } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { inflateSync } from 'node:zlib';
 import sharp from 'sharp';
 
-// A PDF's pixels, for the tests that read what WeasyPrint printed. CI installs no rasterizer, so those suites skip
-// without one.
+// A PDF's pixels and pages, for the tests that read what WeasyPrint printed. CI installs no rasterizer, so those
+// suites skip without one.
 
 // The PDF's first page at 72 dpi, one pixel per point: macOS's sips or poppler's pdftoppm.
 export const rasterizer = Bun.which('sips') ?? Bun.which('pdftoppm');
@@ -37,4 +38,16 @@ export type Rgb = [number, number, number];
 export function pixelAt(page: Raster, x: number, y: number): Rgb {
     const i = (Math.round(y) * page.width + Math.round(x)) * 3;
     return [page.data[i], page.data[i + 1], page.data[i + 2]];
+}
+
+// The pages a PDF holds, from its page tree's count. WeasyPrint keeps the page tree in a compressed object stream.
+export function pageCount(pdf: Buffer): number {
+    const text = pdf.toString('latin1');
+    let count = 0;
+    for (const m of text.matchAll(/\/Type \/ObjStm[^>]*\/Length (\d+)>>\s*stream\r?\n/g)) {
+        const start = m.index + m[0].length;
+        const objects = inflateSync(pdf.subarray(start, start + Number(m[1]))).toString('latin1');
+        for (const pages of objects.matchAll(/\/Count (\d+)/g)) count = Math.max(count, Number(pages[1]));
+    }
+    return count;
 }

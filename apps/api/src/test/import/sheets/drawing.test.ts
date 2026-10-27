@@ -173,7 +173,7 @@ describe('a worksheet chart', () => {
                 { name: { ...data, row: [0, 0], column: [1, 1] }, values: { ...data, row: [1, 3], column: [1, 1] } },
             ],
         });
-        // Theme colours: the series takes accent1, as the theme states it.
+        // Theme colors: the series takes accent1, as the theme states it.
         expect(spec?.series['x-0']?.color).toBe('#4472c4');
     });
 

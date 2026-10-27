@@ -80,6 +80,21 @@ export function resolveRangeChartData(data: RangeChartData, resolver: CellResolv
     };
 }
 
+// The values and labels a chart draws, counted from its spec before a cell is read, so a caller can charge a chart
+// before it draws. A range past MAX_CHART_POINTS draws a message and no point.
+export function sheetChartPoints(chart: SheetChart): number {
+    const { spec } = readChartSpec(chart);
+    if (!spec) return 0;
+    const { data } = spec;
+    if (data.source === 'inline') {
+        return data.series.reduce((sum, { values }) => sum + values.length, data.categories.length);
+    }
+    const count = (ref: CellRangeRef | null) => (ref ? Math.max(0, size(ref)) : 0);
+    const values = data.series.reduce((sum, { values }) => sum + count(values), 0);
+    const categories = count(data.categories);
+    return values > MAX_CHART_POINTS || categories > MAX_CHART_POINTS ? 0 : values + categories;
+}
+
 // A name is one cell, Google's header cell; a wider ref reads its first.
 export function seriesName(name: RangeChartSeries['name'], resolver: CellResolver): string {
     return typeof name === 'string' ? name : cellLabel(resolver.getCell(name.sheetId, name.row[0], name.column[0]));

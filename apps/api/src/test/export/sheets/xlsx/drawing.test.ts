@@ -153,7 +153,7 @@ describe('drawingOf', () => {
         );
     });
 
-    test("a chart's background, label colour and stroke read back as they were; one without a look reads flat", () => {
+    test("a chart's background, label color and stroke read back as they were; one without a look reads flat", () => {
         const look = { fill: solidFill('#fafaf0'), color: '#112233', strokeColor: '#44556680', strokeWidth: 3 };
         const styled: Sheet = { ...SUMMARY, charts: byId(INLINE, { ...RANGED, ...look }) };
         const { sheets } = roundTrip([styled, MY_DATA]);
@@ -378,7 +378,7 @@ describe('the workbook', () => {
         expect(zip.names().filter((name) => name.startsWith('xl/drawings/drawing'))).toEqual([
             'xl/drawings/drawing1.xml',
         ]);
-        // Its labels and axes in the stored look's colours.
+        // Its labels and axes in the stored look's colors.
         expect(part('xl/charts/chart1_2.xml')).toContain('<a:srgbClr val="AA0000">');
         expect(part('xl/charts/chart1_2.xml')).toContain('<a:srgbClr val="00AA00">');
         const [read] = xlsxToSheets(bytes);

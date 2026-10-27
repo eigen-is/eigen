@@ -29,6 +29,8 @@ import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
     MAX_EXPORT_CELLS,
+    PREVIEW_FLOATING_CELLS,
+    PREVIEW_SHEET_BUDGET,
     renderSheetsHtml,
     renderSheetsPreviewHtml,
     sheetsHtmlDocument,
@@ -82,7 +84,9 @@ function imagesOf(...images: Omit<SheetImage, 'index'>[]): Record<string, SheetI
 describe('Sheets HTML export — rich text', () => {
     test("a rich-text cell shows its runs' text", () => {
         const rich: Cell = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Rich', bl: 1 }, { v: ' text' }] } };
-        expect(renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: rich }])], NO_MEDIA).html).toContain('>Rich text<');
+        expect(renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: rich }])], NO_MEDIA, 'screen').html).toContain(
+            '>Rich text<',
+        );
     });
 });
 
@@ -100,10 +104,10 @@ describe('Sheets HTML export — class-based styles', () => {
             ),
             hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).not.toContain('style="');
         // The moved base td style lives in the stylesheet exactly once.
-        expect(out.css).toContain('td{overflow:hidden;white-space:nowrap;padding:1px 2px}');
+        expect(out.css).toContain('td{overflow:hidden;white-space:nowrap;padding:1px 2px;line-height:0}');
     });
 
     test('identical cell styles dedupe into one class referenced by every cell', () => {
@@ -116,6 +120,7 @@ describe('Sheets HTML export — class-based styles', () => {
                 ]),
             ],
             NO_MEDIA,
+            'screen',
         );
         const red = classesFor(out, 'color:#ff0000');
         const green = classesFor(out, 'color:#00ff00');
@@ -134,7 +139,7 @@ describe('Sheets HTML export — class-based styles', () => {
             { r: 0, c: 2, v: { v: 'b' } },
         ]);
         sheet.showGridLines = false;
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).toContain('<td></td>');
     });
 
@@ -147,6 +152,7 @@ describe('Sheets HTML export — class-based styles', () => {
                 ]),
             ],
             NO_MEDIA,
+            'screen',
         );
         const grid = classesFor(out, 'border:1px solid #d4d4d4');
         expect(grid.length).toBe(1);
@@ -161,7 +167,7 @@ describe('Sheets HTML export — class-based styles', () => {
             { r: 1, c: 1, v: { v: 'b' } },
         ]);
         sheet.config = { rowlen: { 0: 30, 1: 30 }, columnlen: { 0: 120 } };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         const height = classesFor(out, 'height:30px');
         expect(height.length).toBe(1);
         expect(out.html.match(new RegExp(`<tr class="${height[0]}">`, 'g'))?.length).toBe(2);
@@ -178,18 +184,18 @@ describe('Sheets HTML export — class-based styles', () => {
             { r: 2, c: 2, v: { v: 'hidden column' } },
         ]);
         sheet.config = { rowhidden: { 1: 0 }, colhidden: { 2: 0 } };
-        const { html } = renderSheetsHtml([sheet], NO_MEDIA);
+        const { html } = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(html).toContain('>shown<');
         expect(html).not.toContain('hidden row');
         expect(html).not.toContain('hidden column');
-        expect(renderSheetsHtml([sheet], NO_MEDIA).size).toEqual({
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').size).toEqual({
             width: 2 * SHEET_DEFAULT_COL_WIDTH,
             height: 2 * SHEET_DEFAULT_ROW_HEIGHT,
         });
     });
 
     test('the table style interns with real quotes around the body font stack', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA, 'screen');
         const table = classesFor(out, 'border-collapse:collapse');
         expect(table.length).toBe(1);
         expect(out.css).toContain(`font-family:${FONT_STACK_SANS};`);
@@ -203,7 +209,7 @@ describe('Sheets HTML export — class-based styles', () => {
 
     // An unsized cell draws at the grid's default, in pt as the grid draws it.
     test('the table sets the grid default font size', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA, 'screen');
         const table = classesFor(out, 'border-collapse:collapse');
         expect(classesFor(out, `font-size:${SHEET_DEFAULT_FONT_SIZE}pt;`)).toEqual(table);
     });
@@ -211,7 +217,7 @@ describe('Sheets HTML export — class-based styles', () => {
     // A peer can store any number, and the xlsx export holds a size to the same range.
     test("a font size is held to Excel's 1 to 409 points, and one that is not finite draws at the default", () => {
         const cellSize = (fs: number) => {
-            const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', fs } }])], NO_MEDIA);
+            const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', fs } }])], NO_MEDIA, 'screen');
             return out.css.match(/\.s\d+\{font-size:([^;}]+)/)?.[1];
         };
         expect(cellSize(1e9)).toBe('409pt');
@@ -225,6 +231,7 @@ describe('Sheets HTML export — class-based styles', () => {
         const out = renderSheetsHtml(
             [makeSheet([{ r: 0, c: 0, v: { v: 'one' } }]), makeSheet([{ r: 0, c: 0, v: { v: 'two' } }])],
             NO_MEDIA,
+            'screen',
         );
         const brk = classesFor(out, 'page-break-after:always');
         expect(brk.length).toBe(1);
@@ -239,7 +246,7 @@ describe('Sheets HTML export — class-based styles', () => {
             images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10 }),
         };
         const media = new Map([['chart.png', 'data:image/png;base64,AA==']]);
-        const out = renderSheetsHtml([pictured, makeSheet([{ r: 0, c: 0, v: { v: 'two' } }])], media);
+        const out = renderSheetsHtml([pictured, makeSheet([{ r: 0, c: 0, v: { v: 'two' } }])], media, 'screen');
         const brk = classesFor(out, 'page-break-after:always');
         expect(out.html.startsWith(`<div class="sheet ${brk[0]}">`)).toBe(true);
     });
@@ -353,6 +360,7 @@ describe('Sheets HTML export — class-based styles', () => {
                     ]),
                 ],
                 NO_MEDIA,
+                'screen',
             );
             expect(out.css).not.toContain('\\');
             expect(out.css).not.toContain('/*');
@@ -390,6 +398,27 @@ describe('Sheets HTML export — wrap text', () => {
         const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         expect(html).toContain('white-space:pre-wrap');
     });
+
+    // A table row grows to fit its content, so a cell of 6,000 lines would print 3,000 pages charged as one.
+    test('a cell is clipped to its rows, as the editor clips it, so its text grows no row', () => {
+        const text = 'one\ntwo\nthree';
+        const sheet: Sheet = {
+            ...makeSheet([
+                { r: 0, c: 0, v: { v: text, m: text, tb: '2' } },
+                { r: 1, c: 0, v: { v: 'merged', m: 'merged', mc: { r: 1, c: 0, rs: 2, cs: 1 } } },
+                { r: 3, c: 0, v: { v: 'turned', m: 'turned', rt: 45 } },
+            ]),
+            config: { rowlen: { 2: 30 }, merge: { '1_0': { r: 1, c: 0, rs: 2, cs: 1 } } },
+        };
+        // The clip is as tall as the rows less their gridline, and the text inside it is placed absolutely.
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(html).toMatch(
+            /height:19px;margin:-1px 0"><div style="position:absolute;[^"]*">one\ntwo\nthree<\/div><\/div>/,
+        );
+        expect(html).toMatch(/height:49px;margin:-1px 0"><div style="position:absolute;[^"]*">merged<\/div><\/div>/);
+        // A turned span is placed absolutely and grows no row, and a clip would cut it off.
+        expect(html).toMatch(/<td [^>]*><span style="position:absolute;[^"]*rotate\(-45deg\)">turned<\/span><\/td>/);
+    });
 });
 
 describe('Sheets HTML export — conditional formatting', () => {
@@ -402,12 +431,12 @@ describe('Sheets HTML export — conditional formatting', () => {
                 ]),
             ],
             NO_MEDIA,
+            'screen',
         );
         expect(out.html).toContain('Hello');
         expect(out.html).toContain('42');
-        // No conditional formatting → no CF-injected dataBar anchors.
-        expect(out.css).not.toContain('position:relative');
-        expect(out.css).not.toContain('position:absolute');
+        // No conditional formatting → no CF-injected dataBar layers.
+        expect(out.css).not.toContain('z-index');
     });
 
     test('greaterThan rule applies cellColor as background on matching cells', () => {
@@ -431,6 +460,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         // Second cell (value 50, > 10) gets the CF colors.
         const cls = classesFor(out, 'background:#ff8888');
@@ -458,16 +488,19 @@ describe('Sheets HTML export — conditional formatting', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         // Bar divs are positioned absolutely inside position:relative <td>s; each width is
         // proportional to the value, so the three bars produce three distinct classes.
-        expect(classesFor(out, 'position:absolute').length).toBe(3);
+        expect(classesFor(out, 'z-index:0').length).toBe(3);
         expect(classesFor(out, 'position:relative').length).toBeGreaterThan(0);
         expect(out.css).toContain('#638ec6');
-        // Display text wrapped in a span with z-index above the bar.
+        // Display text wrapped in a span with z-index above the bar, clipped to its row inside it.
         const zSpan = classesFor(out, 'z-index:1');
         expect(zSpan.length).toBe(1);
-        expect(out.html).toContain(`<span class="${zSpan[0]}">10</span>`);
+        expect(out.html).toMatch(
+            new RegExp(`<span class="${zSpan[0]}"><div class="s\\d+"><div class="s\\d+">10</div></div></span>`),
+        );
     });
 
     test('colorGradation 2-color rule paints min/max cells with the configured stops', () => {
@@ -488,6 +521,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         expect(out.css).toContain('background:#ff0000');
         expect(out.css).toContain('background:#00ff00');
@@ -521,6 +555,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         expect(out.css).toContain('background:#0000ff');
         expect(out.css).not.toContain('background:#888888');
@@ -544,6 +579,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         // Negative bar is hardcoded red — matches canvas painter (canvas.ts ~line 1683).
         // Positive bar still uses the user-configured color.
@@ -577,6 +613,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         // Two cells fire — both share one interned class, referenced twice.
         const cls = classesFor(out, 'background:#00aa00');
@@ -610,6 +647,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         const cls = classesFor(out, 'background:#ffaa00');
         expect(cls.length).toBe(1);
@@ -641,6 +679,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         // Only the (0,0) cell satisfies; (1,0) reads A2/B2 where B2=-5 fails.
         const cls = classesFor(out, 'background:#88ccff');
@@ -654,6 +693,7 @@ describe('Sheets HTML export — cell styling', () => {
         const out = renderSheetsHtml(
             [makeSheet([{ r: 0, c: 0, v: { v: 'styled', ff: 'Georgia', fc: '#ff0000', bg: '#0000ff' } }])],
             NO_MEDIA,
+            'screen',
         );
         const cls = classesFor(out, 'font-family:"Georgia",sans-serif');
         expect(cls.length).toBe(1);
@@ -666,14 +706,18 @@ describe('Sheets HTML export — cell styling', () => {
     test('a font name containing & or an apostrophe survives into the stylesheet intact', () => {
         // CSS text never decodes entities, so HTML-escaping the name here would ask
         // WeasyPrint for a font called "Bell MT &amp; O'Neill".
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', ff: "Bell MT & O'Neill" } }])], NO_MEDIA);
+        const out = renderSheetsHtml(
+            [makeSheet([{ r: 0, c: 0, v: { v: 'x', ff: "Bell MT & O'Neill" } }])],
+            NO_MEDIA,
+            'screen',
+        );
         expect(out.css).toContain('font-family:"Bell MT & ONeill",sans-serif');
         expect(out.css).not.toContain('&amp;');
         expect(out.css).not.toContain('&#39;');
     });
 
     test('rt as a positive angle produces a CSS rotate anchored at bottom-left', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'up', rt: 45 } }])], NO_MEDIA);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'up', rt: 45 } }])], NO_MEDIA, 'screen');
         // rt is CCW-positive (matches Excel/OOXML); CSS rotate is CW-positive — so the
         // emitted angle is the negation. Positive rt anchors at the cell's bottom-left;
         // the td gets `position:relative` so the span absolute-positions to that corner.
@@ -685,8 +729,18 @@ describe('Sheets HTML export — cell styling', () => {
         expect(out.css).toContain('transform:translateX(0.707em) rotate(-45deg)');
     });
 
+    test('a turned cell keeps its underline and strikethrough: the unclipped absolute span inherits the td decoration', () => {
+        const out = renderSheetsHtml(
+            [makeSheet([{ r: 0, c: 0, v: { v: 'up', rt: 45, un: 1, cl: 1 } }])],
+            NO_MEDIA,
+            'screen',
+        );
+        expect(out.css).toContain('text-decoration:underline line-through');
+        expect(out.css).toMatch(/position:absolute;left:0;bottom:0;[^}]*text-decoration:inherit/);
+    });
+
     test('rt as a negative angle anchors the rotation at top-left', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'down', rt: -90 } }])], NO_MEDIA);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'down', rt: -90 } }])], NO_MEDIA, 'screen');
         expect(out.css).toContain('position:relative');
         expect(out.css).toContain('position:absolute;left:0;top:0');
         expect(out.css).toContain('transform-origin:left top');
@@ -694,13 +748,14 @@ describe('Sheets HTML export — cell styling', () => {
         expect(out.css).toContain('transform:translateX(1.000em) rotate(90deg)');
     });
 
-    test('rotated cells skip ht/vt in favour of position:relative', () => {
+    test('rotated cells skip ht/vt in favor of position:relative', () => {
         // The rotated span is absolutely-positioned in the cell, so emitting text-align
         // or vertical-align on the td has nothing to act on. Confirms we don't drag the
         // user's ht=center / vt=middle into a now-meaningless td-level declaration.
         const out = renderSheetsHtml(
             [makeSheet([{ r: 0, c: 0, v: { v: 'centered', rt: 45, ht: 0, vt: 0 } }])],
             NO_MEDIA,
+            'screen',
         );
         expect(out.css).toContain('position:relative');
         expect(out.css).not.toContain('text-align:center');
@@ -708,8 +763,8 @@ describe('Sheets HTML export — cell styling', () => {
         expect(out.css).not.toContain('text-align:left');
     });
 
-    test("a cell without an alignment of its own takes Excel's General, as the editor draws it: a number or date right, a boolean or error centred; text and a picked one keep theirs", () => {
-        const css = (v: Cell) => renderSheetsHtml([makeSheet([{ r: 0, c: 0, v }])], NO_MEDIA).css;
+    test("a cell without an alignment of its own takes Excel's General, as the editor draws it: a number or date right, a boolean or error centered; text and a picked one keep theirs", () => {
+        const css = (v: Cell) => renderSheetsHtml([makeSheet([{ r: 0, c: 0, v }])], NO_MEDIA, 'screen').css;
         expect(css({ v: 42, m: '42', ct: { fa: 'General', t: 'n' } })).toContain('text-align:right');
         expect(css({ v: 45000, m: '3/15/2023', ct: { fa: 'General', t: 'd' } })).toContain('text-align:right');
         expect(css({ v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } })).toContain('text-align:center');
@@ -734,7 +789,7 @@ describe('Sheets HTML export — cell styling', () => {
             }),
         );
         const css = (v: Cell | null | undefined) =>
-            v ? renderSheetsHtml([makeSheet([{ r: 0, c: 0, v }])], NO_MEDIA).css : '';
+            v ? renderSheetsHtml([makeSheet([{ r: 0, c: 0, v }])], NO_MEDIA, 'screen').css : '';
         const [number, general, text] = (sheet?.celldata ?? []).map(({ v }) => v);
         expect([number?.ht, general?.ht]).toEqual([undefined, undefined]);
         expect(css(number)).toContain('text-align:right');
@@ -743,7 +798,11 @@ describe('Sheets HTML export — cell styling', () => {
     });
 
     test('rt = "vertical" produces vertical writing-mode', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'stacked', rt: 'vertical' } }])], NO_MEDIA);
+        const out = renderSheetsHtml(
+            [makeSheet([{ r: 0, c: 0, v: { v: 'stacked', rt: 'vertical' } }])],
+            NO_MEDIA,
+            'screen',
+        );
         expect(out.css).toContain('writing-mode:vertical-rl');
         expect(out.css).toContain('text-orientation:upright');
     });
@@ -757,8 +816,9 @@ describe('Sheets HTML export — cell styling', () => {
                 ]),
             ],
             NO_MEDIA,
+            'screen',
         );
-        expect(out.css).not.toContain('transform:');
+        expect(out.css).not.toContain('rotate(');
         expect(out.css).not.toContain('writing-mode:vertical');
     });
 });
@@ -775,7 +835,7 @@ describe('Sheets HTML export — hyperlinks', () => {
                 '0_1': { linkType: 'webpage', linkAddress: 'example.com' },
             },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).toContain(
             '<a href="https://example.com/browse?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">Jira ticket</a>',
         );
@@ -799,7 +859,7 @@ describe('Sheets HTML export — hyperlinks', () => {
                 '0_2': { linkType: 'cellrange', linkAddress: 'Sheet2!B2' },
             },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).not.toContain('<a ');
         expect(out.html).not.toContain('javascript:');
         expect(out.html).toContain('click me');
@@ -815,6 +875,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
         const out = renderSheetsHtml(
             [makeSheet([{ r: 0, c: 0, v: { v: 'x', fc: 'red;"><script>alert(1)</script>', bg: 'blue">' } }])],
             NO_MEDIA,
+            'screen',
         );
         expect(out.css).not.toMatch(/script/i);
         expect(out.html).not.toMatch(/<script/i);
@@ -848,7 +909,10 @@ describe('Sheets HTML export — hostile values in CSS', () => {
             ),
             config: { borderInfo: { '0_0': { b: { style: 1, color: injected } } } },
         };
-        for (const html of [renderSheetsHtml([sheet], NO_MEDIA).css, renderSheetsPreviewHtml([sheet], NO_MEDIA).html]) {
+        for (const html of [
+            renderSheetsHtml([sheet], NO_MEDIA, 'screen').css,
+            renderSheetsPreviewHtml([sheet], NO_MEDIA).html,
+        ]) {
             expect(html).not.toContain('position:fixed');
             expect(html).not.toContain('inset');
         }
@@ -874,7 +938,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
             ),
             config: { borderInfo: JSON.parse('{"0_0":{"b":{"style":1,"color":3}}}') },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).toContain('>x<');
         expect(out.css).not.toMatch(/color:(42|7|3)\b|background:\[/);
         expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('>x<');
@@ -883,7 +947,11 @@ describe('Sheets HTML export — hostile values in CSS', () => {
     test.each(['#ff0000', '#F00', 'rgb(255, 0, 0)', 'rgba(0, 0, 255, 0.5)', 'transparent', 'red'])(
         'a cell keeps the color %s',
         (color) => {
-            const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', fc: color, bg: color } }])], NO_MEDIA);
+            const out = renderSheetsHtml(
+                [makeSheet([{ r: 0, c: 0, v: { v: 'x', fc: color, bg: color } }])],
+                NO_MEDIA,
+                'screen',
+            );
             expect(classesFor(out, `color:${color};background:${color}`)).toHaveLength(1);
         },
     );
@@ -909,12 +977,17 @@ describe('Sheets HTML export — hostile values in CSS', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         expect(out.css).toContain('background:rgb(128, 128, 0)');
     });
 
     test('braces in a hostile value cannot open or close CSS rule blocks', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', bg: 'red}td{display:none' } }])], NO_MEDIA);
+        const out = renderSheetsHtml(
+            [makeSheet([{ r: 0, c: 0, v: { v: 'x', bg: 'red}td{display:none' } }])],
+            NO_MEDIA,
+            'screen',
+        );
         expect(out.css).not.toContain('{display:none');
         expect(out.css).not.toContain('td{display');
         // Every rule stays balanced: strip the well-formed rules and nothing may remain.
@@ -939,6 +1012,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         expect(out.css).not.toMatch(/<script/i);
         expect(out.html).not.toMatch(/<script/i);
@@ -949,7 +1023,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'x' } }]),
             config: { borderInfo: { '0_0': { b: { style: 1, color: 'red;"><script>x</script>' } } } },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.css).not.toMatch(/<script/i);
         expect(out.html).not.toMatch(/<script/i);
     });
@@ -959,7 +1033,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'x' } }]),
             config: { borderInfo: { '0_0': { l: { style: 8, color: '#1a5fb4' }, b: { style: 1, color: '#ff0000' } } } },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         const [cls] = classesFor(out, 'border-left:2px solid #1a5fb4');
         expect(cls).toBeDefined();
         expect(classesFor(out, 'border-bottom:1px solid #ff0000')).toEqual([cls]);
@@ -994,7 +1068,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
                 },
             },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         const [cls] = classesFor(out, 'border-top:1px solid #ff0000');
         expect(cls).toBeDefined();
         for (const edge of ['left', 'right', 'bottom']) {
@@ -1021,6 +1095,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
                 ),
             ],
             NO_MEDIA,
+            'screen',
         );
         expect(out.css).not.toMatch(/<script/i);
         expect(out.html).not.toMatch(/<script/i);
@@ -1040,7 +1115,7 @@ describe('Sheets export — content size (@page)', () => {
         };
         // Pre-coercion this summed to the string "050;}@page{100", headed for the <head> @page CSS.
         // Bad column → SHEET_DEFAULT_COL_WIDTH, bad row → SHEET_DEFAULT_ROW_HEIGHT.
-        expect(renderSheetsHtml([sheet], NO_MEDIA).size).toEqual({
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').size).toEqual({
             width: SHEET_DEFAULT_COL_WIDTH + 100,
             height: 25 + SHEET_DEFAULT_ROW_HEIGHT,
         });
@@ -1053,12 +1128,12 @@ describe('Sheets export — content size (@page)', () => {
             defaultRowHeight: 17,
             images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 100, y: 60, width: 10, height: 10 }),
         };
-        const out = renderSheetsHtml([sheet], new Map([['chart.png', 'data:image/png;base64,']]));
+        const out = renderSheetsHtml([sheet], new Map([['chart.png', 'data:image/png;base64,']]), 'screen');
         expect(out.css).toContain('{width:64px}');
         expect(out.css).toContain('{height:17px}');
         // One column and two rows sit left of and above the table.
         expect(classesFor(out, 'left:36px;top:26px')).toHaveLength(1);
-        expect(renderSheetsHtml([sheet], NO_MEDIA).size).toEqual({ width: 64, height: 36 });
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').size).toEqual({ width: 64, height: 36 });
     });
 
     test('the PDF page of a huge sheet is capped at the PDF page limit', () => {
@@ -1082,7 +1157,7 @@ describe('Sheets export — content size (@page)', () => {
         };
         // The overlay draws at the absolute grid coordinate, so the page has to reach the
         // image's far edge — the one default-sized cell is not what bounds this sheet.
-        expect(renderSheetsHtml([sheet], NO_MEDIA).size).toEqual({ width: 500, height: 250 });
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').size).toEqual({ width: 500, height: 250 });
     });
 
     // The page covers the box an object turns into: a 400 × 100 chart at 90° stands 100 wide and 400 tall about
@@ -1100,7 +1175,7 @@ describe('Sheets export — content size (@page)', () => {
                 angle: 90,
             }),
         };
-        expect(renderSheetsHtml([sheet], NO_MEDIA).size).toEqual({ width: 350, height: 450 });
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').size).toEqual({ width: 350, height: 450 });
     });
 
     // A 100 × 500 image at A1 turned 90° covers -200 to 300 across: the page has no headers to tuck the left part
@@ -1110,8 +1185,8 @@ describe('Sheets export — content size (@page)', () => {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]),
             images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 100, height: 500, angle: 90 }),
         };
-        expect(renderSheetsHtml([sheet], NO_MEDIA).size).toEqual({ width: 500, height: 300 });
-        const out = renderSheetsHtml([sheet], new Map([['chart.png', 'data:image/png;base64,AA==']]));
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').size).toEqual({ width: 500, height: 300 });
+        const out = renderSheetsHtml([sheet], new Map([['chart.png', 'data:image/png;base64,AA==']]), 'screen');
         expect(classesFor(out, 'left:200px;top:0px;width:100px;height:500px')).toHaveLength(1);
     });
 
@@ -1121,7 +1196,7 @@ describe('Sheets export — content size (@page)', () => {
             images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 300, y: 100, width: 10, height: 10 }),
         };
         // Two default rows and one default column sit above/left of the table.
-        expect(renderSheetsHtml([sheet], NO_MEDIA).size).toEqual({
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').size).toEqual({
             width: 300 + 10 - SHEET_DEFAULT_COL_WIDTH,
             height: 100 + 10 - 2 * SHEET_DEFAULT_ROW_HEIGHT,
         });
@@ -1143,6 +1218,7 @@ describe('Sheets HTML export — floating images', () => {
         const out = renderSheetsHtml(
             [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 120, y: 40, width: 200, height: 150 }])],
             MEDIA,
+            'screen',
         );
         // The box reaches the image's far corner, so the next sheet starts below it.
         const [wrapper] = classesFor(out, 'position:relative;width:320px;min-height:190px');
@@ -1156,6 +1232,7 @@ describe('Sheets HTML export — floating images', () => {
         const out = renderSheetsHtml(
             [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10, angle: 30 }])],
             MEDIA,
+            'screen',
         );
         expect(classesFor(out, 'transform:rotate(30deg);transform-origin:center center')).toHaveLength(1);
     });
@@ -1163,7 +1240,11 @@ describe('Sheets HTML export — floating images', () => {
     // Geometry is schemaless at the Yjs boundary: a peer can store a string, which reaches the CSS as its number only.
     test('a stored string draws as its number and an angle that is no number draws unrotated', () => {
         const stored = JSON.parse('{"x":"12","y":"8","width":"40","height":"30","angle":"red;position:fixed"}');
-        const out = renderSheetsHtml([withImages([{ id: 'img_1', mediaName: 'chart.png', ...stored }])], MEDIA);
+        const out = renderSheetsHtml(
+            [withImages([{ id: 'img_1', mediaName: 'chart.png', ...stored }])],
+            MEDIA,
+            'screen',
+        );
         expect(classesFor(out, 'left:12px;top:8px;width:40px;height:30px')).toHaveLength(1);
         expect(out.css).not.toContain('rotate(');
         expect(out.css).not.toContain('position:fixed');
@@ -1173,6 +1254,7 @@ describe('Sheets HTML export — floating images', () => {
         const out = renderSheetsHtml(
             [withImages([{ id: 'img_1', mediaName: 'pending:abc', x: 0, y: 0, width: 10, height: 10 }])],
             MEDIA,
+            'screen',
         );
         expect(out.html).not.toContain('<img');
         expect(classesFor(out, 'position:relative;width:')).toHaveLength(0);
@@ -1183,7 +1265,7 @@ describe('Sheets HTML export — floating images', () => {
             name: 'Blank',
             images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 5, y: 5, width: 10, height: 10 }),
         };
-        expect(renderSheetsHtml([sheet], MEDIA).html).toContain('<img');
+        expect(renderSheetsHtml([sheet], MEDIA, 'screen').html).toContain('<img');
     });
 
     test('the overlay is offset by the rows and columns before the used range', () => {
@@ -1192,7 +1274,7 @@ describe('Sheets HTML export — floating images', () => {
             images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 100, y: 60, width: 10, height: 10 }),
         };
         // Two default rows and one default column sit above/left of the table.
-        const out = renderSheetsHtml([sheet], MEDIA);
+        const out = renderSheetsHtml([sheet], MEDIA, 'screen');
         const left = 100 - SHEET_DEFAULT_COL_WIDTH;
         const top = 60 - 2 * SHEET_DEFAULT_ROW_HEIGHT;
         expect(classesFor(out, `left:${left}px;top:${top}px`)).toHaveLength(1);
@@ -1203,18 +1285,56 @@ describe('Sheets HTML export — floating images', () => {
             ...makeSheet([{ r: 4, c: 2, v: { v: 'C5' } }]),
             images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 160, height: 60 }),
         };
-        const out = renderSheetsHtml([sheet], MEDIA);
+        const out = renderSheetsHtml([sheet], MEDIA, 'screen');
         // The window starts at A1 now, so the overlay draws at the stored geometry...
         expect(classesFor(out, 'left:0px;top:0px;width:160px;height:60px')).toHaveLength(1);
         // ...and the page spans the empty rows and columns the image sits over.
-        expect(renderSheetsHtml([sheet], NO_MEDIA).size).toEqual({
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').size).toEqual({
             width: 3 * SHEET_DEFAULT_COL_WIDTH,
             height: 5 * SHEET_DEFAULT_ROW_HEIGHT,
         });
     });
 
+    // A box turned past A1 moves back onto the page, and its bounds can come out a few ulps below 0.
+    test('an image turned past A1 opens no row or column before A1', () => {
+        for (const angle of [30, 45, 60, 135]) {
+            const sheet: Sheet = {
+                ...makeSheet([{ r: 2, c: 2, v: { v: 'C3', m: 'C3' } }]),
+                images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 200, height: 100, angle }),
+            };
+            const out = renderSheetsHtml([sheet], MEDIA, 'screen');
+            expect(out.html.match(/<col /g)).toHaveLength(3);
+            expect(out.html.match(/<tr /g)).toHaveLength(3);
+        }
+    });
+
+    // The editor and the import write whole pixels, so a length under one is no size a sheet has.
+    test('a track size under a pixel draws as the default, so a turned image at A1 still finds its cells', () => {
+        for (const tiny of [0.5, 1e-20, 1e-300]) {
+            const sheet: Sheet = {
+                ...makeSheet([{ r: 2, c: 2, v: { v: 'C3', m: 'C3' } }]),
+                defaultColWidth: tiny,
+                defaultRowHeight: tiny,
+                images: imagesOf({
+                    id: 'img_1',
+                    mediaName: 'chart.png',
+                    x: 0,
+                    y: 0,
+                    width: 200,
+                    height: 100,
+                    angle: 45,
+                }),
+            };
+            const out = renderSheetsHtml([sheet], MEDIA, 'screen');
+            expect(out.html).toContain('>C3<');
+            expect(out.html.match(/<col /g)).toHaveLength(3);
+            expect(classesFor(out, `width:${SHEET_DEFAULT_COL_WIDTH}px`)).toHaveLength(1);
+            expect(classesFor(out, `height:${SHEET_DEFAULT_ROW_HEIGHT}px`)).toHaveLength(1);
+        }
+    });
+
     test('a workbook without floating images emits the bare table it always did', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }])], MEDIA);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }])], MEDIA, 'screen');
         expect(out.html).not.toContain('position:relative;width:');
         expect(out.html).toMatch(/<div class="sheet">\n<table /);
     });
@@ -1239,7 +1359,7 @@ describe('Sheets HTML export — floating images', () => {
         // fragment's scroll width and collapse the thumbnail that scales by it.
         expect(renderSheetsPreviewHtml([sheet], MEDIA).html).not.toContain('<img');
         // The full export still draws it — getSheetContentSize sizes the page to reach it.
-        expect(renderSheetsHtml([sheet], MEDIA).html).toContain('<img');
+        expect(renderSheetsHtml([sheet], MEDIA, 'screen').html).toContain('<img');
     });
 
     test('the preview keeps an image that only overhangs its window', () => {
@@ -1262,6 +1382,57 @@ describe('Sheets HTML export — floating images', () => {
         expect(sanitizeExportHtml(html, { allowedRefs: new Set([url]) })).toContain(url);
         expect(sanitizeExportHtml(html)).not.toContain(url);
     });
+
+    // Every tag repeats the whole data: URI, so 1,000 entries over one 1 MB picture built a 1 GB document.
+    test('images spend the cell cap with the bytes their tags write, and one the cap leaves out is counted', () => {
+        const picture = `data:image/png;base64,${'A'.repeat(1_000_000)}`;
+        const images = Array.from({ length: 100 }, (_, i) => ({
+            id: `img_${i}`,
+            mediaName: 'photo.png',
+            x: i,
+            y: 0,
+            width: 10,
+            height: 10,
+        }));
+        const lost: string[] = [];
+        const html = sheetsHtmlDocument({
+            title: 'Photos',
+            sheets: [withImages(images)],
+            mediaUrls: new Map([['photo.png', picture]]),
+            mode: 'pdf',
+            lost: (code) => lost.push(code),
+        });
+        const drawn = html.match(/<img /g)?.length ?? 0;
+        expect(drawn).toBeGreaterThan(0);
+        expect(drawn).toBeLessThan(100);
+        expect(html.length).toBeLessThan(20_000_000);
+        expect(lost).toEqual(Array(100 - drawn).fill('images-dropped'));
+    });
+
+    // A tag and its style rule write about 180 bytes around the source, so 80,000 tiny pictures wrote 22 MB.
+    test('an image spends the cap with its tag as well as its source, so many tiny pictures write what the cap holds', () => {
+        const tiny = `data:image/png;base64,${'A'.repeat(68)}`;
+        const images = Array.from({ length: 80_000 }, (_, i) => ({
+            id: `img_${i}`,
+            mediaName: 'dot.png',
+            x: (i % 100) * 12,
+            y: Math.floor(i / 100) * 12,
+            width: 10,
+            height: 10,
+        }));
+        const lost: string[] = [];
+        const html = sheetsHtmlDocument({
+            title: 'Dots',
+            sheets: [withImages(images)],
+            mediaUrls: new Map([['dot.png', tiny]]),
+            mode: 'pdf',
+            lost: (code) => lost.push(code),
+        });
+        const drawn = html.match(/<img /g)?.length ?? 0;
+        // The cap's cells at the 50 bytes a cell writes.
+        expect(html.length).toBeLessThan(MAX_EXPORT_CELLS * 50);
+        expect(lost).toEqual(Array(80_000 - drawn).fill('images-dropped'));
+    }, 60_000);
 });
 
 // A chart draws as the painter's inline SVG in the same overlay, its range read from the materialized sheets.
@@ -1311,7 +1482,7 @@ describe('Sheets HTML export — charts', () => {
     const sheetWithChart = (): Sheet => ({ ...makeSheet(cells), id: 'data', charts: { c1: chartOn('data') } });
 
     test('draws each chart as inline SVG at its stored box, with the labels its cells hold', () => {
-        const out = renderSheetsHtml([sheetWithChart()], NO_MEDIA);
+        const out = renderSheetsHtml([sheetWithChart()], NO_MEDIA, 'screen');
         const [box] = classesFor(out, 'position:absolute;left:120px;top:40px;width:400px;height:300px;background:#fff');
         expect(box).toBeDefined();
         expect(out.html).toContain(
@@ -1327,7 +1498,11 @@ describe('Sheets HTML export — charts', () => {
             id: 'charts',
             charts: { c1: chartOn('data', { x: 0, y: 0, width: 300, height: 200 }) },
         };
-        const out = renderSheetsHtml([chartSheet, { ...makeSheet(cells), id: 'data', name: 'Data' }], NO_MEDIA);
+        const out = renderSheetsHtml(
+            [chartSheet, { ...makeSheet(cells), id: 'data', name: 'Data' }],
+            NO_MEDIA,
+            'screen',
+        );
         expect(svgOf(out.html)).toContain('>Ajax<');
     });
 
@@ -1336,7 +1511,7 @@ describe('Sheets HTML export — charts', () => {
             ...sheetWithChart(),
             charts: { c1: chartOn('data', { x: 600, y: 300, width: 100, height: 50 }) },
         };
-        expect(renderSheetsHtml([sheet], NO_MEDIA).size).toEqual({ width: 700, height: 350 });
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').size).toEqual({ width: 700, height: 350 });
     });
 
     // A peer or a file can store any number; at a trillion px the painter overflows its stack.
@@ -1345,9 +1520,9 @@ describe('Sheets HTML export — charts', () => {
             ...sheetWithChart(),
             charts: { c1: chartOn('data', { x: 9.4e11, y: 40, width: 9.4e11, height: 9.4e11 }) },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).toContain(`width="${CHART_MAX_SIDE}" height="${CHART_MAX_SIDE}"`);
-        expect(renderSheetsHtml([sheet], NO_MEDIA).size.width).toBe(
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').size.width).toBe(
             REFERENCE_COLUMN_COUNT * SHEET_DEFAULT_COL_WIDTH + CHART_MAX_SIDE,
         );
     });
@@ -1358,7 +1533,7 @@ describe('Sheets HTML export — charts', () => {
         const media = new Map([['chart.png', 'data:image/png;base64,']]);
         const drawn = (index: string) => {
             const sheet: Sheet = { ...sheetWithChart(), images: { img_1: { ...image, index } } };
-            const { html } = renderSheetsHtml([sheet], media);
+            const { html } = renderSheetsHtml([sheet], media, 'screen');
             return html.indexOf('<img') > html.indexOf('<svg') ? 'image on top' : 'chart on top';
         };
         expect(drawn('a1')).toBe('image on top');
@@ -1367,7 +1542,7 @@ describe('Sheets HTML export — charts', () => {
 
     test('a rotated chart turns about its center as an image does', () => {
         const sheet: Sheet = { ...sheetWithChart(), charts: { c1: { ...chartOn('data'), angle: 90 } } };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(classesFor(out, 'background:#fff;transform:rotate(90deg);transform-origin:center center')).toHaveLength(
             1,
         );
@@ -1401,7 +1576,77 @@ describe('Sheets HTML export — charts', () => {
         expect(svgOf(doc)).toContain('<clipPath id="');
         expect(svgOf(doc)).toContain('<g clip-path="url(#');
         expect(svgOf(doc)).toContain('fill="#334455"');
-        expect(svgOf(renderSheetsHtml([sheetWithChart()], NO_MEDIA).html)).not.toContain('<clipPath');
+        expect(svgOf(renderSheetsHtml([sheetWithChart()], NO_MEDIA, 'screen').html)).not.toContain('<clipPath');
+    });
+
+    test('charts spend the cell cap with the points they draw, and one the cap leaves out is counted', () => {
+        const points = 2000;
+        const numbers = Array.from({ length: points }, (_, r) => ({ r, c: 0, v: { v: r, m: String(r) } }));
+        const charts: Record<string, SheetChart> = {};
+        for (let i = 0; i < 200; i++) {
+            const chart = chartOn('data', { x: 0, y: 0, width: 200, height: 100 });
+            const spec = sampleChartSpec('line');
+            charts[`c${i}`] = {
+                ...chart,
+                id: `c${i}`,
+                index: `a${String(i).padStart(3, '0')}`,
+                ...newSheetChartSpecParts({
+                    ...spec,
+                    data: {
+                        source: 'range',
+                        categories: null,
+                        series: [{ id: 's-1', name: 'n', values: ref('data', [0, points - 1], [0, 0]) }],
+                    },
+                }),
+            };
+        }
+        const sheet: Sheet = { ...makeSheet(numbers), id: 'data', charts };
+        const lost: string[] = [];
+        const html = sheetsHtmlDocument({
+            title: 'Charts',
+            sheets: [sheet],
+            mediaUrls: NO_MEDIA,
+            mode: 'screen',
+            lost: (code) => lost.push(code),
+        });
+        const drawn = html.match(/<svg /g)?.length ?? 0;
+        expect(drawn).toBeGreaterThan(0);
+        expect(drawn).toBeLessThan(200);
+        expect(lost).toEqual(Array(200 - drawn).fill('charts-dropped'));
+        // The preview's charts spend an allowance of their own, and it says it left some out. The export's cap drew
+        // 99 here, 22 MB that the preview's byte guard threw away whole.
+        const preview = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        const fit = Math.floor(PREVIEW_FLOATING_CELLS / (500 + points));
+        expect(fit).toBeGreaterThan(0);
+        expect(preview.html.match(/<svg /g)).toHaveLength(fit);
+        expect(preview.truncated).toBe(true);
+    }, 60_000);
+
+    test('a preview whose window spends all its cells still draws its first chart', () => {
+        const { maxRows, maxCols, maxCells } = PREVIEW_SHEET_BUDGET;
+        const cells = Array.from({ length: maxRows * maxCols }, (_, i) => ({
+            r: Math.floor(i / maxCols),
+            c: i % maxCols,
+            v: { v: i, m: String(i) },
+        }));
+        expect(cells).toHaveLength(maxCells);
+        const sheet: Sheet = { ...makeSheet(cells), id: 'data', charts: { c1: chartOn('data') } };
+        expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html.match(/<svg /g)).toHaveLength(1);
+    });
+
+    // A chart below the preview's rows draws nothing there, so it must not spend the allowance the chart on top needs.
+    test('a preview charges only the charts it shows, so charts far below its rows leave the one on top drawn', () => {
+        // The chart on top is painted last, after 25 that cost more than the allowance together.
+        const top = { ...chartOn('data', { x: 0, y: 60, width: 200, height: 100 }), id: 'top', index: 'a99' };
+        const charts: Record<string, SheetChart> = { top };
+        for (let i = 0; i < 25; i++) {
+            const far = chartOn('data', { x: 0, y: 40_000 + i * 120, width: 200, height: 100 });
+            charts[`far${i}`] = { ...far, id: `far${i}`, index: `a${String(i).padStart(2, '0')}` };
+        }
+        const sheet: Sheet = { ...makeSheet(cells), id: 'data', charts };
+        const preview = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(preview.html.match(/<svg /g)).toHaveLength(1);
+        expect(preview.truncated).toBe(true);
     });
 });
 
@@ -1416,7 +1661,7 @@ describe('Sheets HTML export — the cell cap', () => {
             { r: 263, c: 0, v: { v: 'last row' } },
             { r: 0, c: 14_702, v: { v: 'far right' } },
         ]);
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.cut).toEqual([sheet]);
         expect(trs(out.html)).toBe(264);
         expect(cols(out.html)).toBe(946);
@@ -1426,12 +1671,25 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(out.size).toEqual({ width: 946 * SHEET_DEFAULT_COL_WIDTH, height: 264 * SHEET_DEFAULT_ROW_HEIGHT });
     }, 30_000);
 
+    test('a PDF keeps the columns one page holds, as the page cuts off the rest', () => {
+        const sheet = makeSheet([
+            { r: 0, c: 0, v: { v: 'top left' } },
+            { r: 263, c: 0, v: { v: 'last row' } },
+            { r: 0, c: 14_702, v: { v: 'far right' } },
+        ]);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'pdf');
+        expect(out.cut).toEqual([sheet]);
+        expect(trs(out.html)).toBe(264);
+        expect(cols(out.html)).toBe(192);
+        expect(out.size.width).toBe(192 * SHEET_DEFAULT_COL_WIDTH);
+    }, 30_000);
+
     test('a sheet taller than the cap keeps its one column and the rows that fit', () => {
         const sheet = makeSheet([
             { r: 0, c: 0, v: { v: 'top' } },
             { r: 299_999, c: 0, v: { v: 'bottom' } },
         ]);
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.cut).toEqual([sheet]);
         expect(cols(out.html)).toBe(1);
         expect(trs(out.html)).toBe(MAX_EXPORT_CELLS);
@@ -1449,7 +1707,7 @@ describe('Sheets HTML export — the cell cap', () => {
             },
         };
         const cpuMs = cpuClock();
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(cpuMs()).toBeLessThan(10_000);
         expect(out.cut).toEqual([sheet]);
         expect(out.html).toContain('>top left<');
@@ -1489,7 +1747,7 @@ describe('Sheets HTML export — the cell cap', () => {
                 { r: 999_999, c: 9, v: { v: 'bottom right' } },
             ],
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.cut).toEqual([sheet]);
         expect(cols(out.html)).toBe(10);
         expect(trs(out.html)).toBe(25_000);
@@ -1505,7 +1763,7 @@ describe('Sheets HTML export — the cell cap', () => {
                 { r: 1999, c: 499, v: { v: 'bottom right' } },
             ],
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.cut).toEqual([sheet]);
         expect(cols(out.html)).toBe(192);
         expect(trs(out.html)).toBe(1302);
@@ -1524,7 +1782,7 @@ describe('Sheets HTML export — the cell cap', () => {
         // 3,089 rows of 80 columns spend 247,120 cells and leave 2,880.
         const first = grid('first', 3089, 80);
         const second = grid('second', 3925, 20);
-        const out = renderSheetsHtml([first, second], NO_MEDIA);
+        const out = renderSheetsHtml([first, second], NO_MEDIA, 'screen');
         expect(out.cut).toEqual([second]);
         const [firstHtml, secondHtml] = out.html.split('<div class="sheet').slice(1);
         expect(trs(firstHtml)).toBe(3089);
@@ -1538,24 +1796,25 @@ describe('Sheets HTML export — the cell cap', () => {
                 { r: 0, c: 0, v: { v: 'top left' } },
                 { r: rows - 1, c: 499, v: { v: 'bottom right' } },
             ]);
-        const exact = renderSheetsHtml([grid(500)], NO_MEDIA);
+        const exact = renderSheetsHtml([grid(500)], NO_MEDIA, 'screen');
         expect(exact.cut).toEqual([]);
         expect(tds(exact.html)).toBe(MAX_EXPORT_CELLS);
-        const over = renderSheetsHtml([grid(501)], NO_MEDIA);
+        const over = renderSheetsHtml([grid(501)], NO_MEDIA, 'screen');
         expect(over.cut).toHaveLength(1);
         expect(trs(over.html)).toBe(501);
         expect(cols(over.html)).toBe(499);
     }, 30_000);
 
-    test('a row whose every column is hidden still counts against the cap', () => {
+    test('a row whose every column is hidden still counts against the cap, though it prints nothing', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'hidden' } }]),
             config: { colhidden: { 0: 0 }, merge: { '0_0': { r: 0, c: 0, rs: REFERENCE_ROW_COUNT, cs: 1 } } },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const next = makeSheet([{ r: 0, c: 0, v: { v: 'next' } }]);
+        const out = renderSheetsHtml([sheet, next], NO_MEDIA, 'screen');
         expect(out.cut).toEqual([sheet]);
-        expect(trs(out.html)).toBe(MAX_EXPORT_CELLS);
-        expect(tds(out.html)).toBe(0);
+        expect(out.leftOut).toEqual([next]);
+        expect(out.html).toBe('');
     }, 30_000);
 
     test("a border key past Excel's grid sizes the PDF page from the kept window, quickly", () => {
@@ -1577,7 +1836,7 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(lost).toEqual(['sheets-cut']);
         expect(trs(html)).toBe(MAX_EXPORT_CELLS);
         const lone = { ...sheet, config: { borderInfo: { '10000000000_0': { b: { style: 1, color: '#000' } } } } };
-        expect(renderSheetsHtml([{ ...lone, celldata: [], data: [] }], NO_MEDIA)).toMatchObject({
+        expect(renderSheetsHtml([{ ...lone, celldata: [], data: [] }], NO_MEDIA, 'screen')).toMatchObject({
             cut: [],
             size: { width: 0, height: 0 },
         });
@@ -1596,7 +1855,7 @@ describe('Sheets HTML export — the cell cap', () => {
             },
         });
         const sheets = [forged('s0'), forged('s1'), forged('s2')];
-        const out = renderSheetsHtml(sheets, NO_MEDIA);
+        const out = renderSheetsHtml(sheets, NO_MEDIA, 'screen');
         // The first sheet leaves 16 cells, too few for one row of the next.
         expect(out.cut).toEqual([sheets[0]]);
         expect(out.leftOut).toEqual([sheets[1], sheets[2]]);
@@ -1655,7 +1914,7 @@ describe('Sheets HTML export — the cell cap', () => {
             }) satisfies Sheet;
         const first = grid('first', 400);
         const second = grid('second', 200);
-        const out = renderSheetsHtml([first, second], NO_MEDIA);
+        const out = renderSheetsHtml([first, second], NO_MEDIA, 'screen');
         expect(out.cut).toEqual([second]);
         const [, secondHtml] = out.html.split('<div class="sheet').slice(1);
         expect(trs(secondHtml)).toBe(200);
@@ -1694,9 +1953,56 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(tds(screen.html)).toBe(2005);
     }, 30_000);
 
+    // A row starts the next page when it doesn't fit what is left of one, so a row taller than half a page prints a
+    // page of its own.
+    test('in a PDF a sheet costs a page of cells for each page it prints, so tall rows are cut to the pages the cap holds', () => {
+        const tall = (id: string, rowHeight: number): Sheet => ({
+            id,
+            name: id,
+            order: 0,
+            defaultRowHeight: rowHeight,
+            celldata: [
+                { r: 0, c: 0, v: { v: 'first', m: 'first' } },
+                { r: 3999, c: 0, v: { v: 'last', m: 'last' } },
+            ],
+        });
+        const next: Sheet = {
+            id: 'next',
+            name: 'next',
+            order: 1,
+            celldata: [{ r: 0, c: 0, v: { v: 'next', m: 'next' } }],
+        };
+        for (const height of [19_200, 10_000]) {
+            const pdf = renderSheetsHtml([tall('tall', height), next], NO_MEDIA, 'pdf');
+            expect(trs(pdf.html)).toBe(2000);
+            expect(pdf.cut.map((sheet) => sheet.id)).toEqual(['tall']);
+            expect(pdf.leftOut).toEqual([next]);
+            // The HTML download has no pages to pay for.
+            expect(trs(renderSheetsHtml([tall('tall', height), next], NO_MEDIA, 'screen').html)).toBe(4001);
+        }
+        // Two rows of 9,000 px share a page, so 4,000 of them print on the 2,000 pages the cap holds.
+        const shared = renderSheetsHtml([tall('shared', 9000)], NO_MEDIA, 'pdf');
+        expect(trs(shared.html)).toBe(4000);
+        expect(shared.cut).toEqual([]);
+    }, 30_000);
+
+    test('in a PDF an image parked far below the cells costs the pages it stretches the sheet over', () => {
+        const parked = (id: string): Sheet => ({
+            id,
+            name: id,
+            order: 0,
+            celldata: [{ r: 0, c: 0, v: { v: id, m: id } }],
+            images: imagesOf({ id: 'img', mediaName: 'm', x: 0, y: 30_000_000, width: 10, height: 10 }),
+        });
+        // Clamped to the bottom of Excel's grid, each image stretches its sheet over 1,097 pages.
+        const pdf = renderSheetsHtml([parked('a'), parked('b')], NO_MEDIA, 'pdf');
+        expect(pdf.leftOut.map((sheet) => sheet.id)).toEqual(['b']);
+        expect(renderSheetsHtml([parked('a'), parked('b')], NO_MEDIA, 'screen').leftOut).toEqual([]);
+    }, 30_000);
+
     test('a sheet under the cap is not cut and carries no warning', async () => {
         const sheet: Sheet = { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [{ r: 0, c: 0, v: { v: 'x' } }] };
-        expect(renderSheetsHtml([sheet], NO_MEDIA).cut).toEqual([]);
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').cut).toEqual([]);
         const doc = new Y.Doc();
         doc.getMap('state').set('snapshot', encodeSheetsSnapshot([sheet], { computed: true }));
         expect((await renderEigensheetsExport(doc, 'html', 'Small', async () => [])).warnings).toEqual([]);
@@ -1728,7 +2034,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
             { borderInfo: { '-1000000000_0': border } },
             { merge: { '0_0': { r: -1_000_000_000, c: 0, rs: 1, cs: 1 } } },
         ]) {
-            const { out, ms } = timed(() => renderSheetsHtml([topLeft(config)], NO_MEDIA));
+            const { out, ms } = timed(() => renderSheetsHtml([topLeft(config)], NO_MEDIA, 'screen'));
             expect(ms).toBeLessThan(2_000);
             expect(out.cut).toEqual([]);
             expect(trs(out.html)).toBe(1);
@@ -1751,7 +2057,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
                 },
             ],
         );
-        const { out, ms } = timed(() => renderSheetsHtml([sheet], NO_MEDIA));
+        const { out, ms } = timed(() => renderSheetsHtml([sheet], NO_MEDIA, 'screen'));
         expect(ms).toBeLessThan(2_000);
         expect(classesFor(out, 'background:#00ff00')).toHaveLength(1);
     }, 30_000);
@@ -1760,10 +2066,11 @@ describe('Sheets HTML export — the window over forged keys', () => {
         const sheets = Array.from({ length: 20 }, (_, i) =>
             topLeft({ rowhidden: { 0: 0 }, borderInfo: { [`0_${REFERENCE_COLUMN_COUNT - 1}`]: border } }, `s${i}`),
         );
-        const { out, ms } = timed(() => renderSheetsHtml(sheets, NO_MEDIA));
+        const { out, ms } = timed(() => renderSheetsHtml(sheets, NO_MEDIA, 'screen'));
         expect(ms).toBeLessThan(2_000);
-        // Fifteen sheets keep all 16,384 columns, the sixteenth the 4,240 cells left, and the rest are left out.
-        expect(cols(out.html)).toBe(MAX_EXPORT_CELLS);
+        // Fifteen sheets keep all 16,384 columns, the sixteenth the 4,240 cells left, and the rest are left out. None
+        // of them prints.
+        expect(out.html).toBe('');
         expect(out.cut).toEqual([sheets[15]]);
         expect(out.leftOut).toEqual(sheets.slice(16));
     }, 30_000);
@@ -1773,7 +2080,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
         for (let i = 0; i < 500; i++)
             merge[`${i}_0`] = { r: i, c: 0, rs: REFERENCE_ROW_COUNT, cs: REFERENCE_COLUMN_COUNT };
         const { out, ms } = timed(() =>
-            renderSheetsHtml([topLeft({ merge, borderInfo: { '0_0': border } })], NO_MEDIA),
+            renderSheetsHtml([topLeft({ merge, borderInfo: { '0_0': border } })], NO_MEDIA, 'screen'),
         );
         expect(ms).toBeLessThan(2_000);
         expect(tds(out.html)).toBe(1);
@@ -1786,7 +2093,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
             first: { r: 0, c: REFERENCE_COLUMN_COUNT - 1, rs: 2, cs: 1 },
         };
         for (let i = 0; i < 100_000; i++) merge[`m${i}`] = { r: 1, c: 0, rs: 1, cs: REFERENCE_COLUMN_COUNT };
-        const { out, ms } = timed(() => renderSheetsHtml([topLeft({ merge })], NO_MEDIA));
+        const { out, ms } = timed(() => renderSheetsHtml([topLeft({ merge })], NO_MEDIA, 'screen'));
         expect(ms).toBeLessThan(1_000);
         // Every full-width merge overlaps the first one's last column, so only that one is kept.
         expect(out.html).toContain('<td rowspan="2" class=');
@@ -1808,7 +2115,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
             html
                 .match(/<tr [^>]*>.*?<\/tr>/g)
                 ?.map((tr) => tr.match(/<td[^>]*>/g)?.map((td) => td.replace(/ class="s\d+"/, '')));
-        expect(rowsOf(renderSheetsHtml([sheet], NO_MEDIA).html)).toEqual([
+        expect(rowsOf(renderSheetsHtml([sheet], NO_MEDIA, 'screen').html)).toEqual([
             ['<td>', '<td>', '<td rowspan="3">', '<td>', '<td>'],
             ['<td>', '<td>', '<td>', '<td>'],
             ['<td colspan="2">', '<td>', '<td>'],
@@ -1846,8 +2153,8 @@ describe('Sheets HTML export — the window over forged keys', () => {
             { rowhidden: { 0: 0 } },
         ];
         for (const hidden of hiddens) {
-            const out = renderSheetsHtml([box(hidden)], NO_MEDIA);
-            const cls = out.html.match(/<td[^>]*class="(s\d+)"[^>]*>m</)?.[1];
+            const out = renderSheetsHtml([box(hidden)], NO_MEDIA, 'screen');
+            const cls = out.html.match(/<td[^>]*class="(s\d+)"[^>]*>(?:<div[^>]*>)+m</)?.[1];
             const declarations = out.css.match(new RegExp(`\\.${cls}\\{([^}]*)\\}`))?.[1].split(';');
             expect(declarations?.filter((d) => d.startsWith('border-')).sort()).toEqual([
                 'border-bottom:1px solid #000000',
@@ -1875,23 +2182,125 @@ describe('Sheets HTML export — the window over forged keys', () => {
             { ...valid, cellrange: [{ row: null, column: [0, 0] }] },
             { ...valid, cellrange: [null] },
         ];
-        const sheet = makeSheet([{ r: 0, c: 0, v: cell }], [...forged, valid] as never);
-        const out = renderSheetsHtml([{ ...sheet, config: { merge: { '0_0': null as never } } }], NO_MEDIA);
+        // A peer's values reach the export untyped, as JSON.parse returns them.
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: cell }]),
+            conditionalFormatRules: JSON.parse(JSON.stringify([...forged, valid])),
+        };
+        const nullMerge: Sheet = JSON.parse(JSON.stringify({ ...sheet, config: { merge: { '0_0': null } } }));
+        const out = renderSheetsHtml([nullMerge], NO_MEDIA, 'screen');
         expect(classesFor(out, 'background:#00ff00')).toHaveLength(1);
         expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('background:#00ff00');
+    });
+
+    test('a rule whose values, looks or colors a peer forged is dropped, and the export and the preview still render', () => {
+        const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
+        const at = [{ row: [5, 6], column: [0, 0] }];
+        const red = { cellColor: '#ff0000' };
+        // As a peer's update arrives: JSON no type checked. The formula rule starts above the window, so its anchor moves.
+        const forged = JSON.parse(
+            JSON.stringify([
+                {
+                    type: 'default',
+                    conditionName: 'formula',
+                    cellrange: [{ row: [0, 10], column: [0, 0] }],
+                    format: red,
+                    conditionValue: null,
+                },
+                { type: 'default', conditionName: 'greaterThan', cellrange: at, format: red },
+                { type: 'default', conditionName: 'greaterThan', cellrange: at, conditionValue: [1] },
+                { type: 'default', conditionName: 'equal', cellrange: at, format: red, conditionValue: [null] },
+                { type: 'dataBar', cellrange: at },
+                { type: 'colorGradation', cellrange: at, format: ['red', 'blue'] },
+                {
+                    type: 'default',
+                    conditionName: 'greaterThan',
+                    cellrange: [{ row: [6, 5], column: [0, 0] }],
+                    format: red,
+                    conditionValue: [1],
+                },
+            ]),
+        );
+        const valid: ConditionalFormatRule = {
+            type: 'default',
+            cellrange: [{ row: [5, 6], column: [0, 0] }],
+            format: { cellColor: '#00ff00' },
+            conditionName: 'greaterThan',
+            conditionRange: [],
+            conditionValue: [1],
+        };
+        const sheet = makeSheet(
+            [
+                { r: 5, c: 0, v: cell },
+                { r: 6, c: 0, v: cell },
+            ],
+            [...forged, valid],
+        );
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
+        expect(classesFor(out, 'background:#00ff00')).toHaveLength(1);
+        expect(out.css).not.toContain('#ff0000');
+        expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('background:#00ff00');
+    });
+
+    test('a merge marker, a track map or an image a peer stored as no object is skipped, and the export and the preview still render', () => {
+        for (const config of [{ rowlen: 5 }, { rowhidden: 'abc' }, { columnlen: true }, { colhidden: 7 }]) {
+            const sheet: Sheet = JSON.parse(
+                JSON.stringify({
+                    id: 'forged',
+                    name: 'forged',
+                    order: 0,
+                    celldata: [
+                        { r: 0, c: 0, v: { mc: 1 } },
+                        { r: 0, c: 1, v: { mc: 'x' } },
+                        { r: 1, c: 0, v: { v: 'kept', m: 'kept' } },
+                    ],
+                    config,
+                    images: { a: null },
+                    charts: { b: 7 },
+                }),
+            );
+            expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').html).toContain('>kept<');
+            expect(renderSheetsHtml([sheet], NO_MEDIA, 'pdf').html).toContain('>kept<');
+            expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('>kept<');
+        }
+    });
+
+    // The editor stores an empty list for a rule that takes no value, and the evaluator reads the first one.
+    test('a date rule with no value draws nothing and fails nothing', () => {
+        const date = { v: 46_000, m: '2025-12-09', ct: { fa: 'yyyy-mm-dd', t: 'd' } };
+        const rule: ConditionalFormatRule = {
+            type: 'default',
+            cellrange: [{ row: [0, 0], column: [0, 0] }],
+            format: { cellColor: '#ff0000' },
+            conditionName: 'occurrenceDate',
+            conditionRange: [],
+            conditionValue: [],
+        };
+        const sheet = makeSheet([{ r: 0, c: 0, v: date }], [rule]);
+        expect(renderSheetsHtml([sheet], NO_MEDIA, 'screen').html).toContain('>2025-12-09<');
+    });
+
+    test('a sheet whose every row or every column is hidden prints no page, as a blank one prints none', () => {
+        const shown = topLeft(undefined, 'shown');
+        const rows = topLeft({ rowhidden: { 0: 0 } }, 'rows');
+        const columns = topLeft({ colhidden: { 0: 0 } }, 'columns');
+        const out = renderSheetsHtml([rows, shown, columns], NO_MEDIA, 'pdf');
+        expect(out.html).toBe(renderSheetsHtml([shown], NO_MEDIA, 'pdf').html);
     });
 
     test('an empty tab between two others adds no page', () => {
         const tab = (id: string, cells: Sheet['celldata']): Sheet => ({ id, name: id, order: 0, celldata: cells });
         const a = tab('a', [{ r: 0, c: 0, v: { v: 'a', m: 'a' } }]);
         const c = tab('c', [{ r: 0, c: 0, v: { v: 'c', m: 'c' } }]);
-        expect(renderSheetsHtml([a, tab('empty', []), c], NO_MEDIA)).toEqual(renderSheetsHtml([a, c], NO_MEDIA));
+        expect(renderSheetsHtml([a, tab('empty', []), c], NO_MEDIA, 'screen')).toEqual(
+            renderSheetsHtml([a, c], NO_MEDIA, 'screen'),
+        );
     });
 
     test('merges right of the window cost nothing per rendered cell', () => {
         const merge: Record<string, { r: number; c: number; rs: number; cs: number }> = {};
         for (let i = 0; i < 10_000; i++) merge[`0_${1000 + i}`] = { r: 0, c: 1000 + i, rs: REFERENCE_ROW_COUNT, cs: 1 };
-        const { out, ms } = timed(() => renderSheetsHtml([topLeft({ merge })], NO_MEDIA));
+        const { out, ms } = timed(() => renderSheetsHtml([topLeft({ merge })], NO_MEDIA, 'screen'));
         expect(ms).toBeLessThan(2_000);
         expect(cols(out.html)).toBe(192);
         expect(trs(out.html)).toBe(1302);
@@ -1902,7 +2311,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
         const rowhidden = Object.fromEntries(Array.from({ length: 2000 }, (_, r) => [r, 0]));
         const merge = { '0_0': { r: 0, c: 0, rs: 2001, cs: REFERENCE_COLUMN_COUNT } };
         const { out, ms } = timed(() =>
-            renderSheetsHtml([topLeft({ rowhidden, merge, borderInfo: { '0_0': border } })], NO_MEDIA),
+            renderSheetsHtml([topLeft({ rowhidden, merge, borderInfo: { '0_0': border } })], NO_MEDIA, 'screen'),
         );
         expect(ms).toBeLessThan(2_000);
         expect(trs(out.html)).toBe(1);
@@ -1915,10 +2324,51 @@ describe('Sheets HTML export — the window over forged keys', () => {
         const sheets = Array.from({ length: 300 }, (_, i) =>
             topLeft({ rowhidden: { 5: 0 }, colhidden: { 5: 0 }, borderInfo: { [farCorner]: border } }, `s${i}`),
         );
-        const { out, ms } = timed(() => renderSheetsHtml(sheets, NO_MEDIA));
+        const { out, ms } = timed(() => renderSheetsHtml(sheets, NO_MEDIA, 'screen'));
         expect(ms).toBeLessThan(2_000);
         expect(out.cut).toEqual([sheets[0]]);
         expect(out.leftOut).toHaveLength(299);
+    }, 30_000);
+
+    // Each read of a track map, by key or by enumerating it, is counted.
+    test('a track map is read no more than its keys, however far the first cell is, and not at all once the cap is spent', () => {
+        let reads = 0;
+        const counted = (map: Record<string, number>) =>
+            new Proxy(map, {
+                get: (target, key) => {
+                    reads++;
+                    return Reflect.get(target, key);
+                },
+                ownKeys: (target) => {
+                    reads++;
+                    return Reflect.ownKeys(target);
+                },
+            });
+        const far = (id: string): Sheet => ({
+            id,
+            name: id,
+            order: 0,
+            config: {
+                borderInfo: { '65535_8191': border },
+                rowlen: counted({}),
+                rowhidden: counted({ 0: 0 }),
+                columnlen: counted({}),
+                colhidden: counted({}),
+            },
+        });
+        const kept = renderSheetsHtml([far('kept')], NO_MEDIA, 'screen');
+        expect(tds(kept.html)).toBe(1);
+        expect(reads).toBeLessThan(100);
+
+        reads = 0;
+        const spender = topLeft({ borderInfo: { '1249_199': border } }, 'spender');
+        const out = renderSheetsHtml(
+            [spender, ...Array.from({ length: 20 }, (_, i) => far(`s${i}`))],
+            NO_MEDIA,
+            'screen',
+        );
+        expect(out.leftOut).toHaveLength(20);
+        expect(reads).toBe(0);
     }, 30_000);
 
     test("a merge's span counts the rows and columns that show, so it matches the colgroup", () => {
@@ -1932,7 +2382,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
             ],
             config: { colhidden: { 1: 0 }, rowhidden: { 1: 0 }, merge: { '0_0': { r: 0, c: 0, rs: 3, cs: 3 } } },
         };
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(cols(out.html)).toBe(3);
         expect(out.html).toContain('colspan="2" rowspan="2"');
         expect(out.html).toContain('>after<');
@@ -1941,12 +2391,12 @@ describe('Sheets HTML export — the window over forged keys', () => {
             colhidden: { 1: 0 },
             merge: { '0_0': { r: 0, c: 0, rs: REFERENCE_ROW_COUNT, cs: REFERENCE_COLUMN_COUNT } },
         });
-        const cutOut = renderSheetsHtml([cut], NO_MEDIA);
+        const cutOut = renderSheetsHtml([cut], NO_MEDIA, 'screen');
         expect(cutOut.html).toContain(`colspan="${cols(cutOut.html)}"`);
 
         // A merge whose first row is hidden draws its text on the first row that shows.
         const hiddenFirst = topLeft({ rowhidden: { 0: 0 }, merge: { '0_0': { r: 0, c: 0, rs: 3, cs: 2 } } });
-        const hiddenOut = renderSheetsHtml([hiddenFirst], NO_MEDIA);
+        const hiddenOut = renderSheetsHtml([hiddenFirst], NO_MEDIA, 'screen');
         expect(trs(hiddenOut.html)).toBe(2);
         expect(hiddenOut.html).toContain('<td colspan="2" rowspan="2" class=');
         expect(hiddenOut.html).toContain('>top left<');
@@ -1958,7 +2408,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
             rowlen: { 0: -5 },
             borderInfo: { [farCorner]: border },
         });
-        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(cols(out.html)).toBe(192);
         expect(out.size).toEqual({ width: 192 * SHEET_DEFAULT_COL_WIDTH, height: 1302 * SHEET_DEFAULT_ROW_HEIGHT });
         expect(classesFor(out, `width:${SHEET_DEFAULT_COL_WIDTH}px`)).toHaveLength(1);

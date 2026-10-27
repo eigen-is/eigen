@@ -80,6 +80,13 @@ describe('floatingItems', () => {
     test('a sheet without maps has none', () => {
         expect(floatingItems({ name: 'S' })).toEqual([]);
     });
+
+    test('an entry a peer stored as no object is skipped', () => {
+        const sheet: Sheet = JSON.parse(
+            JSON.stringify({ name: 'S', images: { a: null, i1: image('i1', 'a0') }, charts: { b: 7, c: 'x' } }),
+        );
+        expect(floatingItems(sheet).map(({ object }) => object.id)).toEqual(['i1']);
+    });
 });
 
 describe('nextFloatingIndex', () => {

@@ -73,6 +73,22 @@ describe('a conditional format', () => {
         );
     });
 
+    // A formula reads relative to its first range, so a forged first range would shift it against nothing.
+    test('a rule with a forged range, values or looks is dropped and counted, whichever range is forged', () => {
+        const forged: unknown[] = [
+            { ...condition('formula', ['=A1>1']), cellrange: [null, { row: [3, 3], column: [0, 0] }] },
+            { ...condition('formula', ['=A1>1']), cellrange: [{ row: 'x', column: [0, 0] }, ...RANGE] },
+            { ...condition('greaterThan', ['1']), cellrange: [{ row: [4, 0], column: [1, 1] }] },
+            { ...condition('greaterThan', ['1']), format: null },
+            { ...condition('greaterThan', ['1']), conditionValue: [{ x: 1 }] },
+            { type: 'colorGradation', cellrange: RANGE, format: ['red', 'blue'] },
+        ];
+        const rules: ConditionalFormatRule[] = JSON.parse(JSON.stringify(forged));
+        const { xml, lost } = roundTrip({ conditionalFormatRules: rules });
+        expect(lost).toEqual(Array(6).fill('conditional-formats-dropped'));
+        expect(xml).toBe('');
+    });
+
     test('every rule kind the engine evaluates reads back as itself, in order', () => {
         const rules: ConditionalFormatRule[] = [
             condition('greaterThan', ['10']),
@@ -141,7 +157,7 @@ describe('a conditional format', () => {
         expect(conditionalFormatRules).toEqual(rules);
     });
 
-    test('equal looks share a dxf through the registry, and a rule without colours names none', () => {
+    test('equal looks share a dxf through the registry, and a rule without colors names none', () => {
         const { xml, looks, conditionalFormatRules } = roundTrip({
             conditionalFormatRules: [
                 condition('greaterThan', ['1']),
@@ -317,6 +333,18 @@ describe('a data validation', () => {
             'validation-prompts-cut',
             'validations-dropped',
         ]);
+    });
+
+    test("a prompt is cut before a surrogate pair's halves, never between them", () => {
+        const prompt = `${'p'.repeat(254)}😀`;
+        const { xml, dataVerification, lost } = roundTrip({
+            dataVerification: {
+                '0_0': validation({ type: 'number', type2: 'equal', hintShow: true, hintValue: prompt }),
+            },
+        });
+        expect(dataVerification?.['0_0']?.hintValue).toBe('p'.repeat(254));
+        expect(xml).not.toContain('&#xD83D;');
+        expect(lost).toEqual(['validation-prompts-cut']);
     });
 
     test('conditional formats come before validations, as CT_Worksheet orders them', () => {

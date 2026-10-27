@@ -80,7 +80,7 @@ describe('the style registry', () => {
         });
     });
 
-    test("a colour Office can't hold paints nothing", () => {
+    test("a color Office can't hold paints nothing", () => {
         const { styles } = registryOf();
         expect(styles.xf({ fc: 'red', bg: 'rgba(0, 0, 0, 0)' }, undefined)).toBe(0);
     });

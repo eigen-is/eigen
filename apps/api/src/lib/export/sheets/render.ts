@@ -5,7 +5,14 @@
 // name.
 
 import { escapeHtml } from '@workspace/lib/html';
-import type { Cell, CellBorderSides, CellWithRowAndCol, MergeCell, Sheet } from '@workspace/lib/sheets';
+import type {
+    Cell,
+    CellBorderSides,
+    CellWithRowAndCol,
+    MergeCell,
+    Sheet,
+    SheetFloatingItem,
+} from '@workspace/lib/sheets';
 import {
     borderSidesToCss,
     cellFontName,
@@ -27,6 +34,7 @@ import {
     generalAlign,
     renderSheetChartSvg,
     richText,
+    sheetChartPoints,
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
@@ -35,8 +43,8 @@ import { cellFontSize } from '../../ooxml/spreadsheetml';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, sheetsResolver, VERTICAL_ALIGN } from './cell-style';
-import type { SheetBudget, WindowedSheet } from './window';
-import { floatingObjects, windowedSheet } from './window';
+import type { FloatingObject, SheetBudget, WindowedSheet } from './window';
+import { windowedSheet } from './window';
 
 // Image sources by media name: data: URIs for an export, the prepared preview URLs for a preview.
 type MediaUrls = Map<string, string>;
@@ -51,29 +59,59 @@ type StyleRegistry = Map<string, string>;
 
 export const PREVIEW_SHEET_BUDGET: SheetBudget = { maxRows: 200, maxCols: 50, maxCells: 10_000 };
 
+// The cells the preview's images and charts spend, apart from the window's, so a window that spends all of its own
+// still draws its first charts. As many as the window holds draws four charts of 2,000 points, about 1 MB of SVG, so
+// a full window and its charts stay well under the preview's 8 MB byte guard.
+export const PREVIEW_FLOATING_CELLS = 10_000;
+
 // The most cells, rows times columns, an export walks of all its sheets together. A peer can write a merge or a border
 // key at XFD1048576 on as many sheets as it likes, and the sanitizer and WeasyPrint pay for every cell the walk writes.
 // A row whose every column is hidden still costs one, and a sheet whose every row is hidden costs its columns once.
 export const MAX_EXPORT_CELLS = 250_000;
 
-// The cells a sheet costs a PDF at least, since each sheet that draws prints a page of its own and WeasyPrint pays for
-// pages as well as cells: the cap then holds 2,000 pages. One-cell sheets printed in 6.4 s for 1,000, 18.8 s for 2,000
-// and 47.9 s for 3,000, and 4,000 reached WeasyPrint's 60 s timeout.
+// The cells each page a PDF prints costs, since WeasyPrint pays for pages as well as cells: the cap then holds 2,000
+// pages. One-cell sheets, a page each, printed in 6.4 s for 1,000, 18.8 s for 2,000 and 47.9 s for 3,000, and 4,000
+// reached WeasyPrint's 60 s timeout. A sheet of 4,000 rows each a page tall reached it too.
 const PDF_PAGE_CELLS = 125;
+
+// What a chart costs the cap besides its points: its axes, title and legend cost the render about what 500 cells do.
+// 1,000 one-point charts drew in 0.65 s, where 250,000 cells draw in 0.33 s. A chart draws at most MAX_CHART_POINTS.
+const CHART_CELLS = 500;
+
+// The bytes of HTML a cell with a value writes: a grid of numbers or of short text writes about 50 a cell. An image's
+// tag writes its whole source, a data: URI in an export, so it costs its tag and source at this rate. The cap then
+// holds about 12 MB of pictures instead of cells, and 1,000 images over one 1 MB picture no longer write a 1 GB
+// document.
+const CELL_BYTES = 50;
+
+// The bytes an image writes around its source: its tag, and its own style rule for where it sits. 80,000 tiny pictures
+// cost only their sources before, and wrote 22 MB.
+const IMAGE_TAG_BYTES = 200;
 
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.
 const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
 
 // Every td's defaults: inline in the preview, whose embedders strip the <head>, and the shared td{} rule in the export.
-// There is no vertical-align here, because buildCellStyle always writes one.
-const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
+const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px;line-height:0';
+
+// Where a cell's text sits in its rows, as the canvas places the text's ink: in the middle, or 2 px from the top or
+// the bottom. CSS places a line by its font's ascent and descent instead. In Inter those put the ink 0.1em below the
+// middle of the line and 0.17em below its top, so the margins lift it back.
+const TEXT_PLACEMENT: Record<(typeof VERTICAL_ALIGN)[number], string> = {
+    top: 'top:2px;margin-top:-0.17em',
+    middle: 'top:50%;transform:translateY(-50%);margin-top:-0.1em',
+    bottom: 'bottom:2px',
+};
 
 const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
 
+// The height a page prints a sheet on once a sheet is as tall as the largest page. A shorter sheet fits one page.
+const PAGE_CONTENT_HEIGHT = MAX_PDF_PAGE_PX - 2 * PAGE_MARGIN;
+
 // The workbook as one document. The screen's prints landscape. The PDF's page fits its widest and tallest sheet as
-// rendered, so WeasyPrint never clips a wide grid. A sheet cut to MAX_EXPORT_CELLS, or left out for it, is counted.
-// Only the PDF charges a sheet its page.
+// rendered, so WeasyPrint never clips a wide grid. A sheet cut to MAX_EXPORT_CELLS, or a sheet or chart left out for
+// it, is counted, and so is an image or chart left out. Only the PDF charges a sheet its pages.
 export function sheetsHtmlDocument({
     title,
     sheets,
@@ -87,9 +125,11 @@ export function sheetsHtmlDocument({
     mode: HtmlExportMode;
     lost: LossCounter['lost'];
 }): string {
-    const { html, css, cut, leftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode === 'pdf' ? PDF_PAGE_CELLS : 0);
+    const { html, css, cut, leftOut, floatingLeftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode);
     for (const sheet of cut) lost('sheets-cut', sheet);
     for (const sheet of leftOut) lost('sheets-left-out', sheet);
+    for (const { kind, object } of floatingLeftOut)
+        lost(kind === 'chart' ? 'charts-dropped' : 'images-dropped', object);
     const page = mode === 'pdf' ? pdfPageCss(size) : '@page { size: landscape; margin: 1.5cm; }';
     return exportHtmlDocument({
         title,
@@ -98,58 +138,104 @@ export function sheetsHtmlDocument({
     });
 }
 
-// A preview is a glance, so it renders only the first shown sheet, cut to the budget. `truncated` is true when rows,
-// columns, cells or other sheets were left out, and the caller then adds the shared marker. The resolver spans every
-// sheet, so a rule's formula can read another sheet.
+// A preview is a glance, so it renders only the first shown sheet, cut to the budget. It clips the overlay to the
+// budget's box, since an image parked outside it would stretch the body and shrink the thumbnail scaled from it. The
+// images and charts inside the box spend PREVIEW_FLOATING_CELLS, so a crowded preview draws the ones that fit instead
+// of a body the byte guard throws away. `truncated` is true when rows, columns, cells, images, charts or other sheets
+// were left out, and the caller then adds the shared marker. The resolver spans every sheet, so a rule's formula can
+// read another sheet.
 export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
     const shown = shownSheets(sheets);
     if (shown.length === 0) return { html: '', truncated: false };
     const windowed = windowedSheet(shown[0], () => PREVIEW_SHEET_BUDGET);
     if (!windowed) return { html: '', truncated: true };
-    const first = renderSheet(windowed, new FormulaEngine(), sheetsResolver(sheets), {
-        budget: PREVIEW_SHEET_BUDGET,
+    const { sheet, range, offset } = windowed;
+    const [firstRow, , firstCol] = range ?? [0, 0, 0, 0];
+    const clip = {
+        width: sheetColumnsWidth(sheet, firstCol, firstCol + PREVIEW_SHEET_BUDGET.maxCols - 1),
+        height: sheetRowsHeight(sheet, firstRow, firstRow + PREVIEW_SHEET_BUDGET.maxRows - 1),
+    };
+    const inClip = windowed.floating.filter(
+        ({ bounds }) =>
+            bounds.minX - offset.left < clip.width &&
+            bounds.minY - offset.top < clip.height &&
+            bounds.maxX > offset.left &&
+            bounds.maxY > offset.top,
+    );
+    const floating = chargeFloating(inClip, mediaUrls, PREVIEW_FLOATING_CELLS);
+    const first = renderSheet({ ...windowed, floating: floating.kept }, new FormulaEngine(), sheetsResolver(sheets), {
+        clip,
         mediaUrls,
     });
-    return { html: `<div class="sheet">\n${first.html}\n</div>`, truncated: windowed.truncated || shown.length > 1 };
+    const leftOut = floating.leftOut.length > 0 || inClip.length < windowed.floating.length;
+    const truncated = windowed.truncated || leftOut || shown.length > 1;
+    return { html: `<div class="sheet">\n${first.html}\n</div>`, truncated };
 }
 
 // One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
 // The resolver reads the stored values: only a rule's own formula is evaluated. The sheets spend one MAX_EXPORT_CELLS
-// in tab order, so a sheet gets the cells the ones before it left, and one that draws costs at least `pageCells`.
-// `cut` holds the sheets cut to it, `leftOut` the sheets it left no row or page of, and `size` is the widest and
+// in tab order, so a sheet gets the cells the ones before it left, and in a PDF one that draws costs at least a page.
+// A sheet's images and charts spend what its cells left. `cut` holds the sheets cut to the cap, `leftOut` the sheets it
+// left no row or page of, `floatingLeftOut` the images and charts it left no room for, and `size` is the widest and
 // tallest sheet as rendered.
 export function renderSheetsHtml(
     sheets: Sheet[],
     mediaUrls: MediaUrls,
-    pageCells = 0,
-): { html: string; css: string; cut: Sheet[]; leftOut: Sheet[]; size: ContentSize } {
+    mode: HtmlExportMode,
+): {
+    html: string;
+    css: string;
+    cut: Sheet[];
+    leftOut: Sheet[];
+    floatingLeftOut: SheetFloatingItem[];
+    size: ContentSize;
+} {
     const engine = new FormulaEngine();
     const resolver = sheetsResolver(sheets);
     const styles: StyleRegistry = new Map();
     const cut: Sheet[] = [];
     const leftOut: Sheet[] = [];
+    const floatingLeftOut: SheetFloatingItem[] = [];
     const size = { width: 0, height: 0 };
     const bodies: string[] = [];
     let cellsLeft = MAX_EXPORT_CELLS;
     for (const sheet of shownSheets(sheets)) {
-        const windowed = windowedSheet(sheet, (rows, cols) => exportWindow(cellsLeft, rows, cols));
+        const budget = (rows: number, cols: number) => exportWindow(mode, cellsLeft, rows, cols);
+        let windowed = windowedSheet(sheet, budget);
+        // A sheet with shown cells, images or charts prints a page of its own. A blank one takes no page, and nor does
+        // one whose every row or every column is hidden.
+        const draws =
+            windowed !== null &&
+            ((windowed.rows.length > 0 && windowed.cols.length > 0) || windowed.floating.length > 0);
+        let pages = 0;
+        if (windowed && draws && mode === 'pdf') {
+            const printed = printedPages(windowed, Math.floor(cellsLeft / PDF_PAGE_CELLS));
+            pages = printed.pages;
+            if (printed.rows < windowed.rows.length) {
+                const kept = printed.rows;
+                windowed =
+                    kept > 0 ? windowedSheet(sheet, (rows, cols) => ({ ...budget(rows, cols), maxRows: kept })) : null;
+            }
+        }
         if (!windowed) {
             leftOut.push(sheet);
             continue;
         }
-        // A sheet with cells, images or charts prints a page of its own. A blank one takes no page.
-        const draws = windowed.range !== null || floatingObjects(windowed.sheet).length > 0;
-        const cells = draws ? Math.max(windowed.cells, pageCells) : windowed.cells;
+        const cells = Math.max(windowed.cells, pages * PDF_PAGE_CELLS);
         if (cells > cellsLeft) {
             leftOut.push(sheet);
             continue;
         }
         cellsLeft -= cells;
         if (windowed.truncated) cut.push(sheet);
-        const rendered = renderSheet(windowed, engine, resolver, { styles, mediaUrls });
+        if (!draws) continue;
+        const floating = chargeFloating(windowed.floating, mediaUrls, cellsLeft);
+        cellsLeft -= floating.cells;
+        floatingLeftOut.push(...floating.leftOut);
+        const rendered = renderSheet({ ...windowed, floating: floating.kept }, engine, resolver, { styles, mediaUrls });
         size.width = Math.max(size.width, rendered.size.width);
         size.height = Math.max(size.height, rendered.size.height);
-        // A blank sheet draws nothing, so it takes no page.
+        // Images whose media resolves to nothing draw nothing.
         if (rendered.html) bodies.push(rendered.html);
     }
     // Each sheet but the last ends its page. The .sheet div already has a class, so its page break is a second class.
@@ -160,7 +246,7 @@ export function renderSheetsHtml(
             return `<div class="${divClass}">\n${body}\n</div>`;
         })
         .join('\n');
-    return { html, css: serializeStyleRules(styles), cut, leftOut, size };
+    return { html, css: serializeStyleRules(styles), cut, leftOut, floatingLeftOut, size };
 }
 
 // The sheets the tabs show, as Excel prints them. The resolver still spans every sheet, the hidden ones too.
@@ -173,11 +259,60 @@ function pdfPageCss({ width, height }: ContentSize): string {
     return `@page { size: ${side(width)}px ${side(height)}px; margin: ${PAGE_MARGIN}px; }`;
 }
 
+// The pages the PDF prints a sheet on, and how many of its rows the first `most` pages hold. Each row prints at its
+// stored height, since clipToRows keeps a cell's content inside its rows, and a border thicker than a pixel adds one
+// or two. A row that doesn't fit what is left of a page starts the next one, as WeasyPrint breaks a table between
+// rows, so rows taller than half a page print a page each. The overlay's box stretches the sheet to its farthest
+// image or chart. A sheet whose overlay alone takes more than `most` pages has no row to keep.
+function printedPages({ sheet, rows, offset, floating }: WindowedSheet, most: number): { pages: number; rows: number } {
+    const overlay = Math.ceil(floatingExtent(floating, offset).height / PAGE_CONTENT_HEIGHT);
+    if (overlay > most) return { pages: overlay, rows: 0 };
+    let pages = 1;
+    let filled = 0;
+    for (const [i, r] of rows.entries()) {
+        const height = sheetRowsHeight(sheet, r, r);
+        if (filled > 0 && filled + height > PAGE_CONTENT_HEIGHT) {
+            if (pages === most) return { pages, rows: i };
+            pages++;
+            filled = 0;
+        }
+        filled += height;
+    }
+    return { pages: Math.max(pages, overlay), rows: rows.length };
+}
+
+// The images and charts that fit `cellsLeft`, in paint order, and the ones left out. A chart costs CHART_CELLS and
+// the points it draws. An image costs the bytes of its tag and source at CELL_BYTES a cell, since every tag repeats
+// the whole source. One whose media resolves to nothing draws nothing and costs nothing.
+function chargeFloating(
+    floating: FloatingObject[],
+    mediaUrls: MediaUrls,
+    cellsLeft: number,
+): { kept: FloatingObject[]; cells: number; leftOut: SheetFloatingItem[] } {
+    const kept: FloatingObject[] = [];
+    const leftOut: SheetFloatingItem[] = [];
+    let cells = 0;
+    for (const object of floating) {
+        const { item } = object;
+        const src = item.kind === 'image' ? mediaUrls.get(item.object.mediaName) : undefined;
+        let cost = 0;
+        if (item.kind === 'chart') cost = CHART_CELLS + sheetChartPoints(item.object);
+        else if (src !== undefined) cost = Math.ceil((IMAGE_TAG_BYTES + src.length) / CELL_BYTES);
+        if (cells + cost > cellsLeft) {
+            leftOut.push(item);
+            continue;
+        }
+        cells += cost;
+        kept.push(object);
+    }
+    return { kept, cells, leftOut };
+}
+
 // The far corner of a sheet's images and charts as they turn, in the table's space, as the overlay places them.
-function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { width: number; height: number } {
+function floatingExtent(floating: FloatingObject[], offset: { left: number; top: number }): ContentSize {
     let width = 0;
     let height = 0;
-    for (const { bounds } of floatingObjects(sheet)) {
+    for (const { bounds } of floating) {
         width = Math.max(width, bounds.maxX - offset.left);
         height = Math.max(height, bounds.maxY - offset.top);
     }
@@ -185,27 +320,23 @@ function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { 
 }
 
 // The sheet's table and overlay, for the caller to wrap in its .sheet div. With `styles` this is the export, with
-// interned classes. Without it this is the preview, inline-styled, whose `budget` also clips the overlay. `size` is
+// interned classes. Without it this is the preview, inline-styled, whose `clip` box also clips the overlay. `size` is
 // the table and its overlay as rendered: the overlay draws at the stored grid coordinate, so an image or chart parked
 // past the used range is still on the page.
 function renderSheet(
-    { sheet, rows, cols, range, offset }: WindowedSheet,
+    { sheet, rows, cols, range, offset, floating }: WindowedSheet,
     engine: FormulaEngine,
     resolver: CellResolver,
-    { budget, styles, mediaUrls }: { budget?: SheetBudget; styles?: StyleRegistry; mediaUrls: MediaUrls },
+    { clip, styles, mediaUrls }: { clip?: ContentSize; styles?: StyleRegistry; mediaUrls: MediaUrls },
 ): { html: string; size: ContentSize } {
     const forStylesheet = styles !== undefined;
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
-    const [firstRow, , firstCol] = range ?? [0, 0, 0, 0];
-    const clip = budget && {
-        width: sheetColumnsWidth(sheet, firstCol, firstCol + budget.maxCols - 1),
-        height: sheetRowsHeight(sheet, firstRow, firstRow + budget.maxRows - 1),
-    };
-    const overlay = { styles, mediaUrls, resolver };
+    const extent = floatingExtent(floating, offset);
+    const overlay = { floating, extent, styles, mediaUrls, resolver };
     if (!range) {
         // An image or chart on an otherwise blank sheet is all there is to render.
-        return { html: withFloatingOverlay(sheet, '', 0, offset, clip, overlay), size: floatingExtent(sheet, offset) };
+        return { html: withFloatingOverlay('', 0, offset, clip, overlay), size: extent };
     }
 
     // Each merge is one td on the first rendered cell it covers, spanning the rendered rows and columns it covers, so
@@ -282,10 +413,11 @@ function renderSheet(
     }
     const colgroup = `<colgroup>${colTags.join('')}</colgroup>`;
 
+    const heights = rows.map((r) => sheetRowsHeight(sheet, r, r));
     const rowTags: string[] = [];
     let tableHeight = 0;
     for (let i = 0; i < rows.length; i++) {
-        const h = sheetRowsHeight(sheet, rows[i], rows[i]);
+        const h = heights[i];
         tableHeight += h;
         const cells: string[] = [];
         for (let j = 0; j < width; j++) {
@@ -317,8 +449,18 @@ function renderSheet(
             if (href != null) {
                 display = `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${display}</a>`;
             }
-            const dataBarLayer = cfStyle?.dataBar ? renderDataBar(cfStyle.dataBar, display, styles) : null;
-            const inner = wrapForRotation(v, dataBarLayer ?? display, styles);
+            // A turned span is placed absolutely, so it grows no row, and a clip around it would cut it off. Any other
+            // content is clipped to the cell's rows, under the data bar's layer, which spans the whole cell.
+            const dataBar = cfStyle?.dataBar;
+            let inner: string;
+            if (isNumericRotation(v)) {
+                inner = wrapForRotation(v, dataBar ? renderDataBar(dataBar, display, styles) : display, styles);
+            } else {
+                const cellHeight = span ? heights.slice(i, i + span.rs).reduce((sum, rowHeight) => sum + rowHeight) : h;
+                const valign = v?.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
+                const clipped = clipToRows(wrapForRotation(v, display, styles), cellHeight, valign, styles);
+                inner = dataBar ? renderDataBar(dataBar, clipped, styles) : clipped;
+            }
             const attrStr = attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
             cells.push(`<td${attrStr}>${inner}</td>`);
         }
@@ -329,9 +471,29 @@ function renderSheet(
     const q = fontQuote(forStylesheet);
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS.replaceAll('"', q)};font-size:${SHEET_DEFAULT_FONT_SIZE}pt;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rowTags.join('')}</tbody></table>`;
-    const html = withFloatingOverlay(sheet, table, tableWidth, offset, clip, overlay);
-    const extent = floatingExtent(sheet, offset);
+    const html = withFloatingOverlay(table, tableWidth, offset, clip, overlay);
     return { html, size: { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) } };
+}
+
+// A table row grows to fit its content, but the editor clips a cell's text to its rows. So the content sits in an
+// inline-block as tall as the rows less their gridline, the box the editor clips to, and every row prints at its
+// stored height. Its margins give back the td's padding. WeasyPrint pages through a block's content past its height,
+// but not through an inline-block's. The text inside is placed absolutely, so centered text spills past both edges
+// as the editor's does. Its line pitch is the editor's, which spaces wrapped lines at 1.5 times their ascent. The td's
+// line-height is 0, so a large font adds no line around the block. A text decoration doesn't reach into an
+// inline-block or an absolute box, so both take the td's own.
+function clipToRows(
+    content: string,
+    height: number,
+    valign: (typeof VERTICAL_ALIGN)[number],
+    styles?: StyleRegistry,
+): string {
+    if (!content) return content;
+    const clip =
+        'display:inline-block;width:100%;vertical-align:top;position:relative;overflow:hidden;' +
+        `text-decoration:inherit;height:${Math.max(0, height - 1)}px;margin:-1px 0`;
+    const text = `position:absolute;left:0;right:0;line-height:1.1;text-decoration:inherit;${TEXT_PLACEMENT[valign]}`;
+    return `<div ${styleAttr(styles, clip)}><div ${styleAttr(styles, text)}>${content}</div></div>`;
 }
 
 // The position of the first track in `tracks`, ascending, at or after `track`: tracks.length when there is none.
@@ -346,29 +508,40 @@ function firstAtOrAfter(tracks: number[], track: number): number {
     return low;
 }
 
-// The export's window keeps the columns from the left up to one PDF page wide, and more of them while every row still
-// fits, a sheet whose every row is hidden as one row. Then it keeps the rows that fit the cells left.
-function exportWindow(cellsLeft: number, rows: number, cols: number): SheetBudget {
+// The export's window keeps the columns from the left up to one PDF page wide. The HTML download keeps more of them
+// while every row still fits, a sheet whose every row is hidden as one row, where the PDF's page would cut them off.
+// Then it keeps the rows that fit the cells left.
+function exportWindow(mode: HtmlExportMode, cellsLeft: number, rows: number, cols: number): SheetBudget {
     const pageCols = Math.min(cols, PAGE_COLUMNS);
-    const maxCols = Math.min(cols, Math.max(pageCols, Math.floor(cellsLeft / Math.max(1, rows))));
+    const maxCols =
+        mode === 'pdf' ? pageCols : Math.min(cols, Math.max(pageCols, Math.floor(cellsLeft / Math.max(1, rows))));
     return { maxRows: Math.min(rows, Math.floor(cellsLeft / Math.max(1, maxCols))), maxCols, maxCells: cellsLeft };
 }
 
 // The table inside a box that reaches the farthest image or chart, so what follows in the flow, the next sheet or the
-// preview's marker, starts below them. The preview clips the overlay to its budget's box: an image parked outside it
-// would stretch the body and shrink the thumbnail scaled from it. A sheet with no images or charts writes the bare
-// table.
+// preview's marker, starts below them. The preview's box stops at its clip. A sheet with no images or charts writes
+// the bare table.
 function withFloatingOverlay(
-    sheet: Sheet,
     table: string,
     tableWidth: number,
     offset: { left: number; top: number },
-    clip: { width: number; height: number } | undefined,
-    { styles, mediaUrls, resolver }: { styles?: StyleRegistry; mediaUrls: MediaUrls; resolver: CellResolver },
+    clip: ContentSize | undefined,
+    {
+        floating,
+        extent,
+        styles,
+        mediaUrls,
+        resolver,
+    }: {
+        floating: FloatingObject[];
+        extent: ContentSize;
+        styles?: StyleRegistry;
+        mediaUrls: MediaUrls;
+        resolver: CellResolver;
+    },
 ): string {
-    const overlay = renderFloatingObjects(sheet, mediaUrls, resolver, offset, styles, clip);
+    const overlay = renderFloatingObjects(floating, mediaUrls, resolver, offset, styles);
     if (!overlay) return table;
-    const extent = floatingExtent(sheet, offset);
     const width = Math.max(tableWidth, clip ? Math.min(extent.width, clip.width) : extent.width);
     const height = clip ? Math.min(extent.height, clip.height) : extent.height;
     const box = `position:relative;width:${width}px;min-height:${height}px${clip ? ';overflow:hidden' : ''}`;
@@ -405,13 +578,11 @@ function buildCellStyle(
         if (cellColor) parts.push(`background:${cellColor}`);
         // A rotated cell's span is placed absolutely (wrapForRotation), so no alignment acts on it. Any other cell
         // writes its own text-align, else Excel's General one as the canvas draws it, where left, the td's own, writes
-        // none. Its vertical-align defaults to middle.
+        // none. Its text places itself in the cell's rows (clipToRows).
         if (!rotated) {
             const general = generalAlign(v);
             const ht = v.ht != null && v.ht in HORIZONTAL_ALIGN ? v.ht : general === '1' ? undefined : Number(general);
             if (ht !== undefined) parts.push(`text-align:${HORIZONTAL_ALIGN[ht]}`);
-            const valign = v.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
-            parts.push(`vertical-align:${valign}`);
         }
         if (cellWrapsText(v)) parts.push('white-space:pre-wrap;word-wrap:break-word');
         if (v.un === 1 && v.cl === 1) {
@@ -474,7 +645,8 @@ function getCellDisplay(v: Cell | null): string {
 // bottom for a positive rt, which turns up, and left and top for a negative one. CSS turns clockwise and rt
 // anticlockwise, as Excel does, so the angle is negated. Turned around a corner, the text would swing past the cell's
 // left edge and be clipped, so the span shifts right by sin(rt) em after it turns, as the canvas shifts its pivot by
-// the text's height. A 'vertical' rt stacks the characters with writing-mode instead.
+// the text's height. The span sets its own line-height, as the td's is 0 (clipToRows). A 'vertical' rt stacks the
+// characters with writing-mode instead.
 function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry): string {
     if (!v || v.rt == null) return inner;
     if (v.rt === 'vertical') {
@@ -487,7 +659,7 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
         const origin = rt > 0 ? 'left bottom' : 'left top';
         const overhangEm = Math.abs(Math.sin((rt * Math.PI) / 180)).toFixed(3);
         const decl =
-            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;` +
+            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;line-height:normal;text-decoration:inherit;` +
             `transform-origin:${origin};transform:translateX(${overhangEm}em) rotate(${cssAngle}deg)`;
         return `<span ${styleAttr(styles, decl)}>${inner}</span>`;
     }
@@ -495,7 +667,8 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
 }
 
 // The data bar as the canvas paints it: a negative value fills the half left of the zero line, a positive one the half
-// right of it. The canvas paints a negative bar red whatever the rule's color, so the export does too.
+// right of it. The canvas paints a negative bar red whatever the rule's color, so the export does too. The text's span
+// hands the td's text decoration on to the clipped block inside it.
 function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): string {
     const from = cssColor(bar.format[0]) ?? 'transparent';
     const to = cssColor(bar.format[1]) ?? 'transparent';
@@ -518,7 +691,8 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
     }
 
     const barStyle = `position:absolute;top:0;left:${left}%;width:${width}%;height:100%;background:${fill};z-index:0`;
-    return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, 'position:relative;z-index:1')}>${display}</span>`;
+    const textStyle = 'position:relative;z-index:1;text-decoration:inherit';
+    return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, textStyle)}>${display}</span>`;
 }
 
 // Images and charts at their stored boxes, rotated about their centers, in the order the editor stacks them. An image
@@ -526,18 +700,14 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
 // file deleted under the reference. A chart draws as the painter's inline SVG on white like the editor's chart box,
 // so the gridlines stop at it, its ranges read from the materialized sheets.
 function renderFloatingObjects(
-    sheet: Sheet,
+    floating: FloatingObject[],
     mediaUrls: MediaUrls,
     resolver: CellResolver,
     offset: { left: number; top: number },
     styles?: StyleRegistry,
-    clip?: { width: number; height: number },
 ): string {
     const parts: string[] = [];
-    for (const { item, box, bounds } of floatingObjects(sheet)) {
-        const [minX, minY] = [bounds.minX - offset.left, bounds.minY - offset.top];
-        const [maxX, maxY] = [bounds.maxX - offset.left, bounds.maxY - offset.top];
-        if (clip && (minX >= clip.width || minY >= clip.height || maxX <= 0 || maxY <= 0)) continue;
+    for (const { item, box } of floating) {
         const rotate = box.angle ? `;transform:rotate(${box.angle}deg);transform-origin:center center` : '';
         const place = (extra = '') =>
             styleAttr(

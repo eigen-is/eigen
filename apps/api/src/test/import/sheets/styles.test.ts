@@ -19,12 +19,12 @@ const xfs = (...xf: string[]) => `<cellXfs>${xf.join('')}</cellXfs>`;
 const font = (inner: string) => `<fonts><font/><font>${inner}</font></fonts>`;
 
 describe('the theme palette', () => {
-    test("lists SpreadsheetML's order, light before dark, from srgbClr or a system colour's last value", () => {
+    test("lists SpreadsheetML's order, light before dark, from srgbClr or a system color's last value", () => {
         expect(PALETTE.slice(0, 5)).toEqual(['#FFFFFF', '#000000', '#E7E6E6', '#44546A', '#4472C4']);
         expect(PALETTE).toHaveLength(12);
     });
 
-    test('is empty without a theme, so a theme colour resolves to none', () => {
+    test('is empty without a theme, so a theme color resolves to none', () => {
         expect(themePalette(undefined)).toEqual([]);
         expect(
             readLooks(
@@ -100,7 +100,7 @@ describe('a number format', () => {
 });
 
 describe('a font', () => {
-    test('maps weight, slant, underline, strike, size, a bundled family and a colour', () => {
+    test('maps weight, slant, underline, strike, size, a bundled family and a color', () => {
         const [, look] = looks(
             `${font('<b/><i/><u/><strike/><sz val="14"/><name val="Arial"/><color rgb="FF112233"/>')}${xfs('<xf/>', '<xf fontId="1"/>')}`,
         );
@@ -114,17 +114,23 @@ describe('a font', () => {
         expect(look.cell).toEqual({});
     });
 
-    test('a theme colour takes its tint; a family Eigen has no font for sets none', () => {
+    test('a theme color takes its tint; a family Eigen has no font for sets none', () => {
         const [, look] = looks(
             `${font('<color theme="4" tint="0.5"/><name val="Wingdings Fancy"/><sz val="10.5"/>')}${xfs('<xf/>', '<xf fontId="1"/>')}`,
         );
         expect(look.cell).toEqual({ fc: '#A2B9E2', fs: 10.5 });
     });
 
-    // ECMA-376 shifts the colour's HLS luminance by the tint. Excel's swatches for the Office theme work that out in
+    // ECMA-376 applies a tint to a color of any kind, and LibreOffice reads it so. Accent 1 is #4472C4.
+    test('an rgb color takes its tint as a theme color does', () => {
+        const [, look] = looks(`${font('<color rgb="FF4472C4" tint="0.5"/>')}${xfs('<xf/>', '<xf fontId="1"/>')}`);
+        expect(look.cell).toEqual({ fc: '#A2B9E2' });
+    });
+
+    // ECMA-376 shifts the color's HLS luminance by the tint. Excel's swatches for the Office theme work that out in
     // whole steps of 1/240, so a channel can land up to two steps from the spec's: Text 2, Lighter 40% is exact. The
-    // RGB blend this replaced was up to 17 steps off on a dark colour lightened.
-    test("a tint shifts the theme colour's luminance, within two steps of Excel's palette", () => {
+    // RGB blend this replaced was up to 17 steps off on a dark color lightened.
+    test("a tint shifts the theme color's luminance, within two steps of Excel's palette", () => {
         const tints = [
             ['3', '0.39997558519241921', '#8497B0'],
             ['3', '0.79998168889431442', '#D6DCE4'],
@@ -188,7 +194,7 @@ describe('an alignment', () => {
 });
 
 describe('a border', () => {
-    test('maps each side to its style and colour, black by default, and diagonalDown to the slash', () => {
+    test('maps each side to its style and color, black by default, and diagonalDown to the slash', () => {
         const borders = `<borders><border/><border diagonalDown="1" diagonalUp="1"><left style="thin"><color rgb="FFFF0000"/></left><right style="medium"/><top style="nonsense"/><bottom/><diagonal style="dashed"><color theme="4"/></diagonal></border><border diagonalUp="1"><diagonal style="thin"/></border></borders>`;
         const [, none, sides, up] = looks(
             `${borders}${xfs('<xf/>', '<xf borderId="0"/>', '<xf borderId="1"/>', '<xf borderId="2"/>')}`,

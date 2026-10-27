@@ -96,7 +96,7 @@ describe('an xlsx export read back by the import', () => {
         expect(hidden).toMatchObject({ name: 'Hidden', hide: 1 });
     });
 
-    test('a cell with a border alone stays no cell, and a look without a colour gains none', async () => {
+    test('a cell with a border alone stays no cell, and a look without a color gains none', async () => {
         const thin = { style: 1, color: '#000000' };
         const [sheet] = xlsxToSheets(
             exportXlsx([

@@ -222,8 +222,16 @@ describe('the reader', () => {
         expect(sheet.config?.rowlen).toBeUndefined();
     });
 
+    // LibreOffice refits a row that isn't custom to its largest run: a 24 pt run opens at 29.1 pt.
+    test("a rich run larger than Excel's default grows its row, as the cell's own font does", () => {
+        const strings = ['<r><t>small </t></r><r><rPr><sz val="24"/></rPr><t>large</t></r>'];
+        const data = '<row r="1"><c r="A1" t="s"><v>0</v></c></row>';
+        const [sheet] = xlsxToSheets(xlsxFixture({ sheets: [{ data }], strings }));
+        expect(sheet.config?.rowlen).toEqual({ 0: 49 });
+    });
+
     test('an empty wrapped cell grows no row, as LibreOffice draws it at the default', () => {
-        // A coloured font, so the reader keeps the cell without a value.
+        // A colored font, so the reader keeps the cell without a value.
         const styles = styleSheet({
             fonts: ['<font><sz val="11"/><color rgb="FF333399"/><name val="Calibri"/></font>'],
             xfs: ['<xf numFmtId="0" fontId="1" fillId="0" borderId="0"><alignment wrapText="1"/></xf>'],
@@ -362,7 +370,7 @@ describe('the reader', () => {
         });
     });
 
-    test('hidden sheets import hidden, and tab colours as the editor stores them', () => {
+    test('hidden sheets import hidden, and tab colors as the editor stores them', () => {
         const tab = (color: string) => `<sheetPr><tabColor ${color}/></sheetPr>`;
         const sheets = xlsxToSheets(
             xlsxFixture({
@@ -377,7 +385,7 @@ describe('the reader', () => {
         expect(sheets.map(({ name, hide, color }) => ({ name, hide, color }))).toEqual([
             { name: 'Red', hide: undefined, color: '#FF0000' },
             { name: 'Hidden', hide: 1, color: '#8FAADC' },
-            // An indexed colour is none.
+            // An indexed color is none.
             { name: 'Very hidden', hide: 1, color: undefined },
         ]);
     });
@@ -642,7 +650,7 @@ describe("the reader's output budget", () => {
         });
     });
 
-    test('the grids recalc materialises count against the cell cap, every sheet together', () => {
+    test('the grids recalc materializes count against the cell cap, every sheet together', () => {
         const corners = (row: number, column: string) =>
             `<row r="1"><c r="A1"><v>1</v></c></row><row r="${row}"><c r="${column}${row}"><v>1</v></c></row>`;
         // 2,000 rows by 1,000 columns (ALL) is 2M cells: one such sheet fits, three don't.
@@ -676,7 +684,7 @@ describe("the reader's output budget", () => {
     });
 
     // Each sheet holding A1 and XFD1 spans 16,384 cells, and recalc builds it 100 rows deep: 1.6M slots.
-    test('the grid recalc materialises, every sheet at least a default grid deep and wide, has a budget of its own', () => {
+    test('the grid recalc materializes, every sheet at least a default grid deep and wide, has a budget of its own', () => {
         const wide = (count: number) =>
             xlsxFixture({
                 sheets: Array.from({ length: count }, () => ({
