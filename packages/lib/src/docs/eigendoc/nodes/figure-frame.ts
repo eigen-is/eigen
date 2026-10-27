@@ -14,9 +14,13 @@ export type FigureFrameNode = (typeof FIGURE_FRAME_NODES)[number];
 export const isFigureFrameNode = (name: string | undefined): name is FigureFrameNode =>
     FIGURE_FRAME_NODES.some((node) => node === name);
 
-// In front of and behind the text are out of the flow: the box sits at its offsets from its anchor paragraph.
+// In front of and behind the text are out of the flow: the box sits at its offsets from its anchor paragraph. The
+// prose stylesheet spells the two out again, as CSS can't import this list.
 const POSITIONED_LAYOUTS = ['front', 'behind'] as const;
 export type PositionedLayout = (typeof POSITIONED_LAYOUTS)[number];
+
+// A positioned figure's or chart's box, in the editor or in pasted HTML.
+export const POSITIONED_SELECTOR = POSITIONED_LAYOUTS.map((layout) => `[data-layout="${layout}"]`).join(', ');
 const FIGURE_LAYOUTS = ['block', 'wrap-left', 'wrap-right', ...POSITIONED_LAYOUTS] as const;
 export type FigureLayout = (typeof FIGURE_LAYOUTS)[number];
 const FIGURE_ALIGNMENTS = ['left', 'center', 'right'] as const;
@@ -84,6 +88,19 @@ export function figureLayoutStyle({
     if (!isPositioned(layout)) return undefined;
     const place = { left: offsetX ?? 0, top: offsetY ?? 0 };
     return width ? { ...place, width: Math.min(MAX_POSITION_PX, width) } : place;
+}
+
+// A positioned box's offsets from its paragraph, kept on the paper: between the paper's left and right edges, and below
+// its top. `anchor` is where the paragraph starts on the paper, and every length is in page px.
+export function keepOnPaper(
+    box: { x: number; y: number; width: number },
+    anchor: { left: number; top: number },
+    paperWidth: number,
+): { offsetX: number; offsetY: number } {
+    return {
+        offsetX: Math.round(Math.max(-anchor.left, Math.min(paperWidth - box.width - anchor.left, box.x))),
+        offsetY: Math.round(Math.max(-anchor.top, box.y)),
+    };
 }
 
 export function figureFrameAttributes() {

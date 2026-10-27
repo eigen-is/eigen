@@ -32,6 +32,8 @@ export {
     figureLayoutStyle,
     isFigureFrameNode,
     isPositioned,
+    keepOnPaper,
+    POSITIONED_SELECTOR,
     readFigureFrameAttrs,
     readFrameWidth,
     setFigureAttributes,

@@ -18,6 +18,8 @@ import {
     DEFAULT_PAGE_SETUP,
     isFigureFrameNode,
     isPositioned,
+    keepOnPaper,
+    POSITIONED_SELECTOR,
     pagePx,
     readFigureFrameAttrs,
     readFrameWidth,
@@ -62,8 +64,6 @@ const positionedFiguresKey = new PluginKey('positionedFigures');
 const REWIND = 'rewind';
 
 const LIST_ITEMS = ['listItem', 'taskItem'];
-
-const POSITIONED_BOXES = '.figure[data-layout="front"], .figure[data-layout="behind"]';
 
 const isPositionedFigure = (node: PMNode | null): node is PMNode =>
     node !== null && isFigureFrameNode(node.type.name) && isPositioned(node.attrs.layout);
@@ -140,8 +140,7 @@ function anchorOnPaper(view: EditorView, page: PageSetup, anchor: DOMRect): { le
     };
 }
 
-// A box's offsets from its anchor paragraph's drawn rect, kept on the paper of the page map: between its edges, and
-// below the page's top.
+// A box's offsets from its anchor paragraph's drawn rect, kept on the paper of the page map.
 function offsetsOnPaper(
     view: EditorView,
     page: PageSetup,
@@ -149,13 +148,9 @@ function offsetsOnPaper(
     anchor: DOMRect,
 ): { offsetX: number; offsetY: number } {
     const scale = pageScale(view.dom);
-    const { left, top } = anchorOnPaper(view, page, anchor);
     const x = (box.left - anchor.left) / scale;
     const y = (box.top - anchor.top) / scale;
-    return {
-        offsetX: Math.round(Math.max(-left, Math.min(page.width - box.width - left, x))),
-        offsetY: Math.round(Math.max(-top, y)),
-    };
+    return keepOnPaper({ x, y, width: box.width }, anchorOnPaper(view, page, anchor), page.width);
 }
 
 // The room on the paper around the positioned figure at `pos`, drawn `width` page px wide, which a grip grows it into
@@ -339,7 +334,7 @@ function overText(textblock: Element, x: number, y: number): boolean {
 // The body's min-height reaches the lowest positioned box, so the notes and the footer band draw below it. A doc with
 // none reads no layout. It runs at most once a frame, as each run lays out the page.
 function growBody(view: EditorView) {
-    const boxes = view.dom.querySelectorAll(POSITIONED_BOXES);
+    const boxes = view.dom.querySelectorAll(POSITIONED_SELECTOR);
     if (boxes.length === 0) {
         view.dom.style.minHeight = '';
         return;

@@ -3,17 +3,19 @@
 
 import { bundledFontOfStack, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspace/lib/constants/fonts';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
-import { FOOTNOTE_SELECTOR, ITALIC_HEADING_SELECTOR, unwrapRenderedMath } from '@workspace/lib/docs/eigendoc';
+import {
+    FOOTNOTE_SELECTOR,
+    ITALIC_HEADING_SELECTOR,
+    keepOnPaper,
+    POSITIONED_SELECTOR,
+    unwrapRenderedMath,
+} from '@workspace/lib/docs/eigendoc';
 
-// A figure or a chart in front of or behind the text.
-const POSITIONED = '[data-layout="front"], [data-layout="behind"]';
-
-// Pasted HTML before the schema parses it: a drawn equation as its <math> alone, foreign fonts onto the bundled ones,
-// no font or size the doc draws already, images, charts and tables no wider than the column, no anchor for a comment
-// card this document lacks, in an italic heading an upright run as the mark, and no footnote where none goes. A
-// positioned image or chart keeps to the paper instead: its width, its offset from the left, and below the page's top.
-// Its paragraph's place isn't known here, so an indented one may overhang by its indent until it is dragged.
-// page: the doc's page map in px. normalFont: the doc's Normal font.
+// Fits pasted HTML to the doc it lands in, before the schema parses it. A drawn equation keeps only its <math>. Fonts
+// map onto the bundled ones, and a font or size the doc already draws goes. Images, charts and tables get no wider than
+// the column. A comment anchor goes when this doc lacks its card, and a footnote goes where none can sit. A positioned
+// image or chart keeps to the paper instead of the column. Its paragraph's place isn't known here, so an indented one
+// may overhang by its indent until it is dragged.
 export function cleanPastedHTML(
     html: string,
     page: PageSetup,
@@ -23,7 +25,7 @@ export function cleanPastedHTML(
 ): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const column = page.width - page.margin.left - page.margin.right;
-    const capOf = (el: Element) => (el.closest(POSITIONED) ? page.width : column);
+    const capOf = (el: Element) => (el.closest(POSITIONED_SELECTOR) ? page.width : column);
     unwrapRenderedMath(doc.body);
 
     // A band's schema has no footnote, whose note belongs to the body's text: its paragraphs would land as the band's.
@@ -89,16 +91,14 @@ export function cleanPastedHTML(
     }
 
     // Offsets count from the paragraph, taken as starting at the column's top left corner.
-    for (const el of doc.querySelectorAll<HTMLElement>(POSITIONED)) {
+    const corner = { left: page.margin.left, top: page.margin.top };
+    for (const el of doc.querySelectorAll<HTMLElement>(POSITIONED_SELECTOR)) {
         const x = Number(el.getAttribute('data-offset-x'));
-        if (el.hasAttribute('data-offset-x') && Number.isFinite(x)) {
-            const width = Number(el.getAttribute('data-width') ?? el.querySelector('img')?.getAttribute('width')) || 0;
-            const right = Math.max(-page.margin.left, page.width - page.margin.left - width);
-            el.setAttribute('data-offset-x', String(Math.max(-page.margin.left, Math.min(right, x))));
-        }
         const y = Number(el.getAttribute('data-offset-y'));
-        if (el.hasAttribute('data-offset-y') && Number.isFinite(y))
-            el.setAttribute('data-offset-y', String(Math.max(-page.margin.top, y)));
+        const width = Number(el.getAttribute('data-width') ?? el.querySelector('img')?.getAttribute('width')) || 0;
+        const { offsetX, offsetY } = keepOnPaper({ x, y, width }, corner, page.width);
+        if (el.hasAttribute('data-offset-x') && Number.isFinite(x)) el.setAttribute('data-offset-x', String(offsetX));
+        if (el.hasAttribute('data-offset-y') && Number.isFinite(y)) el.setAttribute('data-offset-y', String(offsetY));
     }
 
     return doc.body.innerHTML;
