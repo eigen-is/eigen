@@ -1366,6 +1366,32 @@ describe('Sheets HTML export — floating images', () => {
         expect(sanitizeExportHtml(html, { allowedRefs: new Set([url]) })).toContain(url);
         expect(sanitizeExportHtml(html)).not.toContain(url);
     });
+
+    // Every tag repeats the whole data: URI, so 1,000 entries over one 1 MB picture built a 1 GB document.
+    test('images spend the cell cap with the bytes their tags write, and one the cap leaves out is counted', () => {
+        const picture = `data:image/png;base64,${'A'.repeat(1_000_000)}`;
+        const images = Array.from({ length: 100 }, (_, i) => ({
+            id: `img_${i}`,
+            mediaName: 'photo.png',
+            x: i,
+            y: 0,
+            width: 10,
+            height: 10,
+        }));
+        const lost: string[] = [];
+        const html = sheetsHtmlDocument({
+            title: 'Photos',
+            sheets: [withImages(images)],
+            mediaUrls: new Map([['photo.png', picture]]),
+            mode: 'pdf',
+            lost: (code) => lost.push(code),
+        });
+        const drawn = html.match(/<img /g)?.length ?? 0;
+        expect(drawn).toBeGreaterThan(0);
+        expect(drawn).toBeLessThan(100);
+        expect(html.length).toBeLessThan(20_000_000);
+        expect(lost).toEqual(Array(100 - drawn).fill('images-dropped'));
+    });
 });
 
 // A chart draws as the painter's inline SVG in the same overlay, its range read from the materialized sheets.

@@ -5,7 +5,14 @@
 // name.
 
 import { escapeHtml } from '@workspace/lib/html';
-import type { Cell, CellBorderSides, CellWithRowAndCol, MergeCell, Sheet, SheetChart } from '@workspace/lib/sheets';
+import type {
+    Cell,
+    CellBorderSides,
+    CellWithRowAndCol,
+    MergeCell,
+    Sheet,
+    SheetFloatingItem,
+} from '@workspace/lib/sheets';
 import {
     borderSidesToCss,
     cellFontName,
@@ -66,6 +73,11 @@ const PDF_PAGE_CELLS = 125;
 // 1,000 one-point charts drew in 0.65 s, where 250,000 cells draw in 0.33 s. A chart draws at most MAX_CHART_POINTS.
 const CHART_CELLS = 500;
 
+// The bytes of HTML a cell with a value writes: a grid of numbers or of short text writes about 50 a cell. An image's
+// tag writes its whole source, a data: URI in an export, so it costs the source's length at this rate. The cap then
+// holds about 12 MB of pictures, and 1,000 images over one 1 MB picture no longer write a 1 GB document.
+const CELL_BYTES = 50;
+
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.
 const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
 
@@ -84,7 +96,7 @@ const PAGE_CONTENT_HEIGHT = MAX_PDF_PAGE_PX - 2 * PAGE_MARGIN;
 
 // The workbook as one document. The screen's prints landscape. The PDF's page fits its widest and tallest sheet as
 // rendered, so WeasyPrint never clips a wide grid. A sheet cut to MAX_EXPORT_CELLS, or a sheet or chart left out for
-// it, is counted. Only the PDF charges a sheet its pages.
+// it, is counted, and so is an image or chart left out. Only the PDF charges a sheet its pages.
 export function sheetsHtmlDocument({
     title,
     sheets,
@@ -98,10 +110,11 @@ export function sheetsHtmlDocument({
     mode: HtmlExportMode;
     lost: LossCounter['lost'];
 }): string {
-    const { html, css, cut, leftOut, chartsLeftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode);
+    const { html, css, cut, leftOut, floatingLeftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode);
     for (const sheet of cut) lost('sheets-cut', sheet);
     for (const sheet of leftOut) lost('sheets-left-out', sheet);
-    for (const chart of chartsLeftOut) lost('charts-dropped', chart);
+    for (const { kind, object } of floatingLeftOut)
+        lost(kind === 'chart' ? 'charts-dropped' : 'images-dropped', object);
     const page = mode === 'pdf' ? pdfPageCss(size) : '@page { size: landscape; margin: 1.5cm; }';
     return exportHtmlDocument({
         title,
@@ -119,21 +132,21 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
     if (shown.length === 0) return { html: '', truncated: false };
     const windowed = windowedSheet(shown[0], () => PREVIEW_SHEET_BUDGET);
     if (!windowed) return { html: '', truncated: true };
-    const charts = chargeCharts(windowed.floating, MAX_EXPORT_CELLS - windowed.cells);
-    const first = renderSheet({ ...windowed, floating: charts.kept }, new FormulaEngine(), sheetsResolver(sheets), {
+    const floating = chargeFloating(windowed.floating, mediaUrls, MAX_EXPORT_CELLS - windowed.cells);
+    const first = renderSheet({ ...windowed, floating: floating.kept }, new FormulaEngine(), sheetsResolver(sheets), {
         budget: PREVIEW_SHEET_BUDGET,
         mediaUrls,
     });
-    const truncated = windowed.truncated || charts.leftOut.length > 0 || shown.length > 1;
+    const truncated = windowed.truncated || floating.leftOut.length > 0 || shown.length > 1;
     return { html: `<div class="sheet">\n${first.html}\n</div>`, truncated };
 }
 
 // One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
 // The resolver reads the stored values: only a rule's own formula is evaluated. The sheets spend one MAX_EXPORT_CELLS
 // in tab order, so a sheet gets the cells the ones before it left, and in a PDF one that draws costs at least a page.
-// A sheet's charts spend what its cells left. `cut` holds the sheets cut to the cap, `leftOut` the sheets it left no
-// row or page of, `chartsLeftOut` the charts it left no room for, and `size` is the widest and tallest sheet as
-// rendered.
+// A sheet's images and charts spend what its cells left. `cut` holds the sheets cut to the cap, `leftOut` the sheets it
+// left no row or page of, `floatingLeftOut` the images and charts it left no room for, and `size` is the widest and
+// tallest sheet as rendered.
 export function renderSheetsHtml(
     sheets: Sheet[],
     mediaUrls: MediaUrls,
@@ -143,7 +156,7 @@ export function renderSheetsHtml(
     css: string;
     cut: Sheet[];
     leftOut: Sheet[];
-    chartsLeftOut: SheetChart[];
+    floatingLeftOut: SheetFloatingItem[];
     size: ContentSize;
 } {
     const engine = new FormulaEngine();
@@ -151,7 +164,7 @@ export function renderSheetsHtml(
     const styles: StyleRegistry = new Map();
     const cut: Sheet[] = [];
     const leftOut: Sheet[] = [];
-    const chartsLeftOut: SheetChart[] = [];
+    const floatingLeftOut: SheetFloatingItem[] = [];
     const size = { width: 0, height: 0 };
     const bodies: string[] = [];
     let cellsLeft = MAX_EXPORT_CELLS;
@@ -185,10 +198,10 @@ export function renderSheetsHtml(
         cellsLeft -= cells;
         if (windowed.truncated) cut.push(sheet);
         if (!draws) continue;
-        const charts = chargeCharts(windowed.floating, cellsLeft);
-        cellsLeft -= charts.cells;
-        chartsLeftOut.push(...charts.leftOut);
-        const rendered = renderSheet({ ...windowed, floating: charts.kept }, engine, resolver, { styles, mediaUrls });
+        const floating = chargeFloating(windowed.floating, mediaUrls, cellsLeft);
+        cellsLeft -= floating.cells;
+        floatingLeftOut.push(...floating.leftOut);
+        const rendered = renderSheet({ ...windowed, floating: floating.kept }, engine, resolver, { styles, mediaUrls });
         size.width = Math.max(size.width, rendered.size.width);
         size.height = Math.max(size.height, rendered.size.height);
         // Images whose media resolves to nothing draw nothing.
@@ -202,7 +215,7 @@ export function renderSheetsHtml(
             return `<div class="${divClass}">\n${body}\n</div>`;
         })
         .join('\n');
-    return { html, css: serializeStyleRules(styles), cut, leftOut, chartsLeftOut, size };
+    return { html, css: serializeStyleRules(styles), cut, leftOut, floatingLeftOut, size };
 }
 
 // The sheets the tabs show, as Excel prints them. The resolver still spans every sheet, the hidden ones too.
@@ -237,20 +250,25 @@ function printedPages({ sheet, rows, offset, floating }: WindowedSheet, most: nu
     return { pages: Math.max(pages, overlay), rows: rows.length };
 }
 
-// The images and charts that fit `cellsLeft`, in paint order, and the charts left out. A chart costs CHART_CELLS and
-// the points it draws. An image costs no more than its tag.
-function chargeCharts(
+// The images and charts that fit `cellsLeft`, in paint order, and the ones left out. A chart costs CHART_CELLS and
+// the points it draws. An image costs its source's bytes at CELL_BYTES a cell, since every tag repeats the whole
+// source. One whose media resolves to nothing draws nothing and costs nothing.
+function chargeFloating(
     floating: FloatingObject[],
+    mediaUrls: MediaUrls,
     cellsLeft: number,
-): { kept: FloatingObject[]; cells: number; leftOut: SheetChart[] } {
+): { kept: FloatingObject[]; cells: number; leftOut: SheetFloatingItem[] } {
     const kept: FloatingObject[] = [];
-    const leftOut: SheetChart[] = [];
+    const leftOut: SheetFloatingItem[] = [];
     let cells = 0;
     for (const object of floating) {
         const { item } = object;
-        const cost = item.kind === 'chart' ? CHART_CELLS + sheetChartPoints(item.object) : 0;
-        if (item.kind === 'chart' && cells + cost > cellsLeft) {
-            leftOut.push(item.object);
+        const cost =
+            item.kind === 'chart'
+                ? CHART_CELLS + sheetChartPoints(item.object)
+                : Math.ceil((mediaUrls.get(item.object.mediaName)?.length ?? 0) / CELL_BYTES);
+        if (cells + cost > cellsLeft) {
+            leftOut.push(item);
             continue;
         }
         cells += cost;
