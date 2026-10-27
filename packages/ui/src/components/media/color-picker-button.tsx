@@ -1,3 +1,7 @@
+// A toolbar icon button that opens a ColorPicker in a popover, shared by formatting toolbars such as the
+// docs and sheets ones. It owns its open state and closes after a pick, so a caller wires only `value` and
+// `onChange`.
+
 import { Button } from '@workspace/ui/components/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
@@ -19,11 +23,10 @@ type ColorPickerButtonProps = {
     active?: boolean;
     // Extra class for the popover content — sheets pass `sheet-mousedown-cancel`.
     popoverClassName?: string;
+    // An editor that takes the focus back on a pick passes its keep-focus handler, so Radix doesn't refocus the trigger.
+    onCloseAutoFocus?: (event: Event) => void;
 };
 
-// Toolbar icon button that opens a ColorPicker in a popover. Owns its own open state and
-// closes after a pick; callers only wire `value` + `onChange`. Shared by the docs and
-// sheets formatting toolbars.
 export function ColorPickerButton({
     icon: Icon,
     tooltipText,
@@ -33,6 +36,7 @@ export function ColorPickerButton({
     showSwatch = false,
     active = false,
     popoverClassName,
+    onCloseAutoFocus,
 }: ColorPickerButtonProps) {
     const [open, setOpen] = useState(false);
 
@@ -64,7 +68,11 @@ export function ColorPickerButton({
                     </Tooltip>
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className={cn('w-auto p-3', popoverClassName)} align="start">
+            <PopoverContent
+                className={cn('w-auto p-3', popoverClassName)}
+                align="start"
+                onCloseAutoFocus={onCloseAutoFocus}
+            >
                 <ColorPicker
                     value={value}
                     resetLabel={resetLabel}

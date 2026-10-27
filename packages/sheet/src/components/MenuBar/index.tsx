@@ -1,8 +1,13 @@
+// The workbook's menu bar: the Edit, View, Insert, Format and Data menus, the format toolbar in the middle
+// and the host's own items at either end. While a cell is open, every menu hands the focus back to the cell
+// editor as it closes.
+
 import { ToolbarMenu } from '@workspace/ui/components/layout/toolbar';
 import { useFindBarRefocus } from '@workspace/ui/components/search/find-in-document-button';
 import type { ReactNode } from 'react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
+import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
 import { DataMenu } from './data-menu';
 import { FormatMenu } from './format-menu';
 import { FormatToolbar } from './format-toolbar';
@@ -23,7 +28,8 @@ type Props = {
 // The seam is a container query on the bar's own width, so a sidebar beside the workbook counts.
 export function MenuBar({ leftItems, rightItems }: Props) {
     const { context } = useContext(WorkbookContext);
-    const { focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
+    const { focusFindBarRef, onCloseAutoFocus: refocusFindBar } = useFindBarRefocus();
+    const refocusCellEditor = useCellEditorRefocus();
     return (
         <div className="@container border-b border-border bg-background">
             <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] @[1360px]:grid-cols-[1fr_auto_1fr] items-center gap-1 app-gutter-x h-12">
@@ -32,7 +38,10 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                     <ToolbarMenu
                         label="Edit"
                         contentClassName="w-56 sheet-mousedown-cancel"
-                        onCloseAutoFocus={onCloseAutoFocus}
+                        onCloseAutoFocus={(event) => {
+                            refocusFindBar(event);
+                            if (!event.defaultPrevented) refocusCellEditor(event);
+                        }}
                     >
                         <SheetEditMenu focusFindBarRef={focusFindBarRef} />
                     </ToolbarMenu>
@@ -42,19 +51,35 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                         comments via the ungated Comments panel toggle. */}
                     {context.allowEdit && (
                         <>
-                            <ToolbarMenu label="View" contentClassName="w-56 sheet-mousedown-cancel">
+                            <ToolbarMenu
+                                label="View"
+                                contentClassName="w-56 sheet-mousedown-cancel"
+                                onCloseAutoFocus={refocusCellEditor}
+                            >
                                 <ViewMenu />
                             </ToolbarMenu>
 
-                            <ToolbarMenu label="Insert" contentClassName="w-56 sheet-mousedown-cancel">
+                            <ToolbarMenu
+                                label="Insert"
+                                contentClassName="w-56 sheet-mousedown-cancel"
+                                onCloseAutoFocus={refocusCellEditor}
+                            >
                                 <InsertMenu />
                             </ToolbarMenu>
 
-                            <ToolbarMenu label="Format" contentClassName="w-64 sheet-mousedown-cancel">
+                            <ToolbarMenu
+                                label="Format"
+                                contentClassName="w-64 sheet-mousedown-cancel"
+                                onCloseAutoFocus={refocusCellEditor}
+                            >
                                 <FormatMenu />
                             </ToolbarMenu>
 
-                            <ToolbarMenu label="Data" contentClassName="w-56 sheet-mousedown-cancel">
+                            <ToolbarMenu
+                                label="Data"
+                                contentClassName="w-56 sheet-mousedown-cancel"
+                                onCloseAutoFocus={refocusCellEditor}
+                            >
                                 <DataMenu />
                             </ToolbarMenu>
                         </>

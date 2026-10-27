@@ -1,3 +1,6 @@
+// The menu bar's Format menu, such as number formats, text styles, alignment, borders, merging and
+// conditional formats. Its items run the same toolbar handlers as the format toolbar.
+
 import type { BorderType } from '@workspace/lib/sheets';
 import {
     ChoiceMenuItems,
@@ -11,6 +14,7 @@ import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { Fragment, useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
+import { useEditorSelectionStyle } from '../../hooks/useEditorSelectionStyle';
 import {
     applyColorScalePreset,
     applyDataBarPreset,
@@ -98,7 +102,8 @@ function NumberFormatSubmenu() {
 
 function TextSubmenu() {
     const { setContext, refs } = useContext(WorkbookContext);
-    const textColor = useAnchorCell()?.fc ?? '';
+    const anchorColor = useAnchorCell()?.fc;
+    const textColor = useEditorSelectionStyle()?.fc ?? anchorColor ?? '';
 
     return (
         <DropdownMenuSub>
@@ -305,8 +310,10 @@ function WrappingSubmenu() {
                     onClick={() => {
                         setContext((ctx) => {
                             const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(ctx, refs.cellInput.current!, d, 'tb', 'wrap');
+                            const input = refs.cellInput.current;
+                            if (d == null || !input) return;
+                            const canvas = refs.canvas.current?.getContext('2d') ?? undefined;
+                            updateFormat(ctx, input, d, 'tb', 'wrap', canvas);
                         });
                     }}
                 >
@@ -340,7 +347,9 @@ function FontSizeSubmenu() {
                         key={num}
                         onClick={() => {
                             setContext((ctx) => {
-                                handleTextSize(ctx, refs.cellInput.current!, num);
+                                const input = refs.cellInput.current;
+                                const canvas = refs.canvas.current?.getContext('2d') ?? undefined;
+                                if (input) handleTextSize(ctx, input, num, canvas);
                             });
                         }}
                     >

@@ -1,542 +1,372 @@
-import { indexOf, isEmpty, kebabCase } from 'es-toolkit/compat';
+// A rich-text cell keeps its text as runs (`ct.s`): pieces of text, each with its own weight, slant,
+// decoration, color, size and font. While the cell is open, the in-cell editor shows the same runs as
+// spans. This module reads the editor's DOM back into runs, applies a toolbar format to the selected
+// characters, writes the runs back as spans and puts the selection back. updateCell commits what
+// committedRuns reads, so the cell gets what the editor shows.
+
+import { readCssFontSize, readFontSize } from '@workspace/lib/constants/fonts';
+import { escapeHtml } from '@workspace/lib/html';
+import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import type { Cell, CellStyle, InlineStringSegment } from '../../engine/types';
-import type { Context } from '../context';
-import { getFontStyleByCell } from './cell';
-import { selectTextContent, selectTextContentCross } from './cursor';
+import { rgbToHex } from '../utils';
+
+const RUN_STYLE_KEYS = ['bl', 'it', 'un', 'cl', 'fc', 'fs', 'ff'] as const;
+
+export type RunStyleKey = (typeof RUN_STYLE_KEYS)[number];
+
+// A run's whole look. A key a stored run leaves out is the default, as the canvas draws it.
+export type RunStyle = { bl: number; it: number; un: number; cl: number; fc: string; fs: number; ff: string };
+
+type TextRun = RunStyle & { v: string };
 
 type InlineStringCell = Cell & { ct: { t: 'inlineStr'; s: InlineStringSegment[] } };
-type InlineStringCT = { t: 'inlineStr'; s: InlineStringSegment[] };
 
-// Mapping from Cell style-attribute keys to their CSS property names. Used by the
-// inline-string CSS pipeline (parsing span styles back to cell attributes) and as
-// the set of style attrs `getFontStyleByCell` / `isAllSelectedCellsInStatus` know
-// about. Kept `as const` so consumers can derive `StyleAttr` and so the CSS-name
-// values are literal-typed for downstream string comparisons.
-export const attrToCssName = {
-    bl: 'font-weight',
-    it: 'font-style',
-    ff: 'font-family',
-    fs: 'font-size',
-    fc: 'color',
-    cl: 'text-decoration',
-    un: 'border-bottom',
-} as const;
+// A format on a bare caret, waiting for the text typed there next, as in Google Sheets and Excel.
+type PendingStyle = { at: number; style: Partial<RunStyle> };
 
-export type StyleAttr = keyof typeof attrToCssName;
+const DEFAULT_COLOR = '#000000';
 
-export function isStyleAttr(key: PropertyKey): key is StyleAttr {
-    return typeof key === 'string' && key in attrToCssName;
-}
+const HEX_COLOR = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/;
 
-// CamelCased counterparts of `attrToCssName`. Pre-computed (rather than
-// `camelCase(attrToCssName[attr])` at runtime) so the value type is
-// `keyof CSSStyleDeclaration`, which lets consumers index `element.style[...]`
-// without a cast.
-export const cssDomKeyForAttr = {
-    bl: 'fontWeight',
-    it: 'fontStyle',
-    ff: 'fontFamily',
-    fs: 'fontSize',
-    fc: 'color',
-    cl: 'textDecoration',
-    un: 'borderBottom',
-} as const satisfies Record<StyleAttr, keyof CSSStyleDeclaration>;
-
-// Cell fields stamped transiently by `getCssText` for the underline (`un`) branch.
-// They never persist on stored cells — only read by `getFontStyleByCell` to size /
-// color the rendered underline.
-export type UnderlineHints = { _color?: string; _fontSize?: number };
-
-export const inlineStyleAffectAttribute = {
-    bl: 1,
-    it: 1,
-    ff: 1,
-    cl: 1,
-    un: 1,
-    fs: 1,
-    fc: 1,
+const TAG_STYLES: Record<string, Partial<RunStyle>> = {
+    B: { bl: 1 },
+    STRONG: { bl: 1 },
+    I: { it: 1 },
+    EM: { it: 1 },
+    U: { un: 1 },
+    S: { cl: 1 },
+    STRIKE: { cl: 1 },
+    DEL: { cl: 1 },
 };
 
-export const inlineStyleAffectCssName = {
-    'font-weight': 1,
-    'font-style': 1,
-    'font-family': 1,
-    'text-decoration': 1,
-    'border-bottom': 1,
-    'font-size': 1,
-    color: 1,
-};
+const BLOCK_TAGS = new Set(['DIV', 'P']);
+
+// The editor's last selection survives a toolbar control taking the focus, such as the size box or
+// the color popover, so the control formats the characters the user had selected.
+const savedSelections = new WeakMap<HTMLElement, [number, number]>();
+const pendingStyles = new WeakMap<HTMLElement, PendingStyle>();
 
 export function isInlineStringCell(cell: Cell | null | undefined): cell is InlineStringCell {
     return cell?.ct?.t === 'inlineStr' && (cell?.ct?.s?.length ?? 0) > 0;
 }
 
-export function isInlineStringCT(ct: Cell['ct'] | null | undefined): ct is InlineStringCT {
-    return ct?.t === 'inlineStr' && (ct?.s?.length ?? 0) > 0;
+export function isRunStyleKey(key: string): key is RunStyleKey {
+    return RUN_STYLE_KEYS.some((runKey) => runKey === key);
 }
 
-export function convertCssToStyleList(cssText: string, originCell: Cell) {
-    if (isEmpty(cssText)) {
-        return {};
-    }
-    const cssTextArray = cssText.split(';');
-
-    const styleList: CellStyle = {
-        fc: originCell.fc || '#000000',
-        fs: originCell.fs || 10,
-        cl: originCell.cl || 0,
-        un: originCell.un || 0,
-        bl: originCell.bl || 0,
-        it: originCell.it || 0,
-        ff: originCell.ff || 0,
+// A run's style with every key filled in. The style comes from a stored cell, which a collaborator or an
+// xlsx wrote, and runsHtml writes it into a style attribute. So a flag or a legacy string size reads as
+// its number, and a color, size or font that is not a plain value falls back to the default.
+export function runStyleOf(style: CellStyle | null | undefined): RunStyle {
+    return {
+        bl: Number(style?.bl) || 0,
+        it: Number(style?.it) || 0,
+        un: Number(style?.un) || 0,
+        cl: Number(style?.cl) || 0,
+        fc: hexColor(style?.fc),
+        fs: readFontSize(Number(style?.fs) || undefined) ?? SHEET_DEFAULT_FONT_SIZE,
+        ff: cssFontName(style?.ff) ?? SHEET_DEFAULT_FONT.name,
     };
-    for (let s of cssTextArray) {
-        s = s.toLowerCase();
-        const key = s.substring(0, s.indexOf(':')).trim();
-        const value = s.substring(s.indexOf(':') + 1).trim();
-        if (key === 'font-weight') {
-            if (value === 'bold') {
-                styleList.bl = 1;
-            }
-        }
-
-        if (key === 'font-style') {
-            if (value === 'italic') {
-                styleList.it = 1;
-            }
-        }
-
-        if (key === 'font-family') {
-            styleList.ff = value;
-        }
-
-        if (key === 'font-size') {
-            styleList.fs = Number.parseFloat(value);
-        }
-
-        if (key === 'color') {
-            styleList.fc = value;
-        }
-
-        if (key === 'text-decoration') {
-            styleList.cl = 1;
-        }
-
-        if (key === 'border-bottom') {
-            styleList.un = 1;
-        }
-
-        if (key === 'lucky-strike') {
-            styleList.cl = Number(value);
-        }
-
-        if (key === 'lucky-underline') {
-            styleList.un = Number(value);
-        }
-    }
-
-    return styleList;
 }
 
-export function convertSpanToShareString(
-    // eslint-disable-next-line no-undef
-    $dom: NodeListOf<HTMLSpanElement>,
-    originCell: Cell,
+// A stored font's name, or undefined when there is none or it could break out of a CSS font-family.
+export function cssFontName(ff: CellStyle['ff']): string | undefined {
+    const font = cellFontName(ff);
+    return font && !/[;\n("']/.test(font) ? font : undefined;
+}
+
+// A format applied to a whole cell outside the editor reaches each of its runs too.
+export function updateInlineStringFormatOutside(cell: Cell, key: RunStyleKey, value: string | number) {
+    for (const run of cell.ct?.s ?? []) Object.assign(run, styleValue(key, value));
+}
+
+// The runs in the editor, as updateCell stores them. Text outside any styled element has the cell's own
+// style, which the editor box shows. A cell keeps a line break as \r\n. A contenteditable keeps one
+// trailing break to show an empty last line, and that one is not the user's.
+export function committedRuns(input: HTMLElement, cell: Cell | null | undefined): TextRun[] {
+    const runs = readRuns(input, runStyleOf(cell));
+    const last = runs.at(-1);
+    if (last?.v.endsWith('\n') && !last.v.endsWith('\n\n')) last.v = last.v.slice(0, -1);
+    return mergeRuns(runs.map((run) => ({ ...run, v: run.v.replace(/\n/g, '\r\n') })));
+}
+
+// Spans for the editor. A span states only where its run differs from `base`, the style the editor box
+// shows, so text typed beside a span reads back with the box's style.
+export function runsHtml(runs: readonly InlineStringSegment[], base: RunStyle): string {
+    let html = '';
+    for (const run of runs) {
+        if (!run.v) continue;
+        const css = escapeHtml(runCss(runStyleOf(run), base));
+        html += `<span class="sheet-input-span" style="${css}">${escapeHtml(run.v)}</span>`;
+    }
+    return html;
+}
+
+export function sameRunStyle(a: RunStyle, b: RunStyle): boolean {
+    return RUN_STYLE_KEYS.every((key) => a[key] === b[key]);
+}
+
+// Keeps the editor's selection while it is in the editor. A caret that moves drops a pending style.
+export function rememberEditorSelection(input: HTMLElement) {
+    const offsets = selectionOffsets(input);
+    if (!offsets) return;
+    savedSelections.set(input, offsets);
+    const pending = pendingStyles.get(input);
+    if (pending && (offsets[0] !== pending.at || offsets[1] !== pending.at)) pendingStyles.delete(input);
+}
+
+// Puts the focus back in the editor with the selection it last had, after a toolbar control took it.
+export function restoreEditorSelection(input: HTMLElement) {
+    const offsets = selectionOffsets(input) ?? savedSelections.get(input);
+    if (offsets) setSelectionOffsets(input, ...offsets);
+    else input.focus({ preventScroll: true });
+}
+
+// A closed editor's selection and caret format don't carry into the next cell it opens on.
+export function forgetEditorSelection(input: HTMLElement) {
+    savedSelections.delete(input);
+    pendingStyles.delete(input);
+}
+
+// Applies one format to the selected characters, or to the text typed next when only a caret is there.
+export function formatEditorSelection(
+    input: HTMLElement,
+    cell: Cell | null | undefined,
+    key: RunStyleKey,
+    value: string | number,
 ) {
-    const styles: CellStyle[] = [];
-    let preStyleList: Cell;
-    let preStyleListString = null;
-    for (let i = 0; i < $dom.length; i += 1) {
-        const span = $dom[i];
-        const styleList = convertCssToStyleList(span.style.cssText, originCell) as Cell;
-
-        const curStyleListString = JSON.stringify(styleList);
-        let v = span.innerText;
-        v = v.replace(/\n/g, '\r\n');
-        if (i === $dom.length - 1) {
-            if (v.endsWith('\r\n') && !v.endsWith('\r\n\r\n')) {
-                v = v.slice(0, v.length - 2);
-            }
-        }
-
-        if (curStyleListString === preStyleListString) {
-            preStyleList!.v += v;
-        } else {
-            styleList.v = v;
-            styles.push(styleList);
-
-            preStyleListString = curStyleListString;
-            preStyleList = styleList;
-        }
-    }
-    return styles;
-}
-
-export function updateInlineStringFormatOutside(cell: Cell, key: keyof Cell, value: unknown) {
-    if (cell.ct == null) {
-        return;
-    }
-    const { s } = cell.ct;
-    if (s == null) {
-        return;
-    }
-    for (const item of s) {
-        (item as Record<string, unknown>)[key] = value;
-    }
-}
-
-function getClassWithcss(cssText: string, ukey: string) {
-    const cssTextArray = cssText.split(';');
-    if (ukey == null || ukey.length === 0) {
-        return cssText;
-    }
-    if (cssText.indexOf(ukey) > -1) {
-        for (let i = 0; i < cssTextArray.length; i += 1) {
-            let s = cssTextArray[i];
-            s = s.toLowerCase();
-            const key = s.substring(0, s.indexOf(':')).trim();
-            const value = s.substring(s.indexOf(':') + 1).trim();
-            if (key === ukey) {
-                return value;
-            }
-        }
-    }
-
-    return '';
-}
-
-function upsetClassWithCss(cssText: string, ukey: string, uvalue: string) {
-    const cssTextArray = cssText.split(';');
-    let newCss = '';
-    if (ukey == null || ukey.length === 0) {
-        return cssText;
-    }
-    if (cssText.indexOf(ukey) > -1) {
-        for (let i = 0; i < cssTextArray.length; i += 1) {
-            let s = cssTextArray[i];
-            s = s.toLowerCase();
-            const key = s.substring(0, s.indexOf(':')).trim();
-            const value = s.substring(s.indexOf(':') + 1).trim();
-            if (key === ukey) {
-                newCss += `${key}:${uvalue};`;
-            } else if (key.length > 0) {
-                newCss += `${key}:${value};`;
-            }
-        }
-    } else if (ukey.length > 0) {
-        cssText += `${ukey}:${uvalue};`;
-        newCss = cssText;
-    }
-
-    return newCss;
-}
-
-function removeClassWidthCss(cssText: string, ukey: string) {
-    const cssTextArray = cssText.split(';');
-    let newCss = '';
-    const oUkey = ukey;
-    if (ukey == null || ukey.length === 0) {
-        return cssText;
-    }
-    if (isStyleAttr(ukey)) {
-        ukey = attrToCssName[ukey];
-    }
-    if (cssText.indexOf(ukey) > -1) {
-        for (let i = 0; i < cssTextArray.length; i += 1) {
-            let s = cssTextArray[i];
-            s = s.toLowerCase();
-            const key = s.substring(0, s.indexOf(':')).trim();
-            const value = s.substring(s.indexOf(':') + 1).trim();
-            if (
-                key === ukey ||
-                (oUkey === 'cl' && key === 'lucky-strike') ||
-                (oUkey === 'un' && key === 'lucky-underline')
-            ) {
-            } else if (key.length > 0) {
-                newCss += `${key}:${value};`;
-            }
-        }
+    const offsets = selectionOffsets(input) ?? savedSelections.get(input);
+    if (!offsets) return;
+    const [start, end] = offsets;
+    const style = styleValue(key, value);
+    if (start === end) {
+        const pending = pendingStyles.get(input);
+        const earlier = pending?.at === start ? pending.style : {};
+        pendingStyles.set(input, { at: start, style: { ...earlier, ...style } });
     } else {
-        newCss = cssText;
+        const base = runStyleOf(cell);
+        input.innerHTML = runsHtml(applyRunStyle(readRuns(input, base), start, end, style), base);
     }
-
-    return newCss;
+    setSelectionOffsets(input, start, end);
 }
 
-function getCssText(cssText: string, attr: keyof Cell, value: unknown) {
-    const styleObj: Cell & UnderlineHints = {};
-    (styleObj as Record<string, unknown>)[attr] = value;
-    if (attr === 'un') {
-        let fontColor = getClassWithcss(cssText, 'color');
-        if (fontColor === '') {
-            fontColor = '#000000';
-        }
-        let fs = getClassWithcss(cssText, 'font-size');
-        if (fs === '') {
-            fs = '11';
-        }
-        styleObj._fontSize = Number(fs);
-        styleObj._color = fontColor;
+// The style the toolbar shows while the cell is open: at a caret, the run left of it and any pending
+// style; over a selection, each on/off format only when all of the selection has it.
+export function editorSelectionStyle(input: HTMLElement, cell: Cell | null | undefined): RunStyle | null {
+    const offsets = selectionOffsets(input) ?? savedSelections.get(input);
+    if (!offsets) return null;
+    const [start, end] = offsets;
+    const base = runStyleOf(cell);
+    const runs = readRuns(input, base);
+    const from = splitAt(runs, start);
+    if (start === end) {
+        const pending = pendingStyles.get(input);
+        const caret = runStyleOf(runs[from - 1] ?? runs[from] ?? base);
+        return { ...caret, ...(pending?.at === start ? pending.style : {}) };
     }
-    const s = getFontStyleByCell(styleObj, undefined, false);
-    const ukey = kebabCase(Object.keys(s)[0]);
-    const uvalue = Object.values(s)[0] as string;
-    // let cssText = span.style.cssText;
-    cssText = removeClassWidthCss(cssText, attr);
-
-    cssText = upsetClassWithCss(cssText, ukey, uvalue);
-
-    return cssText;
+    const selected = runs.slice(from, splitAt(runs, end));
+    const style = runStyleOf(selected[0] ?? base);
+    for (const key of ['bl', 'it', 'un', 'cl'] as const) {
+        if (!selected.every((run) => run[key])) style[key] = 0;
+    }
+    return style;
 }
 
-function extendCssText(origin: string, cover: string, isLimit = true) {
-    const originArray = origin.split(';');
-    const coverArray = cover.split(';');
-    let newCss = '';
-
-    const addKeyList: Record<string, number> = {};
-    for (let i = 0; i < originArray.length; i += 1) {
-        let so = originArray[i];
-        let isAdd = true;
-        so = so.toLowerCase();
-        const okey = so.substring(0, so.indexOf(':')).trim();
-
-        /* Do not set font size here, to avoid the font growing larger after applying strikethrough etc. */
-        if (okey === 'font-size') {
-            continue;
-        }
-
-        const ovalue = so.substring(so.indexOf(':') + 1).trim();
-
-        if (isLimit) {
-            if (!(okey in inlineStyleAffectCssName)) {
-                continue;
-            }
-        }
-
-        for (let a = 0; a < coverArray.length; a += 1) {
-            let sc = coverArray[a];
-            sc = sc.toLowerCase();
-            const ckey = sc.substring(0, sc.indexOf(':')).trim();
-            const cvalue = sc.substring(sc.indexOf(':') + 1).trim();
-
-            if (okey === ckey) {
-                newCss += `${ckey}:${cvalue};`;
-                isAdd = false;
-            }
-        }
-
-        if (isAdd) {
-            newCss += `${okey}:${ovalue};`;
-        }
-
-        addKeyList[okey] = 1;
+// Types `text` where the browser can't keep the style Google Sheets and Docs give it: at a caret in the
+// pending style a format left there, and over selected characters in the style of the first one, which
+// the browser drops when the selection holds all of a styled span. False leaves the typing to the browser.
+export function typeStyledText(input: HTMLElement, cell: Cell | null | undefined, text: string): boolean {
+    const pending = pendingStyles.get(input);
+    pendingStyles.delete(input);
+    const offsets = selectionOffsets(input);
+    if (!offsets) return false;
+    const [start, end] = offsets;
+    const base = runStyleOf(cell);
+    const runs = readRuns(input, base);
+    const at = splitAt(runs, start);
+    let typed: TextRun;
+    if (start === end) {
+        if (pending?.at !== start) return false;
+        typed = { ...runStyleOf(runs[at - 1] ?? runs[at] ?? base), ...pending.style, v: text };
+    } else {
+        // Plain text replaced types as the browser types it, and a formula's colored references are no runs.
+        const first = runs[at];
+        if (!first || sameRunStyle(first, base) || input.textContent?.startsWith('=')) return false;
+        typed = { ...first, v: text };
+        runs.splice(at, splitAt(runs, end) - at);
     }
-
-    for (let a = 0; a < coverArray.length; a += 1) {
-        let sc = coverArray[a];
-        sc = sc.toLowerCase();
-        const ckey = sc.substring(0, sc.indexOf(':')).trim();
-        const cvalue = sc.substring(sc.indexOf(':') + 1).trim();
-
-        if (isLimit) {
-            if (!(ckey in inlineStyleAffectCssName)) {
-                continue;
-            }
-        }
-
-        if (!(ckey in addKeyList)) {
-            newCss += `${ckey}:${cvalue};`;
-        }
-    }
-
-    return newCss;
+    runs.splice(at, 0, typed);
+    input.innerHTML = runsHtml(mergeRuns(runs), base);
+    setSelectionOffsets(input, start + text.length, start + text.length);
+    return true;
 }
 
-export function updateInlineStringFormat(
-    _ctx: Context,
-    _cell: Cell,
-    attr: keyof Cell,
-    value: unknown,
-    cellInput: HTMLDivElement,
-) {
-    // let s = ctx.inlineStringEditCache;
-    const w = window.getSelection();
-    if (!w) return;
-    if (w.rangeCount === 0) return;
-
-    const range = w.getRangeAt(0);
-
-    const $textEditor = cellInput;
-
-    if (range.collapsed === true) {
-        return;
-    }
-
-    const { endContainer } = range;
-    const { startContainer } = range;
-    const { endOffset } = range;
-    const { startOffset } = range;
-
-    if ($textEditor) {
-        if (startContainer === endContainer) {
-            const span = startContainer.parentNode as HTMLElement | null;
-            let spanIndex: number;
-            let inherit = false;
-
-            const content = span?.innerHTML || '';
-
-            const fullContent = $textEditor.innerHTML;
-            if (fullContent.substring(0, 5) !== '<span') {
-                inherit = true;
-            }
-
-            if (span) {
-                let left = '';
-                let mid = '';
-                let right = '';
-                const s1 = 0;
-                const s2 = startOffset;
-                const s3 = endOffset;
-                const s4 = content.length;
-                left = content.substring(s1, s2);
-                mid = content.substring(s2, s3);
-                right = content.substring(s3, s4);
-
-                let cont = '';
-                if (left !== '') {
-                    let { cssText } = span.style;
-                    if (inherit) {
-                        const box = span.closest('.sheet-input-box-inner') as HTMLElement | null;
-                        if (box != null) {
-                            cssText = extendCssText(box.style.cssText, cssText);
-                        }
-                    }
-                    cont += `<span style='${cssText}'>${left}</span>`;
+function readRuns(root: Node, base: RunStyle): TextRun[] {
+    const runs: TextRun[] = [];
+    const visit = (node: Node, style: RunStyle) => {
+        for (const child of node.childNodes) {
+            if (isElement(child)) {
+                if (child.tagName === 'BR' || (BLOCK_TAGS.has(child.tagName) && runs.length > 0)) {
+                    appendRun(runs, { ...style, v: '\n' });
                 }
-
-                if (mid !== '') {
-                    let cssText = getCssText(span.style.cssText, attr, value);
-
-                    if (inherit) {
-                        const box = span.closest('.sheet-input-box-inner') as HTMLElement | null;
-                        if (box != null) {
-                            cssText = extendCssText(box.style.cssText, cssText);
-                        }
-                    }
-
-                    cont += `<span style='${cssText}'>${mid}</span>`;
-                }
-
-                if (right !== '') {
-                    let { cssText } = span.style;
-                    if (inherit) {
-                        const box = span.closest('.sheet-input-box-inner') as HTMLElement | null;
-                        if (box != null) {
-                            cssText = extendCssText(box.style.cssText, cssText);
-                        }
-                    }
-                    cont += `<span style='${cssText}'>${right}</span>`;
-                }
-
-                if (startContainer.parentElement?.tagName === 'SPAN') {
-                    spanIndex = indexOf($textEditor.querySelectorAll('span'), span);
-                    span.outerHTML = cont;
-                } else {
-                    spanIndex = 0;
-                    span.innerHTML = cont;
-                }
-
-                let seletedNodeIndex = 0;
-                if (s1 === s2) {
-                    seletedNodeIndex = spanIndex;
-                } else {
-                    seletedNodeIndex = spanIndex + 1;
-                }
-
-                selectTextContent($textEditor.querySelectorAll('span')[seletedNodeIndex]);
-            }
-        } else {
-            if (startContainer.parentElement?.tagName === 'SPAN' && endContainer.parentElement?.tagName === 'SPAN') {
-                const startSpan = startContainer.parentNode as HTMLElement | null;
-                const endSpan = endContainer.parentNode as HTMLElement | null;
-                const allSpans = $textEditor.querySelectorAll('span');
-
-                const startSpanIndex = indexOf(allSpans, startSpan);
-                const endSpanIndex = indexOf(allSpans, endSpan);
-
-                const startContent = startSpan?.innerHTML || '';
-                const endContent = endSpan?.innerHTML || '';
-                let sleft = '';
-                let sright = '';
-                let eleft = '';
-                let eright = '';
-                const s1 = 0;
-                const s2 = startOffset;
-                const s3 = endOffset;
-                const s4 = endContent.length;
-
-                sleft = startContent.substring(s1, s2);
-                sright = startContent.substring(s2, startContent.length);
-
-                eleft = endContent.substring(0, s3);
-                eright = endContent.substring(s3, s4);
-                let spans = $textEditor.querySelectorAll('span');
-                // const replaceSpans = spans.slice(startSpanIndex, endSpanIndex + 1);
-                let cont = '';
-                for (let i = 0; i < startSpanIndex; i += 1) {
-                    const span = spans[i];
-                    const content = span.innerHTML;
-                    cont += `<span style='${span.style.cssText}'>${content}</span>`;
-                }
-                if (sleft !== '') {
-                    cont += `<span style='${startSpan!.style.cssText}'>${sleft}</span>`;
-                }
-
-                if (sright !== '') {
-                    const cssText = getCssText(startSpan!.style.cssText, attr, value);
-                    cont += `<span style='${cssText}'>${sright}</span>`;
-                }
-
-                if (startSpanIndex < endSpanIndex) {
-                    for (let i = startSpanIndex + 1; i < endSpanIndex; i += 1) {
-                        const span = spans[i];
-                        const content = span.innerHTML;
-                        cont += `<span style='${span.style.cssText}'>${content}</span>`;
-                    }
-                }
-
-                if (eleft !== '') {
-                    const cssText = getCssText(endSpan!.style.cssText, attr, value);
-                    cont += `<span style='${cssText}'>${eleft}</span>`;
-                }
-
-                if (eright !== '') {
-                    cont += `<span style='${endSpan!.style.cssText}'>${eright}</span>`;
-                }
-
-                for (let i = endSpanIndex + 1; i < spans.length; i += 1) {
-                    const span = spans[i];
-                    const content = span.innerHTML;
-                    cont += `<span style='${span.style.cssText}'>${content}</span>`;
-                }
-
-                $textEditor.innerHTML = cont;
-
-                let startSeletedNodeIndex: number;
-                let endSeletedNodeIndex: number;
-                if (s1 === s2) {
-                    startSeletedNodeIndex = startSpanIndex;
-                    endSeletedNodeIndex = endSpanIndex;
-                } else {
-                    startSeletedNodeIndex = startSpanIndex + 1;
-                    endSeletedNodeIndex = endSpanIndex + 1;
-                }
-
-                spans = $textEditor.querySelectorAll('span');
-
-                selectTextContentCross(spans[startSeletedNodeIndex], spans[endSeletedNodeIndex]);
+                visit(child, elementStyle(child, style));
+            } else if (child.nodeType === child.TEXT_NODE) {
+                appendRun(runs, { ...style, v: child.textContent ?? '' });
             }
         }
+    };
+    visit(root, base);
+    return runs;
+}
+
+function isElement(node: Node): node is HTMLElement {
+    return node.nodeType === node.ELEMENT_NODE;
+}
+
+// The style an element gives its text: its tag, as the browser's own bold writes <b>, then its inline
+// CSS, as a span of ours or one the browser wrote carries it.
+function elementStyle(element: HTMLElement, inherited: RunStyle): RunStyle {
+    const style = { ...inherited, ...TAG_STYLES[element.tagName] };
+    const { fontWeight, fontStyle, color, fontSize, fontFamily } = element.style;
+    const decoration = element.style.textDecorationLine || element.style.textDecoration;
+    if (fontWeight) style.bl = fontWeight === 'bold' || fontWeight === 'bolder' || Number(fontWeight) >= 600 ? 1 : 0;
+    if (fontStyle) style.it = fontStyle === 'normal' ? 0 : 1;
+    if (decoration) {
+        style.un = decoration.includes('underline') ? style.un || 1 : 0;
+        style.cl = decoration.includes('line-through') ? 1 : 0;
     }
+    if (color) style.fc = hexColor(color);
+    const points = readCssFontSize(fontSize);
+    if (points) style.fs = points;
+    if (fontFamily) style.ff = cellFontName(fontFamily) ?? style.ff;
+    return style;
+}
+
+// The browser hands a color back as rgb(), and runs store the hex the color picker writes. Anything else
+// is no color a run can hold.
+function hexColor(color: string | undefined): string {
+    if (!color) return DEFAULT_COLOR;
+    const hex = color.startsWith('rgb') ? rgbToHex(color) : color.toLowerCase();
+    return HEX_COLOR.test(hex) ? hex : DEFAULT_COLOR;
+}
+
+function styleValue(key: RunStyleKey, value: string | number): Partial<RunStyle> {
+    if (key === 'fc') return { fc: hexColor(String(value)) };
+    if (key === 'ff') return { ff: cellFontName(value) ?? SHEET_DEFAULT_FONT.name };
+    return { [key]: Number(value) };
+}
+
+function runCss(style: RunStyle, base: RunStyle): string {
+    const css: string[] = [];
+    if (style.bl !== base.bl) css.push(`font-weight:${style.bl ? 'bold' : 'normal'}`);
+    if (style.it !== base.it) css.push(`font-style:${style.it ? 'italic' : 'normal'}`);
+    if (style.un !== base.un || style.cl !== base.cl) {
+        const lines = [style.un ? 'underline' : '', style.cl ? 'line-through' : ''].filter(Boolean);
+        css.push(`text-decoration:${lines.join(' ') || 'none'}`);
+    }
+    if (style.fc !== base.fc) css.push(`color:${style.fc}`);
+    if (style.fs !== base.fs) css.push(`font-size:${style.fs}pt`);
+    if (style.ff !== base.ff) css.push(`font-family:"${style.ff.replace(/["\\]/g, '')}", sans-serif`);
+    return css.join(';');
+}
+
+function appendRun(runs: TextRun[], run: TextRun) {
+    if (run.v === '') return;
+    const last = runs.at(-1);
+    if (last && sameRunStyle(last, run)) last.v += run.v;
+    else runs.push({ ...run });
+}
+
+function mergeRuns(runs: readonly TextRun[]): TextRun[] {
+    const merged: TextRun[] = [];
+    for (const run of runs) appendRun(merged, run);
+    return merged;
+}
+
+function applyRunStyle(runs: TextRun[], start: number, end: number, style: Partial<RunStyle>): TextRun[] {
+    const from = splitAt(runs, start);
+    const to = splitAt(runs, end);
+    return mergeRuns(runs.map((run, index) => (index >= from && index < to ? { ...run, ...style } : run)));
+}
+
+// Splits the run that `at` falls inside, so that a run starts there, and returns that run's index.
+function splitAt(runs: TextRun[], at: number): number {
+    let start = 0;
+    for (let index = 0; index < runs.length; index += 1) {
+        const run = runs[index];
+        if (at === start) return index;
+        if (at < start + run.v.length) {
+            const cut = at - start;
+            runs.splice(index, 1, { ...run, v: run.v.slice(0, cut) }, { ...run, v: run.v.slice(cut) });
+            return index + 1;
+        }
+        start += run.v.length;
+    }
+    return runs.length;
+}
+
+// The selection as character offsets into the editor's text, or null when it is not in the editor.
+function selectionOffsets(input: HTMLElement): [number, number] | null {
+    const selection = input.ownerDocument.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    const range = selection.getRangeAt(0);
+    if (!input.contains(range.startContainer) || !input.contains(range.endContainer)) return null;
+    return [
+        textOffset(input, range.startContainer, range.startOffset),
+        textOffset(input, range.endContainer, range.endOffset),
+    ];
+}
+
+// Counted the way readRuns reads, so a <br> or a block is the one character it reads as.
+function textOffset(input: HTMLElement, container: Node, offset: number): number {
+    const before = input.ownerDocument.createRange();
+    before.setStart(input, 0);
+    before.setEnd(container, offset);
+    let length = 0;
+    for (const run of readRuns(before.cloneContents(), runStyleOf(null))) length += run.v.length;
+    return length;
+}
+
+function setSelectionOffsets(input: HTMLElement, start: number, end: number) {
+    const range = input.ownerDocument.createRange();
+    range.setStart(...textPoint(input, start));
+    range.setEnd(...textPoint(input, end));
+    if (input.ownerDocument.activeElement !== input) input.focus({ preventScroll: true });
+    const selection = input.ownerDocument.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+}
+
+// The point `at` characters into the editor's text, counted the way readRuns reads, so a <br> or a block
+// is one character. A point between two spans is the end of the left one, so typing there continues the
+// run on the left.
+function textPoint(input: HTMLElement, at: number): [Node, number] {
+    let left = at;
+    let read = false;
+    let point: [Node, number] = [input, 0];
+    const visit = (node: Node): boolean => {
+        for (const [index, child] of [...node.childNodes].entries()) {
+            if (isElement(child)) {
+                if (child.tagName === 'BR' || (BLOCK_TAGS.has(child.tagName) && read)) {
+                    if (left === 0) return true;
+                    left -= 1;
+                    read = true;
+                    point = child.tagName === 'BR' ? [node, index + 1] : [child, 0];
+                }
+                if (visit(child)) return true;
+            } else if (child.nodeType === child.TEXT_NODE) {
+                const length = child.textContent?.length ?? 0;
+                if (left <= length) {
+                    point = [child, left];
+                    return true;
+                }
+                left -= length;
+                read ||= length > 0;
+                point = [child, length];
+            }
+        }
+        return false;
+    };
+    visit(input);
+    return point;
 }

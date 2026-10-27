@@ -1,3 +1,7 @@
+// The actions of the format toolbar and the Format menu on the selection, such as bold, the font, a
+// number format, borders, merging and autosum. Each runs inside a setContext recipe. While a cell is
+// open on text, a font format goes to the editor's selected characters rather than to the cells.
+
 import type { BorderType } from '@workspace/lib/sheets';
 import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
 import { cellValue, is_date, numberDisplay, parseCellInput } from '../../engine/format';
@@ -14,8 +18,12 @@ import { israngeseleciton } from './formula-editor';
 import { execFunctionGroup, execfunction } from './formula-exec';
 import { createFormulaRangeSelect, rangeSetValue, setCaretPosition } from './formula-range';
 import { showLinkCard } from './hyperlink';
-import type { StyleAttr } from './inline-string';
-import { inlineStyleAffectAttribute, updateInlineStringFormat, updateInlineStringFormatOutside } from './inline-string';
+import {
+    editorSelectionStyle,
+    formatEditorSelection,
+    isRunStyleKey,
+    updateInlineStringFormatOutside,
+} from './inline-string';
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
 import { selectIsOverlap } from './selection';
@@ -143,10 +151,12 @@ export function updateFormatCell(
                 const value = d[r][c];
 
                 if (value && isPlainObject(value)) {
-                    updateInlineStringFormatOutside(value, attr, foucsStatus);
-                    (value as Record<string, unknown>)[attr as string] = foucsStatus;
+                    if (isRunStyleKey(attr)) updateInlineStringFormatOutside(value, attr, foucsStatus);
+                    Object.assign(value, { [attr]: foucsStatus });
                     const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
-                    if (attr === 'fs' && canvas) {
+                    // A larger size or wrapped lines need a taller row. The row grows to fit and never
+                    // shrinks here, as another cell in it may need the height.
+                    if ((attr === 'fs' || attr === 'tb') && canvas) {
                         const textInfo = getCellTextInfo(d[r][c]!, canvas, ctx, {
                             r,
                             c,
@@ -160,9 +170,7 @@ export function updateFormatCell(
                         }
                     }
                 } else {
-                    const newCell: Cell = { v: value as Cell['v'] };
-                    (newCell as Record<string, unknown>)[attr as string] = foucsStatus;
-                    d[r][c] = newCell;
+                    d[r][c] = { [attr]: foucsStatus };
                 }
             }
         }
@@ -180,17 +188,10 @@ export function updateFormat(
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
-    if (attr in inlineStyleAffectAttribute) {
-        if (ctx.editingCellPosition.length > 0) {
-            const value = $input.innerText;
-            if (value.substring(0, 1) !== '=') {
-                const cell = d[ctx.editingCellPosition[0]][ctx.editingCellPosition[1]];
-                if (cell) {
-                    updateInlineStringFormat(ctx, cell, attr, foucsStatus, $input);
-                }
-                return;
-            }
-        }
+    if (isRunStyleKey(attr) && isEditingText(ctx, $input)) {
+        const [r, c] = ctx.editingCellPosition;
+        formatEditorSelection($input, d[r]?.[c], attr, foucsStatus);
+        return;
     }
 
     forEach(ctx.selections, (selection) => {
@@ -201,14 +202,22 @@ export function updateFormat(
     });
 }
 
-function toggleAttr(ctx: Context, cellInput: HTMLDivElement, attr: StyleAttr) {
+// While a cell is open on text, not a formula, a font format applies to the editor's selected
+// characters, and to a new cell as well as a filled one.
+function isEditingText(ctx: Context, $input: HTMLDivElement) {
+    return ctx.editingCellPosition.length > 0 && !$input.innerText.startsWith('=');
+}
+
+function toggleAttr(ctx: Context, cellInput: HTMLDivElement, attr: 'bl' | 'it' | 'un' | 'cl') {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    const flag = isAllSelectedCellsInStatus(ctx, attr, 1);
-    const foucsStatus = flag ? 0 : 1;
+    const [r, c] = ctx.editingCellPosition;
+    const isOn = isEditingText(ctx, cellInput)
+        ? Boolean(editorSelectionStyle(cellInput, flowdata[r]?.[c])?.[attr])
+        : isAllSelectedCellsInStatus(ctx, attr, 1);
 
-    updateFormat(ctx, cellInput, flowdata, attr, foucsStatus);
+    updateFormat(ctx, cellInput, flowdata, attr, isOn ? 0 : 1);
 }
 
 function setAttr(

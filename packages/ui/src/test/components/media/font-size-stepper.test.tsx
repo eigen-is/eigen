@@ -67,3 +67,20 @@ test('Escape, a word or no change applies nothing and shows the size again', asy
     await type(input, '11');
     expect(onChange).not.toHaveBeenCalled();
 });
+
+// The focus may move on as the size applies, such as back to a cell editor with a word selected, and the
+// browser types a key's default action into whatever has the focus then.
+test('the Enter that applies a size does nothing else', async () => {
+    const input = await render(11);
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    await act(async () => {
+        input.focus();
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '18');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+        input.dispatchEvent(enter);
+    });
+    expect(enter.defaultPrevented).toBe(true);
+    expect(onChange.mock.calls).toEqual([[18]]);
+});

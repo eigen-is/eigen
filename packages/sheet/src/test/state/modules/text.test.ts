@@ -1,28 +1,30 @@
 // Excel and Google wrap text only: a number too wide for its column stays on one line and clips.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
-import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
 import { clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet } from '../../../state/modules/text';
 import type { Cell } from '../../../state/types';
-import { contextFactory } from '../factories/context';
+import { workbookContextFactory } from '../factories/context';
 
-function measuringCanvas(): CanvasRenderingContext2D {
+type Measure = (text: string, font: string) => { width: number; ascent: number; descent: number };
+
+const fixedGlyphs: Measure = (text) => ({ width: text.length * 7, ascent: 8, descent: 3 });
+
+function measuringCanvas(measure = fixedGlyphs): CanvasRenderingContext2D {
     const canvas = {
         font: '11px Arial',
         textAlign: 'start',
         textBaseline: 'alphabetic',
-        measureText: (text: string) => ({
-            width: text.length * 7,
-            actualBoundingBoxAscent: 8,
-            actualBoundingBoxDescent: 3,
-        }),
+        measureText: (text: string) => {
+            const { width, ascent, descent } = measure(text, canvas.font);
+            return { width, actualBoundingBoxAscent: ascent, actualBoundingBoxDescent: descent };
+        },
     };
     return canvas as unknown as CanvasRenderingContext2D;
 }
 
 function layout(cell: Cell) {
-    const ctx = contextFactory() as Context;
+    const ctx = workbookContextFactory();
     return getCellTextInfo(cell, measuringCanvas(), ctx, {
         cellWidth: 40,
         cellHeight: 60,
@@ -71,7 +73,7 @@ describe('state/modules/text — getCellTextInfo General alignment', () => {
 
     function typed(text: string): Cell {
         const data: (Cell | null)[][] = [[null]];
-        setCellValue(contextFactory() as Context, 0, 0, data, text);
+        setCellValue(workbookContextFactory(), 0, 0, data, text);
         return data[0][0] ?? {};
     }
 
@@ -103,5 +105,122 @@ describe('state/modules/text — font sets', () => {
         expect(getFontSet({ ff: "'source serif 4', sans-serif", it: 1, fs: 12 }, 10)).toStartWith(
             'italic normal normal 12pt "Source Serif 4",',
         );
+    });
+});
+
+// A rich cell wraps between words, inside a run too, and the runs on one line share its baseline.
+describe('state/modules/text — rich text wrap', () => {
+    beforeEach(() => {
+        clearMeasureTextCache();
+    });
+
+    // Glyphs as wide and as tall as the font set's point size says, so two sizes measure apart.
+    const sizedCanvas = () =>
+        measuringCanvas((text, font) => {
+            const size = Number.parseFloat(font.match(/([\d.]+)pt/)?.[1] ?? '10');
+            return { width: text.length * size * 0.7, ascent: size, descent: size * 0.25 };
+        });
+
+    function lines(runs: { v: string; fs: number }[], cellWidth: number) {
+        const cell: Cell = { tb: '2', ct: { fa: 'General', t: 'inlineStr', s: runs } };
+        const info = getCellTextInfo(cell, sizedCanvas(), workbookContextFactory(), {
+            cellWidth,
+            cellHeight: 200,
+            r: 0,
+            c: 0,
+        });
+        const byLine = new Map<number, { text: string; tops: Set<number> }>();
+        for (const word of info?.values ?? []) {
+            const line = byLine.get(word.splitIndex ?? 0) ?? { text: '', tops: new Set<number>() };
+            line.text += word.content;
+            line.tops.add(word.top);
+            byLine.set(word.splitIndex ?? 0, line);
+        }
+        return [...byLine.values()];
+    }
+
+    test('one run too wide for the cell breaks at its spaces', () => {
+        expect(lines([{ v: 'aa bb cc dd', fs: 10 }], 50).map((line) => line.text.trim())).toEqual(['aa bb', 'cc dd']);
+    });
+
+    test('two sizes on one wrapped line share its baseline', () => {
+        const wrapped = lines(
+            [
+                { v: 'aa bb ', fs: 10 },
+                { v: 'CC', fs: 20 },
+                { v: ' dd ee ff gg', fs: 10 },
+            ],
+            100,
+        );
+        expect(wrapped.map((line) => line.text.trim())).toEqual(['aa bb CC dd', 'ee ff gg']);
+        for (const line of wrapped) expect(line.tops.size).toBe(1);
+    });
+
+    function pieces(runs: { v: string; fs: number }[], tb: string | undefined, cellWidth = 1000) {
+        const cell: Cell = { tb, ct: { fa: 'General', t: 'inlineStr', s: runs } };
+        const info = getCellTextInfo(cell, sizedCanvas(), workbookContextFactory(), {
+            cellWidth,
+            cellHeight: 200,
+            r: 0,
+            c: 0,
+        });
+        return info?.values.map((word) => word.content);
+    }
+
+    test('the words of one style on a line draw as one piece, so right-to-left text keeps its order', () => {
+        expect(pieces([{ v: 'שלום עולם', fs: 10 }], '2')).toEqual(['שלום עולם']);
+        expect(pieces([{ v: 'aa bb cc dd', fs: 10 }], '2', 50)).toEqual(['aa bb ', 'cc dd']);
+        expect(
+            pieces(
+                [
+                    { v: 'aa ', fs: 10 },
+                    { v: 'bb', fs: 20 },
+                    { v: ' cc', fs: 10 },
+                ],
+                '2',
+            ),
+        ).toEqual(['aa ', 'bb', ' cc']);
+    });
+
+    test('a rich cell that does not wrap draws each run as one piece', () => {
+        expect(
+            pieces(
+                [
+                    { v: 'aa bb cc', fs: 10 },
+                    { v: ' dd', fs: 20 },
+                ],
+                undefined,
+            ),
+        ).toEqual(['aa bb cc', ' dd']);
+    });
+
+    // 16,000 words took seconds when every step added up the line from its start again. Four times the words
+    // cost a linear layout four times the CPU and a quadratic one sixteen times. CPU time, not the wall clock,
+    // and a ratio, not a bound, so a loaded or slower runner passes too. Ten rounds lift the short run above
+    // the clock's grain, and a first run warms the JIT.
+    test('a long rich cell lays out in linear time, wrapped or not', () => {
+        const cpu = (words: number, tb: string | undefined) => {
+            const v = Array.from({ length: words }, (_, index) => `w${index % 97}`).join(' ');
+            clearMeasureTextCache();
+            const started = process.cpuUsage();
+            for (let round = 0; round < 10; round += 1) {
+                pieces(
+                    [
+                        { v, fs: 10 },
+                        { v: ' end', fs: 20 },
+                    ],
+                    tb,
+                    1e7,
+                );
+            }
+            const { user, system } = process.cpuUsage(started);
+            return user + system;
+        };
+        for (const tb of [undefined, '2']) {
+            cpu(4000, tb);
+            const small = cpu(4000, tb);
+            const large = cpu(16000, tb);
+            expect(large).toBeLessThan(small * 10);
+        }
     });
 });

@@ -1,3 +1,7 @@
+// The font size control of a formatting toolbar, such as the docs and sheets toolbars: a box between a
+// minus and a plus button. The buttons step the size, and the box applies a typed size on Enter or blur
+// and drops it on Escape.
+
 import { readFontSize } from '@workspace/lib/constants/fonts';
 import { Minus, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -47,9 +51,12 @@ export function FontSizeStepper({ value, onChange, onStep }: FontSizeStepperProp
                 onChange={(e) => setDraft(e.target.value)}
                 onBlur={commit}
                 onKeyDown={(e) => {
-                    // Typing here is the box's, not the keys of the editor or grid around it.
+                    // Typing here is the box's, not the keys of the editor or grid around it. The size applies
+                    // as the box blurs, and the focus may go on to an editor, so Enter's own action is
+                    // dropped: it would type a line break over the editor's selection.
                     e.stopPropagation();
                     if (e.key === 'Escape') escaped.current = true;
+                    if (e.key === 'Enter') e.preventDefault();
                     if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
                 }}
             />

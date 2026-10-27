@@ -15,6 +15,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Word files** — an image or a chart behind or in front of the text stays there when you import a Word file or download a document as Word
 - **Table borders in Docs** — give the selected cells all borders, a box around them, or none, and pick the border color, in the **Table** panel or under **Format › Table**. A row or column you add takes the borders and fill of the one beside it
 - **Table borders in Word files** — a Word table keeps its borders, their colors, widths and dashes, when it comes in and when you download a document as Word. A table without borders in Word has none in Docs
+- **Styling part of a cell in Sheets** — while you edit a cell, select some of its words and make them bold, italic, underlined, struck through, or another color, font or size. **Ctrl+B**, **Ctrl+I** and **Ctrl+U** (Mac: **⌘B**, **⌘I**, **⌘U**) work as you type, and a style you pick with no words selected applies to what you type next. Text you type or paste over selected words takes their style, and text you paste comes in as plain text, as in Google Sheets. The cell keeps its styles when you download it as Excel
 
 ### Changed
 
@@ -47,6 +48,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Sheets** — an edit someone makes while your spreadsheet is still opening, or while it reloads, shows up instead of going missing until you reload
 - **Spreadsheet PDF** — a sheet with one cell of thousands of lines prints on one page instead of thousands
 - **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads as a web page or PDF with the ones that fit and leaves the rest out, instead of failing. Its preview shows the charts that fit instead of nothing
+- **Sheets** — a wrapped cell that mixes styles, such as one from an Excel file, breaks its lines between words instead of keeping a long styled stretch on one line
+- **Sheets** — turning on **Format → Wrapping → Wrap**, or picking a bigger size in the font size box or **Format → Font size**, makes the row tall enough for the cell's text
 
 ## [0.4.0] - 2026-10-26
 

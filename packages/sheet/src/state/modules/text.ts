@@ -1,3 +1,8 @@
+// Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
+// and where each piece of text sits, a rich cell's runs included. The painter lays out every cell it
+// draws, and the row's auto height asks for the same layout. Only the text measurements are cached,
+// until clearMeasureTextCache.
+
 import { cellFontName, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cellWrapsText } from '../../engine/format';
@@ -37,9 +42,13 @@ type InlineRun = {
     wrap?: boolean;
     fs: number;
     v?: string;
-    si?: number;
     measureText?: MeasureTextMetrics;
 };
+
+// What a wrapped rich cell breaks between: a space, one CJK character, or a run of anything else. The
+// wrap pass breaks a line after a space or a wide character, as it does in plain text.
+const CJK = '\\u3000-\\u9fff\\uac00-\\ud7af\\uf900-\\ufaff\\uff00-\\uffef';
+const WRAP_WORDS = new RegExp(` |[${CJK}]|[^ ${CJK}]+`, 'g');
 
 // One styled run produced by the layout pass. `style` is either an InlineRun
 // (when wordGroup.inline === true) or the resolved fontset string for plain text;
@@ -94,6 +103,10 @@ type DrawLineOption = {
     fs: number;
 };
 
+function sameInlineLook(a: InlineRun, b: InlineRun) {
+    return a.fontset === b.fontset && a.fc === b.fc && a.cl === b.cl && a.un === b.un && a.fs === b.fs;
+}
+
 function checkWordByteLength(value: string) {
     return Math.ceil(value.charCodeAt(0).toString(2).length / 8);
 }
@@ -109,11 +122,9 @@ export function hasChinaword(s: string) {
 
 const textHeightCache: Record<string, [number, number]> = {};
 let measureTextCache: Record<string, MeasureTextMetrics> = {};
-let measureTextCellInfoCache: Record<string, CellTextInfo | null> = {};
 
 export function clearMeasureTextCache() {
     measureTextCache = {};
-    measureTextCellInfoCache = {};
 }
 
 function getTextSize(text: string, font: string) {
@@ -331,7 +342,8 @@ export function drawLineInfo(
 // `option.cellWidth` absent → "onlyWidth" mode (row-height auto-fit); only the geometry
 // totals are computed and the layout math returns early. `option.cellHeight` absent is
 // allowed for callers that only consume textHeightAll — the layout `values` produced
-// with the default 0 are unused.
+// with the default 0 are unused. Such a caller fits the row to the text, so a plain cell's
+// wrapped lines are all laid out rather than only those that fit the row.
 export function getCellTextInfo(
     cell: Cell,
     renderCtx: CanvasRenderingContext2D,
@@ -340,14 +352,10 @@ export function getCellTextInfo(
 ): CellTextInfo | null {
     const cellWidth = option.cellWidth ?? 0;
     const cellHeight = option.cellHeight ?? 0;
+    const linesFitIn = option.cellHeight ?? Number.POSITIVE_INFINITY;
     const space_width = option.space_width ?? 2;
     const space_height = option.space_height ?? 2;
     const isMode = option.cellWidth == null ? 'onlyWidth' : '';
-    const isModeSplit = isMode === 'onlyWidth' ? '_' : '';
-    const textInfo = measureTextCellInfoCache[`${option.r}_${option.c}${isModeSplit}${isMode}`];
-    if (textInfo) {
-        return textInfo;
-    }
 
     // Horizontal alignment
     const horizonAlign = normalizedCellAttr(cell, 'ht');
@@ -376,61 +384,23 @@ export function getCellTextInfo(
     let value: string | number | boolean | undefined;
     const inlineStringArr: InlineRun[] = [];
     if (isInlineStringCell(cell)) {
-        const sharedStrings = cell.ct.s;
-        let similarIndex = 0;
-        for (let i = 0; i < sharedStrings.length; i += 1) {
-            const shareCell = sharedStrings[i];
-            const scfontset = getFontSet(shareCell, sheetCtx.defaultFontSize);
-            const { fc } = shareCell;
-            const { cl } = shareCell;
-            const { un } = shareCell;
-            let { v } = shareCell;
-            const { fs } = shareCell;
-            v = (v ?? '')
-                .replace(/\r\n/g, '_x000D_')
-                .replace(/&#13;&#10;/g, '_x000D_')
-                .replace(/\r/g, '_x000D_')
-                .replace(/\n/g, '_x000D_');
-            const splitArr = v.split('_x000D_');
-            for (let x = 0; x < splitArr.length; x += 1) {
-                const newValue = splitArr[x];
-
-                if (newValue === '' && x !== splitArr.length - 1) {
-                    inlineStringArr.push({
-                        fontset: scfontset,
-                        fc: !fc ? '#000' : fc,
-                        cl: !cl ? 0 : cl,
-                        un: !un ? 0 : un,
-                        wrap: true,
-                        fs: !fs ? 11 : fs,
-                    });
-                    similarIndex += 1;
-                } else {
-                    inlineStringArr.push({
-                        fontset: scfontset,
-                        fc: !fc ? '#000' : fc,
-                        cl: !cl ? 0 : cl,
-                        un: !un ? 0 : un,
-                        v: newValue,
-                        si: similarIndex,
-                        fs: !fs ? 11 : fs,
-                    });
-
-                    if (x !== splitArr.length - 1) {
-                        inlineStringArr.push({
-                            fontset: scfontset,
-                            fc: !fc ? '#000' : fc,
-                            cl: !cl ? 0 : cl,
-                            un: !un ? 0 : un,
-                            wrap: true,
-                            fs: !fs ? 11 : fs,
-                        });
-                        similarIndex += 1;
-                    }
+        for (const run of cell.ct.s) {
+            const style = {
+                fontset: getFontSet(run, sheetCtx.defaultFontSize),
+                fc: run.fc || '#000',
+                cl: run.cl || 0,
+                un: run.un || 0,
+                fs: run.fs || 11,
+            };
+            const lines = (run.v ?? '').split(/\r\n|&#13;&#10;|\r|\n/);
+            for (const [index, line] of lines.entries()) {
+                const isLast = index === lines.length - 1;
+                if (line !== '' || isLast) {
+                    const words = wrap ? (line.match(WRAP_WORDS) ?? [line]) : [line];
+                    for (const word of words) inlineStringArr.push({ ...style, v: word });
                 }
+                if (!isLast) inlineStringArr.push({ ...style, wrap: true });
             }
-
-            similarIndex += 1;
         }
         isInline = true;
     } else {
@@ -674,9 +644,7 @@ export function getCellTextInfo(
             } | null = null;
             // Inline-string variant of the wrap-break tracker — only the index is needed there.
             let spaceOrTwoByteIndex: number | null = null;
-            // Lazily resolves an inline run's cached canvas metrics; the runtime fills sc.measureText
-            // for non-wrap runs before any branch that reads it, but TS can't track that across the
-            // while-loop boundary, so each push site routes through here.
+            // A rich cell's word is measured once, however often the wrap pass goes back over it.
             const measureRun = (sc: InlineRun): MeasureTextMetrics => {
                 if (sc.measureText == null) {
                     sc.measureText = getMeasureText(sc.v ?? '', renderCtx, sc.fontset);
@@ -684,16 +652,27 @@ export function getCellTextInfo(
                 return sc.measureText;
             };
 
-            // Build a CellTextWordGroup from an inline run; centralises the metrics
-            // lookup so callers don't repeat the height = asc + desc arithmetic.
-            // `splitIndex` is read at call time (closure over the outer mutable var).
-            const buildItem = (sc: InlineRun): CellTextWordGroup => {
+            // Puts a word of a rich cell on the line being filled. A word in the same style as the one
+            // before it joins that piece, so right-to-left text draws in its own order and the canvas
+            // kerns across the join.
+            const addWord = (sc: InlineRun) => {
                 const m = measureRun(sc);
-                return {
+                const height = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
+                const line = (text_all_split[splitIndex] ??= []);
+                const last = line.at(-1);
+                if (last && typeof last.style !== 'string' && sameInlineLook(last.style, sc)) {
+                    last.content += sc.v ?? '';
+                    last.width += m.width;
+                    last.height = Math.max(last.height, height);
+                    last.asc = Math.max(last.asc ?? 0, m.actualBoundingBoxAscent);
+                    last.desc = Math.max(last.desc ?? 0, m.actualBoundingBoxDescent);
+                    return;
+                }
+                line.push({
                     content: sc.v ?? '',
                     style: sc,
                     width: m.width,
-                    height: m.actualBoundingBoxAscent + m.actualBoundingBoxDescent,
+                    height,
                     left: 0,
                     top: 0,
                     splitIndex,
@@ -701,30 +680,24 @@ export function getCellTextInfo(
                     desc: m.actualBoundingBoxDescent,
                     inline: true,
                     fs: sc.fs,
-                };
+                });
             };
 
             if (isInline) {
+                // The line being filled holds the items from anchor up to i. Its size grows with each item
+                // and starts again at a line break, so a long cell costs one pass.
+                let lineWidth = 0;
+                let lineHeight = 0;
                 while (i <= inlineStringArr.length) {
-                    const shareCells = inlineStringArr.slice(anchor, i);
-                    if (shareCells[shareCells.length - 1].wrap === true) {
-                        anchor = i;
-
-                        if (shareCells.length > 1) {
-                            for (let s = 0; s < shareCells.length - 1; s += 1) {
-                                text_all_split[splitIndex].push(buildItem(shareCells[s]));
-                            }
-                        }
-
-                        if (shareCells.length === 1) {
-                            const sc = shareCells[0];
-                            const measureText = getMeasureText('M', renderCtx, sc.fontset);
-                            if (isNil(text_all_split[splitIndex])) {
-                                text_all_split[splitIndex] = [];
-                            }
-                            text_all_split[splitIndex].push({
+                    const run = inlineStringArr[i - 1];
+                    if (run.wrap === true) {
+                        if (i - 1 > anchor) {
+                            for (let s = anchor; s < i - 1; s += 1) addWord(inlineStringArr[s]);
+                        } else {
+                            const measureText = getMeasureText('M', renderCtx, run.fontset);
+                            (text_all_split[splitIndex] ??= []).push({
                                 content: '',
-                                style: sc,
+                                style: run,
                                 width: measureText.width,
                                 height: measureText.actualBoundingBoxAscent + measureText.actualBoundingBoxDescent,
                                 left: 0,
@@ -734,116 +707,49 @@ export function getCellTextInfo(
                                 desc: measureText.actualBoundingBoxDescent,
                                 inline: true,
                                 wrap: true,
-                                fs: sc.fs,
+                                fs: run.fs,
                             });
                         }
-
                         splitIndex += 1;
-
+                        anchor = i;
                         i += 1;
-
+                        lineWidth = 0;
+                        lineHeight = 0;
+                        spaceOrTwoByteIndex = null;
                         continue;
                     }
 
-                    let textWidth = 0;
-                    let textHeight = 0;
-                    for (let s = 0; s < shareCells.length; s += 1) {
-                        const sc = shareCells[s];
-                        const m = measureRun(sc);
-                        textWidth += m.width;
-                        textHeight = Math.max(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent);
-                    }
+                    const m = measureRun(run);
+                    lineWidth += m.width;
+                    lineHeight = Math.max(lineHeight, m.actualBoundingBoxAscent + m.actualBoundingBoxDescent);
+                    const rtPI = (rt * Math.PI) / 180;
+                    // The line's box, its height included, as it stands rotated.
+                    const width = lineWidth * Math.cos(rtPI) + lineHeight * Math.sin(rtPI);
+                    const height = lineWidth * Math.sin(rtPI) + lineHeight * Math.cos(rtPI);
 
-                    const width =
-                        textWidth * Math.cos((rt * Math.PI) / 180) + textHeight * Math.sin((rt * Math.PI) / 180); // consider text box wdith and line height
-
-                    const height =
-                        textWidth * Math.sin((rt * Math.PI) / 180) + textHeight * Math.cos((rt * Math.PI) / 180); // consider text box wdith and line height
-
-                    const lastWord = shareCells[shareCells.length - 1];
-                    // Non-wrap items always have v set (see inlineStringArr.push call sites); the
-                    // wrap branch above has already short-circuited so lastWord is non-wrap here.
-                    const lastWordV = lastWord.v ?? '';
-                    if (lastWordV === ' ' || checkWordByteLength(lastWordV) === 2) {
+                    const word = run.v ?? '';
+                    if (word === ' ' || checkWordByteLength(word) === 2) {
                         spaceOrTwoByteIndex = i;
                     }
 
-                    if (rt !== 0) {
-                        // rotate
-                        if (height + space_height > cellHeight && !isNil(text_all_split[splitIndex]) && wrap) {
-                            if (!isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i) {
-                                for (let s = 0; s < spaceOrTwoByteIndex - anchor; s += 1) {
-                                    text_all_split[splitIndex].push(buildItem(shareCells[s]));
-                                }
-                                anchor = spaceOrTwoByteIndex;
-
-                                i = spaceOrTwoByteIndex + 1;
-
-                                splitIndex += 1;
-
-                                spaceOrTwoByteIndex = null;
-                            } else {
-                                anchor = i - 1;
-
-                                for (let s = 0; s < shareCells.length - 1; s += 1) {
-                                    text_all_split[splitIndex].push(buildItem(shareCells[s]));
-                                }
-
-                                splitIndex += 1;
-                            }
-                        } else if (i === inlineStringArr.length) {
-                            if (isNil(text_all_split[splitIndex])) {
-                                text_all_split[splitIndex] = [];
-                            }
-                            for (let s = 0; s < shareCells.length; s += 1) {
-                                text_all_split[splitIndex].push(buildItem(shareCells[s]));
-                            }
-                            break;
-                        } else {
-                            if (isNil(text_all_split[splitIndex])) {
-                                text_all_split[splitIndex] = [];
-                            }
-                            i += 1;
-                        }
+                    // A rotated line runs out of the cell's height, a level one out of its width.
+                    const overflows = rt !== 0 ? height + space_height > cellHeight : width + space_width > cellWidth;
+                    if (wrap && overflows && !isNil(text_all_split[splitIndex])) {
+                        const end =
+                            !isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i ? spaceOrTwoByteIndex : i - 1;
+                        for (let s = anchor; s < end; s += 1) addWord(inlineStringArr[s]);
+                        anchor = end;
+                        i = end + 1;
+                        splitIndex += 1;
+                        spaceOrTwoByteIndex = null;
+                        lineWidth = 0;
+                        lineHeight = 0;
+                    } else if (i === inlineStringArr.length) {
+                        for (let s = anchor; s < i; s += 1) addWord(inlineStringArr[s]);
+                        break;
                     } else {
-                        // plain
-                        if (width + space_width > cellWidth && !isNil(text_all_split[splitIndex]) && wrap) {
-                            if (!isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i) {
-                                for (let s = 0; s < spaceOrTwoByteIndex - anchor; s += 1) {
-                                    text_all_split[splitIndex].push(buildItem(shareCells[s]));
-                                }
-                                anchor = spaceOrTwoByteIndex;
-
-                                i = spaceOrTwoByteIndex + 1;
-
-                                splitIndex += 1;
-
-                                spaceOrTwoByteIndex = null;
-                            } else {
-                                anchor = i - 1;
-
-                                for (let s = 0; s < shareCells.length - 1; s += 1) {
-                                    text_all_split[splitIndex].push(buildItem(shareCells[s]));
-                                }
-
-                                splitIndex += 1;
-                            }
-                        } else if (i === inlineStringArr.length) {
-                            if (isNil(text_all_split[splitIndex])) {
-                                text_all_split[splitIndex] = [];
-                            }
-
-                            for (let s = 0; s < shareCells.length; s += 1) {
-                                text_all_split[splitIndex].push(buildItem(shareCells[s]));
-                            }
-
-                            break;
-                        } else {
-                            if (isNil(text_all_split[splitIndex])) {
-                                text_all_split[splitIndex] = [];
-                            }
-                            i += 1;
-                        }
+                        text_all_split[splitIndex] ??= [];
+                        i += 1;
                     }
                 }
             } else {
@@ -962,7 +868,7 @@ export function getCellTextInfo(
                                 spaceOrTwoByte = null;
 
                                 parsedTextHeight += preTextHeight;
-                                if (parsedTextHeight >= cellHeight) break;
+                                if (parsedTextHeight >= linesFitIn) break;
                             } else {
                                 spaceOrTwoByte = null;
                                 anchor = i - 1;
@@ -987,7 +893,7 @@ export function getCellTextInfo(
                                 splitIndex += 1;
 
                                 parsedTextHeight += preTextHeight;
-                                if (parsedTextHeight >= cellHeight) break;
+                                if (parsedTextHeight >= linesFitIn) break;
                             }
                         } else if (i === valueStr.length) {
                             if (isNil(text_all_split[splitIndex])) {

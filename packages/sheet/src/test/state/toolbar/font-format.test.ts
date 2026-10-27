@@ -9,9 +9,10 @@ import { Window } from 'happy-dom';
 import { enablePatches, produceWithPatches } from 'immer';
 import { setColumnWidth } from '../../../state/api/rowcol';
 import type { Context } from '../../../state/context';
+import { getFlowdata } from '../../../state/context';
 import { clearMeasureTextCache } from '../../../state/modules/text';
-import { handleTextSize } from '../../../state/modules/toolbar';
-import type { SheetConfig } from '../../../state/types';
+import { handleTextSize, updateFormat } from '../../../state/modules/toolbar';
+import type { Cell, SheetConfig } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
 enablePatches();
@@ -89,5 +90,36 @@ describe('state/modules/toolbar — font-size auto-height', () => {
         });
 
         expect(resized.sheets[0].config?.rowlen?.[0]).toBe(grownHeight);
+    });
+});
+
+// Wrap fits the row to the cell's wrapped lines, as Google Sheets does, a mixed-style cell's too.
+describe('state/modules/toolbar — wrap auto-height', () => {
+    function wrappedRowHeight(cell: Cell) {
+        clearMeasureTextCache();
+        const ctx = sizedContext();
+        ctx.sheets[0].data = [[cell]];
+        const [wrapped] = produceWithPatches(ctx, (draft: Context) => {
+            const d = getFlowdata(draft);
+            if (d) updateFormat(draft, cellInput(), d, 'tb', 'wrap', measuringCanvas());
+        });
+        return wrapped.sheets[0].config?.rowlen?.[0] ?? 0;
+    }
+
+    const rich = (...texts: string[]): Cell => ({
+        ct: { fa: 'General', t: 'inlineStr', s: texts.map((v, index) => ({ v, bl: index % 2 })) },
+    });
+
+    // Fitting the row lays out every line, not only those that fit the row it has.
+    test('Wrap on a plain cell grows its row by the lines it wraps to', () => {
+        const oneLine = wrappedRowHeight({ v: 'ab', m: 'ab', ct: { fa: 'General', t: 'g' } });
+        const text = 'a much longer cell text';
+        expect(wrappedRowHeight({ v: text, m: text, ct: { fa: 'General', t: 'g' } })).toBeGreaterThan(oneLine * 1.5);
+    });
+
+    test('Wrap on a rich cell grows its row by the lines it wraps to', () => {
+        const oneLine = wrappedRowHeight(rich('ab'));
+        expect(oneLine).toBeGreaterThan(19);
+        expect(wrappedRowHeight(rich('a much longer ', 'cell text'))).toBeGreaterThan(oneLine * 1.5);
     });
 });

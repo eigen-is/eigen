@@ -23,7 +23,7 @@ You can download a copy of any spreadsheet to your computer without removing it 
 
 The downloaded file takes the name of the spreadsheet.
 
-A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells, charts, images, and sheets past a size limit. Even cut short, a PDF of a very large spreadsheet can take too long to make and fail. A sheet cut short in the PDF keeps the columns one page holds, 192 at the default width, because the page would cut off the rest. The web page keeps more columns while all of the sheet's rows fit. To keep everything, download it as Excel.
+A PDF or web page shows a cell that mixes several styles in the cell's own style. A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells, charts, images, and sheets past a size limit. Even cut short, a PDF of a very large spreadsheet can take too long to make and fail. A sheet cut short in the PDF keeps the columns one page holds, 192 at the default width, because the page would cut off the rest. The web page keeps more columns while all of the sheet's rows fit. To keep everything, download it as Excel.
 
 In the PDF and the web page, text that doesn't fit its cell's row is cut off at the row's edge, as it is in the spreadsheet.
 
@@ -36,7 +36,7 @@ When you download as **Microsoft Excel (.xlsx)**, the following are preserved:
 - Merged cells
 - Column widths and row heights
 - Cell borders
-- Text formatting: bold, italic, underline, strikethrough, font size, text color, and fill color
+- Text formatting: bold, italic, underline, strikethrough, font, font size, text color, and fill color, also where one cell mixes several styles
 - Text alignment, text wrapping, and text rotation
 - The sheet tab names, colors, and order
 - Hidden gridlines (if you hid them)

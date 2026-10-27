@@ -53,6 +53,7 @@ import {
     patchToOp,
     recordEntry,
     redoEntry,
+    selectionCache,
     sheetChartClipboardItem,
     undoEntry,
     warmFormulaCellInfoMap,
@@ -535,8 +536,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     activeElement?.className === 'sheet-overlay' ||
                     (activeElement?.matches('[data-floating-id]') && workbookContainer.current?.contains(activeElement))
                 ) {
+                    // The open cell editor pastes into itself, as text. A ⌘V on the grid waits for its paste in
+                    // selectionCache, and a paste the grid passes on or takes without handlePaste ends that wait,
+                    // so a later paste into the editor can't become a grid paste that closes it.
                     const { clipboardData } = e;
-                    if (!clipboardData) return;
+                    if (!clipboardData || context.editingCellPosition.length > 0) {
+                        selectionCache.isPasteAction = false;
+                        return;
+                    }
 
                     // A same-tab sheet→sheet copy tags text/html with COPY_ACTION_TABLE_MARKER and is
                     // served from ctx.copyState (formulas/formats), not the eigen wire — the classifier
@@ -560,11 +567,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             // Always materialize (even with no image items) so a forged/dangling
                             // eigen-media ref is stripped before the svg is stored — same as docs/slides.
                             e.preventDefault();
+                            selectionCache.isPasteAction = false;
                             onPasteSvgFile(paste.svg.svg, svgImageItems);
                             return;
                         }
                         if (onPasteImageFile) {
                             e.preventDefault();
+                            selectionCache.isPasteAction = false;
                             onPasteImageFile(svgToImageFile(paste.svg.svg));
                             return;
                         }
@@ -590,6 +599,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         );
                         if (imageItems.length > 0 || chartItems.length > 0 || textParts.length > 0) {
                             e.preventDefault();
+                            if (textParts.length === 0) selectionCache.isPasteAction = false;
                             for (const item of imageItems) onPasteEigenImage?.(item);
                             // This workbook's own copy keeps the ranges it was copied with.
                             const copied = globalCache.current.copiedChart;
