@@ -67,6 +67,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
         case SSEventType.DRIVE_FOLDER_DELETED:
         case SSEventType.DRIVE_FILE_DELETED:
             invalidateItemDeleted(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
+            invalidateTrash(queryClient, path.ownerId, path.mountId);
             invalidateSearchOwner(queryClient, path.ownerId);
             invalidateFileHistory(queryClient, path.ownerId);
             return true;
