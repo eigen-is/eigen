@@ -1249,7 +1249,7 @@ test("a viewer's Download image saves the chart in its look on white, its font e
     }
 });
 
-// The outline: View › Show outline on a desktop, remembered per browser, and the kebab's pane on a phone.
+// The outline: Tools › Show outline on a desktop, remembered per browser, and the kebab's pane on a phone.
 const OUTLINE_DOC = {
     type: 'doc',
     content: [
@@ -1266,11 +1266,11 @@ const outlineEntry = (label: string) =>
         (entry) => entry.textContent === label,
     );
 
-test('the outline is hidden at first, and View › Show outline shows and hides it, remembered after a reload', async () => {
+test('the outline is hidden at first, and Tools › Show outline shows and hides it, remembered after a reload', async () => {
     await render(WRITER);
     expect(outlineShown()).toBe(false);
 
-    await openMenu('View');
+    await openMenu('Tools');
     await pick('Show outline');
     expect(outlineShown()).toBe(true);
 
@@ -1278,12 +1278,23 @@ test('the outline is hidden at first, and View › Show outline shows and hides 
     await render(WRITER);
     expect(outlineShown()).toBe(true);
 
-    await openMenu('View');
+    await openMenu('Tools');
     await pick('Show outline');
     expect(outlineShown()).toBe(false);
     await unmount();
     await render(WRITER);
     expect(outlineShown()).toBe(false);
+});
+
+// A column beside the scroll box would narrow it and re-center the page, so the outline lies over the box instead.
+test('the outline lies over the scroll box, as a panel does, so the page keeps its place', async () => {
+    await render(WRITER);
+    await openMenu('Tools');
+    await pick('Show outline');
+    const title = [...document.querySelectorAll('.eigen-toolbar-title')].find((t) => t.textContent === 'Outline');
+    const scroller = bodyView()?.closest('.overflow-y-scroll');
+    expect(scroller?.parentElement).toBeTruthy();
+    expect(title?.closest('.pointer-events-none')?.parentElement).toBe(scroller?.parentElement);
 });
 
 test.each([
@@ -1292,7 +1303,7 @@ test.each([
 ])('a click on an outline entry puts the caret at the start of its heading, for %s', async (_who, who) => {
     await render(who);
     await act(async () => void bodyView()?.editor?.commands.setContent(OUTLINE_DOC));
-    await openMenu('View');
+    await openMenu('Tools');
     await pick('Show outline');
 
     await inBrowserFrames(() => outlineEntry('Method')?.click());
@@ -1303,7 +1314,7 @@ test.each([
 test('a jump scrolls its heading to a small margin below the top of the view, so a note number above it shows', async () => {
     await render(WRITER);
     await act(async () => void bodyView()?.editor?.commands.setContent(OUTLINE_DOC));
-    await openMenu('View');
+    await openMenu('Tools');
     await pick('Show outline');
     const scroller = bodyView()?.closest<HTMLElement>('.overflow-y-scroll');
     const heading = [...(bodyView()?.querySelectorAll('h2') ?? [])].find((h) => h.textContent === 'Method');
@@ -1320,7 +1331,7 @@ test('a jump scrolls its heading to a small margin below the top of the view, so
 test('a jump to a heading leaves the band being edited', async () => {
     await render(WRITER);
     await act(async () => void bodyView()?.editor?.commands.setContent(OUTLINE_DOC));
-    await openMenu('View');
+    await openMenu('Tools');
     await pick('Show outline');
     await doubleClick('header');
     expect(editing()).toEqual(['header']);
@@ -1336,7 +1347,7 @@ test("on a phone the kebab's Show outline opens a pane over the editor, and a ta
     await render(PHONE);
     await act(async () => void bodyView()?.editor?.commands.setContent(OUTLINE_DOC));
     expect(outlineShown()).toBe(false);
-    expect(menuTrigger('View')).toBeUndefined();
+    expect(menuTrigger('Tools')).toBeUndefined();
 
     await openMenu('More actions');
     await pick('Show outline');

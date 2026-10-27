@@ -60,12 +60,12 @@ The dialog shows **Words**, **Characters**, and **Characters excluding spaces**.
 
 The outline lists the document's headings, so you can find your way around a long document.
 
-1. Open the **View** menu and choose **Show outline**. On a phone, open the **⋮** menu at the top right and choose **Show outline**.
+1. Open the **Tools** menu and choose **Show outline**. On a phone, open the **⋮** menu at the top right and choose **Show outline**.
 2. Click a heading in the list. Docs jumps to it and puts your cursor at its start.
 
 The list shows Heading 1 through Heading 6, each indented by its level, and it changes as you type. A Title or Subtitle isn't listed. You can use the outline in a document you can only view, too.
 
-On a computer, the outline sits to the left of the page and stays open while you work. To hide it, choose **View → Show outline** again, or click **Close** at the top of the outline. Your browser remembers whether it was shown, so the next document opens the same way. On a phone, the outline covers the document, and tapping a heading closes it and takes you there.
+On a computer, the outline opens on the left, over the document, so the page stays where it is, and it stays open while you work. To hide it, choose **Tools → Show outline** again, or click **Close** at the top of the outline. Your browser remembers whether it was shown, so the next document opens the same way. On a phone, the outline covers the document, and tapping a heading closes it and takes you there.
 
 ## Rename a document
 

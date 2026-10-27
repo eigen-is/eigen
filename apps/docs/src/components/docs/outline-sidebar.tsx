@@ -1,6 +1,6 @@
-// The doc's outline: the body's headings, indented by level, where a click on one jumps to it. A desktop shows it as a
-// column left of the page, and a phone as a pane that hides the editor. It reads the headings with readOutline on every
-// change to the doc, so a heading typed here or by a collaborator shows at once.
+// The doc's outline: the body's headings, indented by level, where a click on one jumps to it. A desktop lays it over
+// the page's left side, and a phone shows it as a pane that hides the editor. It reads the headings with readOutline
+// on every change to the doc, so a heading typed here or by a collaborator shows at once.
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';

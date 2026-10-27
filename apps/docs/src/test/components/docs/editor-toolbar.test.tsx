@@ -140,19 +140,15 @@ const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', '
 const CLEAR_FORMATTING = `Clear formatting${formatForDisplay('Mod+\\')}`;
 const FULL_ROW = [...MIDDLE_ROW, 'Align', 'Bulleted list', 'Numbered list', 'Checklist', 'Clear formatting'];
 
-test.each([1920, 1300, 1000])(
-    'a writer gets the File, Edit, View, Format, Insert and Tools menus at %ipx',
-    async (width) => {
-        await render(width, true);
-        expect(menus().slice(0, 6)).toEqual(['File', 'Edit', 'View', 'Format', 'Insert', 'Tools']);
-    },
-);
+test.each([1920, 1300, 1000])('a writer gets the File, Edit, Format, Insert and Tools menus at %ipx', async (width) => {
+    await render(width, true);
+    expect(menus().slice(0, 5)).toEqual(['File', 'Edit', 'Format', 'Insert', 'Tools']);
+});
 
-// Six menus and the offline badge overflow a 360px phone, so View and Tools fold into the kebab there.
-test('a writer on a phone gets File, Edit, Format and Insert, and no View or Tools', async () => {
+// Five menus and the offline badge overflow a 360px phone, so Tools folds into the kebab there.
+test('a writer on a phone gets File, Edit, Format and Insert, and no Tools', async () => {
     await render(390, true);
     expect(menus().slice(0, 4)).toEqual(['File', 'Edit', 'Format', 'Insert']);
-    expect(menus()).not.toContain('View');
     expect(menus()).not.toContain('Tools');
 });
 
@@ -1099,9 +1095,9 @@ test('List options › Restart numbering in the middle splits the list there, as
     expect([$from.parent.textContent, $from.parentOffset]).toEqual(['b', 1]);
 });
 
-test('a viewer gets File, Edit, View and Tools, but neither the Format and Insert menus nor the icon row', async () => {
+test('a viewer gets File, Edit and Tools, but neither the Format and Insert menus nor the icon row', async () => {
     await render(1920, false);
-    expect(menus().slice(0, 4)).toEqual(['File', 'Edit', 'View', 'Tools']);
+    expect(menus().slice(0, 3)).toEqual(['File', 'Edit', 'Tools']);
     expect(menus()).not.toContain('Format');
     expect(menus()).not.toContain('Insert');
     expect(iconRow()).toEqual([]);
@@ -1173,20 +1169,23 @@ test.each([true, false])("on a phone the kebab's Word count opens the dialog (wr
     expect(wordCountRows()[0]).toEqual(['Words', '4']);
 });
 
-// Google's View › Show outline, a row checked while the outline shows.
+// Show outline sits under Word count in Tools, a row checked while the outline shows.
 test.each([
     [true, false],
     [false, true],
-])('View › Show outline toggles the outline, checked while it shows (writer %p, shown %p)', async (canWrite, shown) => {
-    onToggleOutline.mockClear();
-    await render(1920, canWrite, { outlineShown: shown });
-    await openMenu('View');
-    const item = document.querySelector<HTMLElement>('[role="menuitemcheckbox"]');
-    expect(item?.textContent?.trim()).toBe('Show outline');
-    expect(item?.getAttribute('aria-checked')).toBe(String(shown));
-    await act(async () => item?.click());
-    expect(onToggleOutline).toHaveBeenCalledTimes(1);
-});
+])(
+    'Tools › Show outline toggles the outline, checked while it shows (writer %p, shown %p)',
+    async (canWrite, shown) => {
+        onToggleOutline.mockClear();
+        await render(1920, canWrite, { outlineShown: shown });
+        await openMenu('Tools');
+        const item = document.querySelector<HTMLElement>('[role="menuitemcheckbox"]');
+        expect(item?.textContent?.trim()).toBe('Show outline');
+        expect(item?.getAttribute('aria-checked')).toBe(String(shown));
+        await act(async () => item?.click());
+        expect(onToggleOutline).toHaveBeenCalledTimes(1);
+    },
+);
 
 test.each([true, false])("on a phone the kebab's Show outline opens the outline (writer %p)", async (canWrite) => {
     onToggleOutline.mockClear();

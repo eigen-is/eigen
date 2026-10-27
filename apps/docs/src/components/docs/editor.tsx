@@ -222,6 +222,7 @@ const TiptapEditor = ({
     } = useDocumentPanels(isMobile);
     const outline = useOutlineShown(isMobile);
     const outlinePaneOpen = isMobile && outline.shown;
+    const outlineOverlayShown = !isMobile && outline.shown;
     const [docHeight, setDocHeight] = useState(0);
     // The image panel's button and Format › Image › Replace image open the same picker.
     const [replacePickerOpen, setReplacePickerOpen] = useState(false);
@@ -757,134 +758,139 @@ const TiptapEditor = ({
                                 />
                             }
                         >
-                            {/* The outline takes its width from the scroll box, so the page's centering and scaling
-                                see the narrower box. */}
-                            <div className="flex h-full">
-                                {outline.shown && !isMobile && (
-                                    <OutlineColumn editor={editor} onJump={jumpToHeading} onClose={outline.close} />
-                                )}
-                                <div className="h-full min-w-0 flex-1 relative overflow-hidden">
-                                    {/* The page box, and on paper the @page margins in its place; the printed clone matches it too. */}
-                                    <style>{pageStylesheet(pageSetup, '[data-document]')}</style>
-                                    <div
-                                        ref={setScrollContainer}
-                                        className={cn(
-                                            'h-full w-full overflow-y-scroll bg-muted p-4',
-                                            needsScale && 'overflow-x-hidden',
-                                        )}
-                                        onClick={(e) => {
-                                            if (e.target === scrollContainerRef.current && !editingBand) {
-                                                editor.commands.blur();
-                                            }
-                                        }}
-                                        // While a band is edited a press in the body leaves it, the caret where it landed,
-                                        // as in Google, and one in another band moves there, as that band is read-only
-                                        // until entered; a press anywhere else would focus nothing, leaving the band
-                                        // edited with Esc and typing reaching nothing, so it keeps the caret. A portaled
-                                        // menu or dialog is the band's own. An open note is left and kept alike, and
-                                        // another note opens itself.
-                                        onMouseDown={
-                                            notes.anchor && !editingBand
-                                                ? (e) => {
-                                                      const target = e.target;
-                                                      if (
-                                                          !(target instanceof Element) ||
-                                                          !e.currentTarget.contains(target) ||
-                                                          noteEditor.view.dom.contains(target)
-                                                      ) {
-                                                          return;
-                                                      }
-                                                      if (target.closest('[data-page-body]')) notes.close();
-                                                      else e.preventDefault();
-                                                  }
-                                                : editingBand
-                                                  ? (e) => {
-                                                        const target = e.target;
-                                                        if (
-                                                            !(target instanceof Element) ||
-                                                            !e.currentTarget.contains(target)
-                                                        ) {
-                                                            return;
-                                                        }
-                                                        if (target.closest('[data-page-body]')) {
-                                                            setEditingBand(null);
-                                                            return;
-                                                        }
-                                                        const pressed = BAND_ROOTS.find((root) =>
-                                                            bands[root].view.dom.contains(target),
-                                                        );
-                                                        if (pressed === editingBand) return;
-                                                        e.preventDefault();
-                                                        if (pressed)
-                                                            enterBand(pressed, { left: e.clientX, top: e.clientY });
-                                                    }
-                                                  : undefined
+                            <div className="h-full relative overflow-hidden">
+                                {/* The page box, and on paper the @page margins in its place; the printed clone matches it too. */}
+                                <style>{pageStylesheet(pageSetup, '[data-document]')}</style>
+                                <div
+                                    ref={setScrollContainer}
+                                    className={cn(
+                                        'h-full w-full overflow-y-scroll bg-muted p-4',
+                                        needsScale && 'overflow-x-hidden',
+                                    )}
+                                    onClick={(e) => {
+                                        if (e.target === scrollContainerRef.current && !editingBand) {
+                                            editor.commands.blur();
                                         }
+                                    }}
+                                    // While a band is edited a press in the body leaves it, the caret where it landed,
+                                    // as in Google, and one in another band moves there, as that band is read-only
+                                    // until entered; a press anywhere else would focus nothing, leaving the band
+                                    // edited with Esc and typing reaching nothing, so it keeps the caret. A portaled
+                                    // menu or dialog is the band's own. An open note is left and kept alike, and
+                                    // another note opens itself.
+                                    onMouseDown={
+                                        notes.anchor && !editingBand
+                                            ? (e) => {
+                                                  const target = e.target;
+                                                  if (
+                                                      !(target instanceof Element) ||
+                                                      !e.currentTarget.contains(target) ||
+                                                      noteEditor.view.dom.contains(target)
+                                                  ) {
+                                                      return;
+                                                  }
+                                                  if (target.closest('[data-page-body]')) notes.close();
+                                                  else e.preventDefault();
+                                              }
+                                            : editingBand
+                                              ? (e) => {
+                                                    const target = e.target;
+                                                    if (
+                                                        !(target instanceof Element) ||
+                                                        !e.currentTarget.contains(target)
+                                                    ) {
+                                                        return;
+                                                    }
+                                                    if (target.closest('[data-page-body]')) {
+                                                        setEditingBand(null);
+                                                        return;
+                                                    }
+                                                    const pressed = BAND_ROOTS.find((root) =>
+                                                        bands[root].view.dom.contains(target),
+                                                    );
+                                                    if (pressed === editingBand) return;
+                                                    e.preventDefault();
+                                                    if (pressed)
+                                                        enterBand(pressed, { left: e.clientX, top: e.clientY });
+                                                }
+                                              : undefined
+                                    }
+                                >
+                                    <div
+                                        data-document="true"
+                                        className={cn(
+                                            // eigen-paper: the page always renders light, in dark mode too (globals.css)
+                                            // Rows: the header band, the body, the notes, the footer band.
+                                            // isolate: the figures behind the text draw on the paper, in every scale.
+                                            'eigen-paper isolate grid grid-rows-[auto_1fr_auto_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
+                                            !needsScale && 'min-h-full m-auto',
+                                        )}
+                                        ref={setDocumentEl}
+                                        // The doc's Normal, which the body and the bands draw unformatted text in.
+                                        style={{
+                                            ...normalStyleProperties(normalStyle),
+                                            ...(needsScale
+                                                ? {
+                                                      transform: `scale(${canvasScale})`,
+                                                      transformOrigin: 'top left',
+                                                      marginBottom: -(1 - canvasScale) * docHeight,
+                                                  }
+                                                : canvasShift > 0 && {
+                                                      transform: `translateX(${-canvasShift}px)`,
+                                                  }),
+                                        }}
                                     >
-                                        <div
-                                            data-document="true"
-                                            className={cn(
-                                                // eigen-paper: the page always renders light, in dark mode too (globals.css)
-                                                // Rows: the header band, the body, the notes, the footer band.
-                                                // isolate: the figures behind the text draw on the paper, in every scale.
-                                                'eigen-paper isolate grid grid-rows-[auto_1fr_auto_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
-                                                !needsScale && 'min-h-full m-auto',
-                                            )}
-                                            ref={setDocumentEl}
-                                            // The doc's Normal, which the body and the bands draw unformatted text in.
-                                            style={{
-                                                ...normalStyleProperties(normalStyle),
-                                                ...(needsScale
-                                                    ? {
-                                                          transform: `scale(${canvasScale})`,
-                                                          transformOrigin: 'top left',
-                                                          marginBottom: -(1 - canvasScale) * docHeight,
-                                                      }
-                                                    : canvasShift > 0 && {
-                                                          transform: `translateX(${-canvasShift}px)`,
-                                                      }),
-                                            }}
-                                        >
-                                            <PageBands
-                                                edge="header"
-                                                editors={bands}
-                                                setup={pageSetup}
-                                                editing={editingBand}
-                                                onEnter={
-                                                    bandsAllowed
-                                                        ? (root, at) => enterBand(root ?? entryBand('header'), at)
-                                                        : undefined
-                                                }
-                                                controls={bandControls}
-                                            />
-                                            <EditorContent
-                                                editor={editor}
-                                                data-page-body
-                                                className="row-start-2 h-full min-w-0 tiptap-wrapper"
-                                            />
-                                            <FootnoteList
-                                                body={editor}
-                                                note={noteEditor}
-                                                open={notes.anchor}
-                                                onOpen={bandsAllowed ? openNote : undefined}
-                                            />
-                                            <PageBands
-                                                edge="footer"
-                                                editors={bands}
-                                                setup={pageSetup}
-                                                editing={editingBand}
-                                                onEnter={
-                                                    bandsAllowed
-                                                        ? (root, at) => enterBand(root ?? entryBand('footer'), at)
-                                                        : undefined
-                                                }
-                                                controls={bandControls}
-                                            />
-                                        </div>
+                                        <PageBands
+                                            edge="header"
+                                            editors={bands}
+                                            setup={pageSetup}
+                                            editing={editingBand}
+                                            onEnter={
+                                                bandsAllowed
+                                                    ? (root, at) => enterBand(root ?? entryBand('header'), at)
+                                                    : undefined
+                                            }
+                                            controls={bandControls}
+                                        />
+                                        <EditorContent
+                                            editor={editor}
+                                            data-page-body
+                                            className="row-start-2 h-full min-w-0 tiptap-wrapper"
+                                        />
+                                        <FootnoteList
+                                            body={editor}
+                                            note={noteEditor}
+                                            open={notes.anchor}
+                                            onOpen={bandsAllowed ? openNote : undefined}
+                                        />
+                                        <PageBands
+                                            edge="footer"
+                                            editors={bands}
+                                            setup={pageSetup}
+                                            editing={editingBand}
+                                            onEnter={
+                                                bandsAllowed
+                                                    ? (root, at) => enterBand(root ?? entryBand('footer'), at)
+                                                    : undefined
+                                            }
+                                            controls={bandControls}
+                                        />
                                     </div>
-                                    {/* Unmounted when closed. The stable gutter ends the panel left of the scrollbar. */}
-                                    {showSidebar && (
-                                        <div className="pointer-events-none absolute inset-0 overflow-hidden [scrollbar-gutter:stable]">
+                                </div>
+                                {/* Unmounted when closed. The stable gutter ends the panel left of the scrollbar. The
+                                    outline lies over the page's left side, so like a panel it moves nothing. */}
+                                {(showSidebar || outlineOverlayShown) && (
+                                    <div className="pointer-events-none absolute inset-0 overflow-hidden [scrollbar-gutter:stable]">
+                                        {outlineOverlayShown && (
+                                            <div className="pointer-events-auto absolute inset-y-0 left-0">
+                                                <OutlineColumn
+                                                    editor={editor}
+                                                    onJump={jumpToHeading}
+                                                    onClose={outline.close}
+                                                />
+                                            </div>
+                                        )}
+                                        {showSidebar && (
                                             <div className="pointer-events-auto absolute inset-y-0 right-0">
                                                 {panel ? (
                                                     <PanelColumn activePanel={panel} {...panelProps} />
@@ -908,9 +914,9 @@ const TiptapEditor = ({
                                                     <TablePropertiesPanel editor={activeEditor} />
                                                 )}
                                             </div>
-                                        </div>
-                                    )}
-                                </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </Column>
                     </DocSearchProvider>
