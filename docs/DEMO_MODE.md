@@ -94,7 +94,7 @@ To check a site plan change without a browser, build a Y.Doc with `buildVectorDo
 
 ## Mail threads because the seeder owns its headers
 
-`buildRfc822` composes each message, dated relative to the seed, and `mailboxDeliver` indexes it. A persona's own replies move to Sent, so only inbound mail sits in the inbox. An all-hands mail reaches every persona with one `Message-ID` for every copy, like a list mail: a later reply threads only if it references that one id.
+`buildRfc822` composes each message, dated relative to the seed, and `mailboxDeliver` indexes it. A persona's own replies move to Sent, so only inbound mail sits in the inbox. An all-hands mail reaches every persona with one `Message-ID` for every copy, like a list mail: a later reply threads only if it references that one id. A reply quotes the message before it with `formatReplyQuote`, the composer's "On <date> <name> wrote:" line over a blockquote, and its text part is that HTML's text, as a reply sent from Eigen has. So the last reply holds the whole thread.
 
 An attachment is fixture bytes, a vCard from the shipped writer, or a `workbook` the shipped xlsx exporter writes. A drive-reference pill links through the `VITE_APP_*_URL` vars, which the seeder points at the demo host, so no pill bakes in a localhost URL.
 

@@ -32,6 +32,8 @@ import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { stripTagsServer } from '@workspace/lib/html';
+import { formatReplyQuote } from '@workspace/lib/mail/reply-quote';
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
@@ -45,6 +47,7 @@ import { JSDOM } from 'jsdom';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
 import type { Drive } from '../lib/drive';
+import { textToHtml } from '../lib/mail/mail-parser/html';
 import type { User } from '../lib/user';
 import type { LeadRole, MailAttachment, SeededInvite, SeededMail, VCardSpec } from './demo/content';
 import {
@@ -870,33 +873,45 @@ async function main(): Promise<void> {
         };
         return serializeEventForImip(event, 'REQUEST');
     };
-    // One flow's threading contract for both branches: the date, the Re: prefix and the
-    // In-Reply-To/References chain, so a branch only resolves from/to and delivers the buffer.
+    // The sender of a seeded message, as the From line and a reply's quote header name them.
+    const senderOf = (message: SeededMail['messages'][number]): { name: string; address: string } => {
+        if (message.fromExternal) return { name: message.fromExternal.name, address: message.fromExternal.email };
+        if (!message.from) throw new Error('A seeded message names no sender');
+        const persona = resolvePersona(message.from);
+        return { name: persona.name, address: emailFor(persona.key) };
+    };
+    // One flow's threading contract for both branches: the date, the Re: prefix, the In-Reply-To/References chain
+    // and the quote, so a branch only resolves from/to and delivers the buffer. A reply quotes the message before it
+    // the way Eigen's composer does, so the last reply holds the whole thread. Its text part is the HTML's text, as
+    // a reply sent from Eigen has.
     const threadState = (subject: string) => {
         const references: string[] = [];
-        let previousId: string | undefined;
+        let previous: { id: string; from: { name: string; address: string }; date: Date; html: string } | undefined;
         return async (
             message: SeededMail['messages'][number],
-            o: { from: string; to: string; html?: string; icalEvent?: { method: string; content: string } },
+            o: { to: string; html?: string; icalEvent?: { method: string; content: string } },
         ): Promise<Buffer> => {
             const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
             date.setHours(message.hour, 0, 0, 0);
             const messageId = `${randomUUID()}@${MAIL_DOMAIN}`;
+            const from = senderOf(message);
+            const ownHtml = o.html ?? textToHtml(message.text);
+            const reply = previous && ownHtml + formatReplyQuote(previous.from, previous.date, previous.html);
             const buffer = await buildRfc822({
-                from: o.from,
+                from: `${from.name} <${from.address}>`,
                 to: o.to,
-                subject: previousId ? `Re: ${subject}` : subject,
+                subject: previous ? `Re: ${subject}` : subject,
                 date,
-                text: message.text,
-                html: o.html,
+                text: reply ? stripTagsServer(reply) : message.text,
+                html: reply ?? o.html,
                 messageId,
-                inReplyTo: previousId,
+                inReplyTo: previous?.id,
                 references: references.length ? references : undefined,
                 attachments: message.attachments?.map(mailAttachment),
                 icalEvent: o.icalEvent,
             });
             references.push(messageId);
-            previousId = messageId;
+            previous = { id: messageId, from, date, html: reply ?? ownHtml };
             return buffer;
         };
     };
@@ -910,8 +925,6 @@ async function main(): Promise<void> {
             let answeredId: string | undefined;
             for (const message of flow.messages) {
                 const external = message.fromExternal;
-                const sender = external ? undefined : userByKey.get(resolvePersona(message.from!).key)!;
-                const from = external ? `${external.name} <${external.email}>` : `${sender!.name} <${sender!.email}>`;
                 const to = external
                     ? recipient.email
                     : externalParty
@@ -921,7 +934,7 @@ async function main(): Promise<void> {
                     external && message.invite
                         ? { method: 'REQUEST', content: inviteIcs(message.invite, external, recipient) }
                         : undefined;
-                const buffer = await nextInThread(message, { from, to, html: message.html, icalEvent });
+                const buffer = await nextInThread(message, { to, html: message.html, icalEvent });
                 const deliveredId = await recipientHome.mail.mailboxDeliver(buffer);
                 // The persona's own replies in the thread belong in their Sent box, not their inbox
                 // (the other end is the external party). Moving them keeps only genuinely inbound mail
@@ -939,8 +952,7 @@ async function main(): Promise<void> {
             // Each persona's copy of the previous message, which the next sender's reply answers.
             let previousCopies = new Map<string, string>();
             for (const [i, message] of flow.messages.entries()) {
-                const senderKey = resolvePersona(message.from!).key;
-                const sender = userByKey.get(senderKey)!;
+                const senderAddress = senderOf(message).address;
                 // Only the mail that opens the flow links the drive; a reply to it does not. Seeded bodies
                 // are HTML fragments (no <body>), so the pill just appends — the same outcome as the mail
                 // client's appendReferenceLinks fallback for a sent message.
@@ -950,18 +962,14 @@ async function main(): Promise<void> {
                         : message.html;
                 // One Message-ID for the whole fan-out, like a real list mail: every persona holds a
                 // copy of the SAME message, and a reply only threads if it references that one id.
-                const buffer = await nextInThread(message, {
-                    from: `${sender.name} <${sender.email}>`,
-                    to,
-                    html,
-                });
+                const buffer = await nextInThread(message, { to, html });
                 const copies = new Map<string, string>();
                 for (const persona of PERSONAS) {
                     const home = await getHome(userByKey.get(persona.key)!.id);
                     const deliveredId = await home.mail.mailboxDeliver(buffer);
                     copies.set(persona.key, deliveredId);
                     // The sender's own copy belongs in their Sent box, same as an inbox-thread reply.
-                    if (persona.key === senderKey) {
+                    if (emailFor(persona.key) === senderAddress) {
                         await home.mail.messageMove(deliveredId, MAILBOX_SENT);
                         await home.mail.messageSetRead(deliveredId, true);
                         const answeredId = previousCopies.get(persona.key);

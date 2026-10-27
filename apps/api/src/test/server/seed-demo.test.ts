@@ -213,6 +213,24 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             );
             expect(replied[0].n).toBeGreaterThanOrEqual(1);
 
+            // A reply quotes the message it answers below its own text, in the HTML and the text part alike, as
+            // Eigen's composer quotes on reply.
+            const askedMail = MAILS.find((mail) => mail.subject === 'Are you doing it again this year');
+            const asked = askedMail?.messages[0];
+            if (!askedMail || !asked?.fromExternal) throw new Error('the seeded question from outside is missing');
+            const askedParagraph = asked.text.split('\n\n')[1];
+            const director = query<{ id: string }>(
+                usersDb,
+                `SELECT id FROM user WHERE email = '${personaByRole('director').key}@${MAIL_DOMAIN}'`,
+            );
+            const answer = parseMail(readMessage(join(root, 'home', director[0].id), `Re: ${askedMail.subject}`));
+            const quoteHeader = `${asked.fromExternal.name} <${asked.fromExternal.email}> wrote:`;
+            expect(answer.text).toContain(`${quoteHeader}\n\n`);
+            expect(answer.text?.indexOf(askedParagraph)).toBeGreaterThan(answer.text?.indexOf(quoteHeader) ?? -1);
+            const quoteHtml = answer.html?.slice(answer.html.indexOf('wrote:</p><blockquote>')) ?? '';
+            expect(quoteHtml).toStartWith('wrote:</p><blockquote>');
+            expect(quoteHtml).toContain(askedParagraph);
+
             // Team drive: file history populated (actors were threaded through every mutation).
             const mountsDir = join(root, 'team', teamId!, 'mounts');
             expect(existsSync(mountsDir)).toBe(true);

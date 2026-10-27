@@ -1,11 +1,11 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
-import { formatFullDateTime } from '@workspace/lib/date';
 import { escapeHtml } from '@workspace/lib/html';
 import {
     createDraftEmail,
     flattenAddresses,
+    formatReplyQuote,
     useDeleteEmail,
     useEmailById,
     useMoveEmail,
@@ -21,14 +21,11 @@ import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
 // The composer has no image node, so a quote carries text and links only.
 function formatEmailQuote(email: Email): string {
-    const fromName = escapeHtml(email.from?.value[0]?.name || '');
-    const fromAddress = escapeHtml(email.from?.value[0]?.address || '');
-    const dateText = escapeHtml(formatFullDateTime(new Date(email.date)));
-    const header = `On ${dateText} ${fromName} &lt;${fromAddress}&gt; wrote:`;
+    const from = email.from?.value[0];
     // email.html is already sanitized by the backend via isomorphic-dompurify in mail-parse.ts,
-    // and email.text is plain text (not HTML) so it's safe to embed as-is in a blockquote.
+    // and email.text is plain text, escaped here, so both are safe to embed in the blockquote.
     const content = email.html || (email.text ? escapeHtml(email.text).replace(/\n/g, '<br>') : '');
-    return `<br><br><p>${header}</p><blockquote>${content}</blockquote>`;
+    return formatReplyQuote({ name: from?.name || '', address: from?.address || '' }, new Date(email.date), content);
 }
 
 // Single-slot undo (Gmail-style): only the most recent reversible action is remembered. `done` is a
