@@ -1,3 +1,8 @@
+// The list-and-detail page every Drive listing shares, such as a folder, Shared with me or a filter by
+// type: the sorted rows with their toolbar, the selected item's detail beside them, and the dialogs
+// their actions open. The caller fetches the rows and says through its capabilities what the viewer
+// may do; this lays them out and wires the actions.
+
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { getDriveComparator, useDriveViewPreferences } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
