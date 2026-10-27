@@ -1,9 +1,10 @@
 // Demo-world content for "Tuimel Festival" — a small, volunteer-run community arts & music
 // festival, ~3 weeks out, line-up ~80% confirmed, short on volunteers, iffy Sunday forecast.
 //
-// This module is DATA ONLY: personas, folder names, document/mail/event/chat/contact text. The
-// mechanics (seed-demo.ts) turn it into a live workspace through the real product surfaces. Keep
-// it that way so a later content-deepening pass swaps data here without touching mechanics.
+// This module is DATA: personas, folder names, document/mail/event/chat/contact text, and the few one-line helpers
+// that spell some of it, such as an equation's MathML. The mechanics (seed-demo.ts) turn it into a live workspace
+// through the real product surfaces. Keep it that way so a later content-deepening pass swaps data here without
+// touching mechanics.
 //
 // Personas are keyed by a fixed local-part; the runtime email is `<key>@<MAIL_DOMAIN>`. Everything
 // the data model keys on (ACLs, comments, calendar attendees, stickies creators) resolves by that
@@ -19,6 +20,7 @@ import type {
     TextAlign,
     VerticalAlign,
 } from '@workspace/lib/vector';
+import { readLatex, writeMathml } from '@workspace/math';
 
 export type LeadRole =
     | 'director'
@@ -101,8 +103,12 @@ export type SeededDoc = {
     name: string; // lowercase, no extension
     author: LeadRole;
     html: string; // parsed into the eigendoc's JSON
+    media?: string[]; // fixture paths under fixtures/, copied into the doc's media/ folder for its figures
     comments: DocComment[];
 };
+
+// A doc in each persona's own drive: no folder, author or comments.
+export type PersonalDoc = Pick<SeededDoc, 'name' | 'html' | 'media'>;
 
 export const DOCS: SeededDoc[] = [
     {
@@ -114,14 +120,22 @@ export const DOCS: SeededDoc[] = [
             '<p>Working document for this edition. Three weeks out. Line-up roughly 80% confirmed, tickets moving, still short on crew for the build weekend.</p>',
             '<h2>Site & access</h2>',
             '<p>The festival is on the Hoeve Tuimelaar field near Vlierzand, on the coast. Remote by design, which means we bring everything in: water, power, sanitation, and the people.</p>',
-            '<ul><li>Shuttle buses from the nearest station, every 30 minutes</li><li>Two generators plus a backup, quote pending</li><li>Camping field opens Friday midday</li></ul>',
+            '<ul><li>Shuttle buses from the nearest station, every 30 minutes<span class="footnote" data-type="footnote"><span data-type="footnote-paragraph">Duin Shuttle runs the loop. The last bus back leaves at 02:00.</span></span></li><li>Two generators plus a backup, quote pending</li><li>Camping field opens Friday midday</li></ul>',
+            '<p><span class="figure"><img data-media-name="camping-field.webp" alt="The camping field with its new sign" width="420"><span class="figcaption">The camping field this week. The sign went up today.</span></span></p>',
             '<h2>Timeline</h2>',
-            '<ul><li>Build weekend: fencing, stages, power</li><li>Load-in and soundchecks: Friday</li><li>Doors: Saturday and Sunday midday</li><li>Strike: Monday</li></ul>',
+            '<table><tbody>',
+            '<tr><th>When</th><th>What</th><th>Who</th></tr>',
+            '<tr><td>Build weekend</td><td>Fencing, stages, power</td><td>Production, site crew, volunteers</td></tr>',
+            '<tr><td>Friday</td><td>Load-in and soundchecks</td><td>Stage & tech</td></tr>',
+            '<tr><td>Saturday and Sunday</td><td>Doors at midday</td><td>Everyone</td></tr>',
+            '<tr><td>Monday</td><td>Strike</td><td>Site crew</td></tr>',
+            '</tbody></table>',
             '<h2>Responsibilities</h2>',
             '<p>Programming owns the line-up and stage times. Production owns the site and logistics. Volunteers owns the shift roster. Finance owns tickets and the budget. Comms owns the public info.</p>',
             '<h2>Open risks</h2>',
             '<p>The Sunday forecast for the exposed field looks rough. We decide on wind cover for the second stage at the go/no-go meeting.</p>',
         ].join(''),
+        media: ['images/camping-field.webp'],
         comments: [
             {
                 card: 'volunteers-gap',
@@ -174,15 +188,119 @@ export const DOCS: SeededDoc[] = [
     },
 ];
 
-// --- Budget sheet: a hand-maintained fixture container (edited in a live demo and copied back into
-// fixtures/, so the content lives in its data.db, not here). This just says where it lands and who
-// authors it in the story. ---
+// --- Workbooks (built from these specs by sheet-build.ts: the budget straight into its container's Y.Doc, the
+// generator quote into an xlsx mail attachment). Ranges are A1 text; a chart's ranges name the tab they read. ---
+
+// Text, a number, or a formula: a string that starts with '='. null leaves the cell empty.
+export type SheetCellSpec = string | number | null;
+
+// header: bold over a rule. section: an italic band on a fill over a rule. total: italic under a rule.
+export type SheetRowSpec = { cells: SheetCellSpec[]; style?: 'header' | 'section' | 'total' };
+
+export type SheetChartSpec = {
+    type: 'column' | 'pie';
+    title: string;
+    seriesName: string;
+    categories: string; // A1 with the tab, e.g. Budget!A4:A7
+    values: string;
+    x: number; // the chart's box on the grid, in pixels from A1
+    y: number;
+};
+
+export type SheetSpec = {
+    name: string; // the tab
+    columns: { width: number; format?: string }[]; // format: the Excel number format the column's numbers show in
+    rows: SheetRowSpec[];
+    dataBars?: string[]; // ranges drawn with a data bar
+    redBelowZero?: string[]; // ranges whose cells turn red when they go below zero
+    dropdowns?: { range: string; options: string[] }[];
+    charts?: SheetChartSpec[];
+};
+
+const EUR = '_(€* #,##0.00_);_(€* (#,##0.00);_(€* "-"??_);_(@_)';
+const BUDGET_STATUSES = ['confirmed', 'pending', 'paid'];
 
 export const BUDGET = {
     folder: 'finance' as TeamFolder,
     name: 'budget', // lowercase, no extension
     author: 'finance' as LeadRole,
+    sheets: [
+        {
+            name: 'Budget',
+            columns: [{ width: 218 }, { width: 128, format: EUR }, { width: 110 }],
+            rows: [
+                { cells: ['Item', 'Amount (EUR)', 'Status'], style: 'header' },
+                { cells: [] },
+                { cells: ['Income'], style: 'section' },
+                { cells: ['Ticket sales', 42000, 'pending'] },
+                { cells: ['Bar', 9000, 'pending'] },
+                { cells: ['Culture fund grant', 15000, 'confirmed'] },
+                { cells: ['Local sponsors', 6000, 'paid'] },
+                { cells: ['Total income', '=SUM(B4:B7)'], style: 'total' },
+                { cells: [] },
+                { cells: ['Costs'], style: 'section' },
+                { cells: ['Artist fees', 28000, 'confirmed'] },
+                { cells: ['Stage & tech', 12000, 'confirmed'] },
+                { cells: ['Security', 6000, 'pending'] },
+                { cells: ['Sanitation', 4000, 'paid'] },
+                { cells: ['Shuttle buses', 3500, 'pending'] },
+                { cells: ['Marketing', 2500, 'paid'] },
+                { cells: ['Total costs', '=SUM(B11:B16)'], style: 'total' },
+                { cells: ['Margin', '=B8-B17'], style: 'total' },
+            ],
+            dataBars: ['B4:B7', 'B11:B16'],
+            redBelowZero: ['B18'],
+            dropdowns: [
+                { range: 'C4:C7', options: BUDGET_STATUSES },
+                { range: 'C11:C16', options: BUDGET_STATUSES },
+            ],
+        },
+        {
+            name: 'Charts',
+            columns: [],
+            rows: [],
+            charts: [
+                {
+                    type: 'column',
+                    title: 'Costs',
+                    seriesName: 'Amount (EUR)',
+                    categories: 'Budget!A11:A16',
+                    values: 'Budget!B11:B16',
+                    x: 20,
+                    y: 20,
+                },
+                {
+                    type: 'pie',
+                    title: 'Income',
+                    seriesName: 'Amount (EUR)',
+                    categories: 'Budget!A4:A7',
+                    values: 'Budget!B4:B7',
+                    x: 640,
+                    y: 20,
+                },
+            ],
+        },
+    ] satisfies SheetSpec[],
 };
+
+// The quote Rob attaches to the generator thread (MAILS), sent as an xlsx.
+export const GENERATOR_QUOTE: SheetSpec[] = [
+    {
+        name: 'Quote',
+        columns: [{ width: 260 }, { width: 70 }, { width: 110, format: EUR }, { width: 120, format: EUR }],
+        rows: [
+            { cells: ['Item', 'Qty', 'Price', 'Total'], style: 'header' },
+            { cells: ['Generator 60 kVA, Thursday to Monday', 2, 1240, '=B2*C2'] },
+            { cells: ['Backup generator 60 kVA, Thursday to Monday', 1, 1040, '=B3*C3'] },
+            { cells: ['Distribution boxes and cabling', 6, 85, '=B4*C4'] },
+            { cells: ['Diesel, estimated litres', 900, 1.85, '=B5*C5'] },
+            { cells: ['Delivery and pickup', 1, 450, '=B6*C6'] },
+            { cells: ['Total excl. VAT', null, null, '=SUM(D2:D6)'], style: 'total' },
+            { cells: ['VAT 21%', null, null, '=D7*0.21'] },
+            { cells: ['Total incl. VAT', null, null, '=D7+D8'], style: 'total' },
+        ],
+    },
+];
 
 // --- Sponsor deck (a slide deck the seeder builds straight into the container's Y.Doc from this
 // spec — no fixture bytes; see deck-build.ts). A deck is a canvas of frames: one slide per frame,
@@ -1152,12 +1270,24 @@ export const CHATS: SeededChat[] = [
 
 // --- Mail (raw RFC822 delivered into persona inboxes; dates spread over the past ~10 days) ---
 
-// An attachment on a seeded message: committed fixture bytes, or a vCard the seeder serializes with
-// the shipped writer. Both land as real MIME attachments.
+// An attachment on a seeded message: committed fixture bytes, a vCard the seeder serializes with the shipped writer,
+// or a workbook it writes as an xlsx with the shipped exporter. Each lands as a real MIME attachment.
 export type MailAttachment = { filename: string } & (
     | { fixture: string; mimeType: string } // path under fixtures/
     | { vcard: VCardSpec }
+    | { workbook: SheetSpec[] }
 );
+
+// An iMIP invitation (METHOD:REQUEST) from the message's external sender to the thread's persona, written with the
+// shipped iCalendar writer. Its day is relative to the festival Saturday, as EVENTS are.
+export type SeededInvite = {
+    title: string;
+    daysFromFestival: number;
+    startHour: number;
+    durationHours: number;
+    location?: string;
+    description?: string;
+};
 
 export type SeededMail = {
     // 'inbox-thread' lands in one persona's inbox; 'all-hands' lands in every persona's inbox. Either
@@ -1178,6 +1308,7 @@ export type SeededMail = {
         // `text` stays as the plain-text fallback (multipart/alternative) when this is set.
         html?: string;
         attachments?: MailAttachment[];
+        invite?: SeededInvite; // only on a message from an external sender
     }[];
 };
 
@@ -1236,6 +1367,7 @@ export const MAILS: SeededMail[] = [
                 daysAgo: 6,
                 hour: 11,
                 text: 'Hi Saar,\n\nQuote attached for two 60kVA units plus a backup. We can deliver Thursday morning, pickup Monday. Let me know if the dates work.\n\nRob\nVlierkracht Verhuur',
+                attachments: [{ filename: 'vlierkracht quote.xlsx', workbook: GENERATOR_QUOTE }],
             },
             {
                 from: 'saar',
@@ -1305,6 +1437,27 @@ export const MAILS: SeededMail[] = [
                 daysAgo: 4,
                 hour: 16,
                 text: 'Hi Marijke,\n\nBudget is attached. Estimating around two thousand visitors across the weekend, similar to last edition. See you at the call.\n\nBram',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'finance',
+        subject: 'Committee visit to the field',
+        messages: [
+            {
+                fromExternal: { name: 'Marijke Veen', email: 'marijke@cultuurfonds-kust.example' },
+                daysAgo: 2,
+                hour: 11,
+                text: 'Hi Bram,\n\nThe committee would like to see the field before the festival. I have sent an invitation for a short walk-through with the farmer. Let me know if the time works for you and Anouk.\n\nMarijke\nCultuurfonds Kust',
+                invite: {
+                    title: 'Cultuurfonds Kust: walk-through of the field',
+                    daysFromFestival: -9,
+                    startHour: 14,
+                    durationHours: 1,
+                    location: 'Hoeve Tuimelaar, Vlierzand',
+                    description: 'The committee walks the field with Griet before the grant is paid out.',
+                },
             },
         ],
     },
@@ -1622,6 +1775,40 @@ export const EVENTS: SeededEvent[] = [
     },
 ];
 
+// --- Shifts: one personal event per persona, in their own calendar rather than the team's. Days are relative to the
+// festival Saturday, as EVENTS are. ---
+
+export type SeededShift = {
+    persona: string; // persona key
+    title: string;
+    daysFromFestival: number;
+    startHour: number;
+    durationHours: number;
+};
+
+export const SHIFTS: SeededShift[] = [
+    { persona: 'anouk', title: 'Walk the field before doors', daysFromFestival: 0, startHour: 10, durationHours: 1 },
+    { persona: 'joris', title: 'Artist check-in desk', daysFromFestival: 0, startHour: 12, durationHours: 3 },
+    { persona: 'saar', title: 'Site walk with Ravi', daysFromFestival: -1, startHour: 9, durationHours: 2 },
+    { persona: 'mees', title: 'Socials: doors and first act', daysFromFestival: 0, startHour: 12, durationHours: 2 },
+    { persona: 'nour', title: 'Volunteer briefing', daysFromFestival: 0, startHour: 10, durationHours: 1 },
+    { persona: 'bram', title: 'Box office cash-up', daysFromFestival: 0, startHour: 22, durationHours: 1 },
+    { persona: 'timo', title: 'Soundcheck second stage', daysFromFestival: -1, startHour: 14, durationHours: 3 },
+    { persona: 'lieke', title: 'Artist hospitality shift', daysFromFestival: 0, startHour: 14, durationHours: 4 },
+    { persona: 'fenna', title: 'Bar shift', daysFromFestival: 0, startHour: 16, durationHours: 6 },
+    { persona: 'daan', title: 'Gate shift', daysFromFestival: 0, startHour: 11, durationHours: 5 },
+    { persona: 'sanne', title: 'Stage crew, second stage', daysFromFestival: 0, startHour: 13, durationHours: 6 },
+    { persona: 'ravi', title: 'Re-peg the second stage', daysFromFestival: 1, startHour: 8, durationHours: 2 },
+    { persona: 'joost', title: 'Workshop: screen printing', daysFromFestival: 1, startHour: 13, durationHours: 2 },
+    { persona: 'imke', title: 'First aid post', daysFromFestival: 0, startHour: 12, durationHours: 6 },
+    { persona: 'lars', title: 'Waste round', daysFromFestival: 0, startHour: 18, durationHours: 3 },
+    { persona: 'yara', title: 'Camping host night shift', daysFromFestival: -1, startHour: 22, durationHours: 6 },
+    { persona: 'pieter', title: 'Box office', daysFromFestival: 0, startHour: 11, durationHours: 5 },
+    { persona: 'maud', title: 'Runner, Saturday peak', daysFromFestival: 0, startHour: 15, durationHours: 4 },
+    { persona: 'sem', title: 'Hang the art on the dune path', daysFromFestival: -1, startHour: 10, durationHours: 4 },
+    { persona: 'tessa', title: 'Sound assistant, main stage', daysFromFestival: 0, startHour: 13, durationHours: 7 },
+];
+
 // --- Contacts (external ecosystem, added to a few leads' address books) ---
 
 export type SeededContact = VCardSpec & { owner: LeadRole };
@@ -1711,7 +1898,7 @@ export const PERSONAL_SHARES: SeededShare[] = [
 // --- Personal notes doc, seeded into every persona's OWN drive (same cozy content for all —
 // a private scratch pad, not shared). Role-agnostic on purpose so one document serves everyone. ---
 
-export const NOTES = {
+export const NOTES: PersonalDoc = {
     name: 'my notes', // lowercase, no extension
     html: [
         '<h1>My notes</h1>',
@@ -1739,6 +1926,28 @@ export const NOTES = {
         '</ul>',
         '<p>That is it. Back to work.</p>',
     ].join(''),
+};
+
+// A displayed equation as the docs editor stores one: MathML with the typed LaTeX as its annotation, in a paragraph.
+const displayedEquation = (latex: string) =>
+    `<p>${writeMathml(readLatex(latex), latex).replace('<math', '<math display="block"')}</p>`;
+
+// --- A scratch doc in every persona's own drive, beside "my notes": someone made a file to see what the editor does.
+// Not a tour. ---
+
+export const TRYING_EIGEN: PersonalDoc = {
+    name: 'trying eigen', // lowercase, no extension
+    html: [
+        '<h1>trying eigen|docs⟩</h1>',
+        '<p>new doc, just poking around before the festival eats my week.</p>',
+        '<p><strong>bold</strong> works. <em>italic</em> works. <s>so does this</s>.</p>',
+        '<p><span class="figure"><img data-media-name="hands-up-at-camp.webp" alt="Arms up in front of the tents" width="420"></span></p>',
+        "<p>the logo isn't half a bra-ket: <strong>eigen</strong> is an operator acting on the ket |docs⟩.</p>",
+        displayedEquation('\\mathbf{eigen}\\,|\\text{docs}\\rangle'),
+        '<p>click the equation and the LaTeX comes back. nice.</p>',
+        '<ul><li><s>find the strikethrough button</s></li><li>look at the budget sheet</li><li>coffee</li></ul>',
+    ].join(''),
+    media: ['images/hands-up-at-camp.webp'],
 };
 
 export function personaByRole(role: LeadRole): Persona {

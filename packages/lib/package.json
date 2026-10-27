@@ -70,6 +70,7 @@
     "./mail": "./src/core/mail/index.ts",
     "./mail/addresses": "./src/core/mail/addresses.ts",
     "./mail/remote-content": "./src/core/mail/remote-content.ts",
+    "./mail/reply-quote": "./src/core/mail/reply-quote.ts",
     "./media": "./src/core/media/index.ts",
     "./notification": "./src/core/notification/index.ts",
     "./notification/tags": "./src/core/notification/tags.ts",
