@@ -1,3 +1,7 @@
+// The detail of one team on the Admin app's teams page: its name, avatar and settings, then its mounts,
+// backups and members as sections, and the toolbar above it that deletes the team. A user's detail
+// has the same section layout, so the two read as one design.
+
 import { useNavigate } from '@tanstack/react-router';
 import { useRemoveTeam } from '@workspace/lib/admin';
 import type { OrgTeam } from '@workspace/lib/types/admin';
