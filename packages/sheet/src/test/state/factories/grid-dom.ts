@@ -27,15 +27,21 @@ export function withGridGeometry(ctx: Context): Context {
     return ctx;
 }
 
+// The grid's container and scroll element, from this module's DOM. The globals are re-asserted per
+// call: the module-scope assignment doesn't re-run for cached imports, and a sibling test file in
+// the same process may have deleted the window or put a stub document in its place.
+export function gridElements(): { container: HTMLDivElement; scrollEl: HTMLDivElement } {
+    g.window = win;
+    g.document = win.document;
+    const container = win.document.createElement('div') as unknown as HTMLDivElement;
+    container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
+    const scrollEl = win.document.createElement('div') as unknown as HTMLDivElement;
+    return { container, scrollEl };
+}
+
 export function mouseUpAt(pageX: number, pageY: number) {
     return (ctx: Context) => {
-        // Re-assert per call: the module-scope assignment doesn't re-run for cached
-        // imports, and a sibling test's cleanup may have deleted the global window.
-        g.window = win;
-        g.document = win.document;
-        const container = win.document.createElement('div') as unknown as HTMLDivElement;
-        container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
-        const scrollEl = win.document.createElement('div') as unknown as HTMLDivElement;
+        const { container, scrollEl } = gridElements();
         const event = { button: 0, pageX, pageY } as unknown as MouseEvent;
         handleOverlayMouseUp(ctx, {} as GlobalCache, {} as Settings, event, scrollEl, container, null, null);
     };

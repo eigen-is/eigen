@@ -7,7 +7,7 @@ import type { Context } from '../../../state/context';
 import { onCellsMoveEnd } from '../../../state/modules/move-cells';
 import type { Cell, GlobalCache } from '../../../state/types';
 import { contextFactory } from '../factories/context';
-import { withGridGeometry } from '../factories/grid-dom';
+import { gridElements, withGridGeometry } from '../factories/grid-dom';
 
 const SIDE = { style: 1, color: '#000' };
 
@@ -30,9 +30,7 @@ function moveTopLeftToRowTwo(seed: (data: (Cell | null)[][]) => void, config: Co
     );
     ctx.cellSelectMoving = true;
     ctx.cellSelectMoveIndex = [0, 0];
-    const container = document.createElement('div') as unknown as HTMLDivElement;
-    container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
-    const scrollEl = document.createElement('div') as unknown as HTMLDivElement;
+    const { container, scrollEl } = gridElements();
     const event = { pageX: 50, pageY: 70 } as MouseEvent;
     onCellsMoveEnd(ctx, {} as GlobalCache, event, scrollEl, container);
     return ctx;
