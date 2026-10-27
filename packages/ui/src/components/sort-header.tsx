@@ -1,10 +1,15 @@
+// The header row of the grid-based lists, such as Drive's file table and the Admin app's users and
+// teams: column headers that sort on a click, and the row that keeps them in view. Callers own the
+// sort state and the grid columns.
+
 import { cn } from '@workspace/ui/lib/utils';
 import { ArrowDown, ArrowUp } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 export type SortDir = 'asc' | 'desc';
 
-// Shared header/menu sort-toggle rule for the grid tables (drive, admin users): re-selecting the
-// active column flips direction; switching to a new column uses that column's default direction.
+// The sort-toggle rule the headers and the sort menus share. Selecting the active column again flips
+// its direction. Switching to another column uses that column's default direction.
 export function nextSortDir<K extends string>(
     key: K,
     activeKey: K,
@@ -25,9 +30,8 @@ export type SortHeaderProps = {
     className?: string;
 };
 
-// Presentational column header button used by the grid-based tables (drive, admin users).
-// Callers own the sort state; this only renders the label + active-direction arrow. Display
-// (and container-query visibility) comes in via className so the header collapses with its cells.
+// One column header: the label and, on the active column, the direction arrow. Display and
+// container-query visibility come in via className, so the header collapses with its cells.
 export function SortHeader({ label, active, dir, onClick, align = 'left', className }: SortHeaderProps) {
     return (
         <button
@@ -43,5 +47,13 @@ export function SortHeader({ label, active, dir, onClick, align = 'left', classN
             {active &&
                 (dir === 'asc' ? <ArrowUp className="h-3 w-3 shrink-0" /> : <ArrowDown className="h-3 w-3 shrink-0" />)}
         </button>
+    );
+}
+
+// The row of column headers, which stays at the top while the rows scroll under it. It sits on the
+// in-content layer, so the positioned parts of a row, such as an avatar, pass under it.
+export function SortHeaderRow({ className, children }: { className: string; children: ReactNode }) {
+    return (
+        <div className={cn('grid border-b app-gutter-x sticky top-0 z-10 bg-background', className)}>{children}</div>
     );
 }

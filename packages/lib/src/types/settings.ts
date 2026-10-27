@@ -1,3 +1,8 @@
+// The settings types the API stores and the apps read, such as a user's personal settings, a team's,
+// a mount's and the server's, with the answers of the setup and S3 checks. A reader that decides what
+// a missing value means, such as celebrationsOn, sits beside its type, so the API and every app read
+// it the same way.
+
 import type { DriveViewPreferences } from './drive';
 import type { MountStorageType, S3Config } from './mount';
 
@@ -26,9 +31,14 @@ export type UserSettings = {
     mounts?: Record<string, MountSettings>;
     email?: EmailSettings;
     driveView?: Partial<DriveViewPreferences>;
-    // Missing = on: a finished checklist now and then gets a small burst of confetti.
+    // A finished checklist now and then gets a small burst of confetti. Read it through celebrationsOn.
     celebrations?: boolean;
 };
+
+// Celebrations are on until the user turns them off, so settings that never mention them have them on.
+export function celebrationsOn(settings: UserSettings | undefined): boolean {
+    return settings?.celebrations !== false;
+}
 
 export type TeamSettings = {
     calendar?: {

@@ -8,7 +8,7 @@ import { formatFileSize } from '@workspace/lib/format';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import type { SortDir } from '@workspace/ui';
-import { EmptyState, nextSortDir, SearchBar, SortHeader, TooltipButton } from '@workspace/ui';
+import { EmptyState, nextSortDir, SearchBar, SortHeader, SortHeaderRow, TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { ContextMenuAnchor } from '@workspace/ui/components/context-menu';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
@@ -209,7 +209,7 @@ export function AdminUsersTable({
 
     return (
         <div className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none">
-            <div className={cn('grid border-b app-gutter-x sticky top-0 z-10 bg-background', grid)}>
+            <SortHeaderRow className={grid}>
                 <SortHeader
                     label="Name"
                     active={sort.col === 'name'}
@@ -259,7 +259,7 @@ export function AdminUsersTable({
                     onClick={() => handleSort('joined')}
                     className={cn('pr-2', visibility.joined)}
                 />
-            </div>
+            </SortHeaderRow>
 
             {visible.map((u) => {
                 const selectable = !guests && u.memberId !== null;

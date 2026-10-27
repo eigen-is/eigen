@@ -1,13 +1,16 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import type { Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
-import {
-    buildSaveOptions,
-    draftReducer,
-    initFields,
-    isDirty,
-    mergeServerAttachments,
-    savedState,
-} from '../../../../components/mail/hooks/use-draft';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { renderInDocument } from '@workspace/ui/test/render-in-document';
+
+// The forward tests render the hook, so the DOM goes in before React and the hook are imported.
+installHappyDom();
+
+const { act, createElement } = await import('react');
+const { AuthProvider } = await import('@workspace/lib/auth');
+const { buildSaveOptions, initFields, mergeServerAttachments, useDraft } = await import(
+    '../../../../components/mail/hooks/use-draft'
+);
 
 function att(filename: string | undefined, contentType: string, index: number, size = 10): Attachment {
     return { filename, contentType, index, size, content: new Uint8Array(size) };
@@ -145,43 +148,80 @@ describe('a forward carries the parts of the message it forwards', () => {
         size: 10,
         contentType: 'application/pdf',
     });
-    const opened = () => savedState(initFields(null, undefined, forward));
 
-    test('both parts of a two-part message go out with the first save, and only an edit saves', () => {
-        let state = draftReducer(opened(), { type: 'add-prefill-attachment', meta: part('t1', 'a.pdf') });
-        state = draftReducer(state, { type: 'add-prefill-attachment', meta: part('t2', 'b.pdf') });
+    let unmount = async () => {};
+    afterEach(() => unmount());
+
+    // Opens a forward's composer state. `saved` lists the temp ids of every save the composer asks for,
+    // and each save answers as a draft the server now holds.
+    async function openForward() {
+        const saved: (string[] | undefined)[] = [];
+        const seen: { draft?: ReturnType<typeof useDraft> } = {};
+        function Probe() {
+            seen.draft = useDraft({
+                email: null,
+                prefillDraft: forward,
+                onSave: async (_draft, options) => {
+                    saved.push(options?.tempAttachmentIds);
+                    return savedDraft([]);
+                },
+            });
+            return null;
+        }
+        ({ unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Probe))));
+        const draft = () => {
+            if (!seen.draft) throw new Error('the composer state never rendered');
+            return seen.draft;
+        };
+        const run = (change: (d: ReturnType<typeof useDraft>) => void) => act(async () => change(draft()));
+        // Sends what the composer would send now: a save when anything changed, none otherwise.
+        const flush = () => act(async () => void (await draft().flushAndGetDraft()));
+        return { saved, run, flush };
+    }
+
+    test('both parts of a two-part message go out with the first save, and only an edit saves', async () => {
+        const { saved, run, flush } = await openForward();
+        await run((d) => d.addPrefillAttachment(part('t1', 'a.pdf')));
+        await run((d) => d.addPrefillAttachment(part('t2', 'b.pdf')));
         // Like the quoted body, the parts are the prefill: a forward the user leaves saves no draft.
-        expect(isDirty(state)).toBe(false);
+        await flush();
+        expect(saved).toEqual([]);
 
-        state = draftReducer(state, { type: 'set-field', field: 'to', value: 'bob@test.eigen.is' });
-        expect(isDirty(state)).toBe(true);
-        expect(buildSaveOptions(state.fields, false).tempAttachmentIds).toEqual(['t1', 't2']);
+        await run((d) => d.setField('to', 'bob@test.eigen.is'));
+        await flush();
+        expect(saved).toEqual([['t1', 't2']]);
     });
 
-    test('removing one part in the composer sends the other', () => {
-        let state = draftReducer(opened(), { type: 'add-prefill-attachment', meta: part('t1', 'a.pdf') });
-        state = draftReducer(state, { type: 'add-prefill-attachment', meta: part('t2', 'b.pdf') });
-        state = draftReducer(state, { type: 'remove-attachment', index: 0 });
-        expect(isDirty(state)).toBe(true);
-        expect(buildSaveOptions(state.fields, false).tempAttachmentIds).toEqual(['t2']);
+    test('removing one part in the composer sends the other', async () => {
+        const { saved, run, flush } = await openForward();
+        await run((d) => d.addPrefillAttachment(part('t1', 'a.pdf')));
+        await run((d) => d.addPrefillAttachment(part('t2', 'b.pdf')));
+        await run((d) => d.removeAttachment(0));
+        await flush();
+        expect(saved).toEqual([['t2']]);
     });
 
-    test('a forward of a message without attachments sends none', () => {
-        const state = draftReducer(opened(), { type: 'set-field', field: 'to', value: 'bob@test.eigen.is' });
-        expect(state.fields.attachments).toEqual([]);
-        expect(buildSaveOptions(state.fields, false).tempAttachmentIds).toBeUndefined();
+    test('a forward of a message without attachments sends none', async () => {
+        const { saved, run, flush } = await openForward();
+        await run((d) => d.setField('to', 'bob@test.eigen.is'));
+        await flush();
+        expect(saved).toEqual([undefined]);
     });
 
-    test('a part that lands after the user typed rides on the pending save', () => {
-        let state = draftReducer(opened(), { type: 'set-field', field: 'to', value: 'bob@test.eigen.is' });
-        state = draftReducer(state, { type: 'add-prefill-attachment', meta: part('t1', 'a.pdf') });
-        expect(isDirty(state)).toBe(true);
-        expect(buildSaveOptions(state.fields, false).tempAttachmentIds).toEqual(['t1']);
+    test('a part that lands after the user typed rides on the pending save', async () => {
+        const { saved, run, flush } = await openForward();
+        await run((d) => d.setField('to', 'bob@test.eigen.is'));
+        await run((d) => d.addPrefillAttachment(part('t1', 'a.pdf')));
+        await flush();
+        expect(saved).toEqual([['t1']]);
     });
 
-    test('a part that lands after the draft was saved is an edit, so the next save embeds it', () => {
-        const saved = savedState({ ...initFields(null, undefined, forward), id: 'draft-1' });
-        const state = draftReducer(saved, { type: 'add-prefill-attachment', meta: part('t1', 'a.pdf') });
-        expect(isDirty(state)).toBe(true);
+    test('a part that lands after the draft was saved is an edit, so the next save embeds it', async () => {
+        const { saved, run, flush } = await openForward();
+        await run((d) => d.setField('to', 'bob@test.eigen.is'));
+        await flush();
+        await run((d) => d.addPrefillAttachment(part('t1', 'a.pdf')));
+        await flush();
+        expect(saved).toEqual([undefined, ['t1']]);
     });
 });

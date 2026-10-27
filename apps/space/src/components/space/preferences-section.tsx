@@ -2,6 +2,7 @@
 // celebrates. Each switch saves to the personal settings as soon as it flips.
 
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
+import { celebrationsOn } from '@workspace/lib/types/settings';
 import { LoadingState } from '@workspace/ui';
 import { Label } from '@workspace/ui/components/label';
 import { Switch } from '@workspace/ui/components/switch';
@@ -20,7 +21,7 @@ export function PreferencesSection() {
                 <div className="flex items-center gap-3">
                     <Switch
                         id="celebrations"
-                        checked={data?.celebrations ?? true}
+                        checked={celebrationsOn(data)}
                         onCheckedChange={(v) => update.mutate({ celebrations: v })}
                     />
                     <Label htmlFor="celebrations">Celebrations</Label>

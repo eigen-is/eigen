@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, sharing, permissions, collaboration]
 related: [drive/share-a-file, drive/get-started]
 order: 90
-updated: 2026-10-23
+updated: 2026-10-27
 ---
 
 Drive keeps two views that bring shared files together in one place: **Shared with me** shows everything other people have given you access to, and **Shared by me** shows everything you have shared with others.
@@ -19,6 +19,8 @@ Drive keeps two views that bring shared files together in one place: **Shared wi
 The list shows every file and folder that someone has explicitly shared with you. Each row shows the file name, the owner's avatar, and who else has access.
 
 Click a file to select it and see its details in the panel on the right. Click it again to open it. If a folder appears in the list, opening it takes you into that folder so you can browse its contents.
+
+Inside a shared folder, and in a shared text file, the path at the top starts with **Shared with me**. Click it to go back to the list. Closing a text file that was shared with you on its own also takes you back to **Shared with me**.
 
 To preview a file without opening it, right-click and choose **Quick preview**, or press Space.
 

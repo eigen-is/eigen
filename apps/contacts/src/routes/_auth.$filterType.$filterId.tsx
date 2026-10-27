@@ -1,5 +1,6 @@
 // The contacts page: the address book, a label or a team's members as a list, filtered by the URL's
-// filterType and filterId. The contact the URL's contactId names opens its detail beside the list.
+// filterType and filterId. The contact the URL's contactId names opens its detail beside the list, and
+// one that is gone says so there.
 // The page also hosts the delete confirmation and the import picker its list and detail share.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
@@ -14,11 +15,11 @@ import {
 import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
 import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/drive';
-import { DeleteDialog, ListDetailLayout, LoadingState } from '@workspace/ui';
+import { DeleteDialog, EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui';
 import { IMPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
 import { FileImportPicker } from '@workspace/ui/components/drive';
 import { LabelFilterHeader } from '@workspace/ui/components/labels';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
 import { ContactsList, ContactsListToolbar } from '../components/contacts/contacts-list';
 import { TeamMemberDetail, TeamMemberDetailToolbar } from '../components/contacts/team-member-detail';
@@ -46,7 +47,7 @@ function ContactsRoute() {
 
     const { data: contacts = [], isLoading: contactsLoading } = useContacts();
     const { data: labels = [] } = useLabels();
-    const { data: myTeams = [] } = useMyTeams();
+    const { data: myTeams = [], isLoading: teamsLoading } = useMyTeams();
     const deleteMutation = useDeleteContact();
     const updateContactMutation = useUpdateContact();
     const importMutation = useImportContacts();
@@ -102,18 +103,7 @@ function ContactsRoute() {
         );
     };
 
-    const contact = contactsLoading ? undefined : contacts.find((c) => c.id === contactId);
-
-    useEffect(() => {
-        if (filterType === 'team') return;
-        if (!contactsLoading && contactId && !contact) {
-            navigate({
-                to: Route.fullPath,
-                params: { filterType, filterId },
-                search: {},
-            });
-        }
-    }, [contactsLoading, contactId, contact, navigate, filterType, filterId]);
+    const contact = contacts.find((c) => c.id === contactId);
 
     const listToolbar = (
         <ContactsListToolbar
@@ -141,10 +131,21 @@ function ContactsRoute() {
         const activeTeam = myTeams.find((t) => t.id === filterId);
         const activeMember = activeTeam?.members.find((m) => m.email === contactId);
 
+        if (teamsLoading) {
+            return <LoadingState />;
+        }
+
         return (
             <ListDetailLayout
                 listToolbar={listToolbar}
-                detail={activeMember && <TeamMemberDetail member={activeMember} />}
+                detail={
+                    contactId &&
+                    (activeMember ? (
+                        <TeamMemberDetail member={activeMember} />
+                    ) : (
+                        <EmptyState message="Member not found" />
+                    ))
+                }
                 detailToolbar={activeMember && <TeamMemberDetailToolbar member={activeMember} />}
                 onBackToList={handleBackToList}
             >
@@ -166,7 +167,10 @@ function ContactsRoute() {
         <>
             <ListDetailLayout
                 listToolbar={listToolbar}
-                detail={contact && <ContactDetail contact={contact} />}
+                detail={
+                    contactId &&
+                    (contact ? <ContactDetail contact={contact} /> : <EmptyState message="Contact not found" />)
+                }
                 detailToolbar={detailToolbar}
                 onBackToList={handleBackToList}
             >

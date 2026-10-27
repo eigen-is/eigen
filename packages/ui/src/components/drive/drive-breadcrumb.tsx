@@ -7,7 +7,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useSharedPaths } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
+import { sharedChainHead, stripEigenExtension } from '@workspace/lib/types/drive';
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -38,9 +38,10 @@ export function DriveBreadcrumb({
     itemClassName,
 }: DriveBreadcrumbProps) {
     const { user } = useAuth();
-    const fromRoot = paths.length === 0 || paths[0].parentId === null;
-    const { data: sharedWithMe = [] } = useSharedPaths(fromRoot ? '' : (user?.id ?? ''), 'with-me');
-    const viaShare = !fromRoot && paths.some((path) => sharedWithMe.some((shared) => shared.id === path.id));
+    const head = sharedChainHead(paths);
+    const { data: sharedWithMe = [] } = useSharedPaths(head ? (user?.id ?? '') : '', 'with-me');
+    const sharedIds = new Set(sharedWithMe.map((shared) => shared.id));
+    const viaShare = !!head && paths.some((path) => sharedIds.has(path.id));
     return (
         <Breadcrumb className={cn('overflow-hidden', className)}>
             <BreadcrumbList>
@@ -64,7 +65,7 @@ export function DriveBreadcrumb({
                     </BreadcrumbItem>
                 )}
                 {paths.map((path, index) => {
-                    const label = index === 0 && fromRoot ? mountLabel : stripEigenExtension(path.name);
+                    const label = index === 0 && !head ? mountLabel : stripEigenExtension(path.name);
                     return (
                         <Fragment key={path.id}>
                             {(index > 0 || viaShare) && <BreadcrumbSeparator />}

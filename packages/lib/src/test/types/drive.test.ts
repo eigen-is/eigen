@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { YjsRootKind } from '../../types/drive';
-import { EIGEN_DOC_TYPE_INFO, isIcsFile, isInlineEditable, isVCardFile } from '../../types/drive';
+import type { DrivePath, YjsRootKind } from '../../types/drive';
+import { EIGEN_DOC_TYPE_INFO, isIcsFile, isInlineEditable, isVCardFile, sharedChainHead } from '../../types/drive';
 
 // Scans each collab app's source for Y.Doc root-type access and asserts the
 // referenced names are declared in EIGEN_DOC_TYPE_INFO[type].yjsRoots. Catches
@@ -162,5 +162,36 @@ describe('isInlineEditable', () => {
         expect(isInlineEditable('text/plain', 'team.vcf')).toBe(false);
         expect(isInlineEditable('text/plain', 'festival.ics')).toBe(false);
         expect(isInlineEditable('text/plain', 'saved.eml')).toBe(false);
+    });
+});
+
+describe('sharedChainHead', () => {
+    const path = (id: string, parentId: string | null): DrivePath => ({
+        id,
+        mountId: 'default',
+        name: id,
+        type: 'folder',
+        parentId,
+        ownerId: 'owner-1',
+        mimeType: 'folder',
+        size: 0,
+        hash: null,
+        thumbnail: null,
+        acl: null,
+        visibility: 'private',
+        sharingRestricted: false,
+        details: null,
+        trashedAt: null,
+        createdAt: new Date('2026-10-01'),
+        updatedAt: new Date('2026-10-01'),
+    });
+
+    test('a chain from the mount root came in through no share', () => {
+        expect(sharedChainHead([path('root', null), path('docs', 'root')])).toBeUndefined();
+        expect(sharedChainHead([])).toBeUndefined();
+    });
+
+    test('a chain the server cut starts at the path the viewer came in through', () => {
+        expect(sharedChainHead([path('project', 'hidden'), path('notes', 'project')])?.id).toBe('project');
     });
 });

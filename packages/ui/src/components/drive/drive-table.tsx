@@ -3,7 +3,7 @@ import { useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types';
 import type { DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
-import { nextSortDir, SortHeader } from '@workspace/ui/components/sort-header';
+import { nextSortDir, SortHeader, SortHeaderRow } from '@workspace/ui/components/sort-header';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import { useRef } from 'react';
@@ -211,7 +211,7 @@ export function DriveTable({
             className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none"
         >
             {!hideHeader && (
-                <div className={cn('grid border-b app-gutter-x sticky top-0 z-10 bg-background', gridCols)}>
+                <SortHeaderRow className={gridCols}>
                     <SortHeader
                         label="Name"
                         active={sortKey === 'name'}
@@ -248,7 +248,7 @@ export function DriveTable({
                         />
                     )}
                     {!hideActions && <div className={coarse ? 'block' : 'hidden @[800px]:block'} />}
-                </div>
+                </SortHeaderRow>
             )}
 
             <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>

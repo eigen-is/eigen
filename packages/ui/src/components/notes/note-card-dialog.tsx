@@ -80,13 +80,15 @@ export function NoteCardDialog({
     const celebrate = useCelebrate();
     // One try per opening: the chance is rolled once, so unticking and re-ticking the last box can't farm it.
     const celebratedRef = useRef(false);
-    useEffect(() => {
-        if (open) celebratedRef.current = false;
-    }, [open]);
     // The parent draws the saved description again, which replaces every box in the page. So the celebration
     // waits for that and starts from the box at the same place in the list, as the clicked one is gone by then.
     const descriptionRef = useRef<HTMLDivElement>(null);
     const celebrateBoxRef = useRef<number | null>(null);
+    // A tick whose save never came back must not celebrate a later edit, such as a peer's, so a close disarms it.
+    useEffect(() => {
+        if (open) celebratedRef.current = false;
+        else celebrateBoxRef.current = null;
+    }, [open]);
     useEffect(() => {
         const index = celebrateBoxRef.current;
         if (index === null) return;

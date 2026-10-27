@@ -1,3 +1,8 @@
+// Drive's folder page: the folder the URL names, with the item ?pid= selects open beside the list. It
+// resolves the mount's "root" alias, sends a viewer who may open only the selected item to that item's
+// share link, offers a request for access when the folder is closed to the viewer, and opens the share
+// dialog that ?sharePathId= asks for.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';

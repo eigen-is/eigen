@@ -1,3 +1,8 @@
+// The Drive types the API serves and every app reads: a path and its ACL, the kinds of path and their
+// MIME types, the Eigen document types with their extensions, export formats and Y.Doc roots, and the
+// readers that classify a file by its name and MIME type. The API and the apps import them alike, so a
+// new kind of path or format is added here once.
+
 import type { BytesTextPreviewMode } from '../constants/preview';
 import { BAND_ROOTS } from '../docs/eigendoc/bands';
 import { STYLE_ROOT } from '../docs/eigendoc/normal-style';
@@ -482,6 +487,14 @@ export type DrivePath = {
     createdAt: Date;
     updatedAt: Date;
 };
+
+// The server cuts another owner's chain at the first folder the viewer can't read, so a chain that
+// doesn't start at a mount root starts where the viewer came in, through a share or a public link.
+// This is that first path, or undefined for a chain that starts at a root.
+export function sharedChainHead(chain: DrivePath[]): DrivePath | undefined {
+    const head = chain.at(0);
+    return head && head.parentId !== null ? head : undefined;
+}
 
 export type DriveViewMode = 'list' | 'grid';
 export const DRIVE_SORT_KEYS = ['name', 'modified', 'size'] as const;

@@ -5,13 +5,14 @@
 // a one-in-three chance, and reduced motion, which gets a short glow on the origin instead of confetti.
 
 import { useSpaceSettings } from '@workspace/lib/space';
+import { celebrationsOn } from '@workspace/lib/types/settings';
 import { burstConfetti } from './confetti-burst';
 
 const CHANCE = 1 / 3;
 
 export function useCelebrate(): (origin: HTMLElement) => void {
     const { data: settings } = useSpaceSettings();
-    const enabled = settings?.celebrations !== false;
+    const enabled = celebrationsOn(settings);
 
     return (origin) => {
         if (!enabled || Math.random() >= CHANCE) return;

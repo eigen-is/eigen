@@ -92,8 +92,8 @@ type EmailDraftProps = {
     // Quoted body / subject / recipients for reply/forward. useDraft reads it once on mount
     // and seeds its fingerprint from it, so no save fires until the user actually edits.
     prefillDraft?: NewDraft;
-    // The parts of the message a forward carries. Each is fetched and uploaded once per compose
-    // session, and its chip is part of the prefill, so they alone save no draft.
+    // The parts of the message a forward carries. Each is fetched and uploaded once, while the forward
+    // has no saved draft, and its chip is part of the prefill, so they alone save no draft.
     forwardedParts?: FileSubject[];
     to?: string;
     // Drive paths to attach when the composer opens (e.g. palette "Mail to…" passes the
@@ -260,6 +260,7 @@ export function EmailDraft({
 
     // The forwarded parts arrive with the composer, so they are attached once on mount. The results are
     // added in the original's order, and a part that fails was toasted by the hook and is left out.
+    // A composer that opens on the saved draft finds them already in it and attaches none again.
     const didAttachForwardedPartsRef = useRef(false);
     const attachForwardedParts = useEffectEvent(async (parts: FileSubject[]) => {
         const results = await Promise.all(
@@ -277,7 +278,7 @@ export function EmailDraft({
         }
     });
     useEffect(() => {
-        if (didAttachForwardedPartsRef.current || !forwardedParts?.length) return;
+        if (email || didAttachForwardedPartsRef.current || !forwardedParts?.length) return;
         didAttachForwardedPartsRef.current = true;
         void attachForwardedParts(forwardedParts);
     }, [forwardedParts]);

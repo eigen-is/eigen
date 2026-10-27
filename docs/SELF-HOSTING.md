@@ -43,7 +43,7 @@ Developing Eigen? `./eigen setup` in a clone builds the images instead: [CONTRIB
 | Errors, HTTPS, mail that does not arrive | [Fix common server problems](https://eigen.is/support/self-hosting/troubleshooting) |
 | Known gaps | [What Eigen does not do yet](https://eigen.is/support/self-hosting/known-gaps) |
 
-The help center at eigen.is follows the `main` channel, so it can describe a build newer than the newest release. Every install serves its own copy at `/support`, which matches the version it runs.
+The help center at eigen.is follows `main`, which moves only for a release, so it describes the newest release. Every install serves its own copy at `/support`, which matches the version it runs.
 
 ## The commands
 
