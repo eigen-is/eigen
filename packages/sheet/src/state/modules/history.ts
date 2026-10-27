@@ -1,8 +1,8 @@
 // What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id. Undo and
 // redo take the context and an entry and return the next context and the batch to send. A cell or field entry skips a
-// target a peer changed since and recalculates the formulas it touches. A sheet, row or column entry builds ops and
-// applies exactly those, through applyOpBatch, as its peers will. The Workbook keeps the stacks and calls these from,
-// for example, handleUndo.
+// target a peer changed since. A sheet, row or column entry builds ops and applies exactly those, through
+// applyOpBatch, as its peers will. A cell, field, row or column step recalculates the formulas it writes back. The
+// Workbook keeps the stacks and calls these from, for example, handleUndo.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { MergeCell } from '@workspace/lib/sheets';
@@ -10,7 +10,7 @@ import { parseCellKey } from '@workspace/lib/sheets';
 import { cloneDeep, get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, produce, produceWithPatches } from 'immer';
-import { dataToCelldata } from '../../engine/celldata';
+import { celldataToData, dataToCelldata } from '../../engine/celldata';
 import { RowColError } from '../../engine/rowcol';
 import type { CalcChainEntry, Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
@@ -23,13 +23,14 @@ import {
     filterPatch,
     getSheetIndex,
     inverseRowColOptions,
+    opToPatch,
     patchToOp,
     rowColMarker,
 } from '../utils';
 import { applyOpBatch } from './apply-ops';
 import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
-import { createContextResolver, snapshotContext } from './formula-cache';
+import { createContextResolver, FormulaCache, snapshotContext } from './formula-cache';
 import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-exec';
 import { rowColMove } from './history-shift';
 import { settleCurrentSheet } from './sheet';
@@ -235,7 +236,8 @@ function recalculate(ctx: Context, patches: Patch[]) {
 
 // A row or column entry, `from` what the op left to `to`. The batch is the marker, the edited sheet's fields and a
 // repair of the cells. The fields are what the marker makes of the live sheet, so a peer's edit since survives, with
-// what the entry restores beyond that. The live context gets only the ops.
+// what the entry restores beyond that. The live context gets only the ops. The repaired cells hold the values the
+// entry recorded, so the step then recalculates them and their dependents, as a cell undo does, and sends those too.
 function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOptions): Step {
     const marker = rowColMarker(options);
     const index = marker?.id == null ? undefined : getSheetIndex(ctx, marker.id);
@@ -243,13 +245,19 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
     const left = withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, from));
     const target = withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, to));
     const restored = applyPatches(ctx, target);
-    // What the marker alone makes of the sheet the op left, and of the live sheet.
-    const made = applyOpBatch(applyPatches(ctx, left), [marker]);
-    const live = applyOpBatch(ctx, [marker]);
+    // What the marker alone makes of the sheet the op left, and of the live sheet. These runs are trials, so each gets a
+    // formula map of its own: a run writes into the map and the open editor's range state, which live outside immer.
+    const trial = (from: Context) => applyOpBatch({ ...from, formulaCache: new FormulaCache() }, [marker]);
+    const made = trial(applyPatches(ctx, left));
+    const live = trial(ctx);
     if (!made || !live) return { ctx, ops: [] };
     const fields = restoredFields(index, target, restored, made.ctx, live.ctx);
     const step = { fields, repair: repairOps(ctx, left, target, options) };
-    return applyBatch(ctx, patchToOp(restored, target, options, step));
+    const applied = applyBatch(ctx, patchToOp(restored, target, options, step));
+    if (applied.ops.length === 0) return applied;
+    const [repaired] = opToPatch(applied.ctx, step.repair);
+    const [next, recalculated] = produceWithPatches(applied.ctx, (draft: Context) => recalculate(draft, repaired));
+    return { ctx: next, ops: [...applied.ops, ...patchToOp(next, filterPatch(recalculated))] };
 }
 
 // The edited sheet's fields as a row or column step leaves them: each as the marker makes it of the live sheet, but a
@@ -327,7 +335,7 @@ function repairOps(ctx: Context, from: Patch[], to: Patch[], options: PatchOptio
         const { id } = ctx.sheets[index];
         const after = moved[index].data ?? [];
         const was = left.get(index) ?? [];
-        const live = ctx.sheets[index].data ?? [];
+        const live = matrixOf(ctx.sheets[index]);
         for (let r = 0; r < rows.length; r += 1) {
             if (rows[r] === after[r]) continue;
             const width = Math.max(rows[r]?.length ?? 0, after[r]?.length ?? 0);
@@ -348,14 +356,21 @@ function repairOps(ctx: Context, from: Patch[], to: Patch[], options: PatchOptio
     return ops;
 }
 
-// The whole matrices a row or column entry records, by sheet index.
+// The whole matrices a row or column entry records, by sheet index. A sheet nobody opened, such as a copy, has no
+// matrix, so the entry records its stored cells.
 function matrices(patches: Patch[]) {
     const found = new Map<number, CellMatrix>();
     for (const { path, value } of patches) {
         const [, index, field] = path;
-        if (path.length === 3 && field === 'data' && typeof index === 'number') found.set(index, value);
+        if (path.length !== 3 || typeof index !== 'number') continue;
+        if (field === 'data') found.set(index, value);
+        else if (field === 'celldata') found.set(index, celldataToData(value, 0, 0));
     }
     return found;
+}
+
+function matrixOf(sheet: Sheet): CellMatrix {
+    return sheet.data ?? celldataToData(sheet.celldata ?? [], 0, 0);
 }
 
 // What a person wrote into a cell: a formula's value, its display text and its value type are the engine's.

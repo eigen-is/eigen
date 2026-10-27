@@ -364,8 +364,9 @@ class Shifter {
         return at(patch, [...patch.path.slice(0, depth), moved, ...below], patch.value);
     }
 
-    // The recalc list names each formula cell by its place, so an entry moves with its cell, and a whole list moves as
-    // one. A write of the list's length moves nothing.
+    // The recalc list names each formula cell by its place, so an entry moves with its cell. A whole list moves as one
+    // and loses the cells the op deletes: an edit that overwrites one formula records every formula cell's place, and
+    // a deleted row elsewhere must not drop that edit's undo. A write of the list's length moves nothing.
     private calcChain(patch: Patch, [index]: (string | number)[]): Patch | null {
         if (!('value' in patch) || patch.value == null || index === 'length') return patch;
         if (index != null) {
@@ -373,13 +374,9 @@ class Shifter {
             return moved && at(patch, patch.path, moved);
         }
         const list: CalcChainEntry[] = patch.value;
-        const moved: CalcChainEntry[] = [];
-        for (const entry of list) {
-            const next = this.chainEntry(entry);
-            if (!next) return null;
-            moved.push(next);
-        }
-        return moved.every((entry, i) => entry === list[i]) ? patch : { ...patch, value: moved };
+        const moved = list.flatMap((entry) => this.chainEntry(entry) ?? []);
+        if (moved.length === list.length && moved.every((entry, i) => entry === list[i])) return patch;
+        return { ...patch, value: moved };
     }
 
     private chainEntry(entry: CalcChainEntry): CalcChainEntry | null {
