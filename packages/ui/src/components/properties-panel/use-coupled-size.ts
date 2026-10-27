@@ -8,6 +8,10 @@ import { isMixed } from './merged-value';
 
 type CoupledSize = { width?: number; height?: number };
 
+// Whether a side the host handed back is the one the latch wrote, as it shows it.
+const isNear = (written: number, side: MergedValue<number>) =>
+    !isMixed(side) && side !== undefined && Math.abs(written - side) <= 0.5;
+
 export function useCoupledSize(
     width: MergedValue<number>,
     height: MergedValue<number>,
@@ -20,22 +24,23 @@ export function useCoupledSize(
             ? width / height
             : null;
 
-    // Every coupled write rounds the derived side, so re-deriving the ratio from the box that came back drifts: 100x50
-    // typed up to 250 passes through 25x13 and lands on 250x130 instead of 250x125. The ratio is latched with the box
-    // it wrote and reused for as long as the incoming box is still that one. Anything else that moves the box
-    // re-derives it.
+    // A host that shows whole px hands back the derived side rounded, so re-deriving the ratio from the box that came
+    // back drifts: 100x50 typed up to 250 passes through 25x13 and lands on 250x130 instead of 250x125. The ratio is
+    // latched with the box it wrote and reused for as long as the incoming box is still that one, within the half px a
+    // rounding moves it. Anything else that moves the box re-derives it.
     const latch = useRef<{ width: number; height: number; ratio: number } | null>(null);
     const held = latch.current;
-    const startRatio = held && held.width === width && held.height === height ? held.ratio : ratio;
+    const startRatio = held && isNear(held.width, width) && isNear(held.height, height) ? held.ratio : ratio;
     const lockedRatio = locked && startRatio !== null && startRatio > 0 ? startRatio : null;
 
-    // The derived side is floored at 1, so an extreme ratio never couples a valid edit to a zero size.
+    // The derived side is exact, as a typed one is, so a locked 4 cm height of a 2:1 box stores 8 cm wide. It is floored
+    // at 1, so an extreme ratio never couples a valid edit to a zero size.
     const changeWidth = (w: number) => {
         if (lockedRatio === null) {
             onChange({ width: w });
             return;
         }
-        const h = Math.max(1, Math.round(w / lockedRatio));
+        const h = Math.max(1, w / lockedRatio);
         latch.current = { width: w, height: h, ratio: lockedRatio };
         onChange({ width: w, height: h });
     };
@@ -44,7 +49,7 @@ export function useCoupledSize(
             onChange({ height: h });
             return;
         }
-        const w = Math.max(1, Math.round(h * lockedRatio));
+        const w = Math.max(1, h * lockedRatio);
         latch.current = { width: w, height: h, ratio: lockedRatio };
         onChange({ width: w, height: h });
     };

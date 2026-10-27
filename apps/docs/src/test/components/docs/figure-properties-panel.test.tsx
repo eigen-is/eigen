@@ -357,21 +357,21 @@ test('a stored height shows in H', async () => {
 // A picture at its own ratio stores no height, so it stays at that ratio wherever it is drawn.
 test.each([
     ['W', '8', { width: mmToPx(80), height: null }],
-    ['H', '4', { width: 302, height: null }],
+    ['H', '4', { width: mmToPx(80), height: null }],
 ])('a locked %s edit of a picture at its own ratio writes the width alone', async (side, value, size) => {
     const editor = await mount();
     const input = side === 'W' ? widthField() : heightField();
     await type(input, value);
     await key(input, 'Enter');
     expect(sizeAt2(editor)).toEqual(size);
-    expect(heightField().value).toBe('4.00');
+    expect([widthField().value, heightField().value]).toEqual(['8.00', '4.00']);
 });
 
 test('a locked W edit of a stretched picture scales its height', async () => {
     const editor = await mount({ height: 50 });
     await type(widthField(), '8');
     await key(widthField(), 'Enter');
-    expect(sizeAt2(editor)).toEqual({ width: mmToPx(80), height: 76 });
+    expect(sizeAt2(editor)).toEqual({ width: mmToPx(80), height: mmToPx(80) / 4 });
 });
 
 test.each([
@@ -388,12 +388,12 @@ test.each([
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
 });
 
-// Coupled first, then fitted: 30 cm is 1133.9 x 283 px, which the 600 px column shrinks in shape.
+// Coupled first, then fitted: 30 cm is 1133.9 x 283.5 px, which the 600 px column shrinks in shape.
 test('a W past the column scales both sides to it', async () => {
     const editor = await mount({ height: 50 });
     await type(widthField(), '30');
     await key(widthField(), 'Enter');
-    expect(sizeAt2(editor)).toEqual({ width: 600, height: (283 * 600) / mmToPx(300) });
+    expect(sizeAt2(editor)).toEqual({ width: 600, height: 150 });
 });
 
 // A height has no floor but a pixel, so a docx divider 4 px tall can be typed back.

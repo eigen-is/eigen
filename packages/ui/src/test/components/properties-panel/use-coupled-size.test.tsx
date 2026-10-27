@@ -10,8 +10,13 @@ const { useCoupledSize } = await import('../../../components/properties-panel/us
 type Size = { width?: number; height?: number };
 type Change = { changeWidth: (width: number) => void; changeHeight: (height: number) => void };
 
-// Mounts the hook over a box the host keeps, as a panel does, and answers the box after each write.
-async function mountCoupled(start: { width: number; height: number }, locked: boolean) {
+// Mounts the hook over a box the host keeps, as a panel does, and answers the box after each write. `shown` is the box
+// the host hands the hook back, such as Vector's whole px.
+async function mountCoupled(
+    start: { width: number; height: number },
+    locked: boolean,
+    shown: (side: number | undefined) => number | undefined = (side) => side,
+) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -19,7 +24,7 @@ async function mountCoupled(start: { width: number; height: number }, locked: bo
     const writes: Size[] = [];
     let change: Change | undefined;
     const Host = () => {
-        change = useCoupledSize(box.width, box.height, locked, (size) => {
+        change = useCoupledSize(shown(box.width), shown(box.height), locked, (size) => {
             writes.push(size);
             box = { ...box, ...size };
         });
@@ -42,9 +47,20 @@ async function mountCoupled(start: { width: number; height: number }, locked: bo
     };
 }
 
-// The ratio is latched with the box it wrote: re-deriving it off the rounded 25x13 lands on 250x130.
-test('a locked width typed up to 250 keeps the 2:1 it started from', async () => {
+// The derived side is stored as a typed one is, so a locked 4 cm height of a 2:1 box reads back as 8 cm wide.
+test('a locked edit derives the other side exactly', async () => {
     const coupled = await mountCoupled({ width: 100, height: 50 }, true);
+    await coupled.type('height', 151.18);
+    expect(coupled.box()).toEqual({ width: 302.36, height: 151.18 });
+    await coupled.cleanup();
+});
+
+// The ratio is latched with the box it wrote: re-deriving it off the 25x13 a host showing whole px gives back lands on
+// 250x130.
+test('a locked width typed up to 250 keeps the 2:1 it started from, though the host shows whole px', async () => {
+    const coupled = await mountCoupled({ width: 100, height: 50 }, true, (side) =>
+        side === undefined ? undefined : Math.round(side),
+    );
     for (const typed of [2, 25, 250]) await coupled.type('width', typed);
     expect(coupled.box()).toEqual({ width: 250, height: 125 });
     await coupled.cleanup();
