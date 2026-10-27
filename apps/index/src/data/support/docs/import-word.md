@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit, docs/page-setup]
 order: 100
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, images, charts, and equations.
@@ -45,7 +45,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Headings stay headings, and Word's Title and Subtitle styles become a Title and a Subtitle.
 - Numbered lists keep their numbers, the number they start at, and their style (1, a, A, i, or I). A list keeps counting across a page break, and a page break inside a list item stays in that item.
 - Checkboxes become a checklist, ticked or not.
-- Tables keep their merged cells, column widths, and cell colors. A table wider than the page shrinks to fit.
+- Tables keep their merged cells, column widths, cell colors, and borders. A border keeps its color and width, and is drawn solid, dashed, dotted, or double. A table without borders in Word has none here. A table wider than the page shrinks to fit.
 - Images keep their size and caption. An image that floats left or right of the text floats there in Eigen too.
 - Column, bar, line, and pie charts become charts you can edit, with their data, colors, title, background, text and line colors, size, and caption. A chart floats as an image does, and a 3-D chart comes in flat. See [Insert images, charts, and tables](/support/docs/images-and-tables).
 - Footnotes stay footnotes, with their formatting and links, and endnotes become footnotes. A footnote with a custom mark, such as *, gets a number instead.

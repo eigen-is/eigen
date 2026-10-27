@@ -4,6 +4,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Added
+
+- **Table borders in Docs** — give the selected cells all borders, a box around them, or none, and pick the border color, in the **Table** panel or under **Format › Table**. A row or column you add takes the borders and fill of the one beside it
+- **Table borders in Word files** — a Word table keeps its borders, their colors, widths and dashes, when it comes in and when you download a document as Word. A table without borders in Word has none in Docs
+
 ### Changed
 
 - **Forwarding email** — a forward brings the original's attachments along, pictures in the message included. Take one off with the **X** on its chip before you send
