@@ -44,6 +44,8 @@ export { readCellBackground } from './nodes/table-cell';
 export type { TitleType } from './nodes/title';
 export type { NormalStyle } from './normal-style';
 export { DEFAULT_NORMAL_STYLE, normalStyleProperties, readNormalStyle, STYLE_ROOT } from './normal-style';
+export type { OutlineHeading } from './outline';
+export { isOutlineHeading, outlineText, readOutline } from './outline';
 export type { PageMargin, PageSetup, PaperSizeName } from './page';
 export {
     cmText,
