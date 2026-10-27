@@ -49,7 +49,8 @@ const event = (p: Partial<CalendarEventOccurrence> & { title: string; startTime:
     occurrenceDate: p.startTime.toISOString().slice(0, 10),
     ...p,
 });
-const at = (day: number, hour: number) => new Date(Date.UTC(2026, 9, day, hour));
+// A timed event is at a wall-clock hour, so it lands on the same day in any zone the tests run in.
+const at = (day: number, hour: number) => new Date(2026, 9, day, hour);
 
 const shared: SharedCalendar = {
     id: 'sc1',
@@ -165,7 +166,12 @@ test('a day holds four events, all-day first, and counts the rest', async () => 
         event({ title: 'Early', startTime: at(20, 8) }),
         event({ title: 'Noon', startTime: at(20, 12) }),
         event({ title: 'Evening', startTime: at(20, 18) }),
-        event({ title: 'Holiday', allDay: true, startTime: at(20, 0), endTime: at(21, 0) }),
+        event({
+            title: 'Holiday',
+            allDay: true,
+            startTime: new Date(Date.UTC(2026, 9, 20)),
+            endTime: new Date(Date.UTC(2026, 9, 21)),
+        }),
     ];
     const { container } = await open();
     expect(pills(container)).toEqual(['Team sync', 'Holiday', 'Early', 'Noon', 'Late']);
