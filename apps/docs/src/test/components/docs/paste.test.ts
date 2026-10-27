@@ -305,6 +305,16 @@ test('a pasted image from the HTML download keeps on the paper by its width', ()
     expect(found).toMatchObject([{ layout: 'front', width: 300, offsetX: 400 }]);
 });
 
+// A stretched picture keeps its shape as the column shrinks it, as a chart does.
+test('a pasted stretched image wider than the column shrinks to it, its height alongside', () => {
+    const html = '<p><span class="figure"><img src="data:image/png;base64," width="1200" height="300"></span></p>';
+    const found: object[] = [];
+    createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+        if (node.type.name === 'figure') found.push(node.attrs);
+    });
+    expect(found).toMatchObject([{ width: 600, height: 150 }]);
+});
+
 test('a pasted image in the flow still caps at the column', () => {
     const html = '<p><img src="data:image/png;base64," width="700"></p>';
     const found: unknown[] = [];
