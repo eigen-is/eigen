@@ -350,6 +350,18 @@ describe('undo and redo recalculate the formulas they touch', () => {
     });
 });
 
+test("a redone formula stays in the recalc list at its place after a peer's row insert", () => {
+    const s = session(workbook({ A1: { v: 1, m: '1', ct: { fa: 'General', t: 'n' } } }));
+    s.edit(s.a, typedAt('D10', '=A1*2'));
+    s.edit(s.b, ...insertRows(2, 2));
+    s.undo(s.a);
+    s.redo(s.a);
+    for (const t of [s.a, s.b]) expect(t.ctx.sheets[0].calcChain).toEqual([{ r: 11, c: 3, id: ONE }]);
+    s.edit(s.b, typedAt('A1', '7'));
+    for (const t of [s.a, s.b]) expect(cellAt(t, 'D12')?.v).toBe(14);
+    expectAgree(s);
+});
+
 describe('a structural undo or redo applies exactly what it sends', () => {
     test("undoing your row insert keeps a peer's edit below it", () => {
         const s = session(workbook());
@@ -699,10 +711,28 @@ describe('shiftEntries', () => {
         ],
         ["a chart's box stays", rows(2, 2), replace(at('charts', 'c1', 'x'), 5), replace(at('charts', 'c1', 'x'), 5)],
         [
-            'calcChain stays',
+            'a recalc list entry moves with its cell',
             rows(2, 2),
             replace(at('calcChain', 0), { r: 5, c: 1, id: ONE }),
-            replace(at('calcChain', 0), { r: 5, c: 1, id: ONE }),
+            replace(at('calcChain', 0), { r: 7, c: 1, id: ONE }),
+        ],
+        [
+            'a whole recalc list moves',
+            columns(0, 1),
+            replace(at('calcChain'), [{ r: 5, c: 1, id: ONE }]),
+            replace(at('calcChain'), [{ r: 5, c: 2, id: ONE }]),
+        ],
+        [
+            'a recalc list entry inside a delete drops the entry',
+            deletedRows(2, 3),
+            replace(at('calcChain', 0), { r: 3, c: 1, id: ONE }),
+            null,
+        ],
+        [
+            "the recalc list's length stays",
+            rows(2, 2),
+            replace(at('calcChain', 'length'), 0),
+            replace(at('calcChain', 'length'), 0),
         ],
         ['the name stays', rows(2, 2), replace(at('name'), 'Uno'), replace(at('name'), 'Uno')],
     ])('%s', (_, marker, patch, expected) => {

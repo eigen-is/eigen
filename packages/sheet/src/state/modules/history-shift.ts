@@ -19,7 +19,7 @@ import {
     shiftMergeForDelete,
     shiftMergeForInsert,
 } from '../../engine/rowcol';
-import type { Cell, CellMatrix } from '../../engine/types';
+import type { CalcChainEntry, Cell, CellMatrix } from '../../engine/types';
 import type { History, Op, Sheet } from '../types';
 import type { PatchOptions } from '../utils';
 
@@ -82,7 +82,7 @@ function deleteMove(op: DeleteRowColOp): RowColMove {
 // A peer's row or column op moves your entries' cells, merges, borders, links, validation and row or column sizes on
 // its sheet, and the formula text that points at it on any sheet, a deleted sheet's included. An entry the op makes
 // meaningless is dropped: one that writes inside deleted rows or columns or cuts a merge, a range or a whole config on
-// the op's sheet, a chart's data on that sheet, or your own row or column op there. calcChain is left as it is.
+// the op's sheet, a chart's data on that sheet, or your own row or column op there.
 export function shiftEntries(entries: History[], marker: Op, sheets: Sheet[]): History[] {
     const { id } = marker;
     const target = sheets.find((sheet) => sheet.id === id);
@@ -151,6 +151,7 @@ class Shifter {
         if (field === 'data') return this.dataPatch(patch, rest);
         if (field === 'config') return this.configPatch(patch, rest);
         if (field === 'hyperlink' || field === 'dataVerification') return this.cellKeyed(patch, rest);
+        if (field === 'calcChain') return this.calcChain(patch, rest);
         return POSITION_FREE_FIELDS.has(field) ? patch : null;
     }
 
@@ -350,6 +351,33 @@ class Shifter {
         return at(patch, [...patch.path.slice(0, depth), moved, ...below], patch.value);
     }
 
+    // The recalc list names each formula cell by its place, so an entry moves with its cell, and a whole list moves as
+    // one. A write of the list's length moves nothing.
+    private calcChain(patch: Patch, [index]: (string | number)[]): Patch | null {
+        if (!('value' in patch) || patch.value == null || index === 'length') return patch;
+        if (index != null) {
+            const moved = this.chainEntry(patch.value);
+            return moved && at(patch, patch.path, moved);
+        }
+        const list: CalcChainEntry[] = patch.value;
+        const moved: CalcChainEntry[] = [];
+        for (const entry of list) {
+            const next = this.chainEntry(entry);
+            if (!next) return null;
+            moved.push(next);
+        }
+        return moved.every((entry, i) => entry === list[i]) ? patch : { ...patch, value: moved };
+    }
+
+    private chainEntry(entry: CalcChainEntry): CalcChainEntry | null {
+        const row = this.move.type === 'row';
+        const position = row ? entry.r : entry.c;
+        const moved = this.move.to(position);
+        if (moved == null) return null;
+        if (moved === position) return entry;
+        return row ? { ...entry, r: moved } : { ...entry, c: moved };
+    }
+
     private formula(f: string, onTargetSheet: boolean): string {
         const text = f.startsWith('=') ? f.slice(1) : f;
         const shifted = `=${this.move.formula(text, this.name, onTargetSheet)}`;
@@ -412,7 +440,6 @@ const POSITION_FREE_FIELDS = new Set<string | number>([
     'defaultRowHeight',
     'defaultColWidth',
     'images',
-    'calcChain',
 ]);
 
 const ROW_MAPS = new Set(['rowlen', 'rowhidden', 'customHeight', 'rowReadOnly']);
