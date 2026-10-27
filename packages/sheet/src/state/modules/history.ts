@@ -1,6 +1,6 @@
-// The tab's own undo and redo. An edit is recorded as an entry of immer patches, with its sheet named by id, and undo
-// and redo are pure: they take the context and an entry and return the next context and the batch to send, never
-// changing the entry. An undo or redo that adds or deletes a sheet, rows or columns builds ops and applies exactly
+// The tab's own undo and redo. An edit is recorded as an entry of immer patches, with its sheet named by id. Undo and
+// redo take the context and an entry and return the next context and the batch to send; only a redone sheet delete
+// changes its entry, to keep the sheet as the redo found it. An undo or redo that adds or deletes a sheet, rows or columns builds ops and applies exactly
 // those, through applyOpBatch, as its peers will. A peer's row or column op shifts the entries (shiftEntries), as it
 // shifts the live cells. The Workbook keeps the two stacks and calls these from handleUndo, handleRedo and applyOp.
 
@@ -49,11 +49,7 @@ export function recordEntry(
 ): History {
     options.id = before.currentSheetId;
     if (options.deleteSheetOp) {
-        const index = before.sheets.findIndex((sheet) => sheet.id === options.deleteSheetOp?.id);
-        const { data, ...value } = cloneDeep(before.sheets[index]);
-        if (data) value.celldata = dataToCelldata(data);
-        value.status = 0;
-        options.deletedSheet = { id: options.deleteSheetOp.id, index, value };
+        options.deletedSheet = deletedSheet(before, options.deleteSheetOp.id);
         return { patches: [], inversePatches: [], options };
     }
     if (options.addSheetOp) options.addSheet = { id: after.sheets[after.sheets.length - 1].id };
@@ -77,7 +73,12 @@ export function undoEntry(ctx: Context, entry: History): Step {
 
 export function redoEntry(ctx: Context, entry: History): Step {
     const { options } = entry;
-    if (options?.deleteSheetOp) return applyBatch(ctx, deleteSheetOps(ctx, options.deleteSheetOp.id));
+    if (options?.deleteSheetOp) {
+        // The undo after this redo brings back the sheet as the redo found it, a peer's edits since the first delete
+        // included. Only this state knows it, so the entry keeps it.
+        options.deletedSheet = deletedSheet(ctx, options.deleteSheetOp.id) ?? options.deletedSheet;
+        return applyBatch(ctx, deleteSheetOps(ctx, options.deleteSheetOp.id));
+    }
     if (options?.addSheetOp) {
         const added = entry.patches.find((patch) => patch.op === 'add' && patch.path.length === 2);
         return applyBatch(ctx, added ? addSheetOps(ctx, added.value) : []);
@@ -102,6 +103,16 @@ export function shiftEntries(entries: History[], marker: Op, sheets: Sheet[]): H
         if (next) shifted.push(next);
     }
     return shifted;
+}
+
+// A sheet about to be deleted, kept with its cells as stored cells so its undo can add it back.
+function deletedSheet(ctx: Context, id: string) {
+    const sheet = ctx.sheets.find((s) => s.id === id);
+    if (!sheet) return undefined;
+    const { data, ...value } = cloneDeep(sheet);
+    if (data) value.celldata = dataToCelldata(data);
+    value.status = 0;
+    return { id, value };
 }
 
 // ['sheets', index, …] → ['sheets', id, …] for a cell or field path. Shorter paths, a whole sheet or the sheet list,

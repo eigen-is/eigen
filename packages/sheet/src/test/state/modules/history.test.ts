@@ -308,6 +308,20 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expectAgree(s);
     });
 
+    test("undoing a redone sheet delete brings the sheet back with a peer's edit made before the redo", () => {
+        const s = session(workbook({}, { A1: text('two') }));
+        s.edit(s.a, ...removeSheet(TWO));
+        s.undo(s.a);
+        s.edit(s.b, typedAt('B2', 'peer', TWO));
+        s.redo(s.a);
+        s.undo(s.a);
+        expect(view(s.a.ctx.sheets)[2].cells).toEqual([
+            { r: 0, c: 0, v: text('two') },
+            { r: 1, c: 1, v: text('peer') },
+        ]);
+        expectAgree(s);
+    });
+
     test("a peer's edit to a sheet you restored applies on your side", () => {
         const s = session(workbook({}, { A1: text('two') }));
         s.edit(s.a, ...removeSheet(TWO));
