@@ -1,6 +1,7 @@
-// The dialog that adds a selection of users to one team. The users list opens it from the "Add to
-// team…" entry of its context menu. The admin searches the organization's teams and clicks one, and
-// each user joins it through the add-member mutation, one call per user.
+// The dialog that adds one or more users to a team, such as the selection the users list's "Add to
+// team…" menu entry passes, or the one user whose detail shows it. The admin searches the
+// organization's teams and clicks one, and each user joins it through the add-member mutation, one
+// call per user. A team every user is already in is left out.
 
 import { useAddTeamMember, useTeams } from '@workspace/lib/admin';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
@@ -23,12 +24,18 @@ export function AddToTeamDialog({ open, onOpenChange, users, organizationId }: A
     const { data: teams = [] } = useTeams(organizationId);
     const addMember = useAddTeamMember();
 
+    const available = useMemo(
+        () =>
+            teams
+                .filter((team) => !users.every((u) => u.teams.some((t) => t.id === team.id)))
+                .sort((a, b) => a.name.localeCompare(b.name)),
+        [teams, users],
+    );
     const filtered = useMemo(() => {
-        const sorted = [...teams].sort((a, b) => a.name.localeCompare(b.name));
-        if (!search) return sorted;
+        if (!search) return available;
         const q = search.toLowerCase();
-        return sorted.filter((t) => t.name.toLowerCase().includes(q));
-    }, [teams, search]);
+        return available.filter((t) => t.name.toLowerCase().includes(q));
+    }, [available, search]);
 
     const handleOpenChange = (v: boolean) => {
         onOpenChange(v);
@@ -36,7 +43,8 @@ export function AddToTeamDialog({ open, onOpenChange, users, organizationId }: A
     };
 
     const handleAdd = async (teamId: string) => {
-        for (const user of users) {
+        // A user already in the team is skipped: adding a member twice fails and would stop the loop.
+        for (const user of users.filter((u) => !u.teams.some((t) => t.id === teamId))) {
             await addMember.mutateAsync({ teamId, userId: user.id });
         }
         handleOpenChange(false);
@@ -62,7 +70,11 @@ export function AddToTeamDialog({ open, onOpenChange, users, organizationId }: A
                 <div className="app-gutter-bleed max-h-64 overflow-y-auto">
                     {filtered.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-4">
-                            {teams.length === 0 ? 'There are no teams yet.' : 'No teams match your search.'}
+                            {teams.length === 0
+                                ? 'There are no teams yet.'
+                                : available.length === 0
+                                  ? 'Already in every team.'
+                                  : 'No teams match your search.'}
                         </p>
                     ) : (
                         filtered.map((team) => (

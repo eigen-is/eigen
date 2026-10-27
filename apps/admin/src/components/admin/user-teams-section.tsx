@@ -1,0 +1,64 @@
+// The Teams section of a user's detail in the Admin app: the teams the user belongs to, each with a
+// button that takes the user out of it, and an "Add to team" button that opens the team picker. It
+// is the user-side twin of a team's Members section and changes membership through the same
+// add-member and remove-member mutations.
+
+import { useRemoveTeamMember } from '@workspace/lib/admin';
+import type { AdminUserRow } from '@workspace/lib/types/admin';
+import { teamOwnerId } from '@workspace/lib/types/owner';
+import { TooltipButton } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
+import { UserAvatar } from '@workspace/ui/components/user';
+import { Plus, X } from 'lucide-react';
+import { useState } from 'react';
+import { AddToTeamDialog } from './add-to-team-dialog';
+
+type UserTeamsSectionProps = {
+    user: AdminUserRow;
+    organizationId?: string;
+};
+
+export function UserTeamsSection({ user, organizationId }: UserTeamsSectionProps) {
+    const [showAddDialog, setShowAddDialog] = useState(false);
+    const removeMember = useRemoveTeamMember();
+
+    return (
+        <div>
+            <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-muted-foreground">Teams</h3>
+                <Button variant="ghost" size="sm" onClick={() => setShowAddDialog(true)}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add to team
+                </Button>
+            </div>
+
+            {user.teams.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Not in any team</p>
+            ) : (
+                <div className="divide-y">
+                    {[...user.teams]
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((team) => (
+                            <div key={team.id} className="flex items-center gap-3 py-2">
+                                <UserAvatar userId={teamOwnerId(team.id)} name={team.name} size="sm" />
+                                <span className="flex-1 min-w-0 truncate text-sm font-medium">{team.name}</span>
+                                <TooltipButton
+                                    icon={X}
+                                    tooltipText="Remove from team"
+                                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                                    onClick={() => removeMember.mutate({ teamId: team.id, userId: user.id })}
+                                />
+                            </div>
+                        ))}
+                </div>
+            )}
+
+            <AddToTeamDialog
+                open={showAddDialog}
+                onOpenChange={setShowAddDialog}
+                users={[user]}
+                organizationId={organizationId}
+            />
+        </div>
+    );
+}

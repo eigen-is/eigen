@@ -123,6 +123,9 @@ const GUEST_COL_VISIBILITY: typeof COL_VISIBILITY = {
     joined: 'hidden',
 };
 
+// The Teams column's text, which its sort compares too.
+const teamNames = (u: AdminUserRow) => u.teams.map((t) => t.name).join(', ');
+
 type AdminUsersTableProps = {
     users: AdminUserRow[];
     usage?: Record<string, HomeSizeResponse>;
@@ -168,7 +171,7 @@ export function AdminUsersTable({
                 case 'role':
                     return (a.role ?? '').localeCompare(b.role ?? '');
                 case 'teams':
-                    return a.teams.join(', ').localeCompare(b.teams.join(', '));
+                    return teamNames(a).localeCompare(teamNames(b));
                 case 'disk':
                     return diskUsed(a) - diskUsed(b);
                 case 'lastActive':
@@ -310,7 +313,7 @@ export function AdminUsersTable({
                         </div>
 
                         <div className={cn('min-w-0 items-center text-muted-foreground pr-2', visibility.teams)}>
-                            <span className="truncate">{u.teams.length > 0 ? u.teams.join(', ') : '—'}</span>
+                            <span className="truncate">{teamNames(u) || '—'}</span>
                         </div>
 
                         <div className={cn('items-center text-muted-foreground pr-2', visibility.lastActive)}>

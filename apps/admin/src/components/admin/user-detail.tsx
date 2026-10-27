@@ -20,6 +20,7 @@ import { KeyRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { BackupSection } from './backup-section';
 import { ResetPasswordDialog } from './reset-password-dialog';
+import { UserTeamsSection } from './user-teams-section';
 
 type UserDetailToolbarProps = {
     user: AdminUserRow;
@@ -120,10 +121,8 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
                             )}
                         </div>
 
-                        <div>
-                            <h3 className="text-sm font-medium text-muted-foreground mb-2">Teams</h3>
-                            <p className="text-sm">{user.teams.length > 0 ? user.teams.join(', ') : '—'}</p>
-                        </div>
+                        {/* Only a member of the organization can join one of its teams. */}
+                        {user.role !== null && <UserTeamsSection user={user} organizationId={organizationId} />}
                     </>
                 )}
 
