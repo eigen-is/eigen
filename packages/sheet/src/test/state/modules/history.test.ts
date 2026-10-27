@@ -628,6 +628,18 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expectAgree(s);
     });
 
+    test('undoing your row delete brings back a formula it broke in a copy nobody opened', () => {
+        const s = session(workbook({ A5: num(3) }, { A1: { f: '=One!A5', v: 3, m: '3' } }));
+        s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
+        s.edit(s.a, ...deleteRows(4, 4));
+        expect(cells(s.a.ctx.sheets[3])[0].v?.f).toContain('#REF!');
+        s.undo(s.a);
+        for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
+            expect(cells(sheets[3])[0].v?.f).toBe('=One!A5');
+        }
+        expectAgree(s);
+    });
+
     test('undoing a delete of merged rows brings the merge back everywhere', () => {
         const merge = { r: 4, c: 0, rs: 2, cs: 2 };
         const corner = { mc: { r: 4, c: 0 } };

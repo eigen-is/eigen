@@ -10,7 +10,7 @@ import { parseCellKey } from '@workspace/lib/sheets';
 import { cloneDeep, get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, produce, produceWithPatches } from 'immer';
-import { dataToCelldata } from '../../engine/celldata';
+import { celldataToData, dataToCelldata } from '../../engine/celldata';
 import { RowColError } from '../../engine/rowcol';
 import type { CalcChainEntry, Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
@@ -327,7 +327,7 @@ function repairOps(ctx: Context, from: Patch[], to: Patch[], options: PatchOptio
         const { id } = ctx.sheets[index];
         const after = moved[index].data ?? [];
         const was = left.get(index) ?? [];
-        const live = ctx.sheets[index].data ?? [];
+        const live = matrixOf(ctx.sheets[index]);
         for (let r = 0; r < rows.length; r += 1) {
             if (rows[r] === after[r]) continue;
             const width = Math.max(rows[r]?.length ?? 0, after[r]?.length ?? 0);
@@ -348,14 +348,21 @@ function repairOps(ctx: Context, from: Patch[], to: Patch[], options: PatchOptio
     return ops;
 }
 
-// The whole matrices a row or column entry records, by sheet index.
+// The whole matrices a row or column entry records, by sheet index. A sheet nobody opened, such as a copy, has no
+// matrix, so the entry records its stored cells.
 function matrices(patches: Patch[]) {
     const found = new Map<number, CellMatrix>();
     for (const { path, value } of patches) {
         const [, index, field] = path;
-        if (path.length === 3 && field === 'data' && typeof index === 'number') found.set(index, value);
+        if (path.length !== 3 || typeof index !== 'number') continue;
+        if (field === 'data') found.set(index, value);
+        else if (field === 'celldata') found.set(index, celldataToData(value, 0, 0));
     }
     return found;
+}
+
+function matrixOf(sheet: Sheet): CellMatrix {
+    return sheet.data ?? celldataToData(sheet.celldata ?? [], 0, 0);
 }
 
 // What a person wrote into a cell: a formula's value, its display text and its value type are the engine's.
