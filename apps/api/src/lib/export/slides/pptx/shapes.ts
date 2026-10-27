@@ -11,12 +11,11 @@ import {
     diamondOutline,
     isBordered,
     isTransparentFill,
-    normalizeAngle,
     parseFill,
     parsePoints,
     rectOutline,
 } from '@workspace/lib/vector';
-import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml } from '../../../ooxml/drawingml';
+import { colorXml, DEGREE, drawingAngle, drawingShare, solidFillXml } from '../../../ooxml/drawingml';
 import { pxToEmu } from '../../../ooxml/ooxml';
 import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import { addOfficeChart } from '../../office-chart';
@@ -32,18 +31,8 @@ export function toEmu(slide: Slide, px: number): number {
     return Math.min(MAX_COORDINATE, Math.max(-MAX_COORDINATE, pxToEmu(px, slide.deck.scale)));
 }
 
-// 1000ths of a percent, DrawingML's share of a whole.
-export function drawingShare(value: number): number {
-    return Math.round(value * HUNDRED_PERCENT);
-}
-
 function degrees(radians: number): number {
     return (radians * 180) / Math.PI;
-}
-
-// Degrees clockwise as DrawingML's 60,000ths, within one turn.
-export function drawingAngle(value: number): number {
-    return Math.round(normalizeAngle(value) * DEGREE) % (360 * DEGREE);
 }
 
 export function elementXml(el: VectorElement, slide: Slide): string {

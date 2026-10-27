@@ -293,6 +293,15 @@ describe('a picture', () => {
         expect(rels).toContain(`Id="rId2" Type="${R}/image" Target="../media/image1.png"`);
     });
 
+    // DrawingML writes a turn within one turn, so an angle that rounds up to a full turn is upright.
+    test('a hair short of a full turn is upright, with no rot', () => {
+        const sheet: Sheet = { name: 'Pictures', images: { below: { ...BELOW, angle: -0.000_001 } } };
+        const drawing = drawingOf(sheet, 1, [sheet], officeImages([PNG], 'xl/media'), () => {});
+        const root = drawing && parseOoxml(xml(drawing.parts[0]));
+        if (!root) throw new Error('no drawing');
+        expect(descendant(root, A_NS, 'xfrm')?.attributes['rot']).toBeUndefined();
+    });
+
     test("an SVG goes in beside its PNG as the svgBlip, and a type Excel can't embed is left out and counted", () => {
         const lost: CountedWarningCode[] = [];
         const drawn: SheetImage = { ...BELOW, mediaName: 'drawing.svg' };
