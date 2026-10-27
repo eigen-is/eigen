@@ -1,5 +1,5 @@
-// The part of the S3 upload pipeline the whole server shares: a limit on parallel uploads per bucket, the
-// wait between retries, and the deadline for uploads when the server shuts down. Each mount's upload queue
+// The part of the S3 upload pipeline the whole server shares: a limit on parallel uploads per S3 destination,
+// the wait between retries, and the deadline for uploads when the server shuts down. Each mount's upload queue
 // is its own and schedules its own retries, but these three must be the same for every mount, so they
 // live here. Nothing here holds user data, only bucket keys and one deadline.
 

@@ -55,8 +55,7 @@ export function worksheetPart(
 ): { xml: () => Generator<string>; relationships: Relationship[] } {
     // A relationship's id is its place in the list: the drawing's first, then each link's.
     const relationships: Relationship[] = [];
-    const drawingId =
-        context.drawing && `rId${relationships.push({ type: `${R_NS}/drawing`, target: context.drawing })}`;
+    if (context.drawing) relationships.push({ type: `${R_NS}/drawing`, target: context.drawing });
     const links = linksXml(sheet, context, relationships);
     function* xml(): Generator<string> {
         const grid = sheetGrid(sheet, context);
@@ -79,7 +78,7 @@ export function worksheetPart(
             rulesXml(sheet, context.styles, context.lost),
             links,
             PAGE_MARGINS,
-            drawingId ? `<drawing r:id="${drawingId}"/>` : '',
+            context.drawing ? '<drawing r:id="rId1"/>' : '',
             '</worksheet>',
         ].join('');
     }

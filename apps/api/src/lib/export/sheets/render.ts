@@ -80,13 +80,12 @@ const PDF_PAGE_CELLS = 125;
 const CHART_CELLS = 500;
 
 // The bytes of HTML a cell with a value writes: a grid of numbers or of short text writes about 50 a cell. An image's
-// tag writes its whole source, a data: URI in an export, so it costs its tag and source at this rate. The cap then
-// holds about 12 MB of pictures instead of cells, and 1,000 images over one 1 MB picture no longer write a 1 GB
-// document.
+// tag writes its whole source, a data: URI in an export, so it costs its tag and source at this rate. So the cap holds
+// about 12 MB of pictures in place of cells, however many images repeat one large picture.
 const CELL_BYTES = 50;
 
-// The bytes an image writes around its source: its tag, and its own style rule for where it sits. 80,000 tiny pictures
-// cost only their sources before, and wrote 22 MB.
+// The bytes an image writes around its source: its tag, and its own style rule for where it sits. Tiny pictures
+// cost little by their sources alone, but each still writes these bytes.
 const IMAGE_TAG_BYTES = 200;
 
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.

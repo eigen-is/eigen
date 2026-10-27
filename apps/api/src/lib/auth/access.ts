@@ -1,7 +1,7 @@
 // The guards a route calls before it acts. requireSelf, requireAdmin, requireTeamAccess and the like throw
 // a 403 ApiError when the caller may not do this. requireLocalhost admits only callers on a trusted network,
 // such as the mail containers that call the internal routes directly. clientIpKey is the one way to read
-// the real client IP behind Caddy, which every rate limit keys on.
+// the real client IP behind Caddy, which the server's own rate limits key on.
 
 import { isMailAppEnabled } from '../config/env';
 import { ApiError } from '../core/errors';

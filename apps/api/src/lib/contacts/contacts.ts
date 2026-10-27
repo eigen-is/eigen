@@ -1,7 +1,7 @@
 // Contacts is one home's address book: the cards in its SQLite database, their labels and avatar images.
 // It seeds the default labels and a "me" card for the owner, whose name and photo flow back to their profile.
-// The contacts routes and the CardDAV server both call it, so an edit from the web app or from a phone
-// goes through the same write lock, quota check and events. It is a part of the Home and closes with it.
+// Callers such as the contacts routes and the CardDAV server all use it, so an edit from the web app or from
+// a phone goes through the same write lock, quota check and events. It is a part of the Home and closes with it.
 
 import { randomUUID } from 'node:crypto';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
