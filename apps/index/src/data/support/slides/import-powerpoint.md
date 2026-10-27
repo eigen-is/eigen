@@ -5,10 +5,10 @@ type: how-to
 tags: [slides, import, powerpoint, pptx]
 related: [slides/export-slides, slides/add-slides]
 order: 100
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
-You can bring a PowerPoint file (`.pptx`) into Slides in two ways: convert it in Drive into a new presentation, or import its slides into a presentation you already have open, next to your own slides or in their place. Its slides come across with their text, shapes, pictures, charts, and backgrounds.
+You can bring a PowerPoint file (`.pptx`) into Slides in two ways: convert it in Drive into a new presentation, or import its slides into a presentation you already have open, next to your own slides or in their place. Its slides come across with their text, shapes, pictures, charts, SmartArt graphics, and backgrounds.
 
 ## Convert a PowerPoint file in Drive
 
@@ -38,6 +38,7 @@ An **Importing pptx file** dialog shows while the file imports. Pictures from th
 - Every other shape, such as a star, a block arrow, a flowchart shape, a map outline, or a freeform drawing, with its fill and outline. You can move, resize, and recolor it like any other shape.
 - PNG, JPEG, GIF, WebP, and SVG pictures.
 - Column, bar, line, and pie charts, with their data, colors, title, background, and text and line colors. They become Slides charts, so you can [edit their data](/support/slides/insert-content) like any other chart. A 3-D chart comes in flat.
+- SmartArt graphics, as the shapes and text PowerPoint shows. Each shape comes in on its own, so you can move, resize, recolor, and edit it like any other shape. The graphic is no longer SmartArt, though: editing its text or adding a shape doesn't rearrange the others.
 - Slide backgrounds: a color, a gradient, or a picture.
 - The shapes and pictures of the slide master and layout, such as a logo or a border, on every slide that shows them.
 
@@ -47,7 +48,8 @@ A converted presentation takes the slide size closest to the file's: a widescree
 
 After an import into an open presentation, a message counts what didn't come across, for example "2 tables and 1 SmartArt graphic were not imported; 5 shapes were simplified."
 
-- A table, SmartArt graphic, or embedded object becomes a box that says what was there, so you can see the gap and rebuild it. The box is see-through, so a title behind it stays readable.
+- A table or embedded object becomes a box that says what was there, so you can see the gap and rebuild it. The box is see-through, so a title behind it stays readable.
+- A SmartArt graphic the file holds without its shapes, as LibreOffice saves one and PowerPoint saves a few kinds, becomes a box that says **SmartArt not imported**, with the graphic's text listed below. A SmartArt graphic that comes in as shapes counts in the message as one that lost its layout.
 - A chart Slides can't draw the way PowerPoint does, such as an area, scatter, doughnut, or combo chart, becomes a box that names the kind of chart and its title, for example **Scatter chart not imported**. A chart with more than 32 series, or more than 2,000 values in all, becomes a box that says **Chart not imported**, with its title.
 - A bent or curved connector, an arc, or a freeform line that isn't closed comes in without its arrowheads. Shadows, glows, and 3-D effects are left out.
 - Pictures come in uncropped and unflipped. A TIFF, BMP, EMF, or WMF picture becomes a box that says **Picture not imported**. So does every picture after the first 1,000, or once the pictures add up to more than the largest file you can upload (35 MB unless your administrator changed it).
