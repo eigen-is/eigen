@@ -3,7 +3,7 @@
 // deleteSheetOps build a sheet's add and delete batches; filterPatch keeps what belongs on the wire; opToPatch turns
 // a peer's ops back into patches on this client's sheet indices.
 
-import type { MergeCell, SheetConfig } from '@workspace/lib/sheets';
+import type { MergeCell } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { isEqual, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
@@ -30,51 +30,28 @@ export type PatchOptions = {
     deleteSheetOp?: {
         id: string;
     };
-    // The deleted sheet as it stood, with its cells stored, which recordEntry keeps for the delete's undo.
+    // The deleted sheet as it stood, with its cells stored. recordEntry adds it to the options it returns, for the
+    // delete's batch and its undo, so a sheet delete's batch is built from the entry's options.
     deletedSheet?: Sheet;
 };
 
-const addtionalMergeOps = (ops: Op[], id: string) => {
-    let merge_new: Record<string, MergeCell> = {};
-    ops.some((op) => {
-        if (op.op !== 'replace' || op.path[0] !== 'config') return false;
-        if (op.path.length === 1) {
-            // Whole-config op from sheetMetadataOps.
-            merge_new = (op.value as SheetConfig | undefined)?.merge ?? {};
-            return true;
-        }
-        if (op.path[1] === 'merge') {
-            merge_new = op.value as Record<string, MergeCell>;
-            return true;
-        }
-        return false;
-    });
-
-    const new_ops: Op[] = [];
-    for (const v of Object.values(merge_new)) {
-        const { r, c, rs, cs } = v;
-        const headerOp = {
-            op: 'replace',
-            path: ['data', r, c, 'mc'],
-            id,
-            value: v,
-        } as Op;
-
-        for (let i = r; i < r + rs; i += 1) {
-            for (let j = c; j < c + cs; j += 1) {
-                new_ops.push({
-                    op: 'replace',
-                    path: ['data', i, j, 'mc'],
-                    id,
-                    value: { r, c },
-                } as Op);
+// The `mc` stamps of every merge in the batch's whole config. The merge map alone doesn't draw a merge: each of its
+// cells points at the corner, and the corner holds the merge's size.
+function mergeStampOps(ops: Op[], id: string): Op[] {
+    const config = ops.find((op) => op.op === 'replace' && op.path.length === 1 && op.path[0] === 'config');
+    const merges: MergeCell[] = Object.values(config?.value?.merge ?? {});
+    const stamps: Op[] = [];
+    for (const merge of merges) {
+        const { r, c, rs, cs } = merge;
+        for (let row = r; row < r + rs; row += 1) {
+            for (let column = c; column < c + cs; column += 1) {
+                stamps.push({ op: 'replace', id, path: ['data', row, column, 'mc'], value: { r, c } });
             }
         }
-
-        new_ops.push(headerOp);
+        stamps.push({ op: 'replace', id, path: ['data', r, c, 'mc'], value: merge });
     }
-    return new_ops;
-};
+    return stamps;
+}
 
 function additionalCellOps(
     ctx: Context,
@@ -185,8 +162,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
             path: p.path,
         };
         if (p.path[0] === 'sheets' && isNumber(p.path[1])) {
-            const id = ctx.sheets[p.path[1]].id!;
-            op.id = id;
+            op.id = ctx.sheets[p.path[1]].id;
             op.path = p.path.slice(2);
             if (isEqual(op.path, ['calcChain', 'length'])) {
                 op.path = ['calcChain'];
@@ -219,7 +195,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
         }
         // The engine fills inserted rows with nulls, and a ['data', r, c, 'mc'] patch can't be applied to a cell that
         // doesn't exist yet, so the cells go before the merge stamps.
-        ops.push(...addtionalMergeOps(ops, id));
+        ops.push(...mergeStampOps(ops, id));
     } else if (options.addSheetOp) {
         // A copy moves the sheets after it, and the batch carries their orders.
         const [[added], rest] = partition(ops, (op) => op.op === 'add' && op.path.length === 0);

@@ -21,7 +21,7 @@ import { addSheet, changeSheet, deleteSheet } from '../../../state/modules/sheet
 import { defaultSettings } from '../../../state/settings';
 import type { History, Op, Sheet } from '../../../state/types';
 import type { Tab } from '../factories/collab';
-import { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
+import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { workbookContextFactory } from '../factories/context';
 import { typed } from '../factories/edit-cycle';
 
@@ -710,6 +710,16 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         s.edit(s.b, typedAt('B2', 'peer', copy));
         expect(cellAt(s.a, 'B2', copy)?.v).toBe('peer');
         expectAgree(s);
+    });
+
+    // The Workbook builds a sheet delete's batch from the options recordEntry returns, so the deleted sheet reaches it
+    // by value, not through a write into the options it passed in.
+    test("a sheet delete's batch comes from the options its entry returns", () => {
+        const options = { deleteSheetOp: { id: TWO } };
+        const { ops, entry } = author(workbook(), (ctx) => deleteSheet(ctx, TWO), options);
+        expect(options).toEqual({ deleteSheetOp: { id: TWO } });
+        expect(entry.options?.deletedSheet?.id).toBe(TWO);
+        expect(ops[0]).toEqual({ op: 'deleteSheet', id: TWO, path: [], value: { id: TWO } });
     });
 
     test('undoing a sheet add removes it everywhere, and redo brings it back', () => {

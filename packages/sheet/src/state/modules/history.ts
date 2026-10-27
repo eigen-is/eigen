@@ -36,8 +36,9 @@ import { settleCurrentSheet } from './sheet';
 
 type Step = { ctx: Context; ops: Op[] };
 
-// What setContextWithProduce keeps of one edit. It fills in the options the edit's ops need too. A sheet delete keeps
-// only the deleted sheet: its undo and redo are ops, and its patches would hold the whole sheet list twice.
+// What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from: a sheet delete
+// adds the deleted sheet, and keeps only that: its undo and redo are ops, and its patches would hold the whole sheet
+// list twice.
 export function recordEntry(
     before: Context,
     after: Context,
@@ -48,8 +49,11 @@ export function recordEntry(
     if (options.deleteSheetOp) {
         const { id } = options.deleteSheetOp;
         const sheet = before.sheets.find((s) => s.id === id);
-        if (sheet) options.deletedSheet = storedCopy(sheet);
-        return { patches: [], inversePatches: [], options };
+        return {
+            patches: [],
+            inversePatches: [],
+            options: sheet ? { ...options, deletedSheet: storedCopy(sheet) } : options,
+        };
     }
     return {
         patches: bySheetId(patches, after.sheets),

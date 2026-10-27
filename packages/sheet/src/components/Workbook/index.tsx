@@ -224,7 +224,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 }
                                 globalCache.current.redoList = [];
                             }
-                            onOp?.(patchToOp(result, filteredPatches, options));
+                            onOp?.(patchToOp(result, filteredPatches, entry.options));
                         }
                     }
                     return result;

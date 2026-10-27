@@ -43,7 +43,7 @@ export function syncablePaths(base: Context, recipe: (ctx: Context) => void) {
 // One edit as setContextWithProduce records it: the new state, its ops and its undo entry.
 export function author(base: Context, recipe: (ctx: Context) => void, options: PatchOptions = {}) {
     const [next, patches, inverse] = produceWithPatches(base, recipe);
-    const entry = recordEntry(base, next, filterPatch(patches), filterPatch(inverse), { ...options });
+    const entry = recordEntry(base, next, filterPatch(patches), filterPatch(inverse), options);
     return {
         next,
         ops: patchToOp(next, filterPatch(patches), entry.options),
