@@ -8,7 +8,7 @@ import { parseXml } from '../../lib/core/xml';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { renderEigenslidesHtml } from '../../lib/export/canvas/transform';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
-import { getFontFaceCSSForFamilies } from '../../lib/export/fonts';
+import { fontFaceCssOf } from '../../lib/export/fonts';
 import { sanitizeExportHtml, sanitizeExportMedia } from '../../lib/export/sanitize';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { buildGoldenDeckScene, seedDeckDoc, seedEigendoc } from '../fixtures/golden-documents';
@@ -805,7 +805,7 @@ suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
     test('a data: image and a data: font still render', async () => {
         const pdf = await htmlToPdf(
             page(
-                `<style>${getFontFaceCSSForFamilies(['Excalifont'])}</style>` +
+                `<style>${fontFaceCssOf(['Excalifont'])}</style>` +
                     `<img src="${DATA_PNG}" style="width:50px;height:50px"><p style="font-family:Excalifont">drawn</p>`,
             ),
         );

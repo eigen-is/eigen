@@ -1,15 +1,14 @@
+// The serve-time inliner for vector SVGs. A stored SVG names each image by its media file, never by its bytes, so a
+// copied container resolves against its own media. An SVG drawn through <img> fetches nothing, so on the way out of
+// the preview, each name becomes a data: URI of the file's bytes, and the Eigen fonts its text uses are embedded too.
+// The screen preview cache calls it.
+
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
-import { getFontFaceCSSForFamilies } from '../export/fonts';
+import { fontFaceCssOf } from '../export/fonts';
 import type { Mount } from '../mount';
 
-// Serve-time media inliner for image-bearing vector SVGs. A stored .svg
-// references each image BY NAME — `href="eigen-media:<name>"` — never by bytes, so a container copy
-// resolves against the copy's own media/ siblings. An SVG rendered through <img> never fetches
-// external references (spec), so the ONLY place a name can become pixels is here: on the way out of
-// the preview route we swap each name-ref for a `data:` URI of the sibling's bytes.
-//
 // The raw SVG is treated as HOSTILE bytes. The load-bearing safety rails, in order:
 //   - name resolution is SAME-FOLDER only (mount.getChildByName over the svg's own parent); the codec
 //     (listEigenMediaRefs → parseEigenMediaHref) already dropped any ref whose decoded name carries
@@ -76,9 +75,9 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
 // The faces are data: URIs, so sanitizeExportHtml keeps them and the sandbox CSP allows them; they are static per
 // build, so a cached result never goes stale. Past the output budget the svg serves without them, its media kept.
 function injectFontFaces(svg: string, budget: Budget): string {
-    const faceCSS = getFontFaceCSSForFamilies(usedEigenFonts(svg));
-    if (faceCSS === '') return svg;
-    const defs = `<defs><style>${faceCSS}</style></defs>`;
+    const faceCss = fontFaceCssOf(usedEigenFonts(svg));
+    if (faceCss === '') return svg;
+    const defs = `<defs><style>${faceCss}</style></defs>`;
     budget.remaining -= Buffer.byteLength(defs);
     if (budget.remaining < 0) return svg;
     return spliceAfterSvgOpenTag(svg, defs);

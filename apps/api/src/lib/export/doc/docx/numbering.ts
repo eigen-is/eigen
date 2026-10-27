@@ -53,7 +53,7 @@ function numIdOf(pkg: Package, list: List): number {
     const bullet = list.format === 'bullet';
     const abstract = (bullet ? pkg.bullets.get(list.base) : undefined) ?? pkg.abstractNums.push(list) - 1;
     if (bullet) pkg.bullets.set(list.base, abstract);
-    return pkg.numAbstracts.push(abstract);
+    return pkg.numToAbstract.push(abstract);
 }
 
 // The item's text is a level in; only its first paragraph opens with the number or checkbox.
@@ -98,7 +98,7 @@ function itemIndent(context: Context): number {
     return context.indent + (context.depth < LIST_LEVELS ? LIST_LEVEL : 0);
 }
 
-export function numberingXml(lists: List[], nums: number[]): string {
+export function numberingXml(lists: List[], numToAbstract: number[]): string {
     const abstractNums = lists.map(({ format, start, base }, index) => {
         const levels = Array.from(
             { length: LIST_LEVELS },
@@ -108,7 +108,7 @@ export function numberingXml(lists: List[], nums: number[]): string {
         const nsid = (index + 1).toString(16).toUpperCase().padStart(8, '0');
         return `<w:abstractNum w:abstractNumId="${index}"><w:nsid w:val="${nsid}"/>${levels.join('')}</w:abstractNum>`;
     });
-    const numXml = nums.map(
+    const numXml = numToAbstract.map(
         (abstract, index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${abstract}"/></w:num>`,
     );
     return `<w:numbering xmlns:w="${W_NS}">${abstractNums.join('')}${numXml.join('')}</w:numbering>`;

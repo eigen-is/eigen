@@ -1,7 +1,6 @@
 // Writes the advance-width table measureLabel sums for every bundled font, from the static TTFs a docx embeds. Their
-// Bold slots are the weight the editor draws bold in. Run it by hand after a font changes, and commit its output.
-//
-// Usage: bun apps/api/src/scripts/chart-text-widths.ts
+// Bold slots are the weight the editor draws bold in. Run it by hand with bun after a font changes, and commit its
+// output.
 
 import * as fs from 'node:fs';
 import path from 'node:path';

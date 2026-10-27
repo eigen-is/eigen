@@ -59,14 +59,14 @@ export const PRESENTATION_EMPTY = 'This presentation has no slides';
 export const SAVE_AS_PPTX =
     'Only .pptx presentations can be imported. Save the file as a .pptx in PowerPoint and import it again.';
 
-type Noun = readonly [one: string, many: string];
+type OneAndMany = readonly [one: string, many: string];
 
 // What happened to a kind, one clause each, in this order.
 const OUTCOMES = ['dropped', 'simplified', 'flattened', 'unshown'] as const;
 type Outcome = (typeof OUTCOMES)[number];
 
 // Each outcome said of one and of more.
-const PREDICATES: Record<Outcome, Noun> = {
+const PREDICATES: Record<Outcome, OneAndMany> = {
     dropped: ['was not imported', 'were not imported'],
     simplified: ['was simplified', 'were simplified'],
     flattened: ['lost its layout', 'lost their layout'],
@@ -76,7 +76,7 @@ const PREDICATES: Record<Outcome, Noun> = {
 // What an import left out or drew simpler, per kind, for the toast after Import…, whichever format's reader counted it.
 // Each kind lists in this order within its clause. A pptx's warnings count source shapes, so a master's background is
 // one fill however many slides show it. A code only an export counts, such as charts-simplified, has no row.
-const LOSSES: { code: CountedWarningCode; noun: Noun; what: Outcome }[] = [
+const LOSSES: { code: CountedWarningCode; noun: OneAndMany; what: Outcome }[] = [
     { code: 'tables-dropped', noun: ['table', 'tables'], what: 'dropped' },
     { code: 'charts-dropped', noun: ['chart', 'charts'], what: 'dropped' },
     { code: 'diagrams-dropped', noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'dropped' },

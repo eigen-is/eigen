@@ -177,7 +177,9 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ['small', () => ({ spacing: twips(SMALL_LOOK.letterSpacingPt), size: halfPoints(SMALL_LOOK.sizePt) })],
     [
         'code',
-        // Only inside a heading or title a size of its own, as textStyle's, or it would unset Small's before it.
+        // In a heading or title, code is sized against the heading, so the run takes a size of its own, as
+        // textStyle's does. Elsewhere the run has no size key, since an undefined one would unset the size of a
+        // Small mark before it.
         (_attrs, { blockPt }) => ({
             style: 'Code',
             ...(blockPt !== undefined && {

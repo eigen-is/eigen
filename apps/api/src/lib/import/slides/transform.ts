@@ -10,7 +10,7 @@ import {
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import type { SlidesImportJob, SlidesImportWorkerResult, TransformWarning } from '../../document/transform/protocol';
+import type { SlidesImportJob, SlidesImportTransformResult, TransformWarning } from '../../document/transform/protocol';
 import { toTransferableBuffer, toTransferableMedia } from '../../document/transform/protocol';
 import { importError } from '../messages';
 import { readPptx } from './from-pptx';
@@ -19,7 +19,7 @@ import { PPTX_STYLE } from './shapes';
 export function importPptxToSlidesUpdate(
     data: ArrayBuffer,
     job: Pick<SlidesImportJob, 'deck' | 'maxMediaBytes'>,
-): SlidesImportWorkerResult & { warnings: TransformWarning[] } {
+): SlidesImportTransformResult & { warnings: TransformWarning[] } {
     const { slides, media, warnings, page } = readPptx(Buffer.from(data), job);
     let update: Uint8Array;
     try {

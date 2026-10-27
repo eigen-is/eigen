@@ -6,14 +6,14 @@ import type { Sheet } from '@workspace/lib/sheets';
 import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
 import { SERVER_RECALC_BUDGET } from '../../document/sheets';
-import type { SheetsImportJob, SheetsImportWorkerResult, TransformWarning } from '../../document/transform/protocol';
+import type { SheetsImportJob, SheetsImportTransformResult, TransformWarning } from '../../document/transform/protocol';
 import { toTransferableMedia, toTransferableText } from '../../document/transform/protocol';
 import { readXlsx } from './from-xlsx';
 
 export function importXlsxToSheetsSnapshot(
     data: ArrayBuffer,
     job: Pick<SheetsImportJob, 'maxMediaBytes'>,
-): SheetsImportWorkerResult & { warnings: TransformWarning[] } {
+): SheetsImportTransformResult & { warnings: TransformWarning[] } {
     const read = readXlsx(new Uint8Array(data), job);
     const { sheets, computed } = recalcImportedSheets(read.sheets, read.warnings);
     return {

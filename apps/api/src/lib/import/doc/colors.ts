@@ -1,5 +1,5 @@
-// The docx reader's colour tests: Word's hex as a mark holds it, and whether a fill is one, a light grey, or too light
-// or dark for text on Eigen's paper. Readers such as the run and table readers decide a colour mark and a fill
+// The docx reader's color tests: Word's hex as a mark holds it, and whether a fill is one, a light gray, or too light
+// or dark for text on Eigen's paper. Readers such as the run and table readers decide a color mark and a fill
 // through them.
 
 import { linearize } from '@workspace/lib/background';
@@ -20,7 +20,7 @@ export function isFill(fill: string | undefined): boolean {
     return !!fill && fill !== 'FFFFFF';
 }
 
-// A light grey, as the editor's code fill and its re-saves are: each channel at least D0 and within 18 of the others.
+// A light gray, as the editor's code fill and its re-saves are: each channel at least D0 and within 18 of the others.
 export function isLightNeutral(fill: string | undefined): boolean {
     if (!fill || !isFill(fill)) return false;
     const channels = [0, 2, 4].map((at) => Number.parseInt(fill.slice(at, at + 2), 16));

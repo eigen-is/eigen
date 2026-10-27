@@ -1,3 +1,6 @@
+// An eigendoc's Yjs doc read as the editor's JSON: its body, its bands, its page and its Normal, for the export, the
+// preview and the import. The import commit writes into the same roots, so one file knows where a doc keeps each part.
+
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
@@ -16,10 +19,8 @@ import * as Y from 'yjs';
 import { docSchema } from './doc-schema';
 import { readStoredEquation } from './equation';
 
-// Materialized Yjs doc → ProseMirror JSON. Media-free, so it runs identically on the
-// main thread and inside the document-transform process (which has no Mount). Every
-// consumer of a persisted eigendoc reads it in the Worker, so the Mount-side loader is
-// gone: capture (collab-source.ts) + materialize (yjs-loader.ts) is the only path in.
+// It reads no media, so it runs the same on the main thread and in the transform process, which has no Mount. Every
+// reader of a stored eigendoc runs in the transform process, on a doc the main thread captured.
 export function readEigendocFromDoc(doc: Y.Doc): JSONContent {
     return yXmlFragmentToProsemirrorJSON(doc.getXmlFragment('default'));
 }

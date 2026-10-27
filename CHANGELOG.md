@@ -6,12 +6,13 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
-- **Excel files** — a row Excel shows at normal height comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
+- **Excel files** — a row whose height is set to normal in Excel comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
 - **Spreadsheet PDF** — a spreadsheet with thousands of small sheets prints its first 2,000 sheets instead of failing
+- **Long code blocks** — a Docs document with many long code blocks and no language set downloads and previews at once. Past about 65,000 characters of such code in all, the rest comes without syntax colors
 
 ## [0.4.0] - 2026-10-26
 
-Eigen now opens and saves Word, Excel and PowerPoint files. Docs gets equations, page setup, headers and footers, and footnotes. Docs, Sheets, Slides and Vector get charts. After you update, reload any document you have open.
+Eigen now opens and saves Word, Excel and PowerPoint files. Docs gets equations, page setup, headers and footers, and footnotes. Docs, Sheets, Slides and Vector get charts. After you update, reload any document you have open, or a tab still on 0.3.3 deletes the equations, footnotes and charts it receives.
 
 ### Added
 
@@ -106,7 +107,7 @@ Eigen now opens and saves Word, Excel and PowerPoint files. Docs gets equations,
 - **Calendar** — looking up the calendar of a guest or of the organization answers that you have no access, instead of failing with a server error
 - **Calendar** — looking up the calendar of an account that doesn't exist answers the same as one you can't see, so it doesn't tell which accounts exist
 - **Excel theme colors** — a lighter or darker shade of a theme color, such as Text 2, Lighter 40%, comes into Sheets in the color Excel shows. A file you imported before keeps its old colors until you import it again
-- **Very large spreadsheets** — a web page or PDF download of a spreadsheet draws up to 250,000 cells, shared by its sheets in tab order, instead of running until the export fails. A sheet cut short keeps one PDF page of columns, or more when all its rows fit, then the rows that fit. A sheet with too few cells left is left out
+- **Very large spreadsheets** — a web page download of a spreadsheet draws up to 250,000 cells, shared by its sheets in tab order, instead of running until the export fails. A sheet cut short keeps one PDF page of columns, or more when all its rows fit, then the rows that fit. A sheet with too few cells left is left out. A PDF download is cut the same way, but past about 150,000 cells it can still fail
 - **Merged cells in spreadsheet downloads** — a merged cell over a hidden row or column keeps the table's columns in line in the web page, PDF and preview, and shows its text and its outer border even when its first or last row or column is hidden
 - **Long code blocks** — a Docs code block longer than about 65,000 characters, with no language set, downloads at once without syntax colors, instead of stalling the export
 

@@ -22,7 +22,7 @@ import {
     untypedListFormat,
 } from '../../../document/looks';
 import type { HastNode } from '../../../document/lowlight';
-import { highlightCode, lowlight } from '../../../document/lowlight';
+import { lowlight } from '../../../document/lowlight';
 import { proseValueIfSet } from '../../../document/prose-css';
 import type { StyleId } from '../../../ooxml/wordml';
 import { BORDER_SIDES, codeBlockStyle, JUSTIFICATION, LIST_FORMATS, LIST_LEVELS } from '../../../ooxml/wordml';
@@ -185,7 +185,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
             // Only a name lowlight knows is written: the style id and name carry it verbatim.
             const language = typeof attr === 'string' && lowlight.registered(attr) ? attr : undefined;
             if (language !== undefined) context.pkg.languages.add(language);
-            const tree = highlightCode(language ?? '', textOf(node));
+            const tree = context.pkg.highlight(language ?? '', textOf(node));
             // The mark of an empty or comment-only line draws in the style's Regular.
             useFace(context.pkg, {}, 'CodeBlock');
             const { indent } = CODE_BLOCK_LOOK;

@@ -1,7 +1,7 @@
 // Import into an open document and Convert to a new one, for xlsx, docx and pptx files: the main thread's half, which
 // admits the job, hands the bytes to the transform process, then writes the pictures and commits what came back.
-// Parsing, guards, recalc and serialization run in the transform process, so a failed import creates and changes
-// nothing. Drive's import and convert routes, for example, call it.
+// Parsing, guards, recalc and serialization run in the transform process, so an import whose transform fails creates
+// and changes nothing. Drive's import and convert routes, for example, call it.
 
 import type { ConvertTarget, DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -28,7 +28,7 @@ import type {
     ImportTransformJob,
     SheetsImportJob,
     SlidesImportJob,
-    SlidesImportWorkerResult,
+    SlidesImportTransformResult,
     TransformMedia,
     TransformWarning,
 } from '../document/transform/protocol';
@@ -54,6 +54,7 @@ export async function convertToDocument(
     sourcePath: DrivePath,
     targetType: ConvertTarget,
     user: User,
+    maxBytes: number,
 ): Promise<DrivePath> {
     const { parentId } = sourcePath;
     if (!parentId) throw new ApiError(400, 'Cannot convert a root file');
@@ -68,11 +69,14 @@ export async function convertToDocument(
     // is refused before it.
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(sourcePath.size, format);
+    // The upload limit may have been higher when the file was stored, so it applies here too.
+    if (sourcePath.size > maxBytes) throw new ApiError(413, 'Source file too large');
 
-    // The row's size is only a claim, so the read stops one byte past the cap, and the byte-cap check before the
-    // transform refuses what it read without the rest ever being buffered.
-    const bytes = await mount.readBytes(sourcePath.id, MAX_DECOMPRESSED_BYTES + 1);
+    // The row's size is only a claim, so the read stops one byte past the lower cap and refuses what passes it, without
+    // the rest ever being buffered. Past the byte cap, the check before the transform refuses it.
+    const bytes = await mount.readBytes(sourcePath.id, Math.min(maxBytes, MAX_DECOMPRESSED_BYTES) + 1);
     if (!bytes) throw new ApiError(404, 'File not found');
+    if (bytes.byteLength > maxBytes) throw new ApiError(413, 'Source file too large');
     const buffer = Buffer.from(bytes);
     const name = sourcePath.name.slice(0, -`.${format}`.length);
 
@@ -214,7 +218,7 @@ function importPptxUpdate(
     buffer: Buffer,
     deck: SlidesImportJob['deck'],
     signal?: AbortSignal,
-): Promise<SlidesImportWorkerResult & { warnings: TransformWarning[] }> {
+): Promise<SlidesImportTransformResult & { warnings: TransformWarning[] }> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'pptx');
     return runImportToSlidesUpdate(

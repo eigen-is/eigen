@@ -2,7 +2,7 @@
 // doctype, the data-only policy, the title and the bundled fonts around a type's stylesheet and sanitized body.
 
 import { escapeHtml } from '@workspace/lib/html';
-import { allFontFaceCss, getFontFaceCSSForFamilies } from './fonts';
+import { allFontFaceCss, fontFaceCssOf } from './fonts';
 import { EXPORT_CSP, KEEP_MATHML, sanitizeExportHtml } from './sanitize';
 
 // The data-only rule as a <meta>, so it still holds once a download is saved and opened.
@@ -36,7 +36,7 @@ export function exportHtmlDocument({
     <meta charset="utf-8">
     ${EXPORT_CSP_META}${viewport ? `\n    ${VIEWPORT_META}` : ''}
     <title>${escapeHtml(title)}</title>
-    <style>${fonts ? getFontFaceCSSForFamilies(fonts) : allFontFaceCss()}${css}</style>
+    <style>${fonts ? fontFaceCssOf(fonts) : allFontFaceCss()}${css}</style>
 </head>
 <body>
     ${sanitizeExportHtml(body, { ...KEEP_LINK_TARGETS, ...KEEP_MATHML })}

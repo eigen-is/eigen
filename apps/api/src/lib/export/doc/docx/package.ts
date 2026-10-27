@@ -3,6 +3,7 @@
 
 import type { JSONContent } from '@tiptap/core';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import type { CodeHighlighter } from '../../../document/lowlight';
 import type { Lost } from '../../../document/transform/protocol';
 import { A_NS, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../../ooxml/ooxml';
 import type { PartRelationships } from '../../../ooxml/opc';
@@ -36,10 +37,12 @@ export type Package = {
     publicOrigin: string | undefined;
     abstractNums: List[];
     // Each w:num's abstractNum, by index.
-    numAbstracts: number[];
+    numToAbstract: number[];
     bullets: Map<number, number>;
     checkboxes: boolean;
     languages: Set<string>;
+    // The export's one highlighter, so its code blocks share one budget.
+    highlight: CodeHighlighter;
     images: OfficeImages;
     // The charts the walk wrote, each part under word/charts/ and its workbook under word/embeddings/.
     charts: OfficeCharts;
