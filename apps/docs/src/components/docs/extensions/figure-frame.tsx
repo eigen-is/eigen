@@ -17,7 +17,7 @@ import {
     pxToMm,
     readFigureAttrs,
     readFigureFrameAttrs,
-    readFrameWidth,
+    readFrameSide,
 } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui';
@@ -293,7 +293,7 @@ export function FigureFrame({
         ...frame,
         offsetX: (frame.offsetX ?? 0) + (shift?.dx ?? 0) + (travel?.dx ?? 0),
         offsetY: (frame.offsetY ?? 0) + (shift?.dy ?? 0) + (travel?.dy ?? 0),
-        width: box?.width ?? readFrameWidth(node.attrs.width),
+        width: box?.width ?? readFrameSide(node.attrs.width),
     });
     const chrome = place && box;
 

@@ -48,9 +48,9 @@ export type FigureFrameAttrs = {
     commentCardId?: string | null;
 };
 
-// A figure's or a chart's stored width, which a collaborator can write as anything. One that isn't a positive number
-// reads as unset, and one wider than the largest paper as that paper.
-export const readFrameWidth = (value: unknown): number | null =>
+// A figure's or a chart's stored width or height, which a collaborator can write as anything. One that isn't a positive
+// number reads as unset, and one past the largest paper as that paper.
+export const readFrameSide = (value: unknown): number | null =>
     typeof value === 'number' && value > 0 ? Math.min(MAX_POSITION_PX, value) : null;
 
 const readOffset = (value: unknown) =>
@@ -59,7 +59,7 @@ const readOffset = (value: unknown) =>
         : null;
 
 // Only Eigen's own span places a figure: another app's <figure> or absolute <img> has no anchor paragraph to count from.
-const isOwnSpan = (element: HTMLElement) => element.tagName === 'SPAN';
+export const isOwnSpan = (element: HTMLElement) => element.tagName === 'SPAN';
 
 const parseOffset = (element: HTMLElement, name: string) => {
     const attr = element.getAttribute(name);

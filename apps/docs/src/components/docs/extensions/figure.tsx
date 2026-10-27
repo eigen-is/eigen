@@ -6,7 +6,7 @@ import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
-import { FigureNode, readFigureFrameAttrs, readFrameWidth, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
+import { FigureNode, readFigureFrameAttrs, readFrameSide, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
 import { ImagePlaceholder } from '@workspace/ui/components/media';
@@ -46,7 +46,7 @@ function FigureView(props: NodeViewProps) {
         [editor, getPos],
     );
 
-    const width = readFrameWidth(node.attrs.width);
+    const width = readFrameSide(node.attrs.width);
     const mediaName: string = node.attrs.mediaName ?? '';
     const src = resolveMediaUrl(mediaName) || node.attrs.src || '';
     const showPlaceholder = !src;
@@ -182,7 +182,7 @@ export const Figure = FigureNode.extend<FigureFrameOptions>({
             const drawn =
                 (figure instanceof Element && figure.querySelector('img')?.clientWidth) || FIGURE_DEFAULT_WIDTH;
             return this.editor.commands.resizeFigure(selection.from, {
-                width: clampFigureWidth((readFrameWidth(selection.node.attrs.width) ?? drawn) + delta, maxWidth),
+                width: clampFigureWidth((readFrameSide(selection.node.attrs.width) ?? drawn) + delta, maxWidth),
             });
         };
         return Object.fromEntries(

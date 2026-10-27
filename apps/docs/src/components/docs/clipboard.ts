@@ -24,7 +24,7 @@ import {
     PAGE_NUMBER_TEXT,
     readChartAttrs,
     readEquation,
-    readFrameWidth,
+    readFrameSide,
 } from '@workspace/lib/docs/eigendoc';
 import type {
     EigenClipboardChartItem,
@@ -121,7 +121,7 @@ function copiedClipboardItems(
             buildImageClipboardItem({
                 mediaName: node.attrs.mediaName,
                 source: mediaPath,
-                box: figureClipboardBox(view, pos, readFrameWidth(node.attrs.width)),
+                box: figureClipboardBox(view, pos, readFrameSide(node.attrs.width)),
                 caption: node.attrs.caption || undefined,
             }),
         );

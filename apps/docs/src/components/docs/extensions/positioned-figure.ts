@@ -22,7 +22,7 @@ import {
     POSITIONED_SELECTOR,
     pagePx,
     readFigureFrameAttrs,
-    readFrameWidth,
+    readFrameSide,
     setFigureAttributes,
 } from '@workspace/lib/docs/eigendoc';
 import { pageScale } from './text-column';
@@ -383,7 +383,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     const paper = page();
                     const box = figureBoxAt(view, pos);
                     const anchor = rectAt(view, $from.before());
-                    const stored = readFrameWidth(node.attrs.width);
+                    const stored = readFrameSide(node.attrs.width);
                     const width = Math.min(paper.width, stored ?? (box?.width ?? 0) / pageScale(view.dom));
                     setFigureAttributes(tr, pos, {
                         layout,
@@ -420,7 +420,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     const rect = rectAt(view, anchor);
                     if (!rect) return false;
                     if (!dispatch) return true;
-                    const width = readFrameWidth(node.attrs.width) ?? box.width / scale;
+                    const width = readFrameSide(node.attrs.width) ?? box.width / scale;
                     const offsets = offsetsOnPaper(view, page(), { ...at, width }, rect);
                     if (anchor === $pos.before()) {
                         setFigureAttributes(tr, pos, offsets);
@@ -450,7 +450,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     const box = {
                         left: anchor.left + (offsetX ?? 0) * scale,
                         top: anchor.top + (offsetY ?? 0) * scale,
-                        width: attributes.width ?? readFrameWidth(node.attrs.width) ?? 0,
+                        width: attributes.width ?? readFrameSide(node.attrs.width) ?? 0,
                     };
                     setFigureAttributes(tr, pos, { ...attributes, ...offsetsOnPaper(view, page(), box, anchor) });
                     return true;

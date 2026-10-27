@@ -35,7 +35,7 @@ export {
     keepOnPaper,
     POSITIONED_SELECTOR,
     readFigureFrameAttrs,
-    readFrameWidth,
+    readFrameSide,
     setFigureAttributes,
 } from './nodes/figure-frame';
 export { selectionFontSizes } from './nodes/font-size';
