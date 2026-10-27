@@ -49,7 +49,7 @@
     "packages/lib/src/core/mail/hooks/use-emails.ts": 1,
     "packages/lib/src/core/search/pagefind.ts": 1,
     "packages/lib/src/core/sse/hooks/use-sse.ts": 1,
-    "packages/lib/src/docs/eigendoc/nodes/figure.ts": 3,
+    "packages/lib/src/docs/eigendoc/nodes/figure.ts": 2,
     "packages/lib/src/sheets/snapshot-codec.ts": 8,
     "packages/lib/src/sheets/yjs-ops.ts": 1,
     "packages/lib/src/types/chart.ts": 1,
