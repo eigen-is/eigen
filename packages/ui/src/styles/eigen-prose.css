@@ -510,10 +510,6 @@
 
     a {
         color: var(--color-link, #2563eb);
-        text-decoration: none;
-    }
-
-    a:hover {
         text-decoration: underline;
     }
 

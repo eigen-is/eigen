@@ -31,6 +31,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Adding people to a team** — dragging users onto a team is gone with the sidebar list. To add several people at once, select them on the **Users** page, right-click and choose **Add to team…**. A team's **Members** section still adds one person at a time
 - **Admin users** — a user's details list their teams under the role, leaving out the team named after your organization that everyone joins. Add the user to a team with **Add to team**, or take them out of one with its **×**
 - **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width, because the page cuts off the rest. A web page download keeps more columns while all of the sheet's rows fit
+- **Links in Docs** — a link is underlined, as in Word and Google Docs, also in a preview and in a document you download as a web page or PDF
+- **Number fields in Slides and Vector** — a number in the side panel shows a fixed number of decimals: the stroke width and letter spacing show two, such as 2.00, and a position or size shows whole numbers. While you type, the field shows what you typed
 - **Spreadsheet downloads** — a cell's text stays inside its row in a web page or PDF download, as it does in the editor. A wrapped cell taller than its row shows the part that fits
 
 ### Fixed
