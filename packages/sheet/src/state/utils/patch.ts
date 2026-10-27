@@ -4,7 +4,7 @@
 
 import type { MergeCell, SheetConfig } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
-import { every, isEqual, isNil, isNumber, partition } from 'es-toolkit/compat';
+import { isEqual, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
@@ -218,17 +218,15 @@ export function patchToOp(
         }
         return op;
     });
-    every(ops, (p) => {
-        if (p.op === 'replace' && !isNil(p.value?.hl) && p.path.length === 3 && p.path![0] === 'data') {
-            const index = getSheetIndex(ctx, p.id!) as number;
-            ops.push({
-                id: p!.id!,
-                op: 'replace',
-                path: ['hyperlink', `${p.path[1]}_${p.path![2]}`],
-                value: ctx.sheets[index].hyperlink![`${p.value!.hl!.r!}_${p.value!.hl.c!}`],
-            });
-        }
-    });
+    // A linked cell written whole ships its link. The link sits under the cell's own key: the cell's `hl` keeps the
+    // place the link was made at, which a row or column op does not move.
+    for (const op of [...ops]) {
+        const [field, r, c] = op.path;
+        if (op.op !== 'replace' || op.value?.hl == null || op.path.length !== 3 || field !== 'data') continue;
+        const key = `${r}_${c}`;
+        const sheet = ctx.sheets.find((s) => s.id === op.id);
+        ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: sheet?.hyperlink?.[key] });
+    }
     if (options?.insertRowColOp) {
         ops = ops.filter(writesOneFloatingObject);
         ops.push({

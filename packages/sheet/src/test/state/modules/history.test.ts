@@ -11,7 +11,8 @@ import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell } from '../../../engine/types';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
-import { shiftEntries } from '../../../state/modules/history';
+import { shiftEntries } from '../../../state/modules/history-shift';
+import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet } from '../../../state/modules/sheet';
@@ -195,6 +196,68 @@ describe("undo after a peer's row, column or sheet change lands on your cell", (
         expect(cellAt(s.a, 'A1', TWO)?.f).toBe('=One!B11');
         expectAgree(s);
     });
+});
+
+describe("undo after a peer's row op on another sheet keeps formulas pointing at the moved rows", () => {
+    test('a row delete brings back a formula with its reference moved', () => {
+        const s = session(workbook({ A5: { f: '=Two!A10', v: 0, m: '0' } }));
+        s.edit(s.a, ...deleteRows(4, 4));
+        s.edit(s.b, ...insertRows(2, 2, TWO));
+        s.undo(s.a);
+        expect(cellAt(s.a, 'A5')?.f).toBe('=Two!A12');
+        expectAgree(s);
+    });
+
+    test('a sheet delete brings back a formula with its reference moved', () => {
+        const s = session(workbook({}, { A1: { f: '=One!A10', v: 0, m: '0' } }));
+        s.edit(s.a, ...removeSheet(TWO));
+        s.edit(s.b, ...insertRows(2, 2));
+        s.undo(s.a);
+        expect(view(s.a.ctx.sheets)[2].cells[0].v?.f).toBe('=One!A12');
+        expectAgree(s);
+    });
+
+    test('a redone copy brings back its formula with its reference moved', () => {
+        const s = session(workbook({}, { A1: { f: '=One!A10', v: 0, m: '0' } }));
+        s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
+        s.undo(s.a);
+        s.edit(s.b, ...insertRows(2, 2));
+        s.redo(s.a);
+        expect(cells(s.a.ctx.sheets[3])[0].v?.f).toBe('=One!A12');
+        expectAgree(s);
+    });
+
+    test("your row insert stays undoable after a peer's row insert on a sheet whose formulas it moved", () => {
+        const s = session(workbook({ A10: { v: 1, m: '1' } }, { A5: { f: '=One!A10', v: 1, m: '1' } }));
+        s.edit(s.a, ...insertRows(2, 1));
+        expect(cellAt(s.a, 'A5', TWO)?.f).toBe('=One!A11');
+        s.edit(s.b, ...insertRows(0, 2, TWO));
+        s.undo(s.a);
+        expect(cellAt(s.a, 'A10')?.v).toBe(1);
+        expect(cellAt(s.a, 'A7', TWO)?.f).toBe('=One!A10');
+        expectAgree(s);
+    });
+
+    test("a sheet's first link stays undoable after a peer's row insert", () => {
+        const s = session(workbook({ B5: text('link') }));
+        s.edit(s.a, (ctx) => saveHyperlink(ctx, 4, 1, 'link', 'webpage', 'https://eigen.is'));
+        s.edit(s.b, ...insertRows(2, 2));
+        s.undo(s.a);
+        expect(s.a.ctx.sheets[0].hyperlink ?? {}).toEqual({});
+        expectAgree(s);
+    });
+});
+
+test("an edit to a linked cell after a peer's row insert keeps its link everywhere", () => {
+    const s = session(workbook({ B5: text('link') }));
+    s.edit(s.a, (ctx) => saveHyperlink(ctx, 4, 1, 'link', 'webpage', 'https://eigen.is'));
+    s.edit(s.b, ...insertRows(2, 2));
+    s.edit(s.a, (ctx) => {
+        const row = ctx.sheets[0].data?.[6];
+        if (row) row[1] = { ...row[1], bl: 1 };
+    });
+    expect(s.a.ctx.sheets[0].hyperlink).toEqual({ '6_1': { linkType: 'webpage', linkAddress: 'https://eigen.is' } });
+    expect(s.b.ctx.sheets[0].hyperlink).toEqual(s.a.ctx.sheets[0].hyperlink);
 });
 
 describe('undo skips a cell a peer changed since, by what was written into it', () => {
@@ -509,7 +572,42 @@ describe('shiftEntries', () => {
             null,
         ],
         ['a whole config drops the entry', rows(2, 2), replace(at('config'), {}), null],
-        ['a whole matrix drops the entry', rows(2, 2), replace(at('data'), []), null],
+        [
+            'a whole matrix moves with the rows',
+            rows(1, 1),
+            replace(at('data'), [[{ v: 1 }], [null], [{ f: '=A2' }]]),
+            replace(at('data'), [[{ v: 1 }], [null], [null], [{ f: '=A3' }]]),
+        ],
+        [
+            'a whole matrix on another sheet moves its formulas that read One',
+            rows(1, 1),
+            replace(['sheets', TWO, 'data'], [[{ f: '=One!A2+A2' }]]),
+            replace(['sheets', TWO, 'data'], [[{ f: '=One!A3+A2' }]]),
+        ],
+        [
+            'a whole row moves with a row insert',
+            rows(2, 2),
+            replace(at('data', 5), [{ v: 1 }]),
+            replace(at('data', 7), [{ v: 1 }]),
+        ],
+        [
+            "a sheet's whole link map moves",
+            rows(2, 2),
+            replace(at('hyperlink'), { '5_1': { linkType: 'webpage' } }),
+            replace(at('hyperlink'), { '7_1': { linkType: 'webpage' } }),
+        ],
+        [
+            'a whole link map that loses a link to a delete drops the entry',
+            deletedRows(2, 3),
+            replace(at('hyperlink'), { '3_1': { linkType: 'webpage' } }),
+            null,
+        ],
+        [
+            'a whole row height map moves',
+            rows(2, 2),
+            replace(at('config', 'rowlen'), { 5: 30 }),
+            replace(at('config', 'rowlen'), { 7: 30 }),
+        ],
         ['a conditional format drops the entry', rows(2, 2), replace(at('conditionalFormatRules', 0), {}), null],
         ['a whole row drops the entry on a column insert', columns(2, 2), replace(at('data', 5), []), null],
         ["a chart's data on One drops the entry", rows(2, 2), replace(at('charts', 'c1', 'specData'), '{}'), null],
