@@ -56,6 +56,7 @@ function workbook(one: Record<string, Cell> = {}, two: Record<string, Cell> = {}
 }
 
 const text = (v: string): Cell => ({ v, m: v, ct: { fa: 'General', t: 'g' } });
+const num = (n: number): Cell => ({ v: n, m: String(n), ct: { fa: 'General', t: 'n' } });
 
 // Each tab starts from the same workbook, and every batch either sends is logged for the joiner.
 function session(base: Context) {
@@ -226,6 +227,19 @@ describe("undo after a peer's row, column or sheet change lands on your cell", (
         expect(cellAt(s.a, 'C5', THREE)?.v).toBe('old');
         expect(view(s.a.ctx.sheets).map((x) => x.id)).toEqual([ONE, THREE, TWO]);
         expect(view(s.a.ctx.sheets)[2].cells).toEqual([{ r: 0, c: 0, v: text('two') }]);
+        expectAgree(s);
+    });
+
+    // Overwriting a formula rewrites the whole recalc list, so the entry holds every formula cell's place, also one in
+    // rows the peer deletes.
+    test("a peer's row delete keeps the undo of an edit that rewrote the whole recalc list", () => {
+        const s = session(workbook({ A1: num(1), C2: { f: '=A1', v: 1, m: '1' }, B10: { f: '=A1', v: 1, m: '1' } }));
+        s.edit(s.a, typedAt('C2', '5'));
+        s.edit(s.b, ...deleteRows(9, 9));
+        expect(s.a.history.undoList).toHaveLength(1);
+        s.undo(s.a);
+        expect(cellAt(s.a, 'C2')).toMatchObject({ f: '=A1', v: 1 });
+        expect(s.a.ctx.sheets[0].calcChain).toContainEqual({ r: 1, c: 2, id: ONE });
         expectAgree(s);
     });
 
@@ -464,8 +478,6 @@ describe('undo skips a cell a peer changed since, by what was written into it', 
 // An undo sends what a person wrote and recalculates the rest: a value the engine computed is only right for the
 // inputs at the time it was recorded.
 describe('undo and redo recalculate the formulas they touch', () => {
-    const num = (n: number): Cell => ({ v: n, m: String(n), ct: { fa: 'General', t: 'n' } });
-
     test("a dependent reads a peer's later input after your undo", () => {
         const s = session(workbook({ A1: num(1), B1: num(2), D10: { f: '=A1+B1', v: 3, m: '3' } }));
         s.edit(s.a, typedAt('A1', '5'));
@@ -956,6 +968,19 @@ describe('shiftEntries', () => {
             columns(0, 1),
             replace(at('calcChain'), [{ r: 5, c: 1, id: ONE }]),
             replace(at('calcChain'), [{ r: 5, c: 2, id: ONE }]),
+        ],
+        [
+            'a whole recalc list loses the cells inside a delete',
+            deletedRows(2, 3),
+            replace(at('calcChain'), [
+                { r: 1, c: 1, id: ONE },
+                { r: 3, c: 1, id: ONE },
+                { r: 5, c: 1, id: ONE },
+            ]),
+            replace(at('calcChain'), [
+                { r: 1, c: 1, id: ONE },
+                { r: 3, c: 1, id: ONE },
+            ]),
         ],
         [
             'a recalc list entry inside a delete drops the entry',
