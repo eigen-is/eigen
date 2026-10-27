@@ -140,6 +140,13 @@ describe('a docx table of contents', () => {
         expect(blocks(json)).toEqual(['toc 3', 'pageBreak: ', 'heading: Intro']);
     });
 
+    test('a section break in the paragraph that begins the field follows the node', async () => {
+        const sectPr = '<w:sectPr><w:type w:val="nextPage"/></w:sectPr>';
+        const begins = paragraph(`${run('Before ')}${field('TOC \\o "1-3"')}${run('Intro\t1')}`, undefined, sectPr);
+        const { json } = await read(`${begins}${paragraph(END)}${heading('Intro')}`);
+        expect(blocks(json)).toEqual(['paragraph: Before ', 'toc 3', 'pageBreak: ', 'heading: Intro']);
+    });
+
     // A text box is no entry: its paragraphs are its own, read where the entry anchors it.
     test("a text box an entry anchors stays, and its paragraphs aren't the result's", async () => {
         const box = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Box"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent>${paragraph(run('Boxed'))}</w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
@@ -172,6 +179,31 @@ describe("a docx table of contents' result that runs on", () => {
             'paragraph: ',
         ]);
         expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
+    });
+
+    test('ended at the start of a heading, it is a node and the heading stays', async () => {
+        const { json, warnings } = await read(`${opener}${paragraph(`${END}${run('Intro')}`, 'Heading1')}`);
+        expect(blocks(json)).toEqual(['toc 3', 'heading: Intro']);
+        expect(warnings).toEqual([]);
+    });
+
+    test("ended after a heading's text, it takes none of the heading", async () => {
+        const { json, warnings } = await read(`${opener}${paragraph(`${run('Intro')}${END}`, 'Heading1')}`);
+        expect(blocks(json)).toEqual(['paragraph: Intro\t1', 'heading: Intro']);
+        expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
+    });
+
+    test('begun after text in a paragraph that ends a section, its held entry comes back before the break', async () => {
+        const sectPr = '<w:sectPr><w:type w:val="nextPage"/></w:sectPr>';
+        const begins = paragraph(`${run('Before ')}${field('TOC \\o "1-3"')}${run('Intro\t1')}`, undefined, sectPr);
+        const { json } = await read(`${begins}${heading('Intro')}`);
+        expect(blocks(json)).toEqual(['paragraph: Before ', 'paragraph: Intro\t1', 'pageBreak: ', 'heading: Intro']);
+    });
+
+    test('a table of contents after the one it gave back is a node', async () => {
+        const toc = paragraph(`${field('TOC \\o "1-2"')}${run('Intro\t1')}${END}`);
+        const { json } = await read(`${opener}${heading('Intro')}${toc}`);
+        expect(blocks(json)).toEqual(['paragraph: Intro\t1', 'heading: Intro', 'toc 2']);
     });
 
     test('never ended, it keeps a table after it whole and the paragraphs in their order', async () => {

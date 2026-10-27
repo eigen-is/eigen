@@ -350,9 +350,10 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     if (SIZED.has(role.kind) && !listed && isBodySized(reader, p, paraRun)) role = { kind: 'paragraph' };
     if (role.kind === 'code' && !isMonospace(reader, p, paraRun)) role = { kind: 'paragraph' };
 
-    // A table of contents' result holds no heading, so one ends a result the file ends late or never.
     const between = betweenBodyBlocks(scope);
-    const released = between && role.kind === 'heading' ? abandonToc(reader) : [];
+    // The cut of a result begun above, which runs into this paragraph.
+    const carried: TocCut | undefined =
+        between && reader.openToc ? { toc: reader.openToc, from: 0, opened: false } : undefined;
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
@@ -364,13 +365,20 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         pieces: [],
         pending: [],
         leftOut: [],
-        tocCuts: between ? (reader.openToc ? [{ toc: reader.openToc, from: 0, opened: false }] : []) : undefined,
+        tocCuts: between ? (carried ? [carried] : []) : undefined,
     };
     walkInline(
         reader,
         xmlElements(p).filter((child) => child.ns !== W_NS || child.local !== 'pPr'),
         context,
     );
+    // A table of contents' result holds no heading, so a heading it runs into ends a result the file ends late or
+    // never. A field that ends before the heading's text ends where Word's result does.
+    const runOn =
+        carried && role.kind === 'heading' && (carried.to === undefined || isShown(context.pieces.slice(0, carried.to)))
+            ? carried
+            : undefined;
+    const released = runOn ? abandonToc(reader, runOn.toc) : [];
     const setting: ParagraphSetting = {
         p,
         scope,
@@ -381,9 +389,9 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         paraRun,
         numId: listed ? numId : undefined,
     };
-    const itemsOf = (pieces: Piece[], whole: boolean) => paragraphItems(reader, setting, context, pieces, whole);
-    const cuts = context.tocCuts ?? [];
-    if (cuts.length === 0) return [...released, ...itemsOf(context.pieces, true)];
+    const itemsOf = (pieces: Piece[], ends: ParagraphEnds) => paragraphItems(reader, setting, context, pieces, ends);
+    const cuts = (context.tocCuts ?? []).filter((cut) => cut !== runOn);
+    if (cuts.length === 0) return [...released, ...itemsOf(context.pieces, WHOLE)];
     // What the paragraph gives besides its own lines, when a result holds them all.
     const extras: Item[] = [...context.pending];
     if (direct.sectionBreak && scope.story === 'body') extras.push({ kind: 'break' });
@@ -403,14 +411,18 @@ type ParagraphSetting = {
     numId: string | undefined;
 };
 
-// A paragraph's pieces as its items, and when `whole` the page break before it, the text boxes it anchors and the
-// section break after it too.
+// What a paragraph's items take besides its lines: `before` the page break before it, `after` the text boxes it
+// anchors and the section break after it.
+type ParagraphEnds = { before: boolean; after: boolean };
+const WHOLE: ParagraphEnds = { before: true, after: true };
+
+// A paragraph's pieces as its items, with the ends asked for.
 function paragraphItems(
     reader: Reader,
     { p, scope, direct, styleId, styled, role: paraRole, paraRun, numId }: ParagraphSetting,
     context: RunContext,
     pieces: Piece[],
-    whole: boolean,
+    ends: ParagraphEnds,
 ): Item[] {
     const { styles } = reader;
     const style = styles.get(styleId);
@@ -561,7 +573,7 @@ function paragraphItems(
     // A paragraph whose mark and text are hidden is not there at all.
     const markHidden = direct.markHidden ?? styles.run(styleId).vanish ?? false;
     const items: Item[] = [];
-    if (whole && props.pageBreakBefore && scope.story === 'body') items.push({ kind: 'break' });
+    if (ends.before && props.pageBreakBefore && scope.story === 'body') items.push({ kind: 'break' });
     const split = halves.length > 1;
     let numbered = false;
     for (const [index, half] of halves.entries()) {
@@ -651,7 +663,7 @@ function paragraphItems(
         numbered = true;
         items.push(para);
     }
-    if (!whole) return items;
+    if (!ends.after) return items;
     // A text box's blocks follow the paragraph that anchors it, at its text and in its quotes, so they stay in its item.
     for (const item of context.pending) {
         if (item.kind === 'para') {
@@ -668,11 +680,12 @@ function paragraphItems(
 
 // A paragraph a table of contents' result runs through. The result's pieces are cut, and Word's saved entry, its text
 // up to the tab before its page number, kept to compare. The node stands after what the paragraph keeps, where the field
-// began. A paragraph all result is held until the field ends, and so is the result in the paragraph that begins it.
+// began. A paragraph all result is held until the field ends, and so is the result in the paragraph that begins it,
+// with what the paragraph gives after its lines, which follows the result.
 function cutTocResults(
     cuts: TocCut[],
     pieces: Piece[],
-    itemsOf: (pieces: Piece[], whole: boolean) => Item[],
+    itemsOf: (pieces: Piece[], ends: ParagraphEnds) => Item[],
     extras: Item[],
 ): Item[] {
     for (const { toc, from, to } of cuts) {
@@ -685,7 +698,7 @@ function cutTocResults(
     }
     const [first] = cuts;
     if (cuts.length === 1 && first && !first.opened && first.to === undefined) {
-        first.toc.held.push({ cut: extras, whole: itemsOf(pieces, true) });
+        first.toc.held.push({ cut: extras, whole: itemsOf(pieces, WHOLE) });
         return [];
     }
     const node = (toc: OpenToc): Item => ({
@@ -696,10 +709,17 @@ function cutTocResults(
     const items = cuts.flatMap(({ toc, opened, to }) =>
         opened || to === undefined ? [] : toc.held.flatMap(({ cut }) => cut),
     );
+    const goesOn = cuts.some(({ opened, to }) => opened && to === undefined);
     const kept = pieces.filter((_, index) => !cuts.some(({ from, to }) => index >= from && index < (to ?? Infinity)));
-    items.push(...(isShown(kept) || kept.some((piece) => piece.kind === 'break') ? itemsOf(kept, true) : extras));
+    if (isShown(kept) || kept.some((piece) => piece.kind === 'break'))
+        items.push(...itemsOf(kept, { before: true, after: !goesOn }));
+    else if (!goesOn) items.push(...extras);
     for (const { toc, from, to, opened } of cuts) {
-        if (opened && to === undefined) toc.held.push({ cut: [node(toc)], whole: itemsOf(pieces.slice(from), false) });
+        if (opened && to === undefined)
+            toc.held.push({
+                cut: [node(toc), ...extras],
+                whole: itemsOf(pieces.slice(from), { before: false, after: true }),
+            });
         else if (opened) items.push(node(toc));
     }
     return items;
@@ -711,11 +731,12 @@ function betweenBodyBlocks(scope: Scope): boolean {
 }
 
 // A heading, a table or the body's end inside a table of contents' result, which holds none, means the file ends the
-// field late or never. What the field held stays its paragraphs, counted as flattened.
-function abandonToc(reader: Reader): Item[] {
-    const toc = reader.openToc;
+// field late or never. What the field held stays its paragraphs, counted as flattened. Left open, the field would hold
+// the next table of contents as one nested in it.
+function abandonToc(reader: Reader, toc = reader.openToc): Item[] {
     if (!toc) return [];
-    reader.openToc = undefined;
+    if (reader.openToc === toc) reader.openToc = undefined;
+    if (reader.fields.at(-1) === toc.field) reader.fields.pop();
     reader.tocs = reader.tocs.filter((other) => other !== toc);
     reader.lost('blocks-flattened');
     return toc.held.flatMap(({ whole }) => whole);
