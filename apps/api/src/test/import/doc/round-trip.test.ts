@@ -249,6 +249,7 @@ describe('the page', () => {
             headerDistance: 8,
             footerDistance: 5,
             differentFirstPage: false,
+            pageless: false,
         };
         const source = buildAllFeaturesDocJson();
         const { page: read } = docxToPmJson(
@@ -265,6 +266,24 @@ describe('the page', () => {
         expect(read.headerDistance).toBeCloseTo(8, 1);
         expect(read.footerDistance).toBeCloseTo(5, 1);
         expect(read.differentFirstPage).toBe(false);
+    });
+
+    test('a page-less doc comes back page-less, its wide table at its own widths', async () => {
+        const cell = (width: number) => ({ type: 'tableCell', attrs: { colwidth: [width] }, content: [p('x')] });
+        const json = {
+            type: 'doc',
+            content: [{ type: 'table', content: [{ type: 'tableRow', content: [cell(667), cell(667)] }] }],
+        };
+        const { json: back, page } = docxToPmJson(
+            Buffer.from(
+                writeDocx(
+                    { json, bands: {}, page: { ...DEFAULT_PAGE_SETUP, pageless: true }, style: DEFAULT_NORMAL_STYLE },
+                    { title: 'Wide', media: [], lost: () => {} },
+                ),
+            ),
+        );
+        expect(page.pageless).toBe(true);
+        expect(nodesOfType(back, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([[667], [667]]);
     });
 
     // Each band comes back where it was, page numbers as fields and an equation as Word's; page 1's footer is the empty
