@@ -10,7 +10,13 @@ Drive opens a file at the inline-edit route when `isInlineEditable(mimeType, nam
 
 ## The crumbs read the file's own chain
 
-The view toolbar asks for the breadcrumb of the file itself, not of its folder, and draws it with `DriveBreadcrumb`, the folder list's component. The server cuts another owner's chain at the first folder the viewer can't read (`SharedDrive.breadCrumb`), so a file shared on its own has a folder whose chain is empty to that viewer. The folder's chain would leave only the file name. `DriveBreadcrumb` leads a chain that starts below a mount root with "Shared with me", and labels a chain from the root with the mount's name, so a file opened from Shared with me, a team drive or search reads the same path its folder does.
+The view toolbar asks for the breadcrumb of the file itself, not of its folder, and draws it with `DriveBreadcrumb`, the folder list's component. The server cuts another owner's chain at the first folder the viewer can't read (`SharedDrive.breadCrumb`), so a file shared on its own has a folder whose chain is empty to that viewer. The folder's chain would leave only the file name.
+
+A chain from a mount root starts with the mount's name. A cut chain leads with Shared with me only when the viewer's Shared with me feed holds a path in it, because a public file reaches anyone signed in, a guest who signed up from the link included, and was shared with none of them. Such a chain starts at its first folder instead. The Shared with me crumb is a link only where the caller passes `onOpenSharedWithMe`, as Drive's folder list and the view toolbar do. The Location line in the other apps' dialogs has no such page and shows it as text.
+
+## Closing a file shared on its own returns to Shared with me
+
+Closing goes to the file's folder, unless the file heads its own chain: then the viewer can't read the folder, and the folder route would only show a request for access. The edit route reads the same breadcrumb query as the toolbar and goes to Shared with me instead.
 
 ## Two lists decide what is editable
 

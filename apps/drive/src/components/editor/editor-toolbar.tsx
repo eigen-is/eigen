@@ -32,9 +32,18 @@ export function ViewToolbar({ path, canWrite, onEdit }: ViewToolbarProps) {
         });
     };
 
+    const handleOpenSharedWithMe = () => {
+        navigate({ to: '/shared/$to', params: { to: 'with-me' } });
+    };
+
     return (
         <Toolbar>
-            <DriveBreadcrumb paths={breadcrumbPaths} mountLabel={mountLabel} onNavigate={handleBreadcrumbClick} />
+            <DriveBreadcrumb
+                paths={breadcrumbPaths}
+                mountLabel={mountLabel}
+                onNavigate={handleBreadcrumbClick}
+                onOpenSharedWithMe={handleOpenSharedWithMe}
+            />
             {canWrite && (
                 <Button size="sm" onClick={onEdit}>
                     Edit
