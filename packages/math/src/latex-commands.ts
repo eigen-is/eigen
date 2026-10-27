@@ -32,8 +32,9 @@ type LatexRow =
     | { kind: 'notation' }
     | { kind: 'pmod' }
     // The braket package's commands, such as \ket and \braket: a fenced row around the argument. With `split`, each |
-    // in the argument is a separator.
-    | { kind: 'braket'; open: string; close: string; split: boolean; stars: number }
+    // in the argument is a separator. `join` is what physics reads after the argument as a ket, making ⟨a|b⟩: a
+    // command, as \ket after \bra, or a group.
+    | { kind: 'braket'; open: string; close: string; split: boolean; stars: number; join?: 'ket' | 'group' }
     // The physics package's \expval, \mel and \ketbra. Their stars only size the fences, which the tree doesn't keep.
     | { kind: 'expectation'; stars: number }
     | { kind: 'matrixElement'; stars: number }
@@ -433,11 +434,11 @@ const ROWS: [string, LatexRow][] = [
     ['enclose', { kind: 'notation' }],
     ['pmod', { kind: 'pmod' }],
     // physics takes a star on \bra and \ket. The braket package's capitals grow, as every fence in the tree does.
-    ['bra', { kind: 'braket', open: '⟨', close: '|', split: false, stars: 1 }],
+    ['bra', { kind: 'braket', open: '⟨', close: '|', split: false, stars: 1, join: 'ket' }],
     ['Bra', { kind: 'braket', open: '⟨', close: '|', split: false, stars: 0 }],
     ['ket', { kind: 'braket', open: '|', close: '⟩', split: false, stars: 1 }],
     ['Ket', { kind: 'braket', open: '|', close: '⟩', split: false, stars: 0 }],
-    ['braket', { kind: 'braket', open: '⟨', close: '⟩', split: true, stars: 0 }],
+    ['braket', { kind: 'braket', open: '⟨', close: '⟩', split: true, stars: 0, join: 'group' }],
     ['Braket', { kind: 'braket', open: '⟨', close: '⟩', split: true, stars: 0 }],
     ['set', { kind: 'braket', open: '{', close: '}', split: true, stars: 0 }],
     ['Set', { kind: 'braket', open: '{', close: '}', split: true, stars: 0 }],

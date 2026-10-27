@@ -636,7 +636,16 @@ describe('bra-ket notation reads as fenced rows', () => {
         ['\\ket{\\psi}', [fenced('|', '⟩', [psi])]],
         ['\\Ket{a}', [fenced('|', '⟩', [a])]],
         // physics's star keeps a bra or ket from growing, a size the tree doesn't hold.
-        ['\\bra*{a}\\ket*{b}', [fenced('⟨', '|', [a]), fenced('|', '⟩', [b])]],
+        ['\\bra*{a}', [fenced('⟨', '|', [a])]],
+        ['\\ket*{b}', [fenced('|', '⟩', [b])]],
+        // physics joins a \ket right after a \bra into one row; its argument is a group, else the ket is empty.
+        ['\\bra{a}\\ket{b}', [fenced('⟨', '⟩', [a, b])]],
+        ['\\bra*{a} \\ket*{b}', [fenced('⟨', '⟩', [a, b])]],
+        ['\\bra{a}\\ket{b}^2', [{ kind: 'scripts', base: [fenced('⟨', '⟩', [a, b])], sup: two }]],
+        ['\\bra{a}\\ket\\psi', [fenced('⟨', '⟩', [a, []]), ...psi]],
+        ['\\Bra{a}\\Ket{b}', [fenced('⟨', '|', [a]), fenced('|', '⟩', [b])]],
+        ['\\ket{a}\\bra{b}', [fenced('|', '⟩', [a]), fenced('⟨', '|', [b])]],
+        ['\\bra{a}{b}', [fenced('⟨', '|', [a]), ...b]],
         ['\\ket\\psi', [fenced('|', '⟩', [psi])]],
         ['\\ket{\\psi}^2', [{ kind: 'scripts', base: [fenced('|', '⟩', [psi])], sup: two }]],
         // braket's \braket and \set: each | at the top of the argument is a separator, as \Braket's \middle| is.
@@ -644,6 +653,12 @@ describe('bra-ket notation reads as fenced rows', () => {
         ['\\braket{a|A|b}', [fenced('⟨', '⟩', [a, A, b])]],
         ['\\Braket{a|\\frac12|b}', [fenced('⟨', '⟩', [a, half, b])]],
         ['\\braket{a}', [fenced('⟨', '⟩', [a])]],
+        // physics's \braket{a}{b}: a group after an argument without a bar at its top is the ket.
+        ['\\braket{a}{b}', [fenced('⟨', '⟩', [a, b])]],
+        ['\\braket{a} {b}^2', [{ kind: 'scripts', base: [fenced('⟨', '⟩', [a, b])], sup: two }]],
+        ['\\braket{{a|b}}{\\psi}', [fenced('⟨', '⟩', [[...a, bar, ...b], psi])]],
+        ['\\braket{a|b}{A}', [fenced('⟨', '⟩', [a, b]), ...A]],
+        ['\\Braket{a}{b}', [fenced('⟨', '⟩', [a]), ...b]],
         ['\\braket{}', [fenced('⟨', '⟩', [[]])]],
         ['\\braket{|}', [fenced('⟨', '⟩', [[], []])]],
         // A | inside a group, after \left or as a \big delimiter is no separator, and \| is the character ‖.

@@ -273,7 +273,12 @@ class LatexReader {
             case 'outerProduct':
                 end = this.#argumentEnd(this.#starred(end, command.stars), nesting);
                 return this.#isChar(end, '{') ? this.#argumentEnd(end, nesting) : end;
-            case 'braket':
+            case 'braket': {
+                end = this.#starred(end, command.stars);
+                const ket = this.#ketAt(command, end, nesting);
+                if (ket === undefined) break;
+                return this.#isChar(ket, '{') ? this.#argumentEnd(ket, nesting) : ket;
+            }
             case 'matrixElement':
                 end = this.#starred(end, command.stars);
         }
@@ -286,6 +291,28 @@ class LatexReader {
         let end = index;
         while (end < index + stars && this.#isChar(end, '*')) end++;
         return end;
+    }
+
+    // Each | at the top of the argument at `index`, where a \braket or \set splits it.
+    #bars(index: number, nesting: number): number[] {
+        const braced = this.#isChar(index, '{');
+        const end = Math.min(braced ? this.#partners[index] : this.#argumentEnd(index, nesting), this.#end);
+        const bars: number[] = [];
+        for (let at = braced ? index + 1 : index; at < end; at = this.#atomEnd(at, nesting + 1))
+            if (this.#isChar(at, '|')) bars.push(at);
+        return bars;
+    }
+
+    // Where the ket starts that physics joins to the bra-ket argument at `index`, making ⟨a|b⟩: after a \ket right
+    // after \bra{a}, or a group after a \braket{a} without a bar. Physics reads only a group as the ket's argument, so
+    // `\bra{a}\ket\psi` is ⟨a|⟩ before ψ. Undefined where nothing joins.
+    #ketAt(command: Extract<LatexCommand, { kind: 'braket' }>, index: number, nesting: number): number | undefined {
+        const end = this.#argumentEnd(index, nesting);
+        const next = this.#commandAt(end);
+        if (command.join === 'ket' && next?.kind === 'braket' && this.#tokens[end].text === command.join)
+            return this.#starred(end + 1, next.stars);
+        if (command.join === 'group' && this.#isChar(end, '{') && this.#bars(index, nesting).length === 0) return end;
+        return undefined;
     }
 
     // A base sits a level below the node its scripts make, two below when both are limits.
@@ -615,11 +642,9 @@ class LatexReader {
     // A bra-ket's argument as the parts of a fenced row. Where it splits, each | at the argument's top is a separator,
     // as \Braket makes it a \middle|; one in a group or a delimiter's own stays a character.
     #braket(open: string, close: string, split: boolean, style: Style, depth: number): MathNode {
+        const bars = split ? this.#bars(this.#pos, 0) : [];
         const parts: MathRow[] = [];
         this.#window(() => {
-            const bars: number[] = [];
-            for (let index = this.#pos; split && index < this.#end; index = this.#atomEnd(index, 0))
-                if (this.#isChar(index, '|')) bars.push(index);
             let current = style;
             for (const bar of [...bars, this.#end]) {
                 const pieces: Piece[] = [];
@@ -823,10 +848,19 @@ class LatexReader {
                 this.#spliced(into, style, depth);
                 into.push({ chars: ')', style });
                 return;
-            case 'braket':
+            case 'braket': {
                 this.#pos = this.#starred(this.#pos, command.stars);
-                into.push({ node: this.#braket(command.open, command.close, command.split, style, depth) });
+                const at = this.#ketAt(command, this.#pos, 0);
+                if (at === undefined) {
+                    into.push({ node: this.#braket(command.open, command.close, command.split, style, depth) });
+                    return;
+                }
+                const bra = this.#row(style, depth + 1);
+                this.#pos = at;
+                const ket = this.#isChar(at, '{') ? this.#row(style, depth + 1) : this.#build([], depth + 1);
+                into.push({ node: barred(LANGLE, RANGLE, [bra, ket]) });
                 return;
+            }
             case 'expectation': {
                 this.#pos = this.#starred(this.#pos, command.stars);
                 const operator = this.#row(style, depth + 1);

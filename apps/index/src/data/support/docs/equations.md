@@ -25,7 +25,7 @@ Leaving the field, for example by clicking back in the document, saves the equat
 
 ## Write LaTeX
 
-Eigen reads the common LaTeX math commands: `\frac{a}{b}` for a fraction, `\sqrt{x}` for a root, `x_i` and `x^2` for scripts, `\sum`, `\int`, Greek letters such as `\alpha`, and environments such as `cases` and `pmatrix`. For quantum states, the bra-ket commands `\bra{\phi}`, `\ket{\psi}`, `\braket{\phi|\psi}`, `\expval{A}`, `\mel{a}{A}{b}` and `\ketbra{a}{b}` draw angle brackets and bars that grow with what's inside them.
+Eigen reads the common LaTeX math commands: `\frac{a}{b}` for a fraction, `\sqrt{x}` for a root, `x_i` and `x^2` for scripts, `\sum`, `\int`, Greek letters such as `\alpha`, and environments such as `cases` and `pmatrix`. For quantum states, the bra-ket commands `\bra{\phi}`, `\ket{\psi}`, `\braket{\phi|\psi}`, `\expval{A}`, `\mel{a}{A}{b}` and `\ketbra{a}{b}` draw angle brackets and bars that grow with what's inside them. As in the physics package, `\bra{\phi}\ket{\psi}` and `\braket{\phi}{\psi}` join into one bracket.
 
 Type a command's name and a space, and Eigen adds the braces it needs. `\frac` and a space becomes `\frac{}{}`, with the cursor in the first pair. An empty part of a fraction, a root, or another template shows as a dotted box in the preview, so you can see what's left to fill in.
 

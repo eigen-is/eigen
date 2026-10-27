@@ -109,8 +109,10 @@ The braket package's `\bra`, `\ket`, `\braket` and `\set`, and the physics packa
 | Typed | Reads as |
 |---|---|
 | `\bra{a}`, `\Bra{a}` | ⟨a\| |
+| `\bra{a}\ket{b}` | ⟨a\|b⟩, one row |
 | `\ket{a}`, `\Ket{a}` | \|a⟩ |
 | `\braket{a\|b}`, `\Braket{a\|A\|b}`, `\braket{a}` | ⟨a\|b⟩, ⟨a\|A\|b⟩, ⟨a⟩ |
+| `\braket{a}{b}` | ⟨a\|b⟩ |
 | `\set{x\|x>0}`, `\Set{x\|x>0}` | {x\|x>0} |
 | `\expval{A}`, `\expval{A}{\psi}` | ⟨A⟩, ⟨ψ\|A\|ψ⟩ |
 | `\mel{a}{A}{b}` | ⟨a\|A\|b⟩ |
@@ -120,7 +122,7 @@ In `\braket`, `\Braket`, `\set` and `\Set` every `|` at the top of the argument 
 
 The tree's fences always grow, as `\left` and `\right` do. braket's lowercase commands keep one size and its capitals grow; physics grows unless starred. Both read alike, and physics's stars, one on `\bra`, `\ket` and `\ketbra` and up to two on `\expval` and `\mel`, are read and dropped. The thin spaces `\set` puts inside its braces are not kept.
 
-`\braket` takes one argument, as braket, KaTeX and MathJax read it. physics's two-argument `\braket{a}{b}` reads as ⟨a⟩ then b. Its contraction of `\bra{a}\ket{b}` into ⟨a|b⟩ is not taken either: that reads as two rows, ⟨a||b⟩, as braket and KaTeX draw it. `\expval{A}{\psi}` and `\ketbra{a}` repeat an argument, so the tree holds it twice, and the size bound counts it twice.
+Two physics habits join a bra and a ket into one row ⟨a|b⟩, as physics does. A `\ket` right after `\bra{a}`, spaces and stars allowed, is its ket; physics takes only a group as that ket's argument, so `\bra{a}\ket\psi` is ⟨a|⟩ before ψ. `\Bra` and `\Ket`, which physics lacks, never join. A group right after `\braket{a}` is the ket of physics's `\braket{a}{b}`, unless a bar at the top of the first argument makes it braket's `\braket{a|b}`, which keeps the group after it. `\braket{a}` alone stays braket's ⟨a⟩, not physics's ⟨a|a⟩. KaTeX reads neither habit and draws ⟨a||b⟩ and ⟨a⟩b. `\expval{A}{\psi}` and `\ketbra{a}` repeat an argument, so the tree holds it twice, and the size bound counts it twice.
 
 `writeLatex` writes such a row as `\left\langle a\middle|b\right\rangle`, never as `\braket`. Every LaTeX, KaTeX and MathJax read `\left` and `\middle` without a package. `\braket` needs braket in LaTeX and an extension in MathJax, and physics reads `\braket{a|b}` as ⟨a|b|a|b⟩. A typed `\ket{x}` stays as typed, since the annotation keeps it; a ket from Word comes back as `\left|x\right\rangle`.
 
