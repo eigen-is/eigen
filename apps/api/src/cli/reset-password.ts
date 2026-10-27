@@ -1,3 +1,6 @@
+// ./eigen reset-password: sets a new password for one account through the running API, which also signs the
+// account out everywhere. The password is typed twice on a terminal, read once from a pipe, or made up and printed.
+
 import { randomBytes } from 'node:crypto';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import type { ResetPasswordResult } from '../lib/user/reset-password';
