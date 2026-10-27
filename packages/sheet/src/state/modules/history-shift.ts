@@ -193,7 +193,7 @@ class Shifter {
     }
 
     private otherMatrix(matrix: CellMatrix): CellMatrix {
-        const shifted = matrix.map((row) => (row ? this.otherRow(row) : row));
+        const shifted = matrix.map((row) => this.otherRow(row));
         return shifted.every((row, i) => row === matrix[i]) ? matrix : shifted;
     }
 
