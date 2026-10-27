@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Added
+
+- **Outline in Docs** — **View → Show outline** lists the document's headings to the left of the page, and a click jumps to one. It stays shown or hidden in your browser from one document to the next. On a phone it opens from the **⋮** menu
+
 ### Fixed
 
 - **Excel files** — a row Excel shows at normal height comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
