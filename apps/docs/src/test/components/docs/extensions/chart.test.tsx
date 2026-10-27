@@ -10,6 +10,7 @@ const { act, createElement } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { Chart } = await import('../../../../components/docs/extensions/chart');
+const { PositionedFigures } = await import('../../../../components/docs/extensions/positioned-figure');
 const { commentAnchorText, nodeCommentCardId } = await import('../../../../components/docs/extensions/comment-mark');
 const { sampleChartParts } = await import('../../../fixtures/chart-parts');
 
@@ -27,6 +28,7 @@ async function mount({ attrs = {}, editable = true }: { attrs?: object; editable
         extensions: [
             ...getDocExtensions({ exclude: ['chart', 'comment'] }),
             Chart.configure({ onEditData: () => edits.push(editor.state.selection.from) }),
+            PositionedFigures,
         ],
         content: {
             type: 'doc',

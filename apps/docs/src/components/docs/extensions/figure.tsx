@@ -177,7 +177,7 @@ export const Figure = FigureNode.extend<FigureFrameOptions>({
             // With no width stored, the image draws at its own width, and a placeholder at the default.
             const drawn =
                 (figure instanceof Element && figure.querySelector('img')?.clientWidth) || FIGURE_DEFAULT_WIDTH;
-            return this.editor.commands.updateFigure({
+            return this.editor.commands.resizeFigure(selection.from, {
                 width: clampFigureWidth((selection.node.attrs.width || drawn) + delta, maxWidth),
             });
         };

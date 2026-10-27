@@ -35,6 +35,9 @@ declare module '@tiptap/core' {
             // The positioned figure at `pos` moved by `dx` and `dy` page px from where it draws now, on the paragraph
             // under it.
             moveFigure: (pos: number, travel: { dx: number; dy: number }) => ReturnType;
+            // The figure or chart at `pos` resized, with the offsets a west or north grip moved. One in front of or
+            // behind the text that grows past the paper's edge moves back onto it, as a drag keeps it there.
+            resizeFigure: (pos: number, attributes: FigureResize) => ReturnType;
         };
     }
 
@@ -42,6 +45,8 @@ declare module '@tiptap/core' {
         positionedFigures: PositionedFiguresOptions;
     }
 }
+
+type FigureResize = { width?: number; height?: number; offsetX?: number; offsetY?: number };
 
 type PositionedFiguresOptions = {
     // The page map in px: the paper a positioned figure stays on, never the column a screen lays out.
@@ -376,6 +381,27 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     const to = $anchor.start() + leadingRun($anchor.parent);
                     tr.insert(to, node.type.create({ ...node.attrs, ...offsets }, null, node.marks));
                     tr.setSelection(NodeSelection.create(tr.doc, to));
+                    return true;
+                },
+            resizeFigure:
+                (pos, attributes) =>
+                ({ tr, view, dispatch }) => {
+                    const node = tr.doc.nodeAt(pos);
+                    if (!node || !isFigureFrameNode(node.type.name)) return false;
+                    if (!dispatch) return true;
+                    const anchor = rectAt(view, tr.doc.resolve(pos).before());
+                    if (!isPositionedFigure(node) || !anchor) {
+                        setFigureAttributes(tr, pos, attributes);
+                        return true;
+                    }
+                    const scale = pageScale(view.dom);
+                    const { offsetX, offsetY } = { ...readFigureFrameAttrs(node.attrs), ...attributes };
+                    const box = {
+                        left: anchor.left + (offsetX ?? 0) * scale,
+                        top: anchor.top + (offsetY ?? 0) * scale,
+                        width: attributes.width ?? node.attrs.width ?? 0,
+                    };
+                    setFigureAttributes(tr, pos, { ...attributes, ...offsetsOnPaper(view, page(), box, anchor) });
                     return true;
                 },
         };

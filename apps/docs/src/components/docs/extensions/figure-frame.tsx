@@ -17,7 +17,6 @@ import {
     pxToMm,
     readFigureAttrs,
     readFigureFrameAttrs,
-    setFigureAttributes,
 } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui';
@@ -136,12 +135,8 @@ export function useFigureResize<T extends FigureSize>({
         (next: Box, start: Box) => {
             const size = fit(next, gestureMaxWidth.current);
             const offsets = shiftedOffsets(readFigureFrameAttrs(node.attrs), shiftOf(next, start, size));
-            editor.commands.command(({ tr }) => {
-                const pos = getPos();
-                if (pos === undefined) return false;
-                setFigureAttributes(tr, pos, { ...stored(size), ...offsets });
-                return true;
-            });
+            const pos = getPos();
+            if (pos !== undefined) editor.commands.resizeFigure(pos, { ...stored(size), ...offsets });
         },
         [editor, getPos, node.attrs, fit, stored],
     );

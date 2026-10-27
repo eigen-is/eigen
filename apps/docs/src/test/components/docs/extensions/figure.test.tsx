@@ -447,3 +447,14 @@ test('Shift and an arrow key resize a positioned figure up to the paper, not the
     await press(editor, 'ArrowRight');
     expect(editor.state.doc.nodeAt(4)?.attrs['width']).toBe(800);
 });
+
+// Its paragraph starts at the paper's x 100, so at x 490 a 200 px image ends 10 px short of the 800 px paper's edge.
+test('Shift and an arrow key that grow a positioned figure past the paper move it back on', async () => {
+    const { editor } = await mountPositioned(1, { offsetX: 490 });
+    await act(async () => {
+        editor.commands.setNodeSelection(4);
+    });
+    await press(editor, 'ArrowRight');
+    await press(editor, 'ArrowRight');
+    expect(editor.state.doc.nodeAt(4)?.attrs).toMatchObject({ width: 220, offsetX: 480 });
+});
