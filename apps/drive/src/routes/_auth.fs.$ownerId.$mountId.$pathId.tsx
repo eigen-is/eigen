@@ -151,6 +151,7 @@ function DriveRoute() {
                 currentPath={currentPath}
                 onRowSelect={onRowSelect}
                 onRowActivate={onRowActivate}
+                onOpenSharedWithMe={() => navigate({ to: '/shared/$to', params: { to: 'with-me' } })}
                 onBackToList={handleBackToList}
                 onAfterAction={handleAfterAction}
                 capabilities={capabilities}

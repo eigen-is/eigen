@@ -22,6 +22,7 @@ export type DriveLayoutProps = {
     currentPath?: DrivePath | null;
     onRowSelect: (path: DrivePath) => void;
     onRowActivate?: (path: DrivePath) => void;
+    onOpenSharedWithMe?: () => void;
     onBackToList: () => void;
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
     capabilities: DriveCapabilities;
@@ -41,6 +42,7 @@ export function DriveLayout({
     error,
     onRowSelect,
     onRowActivate,
+    onOpenSharedWithMe,
     onBackToList,
     onAfterAction,
     pathId,
@@ -113,6 +115,7 @@ export function DriveLayout({
             showBreadcrumb={capabilities.showBreadcrumb}
             title={title}
             onRowActivate={onRowActivate}
+            onOpenSharedWithMe={onOpenSharedWithMe}
             onCreateFolder={actions.onCreateFolder}
             onUploadFile={actions.onUploadFile}
             onCreateEigenDoc={actions.onCreateEigenDoc}

@@ -2,7 +2,6 @@
 // and context menus, and DriveListToolbar draws the crumb row or title above it with the view controls.
 // DriveLayout mounts both, for example in Drive's folder view and in the document apps' lists.
 
-import { useNavigate } from '@tanstack/react-router';
 import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
@@ -150,6 +149,8 @@ type DriveListToolbarProps = CreateCallbacks & {
     showBreadcrumb?: boolean;
     title?: string;
     onRowActivate?: (path: DrivePath) => void;
+    // Set by an app that has a Shared with me page; without it the crumb is plain text.
+    onOpenSharedWithMe?: () => void;
 };
 
 export function DriveListToolbar({
@@ -159,6 +160,7 @@ export function DriveListToolbar({
     showBreadcrumb = true,
     title,
     onRowActivate,
+    onOpenSharedWithMe,
     onCreateFolder,
     onUploadFile,
     onCreateEigenDoc,
@@ -167,15 +169,8 @@ export function DriveListToolbar({
     const mountLabel = useMountLabel(ownerId, mountId);
     const { isMobile } = useLayout();
 
-    const navigate = useNavigate();
-
     const handleBreadcrumbClick = (path: DrivePath) => {
         onRowActivate?.(path);
-    };
-
-    // The crumb row shows only in Drive's folder view, so Drive's Shared with me page is its target.
-    const handleOpenSharedWithMe = () => {
-        navigate({ to: '/shared/$to', params: { to: 'with-me' } });
     };
 
     const createItems = getCreateMenuItems({ onCreateFolder, onUploadFile, onCreateEigenDoc });
@@ -212,7 +207,7 @@ export function DriveListToolbar({
                     paths={breadcrumbPaths}
                     mountLabel={mountLabel}
                     onNavigate={handleBreadcrumbClick}
-                    onOpenSharedWithMe={handleOpenSharedWithMe}
+                    onOpenSharedWithMe={onOpenSharedWithMe}
                     itemClassName="flex items-center"
                 />
             ) : title ? (
