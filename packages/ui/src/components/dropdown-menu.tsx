@@ -24,7 +24,8 @@ import {
 // ('back', on push) or the sub-trigger a pop returned to ('trigger', on pop).
 type FocusTarget = { id: string; role: 'back' | 'trigger' };
 
-// Mobile drill-in state, provided by the root so it survives forceMount close; null on desktop.
+// Mobile drill-in state, provided by a DropdownMenu's root so it survives forceMount close, or by MenuRows inside a
+// bar menu's content; null on desktop.
 type MobileMenuState = {
     stack: string[];
     activePage: string | null;
