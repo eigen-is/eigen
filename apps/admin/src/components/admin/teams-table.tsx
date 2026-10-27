@@ -6,7 +6,7 @@ import { formatDate } from '@workspace/lib/date';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { SortDir } from '@workspace/ui';
-import { EmptyState, nextSortDir, SearchBar, SortHeader, TooltipButton } from '@workspace/ui';
+import { EmptyState, nextSortDir, SearchBar, SortHeader, SortHeaderRow, TooltipButton } from '@workspace/ui';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus } from 'lucide-react';
@@ -77,12 +77,12 @@ export function AdminTeamsTable({ teams, searchQuery, activeTeamId, onRowClick }
     }, [teams, searchQuery, sort]);
 
     if (visible.length === 0) {
-        return <EmptyState message={searchQuery ? 'No teams match your search.' : 'No teams yet'} />;
+        return <EmptyState message={searchQuery ? 'No teams match your search.' : 'No teams yet.'} />;
     }
 
     return (
         <div className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none">
-            <div className={cn('grid border-b app-gutter-x sticky top-0 z-10 bg-background', gridCols)}>
+            <SortHeaderRow className={gridCols}>
                 <SortHeader
                     label="Name"
                     active={sort.col === 'name'}
@@ -97,7 +97,7 @@ export function AdminTeamsTable({ teams, searchQuery, activeTeamId, onRowClick }
                     onClick={() => handleSort('created')}
                     className={cn('pr-2', createdVisibility)}
                 />
-            </div>
+            </SortHeaderRow>
 
             {visible.map((team) => (
                 <button

@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2030 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2031 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (186)
+## Components (187)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -65,6 +65,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SidebarPrimaryButton` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-primary-button.tsx |
 | `SidebarSection` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-section.tsx |
 | `SortHeader` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
+| `SortHeaderRow` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `Toolbar` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar.tsx |
 | `ToolbarMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-menu.tsx |
 | `ToolbarSeparator` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-separator.tsx |
@@ -240,7 +241,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | Name | Import from | File |
 |------|-------------|------|
 | `useAcceptWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
-| `useAddTeamMember` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
+| `useAddTeamMembers` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useAdminGuests` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-users.ts |
 | `useAdminUserList` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-user-list.ts |
 | `useAdminUsersUsage` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-user-list.ts |
