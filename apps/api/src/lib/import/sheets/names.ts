@@ -24,12 +24,18 @@ export function nameInliner(
     if (names.length === 0) return (formula) => formula;
     // Excel compares names and sheet names without case. The first name of a key wins.
     const defined = new Map<string, DefinedName>();
+    const spellings = new Set<string>();
     for (const name of names) {
         const key = nameKey(name.name, name.sheet);
         if (!defined.has(key)) defined.set(key, name);
+        spellings.add(name.name.toLowerCase());
     }
-    // One search finds whether a formula holds any name, so the formulas that hold none are not walked.
-    const anyName = new RegExp(names.map(({ name }) => RegExp.escape(name)).join('|'), 'iu');
+    // A formula is walked only when one of its tokens is spelled as a name. So a defined name costs a formula that
+    // doesn't use it one scan, however many names the workbook holds.
+    const usesName = (formula: string) => {
+        for (const [token] of formula.matchAll(TOKEN)) if (spellings.has(token.toLowerCase())) return true;
+        return false;
+    };
     // A bare name is the sheet's own before the workbook's. A name qualified with a sheet is that sheet's only.
     const find = (written: string, qualified: string | undefined, sheet: string) =>
         qualified === undefined
@@ -60,7 +66,7 @@ export function nameInliner(
         return result;
     };
     return (formula, sheet) => {
-        if (!anyName.test(formula)) return formula;
+        if (!usesName(formula)) return formula;
         charge(formula.length);
         const used = new Set<DefinedName>();
         const text = inlineNames(formula, (written, qualified) => {
@@ -76,6 +82,11 @@ export function nameInliner(
         return formula;
     };
 }
+
+// The walker ends a name at a space, a parenthesis, a quote, a comma, an operator, a sheet's `!` and a range's `:`. A
+// token ends at each of them too, so every name the walker would inline is a token. A word in a string or a sheet's
+// name is a token as well, which costs only a walk that inlines nothing.
+const TOKEN = /[^\s"'(),&!:=<>+\-*/%^]+/gu;
 
 function nameKey(name: string, sheet: string | undefined): string {
     return `${sheet?.toLowerCase() ?? ''}!${name.toLowerCase()}`;
