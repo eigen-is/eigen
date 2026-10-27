@@ -78,7 +78,6 @@ class TableOfContentsView implements NodeView {
             if (level > levels) return [];
             const line = document.createElement('a');
             line.setAttribute('data-level', String(level));
-            line.className = 'cursor-pointer hover:underline';
             line.textContent = text;
             // A press would select the node; the jump puts the caret in the heading instead.
             line.addEventListener('mousedown', (event) => {

@@ -274,9 +274,17 @@
         margin: 1em 0;
     }
 
+    /* An entry is body text, not a link's look, until the pointer is on it */
     nav[data-type="table-of-contents"] > [data-level] {
         display: block;
         padding: 0.15em 0;
+        color: inherit;
+        text-decoration: none;
+    }
+
+    nav[data-type="table-of-contents"] > a[data-level]:hover {
+        text-decoration: underline;
+        cursor: pointer;
     }
 
     nav[data-type="table-of-contents"] > [data-level="2"] {
