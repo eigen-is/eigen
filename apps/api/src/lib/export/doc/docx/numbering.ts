@@ -3,7 +3,7 @@
 // numbering.xml from what they recorded.
 
 import type { JSONContent } from '@tiptap/core';
-import { BLOCK_MARGINS, proseTwips } from '../../../document/looks';
+import { BLOCK_MARGINS, LIST_LEVEL, proseTwips } from '../../../document/looks';
 import { W_NS } from '../../../ooxml/ooxml';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, SINGLE_LINE } from '../../../ooxml/wordml';
 import type { Context, Package } from './package';
@@ -14,8 +14,6 @@ import { rPrXml } from './runs';
 export type List = { format: string; start: number; base: number };
 
 export const CLEAR_FLOATS = '<w:r><w:br w:type="textWrapping" w:clear="all"/></w:r>';
-
-export const LIST_LEVEL = proseTwips('.eigen-prose ul', 'padding-left');
 
 // Only an outermost list's last paragraph takes the list's margin; a task list and an empty one number nothing.
 export function listOf(
@@ -37,7 +35,7 @@ export function listOf(
               }
             : undefined;
     const items = { ...context, list, orderedListsAround: context.orderedListsAround + (tag === 'ol' ? 1 : 0) };
-    const blocks = blocksOf(content, textProps({}, items), items, false);
+    const blocks = blocksOf(content, textProps({}, items), items);
     if (context.depth > 0) return blocks;
     const runsOn = tag === 'ol' && context.next === 'orderedList';
     return withAfter(
@@ -63,15 +61,16 @@ export function itemOf(
     after: number,
     open: (first: Paragraph, inner: Context) => Paragraph,
 ): Block[] {
-    const inner = {
+    const inner: Context = {
         ...context,
         indent: itemIndent(context),
         depth: context.depth + 1,
         after,
         list: undefined,
+        numbered: true,
     };
     const props = textProps({}, inner);
-    const blocks = blocksOf(node.content ?? [], props, inner, false);
+    const blocks = blocksOf(node.content ?? [], props, inner);
     // The first block past the floats takes the number, or an empty holder above it when it is no plain paragraph.
     const found = blocks.findIndex((block) => !('float' in block));
     const index = found === -1 ? blocks.length : found;

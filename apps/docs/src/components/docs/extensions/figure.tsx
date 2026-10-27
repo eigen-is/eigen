@@ -23,12 +23,12 @@ const FIGURE_RESIZE_KEYS = Object.keys(FIGURE_RESIZE_STEPS)
     .map((key) => `Shift+${key}`)
     .join(' ');
 
-const fitFigureWidth = (next: Box, maxWidth: number) => clampFigureWidth(next.width, maxWidth);
+// A picture keeps its width alone, as its height follows the image's own ratio.
+const storedWidth = ({ width }: { width: number }) => ({ width });
 
 function FigureView(props: NodeViewProps) {
     const { node, selected, editor, getPos } = props;
     const imageRef = useRef<HTMLImageElement>(null);
-    const containerRef = useRef<HTMLSpanElement>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
     const [failedSrc, setFailedSrc] = useState<string | null>(null);
     const imageProcessed = useRef(false);
@@ -60,9 +60,20 @@ function FigureView(props: NodeViewProps) {
         setAspectRatio(null);
     }, [mediaName]);
 
-    const getMaxWidth = useCallback(() => figureMaxWidth(containerRef.current, layout), [layout]);
-    const commitWidth = useCallback((next: number) => setAttributes({ width: next }), [setAttributes]);
-    const resize = useFigureResize({ getMaxWidth, fit: fitFigureWidth, commit: commitWidth });
+    const getMaxWidth = useCallback(() => figureMaxWidth(editor, layout), [editor, layout]);
+    // The height follows the width at the image's own ratio, which a box exists only once it is known. A box whose top
+    // stopped at the paper's caps the width too.
+    const fitWidth = useCallback(
+        (next: Box, maxWidth: number) => {
+            const fitted = clampFigureWidth(
+                aspectRatio ? Math.min(next.width, next.height * aspectRatio) : next.width,
+                maxWidth,
+            );
+            return { width: fitted, height: aspectRatio ? fitted / aspectRatio : next.height };
+        },
+        [aspectRatio],
+    );
+    const resize = useFigureResize({ editor, getPos, node, getMaxWidth, fit: fitWidth, stored: storedWidth });
 
     const handleImageLoad = useCallback(() => {
         if (!imageRef.current || imageProcessed.current) return;
@@ -101,7 +112,7 @@ function FigureView(props: NodeViewProps) {
         });
     }, [getMaxWidth, node.attrs.width, setAttributes]);
 
-    const displayWidth = resize.preview ?? width;
+    const displayWidth = resize.preview?.size.width ?? width;
     // A picture no browser draws (WMF, EMF) shows its alt text, which a small width squeezes, so its box takes 10rem,
     // or all its container gives: a fixed minimum would push a narrow table cell wider. The wrapper takes it too, as a
     // wrapped figure floats and shrinks to fit. With no alt text the image would draw 0 px tall, so it keeps a line.
@@ -117,8 +128,8 @@ function FigureView(props: NodeViewProps) {
     return (
         <FigureFrame
             {...props}
-            containerRef={containerRef}
             box={box}
+            shift={resize.preview?.shift}
             resizeMode="aspect"
             onTransform={resize.onTransform}
             onCommit={resize.onCommit}
@@ -166,11 +177,11 @@ export const Figure = FigureNode.extend<FigureFrameOptions>({
             )
                 return false;
             const figure = this.editor.view.nodeDOM(selection.from);
-            const maxWidth = figureMaxWidth(figure, selection.node.attrs.layout);
+            const maxWidth = figureMaxWidth(this.editor, selection.node.attrs.layout);
             // With no width stored, the image draws at its own width, and a placeholder at the default.
             const drawn =
                 (figure instanceof Element && figure.querySelector('img')?.clientWidth) || FIGURE_DEFAULT_WIDTH;
-            return this.editor.commands.updateFigure({
+            return this.editor.commands.resizeFigure(selection.from, {
                 width: clampFigureWidth((selection.node.attrs.width || drawn) + delta, maxWidth),
             });
         };

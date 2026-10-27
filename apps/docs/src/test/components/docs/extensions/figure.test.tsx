@@ -12,8 +12,9 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
-const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { Figure } = await import('../../../../components/docs/extensions/figure');
+const { PositionedFigures } = await import('../../../../components/docs/extensions/positioned-figure');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -26,7 +27,18 @@ const text = (t: string) => ({ type: 'text', text: t });
 // on a page whose text column is 600 px.
 async function mount(content: object[] = [paragraph(text('a'), figure, text('b'))]) {
     const editor = new Editor({
-        extensions: [...getDocExtensions({ exclude: ['figure', 'comment'] }), Figure],
+        extensions: [
+            ...getDocExtensions({ exclude: ['figure', 'comment'] }),
+            Figure,
+            // An 800 px paper with 100 px margins.
+            PositionedFigures.configure({
+                page: () => ({
+                    ...DEFAULT_PAGE_SETUP,
+                    width: 800,
+                    margin: { top: 100, right: 100, bottom: 100, left: 100 },
+                }),
+            }),
+        ],
         content: { type: 'doc', content },
     });
     const rendered = await renderInDocument(
@@ -184,8 +196,9 @@ test.each([
     await act(async () => {
         img.dispatchEvent(new Event('load'));
     });
-    Object.defineProperty(box, 'offsetWidth', { value: 600 });
-    box.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 0, width: 600 * scale, height: 100 * scale });
+    Object.defineProperty(editor.view.dom, 'offsetWidth', { value: 600 });
+    editor.view.dom.getBoundingClientRect = () =>
+        DOMRect.fromRect({ x: 0, y: 0, width: 600 * scale, height: 100 * scale });
 
     const grip = box.querySelectorAll('.eigen-selection-handle')[3];
     if (!grip) throw new Error('no south-east grip');
@@ -285,4 +298,186 @@ test('Shift and an arrow key leave a text selection of a figure to the browser',
 
     await press(editor, 'ArrowRight');
     expect(widthAt2(editor)).toBe(200);
+});
+
+// A figure in front of or behind the text: "a" at 1, the figure leading the second paragraph at 4, "b" at 5.
+const positioned = (attrs: object = {}) => [
+    paragraph(text('a')),
+    paragraph(
+        { ...figure, attrs: { ...figure.attrs, layout: 'front', offsetX: 30, offsetY: 40, ...attrs } },
+        text('b'),
+    ),
+];
+
+// The page drawn at `scale`: the column from x 100, the first paragraph from y 100 and the second from y 120, the
+// image 200 by 100 page px at its offsets.
+async function mountPositioned(scale = 1, attrs: object = {}) {
+    const mounted = await mount(positioned(attrs));
+    const { editor, box } = mounted;
+    const at = (element: Element | null | undefined, x: number, y: number, width: number, height: number) => {
+        if (element) element.getBoundingClientRect = () => DOMRect.fromRect({ x, y, width, height });
+    };
+    Object.defineProperty(editor.view.dom, 'offsetWidth', { value: 600 });
+    at(editor.view.dom, 100, 100, 600 * scale, 300 * scale);
+    const first = editor.view.nodeDOM(0);
+    at(first instanceof Element ? first : null, 100, 100, 600 * scale, 20 * scale);
+    const second = editor.view.nodeDOM(3);
+    at(second instanceof Element ? second : null, 100, 100 + 20 * scale, 600 * scale, 20 * scale);
+    for (const element of [box, box.firstElementChild])
+        at(element, 100 + 30 * scale, 100 + 60 * scale, 200 * scale, 100 * scale);
+    const img = box.querySelector('img');
+    if (!img) throw new Error('no img');
+    Object.defineProperties(img, { naturalWidth: { value: 400 }, naturalHeight: { value: 200 } });
+    await act(async () => {
+        img.dispatchEvent(new Event('load'));
+    });
+    return mounted;
+}
+
+const pointer = (target: EventTarget, type: string, clientX: number, clientY: number) =>
+    act(async () => {
+        target.dispatchEvent(
+            new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, button: 0, clientX, clientY }),
+        );
+    });
+
+test("a positioned figure's wrapper is its box at its offsets, which the browser's drag and drop never moves", async () => {
+    const { box } = await mount(positioned());
+    expect(box.style.left).toBe('30px');
+    expect(box.style.top).toBe('40px');
+    expect(box.style.width).toBe('200px');
+    expect(box.hasAttribute('data-drag-handle')).toBe(false);
+    expect(box.getAttribute('draggable')).not.toBe('true');
+});
+
+test('a selected positioned figure draws its grips in a sibling above both layers, at its place', async () => {
+    const { editor, box } = await mountPositioned();
+    await act(async () => {
+        editor.commands.setNodeSelection(4);
+    });
+    const chrome = box.nextElementSibling;
+    if (!(chrome instanceof HTMLElement)) throw new Error('no chrome');
+    expect(chrome.className).toContain('z-2');
+    expect(chrome.style.left).toBe('30px');
+    expect(chrome.querySelectorAll('.eigen-selection-handle').length).toBeGreaterThan(0);
+    expect(box.querySelectorAll('.eigen-selection-handle').length).toBe(0);
+});
+
+// The drag's screen travel divides by the page's scale, and the drop writes once.
+test.each([
+    [1, 80, 60],
+    [0.5, 130, 80],
+])('a drag of 50 by 20 screen px on a page drawn at %p moves the figure to %d, %d', async (scale, offsetX, offsetY) => {
+    const { editor, box } = await mountPositioned(scale);
+    await act(async () => {
+        editor.commands.setNodeSelection(4);
+    });
+    const chrome = box.nextElementSibling;
+    if (!chrome) throw new Error('no chrome');
+    await pointer(chrome, 'pointerdown', 200, 200);
+    await pointer(document, 'pointermove', 250, 220);
+    expect(box.style.left).toBe(`${30 + 50 / scale}px`);
+    expect(editor.state.doc.nodeAt(4)?.attrs['offsetX']).toBe(30);
+    await pointer(document, 'pointerup', 250, 220);
+    expect(editor.state.doc.nodeAt(4)?.attrs).toMatchObject({ offsetX, offsetY });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 4 });
+});
+
+// The page scrolls 100 px under the pointer mid-drag: the preview moves with its paragraph, and so does the drop.
+test('a drop lands where the preview draws it, though the page scrolled during the drag', async () => {
+    const { editor, box } = await mountPositioned();
+    await act(async () => {
+        editor.commands.setNodeSelection(4);
+    });
+    const chrome = box.nextElementSibling;
+    if (!chrome) throw new Error('no chrome');
+    await pointer(chrome, 'pointerdown', 200, 200);
+    await pointer(document, 'pointermove', 250, 220);
+    for (const element of [editor.view.dom, editor.view.nodeDOM(0), editor.view.nodeDOM(3), box, box.firstElementChild])
+        if (element instanceof Element) {
+            const { x, y, width, height } = element.getBoundingClientRect();
+            element.getBoundingClientRect = () => DOMRect.fromRect({ x, y: y - 100, width, height });
+        }
+    await pointer(document, 'pointerup', 250, 220);
+    expect(editor.state.doc.nodeAt(4)?.attrs).toMatchObject({ offsetX: 80, offsetY: 60 });
+});
+
+test('a press on a front figure that is not selected selects it, and the same gesture drags it', async () => {
+    const { editor, box } = await mountPositioned();
+    await pointer(box.querySelector('img') ?? box, 'pointerdown', 200, 200);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 4 });
+    await pointer(document, 'pointermove', 210, 200);
+    await pointer(document, 'pointerup', 210, 200);
+    expect(editor.state.doc.nodeAt(4)?.attrs['offsetX']).toBe(40);
+});
+
+test('Escape drops a drag in progress', async () => {
+    const { editor, box } = await mountPositioned();
+    await pointer(box, 'pointerdown', 200, 200);
+    await pointer(document, 'pointermove', 250, 200);
+    await act(async () => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await pointer(document, 'pointerup', 250, 200);
+    expect(box.style.left).toBe('30px');
+    expect(editor.state.doc.nodeAt(4)?.attrs['offsetX']).toBe(30);
+});
+
+// The north-west grip keeps the bottom right corner where it is, so the offsets follow the size.
+test('a north-west grip that grows a positioned figure moves its offsets by the growth', async () => {
+    const { editor, box } = await mountPositioned();
+    await act(async () => {
+        editor.commands.setNodeSelection(4);
+    });
+    const grip = box.nextElementSibling?.querySelector('.eigen-selection-handle');
+    if (!grip) throw new Error('no north-west grip');
+    Object.defineProperty(grip, 'setPointerCapture', { value: () => {} });
+    await pointer(grip, 'pointerdown', 130, 160);
+    await pointer(document, 'pointermove', 80, 135);
+    await pointer(document, 'pointerup', 80, 135);
+    expect(editor.state.doc.nodeAt(4)?.attrs).toMatchObject({ width: 250, offsetX: -20, offsetY: 15 });
+});
+
+// Its paragraph starts at the paper's x 100: at -80 the image has 20 px of paper to its west, at 490 10 px to its east.
+// A grip grows it no further, so the opposite edge stays put in the preview and in the commit alike.
+test.each([
+    ['north-west', 0, -80, -50, 220, -100, 30],
+    ['south-east', 3, 490, 50, 210, 490, 40],
+])(
+    'a %s grip that would grow a positioned figure past the paper stops at its edge',
+    async (_grip, index, offsetX, dx, width, x, y) => {
+        const { editor, box } = await mountPositioned(1, { offsetX });
+        await act(async () => {
+            editor.commands.setNodeSelection(4);
+        });
+        const grip = box.nextElementSibling?.querySelectorAll('.eigen-selection-handle')[index];
+        if (!grip) throw new Error('no grip');
+        Object.defineProperty(grip, 'setPointerCapture', { value: () => {} });
+        await pointer(grip, 'pointerdown', 200, 200);
+        await pointer(document, 'pointermove', 200 + dx, 200 + dx / 2);
+        expect({ left: box.style.left, width: box.style.width }).toEqual({ left: `${x}px`, width: `${width}px` });
+        await pointer(document, 'pointerup', 200 + dx, 200 + dx / 2);
+        expect(editor.state.doc.nodeAt(4)?.attrs).toMatchObject({ width, offsetX: x, offsetY: y });
+    },
+);
+
+test('Shift and an arrow key resize a positioned figure up to the paper, not the column', async () => {
+    const { editor } = await mount(positioned({ width: 795 }));
+    await act(async () => {
+        editor.commands.setNodeSelection(4);
+    });
+    await press(editor, 'ArrowRight');
+    await press(editor, 'ArrowRight');
+    expect(editor.state.doc.nodeAt(4)?.attrs['width']).toBe(800);
+});
+
+// Its paragraph starts at the paper's x 100, so at x 490 a 200 px image ends 10 px short of the 800 px paper's edge.
+test('Shift and an arrow key that grow a positioned figure past the paper move it back on', async () => {
+    const { editor } = await mountPositioned(1, { offsetX: 490 });
+    await act(async () => {
+        editor.commands.setNodeSelection(4);
+    });
+    await press(editor, 'ArrowRight');
+    await press(editor, 'ArrowRight');
+    expect(editor.state.doc.nodeAt(4)?.attrs).toMatchObject({ width: 220, offsetX: 480 });
 });

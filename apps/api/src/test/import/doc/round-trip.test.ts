@@ -928,15 +928,18 @@ describe("the all-features doc's Google Docs re-save", () => {
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
-        // The recording predates the title, the subtitle, the note's paragraph, the equations' paragraph and the page
-        // number, so it holds none of them, and its export wrote no chart.
+        // The recording predates the title, the subtitle, the note's paragraph, the equations' paragraph, the page
+        // number and the figures in front of and behind the text, so it holds none of them, and its export wrote no
+        // chart.
         source.content = source.content
             .filter(
                 (block: JSONContent) =>
                     block.type !== 'title' &&
                     block.type !== 'subtitle' &&
-                    !block.content?.some((inline: JSONContent) =>
-                        ['pageNumber', 'equation', 'footnote'].includes(inline.type ?? ''),
+                    !block.content?.some(
+                        (inline: JSONContent) =>
+                            ['pageNumber', 'equation', 'footnote'].includes(inline.type ?? '') ||
+                            ['front', 'behind'].includes(inline.attrs?.['layout']),
                     ),
             )
             .map((block: JSONContent) => ({
@@ -1352,6 +1355,162 @@ describe('a Word file, imported, written and imported again', () => {
             null,
         ]);
         expect(stored(second.json)).toEqual(stored(first.json));
+    });
+});
+
+// The writer places a positioned figure from the text column and the paragraph's first line, and the reader places it
+// back from the paragraph's box, so each comes back where Eigen drew it (J1 § 9).
+describe('a figure in front of or behind the text', () => {
+    const media = [
+        { name: 'a.png', contentType: 'image/png', data: toTransferableText('png'), width: 400, height: 300 },
+    ];
+    const spaced = { ...DEFAULT_NORMAL_STYLE, spaceBefore: 6 };
+    const figure = (layout: string, offsetX: number, offsetY: number): JSONContent => ({
+        type: 'figure',
+        attrs: { mediaName: 'a.png', width: 120, layout, offsetX, offsetY },
+    });
+    const text = (value: string): JSONContent => ({ type: 'text', text: value });
+    const p = (attrs: Record<string, unknown>, ...content: JSONContent[]): JSONContent => ({
+        type: 'paragraph',
+        attrs,
+        content,
+    });
+    const heading = (attrs: Record<string, unknown>, ...content: JSONContent[]): JSONContent => ({
+        type: 'heading',
+        attrs: { level: 2, ...attrs },
+        content,
+    });
+    const front = figure('front', 40, 12);
+    const behind = figure('behind', -30, -8);
+    // Each positioned node's kind, layer and offsets, in document order.
+    const placesOf = (json: JSONContent) => {
+        const places: unknown[][] = [];
+        const walk = (node: JSONContent) => {
+            const layout = node.attrs?.['layout'];
+            if ((node.type === 'figure' || node.type === 'chart') && (layout === 'front' || layout === 'behind'))
+                places.push([node.type, layout, node.attrs?.['offsetX'], node.attrs?.['offsetY']]);
+            for (const child of node.content ?? []) walk(child);
+        };
+        walk(json);
+        return places;
+    };
+    // An offset within 1 px of the source's reads as the source's.
+    const near = (places: unknown[][], source: unknown[][]) =>
+        places.map((place, index) =>
+            place.map((value, at) => {
+                const expected = source[index]?.[at];
+                return typeof value === 'number' && typeof expected === 'number' && Math.abs(value - expected) <= 1
+                    ? expected
+                    : value;
+            }),
+        );
+
+    test.each<[string, JSONContent[], typeof DEFAULT_NORMAL_STYLE]>([
+        ['each layer in a plain paragraph', [p({}, front, behind, text('Text over and under'))], DEFAULT_NORMAL_STYLE],
+        ['an anchor-only paragraph', [p({}, text('Above')), p({}, behind)], DEFAULT_NORMAL_STYLE],
+        ['an indented paragraph', [p({ indentLeft: 36 }, front, text('Indented'))], DEFAULT_NORMAL_STYLE],
+        [
+            'a list, under a Normal with space before',
+            [
+                {
+                    type: 'bulletList',
+                    content: [
+                        { type: 'listItem', content: [p({}, text('One'))] },
+                        {
+                            type: 'listItem',
+                            content: [
+                                p({}, front, text('Two')),
+                                {
+                                    type: 'bulletList',
+                                    content: [{ type: 'listItem', content: [p({}, behind, text('Nested'))] }],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+            spaced,
+        ],
+        [
+            'an indented list paragraph',
+            [
+                {
+                    type: 'bulletList',
+                    content: [{ type: 'listItem', content: [p({ indentLeft: 36 }, front, text('Indented item'))] }],
+                },
+            ],
+            DEFAULT_NORMAL_STYLE,
+        ],
+        [
+            'a quote, under a Normal with space before',
+            [{ type: 'blockquote', content: [p({}, text('Quoted')), p({}, behind, text('On'))] }],
+            spaced,
+        ],
+        [
+            'after a heading, and in one with space before',
+            [
+                heading({}, text('Plain')),
+                p({}, front, text('After')),
+                heading({ spaceBefore: 12 }, behind, text('Spaced')),
+            ],
+            DEFAULT_NORMAL_STYLE,
+        ],
+        ['a paragraph with its own space before', [p({}, text('x')), p({ spaceBefore: 18 }, front, text('y'))], spaced],
+        [
+            'the Normal space before, after a table',
+            [
+                {
+                    type: 'table',
+                    content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [p({}, text('Cell'))] }] }],
+                },
+                p({}, front, text('Under')),
+            ],
+            spaced,
+        ],
+        [
+            'a chart in front',
+            [
+                p(
+                    {},
+                    {
+                        type: 'chart',
+                        attrs: {
+                            ...sampleChartParts('column'),
+                            width: 300,
+                            height: 200,
+                            layout: 'front',
+                            offsetX: 200,
+                            offsetY: -20,
+                        },
+                    },
+                    text('Over'),
+                ),
+            ],
+            DEFAULT_NORMAL_STYLE,
+        ],
+    ])('in %s comes back within 1 px, in document order', (_case, content, normal) => {
+        const source = { type: 'doc', content };
+        const docx = writeDocx(
+            { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: normal },
+            { title: 'Positioned', media, lost: () => {} },
+        );
+        const { json } = docxToPmJson(Buffer.from(docx));
+        const expected = placesOf(source);
+        expect(expected.length).toBeGreaterThan(0);
+        expect(near(placesOf(json), expected)).toEqual(expected);
+    });
+
+    test('a positioned figure leads its paragraph and keeps its text, the paragraph its kind', () => {
+        const source = { type: 'doc', content: [heading({}, front, text('Heading')), p({}, behind)] };
+        const docx = writeDocx(
+            { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+            { title: 'Positioned', media, lost: () => {} },
+        );
+        const { json } = docxToPmJson(Buffer.from(docx));
+        expect(json.content?.map((node) => [node.type, node.content?.map((child) => child.type)])).toEqual([
+            ['heading', ['figure', 'text']],
+            ['paragraph', ['figure']],
+        ]);
     });
 });
 

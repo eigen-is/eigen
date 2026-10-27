@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
-import { CAPTION_LOOK } from '../../../lib/document/looks';
+import { CAPTION_LOOK, LIST_LEVEL } from '../../../lib/document/looks';
 import { docxToPmJson, readDocx } from '../../../lib/import/doc/from-docx';
 import { MAX_MEDIA_PARTS, PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
 import { C_NS } from '../../../lib/ooxml/ooxml';
@@ -263,6 +263,195 @@ describe('placement', () => {
                 '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="720" w:bottom="1440" w:left="4000"/></w:sectPr>',
         );
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['layout'])).toEqual([layout]);
+    });
+
+    // In front of or behind the text: the offsets from the anchor paragraph's box, which Word gives from the text column
+    // and the paragraph. The golden package's page is Word's default, A4 with 1 in margins: the column starts 96 px in
+    // and is 9026 twips wide.
+    describe('in front of and behind the text', () => {
+        const EMU = 9525;
+        const placed = (inner: string, attrs = '') =>
+            GOLDEN_DOCX_IMAGE_RUN.replace('<wp:inline>', `<wp:anchor${attrs}>${inner}`).replace(
+                '</wp:inline>',
+                '</wp:anchor>',
+            );
+        const at = (x: number, y: number, h = 'column', v = 'paragraph') =>
+            `<wp:positionH relativeFrom="${h}"><wp:posOffset>${x * EMU}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="${v}"><wp:posOffset>${y * EMU}</wp:posOffset></wp:positionV>`;
+        const front = (x = 100, y = 20, attrs = '') => placed(`${at(x, y)}<wp:wrapNone/>`, attrs);
+        const placesOf = (json: JSONContent) =>
+            [...nodesOfType(json, 'figure'), ...nodesOfType(json, 'chart')].map((node) => [
+                node.attrs?.['layout'],
+                node.attrs?.['offsetX'],
+                node.attrs?.['offsetY'],
+            ]);
+        const text = (value: string) => `<w:r><w:t xml:space="preserve">${value}</w:t></w:r>`;
+
+        test('wrapNone is in front of the text, behindDoc behind it, each at its offsets in px', async () => {
+            const { json } = await importDocxBody(
+                paragraph(`${front()}${text('Over it')}`) +
+                    paragraph(`${front(-30, -5, ' behindDoc="1"')}${text('x')}`),
+            );
+            expect(placesOf(json)).toEqual([
+                ['front', 100, 20],
+                ['behind', -30, -5],
+            ]);
+        });
+
+        // A page-relative offset counts from the paper's edge, 96 px left of the column; an aligned one sits where the
+        // alignment puts it in its area, the 40 px picture centred in the 601.7 px column.
+        test('a horizontal offset from another area or an alignment is an offset from the text column', async () => {
+            const centred =
+                '<wp:positionH relativeFrom="column"><wp:align>center</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapNone/>';
+            const right =
+                '<wp:positionH relativeFrom="page"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapNone/>';
+            const { json } = await importDocxBody(
+                paragraph(placed(`${at(0, 0, 'page')}<wp:wrapNone/>`)) +
+                    paragraph(placed(centred)) +
+                    paragraph(placed(right)),
+            );
+            expect(placesOf(json)).toEqual([
+                ['front', -96, 0],
+                ['front', 281, 0],
+                ['front', 658, 0],
+            ]);
+        });
+
+        test('a vertical offset from the page or the margin, an aligned one or a simple position is 0', async () => {
+            const aligned =
+                '<wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:align>top</wp:align></wp:positionV><wp:wrapNone/>';
+            const { json } = await importDocxBody(
+                [
+                    placed(`${at(0, 300, 'column', 'page')}<wp:wrapNone/>`),
+                    placed(`${at(0, 300, 'column', 'margin')}<wp:wrapNone/>`),
+                    placed(aligned),
+                    placed(`<wp:simplePos x="0" y="0"/>${at(0, 300)}<wp:wrapNone/>`, ' simplePos="1"'),
+                ]
+                    .map((run) => paragraph(`${run}${text('x')}`))
+                    .join(''),
+            );
+            expect(placesOf(json).map(([, , y]) => y)).toEqual([0, 0, 0, 0]);
+        });
+
+        test('its width caps at the paper, a block one at the column', async () => {
+            const wide = (run: string) => run.replaceAll('cx="381000"', `cx="${1000 * EMU}"`);
+            const { json } = await importDocxBody(paragraph(wide(front())) + paragraph(wide(GOLDEN_DOCX_IMAGE_RUN)));
+            expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['width'])).toEqual([793, 601]);
+        });
+
+        test('in a table cell or a note it is a block, where a wrapped one stays wrapped', async () => {
+            const square = placed(`${at(400, 0)}<wp:wrapSquare wrapText="bothSides"/>`);
+            const cell = (run: string) =>
+                `<w:tbl><w:tr><w:tc><w:p>${run}${text('In a cell')}</w:p></w:tc></w:tr></w:tbl>`;
+            const namespaced = front().replace(
+                '<w:drawing>',
+                '<w:drawing xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+            );
+            const { json } = await importDocxBody(
+                `${cell(front())}${cell(square)}${paragraph(`${text('Noted')}<w:r><w:footnoteReference w:id="1"/></w:r>`)}`,
+                {
+                    footnotes: `<w:footnote w:id="1"><w:p>${namespaced}${text('In a note')}</w:p></w:footnote>`,
+                    media: {
+                        'word/media/pixel.png': new Uint8Array(),
+                        'word/_rels/footnotes.xml.rels': new TextEncoder().encode(
+                            `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId4" Type="${IMAGE_REL}" Target="media/pixel.png"/></Relationships>`,
+                        ),
+                    },
+                },
+            );
+            expect(placesOf(json)).toEqual([
+                ['block', null, null],
+                ['wrap-right', null, null],
+                ['block', null, null],
+            ]);
+        });
+
+        test('a group of two pictures is a block, as one anchor has one place', async () => {
+            const WPG = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+            const pic = (id: number) =>
+                `<pic:pic><pic:nvPicPr><pic:cNvPr id="${id}" name="p"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4"/></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="381000" cy="381000"/></a:xfrm></pic:spPr></pic:pic>`;
+            const group = `<w:r><w:drawing><wp:anchor>${at(10, 10)}<wp:extent cx="762000" cy="381000"/><wp:wrapNone/><wp:docPr id="9" name="Group"/><a:graphic><a:graphicData uri="${WPG}"><wpg:wgp xmlns:wpg="${WPG}">${pic(1)}${pic(2)}</wpg:wgp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+            const { json } = await importDocxBody(paragraph(group));
+            expect(placesOf(json)).toEqual([
+                ['block', null, null],
+                ['block', null, null],
+            ]);
+        });
+
+        // GOV.UK's Shigellosis form: its one picture would take the group's extent, the text box beside it included.
+        test('a group of one picture and a text box is a block too', async () => {
+            const WPG = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+            const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+            const pic = `<pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="p"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4"/></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="381000" cy="381000"/></a:xfrm></pic:spPr></pic:pic>`;
+            const box =
+                '<wps:wsp><wps:txbx><w:txbxContent><w:p><w:r><w:t>Beside it</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp>';
+            const group = `<w:r><w:drawing><wp:anchor>${at(10, 10)}<wp:extent cx="6000000" cy="381000"/><wp:wrapNone/><wp:docPr id="9" name="Group"/><a:graphic><a:graphicData uri="${WPG}"><wpg:wgp xmlns:wpg="${WPG}" xmlns:wps="${WPS}">${pic}${box}</wpg:wgp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+            const { json } = await importDocxBody(paragraph(group));
+            expect(placesOf(json)).toEqual([['block', null, null]]);
+        });
+
+        // Eigen's box holds the list's indent, which is its own, not Word's: Word's 720 twips go, Eigen's level counts.
+        test("X in a list item counts from the item's box, past Eigen's own list indent", async () => {
+            const { json } = await importDocxBody(
+                `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:ind w:left="720" w:hanging="360"/></w:pPr>${front()}${text('Item')}</w:p>`,
+            );
+            expect(nodesOfType(json, 'listItem')).toHaveLength(1);
+            expect(placesOf(json)).toEqual([['front', Math.round(100 - LIST_LEVEL / 15), 20]]);
+        });
+
+        // Word counts a paragraph-relative offset from the top of the space before and a line-relative one from the
+        // text; Eigen from the box, whose padding holds a paragraph's own space before and none of a heading's style.
+        test('Y counts from the box, past the space before Word draws and the padding Eigen draws', async () => {
+            const h2 =
+                '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:spacing w:before="480"/></w:pPr></w:style>';
+            const heading = (run: string, before = '') =>
+                `<w:p><w:pPr><w:pStyle w:val="Heading2"/>${before}</w:pPr>${run}${text('Heading')}</w:p>`;
+            const { json } = await importDocxBody(
+                [
+                    heading(front(100, 40)),
+                    heading(front(100, 40), '<w:spacing w:before="240"/>'),
+                    heading(placed(`${at(100, 40, 'column', 'line')}<wp:wrapNone/>`)),
+                    `<w:p><w:pPr><w:spacing w:before="240"/></w:pPr>${placed(`${at(100, 4, 'column', 'line')}<wp:wrapNone/>`)}${text('Spaced')}</w:p>`,
+                ].join(''),
+                { styles: h2 },
+            );
+            expect(nodesOfType(json, 'heading').map((node) => node.attrs?.['spaceBefore'] ?? null)).toEqual([
+                null,
+                12,
+                null,
+            ]);
+            expect(placesOf(json).map(([, , y]) => y)).toEqual([8, 40, 40, 20]);
+        });
+
+        test('one anchored mid-paragraph leads it, and a heading that anchors only one stays a heading, no caption taken', async () => {
+            const { json } = await importDocxBody(
+                paragraph(`${text('Before ')}${front()}${text('after')}`) +
+                    `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>${front()}</w:p>` +
+                    '<w:p><w:pPr><w:pStyle w:val="Caption"/></w:pPr><w:r><w:t>Not a caption</w:t></w:r></w:p>',
+                { styles: '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>' },
+            );
+            const [first, second, third] = json.content ?? [];
+            expect(first?.content?.map((node) => node.type)).toEqual(['figure', 'text']);
+            expect(first?.content?.[1]?.text).toBe('Before after');
+            expect([second?.type, second?.content?.map((node) => node.type)]).toEqual(['heading', ['figure']]);
+            expect([third?.type, third?.content?.[0]?.text]).toEqual(['paragraph', 'Not a caption']);
+            expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['caption'])).toEqual([null, null]);
+        });
+
+        // The figure in front is out of the flow, so the block figure is its line's only figure and takes the caption.
+        test('a block figure beside one in front of the text takes the Caption line after them', async () => {
+            const { json } = await importDocxBody(
+                paragraph(`${GOLDEN_DOCX_IMAGE_RUN}${front()}`) +
+                    '<w:p><w:pPr><w:pStyle w:val="Caption"/></w:pPr><w:r><w:t>Figure 1</w:t></w:r></w:p>',
+                { styles: '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>' },
+            );
+            expect(
+                nodesOfType(json, 'figure').map((node) => [node.attrs?.['layout'], node.attrs?.['caption']]),
+            ).toEqual([
+                ['front', null],
+                ['block', 'Figure 1'],
+            ]);
+            expect(nodesOfType(json, 'text')).toEqual([]);
+        });
     });
 
     // The store keeps marks on text only, so a figure's link would not survive saving.

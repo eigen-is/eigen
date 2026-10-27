@@ -38,6 +38,7 @@ export function writeDocx(
         lost,
     }: { title: string; media: OfficeMedia[]; publicOrigin?: string; lost: LossCounter['lost'] },
 ): Uint8Array {
+    const page = pageTwips(setup);
     const document = partRelationships();
     for (const type of ['styles', 'numbering', 'settings', 'fontTable']) document.relate(type, `${type}.xml`);
     const pkg: Package = {
@@ -57,12 +58,12 @@ export function writeDocx(
         faces: new Map([[normal.font, new Set<FontSlot>(['Regular'])]]),
         normal,
         styles: new Map(styleDefinitions(normal).map((style) => [style.id, style])),
+        paper: page.width,
         lost,
     };
-    const page = pageTwips(setup);
     const column = page.width - page.margin.left - page.margin.right;
     const flow: Context = { pkg, firstInFlow: false, column, indent: 0, depth: 0, orderedListsAround: 0, quotes: 0 };
-    const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false), pkg.styles);
+    const body = blocksXml(blocksOf(json.content ?? [], {}, { ...flow, positions: true }), pkg.styles);
 
     // The notes the body referenced, in Word's notes part after its two separators, each in the body's column through
     // the part's own relationships, as a band is. A nested note is its text.
@@ -71,7 +72,7 @@ export function writeDocx(
         pkg.partRels = partRelationships();
         const note: Context = { ...flow, style: 'FootnoteText' };
         const notes = pkg.footnotes.map((node, index) => {
-            const blocks = blocksOf(flattenNestedFootnotes(node).content ?? [], {}, note, false);
+            const blocks = blocksOf(flattenNestedFootnotes(node).content ?? [], {}, note);
             return `<w:footnote w:id="${index + 1}">${blocksXml(withNoteNumber(blocks), pkg.styles)}</w:footnote>`;
         });
         noteParts.push([
@@ -97,7 +98,7 @@ export function writeDocx(
             pkg.partRels = partRelationships();
             const path = `word/${edge}${index + 1}.xml`;
             const content = band
-                ? blocksXml(withoutAfter(blocksOf(band.content ?? [], {}, flow, false)), pkg.styles)
+                ? blocksXml(withoutAfter(blocksOf(band.content ?? [], {}, flow)), pkg.styles)
                 : '<w:p/>';
             bandParts.push([
                 path,

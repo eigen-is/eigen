@@ -47,6 +47,23 @@ describe("prose css — Docs' own rules", () => {
         expect(PROSE_CSS).not.toMatch(/\.(eigen-prose|tiptap) ol ol[^{]*\{[^}]*list-style-type/);
         expect(PROSE_CSS).not.toMatch(/\.(eigen-prose|tiptap) (ul|ol)[^{]*\{[^}]*flow-root;/);
     });
+
+    // A figure in front of or behind the text counts its offsets from its paragraph's box, in one of two layers.
+    test('a paragraph places its positioned figures, in front of the text or behind it, only in Docs', () => {
+        for (const block of ['p', 'h1', 'h6']) expect(proseValue(`.eigen-doc ${block}`, 'position')).toBe('relative');
+        for (const layout of ['front', 'behind']) {
+            const figure = `.eigen-doc .figure[data-layout="${layout}"]`;
+            expect(proseValue(figure, 'position')).toBe('absolute');
+            expect(proseValue(figure, 'margin')).toBe('0');
+            expect(proseValue(figure, 'display')).toBe('block');
+            expect(proseValue(`${figure} .figcaption`, 'display')).toBe('none');
+        }
+        expect(proseValue('.eigen-doc .figure[data-layout="front"]', 'z-index')).toBe('1');
+        expect(proseValue('.eigen-doc .figure[data-layout="behind"]', 'z-index')).toBe('-1');
+        expect(PROSE_CSS).not.toMatch(
+            /\.(eigen-prose|tiptap) [^{]*(data-layout="(front|behind)"|\bp\b)[^{]*\{[^}]*position:/,
+        );
+    });
 });
 
 describe('canvas text css — the lookup', () => {

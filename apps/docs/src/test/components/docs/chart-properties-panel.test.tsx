@@ -16,6 +16,7 @@ const { parseFill } = await import('@workspace/lib/vector');
 const { getFontFamily } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { Chart } = await import('../../../components/docs/extensions/chart');
+const { PositionedFigures } = await import('../../../components/docs/extensions/positioned-figure');
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
 const { ChartDataEditor, ChartPropertiesPanel } = await import('../../../components/docs/chart-properties-panel');
 
@@ -36,6 +37,7 @@ async function mount(doc = new Y.Doc()) {
         extensions: [
             ...getDocExtensions({ exclude: ['chart'] }),
             Chart,
+            PositionedFigures,
             Collaboration.configure({ document: doc, yUndoOptions: { undoManager } }),
         ],
     });
@@ -209,6 +211,20 @@ test("a Style toggle wraps the chart in one undo step and lights it, the spec's 
 
     undoManager.undo();
     expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ layout: 'block', width: 600, height: 371 });
+});
+
+test('In front of text places the chart in one undo step, keeps it selected and drops its caption row', async () => {
+    const { editor, undoManager } = await mount();
+    expect(document.querySelector('input[placeholder="Caption"]')).not.toBeNull();
+    const front = document.querySelector<HTMLButtonElement>('button[aria-label="In front of text"]');
+    if (!front) throw new Error('no In front of text toggle');
+    await click(front);
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ layout: 'front', offsetX: 0, offsetY: 0 });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
+    expect(document.querySelector('input[placeholder="Caption"]')).toBeNull();
+
+    undoManager.undo();
+    expect(editor.state.doc.nodeAt(1)?.attrs['layout']).toBe('block');
 });
 
 test("the sample's colors are Automatic, and a picked color and a Stacking pick are one undo step each", async () => {

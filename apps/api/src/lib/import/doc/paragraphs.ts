@@ -43,12 +43,13 @@ import {
     NOTE_SEPARATORS,
     SINGLE_LINE,
     STYLE_NAMES,
+    TWIPS_PER_PX,
     textAlignOf,
 } from '../../ooxml/wordml';
 import type { MediaFiles } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import type { Item, ParagraphItem } from './assemble';
-import { buildBlocks, isFigureOnly, isWhitespace } from './assemble';
+import { buildBlocks, isFigureOnly, isWhitespace, placeAnchors } from './assemble';
 import { isFill, isLightNeutral, markColor } from './colors';
 import type { FontTable, Theme } from './docx-fonts';
 import { byFace, fontMark, isMonospaceFont, readFontTable, readTheme } from './docx-fonts';
@@ -204,7 +205,8 @@ function sectionPage(sectPr: XmlElement | undefined): PageSetup {
 export function readDocument(reader: Reader): JSONContent[] {
     const body = wChild(reader.pkg.document.root, 'body');
     if (!body) return [];
-    return buildBlocks(readBlocks(reader, xmlElements(body), { part: reader.pkg.document, story: 'body', tables: 0 }));
+    const scope: Scope = { part: reader.pkg.document, story: 'body', tables: 0 };
+    return placeAnchors(buildBlocks(readBlocks(reader, xmlElements(body), scope)), reader.normal);
 }
 
 // A header or footer part's blocks, read as the body's are, through the part's own relationships, its lists counting
@@ -333,7 +335,15 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
-    const context: RunContext = { scope: runScope, paraStyle: styleId, role, pieces: [], pending: [], leftOut: [] };
+    const context: RunContext = {
+        scope: runScope,
+        paraStyle: styleId,
+        role,
+        spaceBefore: (mergePara(styled, direct).before ?? 0) / TWIPS_PER_PX,
+        pieces: [],
+        pending: [],
+        leftOut: [],
+    };
     walkInline(
         reader,
         xmlElements(p).filter((child) => child.ns !== W_NS || child.local !== 'pPr'),

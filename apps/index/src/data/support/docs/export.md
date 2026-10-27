@@ -39,11 +39,11 @@ A page break starts a new page in the PDF and the Word file. Equations show in a
 
 A download carries the images the document shows. When they add up to more than 200 MB, Eigen refuses the download with "This document's images are too large to export".
 
-The PDF, the web page, and the Word file use the editor's spacing, including the space around images and tables. In the PDF, a list next to an image that floats left or right starts below the image instead of beside it. In the Word file:
+The PDF, the web page, and the Word file use the editor's spacing, including the space around images and tables. In the PDF, a list next to an image that floats left or right starts below the image instead of beside it. An image behind or in front of the text near the end of a page is cut off at the paper's edge, or left out, since it doesn't continue on the next page, and one whose paragraph runs over two pages prints on the first. In the Word file:
 
 - The fonts your document uses are included, so it keeps its typeface on a computer that doesn't have them.
 - Paragraphs keep their line spacing, the space before and after them, and their indents. The first paragraph of a list item follows the list's indent.
-- Images keep their width, alignment, and caption. An image that floats left or right floats in the Word file too, with the text wrapping around it.
+- Images keep their width, alignment, and caption. An image that floats left or right floats in the Word file too, with the text wrapping around it. An image or a chart behind or in front of the text stays behind or in front of it, at its place relative to its paragraph.
 - Numbered lists keep their numbers, and task lists keep their checkboxes, ticked or not.
 - Tables keep their column widths, borders, and cell colors, and a header row repeats on every page.
 - Quotes keep the bar along their left edge.

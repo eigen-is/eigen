@@ -1,3 +1,8 @@
+// The Docs editor page: the collaborative document opened from a route, drawn as one sheet of paper with its header
+// and footer bands, its body and its notes, scaled to fit a narrow window. Around the page it wires the toolbar and
+// menus, the selection's properties panel, comments, chat and search, all through the body's, a band's or a note's
+// editor, whichever holds the selection.
+
 import type { Node } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
@@ -790,7 +795,8 @@ const TiptapEditor = ({
                                         className={cn(
                                             // eigen-paper: the page always renders light, in dark mode too (globals.css)
                                             // Rows: the header band, the body, the notes, the footer band.
-                                            'eigen-paper grid grid-rows-[auto_1fr_auto_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
+                                            // isolate: the figures behind the text draw on the paper, in every scale.
+                                            'eigen-paper isolate grid grid-rows-[auto_1fr_auto_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
                                             !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}

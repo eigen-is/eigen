@@ -79,8 +79,16 @@ describe('chart HTML', () => {
             alignment: 'center',
             caption: 'Points',
             commentCardId: 'card-1',
+            offsetX: null,
+            offsetY: null,
         };
         expect(chartsIn(generateHTML(chartDoc(attrs), extensions))).toEqual([attrs]);
+    });
+
+    // The frame's attributes are the figure's, so a chart goes in front of or behind the text too.
+    test.each(['front', 'behind'])('a chart %s the text survives the HTML round-trip with its offsets', (layout) => {
+        const attrs = { ...PARTS, width: 480, height: 300, layout, offsetX: 36, offsetY: -8 };
+        expect(chartsIn(generateHTML(chartDoc(attrs), extensions))).toMatchObject([attrs]);
     });
 
     test('its span holds no figure, and an image of the chart for other apps', () => {
@@ -226,6 +234,8 @@ describe('readChartAttrs', () => {
             caption: null,
             alignment: null,
             layout: 'wrap-left',
+            offsetX: null,
+            offsetY: null,
             commentCardId: null,
         });
     });

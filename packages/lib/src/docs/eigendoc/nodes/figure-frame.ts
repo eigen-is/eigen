@@ -1,6 +1,11 @@
+// The frame an image and a chart share in Docs: where the box sits (in line, wrapped, or in front of or behind the
+// text at an offset from its paragraph), its caption and its comment card. The figure and chart nodes take its
+// attributes and HTML, the editor's node view and the export's renderer its box style, so every surface draws one box.
+
 import type { CommandProps } from '@tiptap/core';
 import type { DOMOutputSpec } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
+import { MAX_PAPER_MM, mmToPx } from '../page';
 
 // The nodes drawn in the figure's frame: an image and a chart.
 export const FIGURE_FRAME_NODES = ['figure', 'chart'] as const;
@@ -9,17 +14,46 @@ export type FigureFrameNode = (typeof FIGURE_FRAME_NODES)[number];
 export const isFigureFrameNode = (name: string | undefined): name is FigureFrameNode =>
     FIGURE_FRAME_NODES.some((node) => node === name);
 
-const FIGURE_LAYOUTS = ['block', 'wrap-left', 'wrap-right'] as const;
+// In front of and behind the text are out of the flow: the box sits at its offsets from its anchor paragraph.
+const POSITIONED_LAYOUTS = ['front', 'behind'] as const;
+export type PositionedLayout = (typeof POSITIONED_LAYOUTS)[number];
+const FIGURE_LAYOUTS = ['block', 'wrap-left', 'wrap-right', ...POSITIONED_LAYOUTS] as const;
 export type FigureLayout = (typeof FIGURE_LAYOUTS)[number];
 const FIGURE_ALIGNMENTS = ['left', 'center', 'right'] as const;
 export type FigureAlignment = (typeof FIGURE_ALIGNMENTS)[number];
 
+export const isPositioned = (layout: FigureLayout | null | undefined): layout is PositionedLayout =>
+    POSITIONED_LAYOUTS.some((positioned) => positioned === layout);
+
+// A positioned figure anchors on a body paragraph. Inside these nodes it draws in line, as a block.
+export const BLOCK_ONLY_FIGURE_PARENTS = ['tableCell', 'tableHeader', 'footnote'];
+
+// No paper is larger, so a forged offset or width can't stall the layout.
+const MAX_POSITION_PX = mmToPx(MAX_PAPER_MM);
+
 // The box a figure sits in: its place on the page, its caption and its comment card. Every attr defaults to null.
+// The offsets are page px from the anchor paragraph's padding box, kept while the figure is in the flow, so a switch
+// back to in front or behind restores its place.
 export type FigureFrameAttrs = {
     caption?: string | null;
     alignment?: FigureAlignment | null;
     layout?: FigureLayout | null;
+    offsetX?: number | null;
+    offsetY?: number | null;
     commentCardId?: string | null;
+};
+
+const readOffset = (value: unknown) =>
+    typeof value === 'number' && Number.isFinite(value)
+        ? Math.min(MAX_POSITION_PX, Math.max(-MAX_POSITION_PX, value))
+        : null;
+
+// Only Eigen's own span places a figure: another app's <figure> or absolute <img> has no anchor paragraph to count from.
+const isOwnSpan = (element: HTMLElement) => element.tagName === 'SPAN';
+
+const parseOffset = (element: HTMLElement, name: string) => {
+    const attr = element.getAttribute(name);
+    return attr && isOwnSpan(element) ? readOffset(Number(attr)) : null;
 };
 
 export function readFigureFrameAttrs(attrs: Record<string, unknown>): FigureFrameAttrs {
@@ -28,8 +62,23 @@ export function readFigureFrameAttrs(attrs: Record<string, unknown>): FigureFram
         caption: typeof caption === 'string' ? caption : null,
         alignment: FIGURE_ALIGNMENTS.find((a) => a === attrs['alignment']) ?? null,
         layout: FIGURE_LAYOUTS.find((l) => l === attrs['layout']) ?? null,
+        offsetX: readOffset(attrs['offsetX']),
+        offsetY: readOffset(attrs['offsetY']),
         commentCardId: typeof commentCardId === 'string' ? commentCardId : null,
     };
+}
+
+// A positioned box's place and width, which the stylesheet's rules can't know; nothing for a figure in the flow. The
+// width goes on the box, because an image's max-width of 100% inside a shrink-to-fit box is cyclic.
+export function figureLayoutStyle({
+    layout,
+    offsetX,
+    offsetY,
+    width,
+}: FigureFrameAttrs & { width?: number | null }): { left: number; top: number; width?: number } | undefined {
+    if (!isPositioned(layout)) return undefined;
+    const place = { left: offsetX ?? 0, top: offsetY ?? 0 };
+    return width ? { ...place, width: Math.min(MAX_POSITION_PX, width) } : place;
 }
 
 export function figureFrameAttributes() {
@@ -53,12 +102,20 @@ export function figureFrameAttributes() {
             default: 'block',
             parseHTML: (element: HTMLElement): FigureLayout => {
                 const attr = FIGURE_LAYOUTS.find((l) => l === element.getAttribute('data-layout'));
-                if (attr) return attr;
+                if (attr && (!isPositioned(attr) || isOwnSpan(element))) return attr;
                 const float = element.style?.float;
                 if (float === 'left') return 'wrap-left';
                 if (float === 'right') return 'wrap-right';
                 return 'block';
             },
+        },
+        offsetX: {
+            default: null,
+            parseHTML: (element: HTMLElement) => parseOffset(element, 'data-offset-x'),
+        },
+        offsetY: {
+            default: null,
+            parseHTML: (element: HTMLElement) => parseOffset(element, 'data-offset-y'),
         },
     };
 }
@@ -67,12 +124,14 @@ export function figureFrameAttributes() {
 // its paragraph around the content.
 export function figureFrameHTML(
     frame: Record<string, unknown>,
-    { alignment, layout, commentCardId, caption }: FigureFrameAttrs,
+    { alignment, layout, offsetX, offsetY, commentCardId, caption }: FigureFrameAttrs,
     content: DOMOutputSpec,
 ): DOMOutputSpec {
     const attrs = { ...frame };
     if (alignment && alignment !== 'center') attrs['data-alignment'] = alignment;
     if (layout && layout !== 'block') attrs['data-layout'] = layout;
+    if (offsetX != null) attrs['data-offset-x'] = offsetX;
+    if (offsetY != null) attrs['data-offset-y'] = offsetY;
     // Spelled like the comment mark's, so a cut figure keeps its card the way cut text does.
     if (commentCardId) attrs['data-comment-id'] = commentCardId;
     if (caption) return ['span', attrs, content, ['span', { class: 'figcaption' }, caption]];

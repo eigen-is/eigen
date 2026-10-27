@@ -1,11 +1,17 @@
+// What the Docs toolbar and its menus show of the selection: its style, font, marks, alignment, spacing and lists, and
+// whether it is in a table or on an image. useToolbarState reads it from the editor the toolbar follows on every
+// transaction, and the table panel shares its cell helpers.
+
 import { getAttributes, isActive } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
 import { getFontName } from '@workspace/lib/constants/fonts';
+import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import {
     insertFootnote,
     readCellBackground,
+    readFigureAttrs,
     selectionFontSizes,
     selectionParagraphFormat,
 } from '@workspace/lib/docs/eigendoc';
@@ -49,7 +55,8 @@ export type ToolbarState = {
     // Whether a note goes at the caret: not in a code block, nor in a band's schema or a note's.
     canInsertFootnote: boolean;
     table: boolean;
-    figure: boolean;
+    // The selected image's layout, none while no image is selected.
+    figureLayout: FigureLayout | undefined;
     canMergeCells: boolean;
     canSplitCell: boolean;
     // The fill of the cell the selection starts in, '' for none.
@@ -156,7 +163,9 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 canComment: canAnchorComment(editor.state),
                 canInsertFootnote: insertFootnote(editor.state.tr) !== null,
                 table,
-                figure: active('figure'),
+                figureLayout: active('figure')
+                    ? (readFigureAttrs(getAttributes(state, 'figure')).layout ?? 'block')
+                    : undefined,
                 ...selectCellCommands(editor, table),
                 cellBackground: table ? cellBackground(state) : '',
             };

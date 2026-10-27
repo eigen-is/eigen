@@ -1,3 +1,8 @@
+// Quick look: the full-screen overlay that previews one file of a list, such as a Drive item or a mail attachment,
+// with the keys to step through its siblings and close it. It picks a body by the file's preview mode: an image, a
+// video, a PDF, or a text preview the server rendered, such as a doc drawn on its paper. Its actions come from the
+// shared file action registry.
+
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl, getDrivePreviewUrl } from '@workspace/lib/api';
 import { DEFAULT_PAGE_SETUP, DOC_PROSE_CLASS, normalStyleProperties, pageBoxStyle } from '@workspace/lib/docs/eigendoc';
@@ -262,9 +267,10 @@ function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefi
     return (
         <div className={cn(PREVIEW_PANE_CLASS, 'overflow-auto rounded bg-background')}>
             {data.mode === 'eigendoc' ? (
-                // eigen-paper: the page renders light like the editor's; the prose inside escapes the dark rules.
+                // eigen-paper: the page renders light like the editor's; the prose inside escapes the dark rules. It
+                // stacks the figures behind the text on the paper, and cuts one placed past the paper's edge.
                 <div
-                    className="eigen-paper mx-auto bg-background"
+                    className="eigen-paper mx-auto bg-background isolate overflow-hidden"
                     style={{
                         ...pageBoxStyle(data.page ?? DEFAULT_PAGE_SETUP),
                         ...(data.style && normalStyleProperties(data.style)),

@@ -1,7 +1,11 @@
+// The Docs Format menu: text, paragraph styles, alignment and spacing, lists, headers and page numbers, and the table and
+// image submenus that a phone, which has no properties panel, reaches those options through. Every item acts on the
+// editor the toolbar follows: the body's, a band's being edited or the open note's.
+
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
-import type { BandEdge } from '@workspace/lib/docs/eigendoc';
+import type { BandEdge, FigureLayout } from '@workspace/lib/docs/eigendoc';
 import type { TextAlign } from '@workspace/lib/vector';
 import { TEXT_ALIGNS } from '@workspace/lib/vector';
 import { ToolbarMenu } from '@workspace/ui';
@@ -61,6 +65,9 @@ import {
     Underline,
     UnfoldVertical,
 } from 'lucide-react';
+import { setImageLayout } from './extensions/figure-frame';
+import { selectionDrawsInLine } from './extensions/positioned-figure';
+import { figureLayoutLooks } from './figure-properties-panel';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
 import type { PageNumberPreset } from './page-numbers';
@@ -112,6 +119,8 @@ type FormatMenuProps = {
     onReplaceImage: () => void;
     onEnterBand?: (edge: BandEdge) => void;
     onPageNumbers?: (preset: PageNumberPreset) => void;
+    // A band's editor: its image takes the alignment alone, as a band holds no float.
+    inBand: boolean;
 };
 
 export const FormatMenu = ({
@@ -129,6 +138,7 @@ export const FormatMenu = ({
     onReplaceImage,
     onEnterBand,
     onPageNumbers,
+    inBand,
 }: FormatMenuProps) => (
     <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
         <DropdownMenuSub>
@@ -385,13 +395,34 @@ export const FormatMenu = ({
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
-            <DropdownMenuSubTrigger disabled={!active.figure}>
+            <DropdownMenuSubTrigger disabled={!active.figureLayout}>
                 <ImageIcon className="h-4 w-4" /> Image
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 <DropdownMenuItem onClick={onReplaceImage}>
                     <ImagePlus className="h-4 w-4" /> Replace image
                 </DropdownMenuItem>
+                {/* The Image panel's layouts, which a phone has no panel for: none in a band, as the band's panel
+                    offers none, and those in the flow alone where the image draws in line, in a note or a cell. */}
+                {!inBand && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <ChoiceMenuItems<FigureLayout>
+                            value={active.figureLayout}
+                            options={figureLayoutLooks(selectionDrawsInLine(editor)).map(
+                                ({ layout, label, icon: Icon }) => ({
+                                    value: layout,
+                                    label: (
+                                        <>
+                                            <Icon className="h-4 w-4" /> {label}
+                                        </>
+                                    ),
+                                }),
+                            )}
+                            onChange={(layout) => setImageLayout(editor, { layout })}
+                        />
+                    </>
+                )}
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />

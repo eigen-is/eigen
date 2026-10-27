@@ -84,7 +84,13 @@ export async function renderEigendocExport(
             const html = renderDocHtml(
                 withAbsoluteLinks(content, publicOrigin),
                 (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-                { ...(pdf && { smallCapsFont: style.font }), print: pdf, pageFootnotes: pageNotes, equations },
+                {
+                    ...(pdf && { smallCapsFont: style.font }),
+                    print: pdf,
+                    pageFootnotes: pageNotes,
+                    band: part !== 'body',
+                    equations,
+                },
             );
             return part === 'body'
                 ? `<article class="eigen-prose tiptap ${DOC_PROSE_CLASS}">${html}</article>`
@@ -271,10 +277,14 @@ a { color: inherit; text-decoration: inherit; }
 table { border-collapse: collapse; border-spacing: 0; }
 h1, h2, h3, h4, h5, h6 { font-size: inherit; }
 
+/* The page is the stacking context of the figures in front of and behind the text, as the editor's page is. Not
+   isolation, which WeasyPrint doesn't read */
 .page {
     max-width: 100%;
     margin: 0 auto;
     overflow-wrap: anywhere;
+    position: relative;
+    z-index: 0;
 }
 
 /* A block holding a page break must split: avoid pushes it whole to a new page and breaks inside it anyway */

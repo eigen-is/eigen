@@ -9,12 +9,17 @@ import { readChartSpec } from '@workspace/lib/charts';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { ChartAttrs, FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import {
+    BLOCK_ONLY_FIGURE_PARENTS,
     chartSvg,
     FOOTNOTE_PARAGRAPH,
+    figureLayoutStyle,
     flattenNestedFootnotes,
+    isFigureFrameNode,
+    isPositioned,
     PROSE_TEXTBLOCKS,
     readChartAttrs,
     readFigureAttrs,
+    readFigureFrameAttrs,
     readPageNumberKind,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
@@ -32,7 +37,7 @@ type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => st
 // The export's and the preview's one render of a doc's body or band, unsanitized: the DOM the editor holds. On paper
 // (`print`) a heading that holds a note labels its own bookmark and a page number is a field the stylesheet fills in.
 // `smallCapsFont` fakes small caps where the font has none, and the screen lists the notes after the body unless
-// `pageFootnotes` floats them to their pages.
+// `pageFootnotes` floats them to their pages. A `band` is a header or a footer, where no figure is positioned.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
@@ -41,10 +46,13 @@ export function renderDocHtml(
         smallCapsFont?: string;
         print?: boolean;
         pageFootnotes?: boolean;
+        band?: boolean;
         equations?: ({ node }: { node: Node }) => string;
     },
 ): string {
-    const content = inEditorMarkOrder(withTrailingBreaks(flattenNestedFootnotes(json)));
+    const content = inEditorMarkOrder(
+        withTrailingBreaks(withBodyOnlyPositions(flattenNestedFootnotes(json), options?.band ?? false)),
+    );
     const footnotes = options?.pageFootnotes ? undefined : footnoteList();
     const highlight = codeHighlighter();
     const html = renderToHTMLString({
@@ -85,6 +93,17 @@ function withTrailingBreaks(node: JSONContent): JSONContent {
     return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
 }
 
+// A positioned figure or chart anchors on a body paragraph. In a table cell, a note or a band, where a forged doc can
+// hold one, it draws in line, as the editor resets it there.
+function withBodyOnlyPositions(node: JSONContent, inFlow: boolean): JSONContent {
+    if (inFlow && isFigureFrameNode(node.type) && isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout)) {
+        return { ...node, attrs: { ...node.attrs, layout: 'block' } };
+    }
+    const nested = inFlow || BLOCK_ONLY_FIGURE_PARENTS.includes(node.type ?? '');
+    const content = node.content?.map((child) => withBodyOnlyPositions(child, nested));
+    return content ? { ...node, content } : node;
+}
+
 // A peer can store any JSON as the language.
 function renderCodeBlockNode(node: Node, highlight: CodeHighlighter): string {
     const attr = node.attrs['language'];
@@ -107,10 +126,15 @@ function renderTaskItemNode(node: Node, children: string | string[] | undefined)
 }
 
 // The box a figure and a chart share: spans, which a paragraph can hold, drawn by eigen-prose.css's .figure rules as the
-// editor's node view is.
-function renderFigureFrame(attrs: FigureFrameAttrs, content: string): string {
+// editor's node view is. A box in front of or behind the text carries its place and width inline, and its offsets and
+// width as data attributes, so a paste of the download back into Docs keeps its place on the paper.
+function renderFigureFrame(attrs: FigureFrameAttrs & { width?: number | null }, content: string): string {
     const cap = attrs.caption ? `<span class="figcaption">${escapeHtml(attrs.caption)}</span>` : '';
-    return `<span class="figure" data-layout="${attrs.layout ?? 'block'}" data-alignment="${attrs.alignment ?? 'center'}">${content}${cap}</span>`;
+    const place = figureLayoutStyle(attrs);
+    const style = place
+        ? ` data-offset-x="${place.left}" data-offset-y="${place.top}"${place.width ? ` data-width="${place.width}"` : ''} style="left: ${place.left}px; top: ${place.top}px${place.width ? `; width: ${place.width}px` : ''}"`
+        : '';
+    return `<span class="figure" data-layout="${attrs.layout ?? 'block'}" data-alignment="${attrs.alignment ?? 'center'}"${style}>${content}${cap}</span>`;
 }
 
 // `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview.

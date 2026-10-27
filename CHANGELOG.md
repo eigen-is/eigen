@@ -10,6 +10,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **SmartArt in PowerPoint files** — a SmartArt graphic comes into Slides as the shapes and text PowerPoint shows, each one a shape you can move, resize and edit. Editing its text doesn't rearrange the others
 - **SmartArt saved without its shapes** — a graphic saved that way, as LibreOffice saves one, leaves its **SmartArt not imported** box with the graphic's text listed in it
 - **Bra-ket notation in equations** — a Docs equation reads `\bra{\phi}`, `\ket{\psi}` and `\braket{\phi|\psi}`, and `\expval`, `\mel` and `\ketbra` for expectation values, matrix elements and outer products. Their brackets grow with what's inside them
+- **Images behind or in front of the text** — in Docs, put an image or a chart behind the text or in front of it and drag it anywhere on the page. It moves with its paragraph when you type above it
+- **Image layouts on a phone** — **Format → Image** has every way to place an image: in line, wrapped left or right, behind or in front of the text
+- **Word files** — an image or a chart behind or in front of the text stays there when you import a Word file or download a document as Word
 
 ### Changed
 

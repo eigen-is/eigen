@@ -591,6 +591,39 @@
     ol ol ol ol ol ol ol {
         list-style-type: decimal;
     }
+
+    /* A figure in front of or behind the text is placed from its paragraph's padding box, so the indent and the space
+       before are inside it. The paragraph makes no stacking context, so the layers stack in the page's. The renderers
+       write the offsets and the width inline (figureLayoutStyle); within a layer, document order breaks the tie. */
+    p,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        position: relative;
+    }
+
+    .figure[data-layout="front"],
+    .figure[data-layout="behind"] {
+        position: absolute;
+        margin: 0;
+        display: block;
+    }
+
+    .figure[data-layout="front"] {
+        z-index: 1;
+    }
+
+    .figure[data-layout="behind"] {
+        z-index: -1;
+    }
+
+    .figure[data-layout="front"] .figcaption,
+    .figure[data-layout="behind"] .figcaption {
+        display: none;
+    }
 }
 
 /* ===== Task lists — TipTap output ===== */
