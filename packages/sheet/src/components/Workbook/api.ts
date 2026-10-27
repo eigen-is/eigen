@@ -42,6 +42,7 @@ import {
     setChartLook,
     setChartSpec,
     setSearchHighlights,
+    shiftEntries,
     updateFloatingBox,
 } from '../../state';
 
@@ -54,6 +55,13 @@ export function generateAPIs(
 ) {
     return {
         applyOp: (ops: Op[]) => {
+            // A peer's row or column op moves the cells under this tab's undo and redo entries. They shift now, in
+            // call order, so an undo called before this batch keeps the entry it was called with.
+            for (const op of ops) {
+                if (op.op !== 'insertRowCol' && op.op !== 'deleteRowCol') continue;
+                history.undoList = shiftEntries(history.undoList, op, context.sheets);
+                history.redoList = shiftEntries(history.redoList, op, context.sheets);
+            }
             setContext(
                 (ctx_) => {
                     const next = applyOpBatch(current(ctx_), ops);

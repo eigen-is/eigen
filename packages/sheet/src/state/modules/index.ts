@@ -22,6 +22,7 @@ export * from './formula-exec';
 export * from './formula-range';
 export * from './freeze';
 export * from './function-list';
+export * from './history';
 export * from './hyperlink';
 export * from './image';
 export * from './inline-string';

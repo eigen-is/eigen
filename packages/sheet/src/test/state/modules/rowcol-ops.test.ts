@@ -6,13 +6,14 @@
 // including the undo-of-delete path that restores non-derivable config.
 
 import { describe, expect, test } from 'bun:test';
-import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
+import { enablePatches, produce, produceWithPatches } from 'immer';
 import { replaySheetsOps } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Context } from '../../../state/context';
+import { undoEntry } from '../../../state/modules/history';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op, Sheet } from '../../../state/types';
-import { filterPatch, inverseRowColOptions, patchToOp } from '../../../state/utils/patch';
+import { filterPatch, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
@@ -144,17 +145,9 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
     test('undo of a delete restores cells and non-derivable config on the replay side', () => {
         const base = richContext();
         const baseSheets = structuredClone(base.sheets);
-        const [afterDelete, patches, inversePatches] = produceWithPatches(base, (ctx: Context) =>
-            deleteRowCol(ctx, DELETE_OP),
-        );
-        const deleteOps = patchToOp(afterDelete, filterPatch(patches), { deleteRowColOp: DELETE_OP });
-
-        // Mirrors Workbook handleUndo: apply inverse patches locally, emit the
-        // inverse op with restoreDeletedCells set.
-        const afterUndo = applyPatches(afterDelete, inversePatches);
-        const undoOptions = inverseRowColOptions({ deleteRowColOp: DELETE_OP })!;
-        undoOptions.restoreDeletedCells = true;
-        const undoOps = patchToOp(afterUndo, filterPatch(inversePatches), undoOptions, true);
+        const deleted = author(base, (ctx: Context) => deleteRowCol(ctx, DELETE_OP), { deleteRowColOp: DELETE_OP });
+        const deleteOps = deleted.ops;
+        const { ops: undoOps } = undoEntry(deleted.next, deleted.entry);
 
         const replayed: Sheet[] = replaySheetsOps(baseSheets, [deleteOps, undoOps]);
         expect(replayed[0].data).toEqual(base.sheets[0].data);
@@ -308,9 +301,7 @@ describe("a row or column op racing a peer's unfreeze", () => {
                 expect(size(sheets)).toEqual([...after]);
             }
 
-            const undone = applyPatches(onA, op.inverse);
-            const undoOptions = { ...inverseRowColOptions(options), restoreDeletedCells: 'deleteRowColOp' in options };
-            const undoOps = patchToOp(undone, op.inverse, undoOptions, true);
+            const { ctx: undone, ops: undoOps } = undoEntry(onA, op.entry);
             for (const sheets of [
                 undone.sheets,
                 receive(onB, undoOps).sheets,

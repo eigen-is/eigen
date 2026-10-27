@@ -7,7 +7,10 @@ import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer'
 import { generateAPIs } from '../../../components/Workbook/api';
 import { replaySheetsOps } from '../../../engine';
 import type { Context } from '../../../state/context';
-import type { Op } from '../../../state/types';
+import { FormulaCache } from '../../../state/modules/formula-cache';
+import { groupValuesRefresh } from '../../../state/modules/formula-exec';
+import { recordEntry, redoEntry, undoEntry } from '../../../state/modules/history';
+import type { History, Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
 import { filterPatch, opToPatch, patchToOp } from '../../../state/utils/patch';
 
@@ -37,18 +40,21 @@ export function syncablePaths(base: Context, recipe: (ctx: Context) => void) {
 }
 
 // One edit as setContextWithProduce records it: the new state, its ops and its undo entry.
-export function author(base: Context, recipe: (ctx: Context) => void, options?: PatchOptions) {
+export function author(base: Context, recipe: (ctx: Context) => void, options: PatchOptions = {}) {
     const [next, patches, inverse] = produceWithPatches(base, recipe);
+    const entry = recordEntry(base, next, filterPatch(patches), filterPatch(inverse), { ...options });
     return {
         next,
-        ops: patchToOp(next, filterPatch(patches), options),
+        ops: patchToOp(next, filterPatch(patches), entry.options),
         patches: filterPatch(patches),
         inverse: filterPatch(inverse),
+        entry,
     };
 }
 
-// A peer applies a batch through the Workbook's own applyOp, which drops a batch that fails to apply.
-export function receive(ctx: Context, ops: Op[]): Context {
+// A peer applies a batch through the Workbook's own applyOp, which drops a batch that fails to apply and shifts the
+// undo and redo stacks it is given.
+export function receive(ctx: Context, ops: Op[], history: Tab['history'] = { undoList: [], redoList: [] }): Context {
     let next = ctx;
     const setContext = (recipe: (draft: Context) => void) => {
         next = produce(next, recipe);
@@ -58,9 +64,56 @@ export function receive(ctx: Context, ops: Op[]): Context {
         setContext,
         () => {},
         () => {},
-        { undoList: [], redoList: [] },
+        history,
     ).applyOp(ops);
     return next;
+}
+
+// One browser tab: its context and the undo and redo stacks Workbook keeps beside it.
+export type Tab = { ctx: Context; history: { undoList: History[]; redoList: History[] } };
+
+// Each tab builds its own formula map, as each browser does.
+export const tab = (ctx: Context): Tab => ({
+    ctx: produce(ctx, (draft: Context) => {
+        draft.formulaCache = new FormulaCache();
+    }),
+    history: { undoList: [], redoList: [] },
+});
+
+// The tab's own edit, recorded as Workbook records it, recalculated dependents included; returns the batch it sends.
+export function tabEdit(t: Tab, recipe: (ctx: Context) => void, options?: PatchOptions): Op[] {
+    const recalculated = (ctx: Context) => {
+        recipe(ctx);
+        if (ctx.groupValuesRefreshData.length > 0) groupValuesRefresh(ctx);
+    };
+    const { next, ops, entry } = author(t.ctx, recalculated, options);
+    t.ctx = next;
+    t.history.undoList.push(entry);
+    t.history.redoList = [];
+    return ops;
+}
+
+export function tabReceive(t: Tab, ops: Op[]) {
+    t.ctx = receive(t.ctx, ops, t.history);
+}
+
+// Workbook's handleUndo and handleRedo: the entry changes stacks, and the pure step makes the context and the batch.
+export function tabUndo(t: Tab): Op[] {
+    const entry = t.history.undoList.pop();
+    if (!entry) return [];
+    t.history.redoList.push(entry);
+    const { ctx, ops } = undoEntry(t.ctx, entry);
+    t.ctx = ctx;
+    return ops;
+}
+
+export function tabRedo(t: Tab): Op[] {
+    const entry = t.history.redoList.pop();
+    if (!entry) return [];
+    t.history.undoList.push(entry);
+    const { ctx, ops } = redoEntry(t.ctx, entry);
+    t.ctx = ctx;
+    return ops;
 }
 
 // A joiner replays the batches on the base's stored sheets.
