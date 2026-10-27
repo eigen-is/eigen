@@ -4,7 +4,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [0.4.0] - 2026-10-26
 
-The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` and `.pptx` files with its own code. Docs gets equations, page setup, headers and footers, and footnotes. Docs, Sheets, Slides and Vector get charts. After you update, reload every document you have open: a tab still on 0.3.3 deletes the equations, footnotes and charts it receives.
+Eigen now opens and saves Word, Excel and PowerPoint files. Docs gets equations, page setup, headers and footers, and footnotes. Docs, Sheets, Slides and Vector get charts. After you update, reload any document you have open.
 
 ### Added
 
