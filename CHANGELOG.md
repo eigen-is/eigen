@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Added
+
+- **Slides on a phone** — a row of slide thumbnails sits under the slide. Tap one to jump straight to it
+
 ### Fixed
 
 - **Excel files** — a row Excel shows at normal height comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
