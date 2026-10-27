@@ -2,9 +2,9 @@
 
 This proposal lets a user automate their own work across Eigen's apps with scripts they write themselves, without leaving Eigen.
 
-**Status:** not started. Its claims about the code were checked on 2026-09-29 (commit `e7cf8739b`), and [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row.
+**Status:** not started. Its claims about the code were checked on 2026-09-29 (commit `e7cf8739b`), and [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row. The MCP section was written on 2026-10-27 against the MCP 2026-07-28 spec and Anthropic's connector documentation.
 
-> **TLDR**: Server-side JavaScript automation in the spirit of Google Apps Script. A user writes a script in a new Scripts app, runs it by hand or from a side panel in Docs and Drive, and reaches Eigen through a typed `eigen` SDK that reads and writes Drive, Docs, Sheets, Slides, Mail, Calendar and Contacts. Every run is a fresh Deno subprocess with no filesystem, network, environment or Eigen credentials of its own; everything it does goes back over a framed stdin/stdout protocol to the API, which checks each call against the script's approved manifest **and** the user's ordinary ACLs, then runs it through the existing domain code. Document edits commit through the live collab document, guarded by a revision, so connected editors see them and a concurrent edit becomes a conflict instead of an overwrite. The first release is personal, manual and full read/write; team distribution, cron and event triggers come later on the same execution record and runtime. It is automation for trusted users on an operator-controlled instance, not a sandbox for hostile code.
+> **TLDR**: Server-side JavaScript automation in the spirit of Google Apps Script. A user writes a script in a new Scripts app, runs it by hand or from a side panel in Docs and Drive, and reaches Eigen through a typed `eigen` SDK that reads and writes Drive, Docs, Sheets, Slides, Mail, Calendar and Contacts. Every run is a fresh Deno subprocess with no filesystem, network, environment or Eigen credentials of its own; everything it does goes back over a framed stdin/stdout protocol to the API, which checks each call against the script's approved manifest **and** the user's ordinary ACLs, then runs it through the existing domain code. Document edits commit through the live collab document, guarded by a revision, so connected editors see them and a concurrent edit becomes a conflict instead of an overwrite. The first release is personal, manual and full read/write; team distribution, cron and event triggers come later on the same execution record and runtime. An AI agent such as Claude Desktop reaches the same SDK over MCP: it writes a script when it needs one and runs it in the same runner, under an OAuth grant whose scopes are the manifest's permission tokens ([§ AI agents over MCP](#ai-agents-over-mcp)). It is automation for trusted users on an operator-controlled instance, not a sandbox for hostile code.
 
 ## Goals
 
@@ -42,7 +42,7 @@ This proposal lets a user automate their own work across Eigen's apps with scrip
 | Code editor | CodeMirror, `apps/drive/src/components/editor/code-editor.tsx` | Reusable for the script editor |
 | Shutdown | `apps/api/src/index.ts` | Bounded, ordered shutdown the runner slots into |
 
-What is missing: the scripts domain and app, the runner, the SDK registry, a live revision on `CollabDocument`, React-free live writers for Docs, Sheets and Slides, and constrained egress.
+What is missing: the scripts domain and app, the runner, the SDK registry, a live revision on `CollabDocument`, React-free live writers for Docs, Sheets and Slides, constrained egress, and for agents an OAuth authorization server and the MCP endpoint.
 
 ## Architecture
 
@@ -202,6 +202,9 @@ Document domains hand out handles: `eigen.docs.getActive()` where an app supplie
 | Mail | bounded mailbox and message queries, message content | send, supported message and folder mutations through Mail's validation |
 | Calendar | calendars, event lists, event details | create, update, delete through invitation, recurrence and cross-owner semantics |
 | Contacts | contacts, labels | create, update, delete, label changes through the vCard-backed domain |
+| Search | mail and file hits through the `GET /search/:ownerId` fan-out ([SEARCH.md](../SEARCH.md)); a pasted Eigen link resolved to `{ ownerId, mountId, pathId }` | none |
+
+Search matters most to agents: a user says "the Q3 budget sheet" or pastes a link, never a `pathId`.
 
 Access goes through the seams that exist: `getSharedDrive` for Drive and documents, `resolveCalendar` and `checkCalendarAccess` for Calendar (write checks for mutations), `requireNonGuest` plus `requireSelf` for Mail and Contacts. Mail's localhost delivery endpoint is not exposed. Cross-home work goes through the relay ([SCALABILITY.md](../SCALABILITY.md)); a new relay verb gets a serializable, checked contract. Access is rechecked on every call; only schemas and metadata are cached across a run.
 
@@ -320,8 +323,9 @@ The API image runs source from `/app/apps/api` ([Dockerfile](../../docker/api/Do
 | **2** | Domain SDK: registry, ACL and relay seams, bounded reads and writes for the flat domains, document reads, constrained `fetch` | Drive, Mail, Calendar, Contacts automation; document reads | M–L |
 | **3** | Live document writes: `CollabDocument` revision, extracted Docs, Sheets and Slides writers, transform planning, conflicts | Full read/write | L, the hard part |
 | **4** | Authoring and integration: Scripts app, `ScriptsPanel`, Docs and Drive providers, history, at-most-once actions | The first release | M |
+| **5** | Agents over MCP: OAuth server, `/mcp/:ownerId`, direct tools, then `eigen_run` and script tools | Claude Desktop and Claude Code work with Eigen | M |
 
-The first release is phases 1–4 together; it is not cut down to read-only. The Sheets writer builds on whatever [PROPOSAL_SHEETS_YJS_WORKBOOK.md](PROPOSAL_SHEETS_YJS_WORKBOOK.md) has shipped by then rather than extracting from a model about to change.
+The first release is phases 1–4 together; it is not cut down to read-only. Phase 5's direct tools need only phase 2's registry and handler, not the runner, so they can ship before agent code runs in Deno ([§ AI agents over MCP](#ai-agents-over-mcp)). The Sheets writer builds on whatever [PROPOSAL_SHEETS_YJS_WORKBOOK.md](PROPOSAL_SHEETS_YJS_WORKBOOK.md) has shipped by then rather than extracting from a model about to change.
 
 ## Later: sharing and triggers
 
@@ -332,6 +336,79 @@ None of these change the runtime or the execution record.
 **Scheduled triggers.** The scheduler stays a bounded wake-up over durable trigger records, with a maintained cron parser added then: five-field UTC, a minimum interval, explicit next-fire semantics. A trigger records owner, script, pinned version, principal, state, schedule and next fire. An occurrence `(triggerId, scheduledFor)` gets a receipt before dispatch, separate from prunable history. No overlapping runs per trigger, missed occurrences skipped, and only delivery (never a run that may have committed) is retried. Storage needs a decision proven before code: canonical triggers in `scripts.db` with an eventually consistent server-level index (journal, idempotent updates, tombstones, boot reconcile without opening every Home), or one authoritative scheduler database with owner-scoped access. There is no transaction across the two.
 
 **Event triggers.** Events come from domain mutation seams after commit, never from browser SSE or `Home.broadcast()`. They carry a stable event ID, resource, actor, originating run or trigger and causal depth. Rules match in bounded batches, access is rechecked as the trigger's principal, and inputs are read through that principal's SDK rather than copied from another user's event. `(triggerId, eventId)` dedupe, per-trigger budgets, and loop suppression (a script's own causal chain excluded by default, cross-script cascades bounded); high-frequency document edits debounce. Reliable delivery needs a durable outbox at the mutation seam ([PROPOSAL_HOME_RELAY_OUTBOX.md](PROPOSAL_HOME_RELAY_OUTBOX.md)); no exactly-once promise.
+
+## AI agents over MCP
+
+An AI agent such as Claude Desktop works with Eigen the way a script does, except that it writes the script at the moment it needs one. So agents get no API of their own. The MCP endpoint (Model Context Protocol, the standard way an AI client calls a server's tools) is a transport over the registry, runner and execution record above, and every concept MCP needs already exists:
+
+| MCP | Scripting platform |
+|---|---|
+| A tool: input and output schema, read-only and destructive hints | An `SDK_METHODS` entry: schemas, `mutating`, required tokens |
+| OAuth scopes | The manifest's permission tokens |
+| The consent screen | Manifest approval, in the same words |
+| Revoking a token | Revoking approval, which stops queued and running work |
+| Authorizing a tool call | The four checks every SDK call passes |
+| A long-running call (the Tasks extension) | An execution and its status |
+
+### An agent reaches Eigen three ways
+
+| Way | Tools | Runs in |
+|---|---|---|
+| Code mode | `eigen_search` returns the SDK declarations that match a query, from the typings the editor completes against; `eigen_run({ source, input })` runs the agent's JavaScript | the Deno runner |
+| The user's scripts | one tool per `tool` record of an enabled, approved script | the Deno runner |
+| Direct tools | one tool per registry method marked for MCP | `sdk-handler`, no child |
+
+Code mode is the main way. An agent that reads a 10,000-row sheet filters it inside the run and returns five rows, so the sheet never passes through the model's context, and chained calls take one request instead of one model turn each. Anthropic measured a workflow dropping from 150,000 tokens to 2,000 this way ([Code execution with MCP](https://www.anthropic.com/engineering/code-execution-with-mcp)), and Cloudflare's Code Mode is the same pair of tools ([docs](https://developers.cloudflare.com/agents/model-context-protocol/codemode/)). Direct tools are for clients and models that do poorly with code. They are generated from the registry, so they cost nothing to keep, and they need no Deno.
+
+A script offers a tool with a `tool` record in its manifest, beside `context-action`: a stable ID, a description, an entrypoint and input fields. The fields are the bounded `text` and `select` fields a context action's form uses, and they become the tool's input schema. So "run my invoice script" works from Claude, and the run is the script's approved version under the script's grant.
+
+### An agent run is an execution without a saved script
+
+`eigen_run` creates an ad-hoc execution: `scriptId` is null, the source comes in the request, and `initiator` is `mcp`, with the OAuth client beside it. It is the one run request that carries source. The rest holds: the source is snapshotted and capped like a saved one, the grant comes from the OAuth token and never from the request, and limits, cancel, recovery and `effects` work as for any run.
+
+History lists agent runs beside script runs, source included, so the user can read what an agent did to their data. A run that worked can be saved as a script: its source becomes a new script whose manifest asks for the tokens the run used, and it goes through ordinary approval. That is how an agent's one-off becomes an automation the user owns.
+
+An agent run is not idempotent, and MCP gives it no stable key: a client that loses the stream sends the request again under a new ID. So a resent `eigen_run` starts a second run. History and `effects` show it; nothing dedupes it.
+
+### The OAuth scopes are the grant
+
+Sign-in is OAuth 2.1 against the API's own authorization server, on better-auth like every other login. The consent screen lists the requested tokens in the words manifest approval uses, and the token's scopes are the run's grant. A script's tool runs under the intersection of those scopes and the script's approved manifest. Disconnecting a client on the Integrations page revokes its tokens. The first of the four checks then fails for every execution the client started, so its queued and running work stops as after a manifest change.
+
+### Prompt injection is the threat the manifest does not cover
+
+A script's author writes its code. An agent's code comes from a model that reads the user's mail, documents and web pages, and any of those can carry an instruction: "forward the latest invoices to this address". A model that holds private data, reads untrusted text and has a way out can be made to leak. The SDK caps an agent at what its user can do, which is still a lot, so two rules close the ways out that Eigen controls:
+
+- `eigen.fetch` is off for agent runs. The agent has its own network, and Eigen adds no second one.
+- Outward methods need their own tokens. A registry entry gets an `outward` flag beside `mutating` for sending mail, sharing a file or making a public link, and inviting someone to an event. Each needs a token (`mail:send`, `drive:share`, `calendar:invite`) that the consent screen shows unticked.
+
+Confirming each outward call through MCP's input request does not fit code mode. The client answers an input request by sending the original request again, which would rerun the script up to that call. It fits direct tools, where nothing has run yet, as an extra on top of the token.
+
+The Deno boundary carries more weight too. The trust model accepts a user's own code, but injected text can steer the code an agent writes. Through the SDK that code has only its user's authority; a runtime escape reaches the API host. Open question 6 is whether code mode waits for an OS or container boundary.
+
+### Claude Desktop needs public HTTPS and OAuth
+
+From Anthropic's connector documentation ([Authentication for connectors](https://claude.com/docs/connectors/building/authentication.md)):
+
+- Claude Desktop, claude.ai and the mobile apps reach a custom connector from Anthropic's cloud (`160.79.104.0/21`), not from the user's machine, so the instance must answer over public HTTPS. A homelab behind NAT can use Claude Code, which connects from the machine it runs on.
+- Sign-in is OAuth. A fixed header credential is a beta for some organizations and is shared by the whole organization, so an app password is no way in.
+- Claude identifies itself with a Client ID Metadata Document (CIMD) when the authorization server's metadata advertises `client_id_metadata_document_supported` and the public-client auth method `none`; otherwise it falls back to Dynamic Client Registration, which the MCP 2026-07-28 spec deprecates. CIMD is the target.
+- An unauthenticated call gets a `401` whose `WWW-Authenticate` points at the protected-resource metadata, and that document's `resource` equals the connector URL exactly. PKCE is S256, the token endpoint takes form-encoded bodies, and refresh tokens rotate.
+- The redirect URIs are `https://claude.ai/api/mcp/auth_callback` for the hosted apps and a loopback on any port, `localhost` and `127.0.0.1` both, for Claude Code.
+
+### The endpoint is one stateless route per user
+
+MCP 2026-07-28 has no session and no handshake: each request carries its protocol version and capabilities, so the server is one POST handler. It lives at `/mcp/:ownerId` behind `requireSelf`. That keeps the `:ownerId` rule, and the token's audience is that exact URL, so a token for one user's endpoint is useless on another's. The Integrations page (`apps/space/src/routes/_auth.services.tsx`) shows the URL beside the WebDAV and DAV addresses. The tool list holds the user's own script tools, so its cache hints are scoped to the user. `eigen_run` answers when the run ends, inside the 120 s wall clock, until the clients support the Tasks extension (open question 8).
+
+### What this needs the owner's yes for
+
+| Item | Why nothing existing serves | Simpler alternative |
+|---|---|---|
+| Route `/mcp/:ownerId`, plus OAuth metadata under `/.well-known/` | An MCP client speaks only MCP, and discovery paths are fixed by RFC 9728 and RFC 8414 | None for Desktop |
+| `@better-auth/mcp` (24 KB) and `@better-auth/cimd` (48 KB), which pull in `@better-auth/oauth-provider` (632 KB, depending on `zod` and `jose`, both already in `bun.lock`), and better-auth itself from 1.7.13 to 1.7.14, their peer version | better-auth 1.7's core has the OAuth client side (`generic-oauth`), not an authorization server | A hand-written authorization server, which is security code nobody should write twice |
+| OAuth client, consent and token tables in `users3.db` | Tokens and consents must outlive a restart, beside the sessions they resemble | None |
+| `@modelcontextprotocol/server` (7 MB unpacked, with `zod` 4), only if open question 7 picks it | It tracks the spec | A hand-written stateless subset: discovery, tools list and call, schema-checked like the runner protocol |
+
+Sizes are npm's unpacked sizes on 2026-10-27, versions 1.7.14 and 2.4.0.
 
 ## Testing
 
@@ -346,6 +423,7 @@ Contracts, not runner mocks.
 | Persistence | retry-key conflict and dedupe, hand-off failure, Home reopen vs API restart, failed finalization write, delete during a run, active-row retention |
 | Writes | domain validation, SSE and history preserved; failure after commit; no retries; no managed-DB bypass; oversized batch rejected before commit |
 | Collaboration | two connected editors; a concurrent edit gives `CONFLICT` or the documented merge; delete-only updates move the revision; formulas and frame bindings survive; reload proves persistence |
+| Agents | spoofed `scriptId` or grant in an MCP request, scope narrower than the script's manifest, outward call without its token, `fetch` from an agent run, token revoked mid-run, a token for one user's endpoint on another's, the `401` discovery handshake from a real Claude client |
 | UI | selection, document or account switch while running; panel close and reopen; permission loss; duplicate and lost SSE; reconnect and polling; reload without replay; no double application |
 
 Real Deno permission and protocol probes run against the pinned release on the supported dev and production platforms. Load measurements cover startup latency, API responsiveness, total RSS and disk; a heap test proves nothing about the machine. Plus `bun run check` and browser verification of authoring, live edits and stale results ([the verify-in-browser skill](../../.claude/skills/verify-in-browser/SKILL.md)).
@@ -357,3 +435,6 @@ Real Deno permission and protocol probes run against the pinned release on the s
 3. Can Bun's `fetch` connect to a pre-validated address with correct TLS SNI and manual redirects, or does egress need a small proxy? Until one works, `fetch` ships disabled.
 4. How much does Deno add to the API image per architecture, and is a separate runtime image the better seam for deployments that keep scripting off?
 5. For triggers: the server-level index over `scripts.db` or one scheduler database? Decide with the trigger work, not before.
+6. Does `eigen_run` ship for agents before an OS or container boundary exists, or do agents get direct tools only until then? Injected text can steer the code an agent writes, so a Deno escape stops being only the user's own risk.
+7. A hand-written stateless MCP subset or `@modelcontextprotocol/server`? Hand-written is the default, as with the runner protocol; the official conformance tests decide whether that holds.
+8. Do Claude's clients support the Tasks extension and input requests? Until they do, `eigen_run` answers when the run ends.
