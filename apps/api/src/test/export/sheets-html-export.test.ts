@@ -728,6 +728,16 @@ describe('Sheets HTML export — cell styling', () => {
         expect(out.css).toContain('transform:translateX(0.707em) rotate(-45deg)');
     });
 
+    test('a turned cell keeps its underline and strikethrough: the unclipped absolute span inherits the td decoration', () => {
+        const out = renderSheetsHtml(
+            [makeSheet([{ r: 0, c: 0, v: { v: 'up', rt: 45, un: 1, cl: 1 } }])],
+            NO_MEDIA,
+            'screen',
+        );
+        expect(out.css).toContain('text-decoration:underline line-through');
+        expect(out.css).toMatch(/position:absolute;left:0;bottom:0;[^}]*text-decoration:inherit/);
+    });
+
     test('rt as a negative angle anchors the rotation at top-left', () => {
         const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'down', rt: -90 } }])], NO_MEDIA, 'screen');
         expect(out.css).toContain('position:relative');

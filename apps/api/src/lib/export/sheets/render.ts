@@ -659,7 +659,7 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
         const origin = rt > 0 ? 'left bottom' : 'left top';
         const overhangEm = Math.abs(Math.sin((rt * Math.PI) / 180)).toFixed(3);
         const decl =
-            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;line-height:normal;` +
+            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;line-height:normal;text-decoration:inherit;` +
             `transform-origin:${origin};transform:translateX(${overhangEm}em) rotate(${cssAngle}deg)`;
         return `<span ${styleAttr(styles, decl)}>${inner}</span>`;
     }
