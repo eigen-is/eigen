@@ -176,8 +176,8 @@ describe('applyOp and a batch that fails halfway', () => {
     });
 });
 
-// A live client applies a batch to the same sheets a joiner's replay builds from it, whatever the batch's shape.
-describe('applyOp and a joiner agree on every batch shape', () => {
+// A live client applies a batch to the same sheets a joiner's replay builds from it.
+describe('applyOp and a joiner agree on the batch shapes that once disagreed', () => {
     const summary = (sheets: { id?: string; name: string; order?: number; color?: string }[]) =>
         sheets.map(({ id, name, order, color }) => ({ id, name, order, color }));
     const added = { name: 'third', id: 'id_3', order: 2, row: 4, column: 4, celldata: [] };

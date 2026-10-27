@@ -1,7 +1,7 @@
 // How a peer's row or column op moves this tab's pending undos. The engine moves the cells, merges, links and sizes of
 // the sheet the op names, and the formula text that points at it on every sheet; shiftEntries moves an undo entry's
-// paths and values the same way, so an undo lands where its cell now is. The Workbook's applyOp calls it for such an
-// op in a peer's batch, and undo's repair reads a RowColMove to find where a cell was before an op.
+// paths and values the same way, so an undo lands where its cell now is. Callers such as the Workbook's applyOp run it
+// for each such op in a peer's batch, and undo's repair reads a RowColMove to find where a cell was before an op.
 
 import type { MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
