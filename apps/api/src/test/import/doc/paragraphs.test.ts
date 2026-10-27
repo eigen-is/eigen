@@ -286,6 +286,9 @@ describe('notes', () => {
         const { json } = await importDocxBody(paragraph(`${run('Text')}${reference(1)}${run('.')}`), {
             footnotes: `${separators}<w:footnote w:id="1">${paragraph(`<w:r><w:footnoteRef/></w:r>${run(' See ')}${run('Smith', '<w:b/>')}`)}${paragraph(run('Two'))}</w:footnote>`,
         });
+        // Each note gets a story id of its own.
+        const [id] = nodesOfType(json, 'footnote').map((footnote) => footnote.attrs?.['id']);
+        expect(id).toMatch(/^[\w-]{10}$/);
         expect(json.content).toEqual([
             {
                 type: 'paragraph',
@@ -294,6 +297,7 @@ describe('notes', () => {
                     { type: 'text', text: 'Text' },
                     {
                         type: 'footnote',
+                        attrs: { id },
                         content: [
                             {
                                 type: 'paragraph',

@@ -373,6 +373,35 @@ export function buildAllFeaturesDocJson(): JSONContent {
             {
                 type: 'paragraph',
                 content: [
+                    {
+                        type: 'textBox',
+                        attrs: {
+                            id: 'golden-box',
+                            layout: 'front',
+                            offsetX: 320,
+                            offsetY: 0,
+                            width: 200,
+                            height: 80,
+                            fill: '#fff2cc',
+                            outline: '1.5px dashed #c00000',
+                            verticalAlign: 'middle',
+                            rounded: true,
+                        },
+                        content: [
+                            {
+                                type: 'paragraph',
+                                attrs: { textAlign: 'center' },
+                                content: [marked('A text box', { type: 'bold' })],
+                            },
+                            paragraph('in front of the text.'),
+                        ],
+                    },
+                    { type: 'text', text: 'A paragraph that anchors a text box.' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
                     { type: 'text', text: 'Half the sum is ' },
                     equation(writeMathml(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}')),
                     { type: 'text', text: ', and the squares add up to' },

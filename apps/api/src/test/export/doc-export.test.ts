@@ -23,6 +23,7 @@ import renderScript from '../../lib/export/weasyprint-render.py' with { type: 'f
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { EMU_PER_POINT, EMU_PER_PX } from '../../lib/ooxml/ooxml';
 import { openZip } from '../../lib/ooxml/zip';
+import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
 import { sampleChartParts } from '../fixtures/chart-parts';
 import { corpusEquations, equation, seedBand, seedEigendoc } from '../fixtures/golden-documents';
@@ -566,6 +567,87 @@ describe('doc export — figures in front of and behind the text', () => {
         expect(html).toContain(
             'data-layout="behind" data-alignment="center" data-offset-x="-24" data-offset-y="130.5" data-width="320" style="left: -24px',
         );
+    });
+});
+
+describe('doc export — text boxes', () => {
+    const box = (layout: string, attrs: Record<string, unknown> = {}): JSONContent => ({
+        type: 'textBox',
+        attrs: {
+            id: 'b1',
+            layout,
+            offsetX: 30,
+            offsetY: -4,
+            width: 200,
+            height: 80,
+            fill: '#fff2cc',
+            outline: '1.5px dashed #c00000',
+            verticalAlign: 'middle',
+            rounded: true,
+            ...attrs,
+        },
+        content: [
+            {
+                type: 'paragraph',
+                attrs: { textAlign: 'center' },
+                content: [{ type: 'text', text: 'Boxed', marks: [{ type: 'bold' }] }],
+            },
+            paragraph('second'),
+        ],
+    });
+    const anchored = (layout: string, attrs?: Record<string, unknown>): JSONContent => ({
+        type: 'paragraph',
+        content: [box(layout, attrs), { type: 'text', text: 'Anchor' }],
+    });
+
+    async function exportHtml(json: JSONContent, doc = seededDoc(json)): Promise<string> {
+        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', async () => [], undefined);
+        return new TextDecoder().decode(data);
+    }
+
+    const BOX =
+        '<span class="text-box" data-type="text-box" data-story-id="b1" data-width="200" data-height="80" data-fill="#fff2cc" data-outline="1.5px dashed #c00000" data-vertical-align="middle" data-rounded="" style="width: 200px; min-height: 80px; background-color: #fff2cc; border: 1.5px dashed #c00000; padding: 4.8px 9.6px; border-radius: 8px">';
+    const PARAGRAPHS =
+        '<span data-type="text-box-paragraph" style="text-align: center"><strong>Boxed</strong></span><span data-type="text-box-paragraph">second</span>';
+
+    // The sanitized download keeps the frame's place, the box's look and each paragraph's own style, so a paste of it
+    // back into Docs reads the same box.
+    test('the HTML draws the frame at its place, the box in its look and a span per paragraph', async () => {
+        const html = await exportHtml({ type: 'doc', content: [anchored('front')] });
+        expect(html).toContain(
+            `<p><span class="figure" data-layout="front" data-alignment="center" data-offset-x="30" data-offset-y="-4" data-width="200" style="left: 30px; top: -4px; width: 200px">${BOX}${PARAGRAPHS}</span></span>Anchor</p>`,
+        );
+    });
+
+    test('the preview draws the same box through its sanitizer', () => {
+        const { body } = renderEigendocPreviewBody(
+            seededDoc({ type: 'doc', content: [anchored('behind')] }),
+            new Map(),
+        );
+        expect(body).toContain(`data-layout="behind"`);
+        expect(body).toContain(`${BOX}${PARAGRAPHS}</span>`);
+    });
+
+    // A cell has no body paragraph to anchor on, as for a figure.
+    test('a positioned box in a table cell draws in line', async () => {
+        const cell = { type: 'tableCell', content: [anchored('front')] };
+        const html = await exportHtml({
+            type: 'doc',
+            content: [{ type: 'table', content: [{ type: 'tableRow', content: [cell] }] }],
+        });
+        const body = html.split('<body')[1];
+        expect(body).toContain('<span class="figure" data-layout="block" data-alignment="center">');
+        expect(body).not.toContain('data-layout="front"');
+    });
+
+    // WeasyPrint's bookmark reads a heading's text, which would run the box's on into it.
+    test("on paper a heading that holds a box bookmarks its own text, the box's left out", async () => {
+        const heading = {
+            type: 'heading',
+            attrs: { level: 1 },
+            content: [box('front'), { type: 'text', text: 'Title' }],
+        };
+        expect(await pdfHtml(heading)).toContain('<h1 data-bookmark="Title"');
     });
 });
 
@@ -1645,6 +1727,63 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         },
         60_000,
     );
+});
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — text boxes (WeasyPrint)', () => {
+    const box = (layout: string, verticalAlign: string | null): JSONContent => ({
+        type: 'textBox',
+        attrs: {
+            layout,
+            offsetX: 40,
+            offsetY: 0,
+            width: 200,
+            height: 120,
+            outline: '1px solid #000000',
+            verticalAlign,
+        },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: `${layout} box` }] }],
+    });
+    const anchored = (layout: string, verticalAlign: string | null): JSONContent => ({
+        type: 'paragraph',
+        content: [box(layout, verticalAlign), { type: 'text', text: 'Anchor text that runs on under the box.' }],
+    });
+
+    // Each box's top, height and left, and its paragraph's top and height, in px.
+    async function boxes(...content: JSONContent[]) {
+        const lines = await laidOut(
+            await pdfHtml(...content),
+            "if box.element is not None and box.element.get('data-type') in ('text-box', 'text-box-paragraph'): print(id(box.element), box.element.get('data-type'), box.position_y, box.border_height())",
+        );
+        // An element's first box is its block's; the inline boxes inside it come after.
+        const seen = new Set<string>();
+        return lines.flatMap((line) => {
+            const [element = '', type, y, height] = line.split(' ');
+            if (line === '' || seen.has(element)) return [];
+            seen.add(element);
+            return [{ type, y: Number(y), height: Number(height) }];
+        });
+    }
+
+    // WeasyPrint lays a flex column out in an absolute box: the box keeps its minimum height and centres or bottoms
+    // its text in it, in front of and behind the text alike.
+    test('a front, a behind and a centred box print at their size, their text aligned in them', async () => {
+        const laid = await boxes(anchored('front', null), anchored('behind', 'bottom'), anchored('block', 'middle'));
+        const pairs = [0, 2, 4].map((index) => ({ box: laid[index], text: laid[index + 1] }));
+        expect(laid.map(({ type }) => type)).toEqual([
+            'text-box',
+            'text-box-paragraph',
+            'text-box',
+            'text-box-paragraph',
+            'text-box',
+            'text-box-paragraph',
+        ]);
+        for (const { box } of pairs) expect(box?.height).toBeCloseTo(120, 0);
+        const [top, bottom, middle] = pairs.map(({ box, text }) => (text?.y ?? 0) - (box?.y ?? 0));
+        const room = 120 - 2 * 4.8 - 2 - (pairs[0]?.text?.height ?? 0);
+        expect(top).toBeCloseTo(4.8 + 1, 0);
+        expect(bottom).toBeCloseTo(4.8 + 1 + room, 0);
+        expect(middle).toBeCloseTo(4.8 + 1 + room / 2, 0);
+    }, 60_000);
 });
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — tables across pages (WeasyPrint)', () => {

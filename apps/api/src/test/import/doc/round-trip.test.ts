@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { FLAT_CHART_LOOK, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, isStoryNode } from '@workspace/lib/docs/eigendoc';
 import type { ChartStacking } from '@workspace/lib/types/chart';
 import { solidFill } from '@workspace/lib/vector';
 import { readOmml, writeMathml } from '@workspace/math';
@@ -54,6 +54,8 @@ function sourceNames(media: ImportedMedia[]): Map<string, string> {
 // one holding none, only quotes, code, headings, rules or done tasks, comes back a body cell in the header's grey.
 // (13) A paragraph's format is what it sets apart from the Normal, so a value equal to the Normal's comes back as none.
 // (14) The chart part holds the look it draws, so a chart's unset background, label colour and stroke come back flat.
+// (15) Until the writer draws a text box, its paragraphs follow the paragraph that holds it. (16) The import gives every
+// note a fresh story id.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -63,6 +65,7 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         for (const name of ['colwidth', 'width', ...(source.type === 'figure' ? ['height'] : [])])
             if (name in attrs && attrs[name] === null) attrs[name] = imported?.attrs?.[name] ?? null;
         if ('commentCardId' in attrs) attrs['commentCardId'] = null;
+        if (source.type === 'footnote') attrs['id'] = imported?.attrs?.['id'] ?? null;
         if (attrs['textAlign'] === 'left') attrs['textAlign'] = null;
         if (source.type === 'equation') attrs['mathml'] = writeMathml(readStoredEquation(attrs).row);
         if (source.type === 'chart')
@@ -90,6 +93,7 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
     const mixed = source.type === 'tableRow' && source.content?.some((cell) => cell.type === 'tableCell');
     const kept = source.content
         ?.filter((_, index, siblings) => !blankBeforeBreak(siblings, index))
+        .flatMap(boxesAfter)
         .flatMap(splitAtOwnParagraphs)
         .map((child) =>
             mixed && child.type === 'tableHeader' && !child.content?.some(isPlain) ? asBodyCell(child) : child,
@@ -130,6 +134,13 @@ function splitAtOwnParagraphs(node: JSONContent): JSONContent[] {
                 ? { ...node, attrs: { ...node.attrs, spaceAfter: 0 }, content }
                 : { ...node, content },
         );
+}
+
+function boxesAfter(node: JSONContent): JSONContent[] {
+    const boxes = node.content?.filter((child) => child.type === 'textBox') ?? [];
+    if (boxes.length === 0) return [node];
+    const rest = node.content?.filter((child) => child.type !== 'textBox');
+    return [{ ...node, content: rest }, ...boxes.flatMap((box) => box.content ?? [])];
 }
 
 function blankBeforeBreak(siblings: JSONContent[], index: number): boolean {
@@ -1224,15 +1235,23 @@ function isValid(content: JSONContent[]): boolean {
 }
 
 // A Word file imported, written and imported again comes back as the first import read it: what the first import holds
-// is what the docx carries.
+// is what the docx carries. Each import gives a story a fresh id, which is no content.
 describe('a Word file, imported, written and imported again', () => {
+    const withoutIds = (node: JSONContent): JSONContent => ({
+        ...node,
+        ...(isStoryNode(node.type) && { attrs: { ...node.attrs, id: null } }),
+        ...(node.content && { content: node.content.map(withoutIds) }),
+    });
     const run = (text: string, rPr = '') =>
         `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t xml:space="preserve">${text}</w:t></w:r>`;
     const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
     const twice = async (body: string, parts: DocxParts = {}) => {
         const first = await importDocxBody(body, parts);
         const second = docxToPmJson(Buffer.from(writeDocx(first, { title: 'Word', media: [], lost: () => {} })));
-        return { first, second };
+        return {
+            first: { ...first, json: withoutIds(first.json) },
+            second: { ...second, json: withoutIds(second.json) },
+        };
     };
 
     // A size, a heading's style or a note's FootnoteText unlike Eigen's, the runs at the size the node draws in Eigen.

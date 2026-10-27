@@ -7,7 +7,7 @@ import { JSDOM } from 'jsdom';
 import {
     BAND_EXCLUDED_NODES,
     FOOTNOTE_PARAGRAPH,
-    flattenNestedFootnotes,
+    flattenNestedStories,
     footnoteNumbers,
     footnotesInOrder,
     getDocExtensions,
@@ -64,8 +64,8 @@ describe('the footnote node', () => {
         expect(type?.spec.content).toBe('paragraph+');
         expect(type?.spec.isolating).toBe(true);
         expect(type?.spec.selectable).toBe(true);
-        // Numbering derives from document order: the node stores nothing of its own.
-        expect(Object.keys(type?.spec.attrs ?? {})).toEqual([]);
+        // Numbering derives from document order: the node stores its story id alone.
+        expect(Object.keys(type?.spec.attrs ?? {})).toEqual(['id']);
     });
 
     test('sits wherever inline content does: a heading, a list item, a table cell', () => {
@@ -111,6 +111,17 @@ describe('footnote HTML', () => {
         expect(pasted.content?.[0]?.content?.map((inline) => inline.type)).toEqual(['text', 'footnote', 'text']);
     });
 
+    test('keeps its story id, and reads a forged one as none', () => {
+        const withId = doc(paragraph(text('a'), { ...footnote(paragraph(text('n'))), attrs: { id: 'note-1' } }));
+        const html = generateHTML(withId, extensions);
+        expect(html).toContain('<span class="footnote" data-type="footnote" data-story-id="note-1">');
+        expect(parse(html)).toEqual(stored(withId));
+        const forged = parse(
+            '<p>a<span class="footnote" data-type="footnote" data-story-id="no spaces"><span>n</span></span></p>',
+        );
+        expect(forged.content?.[0]?.content?.[1]?.attrs?.['id']).toBeNull();
+    });
+
     test('an empty note keeps one empty paragraph', () => {
         const empty = doc(paragraph(text('a'), footnote(paragraph())));
         expect(parse(generateHTML(empty, extensions))).toEqual(stored(empty));
@@ -132,7 +143,7 @@ describe('footnote HTML', () => {
     });
 });
 
-describe('flattenNestedFootnotes', () => {
+describe('flattenNestedStories over notes', () => {
     test('puts a nested note’s inline content in its place, each paragraph after a space, marks kept', () => {
         const forged = doc(
             paragraph(
@@ -149,7 +160,7 @@ describe('flattenNestedFootnotes', () => {
                 ),
             ),
         );
-        expect(stored(flattenNestedFootnotes(forged))).toEqual(
+        expect(stored(flattenNestedStories(forged))).toEqual(
             stored(
                 doc(paragraph(text('a'), footnote(paragraph(text('outer '), text('in', BOLD), text(' two three.'))))),
             ),
@@ -157,7 +168,7 @@ describe('flattenNestedFootnotes', () => {
     });
 
     test('leaves a doc without nested notes as it is', () => {
-        expect(flattenNestedFootnotes(CLAIM)).toEqual(CLAIM);
+        expect(flattenNestedStories(CLAIM)).toEqual(CLAIM);
     });
 });
 
@@ -210,7 +221,11 @@ describe('insertFootnote', () => {
         const { tr } = state;
         const pos = insertFootnote(tr);
         expect(pos).toBe(2);
-        expect(tr.doc.toJSON()).toEqual(stored(doc(paragraph(text('a'), footnote(paragraph()), text('b')))));
+        const id = tr.doc.nodeAt(2)?.attrs['id'];
+        expect(id).toMatch(/^[\w-]{10}$/);
+        expect(tr.doc.toJSON()).toEqual(
+            stored(doc(paragraph(text('a'), { ...footnote(paragraph()), attrs: { id } }, text('b')))),
+        );
         expect(tr.doc.nodeAt(2)?.type.name).toBe('footnote');
         expect(tr.selection.from).toBe(2 + (tr.doc.nodeAt(2)?.nodeSize ?? 0));
     });
@@ -220,7 +235,10 @@ describe('insertFootnote', () => {
         const state = stateOf(doc(paragraph(text('abc'))), (node) => TextSelection.create(node, 1, 3));
         const { tr } = state;
         expect(insertFootnote(tr)).toBe(3);
-        expect(tr.doc.toJSON()).toEqual(stored(doc(paragraph(text('ab'), footnote(paragraph()), text('c')))));
+        const id = tr.doc.nodeAt(3)?.attrs['id'];
+        expect(tr.doc.toJSON()).toEqual(
+            stored(doc(paragraph(text('ab'), { ...footnote(paragraph()), attrs: { id } }, text('c')))),
+        );
     });
 
     test('after a selected image', () => {

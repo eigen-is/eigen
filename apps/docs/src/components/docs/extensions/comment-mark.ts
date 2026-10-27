@@ -94,7 +94,7 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
     selected.scrollIntoView().run();
 }
 
-const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart' };
+const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart', textBox: 'Text box' };
 
 // A comment on an image or a chart alone has no text to quote, so it reads as "Image" or "Chart", and an equation with
 // no text as "Equation", and a page number as its #. A footnote's note is no part of the quote, as its reference takes no

@@ -626,6 +626,43 @@ describe('docx writer — footnotes', () => {
     });
 });
 
+describe('docx writer — text boxes, written as their text', () => {
+    const box = (layout: string, ...paragraphs: JSONContent[]): JSONContent => ({
+        type: 'textBox',
+        attrs: { layout, offsetX: 40, offsetY: 10, fill: '#ffeeaa', outline: '1px solid #000000' },
+        content: paragraphs,
+    });
+    const cell = (...content: JSONContent[]): JSONContent => ({
+        type: 'table',
+        content: [{ type: 'tableRow', content: [{ type: 'tableCell', content }] }],
+    });
+
+    // Until the writer draws a box, its paragraphs follow the one that holds it, as the import read Word's boxes.
+    test('a front, a block and an in-cell box write their paragraphs after the paragraph that holds them', async () => {
+        const json = doc(
+            p(box('front', p(text('Front one')), p(text('Front two'))), text('Anchor')),
+            p(text('Before'), box('block', p(text('Block')))),
+            cell(p(text('Cell'), box('front', p(text('In cell'))))),
+        );
+        const body = await bodyOf(json);
+        expect(xmlChildren(body, W, 'p').map(texts).slice(0, 5)).toEqual([
+            'Anchor',
+            'Front one',
+            'Front two',
+            'Before',
+            'Block',
+        ]);
+        const tableCell = descendants(body, W, 'tc')[0];
+        expect(tableCell && xmlChildren(tableCell, W, 'p').map(texts)).toEqual(['Cell', 'In cell']);
+        expect(descendants(body, WP, 'anchor')).toEqual([]);
+    });
+
+    test('each box counts as a text box simplified', () => {
+        const json = doc(p(box('front', p(text('a'))), text('b')), p(box('block', p(text('c')))));
+        expect(lossesOf(json)).toEqual([{ code: 'text-simplified', count: 2 }]);
+    });
+});
+
 describe('docx writer — page breaks', () => {
     test('a top-level page break is a PageBreak paragraph holding the break, at its place', async () => {
         const body = await bodyOf(doc(p(text('before')), { type: 'pageBreak' }, p(text('after'))));

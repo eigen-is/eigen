@@ -28,7 +28,7 @@ import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
     DOC_PROSE_CLASS,
-    flattenNestedFootnotes,
+    flattenNestedStories,
     getDocExtensions,
     PAGE_BAND_CLASS,
     PAGE_ROOT,
@@ -414,8 +414,7 @@ export function docEditorOptions({
                 ? (slice, view) =>
                       Slice.fromJSON(view.state.schema, {
                           ...slice.toJSON(),
-                          content: flattenNestedFootnotes({ type: 'footnote', content: slice.content.toJSON() })
-                              .content,
+                          content: flattenNestedStories({ type: 'footnote', content: slice.content.toJSON() }).content,
                       })
                 : undefined,
             handleDrop: (view, event) => {

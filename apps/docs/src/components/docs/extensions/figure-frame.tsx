@@ -447,13 +447,15 @@ export function FigureFrame({
     );
 }
 
-// Keep aspect ratio, which the panel's box and the grips share: on for a picture and off for a chart, as on a slide.
+// Keep aspect ratio, which the panel's box and the grips share: on for a picture and off for a chart and a text box, as
+// on a slide.
 // A choice lasts while its figure stays selected, as a node has no id to remember it by.
-const ASPECT_LOCKED_BY_DEFAULT: Record<FigureFrameNode, boolean> = { figure: true, chart: false };
+const ASPECT_LOCKED_BY_DEFAULT: Record<FigureFrameNode, boolean> = { figure: true, chart: false, textBox: false };
 type AspectChoice = { pos: number; locked: boolean };
 const ASPECT_LOCK_KEYS: Record<FigureFrameNode, PluginKey<AspectChoice | null>> = {
     figure: new PluginKey('figureAspectLock'),
     chart: new PluginKey('chartAspectLock'),
+    textBox: new PluginKey('textBoxAspectLock'),
 };
 
 const selectedFigureAt = (state: EditorState, name: FigureFrameNode) =>

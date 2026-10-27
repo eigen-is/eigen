@@ -7,7 +7,7 @@ import type { JSONContent } from '@tiptap/core';
 import { DOCUMENT_FONT, readFontSize } from '@workspace/lib/constants/fonts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
-    flattenNestedFootnotes,
+    flattenNestedStories,
     PROSE_TEXTBLOCKS,
     pagePx,
     pageTwips,
@@ -272,7 +272,7 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     const paragraphs = blocks.flatMap(noteParagraphs);
     trimStart(paragraphs[0]?.content ?? []);
     const content =
-        flattenNestedFootnotes({
+        flattenNestedStories({
             type: 'footnote',
             content: paragraphs.length > 0 ? paragraphs : [{ type: 'paragraph' }],
         }).content ?? [];

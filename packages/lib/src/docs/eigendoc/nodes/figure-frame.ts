@@ -1,4 +1,4 @@
-// The frame a Docs figure sits in, such as an image or a chart: where its box sits (in line, wrapped, or in front of or
+// The frame a Docs figure sits in, such as an image, a chart or a text box: where its box sits (in line, wrapped, or in front of or
 // behind the text at an offset from its paragraph), its caption and its comment card. Each figure node takes its
 // attributes and HTML from here. Every surface that draws one, such as the editor or the export, takes its box style,
 // so they all draw the same box.
@@ -8,8 +8,8 @@ import type { DOMOutputSpec } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 import { MAX_PAPER_MM, mmToPx } from '../page';
 
-// The nodes drawn in the figure's frame: an image and a chart.
-export const FIGURE_FRAME_NODES = ['figure', 'chart'] as const;
+// The nodes drawn in the figure's frame: an image, a chart and a text box.
+export const FIGURE_FRAME_NODES = ['figure', 'chart', 'textBox'] as const;
 export type FigureFrameNode = (typeof FIGURE_FRAME_NODES)[number];
 
 export const isFigureFrameNode = (name: string | undefined): name is FigureFrameNode =>
@@ -31,7 +31,7 @@ export const isPositioned = (layout: FigureLayout | null | undefined): layout is
     POSITIONED_LAYOUTS.some((positioned) => positioned === layout);
 
 // A positioned figure anchors on a body paragraph. Inside these nodes it draws in line, as a block.
-export const BLOCK_ONLY_FIGURE_PARENTS = ['tableCell', 'tableHeader', 'footnote'];
+export const BLOCK_ONLY_FIGURE_PARENTS = ['tableCell', 'tableHeader', 'footnote', 'textBox'];
 
 // No paper is larger, so a forged offset or width can't stall the layout.
 const MAX_POSITION_PX = mmToPx(MAX_PAPER_MM);

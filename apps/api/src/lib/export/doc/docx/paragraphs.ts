@@ -267,6 +267,8 @@ export function blocksOf(
     // The runs of the figures in front of or behind the text, which open the textblock's first piece, as Word anchors
     // a picture at its paragraph's start.
     let anchors = '';
+    // Until the writer draws a text box, its paragraphs follow the textblock that holds it, in line.
+    const boxed: Block[] = [];
     const flush = () => {
         const faces: RunFace[] = [];
         const runs = runsXml(inline, context, props.style, faces);
@@ -280,6 +282,12 @@ export function blocksOf(
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
+        if (node.type === 'textBox') {
+            context.pkg.lost('text-simplified');
+            const box = { ...context, positions: undefined, firstInFlow: false };
+            for (const block of blocksOf(node.content ?? [], {}, box)) boxed.push(block);
+            continue;
+        }
         if (isFigureFrameNode(node.type)) {
             if (textblock && context.positions && isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout)) {
                 anchors += anchoredFigure(node, textblock, context);
@@ -340,6 +348,7 @@ export function blocksOf(
     const opening = first === undefined ? undefined : blocks[first];
     if (anchors && first !== undefined && opening && !('table' in opening))
         blocks[first] = { ...opening, runs: anchors + opening.runs };
+    for (const block of boxed) blocks.push(block);
     return blocks;
 }
 

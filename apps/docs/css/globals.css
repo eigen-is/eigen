@@ -118,6 +118,13 @@
     width: var(--figure-width, auto);
 }
 
+/* A text box with no fill and no outline draws nothing on paper, so the editor alone shows a dashed guide around it,
+   which an empty box can be found by. An outline, not a border, so the box keeps its size. */
+.ProseMirror .text-box:not([data-fill]):is(:not([data-outline]), [data-outline="none"]) {
+    outline: 1px dashed var(--color-border);
+    outline-offset: -1px;
+}
+
 /* ===== Docs page-less: the editor's page box carries data-pageless, and --breakout, the room right of its text column ===== */
 @media screen {
     [data-pageless] {

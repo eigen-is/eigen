@@ -499,9 +499,11 @@
         margin-top: 0;
     }
 
-    /* Lists, quotes and table cells own the spacing of the paragraphs they hold, as the docx reader and writer take
-       it: a paragraph's own space before or after draws only where it stands in the doc itself. */
-    :is(li, blockquote, td, th) p {
+    /* Lists, quotes, table cells and text boxes own the spacing of the paragraphs they hold, as the docx reader and
+       writer take it: a paragraph's own space before or after draws only where it stands in the doc itself. A closed
+       text box writes a span per paragraph. */
+    :is(li, blockquote, td, th, .text-box) p,
+    .text-box [data-type="text-box-paragraph"] {
         /* biome-ignore lint/complexity/noImportantStyles: must beat the format's inline padding */
         padding-top: 0 !important;
         /* biome-ignore lint/complexity/noImportantStyles: must beat the format's inline margin */
@@ -628,6 +630,48 @@
     .figure[data-layout="front"] .figcaption,
     .figure[data-layout="behind"] .figcaption {
         display: none;
+    }
+
+    /* A text box is a column of its paragraphs inside its border and padding, at its width and at least its height
+       (textBoxHTMLAttributes writes both). It sits inline in its anchor paragraph, so it would draw its text in that
+       paragraph's look, a heading's or a centred one's: it draws in the doc's Normal instead, and its paragraphs apply
+       their own format. */
+    .text-box {
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        font-family: var(--doc-font-family, var(--font-sans));
+        font-size: var(--doc-font-size, 11pt);
+        font-weight: 400;
+        font-style: normal;
+        letter-spacing: normal;
+        text-transform: none;
+        line-height: 1.5;
+        text-align: start;
+        text-indent: 0;
+        color: var(--doc-color, #1a1a2e);
+    }
+
+    .text-box[data-vertical-align="middle"] {
+        justify-content: center;
+    }
+
+    .text-box[data-vertical-align="bottom"] {
+        justify-content: flex-end;
+    }
+
+    /* The open box's live editor writes <p>, a closed box and the exports a span per paragraph: one look for both. */
+    .text-box :is(p, [data-type="text-box-paragraph"]) {
+        display: block;
+        line-height: var(--doc-line-height, 1.694);
+        margin-top: 0;
+    }
+
+    /* The open box's editor is a .tiptap inside the body's, whose fill-the-page height it must not take. */
+    .text-box .tiptap {
+        min-height: 0;
     }
 }
 

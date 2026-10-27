@@ -1,9 +1,14 @@
+// Google's and Word's footnote: a reference in the body's text that holds its note's paragraphs. Notes number in
+// document order and are never stored numbered. A note is one of the doc's stories, with a stable id; the note's own
+// editor, the exports and the docx reader and writer all read it through this node.
+
 import type { JSONContent } from '@tiptap/core';
 import { Node } from '@tiptap/core';
 import type { Node as PMNode, ResolvedPos, Schema } from '@tiptap/pm/model';
 import { DOMSerializer, Fragment, DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 import { TextSelection } from '@tiptap/pm/state';
+import { flattenNestedStories, isStoryNode, newStoryId, readStoryId, storyIdAttribute } from './stories';
 
 const NAME = 'footnote';
 
@@ -12,29 +17,6 @@ export const FOOTNOTE_PARAGRAPH = 'footnote-paragraph';
 
 // data-type, as a web page's own span.footnote is its text.
 export const FOOTNOTE_SELECTOR = `span[data-type="${NAME}"]`;
-
-// The schema can't refuse a note inside a note: the note holds the body's own paragraph, and a content expression
-// names what a node admits, never what it leaves out. So the insert refuses one, a paste flattens one, and every
-// renderer and writer reads a forged one through this: its paragraphs' inline content in its place, each after a space.
-export function flattenNestedFootnotes(node: JSONContent): JSONContent {
-    if (node.type === NAME) return { ...node, content: node.content?.map(withoutFootnotes) };
-    return node.content ? { ...node, content: node.content.map(flattenNestedFootnotes) } : node;
-}
-
-function withoutFootnotes(node: JSONContent): JSONContent {
-    if (!node.content) return node;
-    return {
-        ...node,
-        content: node.content.flatMap((child) =>
-            child.type === NAME
-                ? (child.content ?? []).flatMap((paragraph) => [
-                      { type: 'text', text: ' ' },
-                      ...(withoutFootnotes(paragraph).content ?? []),
-                  ])
-                : [withoutFootnotes(child)],
-        ),
-    };
-}
 
 // Notes number 1, 2, 3 in document order, never stored. A nested note takes none: it reads as text.
 export function footnoteNumbers(doc: PMNode): Map<number, number> {
@@ -53,18 +35,18 @@ export function footnotesInOrder(node: JSONContent): JSONContent[] {
     return (node.content ?? []).flatMap(footnotesInOrder);
 }
 
-const inFootnote = ($pos: ResolvedPos): boolean => {
-    for (let depth = $pos.depth; depth > 0; depth--) if ($pos.node(depth).type.name === NAME) return true;
+const inStory = ($pos: ResolvedPos): boolean => {
+    for (let depth = $pos.depth; depth > 0; depth--) if (isStoryNode($pos.node(depth).type.name)) return true;
     return false;
 };
 
 // A reference after the selection, which stays, as Word's and Google's insert keep a selected text, and the caret
-// after it. Its note is one empty paragraph. Returns where the reference is, or null where no note goes: inside a note,
+// after it. Its note is one empty paragraph. Returns where the reference is, or null where no note goes: inside a story,
 // where the textblock takes no inline node (a code block), and in a schema without one (a band's).
 export function insertFootnote(tr: Transaction): number | null {
     const { $to } = tr.selection;
-    const note = tr.doc.type.schema.nodes[NAME]?.createAndFill();
-    if (!note || inFootnote($to) || !$to.parent.canReplaceWith($to.index(), $to.index(), note.type)) return null;
+    const note = tr.doc.type.schema.nodes[NAME]?.createAndFill({ id: newStoryId() });
+    if (!note || inStory($to) || !$to.parent.canReplaceWith($to.index(), $to.index(), note.type)) return null;
     tr.insert($to.pos, note);
     tr.setSelection(TextSelection.create(tr.doc, $to.pos + note.nodeSize));
     return $to.pos;
@@ -80,7 +62,7 @@ function noteContent(dom: globalThis.Node, schema: Schema): Fragment {
         .filter((child) => child.nodeName === 'SPAN')
         .map((span) => parser.parse(span, { topNode: paragraph.create() }));
     const note = type.createAndFill(null, paragraphs);
-    return note ? schema.nodeFromJSON(flattenNestedFootnotes(note.toJSON())).content : Fragment.empty;
+    return note ? schema.nodeFromJSON(flattenNestedStories(note.toJSON())).content : Fragment.empty;
 }
 
 // Google's and Word's footnote: the reference in the text, holding its note, so a copy, a paste, a delete, an undo and a
@@ -102,6 +84,10 @@ export const FootnoteNode = Node.create({
     // Selecting the reference selects the whole note.
     selectable: true,
 
+    addAttributes() {
+        return storyIdAttribute();
+    },
+
     parseHTML() {
         return [{ tag: FOOTNOTE_SELECTOR, getContent: noteContent }];
     },
@@ -112,6 +98,8 @@ export const FootnoteNode = Node.create({
         const dom = document.createElement('span');
         dom.className = NAME;
         dom.setAttribute('data-type', NAME);
+        const id = readStoryId(node.attrs['id']);
+        if (id) dom.setAttribute('data-story-id', id);
         node.forEach((paragraph) => {
             const span = document.createElement('span');
             span.setAttribute('data-type', FOOTNOTE_PARAGRAPH);

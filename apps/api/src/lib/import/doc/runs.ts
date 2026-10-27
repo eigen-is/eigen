@@ -6,7 +6,7 @@ import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { readFontSize } from '@workspace/lib/constants/fonts';
 import type { Caps, PageNumberKind } from '@workspace/lib/docs/eigendoc';
-import { PAGE_NUMBER_KINDS } from '@workspace/lib/docs/eigendoc';
+import { newStoryId, PAGE_NUMBER_KINDS } from '@workspace/lib/docs/eigendoc';
 import { MathError, readOmml, readOmmlText, writeMathml } from '@workspace/math';
 import type { XmlElement } from '../../core/xml';
 import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
@@ -221,7 +221,11 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
                     child.local === 'footnoteReference' ? 'footnote' : 'endnote',
                     w(child, 'id') ?? '',
                 );
-                if (content) context.pieces.push({ kind: 'node', node: { type: 'footnote', content } });
+                if (content)
+                    context.pieces.push({
+                        kind: 'node',
+                        node: { type: 'footnote', attrs: { id: newStoryId() }, content },
+                    });
                 customMark = !!content && isOn(w(child, 'customMarkFollows')) === true;
                 break;
             }

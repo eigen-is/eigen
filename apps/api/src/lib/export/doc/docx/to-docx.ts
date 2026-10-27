@@ -4,7 +4,7 @@
 
 import type { JSONContent } from '@tiptap/core';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { FIRST_PAGE_BAND, flattenNestedFootnotes, pageTwips } from '@workspace/lib/docs/eigendoc';
+import { FIRST_PAGE_BAND, flattenNestedStories, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { EigendocBands } from '../../../document/doc';
 import { codeHighlighter } from '../../../document/lowlight';
@@ -73,7 +73,7 @@ export function writeDocx(
         pkg.partRels = partRelationships();
         const note: Context = { ...flow, style: 'FootnoteText' };
         const notes = pkg.footnotes.map((node, index) => {
-            const blocks = blocksOf(flattenNestedFootnotes(node).content ?? [], {}, note);
+            const blocks = blocksOf(flattenNestedStories(node).content ?? [], {}, note);
             return `<w:footnote w:id="${index + 1}">${blocksXml(withNoteNumber(blocks), pkg.styles)}</w:footnote>`;
         });
         noteParts.push([
