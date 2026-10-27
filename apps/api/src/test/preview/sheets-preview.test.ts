@@ -400,7 +400,7 @@ describe('eigensheets preview (heavy fixture)', () => {
         expect(body.match(/<col /g)!.length).toBeLessThanOrEqual(50);
         expect(body.match(/<td/g)!.length).toBeLessThanOrEqual(10_000);
         // First-row content still renders from the top-left of the used range.
-        expect(body).toContain('>HA</div></div></td>');
+        expect(body).toContain('>HA</td>');
     }, 120_000);
 });
 
@@ -569,6 +569,6 @@ describe('eigensheets export and preview (hidden sheets)', () => {
 });
 
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
-// an intentional renderer or preview-budget change. Last move: a cell's content is
-// clipped to its rows, as the editor clips it (2026-10-27).
-const GOLDEN_BODY_SHA256 = 'f137618e50ed96f78dc2a9a794ca7c882a8337f697d99a7d72713d12f1d64f9b';
+// an intentional renderer or preview-budget change. Last move: only a cell whose
+// text can pass its rows is clipped to them (2026-10-27).
+const GOLDEN_BODY_SHA256 = '22d84e290caeffe8920970fb650928580cc22e08175f49f604ed7f420b10c63f';

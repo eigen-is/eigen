@@ -4,6 +4,7 @@
 // where the editor floats them. Runs in the transform process, so it reaches no Mount: images arrive as URLs by media
 // name.
 
+import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type {
     Cell,
@@ -60,8 +61,8 @@ type StyleRegistry = Map<string, string>;
 export const PREVIEW_SHEET_BUDGET: SheetBudget = { maxRows: 200, maxCols: 50, maxCells: 10_000 };
 
 // The cells the preview's images and charts spend, apart from the window's, so a window that spends all of its own
-// still draws its first charts. As many as the window holds draws four charts of 2,000 points, about 1 MB of SVG, so
-// a full window and its charts stay well under the preview's 8 MB byte guard.
+// still draws its first charts. As many as the window holds draws four charts of 2,000 points, about 1 MB of SVG. A
+// full window of plain cells and its charts then stay under the preview's 8 MB byte guard.
 export const PREVIEW_FLOATING_CELLS = 10_000;
 
 // The most cells, rows times columns, an export walks of all its sheets together. A peer can write a merge or a border
@@ -92,7 +93,11 @@ const IMAGE_TAG_BYTES = 200;
 const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
 
 // Every td's defaults: inline in the preview, whose embedders strip the <head>, and the shared td{} rule in the export.
-const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px;line-height:0';
+const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
+
+// A line of text is about 1.2 times its font size. With its padding and gridline, a line that fits its rows with a
+// pixel to spare grows them by two pixels at most, as a thick border does.
+const LINE_HEIGHT = 1.2;
 
 // Where a cell's text sits in its rows, as the canvas places the text's ink: in the middle, or 2 px from the top or
 // the bottom. CSS places a line by its font's ascent and descent instead. In Inter those put the ink 0.1em below the
@@ -259,11 +264,11 @@ function pdfPageCss({ width, height }: ContentSize): string {
     return `@page { size: ${side(width)}px ${side(height)}px; margin: ${PAGE_MARGIN}px; }`;
 }
 
-// The pages the PDF prints a sheet on, and how many of its rows the first `most` pages hold. Each row prints at its
-// stored height, since clipToRows keeps a cell's content inside its rows, and a border thicker than a pixel adds one
-// or two. A row that doesn't fit what is left of a page starts the next one, as WeasyPrint breaks a table between
-// rows, so rows taller than half a page print a page each. The overlay's box stretches the sheet to its farthest
-// image or chart. A sheet whose overlay alone takes more than `most` pages has no row to keep.
+// The pages the PDF prints a sheet on, and how many of its rows the first `most` pages hold. Each row prints about its
+// stored height, since content that could grow it is clipped (canPassRows), and a plain line or a border thicker than
+// a pixel adds two pixels at most. A row that doesn't fit what is left of a page starts the next one, as WeasyPrint
+// breaks a table between rows, so rows taller than half a page print a page each. The overlay's box stretches the
+// sheet to its farthest image or chart. A sheet whose overlay alone takes more than `most` pages has no row to keep.
 function printedPages({ sheet, rows, offset, floating }: WindowedSheet, most: number): { pages: number; rows: number } {
     const overlay = Math.ceil(floatingExtent(floating, offset).height / PAGE_CONTENT_HEIGHT);
     if (overlay > most) return { pages: overlay, rows: 0 };
@@ -433,7 +438,9 @@ function renderSheet(
             if (span && span.cs > 1) attrs.push(`colspan="${span.cs}"`);
             if (span && span.rs > 1) attrs.push(`rowspan="${span.rs}"`);
 
-            const cellStyle = buildCellStyle(v, borderMap[`${i}_${j}`], showGrid, cfStyle, forStylesheet);
+            const cellHeight = span ? heights.slice(i, i + span.rs).reduce((sum, rowHeight) => sum + rowHeight) : h;
+            const clipped = canPassRows(v, cellHeight);
+            const cellStyle = buildCellStyle(v, borderMap[`${i}_${j}`], showGrid, cfStyle, forStylesheet, clipped);
             if (forStylesheet) {
                 // The shared td{} rule holds the base declarations, so an unstyled cell needs no class.
                 if (cellStyle) attrs.push(styleAttr(styles, cellStyle));
@@ -449,17 +456,20 @@ function renderSheet(
             if (href != null) {
                 display = `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${display}</a>`;
             }
-            // A turned span is placed absolutely, so it grows no row, and a clip around it would cut it off. Any other
-            // content is clipped to the cell's rows, under the data bar's layer, which spans the whole cell.
+            // Content that can pass the cell's rows is clipped to them, under the data bar's layer, which spans the
+            // whole cell.
             const dataBar = cfStyle?.dataBar;
             let inner: string;
-            if (isNumericRotation(v)) {
-                inner = wrapForRotation(v, dataBar ? renderDataBar(dataBar, display, styles) : display, styles);
+            if (clipped) {
+                const content = clipToRows(
+                    wrapForRotation(v, display, styles),
+                    cellHeight,
+                    cellVerticalAlign(v),
+                    styles,
+                );
+                inner = dataBar ? renderDataBar(dataBar, content, styles) : content;
             } else {
-                const cellHeight = span ? heights.slice(i, i + span.rs).reduce((sum, rowHeight) => sum + rowHeight) : h;
-                const valign = v?.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
-                const clipped = clipToRows(wrapForRotation(v, display, styles), cellHeight, valign, styles);
-                inner = dataBar ? renderDataBar(dataBar, clipped, styles) : clipped;
+                inner = wrapForRotation(v, dataBar ? renderDataBar(dataBar, display, styles) : display, styles);
             }
             const attrStr = attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
             cells.push(`<td${attrStr}>${inner}</td>`);
@@ -475,13 +485,22 @@ function renderSheet(
     return { html, size: { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) } };
 }
 
-// A table row grows to fit its content, but the editor clips a cell's text to its rows. So the content sits in an
-// inline-block as tall as the rows less their gridline, the box the editor clips to, and every row prints at its
-// stored height. Its margins give back the td's padding. WeasyPrint pages through a block's content past its height,
-// but not through an inline-block's. The text inside is placed absolutely, so centered text spills past both edges
-// as the editor's does. Its line pitch is the editor's, which spaces wrapped lines at 1.5 times their ascent. The td's
-// line-height is 0, so a large font adds no line around the block. A text decoration doesn't reach into an
-// inline-block or an absolute box, so both take the td's own.
+// Whether a cell's content can grow its rows past their stored height: wrapped or stacked text, or a line taller than
+// the rows. A table row grows to fit its content, but the editor clips a cell's text to its rows. So such content is
+// clipped (clipToRows), and every row prints about its stored height. A turned span is placed absolutely and grows no
+// row, and a clip would cut it off. Most cells hold one short line and stay plain, since a clip doubles what a cell
+// costs WeasyPrint.
+function canPassRows(v: Cell | null, height: number): boolean {
+    if (!v || isNumericRotation(v)) return false;
+    return cellWrapsText(v) || v.rt === 'vertical' || ptToPx(cellFontSize(v.fs)) * LINE_HEIGHT + 1 > height;
+}
+
+// The content sits in an inline-block as tall as the rows less their gridline, the box the editor clips to. Its
+// margins give back the td's padding. WeasyPrint pages through a block's content past its height, but not through an
+// inline-block's. The text inside is placed absolutely, so centered text spills past both edges as the editor's does.
+// It sits where the canvas puts the ink, and its line pitch is the editor's, which spaces wrapped lines at 1.5 times
+// their ascent. The td of a clipped cell sets its line-height to 0, so a large font adds no line around the block. A
+// text decoration doesn't reach into an inline-block or an absolute box, so both take the td's own.
 function clipToRows(
     content: string,
     height: number,
@@ -554,6 +573,7 @@ function buildCellStyle(
     showGrid: boolean,
     cfStyle: CellFormatStyle | undefined,
     forStylesheet: boolean,
+    clipped: boolean,
 ): string {
     const parts: string[] = [];
 
@@ -578,11 +598,15 @@ function buildCellStyle(
         if (cellColor) parts.push(`background:${cellColor}`);
         // A rotated cell's span is placed absolutely (wrapForRotation), so no alignment acts on it. Any other cell
         // writes its own text-align, else Excel's General one as the canvas draws it, where left, the td's own, writes
-        // none. Its text places itself in the cell's rows (clipToRows).
+        // none. A clipped cell's text places itself in its rows, and a plain one writes its vertical-align unless it is
+        // middle, the table body's own.
         if (!rotated) {
             const general = generalAlign(v);
             const ht = v.ht != null && v.ht in HORIZONTAL_ALIGN ? v.ht : general === '1' ? undefined : Number(general);
             if (ht !== undefined) parts.push(`text-align:${HORIZONTAL_ALIGN[ht]}`);
+            const valign = cellVerticalAlign(v);
+            if (clipped) parts.push('line-height:0');
+            else if (valign !== 'middle') parts.push(`vertical-align:${valign}`);
         }
         if (cellWrapsText(v)) parts.push('white-space:pre-wrap;word-wrap:break-word');
         if (v.un === 1 && v.cl === 1) {
@@ -615,6 +639,10 @@ function buildCellStyle(
     return parts.join(';');
 }
 
+function cellVerticalAlign(v: Cell | null): (typeof VERTICAL_ALIGN)[number] {
+    return v?.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
+}
+
 // Cell, border and rule colors are schemaless values a collaborator sets, so only a string the color parser reads
 // reaches the CSS: `red;position:fixed;inset:0` would add declarations of its own to the export and the drive hero.
 // A bare keyword (a named color) can't add a declaration, so it passes as CSS reads it.
@@ -645,8 +673,7 @@ function getCellDisplay(v: Cell | null): string {
 // bottom for a positive rt, which turns up, and left and top for a negative one. CSS turns clockwise and rt
 // anticlockwise, as Excel does, so the angle is negated. Turned around a corner, the text would swing past the cell's
 // left edge and be clipped, so the span shifts right by sin(rt) em after it turns, as the canvas shifts its pivot by
-// the text's height. The span sets its own line-height, as the td's is 0 (clipToRows). A 'vertical' rt stacks the
-// characters with writing-mode instead.
+// the text's height. A 'vertical' rt stacks the characters with writing-mode instead.
 function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry): string {
     if (!v || v.rt == null) return inner;
     if (v.rt === 'vertical') {
@@ -659,7 +686,7 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
         const origin = rt > 0 ? 'left bottom' : 'left top';
         const overhangEm = Math.abs(Math.sin((rt * Math.PI) / 180)).toFixed(3);
         const decl =
-            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;line-height:normal;text-decoration:inherit;` +
+            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;text-decoration:inherit;` +
             `transform-origin:${origin};transform:translateX(${overhangEm}em) rotate(${cssAngle}deg)`;
         return `<span ${styleAttr(styles, decl)}>${inner}</span>`;
     }
