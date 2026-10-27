@@ -91,6 +91,8 @@ beforeEach(() => {
     provider.destroy();
     doc = new Y.Doc();
     provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
+    // The outline's shown or hidden, which the browser remembers.
+    localStorage.clear();
 });
 
 let unmount = async () => {};
@@ -105,13 +107,16 @@ async function render({
     isMobile,
     mediaFolderId = null,
     chatFolderId = null,
+    width = 1920,
 }: {
     canWrite: boolean;
     isMobile: boolean;
     mediaFolderId?: string | null;
     chatFolderId?: string | null;
+    // The toolbar folds its menus by the window's width, the panes by the layout's isMobile.
+    width?: number;
 }) {
-    window.happyDOM.setViewport({ width: 1920, height: 1000 });
+    window.happyDOM.setViewport({ width, height: 1000 });
     function Editor() {
         const [writer, setWriter] = useState(canWrite);
         setCanWrite = setWriter;
@@ -1242,4 +1247,111 @@ test("a viewer's Download image saves the chart in its look on white, its font e
     } finally {
         saved.mockRestore();
     }
+});
+
+// The outline: View › Show outline on a desktop, remembered per browser, and the kebab's pane on a phone.
+const OUTLINE_DOC = {
+    type: 'doc',
+    content: [
+        { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Intro' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Body' }] },
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Method' }] },
+    ],
+};
+
+const outlineShown = () =>
+    [...document.querySelectorAll('.eigen-toolbar-title')].some((title) => title.textContent === 'Outline');
+const outlineEntry = (label: string) =>
+    [...document.querySelectorAll<HTMLElement>('nav[aria-label="Outline"] button')].find(
+        (entry) => entry.textContent === label,
+    );
+
+test('the outline is hidden at first, and View › Show outline shows and hides it, remembered after a reload', async () => {
+    await render(WRITER);
+    expect(outlineShown()).toBe(false);
+
+    await openMenu('View');
+    await pick('Show outline');
+    expect(outlineShown()).toBe(true);
+
+    await unmount();
+    await render(WRITER);
+    expect(outlineShown()).toBe(true);
+
+    await openMenu('View');
+    await pick('Show outline');
+    expect(outlineShown()).toBe(false);
+    await unmount();
+    await render(WRITER);
+    expect(outlineShown()).toBe(false);
+});
+
+test.each([
+    ['a writer', WRITER],
+    ['a viewer', { canWrite: false, isMobile: false }],
+])('a click on an outline entry puts the caret at the start of its heading, for %s', async (_who, who) => {
+    await render(who);
+    await act(async () => void bodyView()?.editor?.commands.setContent(OUTLINE_DOC));
+    await openMenu('View');
+    await pick('Show outline');
+
+    await inBrowserFrames(() => outlineEntry('Method')?.click());
+    const { $from } = bodyView()?.editor?.state.selection ?? {};
+    expect([$from?.parent.textContent, $from?.parentOffset]).toEqual(['Method', 0]);
+});
+
+test('a jump scrolls its heading to a small margin below the top of the view, so a note number above it shows', async () => {
+    await render(WRITER);
+    await act(async () => void bodyView()?.editor?.commands.setContent(OUTLINE_DOC));
+    await openMenu('View');
+    await pick('Show outline');
+    const scroller = bodyView()?.closest<HTMLElement>('.overflow-y-scroll');
+    const heading = [...(bodyView()?.querySelectorAll('h2') ?? [])].find((h) => h.textContent === 'Method');
+    if (!scroller || !heading) throw new Error('no scroller or heading');
+    spyOn(scroller, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 800, 900));
+    spyOn(heading, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 700, 600, 30));
+    const scrollBy = spyOn(scroller, 'scrollBy').mockImplementation(() => {});
+
+    await inBrowserFrames(() => outlineEntry('Method')?.click());
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    expect(scrollBy).toHaveBeenCalledWith({ top: 700 - 100 - 24 });
+});
+
+test('a jump to a heading leaves the band being edited', async () => {
+    await render(WRITER);
+    await act(async () => void bodyView()?.editor?.commands.setContent(OUTLINE_DOC));
+    await openMenu('View');
+    await pick('Show outline');
+    await doubleClick('header');
+    expect(editing()).toEqual(['header']);
+
+    await inBrowserFrames(() => outlineEntry('Method')?.click());
+    expect(editing()).toEqual([]);
+    expect(bodyView()?.editor?.state.selection.$from.parent.textContent).toBe('Method');
+});
+
+const PHONE = { canWrite: true, isMobile: true, width: 390 };
+
+test("on a phone the kebab's Show outline opens a pane over the editor, and a tap jumps and closes it", async () => {
+    await render(PHONE);
+    await act(async () => void bodyView()?.editor?.commands.setContent(OUTLINE_DOC));
+    expect(outlineShown()).toBe(false);
+    expect(menuTrigger('View')).toBeUndefined();
+
+    await openMenu('More actions');
+    await pick('Show outline');
+    expect(outlineShown()).toBe(true);
+    expect(document.querySelector('.tiptap-wrapper')?.closest('.hidden')).not.toBeNull();
+
+    await inBrowserFrames(() => outlineEntry('Method')?.click());
+    expect(outlineShown()).toBe(false);
+    expect(document.querySelector('.tiptap-wrapper')?.closest('.hidden')).toBeNull();
+    expect(bodyView()?.editor?.state.selection.$from.parent.textContent).toBe('Method');
+
+    // A phone's pane opens closed again on the next visit.
+    await openMenu('More actions');
+    await pick('Show outline');
+    await unmount();
+    await render(PHONE);
+    expect(outlineShown()).toBe(false);
 });

@@ -3,10 +3,10 @@ title: "Create and edit a document"
 description: "Open Docs, create a new document, and start writing. Changes are saved automatically as you type."
 type: how-to
 category: Basics
-tags: [docs, editing, create, writing]
+tags: [docs, editing, create, writing, outline, headings]
 related: [docs/format-text, docs/get-started]
 order: 20
-updated: 2026-10-18
+updated: 2026-10-27
 ---
 
 Docs is the document editor in Eigen. You can create a new document in seconds, write and format your content in the browser, and share it with others when you're ready. Everything saves as you go.
@@ -55,6 +55,17 @@ The word count tells you how long the document is, or how long a part of it is.
 3. Read the counts, then click **OK**.
 
 The dialog shows **Words**, **Characters**, and **Characters excluding spaces**. With text selected, each count shows the selection out of the whole document, such as "12 of 340". Text in tables, lists, and image captions counts. Footnotes don't count, and line breaks don't count as characters. You can count words in a document you can only view, too.
+
+## Jump to a heading with the outline
+
+The outline lists the document's headings, so you can find your way around a long document.
+
+1. Open the **View** menu and choose **Show outline**. On a phone, open the **⋮** menu at the top right and choose **Show outline**.
+2. Click a heading in the list. Docs jumps to it and puts your cursor at its start.
+
+The list shows Heading 1 through Heading 6, each indented by its level, and it changes as you type. A Title or Subtitle isn't listed. You can use the outline in a document you can only view, too.
+
+On a computer, the outline sits to the left of the page and stays open while you work. To hide it, choose **View → Show outline** again, or click **Close** at the top of the outline. Your browser remembers whether it was shown, so the next document opens the same way. On a phone, the outline covers the document, and tapping a heading closes it and takes you there.
 
 ## Rename a document
 

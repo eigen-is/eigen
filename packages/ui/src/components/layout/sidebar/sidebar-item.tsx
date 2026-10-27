@@ -1,3 +1,6 @@
+// One row of a side list, such as an app's sidebar or the docs outline: an icon and a label that link to a route,
+// open a URL or run a click. Condensed, it shows the icon alone. Following a route also closes the sidebar.
+
 import { Link } from '@tanstack/react-router';
 import type { MouseEvent, ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
@@ -36,7 +39,8 @@ export function SidebarItem({
     const { setSidebarOpen } = useLayout();
     const baseStyles = cn(
         'flex items-center rounded-md px-2.5 py-1.5 text-sm font-normal select-none',
-        condensed ? 'justify-center' : 'gap-2.5',
+        // A Button centres its content, which a list of labels starts at the left edge as a link does.
+        condensed ? 'justify-center' : 'justify-start gap-2.5 text-left',
         isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
         className,
     );

@@ -12,7 +12,7 @@ The goal is parity with Word and Google Docs. A property the schema can't hold i
 
 A figure names its image, and never holds bytes or a URL. The name is a file in the container's `media/` folder, resolved to a URL at render ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)). A pending name, `pending:<uuid>`, stands in for an image whose upload has not landed yet. A panel is one of the right-side panes: comments, activity, and the figure, chart, table and equation properties.
 
-The sections cover the schema, the title and subtitle, figures, the page, headers and footers, page numbers, footnotes, the open note, the panels, the menus, page breaks, equations, comments, the clipboard, what keeps content inside the page, table columns, a cell's fill and border, fonts, sizes and caps, a paragraph's spacing and indents, list numbering, and word count. Four things in them surprise people:
+The sections cover the schema, the title and subtitle, figures, the page, headers and footers, page numbers, footnotes, the open note, the panels, the outline, the menus, page breaks, equations, comments, the clipboard, what keeps content inside the page, table columns, a cell's fill and border, fonts, sizes and caps, a paragraph's spacing and indents, list numbering, and word count. Four things in them surprise people:
 
 - The side panels overlay the page instead of taking room from it, and the page slides and scales to stay clear ([§ The page keeps its width](#the-page-keeps-its-width-and-slides-then-scales-clear-of-a-panel)).
 - A figure stores its width in the page's own pixels, so the on-screen scale never leaks into the document ([§ A figure stores a name and a width](#a-figure-stores-a-media-name-and-a-width-in-page-pixels)).
@@ -291,6 +291,20 @@ Laying the panel out as a flex sibling, the way sheets and slides do, would end 
 ## A side panel ends left of the page's scrollbar
 
 The overlay sits in a wrapper with a stable scrollbar gutter (`scrollbar-gutter: stable`) and `overflow: hidden`. That gutter is as wide as the scroll box's scrollbar but draws none, and an absolute child ends where the gutter starts. So the panel stops left of the page's scrollbar, which stays visible and draggable, and its left edge lands where the slide math (`PANEL_INTRUSION_PX`) assumes it is. The wrapper ignores the pointer and the panel takes it back, so clicks around the panel reach the page. An overlay scrollbar has no gutter, so the panel still covers one.
+
+## The outline is the body's headings, by one rule the stored JSON shares
+
+The outline is the list of the body's headings, levels 1 to 6, in document order, that the outline sidebar shows and jumps to. `readOutline` (`packages/lib/src/docs/eigendoc/outline.ts`) reads it from the editor's document as each heading's level, text, position and node. A heading's text leaves out its footnotes, whose paragraphs hold the note's text, and a heading with no text is not listed. The title and subtitle are nodes of their own, and the bands and the open note are other editors, so none of them is in the outline.
+
+The rule itself, `isOutlineHeading` and `outlineText`, reads a node's stored JSON, not a ProseMirror node. So a reader that walks a doc's JSON and never builds nodes, such as the docx writer ([EXPORT.md](EXPORT.md)), can list the same headings with the same text; `outline.test.ts` pins that parity. The walk stops at every textblock, as no heading sits inside one, so the sidebar reads the outline again on each change at the cost of a step per block, not per character.
+
+## The outline sidebar is a column left of the page, shown per browser
+
+View › Show outline shows the outline as a column left of the scroll box, inside the doc's `Column` (`OutlineColumn`, `apps/docs/src/components/docs/outline-sidebar.tsx`). The column takes its width from the scroll box, so the page's slide-then-scale math ([§ The page keeps its width](#the-page-keeps-its-width-and-slides-then-scales-clear-of-a-panel)) sees a narrower box and needs nothing of its own. The right-side panels open and close independently of it.
+
+The list keeps only each heading's level and text, so typing in a paragraph, which moves every heading below it, draws nothing again. A click reads the heading's position at that moment, as an edit above it may have moved it. The jump leaves a band or the open note, puts the caret at the start of the heading, and a frame later scrolls the heading to 24px below the top of the view (`JUMP_MARGIN`): ProseMirror's own scroll stops as soon as the heading shows, at the bottom edge, and flush at the top a footnote number above the heading's line would be clipped. The entries are `SidebarItem` buttons, which start their text at the left edge like every side list, so each level's indent reads.
+
+The outline is hidden at first, and whether it shows is remembered per browser in `localStorage`, under `eigen-docs-outline` (`useOutlineShown`). The doc can't hold it, as one reader's choice would then change every collaborator's view. A phone has no room for the View menu, so the share cluster's kebab holds Show outline, which opens the outline as a pane that hides the editor, as comments do. That pane is never remembered, or every doc would open with its editor hidden, and a tap on a heading jumps there and closes it.
 
 ## The properties panels follow the selection, on desktop only
 
