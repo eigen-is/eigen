@@ -1,11 +1,20 @@
+// The menu bar's Edit menu, such as undo and redo, the clipboard, deleting rows and columns, and find. A row with
+// a shortcut shows the same hotkey definition its key handler matches against, so the label names the key that works.
+
+import { formatForDisplay } from '@tanstack/react-hotkeys';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
+    DropdownMenuShortcut,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { useOptionalDocSearchBar } from '@workspace/ui/components/search/doc-search-provider';
+import {
+    FIND_HOTKEY,
+    FIND_REPLACE_HOTKEY,
+    useOptionalDocSearchBar,
+} from '@workspace/ui/components/search/doc-search-provider';
 import type { RefObject } from 'react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
@@ -19,6 +28,7 @@ import {
     handleFormatPainter,
     handlePasteByClick,
     readClipboardText,
+    SHEET_HOTKEYS,
     tryDeleteRowCol,
 } from '../../state';
 
@@ -40,9 +50,11 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                 <>
                     <DropdownMenuItem disabled={!canUndo} onClick={() => handleUndo()}>
                         Undo
+                        <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.undo)}</DropdownMenuShortcut>
                     </DropdownMenuItem>
                     <DropdownMenuItem disabled={!canRedo} onClick={() => handleRedo()}>
                         Redo
+                        <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.redo)}</DropdownMenuShortcut>
                     </DropdownMenuItem>
 
                     <DropdownMenuSeparator />
@@ -60,6 +72,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                     }}
                 >
                     Cut
+                    <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.cut)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             <DropdownMenuItem
@@ -72,6 +85,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                 }}
             >
                 Copy
+                <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.copy)}</DropdownMenuShortcut>
             </DropdownMenuItem>
             {context.allowEdit && (
                 <>
@@ -84,6 +98,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                         }}
                     >
                         Paste
+                        <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.paste)}</DropdownMenuShortcut>
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
@@ -167,6 +182,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                 }}
             >
                 Find
+                <DropdownMenuShortcut>{formatForDisplay(FIND_HOTKEY)}</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem
                 disabled={!docSearchBar?.canReplace}
@@ -176,6 +192,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                 }}
             >
                 Find and replace
+                <DropdownMenuShortcut>{formatForDisplay(FIND_REPLACE_HOTKEY)}</DropdownMenuShortcut>
             </DropdownMenuItem>
         </>
     );
