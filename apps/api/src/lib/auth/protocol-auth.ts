@@ -67,18 +67,18 @@ export async function verifyProtocolAuth(email: string, password: string, ip?: s
         throw new ApiError(401, 'Unauthorized');
     }
 
-    // 2. A 2FA account never signs in with its account password here. For such an account signInEmail does not
-    // throw: it resolves with `{ twoFactorRedirect: true }`, so step 3 would return the user and skip the second
+    // 2. A 2FA account never signs in with its account password here, because the protocols have no second
     // factor. These accounts use an app password.
     if (user.twoFactorEnabled) {
         recordProtocolAuthFailure(email, ip);
         throw new ApiError(401, 'Unauthorized');
     }
 
-    // 3. The account password.
-    try {
-        await auth.api.signInEmail({ body: { email, password } });
-    } catch {
+    // 3. The account password, checked against the credential account's hash. A protocol client signs in on every
+    // request or poll, so this creates no session and does not count as a sign-in.
+    const context = await auth.$context;
+    const account = await context.internalAdapter.findCredentialAccount(user.id);
+    if (!account?.password || !(await context.password.verify({ hash: account.password, password }))) {
         recordProtocolAuthFailure(email, ip);
         throw new ApiError(401, 'Unauthorized');
     }

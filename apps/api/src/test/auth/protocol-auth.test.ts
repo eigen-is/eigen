@@ -31,6 +31,47 @@ describe('Protocol Auth', () => {
         expect(user.email).toBe(ctx.alice.user.email);
     });
 
+    describe('the account password', () => {
+        async function sessionCount(userId: string): Promise<number> {
+            const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
+            const { session } = await import('../../../auth-schema');
+            const { eq } = await import('drizzle-orm');
+            return getAuthDrizzleDb().select().from(session).where(eq(session.userId, userId)).all().length;
+        }
+
+        test('is checked without creating a session', async () => {
+            const before = await sessionCount(ctx.alice.user.id);
+            for (let i = 0; i < 5; i++) {
+                await verifyProtocolAuth(ctx.alice.user.email, 'testpassword123');
+            }
+            expect(await sessionCount(ctx.alice.user.id)).toBe(before);
+        });
+
+        test('leaves the last sign-in alone', async () => {
+            const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
+            const { getUserById } = await import('../../lib/user');
+            const { user } = await import('../../../auth-schema');
+            const { eq } = await import('drizzle-orm');
+            const lastSignIn = new Date('2026-01-05T09:00:00Z');
+            getAuthDrizzleDb()
+                .update(user)
+                .set({ lastLoginAt: lastSignIn })
+                .where(eq(user.id, ctx.alice.user.id))
+                .run();
+            await verifyProtocolAuth(ctx.alice.user.email, 'testpassword123');
+            expect((await getUserById(ctx.alice.user.id))?.lastLoginAt).toEqual(lastSignIn);
+        });
+
+        test('a wrong one is refused and counts toward the limit', async () => {
+            for (let i = 0; i < 10; i++) {
+                await expect(verifyProtocolAuth(ctx.alice.user.email, 'wrongpassword')).rejects.toThrow('Unauthorized');
+            }
+            await expect(verifyProtocolAuth(ctx.alice.user.email, 'testpassword123')).rejects.toThrow(
+                'Too many failed',
+            );
+        });
+    });
+
     // Better Auth logs every missed key lookup at ERROR, so an account password must never reach it.
     test('an account password never reaches the API key check', async () => {
         const verifyApiKey = spyOn(auth.api, 'verifyApiKey');
