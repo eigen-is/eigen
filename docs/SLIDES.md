@@ -59,7 +59,7 @@ The comment pane and ⌘F span the whole deck while the canvas shows one slide. 
 
 `present-mode.tsx` draws the slide with `FrameView`, the same read-only page the rail draws, so the presenter shows what the editor shows. The doc hook stays mounted above it, so leaving returns to the same slide and the unsynced-edits guard keeps working. Present claims Escape in the capture phase, as the outermost layer ([CANVAS.md](CANVAS.md#escape-is-layered-per-host-on-purpose)).
 
-A click moves forward and a right-click back, and a clicker's arrow, Page and space keys do the same. A click past the last slide leaves present mode. A right-click on the first slide stays put, because leaving on a backward mis-click would be a surprise. Links in a rich-text box work, because present mode is the one place the layers take pointer events. `deckOwnsClick` keeps a press on a link from also moving the deck.
+A click moves forward and a right-click back, and a clicker's arrow, Page and space keys do the same. A click past the last slide leaves present mode. A right-click on the first slide stays put, because leaving on a backward mis-click would be a surprise. Links in a text box or a shape work, because present mode is the one place the layers take pointer events. `deckOwnsClick` keeps a press on a link from also moving the deck.
 
 ## A background reaches other slides only through Apply
 
