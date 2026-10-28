@@ -6,7 +6,7 @@
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import type { BackupProgress } from '@workspace/lib/types/backup';
+import type { BackupProgress, BackupShare } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { incompleteReason, parseBackupShares } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
@@ -156,7 +156,7 @@ export async function restoreSafetyCopy(
 }
 
 // The share-registry rows the archive holds: none for a team, which has no shares.json.
-export function readShares(folder: string): { targetIdentifier: string }[] {
+export function readShares(folder: string): BackupShare[] {
     const sharesPath = path.join(folder, ARCHIVE_SHARES_FILE);
     if (!fs.existsSync(sharesPath)) return [];
     const rows = parseBackupShares(fs.readFileSync(sharesPath, 'utf8'));
@@ -165,7 +165,7 @@ export function readShares(folder: string): { targetIdentifier: string }[] {
 }
 
 // Inserts only the missing rows: a registry row that is already there describes a live share.
-export async function restoreShares(ownerId: string, rows: { targetIdentifier: string }[]): Promise<void> {
+export async function restoreShares(ownerId: string, rows: BackupShare[]): Promise<void> {
     for (const row of rows) await addRegistryEntry(ownerId, row.targetIdentifier);
 }
 
