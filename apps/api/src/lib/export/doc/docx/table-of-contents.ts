@@ -9,7 +9,7 @@ import { outlineEntry, PROSE_TEXTBLOCKS, readTocLevels } from '@workspace/lib/do
 import { NO_TOC_ENTRIES, TOC_GALLERY, tocBookmark, tocInstruction } from '../../../ooxml/wordml';
 import type { Context } from './package';
 import type { Block, Paragraph } from './paragraphs';
-import { textXml } from './runs';
+import { fieldEnd, fieldStart, textXml } from './runs';
 
 // The body's outline: its entries in document order, and each heading's number in it, from 1, by its JSON node.
 export type DocxOutline = { entries: OutlineEntry[]; numbers: Map<JSONContent, number> };
@@ -44,12 +44,6 @@ export function withBookmark(blocks: Block[], number: number): Block[] {
     );
 }
 
-const fieldChar = (type: 'begin' | 'separate' | 'end', dirty = false) =>
-    `<w:r><w:fldChar w:fldCharType="${type}"${dirty ? ' w:dirty="true"' : ''}/></w:r>`;
-
-const instrText = (instruction: string) =>
-    `<w:r><w:instrText xml:space="preserve"> ${instruction} </w:instrText></w:r>`;
-
 // One paragraph per entry in Word's `toc N` style, its text a link to the heading and its page number a PAGEREF field
 // after a dotted right tab at the column's edge. The first entry opens the TOC field and a last paragraph ends it.
 export function tableOfContentsBlocks(node: JSONContent, context: Context): Block[] {
@@ -58,11 +52,11 @@ export function tableOfContentsBlocks(node: JSONContent, context: Context): Bloc
     const entries: Paragraph[] = context.pkg.outline.entries.flatMap(({ level, text }, index) => {
         if (level > levels) return [];
         const name = tocBookmark(index + 1);
-        const page = `${fieldChar('begin')}${instrText(`PAGEREF ${name} \\h`)}${fieldChar('separate')}${fieldChar('end')}`;
+        const page = fieldStart(`PAGEREF ${name} \\h`) + fieldEnd();
         const runs = `<w:hyperlink w:anchor="${name}" w:history="1"><w:r>${textXml(text)}</w:r><w:r><w:tab/></w:r>${page}</w:hyperlink>`;
         return [{ props: { style: `TOC${level}`, rightTab: tab }, runs }];
     });
-    const open = `${fieldChar('begin', true)}${instrText(tocInstruction(levels))}${fieldChar('separate')}`;
+    const open = fieldStart(tocInstruction(levels), { dirty: true });
     const [first = { props: {}, runs: `<w:r>${textXml(NO_TOC_ENTRIES)}</w:r>` }, ...rest] = entries;
     return [
         {
@@ -71,6 +65,6 @@ export function tableOfContentsBlocks(node: JSONContent, context: Context): Bloc
             runs: open + first.runs,
         },
         ...rest,
-        { props: {}, runs: fieldChar('end'), closes: '</w:sdtContent></w:sdt>' },
+        { props: {}, runs: fieldEnd(), closes: '</w:sdtContent></w:sdt>' },
     ];
 }
