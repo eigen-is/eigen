@@ -90,12 +90,12 @@ describe('the reader', () => {
             '1_3': number(0.000001, '0.000001'),
             '1_4': { v: true, m: 'TRUE', ct: { t: 'b' } },
             '1_5': { v: false, m: 'FALSE', ct: { t: 'b' } },
-            '1_6': text('#DIV/0!'),
+            '1_6': { v: '#DIV/0!', m: '#DIV/0!', ct: { fa: 'General', t: 'e' } },
             '1_7': text('inline'),
             '2_0': { ...number(38.75, '38.75'), f: '=SUM(A2:B2)' },
             '2_1': { ...text('AB'), f: '=UPPER("ab")' },
             '2_2': { v: true, f: '=A2>1' },
-            '2_3': { v: '#DIV/0!', f: '=1/0' },
+            '2_3': { v: '#DIV/0!', f: '=1/0', ct: { t: 'e' } },
             // A shared formula's copies move their relative refs; an array formula sits on its anchor.
             '3_1': { v: 2, f: '=B2*2+$A$2+B$2' },
             '3_3': { v: 84, f: '=A2:A3*2' },
@@ -693,6 +693,65 @@ describe("the reader's defined names", () => {
         const data = rowsXml([['A1', { formula: `${name(39_999)}*2`, result: 79_998 }]]);
         const [sheet] = xlsxToSheets(xlsxFixture({ sheets: [{ data }], definedNames: names.join('') }));
         expect(cellsOf(sheet)['0_0']?.f).toBe('=39999*2');
+    });
+});
+
+// Excel saves each formula's result, an error too, and a formula reading an error cell sees an error, as in Excel.
+describe("the reader's errors", () => {
+    const sheet1 = [
+        '<row r="1"><c r="A1"><v>1</v></c>',
+        '<c r="B1" t="e"><f>1/(A1-1)</f><v>#DIV/0!</v></c>',
+        '<c r="C1" t="str"><f>IFERROR(B1,"none")</f><v>none</v></c>',
+        '<c r="D1" t="b"><f>ISERROR(B1)</f><v>1</v></c>',
+        '<c r="E1" t="e"><v>#N/A</v></c>',
+        '<c r="F1" t="b"><f>ISNA(E1)</f><v>1</v></c>',
+        '<c r="G1" t="inlineStr"><is><t>#N/A</t></is></c>',
+        '<c r="H1" t="b"><f>ISNA(G1)</f><v>0</v></c></row>',
+        '<row r="2"><c r="A2"><v>2</v></c>',
+        '<c r="B2"><f>1/(A2-1)</f><v>1</v></c>',
+        '<c r="C2"><f>IFERROR(B2,"none")</f><v>1</v></c>',
+        '<c r="D2" t="b"><f>ISERROR(B2)</f><v>0</v></c></row>',
+    ].join('');
+    const sheet2 = '<row r="1"><c r="A1" t="b"><f>ISNA(Sheet1!E1)</f><v>1</v></c></row>';
+    const book = () =>
+        readXlsx(
+            xlsxFixture({
+                sheets: [
+                    { name: 'Sheet1', data: sheet1 },
+                    { name: 'Sheet2', data: sheet2 },
+                ],
+            }),
+            {
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
+            },
+        );
+
+    test('an error cell is one to the formulas that read it, on its sheet and another, and text that reads as one is not', () => {
+        const [first, second] = recalcSheets(book().sheets);
+        const cells = cellsOf(first);
+        expect(cells['0_4']).toEqual({ v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } });
+        expect(['0_1', '0_2', '0_3', '0_5', '0_7'].map((key) => cells[key]?.v)).toEqual([
+            '#DIV/0!',
+            'none',
+            true,
+            true,
+            false,
+        ]);
+        expect(cellsOf(second)['0_0']?.v).toBe(true);
+    });
+
+    test('a formula reading an error computes as Excel would after an edit', () => {
+        // An edit to A2, and the formulas the editor computes again rather than the values Excel saved.
+        const edited = book().sheets.map((sheet) => ({
+            ...sheet,
+            celldata: (sheet.celldata ?? []).map((entry) => {
+                if (entry.r !== 1) return entry;
+                if (entry.c === 0) return { ...entry, v: { ...entry.v, v: 1, m: '1' } };
+                return { ...entry, v: { ...entry.v, v: undefined, m: undefined } };
+            }),
+        }));
+        const cells = cellsOf(recalcSheets(edited)[0]);
+        expect(['1_1', '1_2', '1_3'].map((key) => cells[key]?.v)).toEqual(['#DIV/0!', 'none', true]);
     });
 });
 

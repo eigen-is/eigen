@@ -51,6 +51,17 @@ describe("a sheet's grid", () => {
         );
     });
 
+    test('an error typed into a cell is an error, and text that reads as one stays text', () => {
+        const { xml, strings } = gridOf({
+            celldata: [
+                { r: 0, c: 0, v: { v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } } },
+                { r: 0, c: 1, v: { v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 's' } } },
+            ],
+        });
+        expect(xml).toBe('<row r="1"><c r="A1" t="e"><v>#N/A</v></c><c r="B1" t="s"><v>0</v></c></row>');
+        expect(strings).toContain('<si><t>#N/A</t></si>');
+    });
+
     test('a date is its serial in a date format', () => {
         const { xml } = gridOf({ celldata: [{ r: 0, c: 0, v: { v: 45366, ct: { fa: 'M/d/yyyy', t: 'd' } } }] });
         expect(xml).toBe('<row r="1"><c r="A1" s="1"><v>45366</v></c></row>');
