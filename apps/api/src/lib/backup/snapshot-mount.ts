@@ -1,6 +1,6 @@
 // Captures one drive mount for a home archive: the rows of its metadata.db copy, every file those rows name from
 // wherever the mount keeps it, and its thumbnails, or, for an s3 mount at the full level, only its staged uploads. The
-// home snapshot calls it once per mount; a storage failure fails the capture rather than leave holes unnamed.
+// home snapshot calls it once per mount. A storage failure fails the capture rather than leave holes unnamed.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
@@ -15,57 +15,19 @@ import { stageManagedDbCopy } from '../versioning/snapshot';
 import { archivePath, managedDbContainer, readMountPathRows, unreachableRows } from './archive-layout';
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 
-// A WAL-mode database does not open without the `-wal` beside it, which an archive leaves out, so the copy's
-// journal mode is rewritten. A failure keeps the copied bytes for verify's quick_check to flag.
-function normalizeArchiveDatabase(destPath: string): void {
-    try {
-        const db = new Database(destPath, { readwrite: true, create: false });
-        try {
-            db.run('PRAGMA journal_mode = DELETE');
-        } finally {
-            db.close();
-        }
-    } catch (error) {
-        console.warn(`[backup] could not reset the journal mode of ${destPath}:`, error);
-    }
-    fs.rmSync(`${destPath}-wal`, { force: true });
-    fs.rmSync(`${destPath}-shm`, { force: true });
-}
-
-// The codes of a failure on this machine, which "storage unreachable" would misname. One by one, not `E[A-Z]+`: a
-// bucket that refuses the connection surfaces as ECONNREFUSED, and that is the storage being unreachable.
-const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOENT)$/;
-
-// A storage failure fails the whole backup: an archive missing a mount's objects is worse than none. Bun's S3Error
-// hides the actionable part in `code`, so a 503 or a coded error becomes one line naming the code and the object.
-function rethrowStorageFailure(mountId: string, storageKey: string, error: unknown): never {
-    const unavailable = error instanceof ApiError && error.status === 503;
-    const failure = unavailable ? error.cause : error;
-    const code = errnoOf(failure);
-    if (code && LOCAL_FAILURE_CODE.test(code)) throw failure;
-    if (!code && !unavailable) throw error;
-    throw new Error(`mount ${mountId}: storage unreachable${code ? ` (${code})` : ''} reading ${storageKey}`);
-}
-
-function readArchivedRows(metadataPath: string) {
-    const db = new Database(metadataPath, { readonly: true });
-    try {
-        return readMountPathRows(db);
-    } finally {
-        db.close();
-    }
-}
-
 // One mount's data tree in an archive: the entries written, how many of them are Eigen's own
 // databases (a user's `notes.db` upload is a file), the ids the thumbnails are keyed by, and what it lacks.
 type MountSnapshot = { entries: BackupEntry[]; databases: number; pathIds: Set<string>; warning?: string };
 
-// A handful of names tells the admin what is missing; the log names them all.
-const WARNING_NAMES = 5;
-
-function warningOf(mountId: string, what: string, names: string[]): string {
-    const more = names.length > WARNING_NAMES ? ` and ${names.length - WARNING_NAMES} more` : '';
-    return `mount ${mountId}: ${what}: ${names.slice(0, WARNING_NAMES).join(', ')}${more}`;
+// A metadata-only capture of an s3 mount reads no object, so an open document's newest commits reach
+// the archive only through staging/: flushing stages them there with a pending row, which the
+// metadata.db staged after this names. comments.db included, which Mount.flushContainerDb skips.
+export async function flushOpenDocumentDbs(mount: Mount): Promise<void> {
+    for (const pathId of [...mount.documentDbs.keys()]) {
+        await withDocumentDb(mount, pathId, async (slot) => {
+            await slot.db?.flush();
+        });
+    }
 }
 
 // A salvaged or hand-edited table can hold rows whose parent chain ends at a missing row or in a cycle, and a hand edit
@@ -104,10 +66,10 @@ export function pruneUnreachableRows(mountId: string, metadataPath: string): str
     }
 }
 
-// Copy every file the archived `metadata.db` copy knows about into `targetDir`, at the path its row gives, from
-// wherever the live mount keeps it now: a rename, move or trash since the copy changes the key, not the archive path.
-// Walking the table rather than the filesystem is what keeps `tmp/` and `staging/` out and `.trash/` + `versions/` in,
-// on every backend; `thumbs/` is copied separately (snapshotMountThumbs), keyed by the ids returned here.
+// Copies every file the archived metadata.db knows about into `targetDir`, at the path its row gives, from wherever
+// the live mount keeps it now. A rename, move or trash since the copy changes the key, not the archive path. Walking
+// the table rather than the folder keeps `tmp/` and `staging/` out and `.trash/` and `versions/` in, on every backend.
+// snapshotMountThumbs copies the thumbnails, keyed by the ids this returns.
 export async function snapshotMountData(
     mount: Mount,
     metadataPath: string,
@@ -218,9 +180,9 @@ export async function snapshotMountData(
         throw new Error(`mount ${mount.id}: storage unreachable, no file with bytes on record was read from it`);
     }
 
-    // The archive lists no file it holds no bytes for: a row deleted for good since the copy leaves the archived
-    // metadata.db, with the topmost folder or container above it that is gone too and holds no live row and none of
-    // the archive's bytes, and all under it.
+    // The archive lists no file it holds no bytes for. A row deleted for good since the copy leaves the archived
+    // metadata.db. So does the topmost folder or container above it that is gone too, unless it holds a live row
+    // or bytes the archive took, and so does everything under that folder.
     const live = new Set((await mount.db.select({ id: paths.id }).from(paths).all()).map((row) => row.id));
     const kept = new Set<string>();
     for (const row of rows) {
@@ -274,17 +236,6 @@ export async function snapshotMountData(
                 ? warningOf(mount.id, 'files with no object in storage, archived without their bytes', lost)
                 : undefined,
     };
-}
-
-// A metadata-only capture of an s3 mount reads no object, so an open document's newest commits reach
-// the archive only through staging/: flushing stages them there with a pending row, which the
-// metadata.db staged after this names. comments.db included, which Mount.flushContainerDb skips.
-export async function flushOpenDocumentDbs(mount: Mount): Promise<void> {
-    for (const pathId of [...mount.documentDbs.keys()]) {
-        await withDocumentDb(mount, pathId, async (slot) => {
-            await slot.db?.flush();
-        });
-    }
 }
 
 // The rest of a metadata-only capture: staging/ as it stands, the bytes the bucket does not have yet,
@@ -342,4 +293,53 @@ export async function snapshotMountThumbs(
         if (captured) entries.push(captured);
     }
     return entries;
+}
+
+// A WAL-mode database does not open without the `-wal` beside it, which an archive leaves out, so the copy's
+// journal mode is rewritten. A failure keeps the copied bytes for verify's quick_check to flag.
+function normalizeArchiveDatabase(destPath: string): void {
+    try {
+        const db = new Database(destPath, { readwrite: true, create: false });
+        try {
+            db.run('PRAGMA journal_mode = DELETE');
+        } finally {
+            db.close();
+        }
+    } catch (error) {
+        console.warn(`[backup] could not reset the journal mode of ${destPath}:`, error);
+    }
+    fs.rmSync(`${destPath}-wal`, { force: true });
+    fs.rmSync(`${destPath}-shm`, { force: true });
+}
+
+// The codes of a failure on this machine, which "storage unreachable" would misname. One by one, not `E[A-Z]+`: a
+// bucket that refuses the connection surfaces as ECONNREFUSED, and that is the storage being unreachable.
+const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOENT)$/;
+
+// A storage failure fails the whole backup: an archive missing a mount's objects is worse than none. Bun's S3Error
+// hides the actionable part in `code`, so a 503 or a coded error becomes one line naming the code and the object.
+function rethrowStorageFailure(mountId: string, storageKey: string, error: unknown): never {
+    const unavailable = error instanceof ApiError && error.status === 503;
+    const failure = unavailable ? error.cause : error;
+    const code = errnoOf(failure);
+    if (code && LOCAL_FAILURE_CODE.test(code)) throw failure;
+    if (!code && !unavailable) throw error;
+    throw new Error(`mount ${mountId}: storage unreachable${code ? ` (${code})` : ''} reading ${storageKey}`);
+}
+
+function readArchivedRows(metadataPath: string) {
+    const db = new Database(metadataPath, { readonly: true });
+    try {
+        return readMountPathRows(db);
+    } finally {
+        db.close();
+    }
+}
+
+// A handful of names tells the admin what is missing; the log names them all.
+const WARNING_NAMES = 5;
+
+function warningOf(mountId: string, what: string, names: string[]): string {
+    const more = names.length > WARNING_NAMES ? ` and ${names.length - WARNING_NAMES} more` : '';
+    return `mount ${mountId}: ${what}: ${names.slice(0, WARNING_NAMES).join(', ')}${more}`;
 }

@@ -65,8 +65,8 @@ export async function snapshotServer(
     const copies: { source: string; rel: string }[] = [];
     const copyTree = (sourceDir: string, relDir: string): void => {
         const tree = listFileTree(sourceDir);
-        // None of these folders holds a database (an org home has no drive to open one), and a file
-        // copy of a live one is torn: one there is a new subsystem this snapshot has to learn.
+        // None of these folders holds a database, since an org home has no drive to open one. A file copy
+        // of a live database is torn, so a database here is a new subsystem this snapshot has to learn.
         const [database] = tree.databases;
         if (database) throw new Error(`snapshotServer: database ${relDir}/${database} in a folder copied as files`);
         for (const rel of tree.dirs) fs.mkdirSync(path.join(folder, relDir, rel), { recursive: true });
@@ -104,18 +104,30 @@ export async function snapshotServer(
     return manifest;
 }
 
-function isReadable(filePath: string): boolean {
-    try {
-        fs.accessSync(filePath, fs.constants.R_OK);
-        return true;
-    } catch {
-        return false;
+// `.env.production`, the DKIM key and the TLS key sit outside data/ or belong to other users, so the API takes
+// what it has been let read. What it cannot read stays out and the manifest says so: a restore then keeps the
+// install's own env file, key and certificate, and a move to another machine needs new DKIM DNS and a new
+// certificate. There is no env file in `bun run dev`.
+export async function appendInstallFiles(
+    writer: ServerArchiveWriter,
+): Promise<{ envFile: boolean; dkim: boolean; certs: boolean }> {
+    assertEnvFileMounted();
+    const envFile = getEnvFile();
+    const hasEnvFile = envFile !== undefined && isReadable(envFile);
+    if (hasEnvFile) await writer.appendFile(SERVER_ARCHIVE_ENV_MEMBER, envFile);
+    const held = { dkim: false, certs: false };
+    for (const { dir, field, names } of INSTALL_FOLDERS) {
+        const source = path.join(getDataRoot(), dir);
+        const files = readableFiles(source, names ?? fileNamesIn(source));
+        for (const name of files) await writer.appendFile(`${dir}/${name}`, path.join(source, name));
+        held[field] = files.length > 0;
     }
+    return { envFile: hasEnvFile, ...held };
 }
 
-// eigen-api mounts the one file, so it keeps the inode it started with: a .env.production an editor or `sed -i`
-// wrote anew since reads stale on Linux, and on Docker Desktop access() passes and the open fails ENOENT. Open, not
-// access(), so the second names itself. A server backup asks before its homes, so it fails before an hour of them.
+// eigen-api mounts the one file, so it keeps the inode it started with. A .env.production that an editor or
+// `sed -i` wrote anew since then reads stale on Linux. On Docker Desktop access() passes and the open fails ENOENT,
+// which is why this opens the file. A server backup asks before its homes, so it fails before an hour of them.
 export function assertEnvFileMounted(): void {
     const envFile = getEnvFile();
     if (envFile === undefined) return;
@@ -135,8 +147,8 @@ function readableFiles(dir: string, names: readonly string[]): readonly string[]
     return names.every((name) => isReadable(path.join(dir, name))) ? names : [];
 }
 
-// The files of a folder. No folder means mail is off.
-function listFiles(dir: string): string[] {
+// The names of the files in a folder. No folder means mail is off.
+function fileNamesIn(dir: string): string[] {
     if (!isReadable(dir)) return [];
     return fs
         .readdirSync(dir, { withFileTypes: true })
@@ -145,23 +157,11 @@ function listFiles(dir: string): string[] {
         .sort();
 }
 
-// `.env.production`, the DKIM key and the TLS key sit outside data/ or belong to other users, so the API takes
-// what it has been let read. What it cannot read stays out and the manifest says so: a restore then keeps the
-// install's own env file, key and certificate, and a move to another machine needs new DKIM DNS and a new
-// certificate. There is no env file in `bun run dev`.
-export async function appendInstallFiles(
-    writer: ServerArchiveWriter,
-): Promise<{ envFile: boolean; dkim: boolean; certs: boolean }> {
-    assertEnvFileMounted();
-    const envFile = getEnvFile();
-    const hasEnvFile = envFile !== undefined && isReadable(envFile);
-    if (hasEnvFile) await writer.appendFile(SERVER_ARCHIVE_ENV_MEMBER, envFile);
-    const held = { dkim: false, certs: false };
-    for (const { dir, field, names } of INSTALL_FOLDERS) {
-        const source = path.join(getDataRoot(), dir);
-        const files = readableFiles(source, names ?? listFiles(source));
-        for (const name of files) await writer.appendFile(`${dir}/${name}`, path.join(source, name));
-        held[field] = files.length > 0;
+function isReadable(filePath: string): boolean {
+    try {
+        fs.accessSync(filePath, fs.constants.R_OK);
+        return true;
+    } catch {
+        return false;
     }
-    return { envFile: hasEnvFile, ...held };
 }
