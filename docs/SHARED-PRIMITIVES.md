@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2105 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2102 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1024,7 +1024,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1117)
+## Utilities & constants (1114)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2091,10 +2091,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `eigenDocEditorValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocSharedTitle` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
-| `FilePresentation` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
 | `getFileIcon` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
-| `getFileIconComponent` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
-| `getFilePresentation` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
 | `nextDriveSort` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `SHEETS_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `SLIDES_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |

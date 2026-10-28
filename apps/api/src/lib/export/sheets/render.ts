@@ -182,6 +182,7 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
             bounds.maxX > offset.left &&
             bounds.maxY > offset.top,
     );
+    // The browser draws the preview, so its pictures cost no decoded pixels: WeasyPrint never sees them.
     const floating = chargeFloating(inClip, mediaUrls, PREVIEW_FLOATING_CELLS, new Map());
     const first = renderSheet({ ...windowed, floating: floating.kept }, new FormulaEngine(), sheetsResolver(sheets), {
         clip,
