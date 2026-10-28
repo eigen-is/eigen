@@ -39,7 +39,8 @@ export function copySheet(ctx: Context, sheetId: string) {
     if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
-    const order = ctx.sheets[index].order! + 1;
+    // A sheet without an order sorts as 0, as the tab strip sorts it.
+    const order = (ctx.sheets[index].order ?? 0) + 1;
     const sheetName = copySheetName(
         ctx.sheets[index].name,
         ctx.sheets.map((sheet) => sheet.name),
@@ -63,7 +64,7 @@ export function copySheet(ctx: Context, sheetId: string) {
     );
     api.addSheet(ctx, undefined, copyId, ctx.sheets[index].isPivotTable, sheetName, sheetData);
     const sheetOrderList: Record<string, number> = {};
-    sheetOrderList[ctx.sheets[ctx.sheets.length - 1].id as string] = order;
+    sheetOrderList[copyId] = order;
     api.setSheetOrder(ctx, sheetOrderList);
 }
 

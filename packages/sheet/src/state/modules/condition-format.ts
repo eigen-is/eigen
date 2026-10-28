@@ -1,3 +1,7 @@
+// Conditional formats in the editor: the rule the dialog builds for the selection, the per-cell format map the
+// painter reads (getComputeMap, checkCF), and the color-scale and data-bar presets. The evaluation itself lives
+// in the engine, which the server export shares.
+
 import type {
     ColorGradationRule,
     ConditionalFormatConditionName,
@@ -9,6 +13,7 @@ import { isNil } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
 import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { ConditionRulesProps } from '../types';
@@ -296,8 +301,7 @@ export const CF_PRESETS: Record<string, string[]> = {
 
 export function clearSheetRules(ctx: Context) {
     if (!checkProtectionFormatCells(ctx)) return;
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    ctx.sheets[index].conditionalFormatRules = [];
+    getSheet(ctx).conditionalFormatRules = [];
 }
 
 export function applyColorScalePreset(ctx: Context, presetKey: string) {
@@ -315,13 +319,13 @@ export function applyDataBarPreset(ctx: Context, presetKey: string) {
 }
 
 function appendRule(ctx: Context, type: 'colorGradation' | 'dataBar', format: string[]) {
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const sheet = getSheet(ctx);
     const rule: ColorGradationRule | DataBarRule = {
         type,
         cellrange: ctx.selections ?? [],
         format,
     };
-    const existing = ctx.sheets[index].conditionalFormatRules ?? [];
+    const existing = sheet.conditionalFormatRules ?? [];
     existing.push(rule);
-    ctx.sheets[index].conditionalFormatRules = existing;
+    sheet.conditionalFormatRules = existing;
 }

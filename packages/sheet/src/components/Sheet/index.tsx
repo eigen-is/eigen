@@ -1,3 +1,7 @@
+// The open sheet's grid: the canvas the cells are painted on and the overlay above it. It sizes the canvas to
+// its placeholder, derives the row and column geometry when the data or track sizes change, and repaints at most
+// once a frame on an edit or a scroll, painting the frozen panes, such as frozen rows, as their own regions.
+
 import type React from 'react';
 import { memo, useCallback, useContext, useEffect, useRef } from 'react';
 import { WorkbookContext } from '../../context';
@@ -176,20 +180,24 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         const sheetData = dataRef.current;
         if (!sheetData) return;
         setContext((draftCtx) => {
+            const canvas = refs.canvas.current;
+            if (!canvas) return;
             if (settings.devicePixelRatio === 0) {
                 draftCtx.devicePixelRatio = (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio;
             }
             updateContextWithSheetData(draftCtx, sheetData);
-            updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholder);
+            updateContextWithCanvas(draftCtx, canvas, placeholder);
         });
     }, [refs.canvas, setContext, settings.devicePixelRatio]);
 
     // Window resize covers devicePixelRatio changes, the observer container-only ones (panels, un-hiding).
     // No feedback loop: the placeholder is sized by its flex parent, canvas and overlay are absolute.
     useEffect(() => {
+        const placeholder = placeholderRef.current;
+        if (!placeholder) return;
         window.addEventListener('resize', resize);
         const observer = new ResizeObserver(resize);
-        observer.observe(placeholderRef.current!);
+        observer.observe(placeholder);
         return () => {
             window.removeEventListener('resize', resize);
             observer.disconnect();
@@ -210,10 +218,12 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
 
     // Init sizing, before the observer's first delivery. Same 0×0 skip: a remount while hidden would pin blank.
     useEffect(() => {
-        const placeholder = placeholderRef.current!;
+        const placeholder = placeholderRef.current;
+        const canvas = refs.canvas.current;
+        if (!placeholder || !canvas) return;
         visibleRef.current = placeholder.clientWidth > 0 && placeholder.clientHeight > 0;
         if (!visibleRef.current) return;
-        setContext((draftCtx) => updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholder));
+        setContext((draftCtx) => updateContextWithCanvas(draftCtx, canvas, placeholder));
     }, [refs.canvas, setContext]);
 
     // Recalculate freeze data when sheet or freeze config changes

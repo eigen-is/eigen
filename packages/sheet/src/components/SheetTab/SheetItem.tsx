@@ -1,3 +1,6 @@
+// One tab in the sheet tab strip: its name, renamed in place on a double click, its colour, its context menu,
+// and the drag and drop that moves it. A drop renumbers every sheet's order from 0.
+
 import { MenuSections } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenu,
@@ -56,8 +59,9 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
 
     const onBlur = useCallback(() => {
         setContext((draftCtx) => {
+            if (!editable.current) return;
             try {
-                editSheetName(draftCtx, editable.current!);
+                editSheetName(draftCtx, editable.current);
             } catch (e) {
                 if (e instanceof Error) showAlert(e.message);
             }
@@ -92,7 +96,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                     else if (f.id === id) droppingSheet = f;
                 }
                 if (draggingSheet && droppingSheet) {
-                    draggingSheet.order = droppingSheet.order! - 0.1;
+                    draggingSheet.order = (droppingSheet.order ?? 0) - 0.1;
                     const resorted = [...draftCtx.sheets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
                     for (const [i, f] of resorted.entries()) {
                         f.order = i;

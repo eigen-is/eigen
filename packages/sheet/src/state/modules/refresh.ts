@@ -1,3 +1,6 @@
+// After an edit writes cells, jfrefreshgrid recomputes the formulas that read them: the cells the edit recorded,
+// else every cell of the given or selected ranges, then the formulas that depend on those.
+
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
@@ -39,9 +42,9 @@ export function jfrefreshgrid(
     range: Selection[] | undefined,
     isRunExecFunction = true,
 ) {
-    if (data == null) {
-        data = getFlowdata(ctx)!;
-    }
+    // No data given means the current sheet's, and a sheet without data has nothing to refresh.
+    const cells = data ?? getFlowdata(ctx);
+    if (!cells) return;
 
     if (range == null) {
         range = ctx.selections;
@@ -50,6 +53,6 @@ export function jfrefreshgrid(
 
     // Trigger linked updates when cell data changes
     if (isRunExecFunction) {
-        runExecFunction(ctx, range, ctx.currentSheetId, data);
+        runExecFunction(ctx, range, ctx.currentSheetId, cells);
     }
 }

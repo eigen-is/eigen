@@ -1,3 +1,6 @@
+// The Custom number formats dialog: a pattern field with the format of the focus cell, a live preview on a
+// sample value, and presets. Apply sets the pattern on the selection through handleNumberFormat.
+
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -24,7 +27,9 @@ export function CustomNumberFormats() {
 
     const apply = () => {
         setContext((ctx) => {
-            handleNumberFormat(ctx, refs.cellInput.current!, pattern);
+            const cellInput = refs.cellInput.current;
+            if (!cellInput) return;
+            handleNumberFormat(ctx, cellInput, pattern);
         });
         hideDialog();
     };

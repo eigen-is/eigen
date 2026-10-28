@@ -1,3 +1,6 @@
+// The Custom sort dialog, opened from the Data menu: it sorts the selected range by one of its columns, ascending
+// or descending, and can treat the first row as a header that names the columns and stays in place.
+
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -25,16 +28,16 @@ export function CustomSort() {
     const row_start = context.selections![0].row[0];
     const row_end = context.selections![0].row[1];
 
-    const sheetIndex = getSheetIndex(context, context.currentSheetId) as number;
+    const sheetIndex = getSheetIndex(context, context.currentSheetId);
 
     useEffect(() => {
         const list: string[] = [];
         if (isTitleChange) {
             for (let i = col_start; i <= col_end; i += 1) {
-                const cell = context.sheets[sheetIndex].data?.[row_start]?.[i];
+                const cell = sheetIndex == null ? undefined : context.sheets[sheetIndex].data?.[row_start]?.[i];
                 const colHeaderValue = cellDisplay(cell) || cell?.v;
                 if (colHeaderValue) {
-                    list.push(colHeaderValue as string);
+                    list.push(String(colHeaderValue));
                 } else {
                     const ColumnChar = columnIndexToLabel(i);
                     list.push(`Column ${ColumnChar}`);

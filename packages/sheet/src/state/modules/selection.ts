@@ -11,6 +11,7 @@ import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { cellDisplay, numberDisplay, numberText } from '../../engine/format';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
@@ -299,7 +300,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     cfg.borderInfo ??= {};
 
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex, [c_r1, c_r2, c_c1, c_c2]);
-    const c_dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
+    const c_dataVerification = cloneDeep(getSheet(ctx, { id: copySheetIndex }).dataVerification) || {};
     let dataVerification: Record<string, DataVerificationRule> | undefined;
 
     let mth = 0;
@@ -335,10 +336,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
 
                     // Data validation copy
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
-                        if (dataVerification == null) {
-                            dataVerification =
-                                cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification) ?? {};
-                        }
+                        dataVerification ??= cloneDeep(ctx.sheets[sheetIndex].dataVerification) ?? {};
 
                         dataVerification[`${h}_${c}`] = c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
                     }
@@ -997,7 +995,6 @@ export function moveHighlightRange(
             ctx,
             columnseleted,
             rowseleted,
-            last,
             row_pre,
             row - row_pre - 1,
             col_pre,
@@ -1178,7 +1175,7 @@ export function moveHighlightRange(
         let left = col_pre;
         let width = col - col_pre - 1;
 
-        const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
+        const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, top, height, left, width);
         if (!isNil(changeparam)) {
             [columnseleted, rowseleted, top, height, left, width] = changeparam;
         }
@@ -1227,9 +1224,7 @@ export function rangeValueToClipboard(
     const colIndexSet = new Set<number>();
     const rect: [number, number, number, number] = [Infinity, -Infinity, Infinity, -Infinity];
 
-    for (let s = 0; s < (ranges?.length ?? 0); s += 1) {
-        const range = ranges![s];
-
+    for (const range of ranges ?? []) {
         const r1 = range.row[0];
         const r2 = range.row[1];
         const c1 = range.column[0];
@@ -1360,9 +1355,7 @@ export function copy(ctx: Context) {
     let RowlChange = false;
     let HasMC = false;
 
-    for (let s = 0; s < (ctx.selections?.length ?? 0); s += 1) {
-        const range = ctx.selections![s];
-
+    for (const range of ctx.selections ?? []) {
         const r1 = range.row[0];
         const r2 = range.row[1];
         const c1 = range.column[0];
@@ -1521,7 +1514,7 @@ export function selectAll(ctx: Context) {
 }
 
 export function calcSelectionInfo(ctx: Context) {
-    const selection = ctx.selections!;
+    const selection = ctx.selections ?? [];
     let numberC = 0;
     let count = 0;
     let sum = 0;
@@ -1533,8 +1526,8 @@ export function calcSelectionInfo(ctx: Context) {
             for (let c = 0; c < data[0].length; c += 1) {
                 // Prevent the selection length from exceeding data bounds
                 if (r >= data.length || c >= data[0].length) break;
-                const cell = data![r][c];
-                const ct = cell?.ct?.t as string;
+                const cell = data[r][c];
+                const ct = cell?.ct?.t;
                 const value = cellDisplay(cell);
                 // Numeric cells keep the raw number in v; m is the formatted display
                 // string (currency symbols, separators) that parseFloat cannot read.

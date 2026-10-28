@@ -1,3 +1,6 @@
+// Merging and unmerging cells: mergeCells writes or removes the merge records in a sheet's config and the
+// mc marks on the cells they cover, for merge all, merge by row or column, and unmerge.
+
 import { cloneDeep } from 'es-toolkit/compat';
 import { cellValue } from '../../engine/format';
 import { isRealNull } from '../../engine/validation';
@@ -43,13 +46,14 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
     if (idx == null) return;
 
     const sheet = ctx.sheets[idx];
+    const d = sheet.data;
+    // A sheet that is not loaded has no cells to merge.
+    if (!d) return;
 
     const cfg = (sheet.config ??= {});
     if (cfg.merge == null) {
         cfg.merge = {};
     }
-
-    const d = sheet.data!;
 
     if (type === 'merge-cancel') {
         for (let i = 0; i < ranges.length; i += 1) {

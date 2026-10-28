@@ -1,3 +1,7 @@
+// The fill handle: dragging the selection's corner extends its cells over the dragged range. It works out the
+// kind of series the cells hold, such as numbers, dates, weekdays or text ending in a number, and fills it, or
+// copies the cells or only their formats as the fill menu chooses. fillFromEdge serves fill down and fill right.
+
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
 import { current, isDraft } from 'immer';
@@ -517,7 +521,7 @@ function fillSeries(data: (Cell | null | undefined)[], len: number, direction: s
             if (d != null) {
                 let num: number;
                 if (direction === 'down' || direction === 'right') {
-                    num = Number(data[data.length - 1]!.v) * (Number(data[1].v) / Number(data[0].v)) ** i;
+                    num = Number(data[data.length - 1]?.v) * (Number(data[1].v) / Number(data[0].v)) ** i;
                 } else {
                     //  direction == "up" || direction == "left"
                     num = Number(data[0].v) / (Number(data[1].v) / Number(data[0].v)) ** i;
@@ -857,7 +861,8 @@ function fillDateSeries(
     rollWeekend: boolean,
 ) {
     const applyData: Cell[] = [];
-    let step: number;
+    // Set on each round's first cell. A round that starts on an empty cell keeps the step before it, 0 at first.
+    let step = 0;
 
     for (let i = 1; i <= len; i += 1) {
         const index = (i - 1) % data.length;
@@ -871,8 +876,8 @@ function fillDateSeries(
             }
 
             const date = rollWeekend
-                ? rollToWeekday(d.m, step!, 'days')
-                : dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
+                ? rollToWeekday(d.m, step, 'days')
+                : dayjs(d.m).add(step, 'days').format('YYYY-MM-DD');
             d.m = date;
             d.v = parseCellInput(date)[2];
             applyData.push(d);

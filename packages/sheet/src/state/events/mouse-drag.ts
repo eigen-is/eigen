@@ -1,3 +1,8 @@
+// The pointer's move and release over the grid while a button is held. handleOverlayMouseMove extends the
+// selection, moves the column or row resize line, the freeze line, a cell or formula-range drag and the fill
+// handle, and updates the hover on painted glyphs. handleOverlayMouseUp ends each drag, such as writing the new
+// frozen pane. The sheet overlay calls both from its document-level mouse listeners.
+
 import { cloneDeep, isNil } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { cancelPaintModel, onCellsMove, onCellsMoveEnd, onFormulaRangeDragEnd, rangeDrag } from '../modules';
@@ -82,9 +87,13 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
         return;
     }
 
-    const last = cloneDeep(ctx.selections?.[ctx.selections.length - 1]);
+    const { selections } = ctx;
+    const anchor = selections?.[selections.length - 1];
+    const last = cloneDeep(anchor);
 
     if (
+        !selections ||
+        !anchor ||
         !last ||
         isNil(last.left) ||
         isNil(last.top) ||
@@ -114,7 +123,7 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
     let width = colGeom.span;
     let columnseleted = colGeom.selected;
 
-    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
+    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, top, height, left, width);
     if (changeparam != null) {
         [columnseleted, rowseleted, top, height, left, width] = changeparam;
     }
@@ -128,22 +137,22 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
     last.height_move = height;
 
     // Check if selecting entire row
-    const isMaxColumn = ctx.selections![ctx.selections!.length - 1].column;
+    const isMaxColumn = anchor.column;
     const colMax = ctx.visibledatacolumn.length - 1;
-    if (isMaxColumn![0] === 0 && isMaxColumn![1] === colMax) {
+    if (isMaxColumn[0] === 0 && isMaxColumn[1] === colMax) {
         last.column[1] = colMax;
         last.width_move = ctx.visibledatacolumn[colMax] - 1;
     }
 
     // Check if selecting entire column
-    const isMaxRow = ctx.selections![ctx.selections!.length - 1].row;
+    const isMaxRow = anchor.row;
     const rowMax = ctx.visibledatarow.length - 1;
-    if (isMaxRow![0] === 0 && isMaxRow![1] === rowMax) {
+    if (isMaxRow[0] === 0 && isMaxRow[1] === rowMax) {
         last.row[1] = rowMax;
         last.height_move = ctx.visibledatarow[rowMax] - 1;
     }
 
-    ctx.selections![ctx.selections!.length - 1] = last;
+    selections[selections.length - 1] = last;
 
     scrollToFrozenRowCol(ctx, globalCache.freezen?.[ctx.currentSheetId]);
 }
@@ -158,9 +167,9 @@ function renderColResize(
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollEl.scrollLeft - window.scrollX;
     if (x < rect.width + ctx.scrollLeft - 100) {
-        const changeSizeLine = container.querySelector('.sheet-change-size-line');
+        const changeSizeLine = container.querySelector<HTMLDivElement>('.sheet-change-size-line');
         if (changeSizeLine) {
-            (changeSizeLine as HTMLDivElement).style.left = `${x}px`;
+            changeSizeLine.style.left = `${x}px`;
         }
         // The header handle lives in the pane region of the resized column:
         // live-translated main coordinates normally, pinned frozen-band
@@ -168,9 +177,9 @@ function renderColResize(
         const vData = globalCache.freezen?.[ctx.currentSheetId]?.vertical?.freezenverticaldata;
         const inFreeze = vData != null && ctx.colsResizeStart[1] < vData.boundary;
         const handleX = inFreeze ? x - scrollEl.scrollLeft + vData.scroll : x;
-        const changeSizeCol = container.querySelector('.sheet-cols-change-size');
+        const changeSizeCol = container.querySelector<HTMLDivElement>('.sheet-cols-change-size');
         if (changeSizeCol) {
-            (changeSizeCol as HTMLDivElement).style.left = `${handleX - 2}px`;
+            changeSizeCol.style.left = `${handleX - 2}px`;
         }
     }
 }
@@ -185,9 +194,9 @@ function renderRowResize(
     const rect = container.getBoundingClientRect();
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollEl.scrollTop - window.scrollY;
     if (y < rect.height + ctx.scrollTop - 20) {
-        const changeSizeLine = container.querySelector('.sheet-change-size-line');
+        const changeSizeLine = container.querySelector<HTMLDivElement>('.sheet-change-size-line');
         if (changeSizeLine) {
-            (changeSizeLine as HTMLDivElement).style.top = `${y}px`;
+            changeSizeLine.style.top = `${y}px`;
         }
         // Same pane-region mapping as renderColResize, on the row axis. The -2
         // preserves the view position the handle had inside the old header
@@ -195,9 +204,9 @@ function renderRowResize(
         const hData = globalCache.freezen?.[ctx.currentSheetId]?.horizontal?.freezenhorizontaldata;
         const inFreeze = hData != null && ctx.rowsResizeStart[1] < hData.boundary;
         const handleY = inFreeze ? y - scrollEl.scrollTop + hData.scroll : y;
-        const changeSizeRow = container.querySelector('.sheet-rows-change-size');
+        const changeSizeRow = container.querySelector<HTMLDivElement>('.sheet-rows-change-size');
         if (changeSizeRow) {
-            (changeSizeRow as HTMLDivElement).style.top = `${handleY - 2}px`;
+            changeSizeRow.style.top = `${handleY - 2}px`;
         }
     }
 }
@@ -210,18 +219,18 @@ function renderColFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElem
     const col = x > (col_pre + col_curr) / 2 ? col_curr : col_pre;
 
     if (x < rect.width + ctx.scrollLeft - 100) {
-        const freezeLine = container.querySelector('.sheet-freeze-drag-line');
+        const freezeLine = container.querySelector<HTMLDivElement>('.sheet-freeze-drag-line');
         if (freezeLine) {
-            (freezeLine as HTMLDivElement).style.left = `${Math.max(0, col - 2)}px`;
+            freezeLine.style.left = `${Math.max(0, col - 2)}px`;
         }
-        const freezeHandle = container.querySelector('.sheet-cols-freeze-handle');
+        const freezeHandle = container.querySelector<HTMLDivElement>('.sheet-cols-freeze-handle');
         if (freezeHandle) {
-            (freezeHandle as HTMLDivElement).style.left = `${x}px`;
+            freezeHandle.style.left = `${x}px`;
         }
         // reuse change-size-line
-        const changeSizeLine = container.querySelector('.sheet-change-size-line');
+        const changeSizeLine = container.querySelector<HTMLDivElement>('.sheet-change-size-line');
         if (changeSizeLine) {
-            (changeSizeLine as HTMLDivElement).style.left = `${x}px`;
+            changeSizeLine.style.left = `${x}px`;
         }
     }
 }
@@ -234,18 +243,18 @@ function renderRowFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElem
     const row = y > (row_curr + row_pre) / 2 ? row_curr : row_pre;
 
     if (y < rect.height + ctx.scrollTop - 20) {
-        const freezeLine = container.querySelector('.sheet-freeze-drag-line');
+        const freezeLine = container.querySelector<HTMLDivElement>('.sheet-freeze-drag-line');
         if (freezeLine) {
-            (freezeLine as HTMLDivElement).style.top = `${Math.max(0, row - 2)}px`;
+            freezeLine.style.top = `${Math.max(0, row - 2)}px`;
         }
-        const freezeHandle = container.querySelector('.sheet-rows-freeze-handle');
+        const freezeHandle = container.querySelector<HTMLDivElement>('.sheet-rows-freeze-handle');
         if (freezeHandle) {
-            (freezeHandle as HTMLDivElement).style.top = `${y}px`;
+            freezeHandle.style.top = `${y}px`;
         }
         // reuse change-size-line
-        const changeSizeLine = container.querySelector('.sheet-change-size-line');
+        const changeSizeLine = container.querySelector<HTMLDivElement>('.sheet-change-size-line');
         if (changeSizeLine) {
-            (changeSizeLine as HTMLDivElement).style.top = `${y}px`;
+            changeSizeLine.style.top = `${y}px`;
         }
     }
 }
@@ -297,7 +306,7 @@ function mouseRender(
     }
 
     // Check if range dialog is in single-select mode
-    if (ctx.rangeDialog?.singleSelect) {
+    if (ctx.rangeDialog.singleSelect) {
         return;
     }
 
@@ -409,9 +418,9 @@ export function handleOverlayMouseUp(
         ctx.formulaCache.rangedrag_row_start
     ) {
         if (document.activeElement?.id === 'sheet-functionbox-cell') {
-            handleFormulaInput(ctx, cellInput!, fxInput!, 0, undefined, false);
-        } else {
-            handleFormulaInput(ctx, fxInput, cellInput!, 0, undefined, false);
+            if (fxInput) handleFormulaInput(ctx, cellInput, fxInput, 0, undefined, false);
+        } else if (cellInput) {
+            handleFormulaInput(ctx, fxInput, cellInput, 0, undefined, false);
         }
     }
 
@@ -533,36 +542,36 @@ export function handleOverlayMouseUp(
         const col_index = x > (col_curr + col_pre) / 2 ? col_index_curr : col_index_curr - 1;
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
+        const sheet = ctx.sheets[idx];
+        const { frozen } = sheet;
         if (col_index < 0) {
-            const { frozen } = ctx.sheets[idx];
             if (frozen) {
                 if (frozen.type === 'rangeBoth' || frozen.type === 'both') {
                     frozen.type = 'rangeRow';
                 } else if (frozen.type === 'column' || frozen.type === 'rangeColumn') {
-                    delete ctx.sheets[idx].frozen;
+                    delete sheet.frozen;
                 }
             }
-            const freezeHandle = container.querySelector('.sheet-cols-freeze-handle') as HTMLDivElement;
+            const freezeHandle = container.querySelector<HTMLDivElement>('.sheet-cols-freeze-handle');
             if (freezeHandle) {
                 freezeHandle.style.left = `${ctx.scrollLeft}px`;
             }
-        } else if (!ctx.sheets[idx].frozen) {
-            ctx.sheets[idx].frozen = {
+        } else if (!frozen) {
+            sheet.frozen = {
                 type: 'rangeColumn',
                 range: { column_focus: col_index, row_focus: 0 },
             };
         } else {
-            const frozen = ctx.sheets[idx].frozen!;
             if (!frozen.range) {
                 frozen.range = { column_focus: col_index, row_focus: 0 };
             } else {
                 frozen.range.column_focus = col_index;
             }
-            if (frozen?.type === 'rangeRow' || frozen?.type === 'row') {
+            if (frozen.type === 'rangeRow' || frozen.type === 'row') {
                 frozen.type = 'rangeBoth';
             }
         }
-        const freezeHandle = container.querySelector('.sheet-cols-freeze-handle') as HTMLDivElement;
+        const freezeHandle = container.querySelector<HTMLDivElement>('.sheet-cols-freeze-handle');
         if (freezeHandle) {
             freezeHandle.style.left = `${getFrozenHandleLeft(ctx)}px`;
         }
@@ -578,32 +587,32 @@ export function handleOverlayMouseUp(
         const row_index = y > (row_curr + row_pre) / 2 ? row_index_curr : row_index_curr - 1;
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
+        const sheet = ctx.sheets[idx];
+        const { frozen } = sheet;
         if (row_index < 0) {
-            const { frozen } = ctx.sheets[idx];
             if (frozen) {
                 if (frozen.type === 'rangeBoth' || frozen.type === 'both') {
                     frozen.type = 'rangeColumn';
                 } else if (frozen.type === 'row' || frozen.type === 'rangeRow') {
-                    delete ctx.sheets[idx].frozen;
+                    delete sheet.frozen;
                 }
             }
-        } else if (!ctx.sheets[idx].frozen) {
-            ctx.sheets[idx].frozen = {
+        } else if (!frozen) {
+            sheet.frozen = {
                 type: 'rangeRow',
                 range: { column_focus: 0, row_focus: row_index },
             };
         } else {
-            const frozen = ctx.sheets[idx].frozen!;
             if (!frozen.range) {
                 frozen.range = { column_focus: 0, row_focus: row_index };
             } else {
                 frozen.range.row_focus = row_index;
             }
-            if (frozen?.type === 'rangeColumn' || frozen?.type === 'column') {
+            if (frozen.type === 'rangeColumn' || frozen.type === 'column') {
                 frozen.type = 'rangeBoth';
             }
         }
-        const freezeHandle = container.querySelector('.sheet-rows-freeze-handle') as HTMLDivElement;
+        const freezeHandle = container.querySelector<HTMLDivElement>('.sheet-rows-freeze-handle');
         if (freezeHandle) {
             freezeHandle.style.top = `${getFrozenHandleTop(ctx)}px`;
         }

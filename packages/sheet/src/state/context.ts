@@ -66,14 +66,12 @@ export type Context = {
     searchHighlights?: SearchHighlight[];
     searchActive?: SearchHighlight | null;
     linkCard?: LinkCardProps;
-    rangeDialog?: RangeDialogProps; // coordinate range mouse selection
+    rangeDialog: RangeDialogProps; // coordinate range mouse selection
     // warning dialog
     warnDialog?: string;
     currency?: string;
-    dataVerification?: {
-        selectStatus: boolean;
-        selectRange: [];
-        dataRegulation?: DataRegulationProps; // data validation rule
+    dataVerification: {
+        dataRegulation: DataRegulationProps; // data validation rule
     };
     // data validation dropdown list
     dataVerificationDropDownList?: boolean;
@@ -241,8 +239,6 @@ export function defaultContext(refs: RefValues): Context {
         },
 
         dataVerification: {
-            selectStatus: false,
-            selectRange: [],
             dataRegulation: {
                 type: '',
                 type2: '',

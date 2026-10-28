@@ -610,3 +610,27 @@ describe('pasted formulas and the dependency map', () => {
         expect(ctx.sheets[1].data![0][3]?.v).toBe(6);
     });
 });
+
+describe('hyperlinks travel with an internal paste', () => {
+    const link = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
+    function linkedCtx() {
+        const ctx = makeCtx(6, 6, (d) => {
+            d[0][0] = { v: 'site', m: 'site', hl: { r: 0, c: 0, id: 'id_1' } };
+        });
+        ctx.sheets[0].hyperlink = { '0_0': link };
+        return ctx;
+    }
+
+    it('a copied link lands on the pasted cell', () => {
+        const ctx = linkedCtx();
+        copyThenPaste(ctx, single(0, 0), single(2, 2));
+        expect(ctx.sheets[0].hyperlink?.['2_2']).toEqual(link);
+    });
+
+    it('a cut link lands on the pasted cell and leaves the vacated one', () => {
+        const ctx = linkedCtx();
+        copyThenPaste(ctx, single(0, 0), single(2, 2), { cut: true });
+        expect(ctx.sheets[0].hyperlink?.['2_2']).toEqual(link);
+        expect(ctx.sheets[0].hyperlink?.['0_0']).toBeUndefined();
+    });
+});

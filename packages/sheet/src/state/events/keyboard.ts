@@ -67,8 +67,8 @@ export function handleGlobalEnter(
         moveHighlightCell(ctx, 'down', 1, 'rangeOfSelect');
         e.preventDefault();
     } else if ((ctx.selections?.length ?? 0) > 0) {
-        const last = ctx.selections![ctx.selections!.length - 1];
-        if (last.row_focus == null || last.column_focus == null) return;
+        const last = ctx.selections?.at(-1);
+        if (last?.row_focus == null || last.column_focus == null) return;
         ctx.editingCellPosition = [last.row_focus, last.column_focus];
         e.preventDefault();
     }
@@ -454,8 +454,8 @@ export function handleGlobalKeyDown(
         if (!allowEdit) return;
         if (!isEmpty(ctx.selections) && kstr !== 'CapsLock' && kcode !== 18) {
             // Activate the input box and forward the keypress to it.
-            const last = ctx.selections![ctx.selections!.length - 1];
-            if (last.row_focus == null || last.column_focus == null) return;
+            const last = ctx.selections?.at(-1);
+            if (last?.row_focus == null || last.column_focus == null) return;
             ctx.editingCellPosition = [last.row_focus, last.column_focus];
             cache.overwriteCell = true;
 

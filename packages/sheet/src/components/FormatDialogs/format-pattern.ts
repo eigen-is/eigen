@@ -273,7 +273,7 @@ export function previewPattern(
     try {
         return { ok: true, text: update(pattern, value) };
     } catch (e) {
-        return { ok: false, error: (e as Error).message };
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
 }
 

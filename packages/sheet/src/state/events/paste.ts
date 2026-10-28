@@ -24,6 +24,7 @@ import { numberDisplay, parseCellInput, richText } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { carrySides, clearSides, getBorderInfoCompute } from '../modules/border';
@@ -53,11 +54,13 @@ type CutPasteSide = {
 };
 
 function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, RowlChange: boolean) {
+    const sourceSheet = getSheet(ctx, { id: source.sheetId });
+    const targetSheet = getSheet(ctx, { id: target.sheetId });
     // The map reads the cells, so both sheets hold their post-cut data first.
     if (ctx.currentSheetId === source.sheetId) {
-        ctx.sheets[getSheetIndex(ctx, target.sheetId)!].data = target.curData;
+        targetSheet.data = target.curData;
     } else if (ctx.currentSheetId === target.sheetId) {
-        ctx.sheets[getSheetIndex(ctx, source.sheetId)!].data = source.curData;
+        sourceSheet.data = source.curData;
     }
 
     // trigger linked cell data updates
@@ -95,8 +98,8 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
     }
 
     // Both sides are spliced; only the row count of the sheet on screen drives the reflow.
-    ctx.sheets[getSheetIndex(ctx, source.sheetId)!].config = source.curConfig;
-    ctx.sheets[getSheetIndex(ctx, target.sheetId)!].config = target.curConfig;
+    sourceSheet.config = source.curConfig;
+    targetSheet.config = target.curConfig;
     const rowHeight = ctx.currentSheetId === source.sheetId ? source.curData.length : target.curData.length;
 
     if (RowlChange) {
@@ -131,11 +134,11 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
         ctx.selections = [{ row: source.range.row, column: source.range.column }];
     }
     // conditional formatting
-    ctx.sheets[getSheetIndex(ctx, source.sheetId)!].conditionalFormatRules = source.curCdformat;
-    ctx.sheets[getSheetIndex(ctx, target.sheetId)!].conditionalFormatRules = target.curCdformat;
+    sourceSheet.conditionalFormatRules = source.curCdformat;
+    targetSheet.conditionalFormatRules = target.curCdformat;
 
-    ctx.sheets[getSheetIndex(ctx, source.sheetId)!].dataVerification = source.curDataVerification;
-    ctx.sheets[getSheetIndex(ctx, target.sheetId)!].dataVerification = target.curDataVerification;
+    sourceSheet.dataVerification = source.curDataVerification;
+    targetSheet.dataVerification = target.curDataVerification;
 
     ctx.formulaCache.execFunctionExist.reverse();
     execFunctionGroup(ctx, null, null, null, null, target.curData);
@@ -149,7 +152,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
-    if ((ctx.selections?.length ?? 0) !== 1) {
+    if (ctx.selections?.length !== 1) {
         return;
     }
 
@@ -161,9 +164,9 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
         const copyh = data.length;
         const copyc = data[0].length;
 
-        const minh = ctx.selections![0].row[0]; // first and last row of apply range
+        const minh = ctx.selections[0].row[0]; // first and last row of apply range
         const maxh = minh + copyh - 1;
-        const minc = ctx.selections![0].column[0]; // first and last column of apply range
+        const minc = ctx.selections[0].column[0]; // first and last column of apply range
         const maxc = minc + copyc - 1;
 
         // return with a warning if the apply range contains partially merged cells
@@ -176,7 +179,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
 
         // Seeded only once the paste is certain: every config write is syncable now that the
         // mirror is gone, so seeding above the guard would ship an op for a paste that never ran.
-        const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
+        const cfg = (getSheet(ctx).config ??= {});
         cfg.merge ??= {};
         cfg.borderInfo ??= {};
 
@@ -204,11 +207,12 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
             }
 
             for (let c = minc; c <= maxc; c += 1) {
-                if (x?.[c]?.mc) {
-                    if ('rs' in x[c]!.mc!) {
-                        delete cfg.merge[`${x[c]!.mc!.r}_${x[c]!.mc!.c}`];
+                const replaced = x?.[c];
+                if (replaced?.mc) {
+                    if ('rs' in replaced.mc) {
+                        delete cfg.merge[`${replaced.mc.r}_${replaced.mc.c}`];
                     }
-                    delete x![c]!.mc;
+                    delete replaced.mc;
                 }
 
                 let value: Cell | null = null;
@@ -321,11 +325,24 @@ function setCellHyperlink(
     c: number,
     link: { linkType: string; linkAddress: string },
 ) {
-    const index = getSheetIndex(ctx, id) as number;
-    if (!ctx.sheets[index].hyperlink) {
-        ctx.sheets[index].hyperlink = {};
+    (getSheet(ctx, { id }).hyperlink ??= {})[`${r}_${c}`] = link;
+}
+
+// The links of a single copied block, carried over when one range is selected.
+function pasteHyperlinks(ctx: Context, copyState: NonNullable<Context['copyState']>) {
+    const anchor = ctx.selections?.[0];
+    if (ctx.selections?.length !== 1 || !anchor || copyState.copyRange.length !== 1) return;
+    const copySheet = getSheet(ctx, { id: copyState.dataSheetId });
+    for (const range of copyState.copyRange) {
+        for (let r = 0; r <= range.row[1] - range.row[0]; r += 1) {
+            for (let c = 0; c <= range.column[1] - range.column[0]; c += 1) {
+                const link = copySheet.hyperlink?.[`${r}_${c}`];
+                if (copySheet.data?.[r + range.row[0]]?.[c + range.column[0]]?.hl && link) {
+                    setCellHyperlink(ctx, copyState.dataSheetId, r + anchor.row[0], c + anchor.column[0], link);
+                }
+            }
+        }
     }
-    ctx.sheets[index]!.hyperlink![`${r}_${c}`] = link;
 }
 
 function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
@@ -344,6 +361,9 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     const c_c1 = copyRange.copyRange[0].column[0];
     const c_c2 = copyRange.copyRange[0].column[1];
 
+    // A sheet without data has nothing to cut.
+    const copySheet = getSheet(ctx, { id: copySheetId });
+    if (!copySheet.data) return;
     const copyData = cloneDeep(getdatabyselection(ctx, { row: [c_r1, c_r2], column: [c_c1, c_c2] }, copySheetId));
 
     const copyh = copyData.length;
@@ -364,7 +384,8 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     }
 
     // Seeded only once the cut-paste is certain — see pasteHandler above.
-    const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
+    const sheet = getSheet(ctx);
+    const cfg = (sheet.config ??= {});
     cfg.merge ??= {};
     cfg.borderInfo ??= {};
 
@@ -380,31 +401,10 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     }
 
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetId, [c_r1, c_r2, c_c1, c_c2]);
-    const c_dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].dataVerification) || {};
-    const dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification) || {};
+    const c_dataVerification = cloneDeep(copySheet.dataVerification) || {};
+    const dataVerification = cloneDeep(sheet.dataVerification) || {};
 
-    // if the selection contains hyperlinks
-    if (ctx.selections?.length === 1 && ctx.copyState?.copyRange.length === 1) {
-        forEach(ctx.copyState?.copyRange, (range) => {
-            for (let r = 0; r <= range.row[1] - range.row[0]; r += 1) {
-                for (let c = 0; c <= range.column[1] - range.column[0]; c += 1) {
-                    const index = getSheetIndex(ctx, ctx.copyState?.dataSheetId as string) as number;
-                    if (
-                        ctx.sheets[index]!.data![r + range.row[0]][c + range.column[0]]?.hl &&
-                        ctx.sheets[index].hyperlink![`${r}_${c}`]
-                    ) {
-                        setCellHyperlink(
-                            ctx,
-                            ctx.copyState?.dataSheetId as string,
-                            r + ctx.selections![0].row[0],
-                            c + ctx.selections![0].column[0],
-                            ctx.sheets[index].hyperlink![`${r}_${c}`],
-                        );
-                    }
-                }
-            }
-        });
-    }
+    pasteHyperlinks(ctx, copyRange);
 
     // cut-paste within the current sheet: delete data, merged cells, data validation, and hyperlinks in the cut range
     if (ctx.currentSheetId === copySheetId) {
@@ -423,7 +423,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
 
                 delete dataVerification[`${i}_${j}`];
 
-                delete ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].hyperlink?.[`${i}_${j}`];
+                delete sheet.hyperlink?.[`${i}_${j}`];
             }
         }
 
@@ -442,11 +442,12 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
                 dataVerification[`${h}_${c}`] = c_dataVerification[`${c_r1 + h - minh}_${c_c1 + c - minc}`];
             }
 
-            if (x[c]?.mc) {
-                if (x[c]?.mc?.rs != null) {
-                    delete cfg.merge[`${x[c]!.mc!.r}_${x[c]!.mc!.c}`];
+            const replaced = x[c];
+            if (replaced?.mc) {
+                if (replaced.mc.rs != null) {
+                    delete cfg.merge[`${replaced.mc.r}_${replaced.mc.c}`];
                 }
-                delete x[c]!.mc;
+                delete replaced.mc;
             }
 
             let value: Cell | null = null;
@@ -490,8 +491,8 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     let target: CutPasteSide;
     if (ctx.currentSheetId !== copySheetId) {
         // cross-sheet operation
-        const sourceData = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].data!);
-        const sourceConfig = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].config);
+        const sourceData = cloneDeep(copySheet.data);
+        const sourceConfig = cloneDeep(copySheet.config);
 
         const sourceCurData = cloneDeep(sourceData);
         const sourceCurConfig = cloneDeep(sourceConfig) || {};
@@ -516,7 +517,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         clearSides(sourceCurConfig.borderInfo, c_r1, c_r2, c_c1, c_c2);
 
         // conditional formatting
-        const source_cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].conditionalFormatRules);
+        const source_cdformat = cloneDeep(copySheet.conditionalFormatRules);
         const source_curCdformat = cloneDeep(source_cdformat);
         const ruleArr: ConditionalFormatRule[] = [];
 
@@ -553,7 +554,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             }
         }
 
-        const target_cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].conditionalFormatRules);
+        const target_cdformat = cloneDeep(sheet.conditionalFormatRules);
         let target_curCdformat = cloneDeep(target_cdformat);
         if (ruleArr.length > 0) {
             target_curCdformat = [...(target_curCdformat ?? []), ...ruleArr];
@@ -575,7 +576,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             cdformat: source_cdformat,
             // A rule whose every cell was cut away has moved to the target.
             curCdformat: source_curCdformat?.filter((rule) => rule.cellrange.length > 0),
-            dataVerification: cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].dataVerification),
+            dataVerification: cloneDeep(copySheet.dataVerification),
             curDataVerification: c_dataVerification,
             range: {
                 row: [c_r1, c_r2],
@@ -590,7 +591,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             curConfig: cfg,
             cdformat: target_cdformat,
             curCdformat: target_curCdformat,
-            dataVerification: cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification),
+            dataVerification: cloneDeep(sheet.dataVerification),
             curDataVerification: dataVerification,
             range: {
                 row: [minh, maxh],
@@ -599,7 +600,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         };
     } else {
         // conditional formatting
-        const cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].conditionalFormatRules);
+        const cdformat = cloneDeep(sheet.conditionalFormatRules);
         const curCdformat = cloneDeep(cdformat);
         if (curCdformat != null && curCdformat.length > 0) {
             for (let i = 0; i < curCdformat.length; i += 1) {
@@ -628,7 +629,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             curConfig: cfg,
             cdformat,
             curCdformat,
-            dataVerification: cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification),
+            dataVerification: cloneDeep(sheet.dataVerification),
             curDataVerification: dataVerification,
             range: {
                 row: [c_r1, c_r2],
@@ -643,7 +644,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             curConfig: cfg,
             cdformat,
             curCdformat,
-            dataVerification: cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification),
+            dataVerification: cloneDeep(sheet.dataVerification),
             curDataVerification: dataVerification,
             range: {
                 row: [minh, maxh],
@@ -671,7 +672,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
     // copy range
     const copyHasMC = copyRange.HasMC;
-    const copySheetIndex = copyRange.dataSheetId;
+    const copySheetId = copyRange.dataSheetId;
 
     const c_r1 = copyRange.copyRange[0].row[0];
     const c_r2 = copyRange.copyRange[0].row[1];
@@ -687,7 +688,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                 row: copyRange.copyRange[i].row,
                 column: copyRange.copyRange[i].column,
             },
-            copySheetIndex,
+            copySheetId,
         );
         if (copyRange.copyRange.length > 1) {
             if (c_r1 === copyRange.copyRange[1].row[0] && c_r2 === copyRange.copyRange[1].row[1]) {
@@ -723,8 +724,9 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     if (copyRange.copyRange.length > 1) {
         for (let i = 0; i < copyData.length; i += 1) {
             for (let j = 0; j < copyData[i].length; j += 1) {
-                if (copyData[i][j] != null && copyData[i]![j]!.f != null) {
-                    delete copyData[i]![j]!.f;
+                const cell = copyData[i][j];
+                if (cell?.f != null) {
+                    delete cell.f;
                 }
             }
         }
@@ -756,7 +758,8 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     }
 
     // Seeded only once the copy-paste is certain — see pasteHandler above.
-    const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
+    const file = getSheet(ctx);
+    const cfg = (file.config ??= {});
     cfg.merge ??= {};
     cfg.borderInfo ??= {};
 
@@ -776,8 +779,8 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
         expandRowsAndColumns(d, addr, addc);
     }
 
-    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex, [c_r1, c_r2, c_c1, c_c2]);
-    const c_dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
+    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetId, [c_r1, c_r2, c_c1, c_c2]);
+    const c_dataVerification = cloneDeep(getSheet(ctx, { id: copySheetId }).dataVerification) || {};
     let dataVerification: Record<string, DataVerificationRule> | null = null;
 
     let mth = 0;
@@ -785,7 +788,6 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     let maxcellCache = 0;
     let maxrowCache = 0;
 
-    const file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
     const hiddenRows = new Set(Object.keys(file.config?.rowhidden || {}));
     const hiddenCols = new Set(Object.keys(file.config?.colhidden || {}));
 
@@ -812,20 +814,16 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
                     // data validation: copy
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
-                        if (dataVerification == null) {
-                            dataVerification = cloneDeep(
-                                ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!]?.dataVerification || {},
-                            );
-                        }
-
-                        dataVerification![`${h}_${c}`] = c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
+                        dataVerification ??= cloneDeep(file.dataVerification || {});
+                        dataVerification[`${h}_${c}`] = c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
                     }
 
-                    if (x[c]?.mc != null) {
-                        if ('rs' in x[c]!.mc!) {
-                            delete cfg.merge[`${x[c]!.mc!.r}_${x[c]!.mc!.c}`];
+                    const replaced = x[c];
+                    if (replaced?.mc != null) {
+                        if ('rs' in replaced.mc) {
+                            delete cfg.merge[`${replaced.mc.r}_${replaced.mc.c}`];
                         }
-                        delete x[c]!.mc;
+                        delete replaced.mc;
                     }
 
                     let value: Cell | null = null;
@@ -880,7 +878,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
     // check whether the copy range has conditional formatting and data validation
     let cdformat: ConditionalFormatRule[] | undefined;
-    const copyIndex = getSheetIndex(ctx, copySheetIndex);
+    const copyIndex = getSheetIndex(ctx, copySheetId);
     const currentIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (copyRange.copyRange.length === 1 && copyIndex != null && currentIndex != null) {
         const c_file = ctx.sheets[copyIndex];
@@ -929,36 +927,17 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     if (cdformat) file.conditionalFormatRules = cdformat;
     file.dataVerification = cloneDeep({ ...file.dataVerification, ...dataVerification });
 
-    // if the selection contains hyperlinks
-    if (ctx.selections?.length === 1 && ctx.copyState?.copyRange.length === 1) {
-        forEach(ctx.copyState?.copyRange, (range) => {
-            for (let r = 0; r <= range.row[1] - range.row[0]; r += 1) {
-                for (let c = 0; c <= range.column[1] - range.column[0]; c += 1) {
-                    const index = getSheetIndex(ctx, ctx.copyState?.dataSheetId as string) as number;
-                    if (
-                        ctx.sheets[index]!.data![r + range.row[0]][c + range.column[0]]?.hl &&
-                        ctx.sheets[index].hyperlink![`${r}_${c}`]
-                    ) {
-                        setCellHyperlink(
-                            ctx,
-                            ctx.copyState?.dataSheetId as string,
-                            r + ctx.selections![0].row[0],
-                            c + ctx.selections![0].column[0],
-                            ctx.sheets[index].hyperlink![`${r}_${c}`],
-                        );
-                    }
-                }
-            }
-        });
-    }
+    pasteHyperlinks(ctx, copyRange);
 
     jfrefreshgrid(ctx, d, ctx.selections);
 }
 
 function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
     // plaintext formula is applied only to one cell
-    const r = ctx.selections![0].row[0];
-    const c = ctx.selections![0].column[0];
+    const selection = ctx.selections?.[0];
+    if (!selection) return;
+    const r = selection.row[0];
+    const c = selection.column[0];
 
     const funcV = execfunction(ctx, formulaStr, r, c, undefined, undefined, true);
 
@@ -1134,14 +1113,15 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         : {};
 
                 const index = getSheetIndex(ctx, ctx.currentSheetId);
-                if (!isNil(index)) {
+                const anchor = ctx.selections?.[0];
+                if (!isNil(index) && anchor) {
                     // Collect only the rows the paste changes and let setRowHeight write them: it
                     // owns the `>= 0` guard, and writing through the sheet's live rowlen bypassed it.
                     const currentRowlen = ctx.sheets[index].config?.rowlen ?? {};
                     const rowHeightList: Record<number, number> = {};
                     forEach(trList, (tr) => {
                         let c = 0;
-                        const targetR = ctx.selections![0].row[0] + r;
+                        const targetR = anchor.row[0] + r;
 
                         const heightAttr = tr.getAttribute('height');
                         if (!isNil(heightAttr)) {
@@ -1271,8 +1251,8 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                     colspan = 1;
                                 }
 
-                                const r_ab = ctx.selections![0].row[0] + r;
-                                const c_ab = ctx.selections![0].column[0] + c;
+                                const r_ab = anchor.row[0] + r;
+                                const c_ab = anchor.column[0] + c;
 
                                 for (let rp = 0; rp < rowspan; rp += 1) {
                                     for (let cp = 0; cp < colspan; cp += 1) {

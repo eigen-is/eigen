@@ -283,7 +283,7 @@ export function handleCellAreaMouseDown(
                     columnseleted = [last.column[0], col_index];
                 }
 
-                const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
+                const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, top, height, left, width);
                 if (changeparam != null) {
                     [columnseleted, rowseleted, top, height, left, width] = changeparam;
                 }
@@ -443,7 +443,7 @@ export function handleCellAreaMouseDown(
                 let left = colGeom.start;
                 let width = colGeom.span;
                 let columnseleted = colGeom.selected;
-                const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
+                const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, top, height, left, width);
                 if (changeparam != null) {
                     [columnseleted, rowseleted, top, height, left, width] = changeparam;
                 }
@@ -453,7 +453,6 @@ export function handleCellAreaMouseDown(
                 last.width_move = width;
                 last.top_move = top;
                 last.height_move = height;
-                ctx.selections![ctx.selections!.length - 1] = last;
             }
         } else if (e.ctrlKey || e.metaKey) {
             // Cmd/Ctrl+click a cell that's already selected toggles it off (deselect),
@@ -575,7 +574,9 @@ export function handleCellAreaDoubleClick(
     }
 
     // Check if current and focus coordinates match; correct if not
-    const { column_focus, row_focus } = ctx.selections![0];
+    const focus = ctx.selections?.[0];
+    const column_focus = focus?.column_focus;
+    const row_focus = focus?.row_focus;
     if (!isNil(column_focus) && !isNil(row_focus) && (column_focus !== col_index || row_focus !== row_index)) {
         row_index = row_focus;
         col_index = column_focus;
@@ -639,7 +640,6 @@ export function handleContextMenu(
                     ctx,
                     [col_index, col_index],
                     [row_index, row_index],
-                    { row_focus: row_index, column_focus: col_index },
                     row_pre,
                     row,
                     col_pre,
@@ -689,7 +689,6 @@ export function handleContextMenu(
                 ctx,
                 [col_index, col_index],
                 [row_index, row_index],
-                { row_focus: row_index, column_focus: col_index },
                 row_pre,
                 row,
                 col_pre,
