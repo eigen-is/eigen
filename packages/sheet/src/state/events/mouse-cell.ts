@@ -1,7 +1,8 @@
 // The grid's clicks on cells. A mousedown selects a cell or a range, extends it with Shift, adds one with ⌘ or Ctrl,
 // picks a reference while a formula is being typed, or does a painted glyph's job, such as ticking a tick box. A
 // double click opens the cell editor, and a right click or a long press selects the cell and opens the context menu.
-// The sheet overlay calls these from its DOM handlers.
+// A press that only closes an app-bar menu is swallowed while a formula is composed. The sheet overlay calls these
+// from its DOM handlers; the drag that follows a press lives in its own file.
 
 import { isNil, last } from 'es-toolkit/compat';
 import type { Context } from '../context';
@@ -61,6 +62,28 @@ export function cellGlyphAtPointer(
     return cellGlyphAt(ctx, x, y);
 }
 
+// Whether a press on a cell puts its reference into the formula being composed, rather than committing the edit.
+function takesFormulaReference(ctx: Context): boolean {
+    return (
+        ctx.editingCellPosition.length > 0 &&
+        Boolean(
+            ctx.formulaCache.rangestart ||
+                ctx.formulaCache.rangedrag_column_start ||
+                ctx.formulaCache.rangedrag_row_start ||
+                israngeseleciton(ctx),
+        )
+    );
+}
+
+// Swallows the press on the grid that only closes a menu while a formula waits for a reference, and returns whether it
+// did. Like a reference press it keeps the browser from moving the focus out of the editor, which would put the caret
+// back at the start.
+export function swallowMenuPress(ctx: Context, globalCache: GlobalCache, e: MouseEvent): boolean {
+    if (!globalCache.pressClosedMenu || !takesFormulaReference(ctx)) return false;
+    e.preventDefault();
+    return true;
+}
+
 // Returns true when the filter button consumed the click (the caller must then
 // skip the cell-input focus, whose auto-scroll would close the just-opened menu).
 export function handleCellAreaMouseDown(
@@ -75,6 +98,7 @@ export function handleCellAreaMouseDown(
     ctx.filterContextMenu = undefined;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
+    if (swallowMenuPress(ctx, globalCache, e)) return;
 
     deselectFloatingObject(ctx);
     const rect = container.getBoundingClientRect();
@@ -212,12 +236,7 @@ export function handleCellAreaMouseDown(
 
     // Formula-related
     if (ctx.editingCellPosition.length > 0) {
-        if (
-            ctx.formulaCache.rangestart ||
-            ctx.formulaCache.rangedrag_column_start ||
-            ctx.formulaCache.rangedrag_row_start ||
-            israngeseleciton(ctx)
-        ) {
+        if (takesFormulaReference(ctx)) {
             // Formula range selection
             let rowseleted = [row_index, row_index_ed];
             let columnseleted = [col_index, col_index_ed];

@@ -1,3 +1,7 @@
+// A document's versions in its File menu: Save version now, and a Version history submenu whose pick asks to
+// restore that version. The restore dialog lives outside the menu, and the same versions show as buttons on
+// the screen a document opens to when its storage is gone.
+
 import { formatDateTime } from '@workspace/lib/date';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -8,10 +12,9 @@ import { Button } from '../../button';
 import { ConfirmDialog } from '../../confirm-dialog';
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dropdown-menu';
 
-// VersionHistoryMenu renders only the dropdown rows. Pair it with
-// RestoreVersionDialog rendered OUTSIDE the parent <DropdownMenuContent>.
-// If the dialog lives inside the dropdown's React subtree, Radix unmounts it
-// the moment the dropdown closes — the dialog flashes and disappears.
+// VersionHistoryMenu renders only the menu rows. Pair it with RestoreVersionDialog rendered outside the
+// menu's content: inside it, Radix unmounts the dialog the moment the menu closes, and the dialog flashes
+// and disappears.
 export function VersionHistoryMenu({
     path,
     onRequestRestore,
@@ -91,7 +94,7 @@ export function RestoreVersionDialog({
     );
 }
 
-// VersionHistoryMenu's rows as plain buttons, for the gone screen outside any dropdown.
+// VersionHistoryMenu's rows as plain buttons, for the gone screen outside any menu.
 export function StorageGoneVersions({ path }: { path: DrivePath }) {
     const { data } = useVersions(path.ownerId, path.mountId, path.id);
     const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);

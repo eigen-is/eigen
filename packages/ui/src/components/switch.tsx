@@ -1,5 +1,7 @@
-import * as SwitchPrimitive from '@radix-ui/react-switch';
+// shadcn's Switch on Radix: an on/off toggle, for a setting that takes effect at once.
+
 import { cn } from '@workspace/ui/lib/utils';
+import { Switch as SwitchPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
 function Switch({ className, ...props }: React.ComponentProps<typeof SwitchPrimitive.Root>) {

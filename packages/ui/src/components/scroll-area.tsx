@@ -1,5 +1,8 @@
-import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area';
+// shadcn's ScrollArea on Radix: a scrolling region with thin, themed scrollbars that look the same in
+// every browser, such as a long list in a panel or a dialog.
+
 import { cn } from '@workspace/ui/lib/utils';
+import { ScrollArea as ScrollAreaPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
 function ScrollArea({ className, children, ...props }: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {

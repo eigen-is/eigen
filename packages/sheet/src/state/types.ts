@@ -333,6 +333,9 @@ export type GlobalCache = {
         x: number;
         y: number;
     };
+    // The last press on the grid landed while a menu was open, so it only closes the menu. Read on the mousedown,
+    // after Radix has closed the menu on the press's pointerdown.
+    pressClosedMenu?: boolean;
 };
 
 // FORMULA

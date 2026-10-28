@@ -19,13 +19,14 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '../dropdown-menu';
+import { AppBarMenu } from '../layout/toolbar/app-bar-menu';
 import { DocumentShareCluster } from '../layout/toolbar/document-share-cluster';
 import { EditMenu } from '../layout/toolbar/edit-menu';
 import { FileMenu } from '../layout/toolbar/file-menu';
 import { CenteredToolbar } from '../layout/toolbar/toolbar';
-import { ToolbarMenu } from '../layout/toolbar/toolbar-menu';
 import { ToolbarSeparator } from '../layout/toolbar/toolbar-separator';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
+import { Menubar } from '../menubar';
 import type { CanvasHandle } from './canvas-editor';
 import { INSERT_IMAGE_KEY, TOOL_LOCK_KEY } from './hooks/use-canvas-keyboard';
 import type { VectorTool } from './hooks/use-tool';
@@ -107,7 +108,7 @@ export function CanvasToolbar({
         <>
             <CenteredToolbar
                 left={
-                    <div className="flex items-center">
+                    <Menubar>
                         <FileMenu
                             path={path}
                             canWrite={canWrite}
@@ -135,7 +136,7 @@ export function CanvasToolbar({
                             </DropdownMenuCheckboxItem>
                         </EditMenu>
                         {canEdit && (
-                            <ToolbarMenu label="Insert">
+                            <AppBarMenu label="Insert">
                                 {insertItems}
                                 <ToolMenuItems tools={INSERT_TOOLS} setTool={setTool} />
                                 {onInsertImage && (
@@ -159,9 +160,9 @@ export function CanvasToolbar({
                                         ))}
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
-                            </ToolbarMenu>
+                            </AppBarMenu>
                         )}
-                    </div>
+                    </Menubar>
                 }
                 center={
                     <>

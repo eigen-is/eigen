@@ -88,7 +88,21 @@ Shared rows know their group. A `FileAction` in `packages/lib/src/core/file-acti
 
 `DropdownMenuSeparator` hides itself when it opens the menu, follows another separator or has no row after it. A row component may render nothing (`DownloadOriginalImageMenuItem` with no path, `DownloadImageMenuItem` with nothing to draw, the comment rows for a viewer), and the separator before it then goes too, so no host writes separator logic of its own. Tests read a menu as a user sees it through `menuRows` and `collapseSeparators` in `packages/ui/src/test/menu-rows.ts`, since happy-dom draws no CSS.
 
-Menubar menus (File, Edit, Format) keep Google's order, which a user knows from Docs, except that their delete rows go last and red, as Format › Table's Delete row, column and table do.
+Bar menus (File, Edit, Format) keep Google's order, which a user knows from Docs, except that their delete rows go last and red, as Format › Table's Delete row, column and table do.
+
+## The app bar's menus are one Radix Menubar
+
+**The menus at the left of a document app's bar are one shadcn `Menubar`, each menu an `AppBarMenu`**: Docs, Sheets, Slides, Vector, Stickies, and Drive's markdown editor when its bar is compact. The menus are non-modal, as Google's are. A press outside an open menu closes it and also reaches what is under it: it focuses an input, places the caret in a document and selects a cell. Where it would change something, it only closes the menu: the canvas ignores it, so the eraser deletes nothing and the text tool places no box, and a formula being composed takes no reference from it. Both ask `pressClosesMenu` in `menubar.tsx` on their pointerdown, which runs before Radix closes the menu on the same press; the grid acts on the mousedown, so `SheetOverlay` keeps the answer in `globalCache.pressClosedMenu` for it. A hover moves to another menu once one is open, and ArrowLeft and ArrowRight walk across the bar. The icon row's dropdowns (Align, the style and font pickers) and the share kebab are `modal={false}` for the same reason: one press on File moves on from them.
+
+The rows are the `DropdownMenu*` rows every other menu uses. Radix gives each kind of menu its own React contexts, so a `DropdownMenu` row inside a Menubar menu would find no menu around it. `MenubarContent` wraps its rows in `MenuRows`, which hands each row the Menubar's Radix parts, so one row such as `ChoiceMenuSub` or `ColorPickerMenuItem` serves a bar menu and a context menu alike, the phone's drill-in included. A whole `DropdownMenu` nested inside a bar menu's rows, such as a picker, gets its own parts back from `DropdownMenuContent`, which provides the DropdownMenu's parts and its root page to its rows, so a pick closes it and leaves the bar menu open.
+
+Three things keep the bar from closing under the user:
+
+- A bar menu has no exit animation, as shadcn's has none. A closing menu kept on screen while it fades sees the focus move into the next menu, and closes the whole bar.
+- A press on an open menu's trigger closes it. Once a menu is open, though, Radix opens the next one as the pointer moves onto its trigger, before the press the user aimed at it. `AppBarMenu` keeps a menu the pointer opened through that press, with the focus in the menu.
+- An editor that takes the focus back as a menu closes takes it only from the page's body, where a pick or Esc leaves it, or from a menu's trigger (`focusLeftToEditor` in `menubar.tsx`). `keepEditorFocus` in Docs and `useCellEditorRefocus` in Sheets ask it. Whatever else took the focus keeps it: the next menu, which would close on focus-outside, a dialog a pick opened, and an input a press outside landed on, such as the size box, the find bar or a comment's reply box.
+
+A bar trigger is a `role="menuitem"` inside the `role="menubar"`, so a test that looks for a menu's rows looks inside `[role="menu"]`.
 
 ## A row that deletes is red and last
 
@@ -215,7 +229,8 @@ Each of these looks like a bug in our own code, so the cause and the fix are wri
 - `TooltipTrigger asChild` overwrites its child's `data-state`, so a Toggle's `data-[state=on]:*` never matches inside a tooltip. Style the pressed state with `aria-pressed:*`, as the find bar's option toggles do (`find-replace-bar.tsx`).
 - A non-modal Popover inside a Radix Dialog can't scroll: the dialog's scroll lock eats the wheel while hover still works. Pass `modal`.
 - A Popover inside a Radix menu closes on focus-outside. Use `DropdownMenuSub`.
-- A Radix menu takes focus back to its trigger on close. To focus something else, `preventDefault` in `onCloseAutoFocus`, then focus the target.
+- A Radix menu takes focus back to its trigger on close. To focus something else, `preventDefault` in `onCloseAutoFocus`, then focus the target, unless the focus already sits in a dialog or another menu.
+- A modal Radix menu turns off pointer events on the page while it is open, so a press on another menu's trigger only closes it. Toolbar menus are non-modal for that reason (§ The app bar's menus are one Radix Menubar).
 - Radix `onOpenChange` never fires on unmount, so state it set stays behind.
 - A flex item that loses `overflow-hidden` loses its escape from its minimum size too: add `min-h-0`.
 - An input focused in `pointerdown` is blurred again by the mousedown that follows. `preventDefault` the pointerdown.

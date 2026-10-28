@@ -11,6 +11,7 @@ const { act, createElement } = await import('react');
 const { DropdownMenuItem } = await import('../../../../components/dropdown-menu');
 const { DocSearchProvider } = await import('../../../../components/search/doc-search-provider');
 const { EditMenu } = await import('../../../../components/layout/toolbar/edit-menu');
+const { Menubar } = await import('../../../../components/menubar');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -31,7 +32,9 @@ async function render({ canEdit = true, selectionItems }: { canEdit?: boolean; s
         selectionItems: selectionItems?.map((label) => createElement(DropdownMenuItem, { key: label }, label)),
     });
     const controller = { search: () => [], highlightAll: () => {}, reveal: () => {} };
-    ({ unmount } = await renderInDocument(createElement(DocSearchProvider, { controller, children: menu })));
+    ({ unmount } = await renderInDocument(
+        createElement(DocSearchProvider, { controller, children: createElement(Menubar, null, menu) }),
+    ));
 }
 
 async function open() {

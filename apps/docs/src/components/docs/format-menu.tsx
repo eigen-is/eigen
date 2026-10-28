@@ -9,7 +9,7 @@ import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BandEdge, FigureLayout } from '@workspace/lib/docs/eigendoc';
 import type { TextAlign } from '@workspace/lib/vector';
 import { TEXT_ALIGNS } from '@workspace/lib/vector';
-import { ToolbarMenu } from '@workspace/ui';
+import { AppBarMenu } from '@workspace/ui';
 import { MenuSections } from '@workspace/ui/components/context-menu';
 import {
     ChoiceMenuItems,
@@ -144,7 +144,7 @@ export const FormatMenu = ({
     pageless,
     onSwitchFormat,
 }: FormatMenuProps) => (
-    <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
+    <AppBarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>
                 <Type className="h-4 w-4" /> Text
@@ -439,5 +439,5 @@ export const FormatMenu = ({
             <RemoveFormatting className="h-4 w-4" /> Clear formatting
             <DropdownMenuShortcut>{formatForDisplay('Mod+\\')}</DropdownMenuShortcut>
         </DropdownMenuItem>
-    </ToolbarMenu>
+    </AppBarMenu>
 );

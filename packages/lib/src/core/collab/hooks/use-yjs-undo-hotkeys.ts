@@ -1,6 +1,13 @@
+// Binds undo and redo to a Yjs UndoManager for an editor without its own keymap, such as a canvas or a Stickies
+// board. The keys work anywhere on the page, for as long as the caller says the user may write.
+
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useCallback, useMemo, useRef } from 'react';
 import type * as Y from 'yjs';
+
+// The keys every Eigen editor undoes and redoes with, which an Edit menu shows beside its rows.
+export const UNDO_HOTKEY = 'Mod+Z';
+export const REDO_HOTKEY = 'Mod+Shift+Z';
 
 export function useYjsUndoHotkeys(undoManager: Y.UndoManager | null, canWrite: boolean): void {
     const enabled = canWrite && !!undoManager;
@@ -19,7 +26,7 @@ export function useYjsUndoHotkeys(undoManager: Y.UndoManager | null, canWrite: b
     }, []);
     const options = useMemo(() => ({ enabled }), [enabled]);
 
-    useHotkey('Mod+Z', undo, options);
+    useHotkey(UNDO_HOTKEY, undo, options);
     useHotkey('Mod+Y', redo, options);
-    useHotkey('Mod+Shift+Z', redo, options);
+    useHotkey(REDO_HOTKEY, redo, options);
 }

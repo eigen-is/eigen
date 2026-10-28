@@ -1,5 +1,8 @@
-import * as PopoverPrimitive from '@radix-ui/react-popover';
+// shadcn's Popover on Radix: a floating panel anchored to a trigger, such as a colour picker or a
+// people list. Its content is held to the viewport, so a tall panel scrolls instead of leaving the page.
+
 import { cn } from '@workspace/ui/lib/utils';
+import { Popover as PopoverPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {

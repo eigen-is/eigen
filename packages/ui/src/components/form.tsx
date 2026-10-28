@@ -1,7 +1,11 @@
-import type * as LabelPrimitive from '@radix-ui/react-label';
-import { Slot } from '@radix-ui/react-slot';
+// shadcn's Form on react-hook-form: FormField binds one field to the form, and FormLabel, FormControl
+// and FormMessage read that field's id and error, so every label, input and message is wired up for
+// screen readers without the caller passing ids around.
+
 import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
+import type { Label as LabelPrimitive } from 'radix-ui';
+import { Slot } from 'radix-ui';
 import * as React from 'react';
 import type { ControllerProps, FieldPath, FieldValues } from 'react-hook-form';
 import { Controller, FormProvider, useFormContext, useFormState } from 'react-hook-form';
@@ -83,11 +87,11 @@ function FormLabel({ className, ...props }: React.ComponentProps<typeof LabelPri
     );
 }
 
-function FormControl({ ...props }: React.ComponentProps<typeof Slot>) {
+function FormControl({ ...props }: React.ComponentProps<typeof Slot.Root>) {
     const { error, formItemId, formDescriptionId, formMessageId } = useFormField();
 
     return (
-        <Slot
+        <Slot.Root
             data-slot="form-control"
             id={formItemId}
             aria-describedby={!error ? `${formDescriptionId}` : `${formDescriptionId} ${formMessageId}`}

@@ -1,4 +1,7 @@
-import { TooltipProvider } from '@radix-ui/react-tooltip';
+// EigenApp is the root every Eigen app renders around its router: the query client, auth, theme,
+// the server event stream, uploads, previews and the command palette. It also keeps a file dropped
+// outside a drop target from navigating the tab away, and binds Mod+P to print the open document.
+
 import { HotkeysProvider, useHotkey } from '@tanstack/react-hotkeys';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@workspace/lib/auth';
@@ -65,28 +68,26 @@ export function EigenApp({ children }: EigenAppProps) {
 
     return (
         <HotkeysProvider>
-            <TooltipProvider>
-                <QueryClientProvider client={queryClient}>
-                    <AuthProvider loadingFallback={<LoadingScreen />}>
-                        <ThemeProvider>
-                            <SSEProvider>
-                                <UploadProvider>
-                                    <PreviewProvider>
-                                        <CommandPaletteProvider>
-                                            <GlobalHotkeys />
-                                            <ErrorBoundary>{children}</ErrorBoundary>
-                                            <Toaster />
-                                        </CommandPaletteProvider>
-                                    </PreviewProvider>
-                                </UploadProvider>
-                            </SSEProvider>
-                        </ThemeProvider>
-                        <Suspense>
-                            <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
-                        </Suspense>
-                    </AuthProvider>
-                </QueryClientProvider>
-            </TooltipProvider>
+            <QueryClientProvider client={queryClient}>
+                <AuthProvider loadingFallback={<LoadingScreen />}>
+                    <ThemeProvider>
+                        <SSEProvider>
+                            <UploadProvider>
+                                <PreviewProvider>
+                                    <CommandPaletteProvider>
+                                        <GlobalHotkeys />
+                                        <ErrorBoundary>{children}</ErrorBoundary>
+                                        <Toaster />
+                                    </CommandPaletteProvider>
+                                </PreviewProvider>
+                            </UploadProvider>
+                        </SSEProvider>
+                    </ThemeProvider>
+                    <Suspense>
+                        <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+                    </Suspense>
+                </AuthProvider>
+            </QueryClientProvider>
         </HotkeysProvider>
     );
 }

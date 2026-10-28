@@ -52,7 +52,7 @@ Some menus stay right-click only, by scope:
 
 ## A submenu drills in on a phone
 
-On a phone `DropdownMenu` shows a `DropdownMenuSub` as a page of the same menu, with a back row, instead of a flyout that has no room beside the menu. Three limits are accepted:
+On a phone a `DropdownMenu`, and every app-bar menu, shows a `DropdownMenuSub` as a page of the same menu, with a back row, instead of a flyout that has no room beside the menu. Three limits are accepted:
 
 - Keyboard roving is weaker inside a page. The pages are built for touch first.
 - A `DropdownMenuSub` directly inside a `DropdownMenuGroup` does not drill. No consumer nests it that way.

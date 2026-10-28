@@ -42,7 +42,7 @@ export async function renderOpenMenu(rows: ReactNode): Promise<{ unmount: () => 
 // Opens the submenu whose row reads `label` with Enter, which opens a desktop submenu and drills into a phone's page.
 export async function openSubmenu(label: string): Promise<void> {
     const { act } = await import('react');
-    const trigger = [...document.querySelectorAll('[role="menuitem"]')].find(
+    const trigger = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find(
         (row) => row.textContent?.trim() === label,
     );
     await act(async () => {

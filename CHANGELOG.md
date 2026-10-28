@@ -47,6 +47,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Tables in Docs** — a table keeps its column widths when wider margins, a turn to portrait or a smaller paper size leave less room for the text, and scrolls sideways inside the page instead of shrinking. A table in a list or a cell still shrinks to fit. When you print or download a PDF, a table wider than the page shrinks to fit it
 - **Page setup in Docs** — the margins show two decimals, such as 2.00 cm
 - **Shortcuts in the Sheets menus** — the **Edit** and **Format → Text** menus show each shortcut next to its item, such as **⌘B** for bold on a Mac and **Ctrl+B** elsewhere
+- **Menus in Docs, Sheets, Slides, Vector and Stickies** — with one menu open, point at another, such as **Edit**, to open it, or move across with the left and right arrow keys. One click on **Edit** while **Format** is open opens **Edit**, and so does one click on a menu while the font or style picker is open. A click outside an open menu also reaches the page, such as selecting a cell
 
 ### Fixed
 

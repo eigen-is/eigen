@@ -1,11 +1,12 @@
-// The Docs Insert menu: links, images, charts, equations, rules, page breaks, tables, code blocks, the page elements
-// (a header, a footer, page numbers and a footnote) and a comment. It inserts into the editor the toolbar follows, and
-// greys out what that editor can't hold. A page-less doc offers no page break, header, footer or page number.
+// Docs' Insert menu: links, images, charts, tables, page elements, equations, footnotes, a table of contents and
+// comments. It asks the editor it acts on what its schema holds, so a band's or a note's editor greys out what it
+// can't take, and a page-less doc offers no page break, header, footer or page number. An equation or a footnote goes
+// in once the menu has closed, so the focus lands in the new field rather than on the menu.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import type { BandEdge } from '@workspace/lib/docs/eigendoc';
-import { ToolbarMenu } from '@workspace/ui';
+import { AppBarMenu } from '@workspace/ui';
 import { CHART_TYPE_OPTIONS } from '@workspace/ui/components/charts';
 import {
     DropdownMenuItem,
@@ -78,7 +79,7 @@ export function InsertMenu({
     // away from the new equation's field or note.
     const afterCloseRef = useRef<(() => void) | null>(null);
     return (
-        <ToolbarMenu
+        <AppBarMenu
             label="Insert"
             onCloseAutoFocus={(e) => {
                 const insert = afterCloseRef.current;
@@ -214,6 +215,6 @@ export function InsertMenu({
                     </DropdownMenuItem>
                 </>
             )}
-        </ToolbarMenu>
+        </AppBarMenu>
     );
 }
