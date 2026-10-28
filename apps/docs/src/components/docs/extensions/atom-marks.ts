@@ -1,3 +1,7 @@
+// Keeps marks off the inline atoms, such as an image, an equation or a page number, which the Yjs binding stores no
+// mark on, so a peer would never see one. It also gives a caret beside an atom the marks of the text run around it.
+// Every docs editor registers it.
+
 import { combineTransactionSteps, Extension, getChangedRanges } from '@tiptap/core';
 import type { Mark, Node, ResolvedPos } from '@tiptap/pm/model';
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
@@ -34,7 +38,7 @@ export const AtomMarks = Extension.create({
         return [
             new Plugin({
                 key: new PluginKey('atomMarks'),
-                // A mark is the parent's to allow, so a bold or a colour over a range lands on its atoms too. One would
+                // A mark is the parent's to allow, so a bold or a color over a range lands on its atoms too. One would
                 // show here until a reload and never reach a peer.
                 appendTransaction(transactions, oldState, newState) {
                     if (!transactions.some((tr) => tr.docChanged)) return null;

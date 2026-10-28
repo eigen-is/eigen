@@ -1,3 +1,6 @@
+// The Docs paragraph styles after Normal text, such as Title and Heading 1, with their icons and previews. The style
+// picker and Format › Paragraph styles list them, and the toolbar reads which one the selection is in.
+
 import type { Node, Schema } from '@tiptap/pm/model';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import type { LucideIcon } from 'lucide-react';
@@ -12,8 +15,8 @@ type ParagraphStyle = {
 };
 
 // Format › Paragraph styles and the style picker list these after Normal text, in Google Docs' order. The picker
-// previews each as the editor draws it: the title largest, the subtitle in grey, the heading sizes stepping down, and
-// Heading 5 and 6 at the body's weight in grey, Heading 6 in italic.
+// previews each as the editor draws it: the title largest, the subtitle in gray, the heading sizes stepping down, and
+// Heading 5 and 6 at the body's weight in gray, Heading 6 in italic.
 const PARAGRAPH_STYLES: ParagraphStyle[] = [
     { name: 'Title', type: 'title', icon: Heading, preview: 'text-2xl' },
     { name: 'Subtitle', type: 'subtitle', icon: LetterText, preview: 'text-base text-muted-foreground' },
