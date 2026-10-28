@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { eq, gt } from 'drizzle-orm';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, matchesIfMatch, matchesIfNoneMatch, normalizeResourceUri } from '../core';
@@ -180,7 +179,7 @@ export async function putCard(
         // A body the server rewrote is not the client's revision, so no validator goes back and the client re-reads (RFC 4918 § 9.7.2).
         const verbatim = stored === body && !merged;
 
-        const id = existing?.id ?? randomUUID();
+        const id = existing?.id ?? crypto.randomUUID();
         const isSelf = eigenId === contacts.home.user.id;
 
         // The avatar URL writeCard derived and stored, after both ceilings passed.

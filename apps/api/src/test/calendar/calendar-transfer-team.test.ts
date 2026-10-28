@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import { ICS_MIME } from '@workspace/lib/types/drive';
@@ -75,7 +74,7 @@ describe('Calendar transfer into a team calendar', () => {
             await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: `Transfer Team ${randomUUID()}`, organizationId: orgId }),
+                body: JSON.stringify({ name: `Transfer Team ${crypto.randomUUID()}`, organizationId: orgId }),
             }),
         );
         owner = teamOwnerId(team.id);
@@ -98,7 +97,7 @@ describe('Calendar transfer into a team calendar', () => {
     });
 
     test('a member with write access imports into the team calendar, and exports it back', async () => {
-        const uid = `team-import-${randomUUID()}@other`;
+        const uid = `team-import-${crypto.randomUUID()}@other`;
         const result = await assertJson<ImportCountsResult>(
             await importRequest(ctx.bob.user, owner, writable, vcal(vevent(uid, 'Team offsite'))),
         );
@@ -112,7 +111,7 @@ describe('Calendar transfer into a team calendar', () => {
     });
 
     test('a member without write access is refused the import and still exports', async () => {
-        const uid = `team-readonly-${randomUUID()}@other`;
+        const uid = `team-readonly-${crypto.randomUUID()}@other`;
         const res = await importRequest(ctx.bob.user, owner, readOnly, vcal(vevent(uid, 'Not mine')));
         expect(res.status).toBe(403);
 
@@ -123,7 +122,7 @@ describe('Calendar transfer into a team calendar', () => {
     // Free-busy is the level that may learn when a calendar is busy and nothing else, so it exports nothing:
     // the stored bytes carry every SUMMARY and DESCRIPTION the range view redacts for it.
     test('a member whose share is free-busy exports nothing', async () => {
-        const uid = `team-freebusy-${randomUUID()}@other`;
+        const uid = `team-freebusy-${crypto.randomUUID()}@other`;
         const secret = await createCalendar('Team board', 'write');
         expect(
             (await importRequest(ctx.bob.user, owner, secret, vcal(vevent(uid, 'Secret board meeting')))).status,
@@ -135,7 +134,7 @@ describe('Calendar transfer into a team calendar', () => {
     });
 
     test('a non-member is refused both', async () => {
-        const uid = `team-outsider-${randomUUID()}@other`;
+        const uid = `team-outsider-${crypto.randomUUID()}@other`;
         expect((await importRequest(ctx.charlie.user, owner, writable, vcal(vevent(uid, 'Outside')))).status).toBe(403);
         expect((await exportRequest(ctx.charlie.user, owner, writable)).status).toBe(403);
     });

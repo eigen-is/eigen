@@ -3,7 +3,6 @@
 // shares and signs it in. Requesting and guessing codes are rate limited. The session itself comes from
 // signInWithScopedPassword, which the demo entry shares.
 
-import { randomUUID } from 'node:crypto';
 import { generateId } from '@better-auth/core/utils/id';
 import { hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
@@ -91,7 +90,7 @@ export async function requestOtp(email: string, ip: string): Promise<void> {
         tx.delete(verification).where(eq(verification.identifier, identifier)).run();
         tx.insert(verification)
             .values({
-                id: randomUUID(),
+                id: crypto.randomUUID(),
                 identifier,
                 value: hashedOtp,
                 expiresAt: new Date(now.getTime() + OTP_EXPIRY_MS),

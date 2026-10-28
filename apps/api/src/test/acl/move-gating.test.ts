@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { authedRequest, driveGet, drivePost, drivePut, getTestContext } from '../setup';
 
@@ -20,7 +19,7 @@ describe('Moving a shared item', () => {
             MOUNT,
             `folder/${rootId}`,
             {
-                folderName: `${name}-${randomUUID()}`,
+                folderName: `${name}-${crypto.randomUUID()}`,
             },
         );
         if (bobWrites) await shareWithBob(created.id);
@@ -34,7 +33,7 @@ describe('Moving a shared item', () => {
             MOUNT,
             `folder/${parentId}/create/doc`,
             {
-                fileName: `moved-${randomUUID()}`,
+                fileName: `moved-${crypto.randomUUID()}`,
             },
         );
     }

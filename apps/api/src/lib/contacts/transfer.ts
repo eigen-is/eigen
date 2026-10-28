@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
 import type { PutResourceResult } from '../core';
@@ -57,7 +56,7 @@ export async function exportCards(contacts: Contacts, ids?: string[]): Promise<s
 function withMintedUid(parsed: ParsedCard): string {
     const version = parsed.lines.findIndex((line) => line.name === 'VERSION');
     const lines = [...parsed.lines];
-    lines.splice(version === -1 ? 1 : version + 1, 0, makeLine('UID', randomUUID()));
+    lines.splice(version === -1 ? 1 : version + 1, 0, makeLine('UID', crypto.randomUUID()));
     return serializeVCardLines(lines);
 }
 
@@ -123,7 +122,7 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
             // A UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`), so mint one; If-None-Match: * keeps the write a create.
             let put: PutResourceResult;
             try {
-                put = await contacts.putCard(`${randomUUID()}.vcf`, body, {
+                put = await contacts.putCard(`${crypto.randomUUID()}.vcf`, body, {
                     ifMatch: null,
                     ifNoneMatch: '*',
                     import: true,

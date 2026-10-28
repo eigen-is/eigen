@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
@@ -46,7 +45,7 @@ describe('putCard — create and read', () => {
 
     test('a create returns created:true and an etag hashing the stored bytes', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const body = card({ uid, email: ['stranger@example.org'] });
 
@@ -62,7 +61,7 @@ describe('putCard — create and read', () => {
 
     test('getCard returns a 3.0 body byte-identically, folded X-props and all', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const body =
             `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nN:Lovelace;Ada;;;\r\nFN:Ada Lovelace\r\n` +
@@ -81,14 +80,14 @@ describe('putCard — create and read', () => {
 
     test('getCard is null for an unknown uri', async () => {
         const { instance: contacts } = await makeContacts();
-        expect(await contacts.getCard(`${randomUUID()}.vcf`)).toBeNull();
+        expect(await contacts.getCard(`${crypto.randomUUID()}.vcf`)).toBeNull();
     });
 });
 
 describe('putCard — path safety', () => {
     test('a traversal uri is refused as invalid by the resource-name rule', async () => {
         const { instance: contacts } = await makeContacts();
-        const res = await put(contacts, '../contacts.db', card({ uid: randomUUID() }));
+        const res = await put(contacts, '../contacts.db', card({ uid: crypto.randomUUID() }));
 
         expect(res).toEqual({ ok: false, error: 'invalid' });
         // The name rule stands even though a uri is no longer a path: nothing is stored under it.
@@ -98,7 +97,7 @@ describe('putCard — path safety', () => {
 
     test('a dot-prefixed uri is refused as invalid', async () => {
         const { instance: contacts } = await makeContacts();
-        expect(await put(contacts, '.hidden.vcf', card({ uid: randomUUID() }))).toEqual({
+        expect(await put(contacts, '.hidden.vcf', card({ uid: crypto.randomUUID() }))).toEqual({
             ok: false,
             error: 'invalid',
         });
@@ -113,7 +112,7 @@ describe('putCard — 4.0 transcode', () => {
             .jpeg()
             .toBuffer();
         const b64 = jpeg.toString('base64');
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const body = `BEGIN:VCARD\r\nVERSION:4.0\r\nUID:${uid}\r\nN:Tesla;Nikola;;;\r\nFN:Nikola Tesla\r\nPHOTO:data:image/jpeg;base64,${b64}\r\nEND:VCARD\r\n`;
 
@@ -130,7 +129,7 @@ describe('putCard — 4.0 transcode', () => {
 
     test('a 3.0 PUT stored verbatim still answers with the etag of its own bytes', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const body = card({ uid, email: ['verbatim@example.org'] });
 
@@ -143,7 +142,7 @@ describe('putCard — 4.0 transcode', () => {
 describe('putCard — preconditions', () => {
     test('If-None-Match:* against an existing card is a precondition failure', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
 
@@ -155,7 +154,7 @@ describe('putCard — preconditions', () => {
 
     test('a stale If-Match is a precondition failure', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
 
@@ -167,7 +166,7 @@ describe('putCard — preconditions', () => {
 
     test('two racing PUTs with the same stale If-Match yield exactly one precondition failure', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const created = await put(contacts, uri, card({ uid, fn: 'V1' }));
         const stale = `"${(created as { etag: string }).etag}"`;
@@ -185,7 +184,7 @@ describe('putCard — preconditions', () => {
 
 describe('putCard — precondition shapes (RFC 7232)', () => {
     const seed = async (contacts: Contacts) => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const res = await put(contacts, uri, card({ uid }));
         return { uid, uri, etag: (res as { etag: string }).etag };
@@ -201,7 +200,7 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
 
     test('If-Match:* against a missing card is a precondition failure', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         expect(await put(contacts, `${uid}.vcf`, card({ uid }), { ifMatch: '*' })).toEqual({
             ok: false,
             error: 'precondition',
@@ -241,26 +240,29 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
 describe('putCard — UID rules', () => {
     test('a body with no UID is invalid', async () => {
         const { instance: contacts } = await makeContacts();
-        const res = await put(contacts, `${randomUUID()}.vcf`, card({}));
+        const res = await put(contacts, `${crypto.randomUUID()}.vcf`, card({}));
         expect(res).toEqual({ ok: false, error: 'invalid', message: 'UID is required' });
     });
 
     test('changing the UID of an existing card is a uid-conflict', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
 
-        expect(await put(contacts, uri, card({ uid: randomUUID() }))).toEqual({ ok: false, error: 'uid-conflict' });
+        expect(await put(contacts, uri, card({ uid: crypto.randomUUID() }))).toEqual({
+            ok: false,
+            error: 'uid-conflict',
+        });
     });
 
     test('a second uri claiming an owned UID is a uid-conflict naming the holder', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const holder = `${uid}.vcf`;
         await put(contacts, holder, card({ uid }));
 
-        expect(await put(contacts, `${randomUUID()}.vcf`, card({ uid }))).toEqual({
+        expect(await put(contacts, `${crypto.randomUUID()}.vcf`, card({ uid }))).toEqual({
             ok: false,
             error: 'uid-conflict',
             conflictUri: holder,
@@ -271,7 +273,7 @@ describe('putCard — UID rules', () => {
 describe('putCard — size ceiling', () => {
     test('a 5 MiB card is accepted and one byte more is too-large', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const prefix = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nFN:Big\r\nNOTE:`;
         const suffix = `\r\nEND:VCARD\r\n`;
         const pad = CARD_MAX_BYTES - Buffer.byteLength(prefix) - Buffer.byteLength(suffix);
@@ -281,7 +283,7 @@ describe('putCard — size ceiling', () => {
         expect((await put(contacts, `${uid}.vcf`, exact)).ok).toBe(true);
 
         const over = prefix + 'a'.repeat(pad + 1) + suffix;
-        expect(await put(contacts, `${randomUUID()}.vcf`, over)).toEqual({ ok: false, error: 'too-large' });
+        expect(await put(contacts, `${crypto.randomUUID()}.vcf`, over)).toEqual({ ok: false, error: 'too-large' });
     });
 });
 
@@ -289,7 +291,7 @@ describe('putCard — index projection', () => {
     test('a group card is indexed and served to DAV but hidden from the app list', async () => {
         const { instance: contacts } = await makeContacts();
         const db = contacts.db;
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await put(
             contacts,
@@ -314,7 +316,7 @@ describe('putCard — index projection', () => {
             .jpeg()
             .toBuffer();
         const b64 = jpeg.toString('base64');
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid, extra: [`PHOTO;ENCODING=b;TYPE=JPEG:${b64}`] }));
 
@@ -326,7 +328,7 @@ describe('putCard — index projection', () => {
     test('a changed card is exactly what getChangedCardsSince reports past the prior ctag', async () => {
         const { instance: contacts } = await makeContacts();
         const before = (await contacts.getBook()).ctag;
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
 
@@ -338,7 +340,7 @@ describe('putCard — index projection', () => {
 describe('putCard — announcements', () => {
     test('the event names the row the write landed on', async () => {
         const { instance: contacts, broadcasts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         broadcasts.length = 0;
 
@@ -349,7 +351,7 @@ describe('putCard — announcements', () => {
 
     test('a create whose delete is already queued behind it still announces both', async () => {
         const { instance: contacts, broadcasts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         broadcasts.length = 0;
 
@@ -369,7 +371,7 @@ describe('putCard — announcements', () => {
 describe('deleteCard', () => {
     test('a delete tombstones the uri and a later create at that uri clears it (single href)', async () => {
         const { instance: contacts } = await makeContacts();
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
         const id = rowByUri(contacts.db, uri)!.id;
@@ -378,7 +380,7 @@ describe('deleteCard', () => {
         expect((await contacts.getDeletedCardsSince(0)).some((d) => d.uri === uri)).toBe(true);
 
         const afterDelete = (await contacts.getBook()).ctag;
-        await put(contacts, uri, card({ uid: randomUUID() }));
+        await put(contacts, uri, card({ uid: crypto.randomUUID() }));
         // The re-created uri is a change, never also a deletion, in the same window.
         expect((await contacts.getDeletedCardsSince(0)).some((d) => d.uri === uri)).toBe(false);
         expect((await contacts.getChangedCardsSince(afterDelete)).some((c) => c.uri === uri)).toBe(true);
@@ -386,7 +388,7 @@ describe('deleteCard', () => {
 
     test('deleting an unknown uri is not-found (DAV DELETE is not idempotent)', async () => {
         const { instance: contacts } = await makeContacts();
-        expect(await contacts.deleteCard(`${randomUUID()}.vcf`, { ifMatch: null })).toEqual({
+        expect(await contacts.deleteCard(`${crypto.randomUUID()}.vcf`, { ifMatch: null })).toEqual({
             ok: false,
             error: 'not-found',
         });
@@ -477,7 +479,7 @@ describe('putCard — self-link', () => {
             .where(eq(contactsSchema.contacts.eigenId, user.id))
             .get()!;
 
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid, eigenId: user.id, email: ['forger@example.org'] }));
 

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { LABEL_NAME_MAX_LENGTH } from '@workspace/lib/constants/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -134,7 +133,7 @@ export async function addLabel(contacts: Contacts, label: Omit<Label, 'id'>): Pr
     if (name.length > LABEL_NAME_MAX_LENGTH) throw new ApiError(422, LABEL_NAME_TOO_LONG);
 
     return contacts.writeLock.run(async () => {
-        const labelId = randomUUID();
+        const labelId = crypto.randomUUID();
 
         try {
             await contacts.db.insert(schema.labels).values({

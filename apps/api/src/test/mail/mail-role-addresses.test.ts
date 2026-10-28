@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import { assertJson, authedRequest, getTestContext } from '../setup';
 
@@ -27,7 +26,7 @@ async function inboxSubjects(user: { id: string; sessionToken: string }): Promis
 describe('Mail role-address delivery', () => {
     for (const local of ['postmaster', 'abuse', 'noreply']) {
         test(`${local}@ delivers to the org admin, not to a non-admin user`, async () => {
-            const subject = `Role ${local} ${randomUUID()}`;
+            const subject = `Role ${local} ${crypto.randomUUID()}`;
             const res = await deliver(`${local}@test.eigen.is`, subject);
             expect(res.status).toBe(200);
 
@@ -37,19 +36,19 @@ describe('Mail role-address delivery', () => {
     }
 
     test('an upper-cased role local part still lands with the admin', async () => {
-        const subject = `Role Postmaster ${randomUUID()}`;
+        const subject = `Role Postmaster ${crypto.randomUUID()}`;
         const res = await deliver('Postmaster@test.eigen.is', subject);
         expect(res.status).toBe(200);
         expect(await inboxSubjects(ctx.alice.user)).toContain(subject);
     });
 
     test('an unknown, non-role address still 404s', async () => {
-        const res = await deliver('nobody@test.eigen.is', `Unknown ${randomUUID()}`);
+        const res = await deliver('nobody@test.eigen.is', `Unknown ${crypto.randomUUID()}`);
         expect(res.status).toBe(404);
     });
 
     test("an existing user's own address still delivers to that user", async () => {
-        const subject = `Direct ${randomUUID()}`;
+        const subject = `Direct ${crypto.randomUUID()}`;
         const res = await deliver(ctx.bob.user.email, subject);
         expect(res.status).toBe(200);
         expect(await inboxSubjects(ctx.bob.user)).toContain(subject);

@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
@@ -232,7 +231,7 @@ describe('birthday normalization at the seam', () => {
     test('updateContact echoing a phone-synced BDAY leaves the BDAY line untouched', async () => {
         const { instance: contacts } = await makeContacts();
         const db = contacts.db;
-        const cardId = randomUUID();
+        const cardId = crypto.randomUUID();
         const uri = 'phone.vcf';
         const put = await contacts.putCard(
             uri,

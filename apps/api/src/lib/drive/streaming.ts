@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { CryptoHasher, FileSink } from 'bun';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
@@ -32,7 +31,7 @@ export async function streamFilesToTemp(
         for await (const event of parseMultipartRequest(request, { maxFileSize: maxSizePerFile })) {
             if (event.type === 'part') {
                 if (!event.filename) continue; // non-file field: chunks fall through unconsumed
-                const tempId = randomUUID();
+                const tempId = crypto.randomUUID();
                 current = {
                     tempId,
                     writer: Bun.file(mount.getTempPath(tempId)).writer({ highWaterMark: 256 * 1024 }),

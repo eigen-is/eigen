@@ -3,7 +3,6 @@
 // Callers such as the contacts routes and the CardDAV server all use it, so an edit from the web app or from
 // a phone goes through the same write lock, quota check and events. It is a part of the Home and closes with it.
 
-import { randomUUID } from 'node:crypto';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 import type { Address, Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
@@ -122,7 +121,7 @@ export class Contacts {
                 this.db
                     .insert(schema.labels)
                     .values({
-                        id: randomUUID(),
+                        id: crypto.randomUUID(),
                         name: label.name,
                         nameKey: normalizeLabelName(label.name),
                         color: label.color,
@@ -342,7 +341,7 @@ export class Contacts {
         return this.writeLock.run(async () => {
             normalizeContactInput(contact);
 
-            const id = randomUUID();
+            const id = crypto.randomUUID();
             const uri = `${id}.vcf`;
             const categories = this.labelNamesFor(contact.labels ?? []);
             // Throws when a staged avatar was swept: a create with a vanished upload must fail, not drop the photo silently.

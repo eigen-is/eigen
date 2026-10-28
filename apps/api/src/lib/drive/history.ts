@@ -2,7 +2,6 @@
 // share, and the users who watch a path. After a change, the watchers of the path and of the folders
 // above it get a notification. Each Mount builds one, and Drive records changes through it.
 
-import { randomUUID } from 'node:crypto';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import { isDocumentType } from '@workspace/lib/types/drive';
 import type { FileEvent, FileEventInput, FileEventType, PathWatchStatus } from '@workspace/lib/types/file-history';
@@ -66,7 +65,7 @@ export class FileHistory {
         this.db
             .insert(fileEvents)
             .values({
-                id: randomUUID(),
+                id: crypto.randomUUID(),
                 pathId: input.pathId,
                 eventType: input.eventType,
                 actorUserId: input.actor.id,

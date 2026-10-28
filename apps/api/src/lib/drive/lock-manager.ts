@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ApiError } from '../core/errors';
 
 // In-memory WebDAV lock state for a single Drive (one per Home). Locks are scoped to the
@@ -66,7 +65,7 @@ export class LockManager {
         if ((this.byPath.get(args.pathId)?.size ?? 0) >= MAX_LOCKS_PER_PATH) {
             throw new ApiError(423, 'Too many locks');
         }
-        const token = `urn:uuid:${randomUUID()}`;
+        const token = `urn:uuid:${crypto.randomUUID()}`;
         const lock: Lock = {
             token,
             pathId: args.pathId,

@@ -1,5 +1,4 @@
 // `ICAL.Component.toString()` is the only serializer here, so folding, escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
-import { randomUUID } from 'node:crypto';
 import { heldAttendees, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
@@ -799,7 +798,7 @@ export function restampResource(
     // One stored id belongs to one row, so a second claimant of the same stored VEVENT gets a fresh id.
     const claimed = new Set<string>();
     const claim = (stored: string | null | undefined): string => {
-        const id = stored && !claimed.has(stored) ? stored : randomUUID();
+        const id = stored && !claimed.has(stored) ? stored : crypto.randomUUID();
         claimed.add(id);
         return id;
     };

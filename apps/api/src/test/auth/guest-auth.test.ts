@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { user as userSchema, verification as verificationSchema } from '../../../auth-schema';
@@ -14,9 +14,9 @@ type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
 describe('Guest Auth', () => {
     test('a scoped sign-in stores the HMAC-SHA256 of scope:email under the auth secret, one per scope', async () => {
-        const email = `scoped-${randomUUID()}@example.com`;
+        const email = `scoped-${crypto.randomUUID()}@example.com`;
         const created = await auth.api.createUser({
-            body: { email, password: randomUUID(), name: 'Scoped', role: 'user' },
+            body: { email, password: crypto.randomUUID(), name: 'Scoped', role: 'user' },
         });
         const signIn = (scope: string) => {
             const password = createHmac('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
@@ -54,7 +54,7 @@ describe('Guest Auth', () => {
                 new Request('http://localhost/guest-auth/request-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: `open-${randomUUID()}@example.com` }),
+                    body: JSON.stringify({ email: `open-${crypto.randomUUID()}@example.com` }),
                 }),
             );
             expect(res.status).toBe(200);
@@ -66,7 +66,7 @@ describe('Guest Auth', () => {
                 new Request('http://localhost/guest-auth/request-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: `closed-${randomUUID()}@example.com` }),
+                    body: JSON.stringify({ email: `closed-${crypto.randomUUID()}@example.com` }),
                 }),
             );
             expect(res.status).toBe(400);
@@ -88,7 +88,7 @@ describe('Guest Auth', () => {
     });
 
     test('request-otp returns 429 after exceeding the per-email rate limit', async () => {
-        const email = `rl-${randomUUID()}@example.com`;
+        const email = `rl-${crypto.randomUUID()}@example.com`;
         for (let i = 0; i < MAX_OTP_REQUESTS_PER_EMAIL; i++) {
             const ok = await ctx.app.handle(
                 new Request('http://localhost/guest-auth/request-otp', {
@@ -179,8 +179,8 @@ describe('Guest Auth', () => {
         let guestToken: string;
 
         beforeAll(async () => {
-            const email = `guard-guest-${randomUUID()}@external.com`;
-            const password = randomUUID();
+            const email = `guard-guest-${crypto.randomUUID()}@external.com`;
+            const password = crypto.randomUUID();
 
             const created = await auth.api.createUser({
                 body: {
@@ -231,12 +231,12 @@ describe('Guest Auth', () => {
             const { reconcileSharesForNewUser } = await import('../../lib/share');
             const { getUserByEmail } = await import('../../lib/user/user');
 
-            const guestEmail = `reg-keep-${randomUUID()}@example.com`;
+            const guestEmail = `reg-keep-${crypto.randomUUID()}@example.com`;
             await addRegistryEntry(ctx.alice.user.id, guestEmail);
             expect(await getEntriesForTarget(guestEmail)).toContain(ctx.alice.user.id);
 
             const created = await auth.api.createUser({
-                body: { email: guestEmail, password: randomUUID(), name: 'Reg Keep', role: 'user' },
+                body: { email: guestEmail, password: crypto.randomUUID(), name: 'Reg Keep', role: 'user' },
             });
             getAuthDrizzleDb()
                 .update(userSchema)
@@ -254,11 +254,11 @@ describe('Guest Auth', () => {
         test('deleting a guest preserves registry entries', async () => {
             const { addRegistryEntry, getEntriesForTarget } = await import('../../lib/share/registry');
 
-            const guestEmail = `reg-survive-${randomUUID()}@example.com`;
+            const guestEmail = `reg-survive-${crypto.randomUUID()}@example.com`;
             await addRegistryEntry(ctx.alice.user.id, guestEmail);
 
             const created = await auth.api.createUser({
-                body: { email: guestEmail, password: randomUUID(), name: 'Reg Survive', role: 'user' },
+                body: { email: guestEmail, password: crypto.randomUUID(), name: 'Reg Survive', role: 'user' },
             });
             getAuthDrizzleDb()
                 .update(userSchema)
@@ -277,7 +277,7 @@ describe('Guest Auth', () => {
 
     describe('full guest flow (request-otp → verify-otp → access)', () => {
         let folderId: string;
-        const guestEmail = `flow-${randomUUID()}@external.com`;
+        const guestEmail = `flow-${crypto.randomUUID()}@external.com`;
 
         beforeAll(async () => {
             // Alice shares a folder with the guest email so request-otp can succeed.
@@ -287,7 +287,7 @@ describe('Guest Auth', () => {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folderName: `flow-shared-${randomUUID()}` }),
+                    body: JSON.stringify({ folderName: `flow-shared-${crypto.randomUUID()}` }),
                 },
             );
             const folder = await assertJson<DrivePath>(folderRes);
@@ -347,7 +347,7 @@ describe('Guest Auth', () => {
         }
 
         test('a wrong guess leaves the code usable', async () => {
-            const email = `typo-${randomUUID()}@external.com`;
+            const email = `typo-${crypto.randomUUID()}@external.com`;
             const otp = await requestOtpAndCapture(email);
             const wrong = await verifyOtp(email, wrongCodeFor(otp));
             expect(wrong.status).toBe(400);
@@ -356,7 +356,7 @@ describe('Guest Auth', () => {
         });
 
         test('the code is burned once the guesses run out', async () => {
-            const email = `brute-${randomUUID()}@external.com`;
+            const email = `brute-${crypto.randomUUID()}@external.com`;
             const otp = await requestOtpAndCapture(email);
             for (let i = 0; i < MAX_OTP_GUESSES; i++) {
                 const wrong = await verifyOtp(email, wrongCodeFor(otp));
@@ -372,7 +372,7 @@ describe('Guest Auth', () => {
 
         // Ten wrong guesses, each a hash verify, plus a sign-in: 1.3 s on CI, past the 5 s default under heavy local load.
         test('a fresh code gets a fresh set of guesses', async () => {
-            const email = `again-${randomUUID()}@external.com`;
+            const email = `again-${crypto.randomUUID()}@external.com`;
             const first = await requestOtpAndCapture(email);
             for (let i = 0; i < MAX_OTP_GUESSES; i++) {
                 await verifyOtp(email, wrongCodeFor(first));
@@ -384,7 +384,7 @@ describe('Guest Auth', () => {
 
         // Eleven full sign-ins, each a handful of password hashes: ~3.4 s on CI, too close to the 5 s default.
         test('a successful sign-in does not count toward the request limit', async () => {
-            const email = `regular-${randomUUID()}@external.com`;
+            const email = `regular-${crypto.randomUUID()}@external.com`;
             for (let i = 0; i < MAX_OTP_REQUESTS_PER_EMAIL + 1; i++) {
                 const otp = await requestOtpAndCapture(email);
                 const res = await verifyOtp(email, otp);
@@ -393,7 +393,7 @@ describe('Guest Auth', () => {
         }, 20_000);
 
         test('one code cannot mint two sessions', async () => {
-            const email = `double-${randomUUID()}@external.com`;
+            const email = `double-${crypto.randomUUID()}@external.com`;
             const otp = await requestOtpAndCapture(email);
             const results = await Promise.all([verifyOtp(email, otp), verifyOtp(email, otp)]);
             expect(results.map((r) => r.status).sort()).toEqual([200, 400]);
@@ -438,7 +438,7 @@ describe('Guest Auth', () => {
 
         test('reconciliation runs on second login too (recovery from any first-time failure)', async () => {
             // Fresh email so the second login below is the second OTP for THIS email.
-            const email = `relogin-${randomUUID()}@external.com`;
+            const email = `relogin-${crypto.randomUUID()}@external.com`;
 
             // Pre-share a different folder to this email.
             const folder2Res = await authedRequest(
@@ -447,7 +447,7 @@ describe('Guest Auth', () => {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folderName: `relogin-${randomUUID()}` }),
+                    body: JSON.stringify({ folderName: `relogin-${crypto.randomUUID()}` }),
                 },
             );
             const folder2 = await assertJson<DrivePath>(folder2Res);
@@ -489,7 +489,7 @@ describe('Guest Auth', () => {
         });
 
         test('concurrent request-otp does not produce duplicate verification rows', async () => {
-            const email = `race-${randomUUID()}@external.com`;
+            const email = `race-${crypto.randomUUID()}@external.com`;
             await updateServerSettings({ guests: { openSignup: true } });
 
             // Fire N concurrent request-otp calls. Without the fix (delete + await + insert),

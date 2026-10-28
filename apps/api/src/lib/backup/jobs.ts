@@ -2,7 +2,6 @@
 // keeps a backup off a folder a restore writes, and the per-home backup and verify jobs themselves. The backup
 // routes start jobs here, the server backup waits for each home's slot here, and shutdown drains what still runs.
 
-import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import type { BackupJob, BackupProgress } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
@@ -50,7 +49,7 @@ export function startBackupJob(
     if (holdsSlot(kind)) requireHomeSlotFree(ownerId, kind);
 
     const job: BackupJob = {
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         kind,
         ownerId,
         startedBy,

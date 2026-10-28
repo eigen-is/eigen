@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { member as memberSchema } from '../../../auth-schema';
@@ -86,7 +85,7 @@ describe('user create hook', () => {
     });
 
     test('a failing default-org join does not fail the created account', async () => {
-        const email = `hook-org-fail-${randomUUID()}@test.eigen.is`;
+        const email = `hook-org-fail-${crypto.randomUUID()}@test.eigen.is`;
         // The user.create.after hook auto-joins the default org via auth.api.addMember; make it fail.
         const spy = spyOn(auth.api, 'addMember').mockRejectedValue(new Error('boom'));
         try {
@@ -101,7 +100,7 @@ describe('user create hook', () => {
 
     test('a failing default-org join still runs share reconciliation', async () => {
         const ctx = await getTestContext();
-        const email = `hook-reconcile-${randomUUID()}@test.eigen.is`;
+        const email = `hook-reconcile-${crypto.randomUUID()}@test.eigen.is`;
 
         // Alice shares a fresh folder with the not-yet-existing email, so a registry entry
         // exists for it before the account is created — reconcile must deliver it on create.
@@ -113,7 +112,7 @@ describe('user create hook', () => {
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ folderName: `hook-reconcile-${randomUUID()}` }),
+                body: JSON.stringify({ folderName: `hook-reconcile-${crypto.randomUUID()}` }),
             },
         );
         const folder = await assertJson<DrivePath>(folderRes);
@@ -153,7 +152,7 @@ describe('sign-in org join', () => {
     });
 
     test('a sign-in joins the default org when the sign-up hook never did', async () => {
-        const email = `signin-org-retry-${randomUUID()}@test.eigen.is`;
+        const email = `signin-org-retry-${crypto.randomUUID()}@test.eigen.is`;
         // Sign up with every join attempt failing: the account lands outside the org, the state
         // (invisible in Admin -> Users, no other repair path) the sign-in join has to heal.
         const spy = spyOn(auth.api, 'addMember').mockRejectedValue(new Error('boom'));
@@ -172,7 +171,7 @@ describe('sign-in org join', () => {
     });
 
     test('a sign-in by an existing member adds no second membership', async () => {
-        const email = `signin-org-once-${randomUUID()}@test.eigen.is`;
+        const email = `signin-org-once-${crypto.randomUUID()}@test.eigen.is`;
         await auth.api.signUpEmail({ body: { email, password: 'testpassword123', name: 'Join Once' } });
         const created = await getUserByEmail(email);
         expect(created).not.toBeNull();

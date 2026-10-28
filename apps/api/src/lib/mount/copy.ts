@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
 import { storageGone } from '../core';
@@ -54,7 +53,7 @@ export async function copyPath(
     // just-created / outage-staged data.db) rather than the possibly-stale-or-absent storage
     // object. The container branch above flushed the doc first, so its pending staging holds the
     // current bytes; a regular file is staged only by a home restore whose upload has not acked yet.
-    const tempId = randomUUID();
+    const tempId = crypto.randomUUID();
     try {
         // Under the tree lock, as the open: on `local` an ancestor rename racing the read would read as gone.
         const { size, hash } = await mount.withTreeShared(async () => {

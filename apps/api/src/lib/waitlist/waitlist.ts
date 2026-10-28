@@ -2,7 +2,6 @@
 // rejects them. An accepted person gets an email with a link that expires, which they use to register. The data is
 // server-wide, in its own database.
 
-import { randomUUID } from 'node:crypto';
 import { escapeHtml } from '@workspace/lib/html';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
@@ -57,7 +56,7 @@ export async function submitWaitlist(email: string, notes: string): Promise<bool
     }
 
     await d.insert(schema.waitlist).values({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         email,
         notes,
         status: 'pending',
@@ -90,7 +89,7 @@ export async function acceptWaitlistEntry(id: string) {
     if (!entry || (entry.status !== 'pending' && entry.status !== 'rejected')) return null;
 
     const d = await db();
-    const inviteToken = randomUUID();
+    const inviteToken = crypto.randomUUID();
     const inviteExpiresAt = new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
     await d
@@ -118,7 +117,7 @@ export async function resendWaitlistInvite(id: string) {
     if (entry?.status !== 'invited') return null;
 
     const d = await db();
-    const inviteToken = randomUUID();
+    const inviteToken = crypto.randomUUID();
     const inviteExpiresAt = new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
     await d

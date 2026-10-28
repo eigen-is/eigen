@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
 import { computeResourceEtag } from '../../lib/core';
 import { encodePathSegment } from '../../lib/dav/href';
@@ -280,7 +279,7 @@ describe('CardDAV', () => {
     });
 
     test('a cross-user PUT (bob writing into alice’s book) is denied 403', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const res = await davRequest('PUT', cardPathname(`${uid}.vcf`), {
             email: ctx.bob.user.email,
             headers: { 'Content-Type': 'text/vcard; charset=utf-8', 'If-None-Match': '*' },
@@ -293,7 +292,7 @@ describe('CardDAV', () => {
     // byte-identity contract, not the store logic proven in carddav-store.test.ts. ---
 
     test('PUT then GET returns byte-identical bytes with a matching quoted etag', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         // X-props, a grouped item1.EMAIL + item1.X-ABLabel, and a folded NOTE — the fidelity the store keeps verbatim.
         const body =
@@ -318,7 +317,7 @@ describe('CardDAV', () => {
     });
 
     test('GET under an unknown book segment is 404 even for an existing card', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
         const res = await davRequest('GET', `/dav/addressbooks/${userId}/bogus/${uri}`, {
@@ -328,7 +327,7 @@ describe('CardDAV', () => {
     });
 
     test('a second PUT without preconditions updates in place with 204 and a fresh etag', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const created = await putCard(uri, vcard(uid, ['EMAIL:one@example.org']), { 'If-None-Match': '*' });
         expect(created.status).toBe(201);
@@ -342,7 +341,7 @@ describe('CardDAV', () => {
     });
 
     test('If-None-Match: * against an existing card maps to 412', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await putCard(uri, vcard(uid), { 'If-None-Match': '*' });
         const res = await putCard(uri, vcard(uid, ['EMAIL:x@example.org']), { 'If-None-Match': '*' });
@@ -350,7 +349,7 @@ describe('CardDAV', () => {
     });
 
     test('a stale If-Match maps to 412', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await putCard(uri, vcard(uid), { 'If-None-Match': '*' });
         const res = await putCard(uri, vcard(uid, ['EMAIL:x@example.org']), { 'If-Match': '"deadbeef"' });
@@ -358,7 +357,7 @@ describe('CardDAV', () => {
     });
 
     test('If-Match: * against an existing card succeeds (RFC 7232 exists check)', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await putCard(uri, vcard(uid), { 'If-None-Match': '*' });
         const res = await putCard(uri, vcard(uid, ['EMAIL:x@example.org']), { 'If-Match': '*' });
@@ -366,13 +365,13 @@ describe('CardDAV', () => {
     });
 
     test('a second uri claiming an owned UID is 409 no-uid-conflict naming the holder', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         // The holder's name carries an @ — pchar-legal, so its href quotes it raw like every other href the
         // CardDAV layer emits, proving the conflict href goes through the same encoder.
-        const holder = `h${randomUUID().replace(/-/g, '')}@x.vcf`;
+        const holder = `h${crypto.randomUUID().replace(/-/g, '')}@x.vcf`;
         expect((await putCard(holder.replace('@', '%40'), vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
 
-        const res = await putCard(`${randomUUID()}.vcf`, vcard(uid), { 'If-None-Match': '*' });
+        const res = await putCard(`${crypto.randomUUID()}.vcf`, vcard(uid), { 'If-None-Match': '*' });
         expect(res.status).toBe(409);
         const xml = await res.text();
         expect(xml).toContain(
@@ -382,11 +381,11 @@ describe('CardDAV', () => {
     });
 
     test('changing the UID of a stored card is a bare 409 no-uid-conflict', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
 
-        const res = await putCard(uri, vcard(randomUUID()));
+        const res = await putCard(uri, vcard(crypto.randomUUID()));
         expect(res.status).toBe(409);
         const xml = await res.text();
         expect(xml).toContain('<CARD:no-uid-conflict/>');
@@ -394,10 +393,10 @@ describe('CardDAV', () => {
     });
 
     test('a UID change onto a UID another card holds names that card', async () => {
-        const held = randomUUID();
+        const held = crypto.randomUUID();
         const holder = `${held}.vcf`;
         expect((await putCard(holder, vcard(held), { 'If-None-Match': '*' })).status).toBe(201);
-        const mine = randomUUID();
+        const mine = crypto.randomUUID();
         expect((await putCard(`${mine}.vcf`, vcard(mine), { 'If-None-Match': '*' })).status).toBe(201);
 
         const res = await putCard(`${mine}.vcf`, vcard(held));
@@ -407,12 +406,12 @@ describe('CardDAV', () => {
 
     test('a card with no UID maps to 400', async () => {
         const body = 'BEGIN:VCARD\r\nVERSION:3.0\r\nN:No;Uid;;;\r\nFN:No Uid\r\nEND:VCARD\r\n';
-        const res = await putCard(`${randomUUID()}.vcf`, body, { 'If-None-Match': '*' });
+        const res = await putCard(`${crypto.randomUUID()}.vcf`, body, { 'If-None-Match': '*' });
         expect(res.status).toBe(400);
     });
 
     test('a PUT carrying a raw C0 control character maps to 400 and stores nothing', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         // A BEL (0x07) inside a NOTE value: stored verbatim it would make every full-book REPORT invalid XML
         // client-side, so the parse seam rejects it as a bad card rather than accepting it.
@@ -422,7 +421,7 @@ describe('CardDAV', () => {
     });
 
     test('an oversize PUT maps to 413 max-resource-size', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const prefix = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nFN:Big\r\nNOTE:`;
         const suffix = '\r\nEND:VCARD\r\n';
         const pad = CARD_MAX_BYTES + 1 - Buffer.byteLength(prefix) - Buffer.byteLength(suffix);
@@ -442,7 +441,7 @@ describe('CardDAV', () => {
             '%zz.vcf', // malformed percent-escape (rejected before decode)
         ];
         for (const name of names) {
-            const res = await putCard(name, vcard(randomUUID()), { 'If-None-Match': '*' });
+            const res = await putCard(name, vcard(crypto.randomUUID()), { 'If-None-Match': '*' });
             expect(res.status).toBe(400);
         }
         const uris = (await (await getHome(userId)).contacts.listCards()).map((c) => c.uri);
@@ -453,7 +452,7 @@ describe('CardDAV', () => {
     test('a %40-encoded @ in a card name round-trips through PUT and GET and its Location is emitted raw', async () => {
         // Inbound decodes A%40B.vcf to the stored uri A@B.vcf; @ is pchar-legal (RFC 3986), so the Location the
         // PUT hands back carries the @ raw, never re-encoded to %40.
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const putRes = await putCard('A%40B.vcf', vcard(uid), { 'If-None-Match': '*' });
         expect(putRes.status).toBe(201);
         expect(putRes.headers.get('Location')).toBe(`/dav/addressbooks/${userId}/contacts/A@B.vcf`);
@@ -466,7 +465,7 @@ describe('CardDAV', () => {
     test('an accented card name round-trips, and its decomposed spelling finds the same row', async () => {
         // The stored name is the composed one, so the emitted href is its percent-encoded form and the NFD
         // spelling a macOS client sends folds onto the same row rather than creating a second resource.
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const nfc = encodeURIComponent('café.vcf');
         const nfd = encodeURIComponent('café.vcf'.normalize('NFD'));
 
@@ -499,7 +498,7 @@ describe('CardDAV', () => {
             .jpeg()
             .toBuffer();
         const b64 = jpeg.toString('base64');
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const body = `BEGIN:VCARD\r\nVERSION:4.0\r\nUID:${uid}\r\nN:Tesla;Nikola;;;\r\nFN:Nikola Tesla\r\nPHOTO:data:image/jpeg;base64,${b64}\r\nEND:VCARD\r\n`;
 
@@ -519,7 +518,7 @@ describe('CardDAV', () => {
     });
 
     test('DELETE removes a card and a subsequent GET is 404', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await putCard(uri, vcard(uid), { 'If-None-Match': '*' });
 
@@ -529,12 +528,12 @@ describe('CardDAV', () => {
     });
 
     test('DELETE of an unknown card is 404 (DAV DELETE is not idempotent)', async () => {
-        const res = await deleteCard(`${randomUUID()}.vcf`);
+        const res = await deleteCard(`${crypto.randomUUID()}.vcf`);
         expect(res.status).toBe(404);
     });
 
     test('DELETE with a stale If-Match maps to 412', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         await putCard(uri, vcard(uid), { 'If-None-Match': '*' });
         const res = await deleteCard(uri, { 'If-Match': '"deadbeef"' });
@@ -582,7 +581,7 @@ describe('CardDAV', () => {
         const count = Math.ceil(REPORT_DATA_BUDGET_BYTES / 4_000_000) + 1;
         const uris: string[] = [];
         for (let i = 0; i < count; i++) {
-            const uid = randomUUID();
+            const uid = crypto.randomUUID();
             const uri = `${uid}.vcf`;
             expect((await putCard(uri, vcard(uid, [`NOTE:${padding}`]), { 'If-None-Match': '*' })).status).toBe(201);
             uris.push(uri);
@@ -604,7 +603,7 @@ describe('CardDAV', () => {
     }, 120_000);
 
     test('a card deleted after its href was learned is a 404 row in a multiget, never a 200 without its data', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
         expect((await deleteCard(uri)).status).toBe(204);
@@ -615,15 +614,15 @@ describe('CardDAV', () => {
     });
 
     test('addressbook-multiget returns address-data for existing hrefs and a 404 row for a missing one', async () => {
-        const uidA = randomUUID();
-        const uidB = randomUUID();
+        const uidA = crypto.randomUUID();
+        const uidB = crypto.randomUUID();
         const uriA = `${uidA}.vcf`;
         const uriB = `${uidB}.vcf`;
         const bodyA = vcard(uidA, ['EMAIL:a@example.org']);
         const bodyB = vcard(uidB, ['EMAIL:b@example.org']);
         expect((await putCard(uriA, bodyA, { 'If-None-Match': '*' })).status).toBe(201);
         expect((await putCard(uriB, bodyB, { 'If-None-Match': '*' })).status).toBe(201);
-        const missing = `${randomUUID()}.vcf`;
+        const missing = `${crypto.randomUUID()}.vcf`;
 
         const res = await report(multigetBody([cardHref(uriA), cardHref(uriB), cardHref(missing)]));
         expect(res.status).toBe(207);
@@ -636,7 +635,7 @@ describe('CardDAV', () => {
     });
 
     test('addressbook-multiget resolves a %40-encoded href and emits the @ raw', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const body = vcard(uid);
         // P%40Q.vcf decodes to P@Q.vcf — the server percent-decodes before matching and emits the @ raw, since @
         // is pchar-legal (RFC 3986); the %40 form must not leak back into the emitted href.
@@ -651,7 +650,7 @@ describe('CardDAV', () => {
     });
 
     test('addressbook-multiget without address-data returns etags only', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
 
@@ -663,7 +662,7 @@ describe('CardDAV', () => {
     });
 
     test('addressbook-multiget with more than 500 hrefs is 400', async () => {
-        const hrefs = Array.from({ length: 501 }, () => cardHref(`${randomUUID()}.vcf`));
+        const hrefs = Array.from({ length: 501 }, () => cardHref(`${crypto.randomUUID()}.vcf`));
         const res = await report(multigetBody(hrefs));
         expect(res.status).toBe(400);
     });
@@ -674,7 +673,7 @@ describe('CardDAV', () => {
     });
 
     test('addressbook-multiget collapses a repeated href to a single response element', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
 
@@ -690,7 +689,7 @@ describe('CardDAV', () => {
     test('addressbook-multiget collapses an NFD href and its NFC twin into one row', async () => {
         // macOS clients spell the same name decomposed in a URL, so the dedupe key folds the Unicode form:
         // one resource must never take two rows of one response (a stored name is ASCII, so both 404).
-        const base = `cafe\u0301-${randomUUID()}.vcf`;
+        const base = `cafe\u0301-${crypto.randomUUID()}.vcf`;
         const res = await report(multigetBody([cardHref(base), cardHref(base.normalize('NFC'))]));
         expect(res.status).toBe(207);
         const xml = await res.text();
@@ -698,7 +697,7 @@ describe('CardDAV', () => {
     });
 
     test('addressbook-multiget collapses a repeated missing href to a single 404 row', async () => {
-        const missing = `${randomUUID()}.vcf`;
+        const missing = `${crypto.randomUUID()}.vcf`;
         const res = await report(multigetBody([cardHref(missing), cardHref(missing)]));
         expect(res.status).toBe(207);
         const xml = await res.text();
@@ -725,7 +724,7 @@ describe('CardDAV', () => {
     });
 
     test('sync-collection without a token lists all cards and a generation-stamped token', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
 
@@ -737,12 +736,12 @@ describe('CardDAV', () => {
     });
 
     test('sync-collection from a prior token returns exactly the card changed since it', async () => {
-        const uidA = randomUUID();
+        const uidA = crypto.randomUUID();
         const uriA = `${uidA}.vcf`;
         expect((await putCard(uriA, vcard(uidA), { 'If-None-Match': '*' })).status).toBe(201);
         const token = syncTokenOf(await (await report(syncBody())).text());
 
-        const uidB = randomUUID();
+        const uidB = crypto.randomUUID();
         const uriB = `${uidB}.vcf`;
         expect((await putCard(uriB, vcard(uidB), { 'If-None-Match': '*' })).status).toBe(201);
 
@@ -752,7 +751,7 @@ describe('CardDAV', () => {
     });
 
     test('sync-collection reports a deleted card as a 404 row', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
         const token = syncTokenOf(await (await report(syncBody())).text());
@@ -779,7 +778,7 @@ describe('CardDAV', () => {
     });
 
     test('sync-collection lists a delete-then-recreate as a single 200 with no 404 row', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
         const token = syncTokenOf(await (await report(syncBody())).text());
@@ -833,9 +832,9 @@ describe('CardDAV', () => {
         `<CARD:prop-filter name="FN"><CARD:text-match collation="${collation}" match-type="contains">${value}</CARD:text-match></CARD:prop-filter>`;
 
     test('addressbook-query (DAVx5 shape) returns only matching cards with byte-exact address-data', async () => {
-        const marker = `Q${randomUUID().replace(/-/g, '')}`;
-        const um = randomUUID();
-        const un = randomUUID();
+        const marker = `Q${crypto.randomUUID().replace(/-/g, '')}`;
+        const um = crypto.randomUUID();
+        const un = crypto.randomUUID();
         const uriMatch = `${um}.vcf`;
         const uriMiss = `${un}.vcf`;
         const bodyMatch = fnCard(um, `Bob ${marker}`);
@@ -851,7 +850,7 @@ describe('CardDAV', () => {
     });
 
     test('a query that matches nothing is an empty 207 with no card responses', async () => {
-        const res = await report(queryBody(fnFilter(`none-${randomUUID()}`)));
+        const res = await report(queryBody(fnFilter(`none-${crypto.randomUUID()}`)));
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect(xml).toContain('multistatus');
@@ -877,8 +876,8 @@ describe('CardDAV', () => {
     });
 
     test('a pretty-printed REPORT is read trimmed: href, text-match and sync-token', async () => {
-        const marker = `P${randomUUID().replace(/-/g, '')}`;
-        const uid = randomUUID();
+        const marker = `P${crypto.randomUUID().replace(/-/g, '')}`;
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const body = fnCard(uid, `Pretty ${marker}`);
         expect((await putCard(uri, body, { 'If-None-Match': '*' })).status).toBe(201);
@@ -894,9 +893,9 @@ describe('CardDAV', () => {
     });
 
     test('the limit element caps the number of responses', async () => {
-        const marker = `L${randomUUID().replace(/-/g, '')}`;
+        const marker = `L${crypto.randomUUID().replace(/-/g, '')}`;
         for (let i = 0; i < 3; i++) {
-            const uid = randomUUID();
+            const uid = crypto.randomUUID();
             expect((await putCard(`${uid}.vcf`, fnCard(uid, `Lim ${marker}`), { 'If-None-Match': '*' })).status).toBe(
                 201,
             );
@@ -906,7 +905,7 @@ describe('CardDAV', () => {
     });
 
     test('a digit-only text-match value keeps its leading zero (no numeric coercion)', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const card = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nFN:Zero Test\r\nN:Zero;;;;\r\nTEL;TYPE=CELL:0612345678\r\nEND:VCARD\r\n`;
         expect((await putCard(uri, card, { 'If-None-Match': '*' })).status).toBe(201);
@@ -969,7 +968,7 @@ describe('CardDAV', () => {
         `</CARD:addressbook-query>`;
 
     test('addressbook-multiget with a prop subset projects to EMAIL + skeleton and drops the rest', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid, partialExtra), { 'If-None-Match': '*' })).status).toBe(201);
 
@@ -990,7 +989,7 @@ describe('CardDAV', () => {
     });
 
     test('addressbook-multiget with an empty address-data (no prop children) returns the full bytes', async () => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const body = vcard(uid, partialExtra);
         expect((await putCard(uri, body, { 'If-None-Match': '*' })).status).toBe(201);
@@ -1001,8 +1000,8 @@ describe('CardDAV', () => {
     });
 
     test('addressbook-query with a prop subset applies the same projection to matching cards', async () => {
-        const marker = `P${randomUUID().replace(/-/g, '')}`;
-        const uid = randomUUID();
+        const marker = `P${crypto.randomUUID().replace(/-/g, '')}`;
+        const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
         const body =
             `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nFN:Bob ${marker}\r\nN:${marker};Bob;;;\r\n` +

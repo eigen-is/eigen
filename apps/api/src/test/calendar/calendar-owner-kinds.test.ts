@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import { eq } from 'drizzle-orm';
@@ -21,7 +20,7 @@ beforeAll(async () => {
 async function createUserWithoutSignIn(role: 'user' | 'guest'): Promise<string> {
     const created = await auth.api.createUser({
         body: {
-            email: `owner-kind-${randomUUID()}@test.eigen.is`,
+            email: `owner-kind-${crypto.randomUUID()}@test.eigen.is`,
             password: 'testpassword123',
             name: 'Owner',
             role: 'user',
@@ -66,11 +65,15 @@ describe('A calendar read for an owner without a calendar of theirs to see', () 
     });
 
     test('an id without a user answers the same as a user without a share', async () => {
-        const missing = randomUUID().replaceAll('-', '');
+        const missing = crypto.randomUUID().replaceAll('-', '');
         expect(await answersFor(missing)).toEqual(NO_ACCESS);
         expect(atHome(missing)).toBe(false);
         // Other tests share alice's calendars with bob, so the user without a share has a home of its own.
-        const existing = await createTestUser(`owner-kind-${randomUUID()}@test.eigen.is`, 'testpassword123', 'Owner');
+        const existing = await createTestUser(
+            `owner-kind-${crypto.randomUUID()}@test.eigen.is`,
+            'testpassword123',
+            'Owner',
+        );
         await getHome(existing.id);
         expect(await answersFor(existing.id)).toEqual(NO_ACCESS);
     });

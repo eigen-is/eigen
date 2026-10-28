@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
@@ -31,7 +30,7 @@ const s3Config: S3Config = {
     secretAccessKey: process.env['S3_TEST_SECRET_KEY'] ?? 'minioadmin',
     region: 'eu-west-1',
     // Unique per run so concurrent/aborted runs never collide; afterAll deletes what we created.
-    prefix: `test-${randomUUID()}`,
+    prefix: `test-${crypto.randomUUID()}`,
 };
 
 // skipIf is evaluated at registration, so the reachability probe runs at module load, not in
@@ -112,7 +111,7 @@ describe.skipIf(!live)('S3Storage (MinIO)', () => {
         expect(await storage.exists('direct/exists.txt')).toBe(true);
         expect(await storage.exists('direct/never-written.txt')).toBe(false);
         expect(
-            await new S3Storage({ ...s3Config, bucket: `missing-${randomUUID()}` }).exists('direct/exists.txt'),
+            await new S3Storage({ ...s3Config, bucket: `missing-${crypto.randomUUID()}` }).exists('direct/exists.txt'),
         ).toBe(false);
     });
 
@@ -129,7 +128,9 @@ describe.skipIf(!live)('S3Storage (MinIO)', () => {
         expect(await storage.delete('direct/delete.txt')).toBe(true);
         expect(await storage.exists('direct/delete.txt')).toBe(false);
         expect(await storage.delete('direct/delete.txt')).toBe(true);
-        expect(await new S3Storage({ ...s3Config, bucket: `missing-${randomUUID()}` }).delete('direct/x')).toBe(true);
+        expect(await new S3Storage({ ...s3Config, bucket: `missing-${crypto.randomUUID()}` }).delete('direct/x')).toBe(
+            true,
+        );
     });
 
     // Pins the audit item-7 fix: size() goes through stat() — S3File.size is a synchronous NaN.
@@ -149,7 +150,7 @@ describe.skipIf(!live)('S3Storage (MinIO)', () => {
 const createdBuckets: S3Config[] = [];
 
 async function createThrowawayBucket(prefix = ''): Promise<S3Config> {
-    const config: S3Config = { ...s3Config, bucket: `eigen-harden-${randomUUID().slice(0, 8)}`, prefix };
+    const config: S3Config = { ...s3Config, bucket: `eigen-harden-${crypto.randomUUID().slice(0, 8)}`, prefix };
     const res = await signedS3Request(config, { method: 'PUT' });
     if (!res.ok) throw new Error(`CreateBucket ${config.bucket} failed (${res.status}): ${await res.text()}`);
     createdBuckets.push(config);

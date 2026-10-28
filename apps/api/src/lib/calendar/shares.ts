@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -67,7 +66,7 @@ function insertSharedCalendar(
     calendar.db
         .insert(schema.sharedCalendars)
         .values({
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             ownerUserId,
             calendarId,
             calendarName,

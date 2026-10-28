@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -78,24 +77,24 @@ describe('Trash revokes access', () => {
         const share = { add: [{ id: ctx.bob.user.email, read: true, write: true }] };
 
         doc = await drivePost<DrivePath>(token, aliceId, MOUNT, `folder/${rootId}/create/doc`, {
-            fileName: `trash-revokes-${randomUUID()}`,
+            fileName: `trash-revokes-${crypto.randomUUID()}`,
         });
         await drivePut(token, aliceId, MOUNT, `path/${doc.id}/acl`, share);
 
         folder = await drivePost<DrivePath>(token, aliceId, MOUNT, `folder/${rootId}`, {
-            folderName: `trash-revokes-${randomUUID()}`,
+            folderName: `trash-revokes-${crypto.randomUUID()}`,
         });
         await drivePut(token, aliceId, MOUNT, `path/${folder.id}/acl`, share);
         inner = await drivePost<DrivePath>(token, aliceId, MOUNT, `folder/${folder.id}/create/doc`, {
-            fileName: `inner-${randomUUID()}`,
+            fileName: `inner-${crypto.randomUUID()}`,
         });
 
         unshared = await drivePost<DrivePath>(token, aliceId, MOUNT, `folder/${rootId}/create/doc`, {
-            fileName: `unshared-${randomUUID()}`,
+            fileName: `unshared-${crypto.randomUUID()}`,
         });
 
         publicDoc = await drivePost<DrivePath>(token, aliceId, MOUNT, `folder/${rootId}/create/doc`, {
-            fileName: `public-${randomUUID()}`,
+            fileName: `public-${crypto.randomUUID()}`,
         });
         await drivePut(token, aliceId, MOUNT, `path/${publicDoc.id}/acl`, { visibility: 'public-read' });
 
@@ -182,7 +181,7 @@ describe('Trash keeps a team drive readable for its members', () => {
         const mountId = await firstMountId(token, owner);
         const rootId = (await driveGet<DrivePath>(token, owner, mountId, 'root')).id;
         const item = await drivePost<DrivePath>(token, owner, mountId, `folder/${rootId}/create/doc`, {
-            fileName: `team-trash-${randomUUID()}`,
+            fileName: `team-trash-${crypto.randomUUID()}`,
         });
 
         const del = await authedRequest(token, `/drive/${owner}/${mountId}/path/${item.id}`, { method: 'DELETE' });

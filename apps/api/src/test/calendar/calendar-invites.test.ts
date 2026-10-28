@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getHome } from '../../lib/home';
@@ -218,7 +217,7 @@ describe('Calendar Invites', () => {
             shares: [{ targetId: ctx.charlie.user.email, permission: 'read' }],
         });
 
-        const orgEventId = `ext-occurrence-${randomUUID()}`;
+        const orgEventId = `ext-occurrence-${crypto.randomUUID()}`;
         const orgUserId = 'external_org@example.com';
         await home.calendar.createEvent(shared.id, {
             title: 'Weekly Sync',
@@ -260,7 +259,7 @@ describe('Calendar Invites', () => {
             const bobHome = await getHome(ctx.bob.user.id);
             const cal = bobHome.calendar;
             const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
-            const uid = `reinvite-${randomUUID()}`;
+            const uid = `reinvite-${crypto.randomUUID()}`;
             const payload = {
                 uid,
                 title: 'Re-received Invite',
@@ -303,7 +302,7 @@ describe('Calendar Invites', () => {
             const bobHome = await getHome(ctx.bob.user.id);
             const cal = bobHome.calendar;
             const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
-            const uid = `collide-${randomUUID()}`;
+            const uid = `collide-${crypto.randomUUID()}`;
             const payload = {
                 uid,
                 title: 'Colliding Invite',
@@ -934,7 +933,7 @@ describe('Delete-as-decline is for attendees only', () => {
             allDay: false,
             data: {
                 organizer: { userId: '', email: organizer, name: 'Stranger' },
-                organizerEventId: `stranger-${randomUUID()}`,
+                organizerEventId: `stranger-${crypto.randomUUID()}`,
                 attendees: [{ email: attendeeEmail, status: 'pending', role: 'required' }],
             },
         });

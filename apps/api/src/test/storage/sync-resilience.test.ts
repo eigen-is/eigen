@@ -1,6 +1,5 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
@@ -375,7 +374,7 @@ describe('write-behind upload pipeline', () => {
         expect(m1.mount.pendingUploadCount).toBe(1);
 
         // Plant an orphan staging file (a crash between stageCopy and the row insert leaves one).
-        const orphan = join(m1.mount.stagingDir, `${randomUUID()}.db`);
+        const orphan = join(m1.mount.stagingDir, `${crypto.randomUUID()}.db`);
         await Bun.write(orphan, 'garbage-referenced-by-no-row');
         expect(readdirSync(m1.mount.stagingDir)).toHaveLength(2);
         // The dead process retries nothing (see 'startup reconcile resumes' above).
@@ -513,7 +512,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingStagedCopy(await mount.getStorageKey(dataDbId))).not.toBeNull();
 
-        const tempId = randomUUID();
+        const tempId = crypto.randomUUID();
         // A non-empty directory at the temp path: the rename of the staged copy's side file onto it fails.
         mkdirSync(join(mount.getTempPath(tempId), 'blocker'), { recursive: true });
         const before = readdirSync(mount.tmpDir);
@@ -532,7 +531,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         // stream/upload temp: named after a random id that is NOT a paths row. Both aged past 1h.
         const recoveryTemp = mount.getTempPath(dataDbId);
         await Bun.write(recoveryTemp, 'live-doc-working-copy');
-        const orphanTemp = mount.getTempPath(randomUUID());
+        const orphanTemp = mount.getTempPath(crypto.randomUUID());
         await Bun.write(orphanTemp, 'stale-transient-temp');
         const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
         utimesSync(recoveryTemp, old, old);
@@ -569,7 +568,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         const insert = crashed.prepare('INSERT INTO items (id, data) VALUES (?, ?)');
         for (let i = 600; i < 700; i++) insert.run(i, 'x'.repeat(100));
         insert.finalize();
-        const imagePath = join(TEST_DIR, `crash-image-${randomUUID()}`);
+        const imagePath = join(TEST_DIR, `crash-image-${crypto.randomUUID()}`);
         copyFileSync(tempPath, imagePath);
         copyFileSync(`${tempPath}-wal`, `${imagePath}-wal`);
         crashed.close();
@@ -692,7 +691,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         const insert = crashed.prepare('INSERT INTO items (id, data) VALUES (?, ?)');
         for (let i = 0; i <= 500; i++) insert.run(i, 'x'.repeat(1000));
         insert.finalize();
-        const imagePath = join(TEST_DIR, `crash-image-${randomUUID()}`);
+        const imagePath = join(TEST_DIR, `crash-image-${crypto.randomUUID()}`);
         copyFileSync(tempPath, imagePath);
         copyFileSync(`${tempPath}-wal`, `${imagePath}-wal`);
         crashed.close();
@@ -706,7 +705,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
     // A WAL an older session of the doc left beside its temp. SQLite replays a -wal into whatever main
     // file sits at that path, so a re-fetched object silently reverts to the stale rows, integrity ok.
     async function plantStaleWal(tempPath: string): Promise<void> {
-        const sourcePath = join(TEST_DIR, `stale-wal-${randomUUID()}.db`);
+        const sourcePath = join(TEST_DIR, `stale-wal-${crypto.randomUUID()}.db`);
         const fresh = new ManagedDatabase(docConfigNoSnap, sourcePath);
         await fresh.open(0);
         await fresh.close({ skipFinalSnapshot: true });

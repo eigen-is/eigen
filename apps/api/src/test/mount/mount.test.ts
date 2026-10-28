@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { MountConfig } from '@workspace/lib/types/mount';
@@ -82,7 +81,7 @@ describe('downloadToTemp', () => {
     test('copies a stored file to a temp path, then cleanupTemp removes it', async () => {
         const data = Buffer.from('snapshot-bytes');
         const fileId = await mount.createFile(rootId, 'snap.db', 'application/octet-stream', data.length, data);
-        const tempId = randomUUID();
+        const tempId = crypto.randomUUID();
         const tempPath = await mount.downloadToTemp(fileId, tempId);
         expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes');
         await mount.cleanupTemp(tempId);
@@ -100,7 +99,7 @@ describe('downloadToTemp', () => {
         const originalGetPath = storage.getPath;
         storage.getPath = undefined;
         try {
-            const tempId = randomUUID();
+            const tempId = crypto.randomUUID();
             const tempPath = await mount.downloadToTemp(fileId, tempId);
             expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes-no-getpath');
             await mount.cleanupTemp(tempId);
@@ -131,7 +130,7 @@ describe('downloadToTemp', () => {
     test('a local tmp/ failure is no storage outage, and leaves no side file behind', async () => {
         const data = Buffer.from('snapshot-bytes-local-failure');
         const fileId = await mount.createFile(rootId, 'snap3.db', 'application/octet-stream', data.length, data);
-        const tempId = randomUUID();
+        const tempId = crypto.randomUUID();
         // A non-empty directory at the temp path: the rename of the downloaded side file onto it fails.
         mkdirSync(join(mount.getTempPath(tempId), 'blocker'), { recursive: true });
         const before = readdirSync(mount.tmpDir);

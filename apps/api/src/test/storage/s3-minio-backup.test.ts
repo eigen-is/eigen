@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
@@ -38,7 +37,7 @@ const s3Config: S3Config = {
     secretAccessKey: process.env['S3_TEST_SECRET_KEY'] ?? 'minioadmin',
     region: 'eu-west-1',
     // Unique per run so concurrent or aborted runs never collide; afterAll deletes what we wrote.
-    prefix: `test-backup-${randomUUID()}`,
+    prefix: `test-backup-${crypto.randomUUID()}`,
 };
 
 // skipIf is evaluated at registration, so the reachability probe runs at module load. Any HTTP
@@ -101,7 +100,7 @@ describe.skipIf(!live)('Backup round trip on a real S3 mount (MinIO)', () => {
 
     beforeAll(async () => {
         await getTestContext();
-        const email = `backup-minio-${randomUUID().slice(0, 8)}@test.eigen.is`;
+        const email = `backup-minio-${crypto.randomUUID().slice(0, 8)}@test.eigen.is`;
         const signUp = await auth.api.signUpEmail({ body: { email, password: PASSWORD, name: 'Backup MinIO' } });
         const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password: PASSWORD } });
         const match = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/);

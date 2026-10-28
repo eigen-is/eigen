@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { auth } from '../../lib/auth/auth';
 import { authedRequest, getTestContext } from '../setup';
 
@@ -67,7 +66,7 @@ describe('Reserved mail addresses', () => {
     });
 
     test('an external reserved address is not blocked by this rule', async () => {
-        const email = `postmaster+${randomUUID()}@example.com`;
+        const email = `postmaster+${crypto.randomUUID()}@example.com`;
         const created = await auth.api.signUpEmail({
             body: { email, password: 'testpassword123', name: 'External Postmaster' },
         });

@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
@@ -23,7 +22,7 @@ describe('ACL entry bounds', () => {
             MOUNT,
             `folder/${rootId}`,
             {
-                folderName: `acl-bounds-${randomUUID()}`,
+                folderName: `acl-bounds-${crypto.randomUUID()}`,
             },
         );
         folderId = folder.id;

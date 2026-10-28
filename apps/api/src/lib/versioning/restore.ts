@@ -2,7 +2,6 @@
 // picks a version in the history panel. It first saves the current state as a version of its own. An
 // open document then takes the old state in place, so connected editors follow without a reload.
 
-import { randomUUID } from 'node:crypto';
 import { isCurrentSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_SHEETS, isCollabType } from '@workspace/lib/types/drive';
@@ -33,7 +32,7 @@ export async function restoreContainer(
     // because Mount.openDatabase would migrate and cache a version that must never change. Each step
     // takes the container lock on its own, and no lock is held from one step to the next. Every
     // restore gets its own temp file, so one restore's cleanup can't delete the file another still reads.
-    const tempId = randomUUID();
+    const tempId = crypto.randomUUID();
     const tempPath = await mount.downloadToTemp(target.id, tempId);
     try {
         // Read before the pre-restore snapshot, so a version that cannot be restored changes nothing.

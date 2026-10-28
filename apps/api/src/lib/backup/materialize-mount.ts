@@ -2,7 +2,6 @@
 // ./eigen restore, whose stage runs beside a live API. So nothing imported here opens a file on load.
 
 import { Database } from 'bun:sqlite';
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -95,7 +94,7 @@ export function materializeMount(
                 if (!fs.existsSync(source)) continue;
                 const key = storageKeyOf(row, byId, isPathBased);
                 if (isRemote) {
-                    const staged = randomUUID();
+                    const staged = crypto.randomUUID();
                     movePath(source, path.join(mountStagingDir, staged));
                     orm.insert(pendingUploads)
                         .values({

@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BunFile } from 'bun';
@@ -290,7 +289,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
 
     test('a move queued behind an in-flight write lands after the commit', async () => {
         const { mount, storage, folderId, fileId, oldKey } = await fileInFolder('move-after-put');
-        const tempId = randomUUID();
+        const tempId = crypto.randomUUID();
         const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Buffer.from('v1'));
         try {
             const gate = storage.armWrite();
@@ -349,7 +348,7 @@ describe('a restore, move or delete whose pre-lock check goes stale', () => {
         ['a folder create', 'folder'],
     ] as const)('%s queued behind a rename to its name answers 409 and keeps the renamed bytes', async (_, kind) => {
         const { mount, storage, folderId, fileId } = await fileInFolder(`create-behind-rename-${kind}`);
-        const tempId = randomUUID();
+        const tempId = crypto.randomUUID();
         const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Buffer.from('UPLOAD'));
         try {
             const hold = Promise.withResolvers<void>();

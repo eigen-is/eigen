@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { assertJson, authedRequest, driveGet, drivePost, drivePut, getTestContext } from '../setup';
 
@@ -21,7 +20,7 @@ describe('Delete of a direct share leaves it', () => {
             MOUNT,
             `folder/${rootId}`,
             {
-                folderName: `leave-share-${randomUUID()}`,
+                folderName: `leave-share-${crypto.randomUUID()}`,
             },
         );
         folderId = folder.id;

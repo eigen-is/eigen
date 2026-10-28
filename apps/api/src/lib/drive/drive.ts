@@ -4,7 +4,6 @@
 // getSharedDrive, which checks access. The few owner-only routes check the owner themselves. Other
 // public methods serve server code, such as chat, collab and the home relay.
 
-import { randomUUID } from 'node:crypto';
 import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
 import type {
     DriveACL,
@@ -470,7 +469,7 @@ export class Drive {
         // databases into the new container this way.
         if (!isContainerType(parent.type)) throw new ApiError(400, 'Target is not a folder');
 
-        const tempId = randomUUID();
+        const tempId = crypto.randomUUID();
         let created: DrivePath;
         try {
             const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
@@ -517,7 +516,7 @@ export class Drive {
         } else {
             // A stream goes through a temp file, so the bytes never sit in memory. The size and hash
             // come from that write, so the mount doesn't read the file again to compute them.
-            const tempId = randomUUID();
+            const tempId = crypto.randomUUID();
             try {
                 const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
                 committed = await mount.writeFileFromTemp(pathId, tempId, size, hash, ifMatch);

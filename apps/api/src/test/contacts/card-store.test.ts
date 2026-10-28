@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
@@ -78,7 +77,7 @@ describe('CARD_MAX_BYTES', () => {
         async () => {
             const { instance: contacts } = await makeContacts();
             const db = contacts.db;
-            const id = await contacts.addContact(contactOfExactly(CARD_MAX_BYTES, randomUUID()));
+            const id = await contacts.addContact(contactOfExactly(CARD_MAX_BYTES, crypto.randomUUID()));
 
             const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
             expect(row.vcard.byteLength).toBe(CARD_MAX_BYTES);
@@ -91,7 +90,7 @@ describe('CARD_MAX_BYTES', () => {
         async () => {
             const { instance: contacts } = await makeContacts();
             const db = contacts.db;
-            const exact = contactOfExactly(CARD_MAX_BYTES, randomUUID());
+            const exact = contactOfExactly(CARD_MAX_BYTES, crypto.randomUUID());
             const before = db.select().from(contactsSchema.contacts).all().length;
 
             // One more ORG character is one more byte on the card.
@@ -177,7 +176,7 @@ describe('Contacts (blob store)', () => {
     test('getContacts excludes an isGroup row planted directly', async () => {
         const { instance: contacts } = await makeContacts();
         const db = contacts.db;
-        const id = randomUUID();
+        const id = crypto.randomUUID();
         const uri = `${id}.vcf`;
         db.insert(contactsSchema.contacts)
             .values({
@@ -203,7 +202,7 @@ describe('Contacts (blob store)', () => {
     test('the contacts list JSON never leaks an inline photo base64', async () => {
         const { instance: contacts, user } = await makeContacts();
         const db = contacts.db;
-        const id = randomUUID();
+        const id = crypto.randomUUID();
         const uri = `${id}.vcf`;
         const photoBase64 = Buffer.from('pretend-jpeg-bytes-long-enough-to-detect-0123456789abcdef').toString('base64');
 
@@ -343,7 +342,7 @@ describe('Contacts label membership (CATEGORIES)', () => {
 
         // Plant a card whose CATEGORIES case differs from the label's stored name, with its row and membership
         // link — as an external CardDAV client that lowercases categories might have written it.
-        const id = randomUUID();
+        const id = crypto.randomUUID();
         const uri = `${id}.vcf`;
         const bytes = new TextEncoder().encode(
             `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${id}\r\nN:Doe;Jane;;;\r\nFN:Jane Doe\r\nCATEGORIES:work\r\nEND:VCARD\r\n`,
@@ -374,7 +373,7 @@ describe('Contacts label membership (CATEGORIES)', () => {
         const { instance: contacts, broadcasts } = await makeContacts();
         broadcasts.length = 0;
 
-        await expect(contacts.updateLabel(randomUUID(), { name: 'Ghost', color: '#000000' })).rejects.toThrow(
+        await expect(contacts.updateLabel(crypto.randomUUID(), { name: 'Ghost', color: '#000000' })).rejects.toThrow(
             'Label not found',
         );
 

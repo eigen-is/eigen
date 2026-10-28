@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomFillSync, randomUUID } from 'node:crypto';
+import { randomFillSync } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -432,7 +432,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
             .jpeg()
             .toBuffer();
         const photo = { kind: 'inline', bytes: new Uint8Array(jpeg), mediaType: 'image/jpeg' } as const;
-        const contactId = randomUUID();
+        const contactId = crypto.randomUUID();
 
         const first = await deriveCardPhotoCache(contacts, contactId, photo);
         const second = await deriveCardPhotoCache(contacts, contactId, photo);
@@ -520,10 +520,10 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     test('downloadAvatar serves only the staged and derived cache-name shapes', async () => {
         const { instance: contacts, dir } = await makeContacts();
         const staged = (await stageAvatar(contacts)).split('/').pop()!;
-        const derived = `${randomUUID()}-0123abcd.webp`;
+        const derived = `${crypto.randomUUID()}-0123abcd.webp`;
         // Names outside those two shapes are refused even when the file is really there — a control
         // character or an arbitrary name never reaches the filesystem read.
-        const rogue = ['evil\n.webp', 'plain.webp', `${randomUUID()}.png`, `${randomUUID()}-XY.webp`];
+        const rogue = ['evil\n.webp', 'plain.webp', `${crypto.randomUUID()}.png`, `${crypto.randomUUID()}-XY.webp`];
         for (const name of [derived, ...rogue]) writeFileSync(join(avatarsDirOf(dir), name), 'x');
 
         expect(await contacts.downloadAvatar(staged)).not.toBeNull();
@@ -536,7 +536,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         const { instance: contacts, dir } = await makeContacts();
         const before = readdirSync(avatarsDirOf(dir)).length;
 
-        const url = await deriveCardPhotoCache(contacts, randomUUID(), {
+        const url = await deriveCardPhotoCache(contacts, crypto.randomUUID(), {
             kind: 'uri',
             uri: 'https://example.com/remote.jpg',
         });

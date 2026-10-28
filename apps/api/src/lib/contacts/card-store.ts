@@ -2,7 +2,6 @@
 // and names the avatar files that belong to a contact. The vCard stays the only source of truth, so lists read a
 // few columns and never the card itself. Contacts and the avatar code use it.
 
-import { randomUUID } from 'node:crypto';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import { eq, sql } from 'drizzle-orm';
 import { PATHS } from '../config/paths';
@@ -64,7 +63,7 @@ export function avatarCacheName(contactId: string, bytes: Uint8Array): string {
     return `${contactId}-${computeResourceEtag(bytes).slice(0, 8)}.webp`;
 }
 
-const CONTACT_ID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'; // randomUUID()
+const CONTACT_ID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'; // crypto.randomUUID()
 const PHOTO_HASH = '[0-9a-f]{8}'; // avatarCacheName's hash suffix
 
 // Allowlisting the two served webp names refuses separators, `..` and control characters by construction.
@@ -175,7 +174,7 @@ export function syncCardLabels(tx: Tx, contactId: string, categories: string[]):
         if (existing) {
             labelIds.add(existing.id);
         } else {
-            const id = randomUUID();
+            const id = crypto.randomUUID();
             tx.insert(schema.labels)
                 .values({ id, name: name.trim(), nameKey, color: labelColorFor(nameKey) })
                 .run();

@@ -4,7 +4,6 @@
 // The restore code next door decides which version to bring back.
 
 import { constants, Database } from 'bun:sqlite';
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
@@ -145,7 +144,7 @@ async function snapshotDataDbToVersionLocal(
     snapshotName: string,
     order: CopyOrder,
 ): Promise<string> {
-    const tempId = randomUUID();
+    const tempId = crypto.randomUUID();
     try {
         const tempPath = mount.getTempPath(tempId);
         if (!(await stageManagedDbCopy(mount, dataDb.id, tempPath, order))) throw storageGone();

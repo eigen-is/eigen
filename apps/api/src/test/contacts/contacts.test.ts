@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
@@ -328,7 +327,7 @@ describe('Contacts', () => {
         test('updating a label that does not exist is rejected with 404', async () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/labels/${randomUUID()}`,
+                `/contacts/${ctx.alice.user.id}/labels/${crypto.randomUUID()}`,
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
