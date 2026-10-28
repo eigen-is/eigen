@@ -273,7 +273,7 @@ export const auth = betterAuth({
                 beforeDeleteTeam: async ({ team }) => {
                     if (team.id === getServerConfig()?.defaultTeamId) {
                         throw new APIError('FORBIDDEN', {
-                            message: "The organisation's default team can't be deleted",
+                            message: "The organization's default team can't be deleted",
                         });
                     }
                     const { teardownTeamData } = await import('../team/delete-team');
