@@ -3,7 +3,10 @@
 
 import type { User } from './user';
 
+// The role a guest account is created with, which a query filters on where it can't call isGuest.
+export const GUEST_ROLE = 'guest';
+
 // A missing user is not a guest.
 export function isGuest(user: Pick<User, 'role'> | null | undefined): boolean {
-    return user?.role === 'guest';
+    return user?.role === GUEST_ROLE;
 }
