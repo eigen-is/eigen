@@ -41,6 +41,15 @@ describe('Space settings', () => {
         expect((await putSettings({ docsView: { textWidth: 'huge' } })).status).toBe(422);
     });
 
+    test('a save of one drive view field keeps the stored sort key', async () => {
+        expect((await putSettings({ driveView: { mode: 'grid', sortKey: 'size' } })).status).toBe(200);
+        expect((await putSettings({ driveView: { mode: 'list' } })).status).toBe(200);
+        const settings = await assertJson<UserSettings>(
+            await authedRequest(ctx.charlie.user.sessionToken, `/space/${ctx.charlie.user.id}/settings`),
+        );
+        expect(settings.driveView).toEqual({ mode: 'list', sortKey: 'size' });
+    });
+
     test('every theme and drive sort key the pickers list is taken, and others are refused', async () => {
         for (const { value } of THEMES) expect((await putSettings({ theme: value })).status).toBe(200);
         for (const sortKey of DRIVE_SORT_KEYS) expect((await putSettings({ driveView: { sortKey } })).status).toBe(200);

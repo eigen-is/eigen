@@ -54,12 +54,12 @@ export const spaceRouter = new Elysia({ name: 'space' })
                 driveView: t.Optional(
                     t.Object({
                         mode: t.Optional(t.Union([t.Literal('list'), t.Literal('grid')])),
-                        sortKey: t.Optional(t.UnionEnum(DRIVE_SORT_KEYS)),
+                        sortKey: optionalEnum(DRIVE_SORT_KEYS),
                         sortDir: t.Optional(t.Union([t.Literal('asc'), t.Literal('desc')])),
                     }),
                 ),
                 celebrations: t.Optional(t.Boolean()),
-                docsView: t.Optional(t.Object({ textWidth: t.Optional(t.UnionEnum(DOCS_TEXT_WIDTHS)) })),
+                docsView: t.Optional(t.Object({ textWidth: optionalEnum(DOCS_TEXT_WIDTHS) })),
             }),
             auth: true,
         },

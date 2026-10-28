@@ -35,6 +35,7 @@ import { deleteUserCompletely } from '../lib/user/delete-user';
 import { resetUserPassword } from '../lib/user/reset-password';
 import { betterAuth } from './auth';
 import {
+    optionalEnum,
     s3ConfigBody,
     s3DestinationBody,
     s3HardenBody,
@@ -174,7 +175,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                     t.Object({
                         mount: t.Optional(
                             t.Object({
-                                storageType: t.Optional(t.UnionEnum(SERVER_STORAGE_TYPES)),
+                                storageType: optionalEnum(SERVER_STORAGE_TYPES),
                             }),
                         ),
                     }),
