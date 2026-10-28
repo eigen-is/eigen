@@ -1,5 +1,5 @@
 // The one write of an account password: its hash onto the user's credential account, the row better-auth's sign-in
-// reads. An admin's reset and the guest and demo sign-in share it.
+// reads. Callers such as an admin's reset and the guest and demo sign-in share it.
 
 import { auth } from './auth';
 

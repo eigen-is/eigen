@@ -134,6 +134,30 @@ describe('Protocol Auth', () => {
             });
         }
 
+        test("a banned account's app password answers 401 and counts toward the failure limit", async () => {
+            const member = await createTestUser('protocol-banned-key@test.eigen.is', 'testpassword123', 'Banned Key');
+            const created = await auth.api.createApiKey({
+                body: { name: 'banned-app-password' },
+                headers: { cookie: `better-auth.session_token=${member.sessionToken}` },
+            });
+            expect((await verifyProtocolAuth(member.email, created.key)).id).toBe(member.id);
+            const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
+            const { user } = await import('../../../auth-schema');
+            const { eq } = await import('drizzle-orm');
+            getAuthDrizzleDb().update(user).set({ banned: true }).where(eq(user.id, member.id)).run();
+            const res = await app.handle(
+                new Request('http://localhost/dav/', {
+                    method: 'PROPFIND',
+                    headers: { Authorization: `Basic ${btoa(`${member.email}:${created.key}`)}`, Depth: '0' },
+                }),
+            );
+            expect(res.status).toBe(401);
+            for (let i = 0; i < 9; i++) {
+                await expect(verifyProtocolAuth(member.email, created.key)).rejects.toThrow('Unauthorized');
+            }
+            await expect(verifyProtocolAuth(member.email, created.key)).rejects.toThrow('Too many failed');
+        });
+
         test("a guest's own app password is refused as well", async () => {
             const created = await auth.api.createApiKey({
                 body: { name: 'guest-app-password' },
@@ -247,6 +271,17 @@ describe('Protocol Auth', () => {
 
         test('signs in over DAV', async () => {
             const credentials = Buffer.from(`${email}:${password}`, 'utf8').toString('base64');
+            const res = await app.handle(
+                new Request('http://localhost/dav/', {
+                    method: 'PROPFIND',
+                    headers: { Authorization: `Basic ${credentials}`, Depth: '0' },
+                }),
+            );
+            expect(res.status).toBe(207);
+        });
+
+        test('signs in over DAV when the client sends Latin-1 bytes', async () => {
+            const credentials = Buffer.from(`${email}:${password}`, 'latin1').toString('base64');
             const res = await app.handle(
                 new Request('http://localhost/dav/', {
                     method: 'PROPFIND',

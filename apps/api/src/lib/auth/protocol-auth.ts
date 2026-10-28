@@ -19,8 +19,7 @@ export async function authenticateBasic(request: Request): Promise<User> {
         throw new ApiError(401, 'Unauthorized');
     }
 
-    // Clients encode the credentials as UTF-8, so a password with accents survives; atob would read them as Latin-1.
-    const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8');
+    const decoded = decodeCredentials(authHeader.slice(6));
     const colonIndex = decoded.indexOf(':');
     if (colonIndex === -1) {
         throw new ApiError(401, 'Unauthorized');
@@ -31,6 +30,17 @@ export async function authenticateBasic(request: Request): Promise<User> {
 
     // Caddy sets X-Real-IP on the /dav and /webdav routes, so a client cannot fake it.
     return verifyProtocolAuth(email, password, clientIpKey(request, null));
+}
+
+// RFC 7617 leaves the charset open. Most clients send UTF-8, so a password with accents survives, but some, such as
+// OkHttp, send ISO-8859-1, where `é` is the single byte E9 and is not valid UTF-8. UTF-8 first, Latin-1 as the fallback.
+function decodeCredentials(base64: string): string {
+    const bytes = Buffer.from(base64, 'base64');
+    try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch {
+        return bytes.toString('latin1');
+    }
 }
 
 // `ip` is the client's address, not the caller's. The DAV routes read it from Caddy's X-Real-IP. A mail login
@@ -45,8 +55,9 @@ export async function verifyProtocolAuth(email: string, password: string, ip?: s
 
     // 1. An app password, checked before the failure limit. It is the credential protocol clients are meant to use,
     // and the only one a 2FA account has, so a bucket filled by a stale client or a flood must not refuse it. Its
-    // check is a cheap hash lookup, so only the slow account-password check below is limited.
-    if (user && APP_PASSWORD_SHAPE.test(password)) {
+    // check is a cheap hash lookup, so only the slow account-password check below is limited. A banned account skips
+    // it and falls through to the counted refusal below.
+    if (user && !isBanned(user) && APP_PASSWORD_SHAPE.test(password)) {
         const keyResult = await auth.api.verifyApiKey({ body: { key: password } });
         if (keyResult.valid && keyResult.key?.referenceId === user.id) {
             clearProtocolAuthFailures(email);
