@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import type { Sheet } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot } from '@workspace/lib/sheets';
+import type { Cell, CellWithRowAndCol, Op, Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
@@ -11,12 +11,14 @@ import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import * as collabSchema from '../../lib/collab/schema';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core';
-import { readSheetsFromDoc } from '../../lib/document/sheets';
+import { readLiveSheets, readSheetsFromDoc } from '../../lib/document/sheets';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
+import { IMPORT_MESSAGES } from '../../lib/import/messages';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
+import { assertInsertFits, MAX_CELLS, MAX_TEXT, sheetsWeight } from '../../lib/import/sheets/limits';
 import { readLooks } from '../../lib/import/sheets/styles';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import { parseOoxml } from '../../lib/ooxml/ooxml';
@@ -345,13 +347,11 @@ describe('Sheets xlsx import/convert', () => {
         expect(restored[0].celldata?.[0]?.v?.v).toBe('Before');
     });
 
-    // A workbook of one picture, as the export writes it: a sheet's image over B2.
-    async function pictureWorkbook(): Promise<ArrayBuffer> {
+    // A workbook of one picture, as the export writes it: a sheet's image over B2, and the cells given.
+    async function pictureWorkbook(celldata: CellWithRowAndCol[] = []): Promise<ArrayBuffer> {
         const image = { id: 'photo', index: 'a0', x: 100, y: 20, width: 40, height: 30, mediaName: 'photo.png' };
         const media = [{ name: 'photo.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG) }];
-        return toTransferableBuffer(
-            exportXlsx([{ name: 'Pictures', celldata: [], images: { photo: image } }], { media }),
-        );
+        return toTransferableBuffer(exportXlsx([{ name: 'Pictures', celldata, images: { photo: image } }], { media }));
     }
 
     async function mediaFiles(pathId: string): Promise<Map<string, Uint8Array>> {
@@ -383,6 +383,69 @@ describe('Sheets xlsx import/convert', () => {
         expect(new Set(names).size).toBe(2);
         expect(new Set((await mediaFiles(sheetsDoc.id)).keys())).toEqual(new Set(names));
     });
+
+    // A sheet no tab has flushed, which fills a workbook to the text cap, so a file's one label passes it.
+    const fullSheet: Op = {
+        op: 'addSheet',
+        id: 'full',
+        path: [],
+        value: {
+            id: 'full',
+            name: 'Full',
+            order: 1,
+            config: {},
+            celldata: [{ r: 0, c: 0, v: { v: 'a'.repeat(MAX_TEXT) } }],
+        },
+    };
+    const labelled = () => pictureWorkbook([{ r: 0, c: 0, v: { v: 'x', m: 'x' } }]);
+
+    test('an insert refused against the workbook saves none of its pictures', async () => {
+        const sheetsDoc = await uploadAndConvert(await pictureWorkbook(), 'pictures-full.xlsx');
+        const before = await mediaFiles(sheetsDoc.id);
+        const home = await getHome(ctx.alice.user.id);
+        const ops = (await home.drive.getCollabDocument(mountId, sheetsDoc.id)).doc.getArray<Op[]>('ops');
+        ops.push([[fullSheet]]);
+        try {
+            const res = await importRequest(sheetsDoc.id, await labelled(), 'insert');
+            expect(res.status).toBe(413);
+            expect(await res.text()).toContain(IMPORT_MESSAGES.xlsx.tooLarge);
+            expect([...(await mediaFiles(sheetsDoc.id)).keys()]).toEqual([...before.keys()]);
+            expect(ops).toHaveLength(1);
+        } finally {
+            ops.delete(0, ops.length);
+        }
+    }, 60_000);
+
+    test('an insert is weighed again in its write, against what another insert added while its pictures were saved', async () => {
+        const sheetsDoc = await uploadAndConvert(buildXlsxBuffer([{ a1: 'A1', value: 'Own' }]), 'grown-meanwhile.xlsx');
+        const home = await getHome(ctx.alice.user.id);
+        const { path } = await home.drive.resolveFile(mountId, sheetsDoc.id);
+        const user = await getUserById(ctx.alice.user.id);
+        if (!user) throw new Error('alice missing');
+        const ops = (await home.drive.getCollabDocument(mountId, sheetsDoc.id)).doc.getArray<Op[]>('ops');
+        // The first open weighs the file before its pictures; the workbook grows before the write opens it again.
+        const realGet = home.drive.getCollabDocument.bind(home.drive);
+        let opens = 0;
+        const getSpy = spyOn(home.drive, 'getCollabDocument').mockImplementation(async (id, pathId) => {
+            if (++opens === 2) ops.push([[fullSheet]]);
+            return realGet(id, pathId);
+        });
+        let error: unknown;
+        try {
+            await importIntoDocument(home.drive, path, Buffer.from(await labelled()), { mode: 'insert' }, user);
+        } catch (e) {
+            error = e;
+        } finally {
+            getSpy.mockRestore();
+        }
+        try {
+            expect(opens).toBe(2);
+            expect(error).toMatchObject({ status: 413, message: IMPORT_MESSAGES.xlsx.tooLarge });
+            expect(ops).toHaveLength(1);
+        } finally {
+            ops.delete(0, ops.length);
+        }
+    }, 60_000);
 
     test('convert rejects non-.xlsx files', async () => {
         const textFile = new File(['not a spreadsheet'], 'notes.txt', { type: 'text/plain' });
@@ -2042,6 +2105,64 @@ describe('Sheets xlsx conversion fidelity', () => {
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('1:0')?.v).toBe('blank target');
         expect(byCoord.get('1:0')?.hl).toBeUndefined();
+    });
+});
+
+// The reader bounds each file alone, so an insert weighs the file with the workbook it joins against the same caps.
+describe('an insert weighed with the workbook it joins', () => {
+    const refused = { status: 413, message: IMPORT_MESSAGES.xlsx.tooLarge };
+    const sheetOf = (id: string, celldata: CellWithRowAndCol[]): Sheet => ({
+        id,
+        name: id,
+        order: 0,
+        config: {},
+        celldata,
+    });
+    const numbers = (count: number) =>
+        Array.from({ length: count }, (_, i) => ({ r: Math.floor(i / 26), c: i % 26, v: { v: i } }));
+    function thrownBy(weigh: () => void): unknown {
+        try {
+            weigh();
+        } catch (error) {
+            return error;
+        }
+        return null;
+    }
+
+    test("a cell's text is its value, display, formula, number format and runs, as the reader charges them", () => {
+        const cell: Cell = { v: 'ab', m: 'cd', f: '=x', ct: { fa: 'General', s: [{ v: 'run' }] } };
+        const sheet = sheetOf('Text', [
+            { r: 0, c: 0, v: cell },
+            { r: 0, c: 1, v: { v: 1 } },
+            { r: 0, c: 2, v: null },
+        ]);
+        expect(sheetsWeight([sheet])).toEqual({ cells: 3, text: 2 + 2 + 2 + 7 + 3 });
+    });
+
+    test('a file that fits alone is refused when it and the workbook pass the cell cap', () => {
+        const workbook = [sheetOf('Stored', numbers(MAX_CELLS - 1_000))];
+        expect(thrownBy(() => assertInsertFits(workbook, { cells: 1_001, text: 0 }))).toMatchObject(refused);
+        expect(thrownBy(() => assertInsertFits(workbook, { cells: 1_000, text: 0 }))).toBeNull();
+    }, 30_000);
+
+    test('a file that fits alone is refused when it and the workbook pass the text cap', () => {
+        const workbook = [sheetOf('Stored', [{ r: 0, c: 0, v: { v: 'a'.repeat(MAX_TEXT - 10) } }])];
+        expect(thrownBy(() => assertInsertFits(workbook, { cells: 1, text: 11 }))).toMatchObject(refused);
+        expect(thrownBy(() => assertInsertFits(workbook, { cells: 1, text: 10 }))).toBeNull();
+    });
+
+    test('a sheet no tab has flushed weighs with the stored ones', () => {
+        const doc = new Y.Doc();
+        doc.getMap('state').set('snapshot', encodeSheetsSnapshot([sheetOf('Stored', numbers(10))], { computed: true }));
+        const pending = sheetOf('Pending', numbers(10));
+        doc.getArray<Op[]>('ops').push([[{ op: 'addSheet', id: pending.id, path: [], value: pending }]]);
+        expect(sheetsWeight(readLiveSheets(doc)).cells).toBe(20);
+    });
+
+    // A file weighs no more than the reader charged it, so the largest a replace accepts sits at both caps.
+    test('a file as large as a replace accepts goes into a workbook never flushed', () => {
+        const file = { cells: MAX_CELLS, text: MAX_TEXT };
+        expect(thrownBy(() => assertInsertFits(readLiveSheets(new Y.Doc()), file))).toBeNull();
     });
 });
 

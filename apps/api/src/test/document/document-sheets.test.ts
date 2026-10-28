@@ -5,7 +5,12 @@ import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheet
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
-import { appendSheetsToYjs, readSheetsFromDoc, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
+import {
+    appendSheetsToYjs,
+    readLiveSheets,
+    readSheetsFromDoc,
+    writeSheetsSnapshotToYjs,
+} from '../../lib/document/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
@@ -819,13 +824,18 @@ describe('document/sheets — appendSheetsToYjs', () => {
         return doc;
     }
 
+    // As the import's write calls it, with the workbook it has just read.
+    function append(doc: Y.Doc, snapshotJson: string): void {
+        appendSheetsToYjs(doc, snapshotJson, readLiveSheets(doc));
+    }
+
     test("the sheets arrive as one batch of addSheet ops under fresh ids, after the workbook's own", () => {
         const doc = workbook();
         const pending: Op[] = [{ op: 'replace', id: 'own', path: ['name'], value: 'Data' }];
         doc.getArray('ops').push([pending]);
         const snapshot = doc.getMap('state').get('snapshot');
 
-        appendSheetsToYjs(doc, encodeSheetsSnapshot(file, { computed: true }));
+        append(doc, encodeSheetsSnapshot(file, { computed: true }));
 
         expect(doc.getMap('state').get('snapshot')).toBe(snapshot);
         const batches = doc.getArray<Op[]>('ops').toArray();
@@ -844,7 +854,7 @@ describe('document/sheets — appendSheetsToYjs', () => {
 
     test('every ref the file makes to a renamed sheet follows its new name, and every id ref its new id', () => {
         const doc = workbook();
-        appendSheetsToYjs(doc, encodeSheetsSnapshot(file, { computed: true }));
+        append(doc, encodeSheetsSnapshot(file, { computed: true }));
         const { sheets } = readSheetsFromDoc(doc, { recalc: false });
         const [, data, summary] = sheets;
         const cell = (r: number, c: number) => summary.celldata?.find((e) => e.r === r && e.c === c)?.v;
@@ -866,14 +876,14 @@ describe('document/sheets — appendSheetsToYjs', () => {
 
     test('a computed file keeps its calc chain, under the new id', () => {
         const doc = workbook();
-        appendSheetsToYjs(doc, encodeSheetsSnapshot(file, { computed: true }));
+        append(doc, encodeSheetsSnapshot(file, { computed: true }));
         const added = doc.getArray<Op[]>('ops').toArray()[0][1].value;
         expect(added.calcChain).toEqual([{ r: 0, c: 0, id: added.id }]);
     });
 
     test('a workbook never flushed takes the file beside the default sheet the editor opens on', () => {
         const doc = new Y.Doc();
-        appendSheetsToYjs(doc, encodeSheetsSnapshot([{ ...file[0], name: 'Sheet1' }], { computed: true }));
+        append(doc, encodeSheetsSnapshot([{ ...file[0], name: 'Sheet1' }], { computed: true }));
         const { sheets } = readSheetsFromDoc(doc, { recalc: false });
         expect(sheets.map((sheet) => sheet.name)).toEqual(['Sheet1', 'Sheet1(Copy)']);
     });
@@ -881,7 +891,7 @@ describe('document/sheets — appendSheetsToYjs', () => {
     test("a name nobody holds is kept, and a ref to a sheet the file doesn't bring stays as written", () => {
         const doc = workbook();
         const json = encodeSheetsSnapshot([{ ...file[1], name: 'Summary' }], { computed: true });
-        appendSheetsToYjs(doc, json);
+        append(doc, json);
         const [summary] = decodeSheetsSnapshot(json);
         const added = doc.getArray<Op[]>('ops').toArray()[0][0].value;
         expect(added.name).toBe('Summary');

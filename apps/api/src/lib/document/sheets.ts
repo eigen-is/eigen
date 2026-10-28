@@ -1,3 +1,7 @@
+// A workbook's Yjs doc, read and written on the server. The transform process reads it as Sheet[] for an export, a
+// preview or a search extract, replaying the pending ops over the snapshot as a browser does. An xlsx import writes it:
+// a replace as a new snapshot, an insert as addSheet ops after the sheets an open tab shows.
+
 import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
 import { decodeSheetsSnapshot } from '@workspace/lib/sheets';
 import {
@@ -25,38 +29,27 @@ export const SERVER_RECALC_BUDGET = {
     maxCellsRead: 32_000_000,
 };
 
-// Materialized Yjs doc → Sheet[]. Every consumer of a persisted workbook reads it in
-// the document-transform process, so there is no Mount-side loader here: capture
-// (collab-source.ts) + materialize (yjs-loader.ts) is the only path in. `recalcError`
-// is non-null when recalc fell back to replayed values — the caller decides how to
-// surface it (a TransformWarning in the transform).
+// Every reader of a stored workbook reads it in the transform process, which loads the Yjs doc first. `recalcError` is
+// set when the recalc failed and the sheets keep their replayed values. The caller decides how to report it, such as a
+// warning on the export.
 export function readSheetsFromDoc(
     doc: Y.Doc,
     { recalc = true }: { recalc?: boolean } = {},
 ): { sheets: Sheet[]; recalcError: string | null } {
     const snapshot = readSheetsSnapshotJson(doc);
     const opBatches = doc.getArray<Op[]>('ops').toArray();
-    // No snapshot + pending ops = a fresh doc closed before its first
-    // flushSnapshot. The ops were recorded against the editor's default sheets
-    // (they reference 'sheet-1'), so replay must start from the same base — an
-    // empty base silently drops every edit. A doc with neither stays [].
+    // Ops without a snapshot come from a new workbook closed before its first flush. They were recorded against the
+    // editor's default sheets, so the replay starts from those, or it drops every edit. A doc with neither stays empty.
     const sheets = snapshot ? decodeSheetsSnapshot(snapshot) : opBatches.length > 0 ? createDefaultSheets() : [];
-    // v2 snapshots are celldata-only, but the renderers' conditional-format pass and
-    // the cross-sheet formula resolver read the dense `data` matrix (v1 editor
-    // flushes carried it implicitly). Materialize it for every sheet so preview and
-    // export see the same workbook regardless of which format persisted it.
-    // One far-flung cell (XFD1048576) makes this a huge grid; the transform deadline caps it.
+    // The snapshot stores cells as a list, but the renderers' conditional formats and the cross-sheet formula resolver
+    // read the dense `data` matrix, so every sheet gets one. One far-flung cell, such as XFD1048576, makes a huge grid,
+    // and the transform's deadline bounds it.
     const replayed = replaySheetsOps(sheets, opBatches).map(withMaterializedData);
 
-    // Server-side recalc for docs the client never computed for us — legacy xlsx
-    // imports from before the import transform persisted computed values + calcChain.
-    // Gated on the needs-recompute signal (formula cells but no calcChain), so
-    // live-edited docs pay nothing — and only the export read opts in: recalc of a
-    // large legacy workbook is unbounded (~39s measured), which a preview or search
-    // extract must never pay inside its 30s transform deadline. Those readers pass
-    // { recalc: false } and serve the replayed values as-is. Any recalc failure
-    // falls back to the replayed stale-but-valid sheets — an export must never 500
-    // because recalc hiccuped. See docs/SHEETS.md § The editor computes on write.
+    // Only a workbook nobody computed, with formulas but no calc chain, is recalculated here, such as an old xlsx
+    // import. An edited workbook pays nothing. Only the export asks for it: a large recalc took 39 s, past the 30 s a
+    // preview or a search extract has, so those read the replayed values. A recalc that fails leaves the replayed
+    // values, because an export must not fail on it.
     if (!recalc || !sheetsNeedRecalc(replayed)) return { sheets: replayed, recalcError: null };
     try {
         return {
@@ -73,8 +66,16 @@ export function readSheetsSnapshotJson(doc: Y.Doc): string | undefined {
     return doc.getMap<string>('state').get('snapshot');
 }
 
-// The import commit: an already-serialized snapshot goes straight into the live
-// doc, so the transform's snapshot JSON is never parsed and re-stringified here.
+// The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets before the first flush,
+// with every pending op replayed.
+export function readLiveSheets(doc: Y.Doc): Sheet[] {
+    const snapshot = readSheetsSnapshotJson(doc);
+    const stored = snapshot ? decodeSheetsSnapshot(snapshot) : createDefaultSheets();
+    return replaySheetsOps(stored, doc.getArray<Op[]>('ops').toArray());
+}
+
+// A replacing import's commit. The transform's snapshot goes into the live doc as it came, never parsed here, and the
+// pending ops go with the workbook they edited.
 export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string): void {
     doc.transact(() => {
         doc.getMap<string>('state').set('snapshot', snapshotJson);
@@ -87,13 +88,9 @@ export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string): void
 // arrives, so an open tab adds them live and keeps its unflushed edits. Each takes a fresh id, and one whose name the
 // workbook holds is renamed as Duplicate names a copy. What the file says about its own sheets follows: formulas,
 // conditional formats, list sources and links name a sheet by name; charts, link cells and the calc chain by id.
-export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string): void {
-    const snapshot = readSheetsSnapshotJson(doc);
-    const ops = doc.getArray<Op[]>('ops');
-    // A doc never flushed opens on the default sheets, as the editor and readSheetsFromDoc both read it.
-    const current = replaySheetsOps(snapshot ? decodeSheetsSnapshot(snapshot) : createDefaultSheets(), ops.toArray());
+// `current` is the workbook as readLiveSheets reads it in the same write, which the caller weighs the file against.
+export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: Sheet[]): void {
     const imported: SheetWithCalcChain[] = decodeSheetsSnapshot(snapshotJson);
-
     const taken = current.map((sheet) => sheet.name);
     const renames = new Map<string, string>();
     const fresh = imported.map((sheet) => {
@@ -138,5 +135,5 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string): void {
         const value: Sheet = { ...sheet, id, name, order: current.length + i, charts };
         return { op: 'addSheet', id, path: [], value };
     });
-    ops.push([added]);
+    doc.getArray<Op[]>('ops').push([added]);
 }

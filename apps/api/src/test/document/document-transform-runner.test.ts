@@ -583,6 +583,14 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
+    test('a sheets import response whose weight is no count resolves as invalid-response', async () => {
+        const runner = makeRunner();
+        const unweighed = await runner.run(makeImportRequest({ behavior: 'import-unweighed' }), EXPORT_OPTIONS);
+        expect(unweighed.ok).toBe(false);
+        if (!unweighed.ok) expect(unweighed.error.code).toBe('invalid-response');
+        await runner.close();
+    });
+
     test('aborting a queued job removes it before any child runs it', async () => {
         const runner = makeRunner();
         const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), PREVIEW_OPTIONS);

@@ -20,7 +20,7 @@ import { getPublicOrigin } from '../config/server-config';
 import { getMaxUploadSize } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { commitEigendocImport } from '../document/doc';
-import { appendSheetsToYjs, writeSheetsSnapshotToYjs } from '../document/sheets';
+import { appendSheetsToYjs, readLiveSheets, writeSheetsSnapshotToYjs } from '../document/sheets';
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
 import { lossSummary } from '../document/transform/losses';
 import type {
@@ -46,6 +46,7 @@ import type { Mount } from '../mount';
 import { MAX_DECOMPRESSED_BYTES } from '../ooxml/zip';
 import type { User } from '../user';
 import { IMPORT_MESSAGES, PRESENTATION_EMPTY } from './messages';
+import { assertInsertFits } from './sheets/limits';
 
 // No signal parameter by design: a conversion detaches from the request, so a page reload can't kill a minute of
 // transform progress.
@@ -130,10 +131,17 @@ export async function importIntoDocument(
     const containerMime = isCollabType(path.type) ? path.mimeType : '';
     const commit = { drive, path, user, signal };
     if (containerMime === DRIVE_MIME_SHEETS) {
-        const { snapshotJson, images, warnings } = await importXlsxSnapshot(buffer, signal);
+        const { snapshotJson, weight, images, warnings } = await importXlsxSnapshot(buffer, signal);
+        // An insert is weighed with the workbook before its pictures are saved, so a refused one leaves none behind.
+        // The write weighs it again, because another insert may have grown the workbook in the meantime.
+        if (mode === 'insert' && images.length > 0) {
+            assertInsertFits(readLiveSheets((await drive.getCollabDocument(path.mountId, path.id)).doc), weight);
+        }
         await commitImport(commit, images, mode === 'replace', (doc) => {
-            if (mode === 'replace') writeSheetsSnapshotToYjs(doc, snapshotJson);
-            else appendSheetsToYjs(doc, snapshotJson);
+            if (mode === 'replace') return writeSheetsSnapshotToYjs(doc, snapshotJson);
+            const current = readLiveSheets(doc);
+            assertInsertFits(current, weight);
+            appendSheetsToYjs(doc, snapshotJson, current);
         });
         return lossSummary(warnings, 'import');
     }

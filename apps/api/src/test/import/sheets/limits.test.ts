@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import { MAX_CELLS, MAX_TEXT } from '../../../lib/import/sheets/from-xlsx';
+import { MAX_CELLS, MAX_TEXT } from '../../../lib/import/sheets/limits';
 import { build, deflated } from '../../fixtures/raw-zip';
 
 // The bounds an untrusted xlsx meets. The zip refuses an archive past its caps before anything inflates; past that the

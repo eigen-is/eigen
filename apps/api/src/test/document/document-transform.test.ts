@@ -822,6 +822,7 @@ describe('document transform (xlsx import)', () => {
             ok: true as const,
             result: {
                 snapshotJson: new TextEncoder().encode(JSON.stringify(sheets)).buffer as ArrayBuffer,
+                weight: { cells: 0, text: 0 },
                 images: [],
             },
             warnings: [{ code: 'recalc-failed' as const, message: 'forced' }],

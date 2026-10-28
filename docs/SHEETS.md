@@ -422,6 +422,10 @@ Every imported sheet takes a fresh id: the importer numbers its sheets `sheet-0`
 
 Defined names need nothing: the reader has already written each into the formulas that use it as the range it names ([EXPORT.md](EXPORT.md#an-xlsx-defined-name-is-inlined-into-the-formulas-that-use-it)), so its refs are renamed like any other. A range written with its sheet on both ends (`'Data'!A1:'Data'!B2`) gets the new name on its first end only, as the formula walker hands the second end's prefix back untouched; Excel writes a range's sheet once.
 
+The reader bounds each file alone ([EXPORT.md](EXPORT.md#zip-guards-run-before-the-parser-inflates-anything)), so repeated inserts could grow one workbook past what any single import may. An insert weighs the file with the workbook against the same `MAX_CELLS` and `MAX_TEXT` and refuses past either with the import's 413 "This spreadsheet is too large to import" (`assertInsertFits` in `apps/api/src/lib/import/sheets/limits.ts`). Both sides are weighed by `sheetsWeight` in one unit: the stored cells, and the characters of each cell's value, display, formula, number format and rich-text runs. The transform weighs the file as the reader read it, and the main thread weighs the workbook as a tab opening it shows it (`readLiveSheets`), so a sheet an earlier insert added, which stays an `addSheet` op until a tab flushes, counts too. The reader charges those same fields and more, so a file a replace accepts always fits an empty workbook. What Insert doesn't count: the recalc grid's slots (`MAX_GRID_SLOTS`), and what the reader charges beyond the cells' own text, such as borders, merges and the text of links and rules ([ROADMAP.md](ROADMAP.md)).
+
+The weigh runs twice. When the file brings pictures, it runs before they are saved, so a refused insert leaves none in the media folder. It runs again in the write, because another insert may have grown the workbook while the pictures were saved.
+
 ## Some xlsx round-trip drifts are decisions
 
 These are deliberate. Where a test pins one, it is in `apps/api/src/test/export/sheets-export.test.ts`. Hyperlinks:
