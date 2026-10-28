@@ -1,3 +1,6 @@
+// Date and time formatting for every app, always day-month-year in English, with the formatters cached because a
+// long list formats one date per row. The backend uses it too, for example in the CLI.
+
 export function formatTime(date: Date | string | number): string {
     const d = new Date(date);
     const h = d.getHours();
@@ -54,12 +57,13 @@ export function formatDateOnly(isoDate: string): string {
     return formatDayMonth(new Date(year, month - 1, day), { year: true });
 }
 
-export function isSameDay(a: Date, b: Date): boolean {
-    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
 export function isToday(date: Date): boolean {
-    return isSameDay(date, new Date());
+    const today = new Date();
+    return (
+        date.getFullYear() === today.getFullYear() &&
+        date.getMonth() === today.getMonth() &&
+        date.getDate() === today.getDate()
+    );
 }
 
 export function formatDateTime(date: Date | string | number): string {

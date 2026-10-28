@@ -1,7 +1,7 @@
 // Viewer-facing sentence templates, one per built-in emote key. {name} is the actor,
 // {target} the target. Shared by the live chat renderer (formatEmoteForViewer, apps/api)
 // and the activity-preview formatter (formatChatPreview) so the phrasing lives in one place.
-export type EmoteDefinition = {
+type EmoteDefinition = {
     firstPerson?: string;
     thirdPerson?: string;
     targetedFirstPerson?: string;

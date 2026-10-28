@@ -1,3 +1,6 @@
+// The calendar types the API and the Calendar app share: calendars, events and their occurrences, guests,
+// reminders, sharing and the inputs that create or change them.
+
 export const IMIP_METHODS = ['REQUEST', 'REPLY', 'CANCEL'] as const;
 export type ImipMethod = (typeof IMIP_METHODS)[number];
 
@@ -23,7 +26,7 @@ export type EventData = {
 };
 
 export const CALENDAR_SHARE_PERMISSIONS = ['free-busy', 'read', 'write'] as const;
-export type CalendarSharePermission = (typeof CALENDAR_SHARE_PERMISSIONS)[number];
+type CalendarSharePermission = (typeof CALENDAR_SHARE_PERMISSIONS)[number];
 
 export type CalendarShare = {
     targetId: string;

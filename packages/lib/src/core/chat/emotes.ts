@@ -1,3 +1,6 @@
+// The built-in chat emotes, such as /wave and /agree, with their aliases and what they say. The composer's
+// suggestions, command validation and the server's parser look an emote up here by its key or alias.
+
 type EmoteCommandDef = {
     key: string;
     aliases?: string[];
@@ -122,8 +125,4 @@ export function resolveEmoteKey(command: string): string | null {
 
 export function getEmoteCommand(key: string) {
     return EMOTE_COMMANDS.find((c) => c.key === key);
-}
-
-export function isEmoteCommand(command: string): boolean {
-    return resolveEmoteKey(command) !== null;
 }

@@ -1,3 +1,6 @@
+// The notification types the API and the apps share: which kinds exist, the details each kind carries, and the
+// shapes written and read.
+
 import type { DrivePathType } from './drive';
 
 export type NotificationType =
@@ -27,7 +30,7 @@ export type ChatNotificationThread = {
     chatName?: string;
 };
 
-export type NotificationDetailsMap = {
+type NotificationDetailsMap = {
     mail: { mailId: string; snippet?: string };
     'calendar-invite': { startTime: number };
     'calendar-invite-updated': { startTime: number };

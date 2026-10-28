@@ -1,6 +1,9 @@
+// An owner id names the Home that owns a resource: a user, a team, an organization or an outside address. It parses
+// an owner id into its kind and id, and builds one from them.
+
 import { validateEmailAddress } from '../validation';
 
-export type OwnerType = 'user' | 'team' | 'org' | 'external' | 'invalid';
+type OwnerType = 'user' | 'team' | 'org' | 'external' | 'invalid';
 
 export type ParsedOwnerId = { type: OwnerType; id: string };
 

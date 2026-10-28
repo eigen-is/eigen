@@ -6,7 +6,7 @@
 import { fontLineHeight } from '../constants/fonts';
 import { DEFAULT_FONT_FAMILY } from './types';
 
-export type FontMetrics = {
+type FontMetrics = {
     unitsPerEm: number; // Inter is 2048; the others 1000 — always normalize by this
     ascender: number;
     descender: number; // negative

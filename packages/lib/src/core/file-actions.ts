@@ -28,7 +28,7 @@ const convertsTo =
         !!info.downloadUrl && isConvertSource(info.name, target) && !subject.readOnly;
 
 // What can be done with a file, answered once for every surface; a predicate never asks which menu is drawing.
-export const FILE_ACTIONS: readonly FileAction[] = [
+const FILE_ACTIONS: readonly FileAction[] = [
     {
         id: 'quick-look',
         label: 'Quick preview',

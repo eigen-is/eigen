@@ -1,7 +1,10 @@
+// Checks a chat slash command before it is sent, for the browser and the server alike: whether it is a known emote,
+// a whisper or a local command, and whether its target is a valid address.
+
 import { getEmoteCommand, resolveEmoteKey } from '../core/chat/emotes';
 import { validateEmailTarget } from './email';
 
-export type CommandValidationResult =
+type CommandValidationResult =
     | {
           valid: true;
           kind: 'builtin-emote' | 'emote' | 'whisper' | 'reply' | 'invite' | 'help' | 'inspect' | 'whoami';

@@ -1,7 +1,11 @@
-import { validateCommand } from '../../validation';
-import { EMOTE_COMMANDS, getEmoteCommand, isEmoteCommand, resolveEmoteKey } from './emotes';
+// The slash commands of the chat composer: the list the suggestion popup shows, which commands need a space after
+// them, and the commands that run in the browser and never reach the server, such as /help and /whoami. The server
+// parses the commands it stores as messages itself.
 
-export { getEmoteCommand, isEmoteCommand, resolveEmoteKey };
+import { validateCommand } from '../../validation';
+import { EMOTE_COMMANDS, getEmoteCommand, resolveEmoteKey } from './emotes';
+
+export { getEmoteCommand, resolveEmoteKey };
 
 // All valid slash command strings
 export const SLASH_COMMANDS = [
@@ -50,7 +54,7 @@ export function commandNeedsSpace(command: string): boolean {
     return !noSpaceCommands.has(command);
 }
 
-export type LocalCommand =
+type LocalCommand =
     | { kind: 'help' }
     | { kind: 'whoami' }
     | { kind: 'inspect'; target: string }

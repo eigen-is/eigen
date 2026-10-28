@@ -14,7 +14,7 @@ export type MountSettings = {
     s3Config?: S3Config;
 };
 
-export type EmailSignature = {
+type EmailSignature = {
     id: string;
     name: string;
     html: string;
@@ -53,7 +53,7 @@ export type UserSettings = {
 export const DOCS_TEXT_WIDTHS = ['narrow', 'medium', 'wide', 'full'] as const;
 export type DocsTextWidth = (typeof DOCS_TEXT_WIDTHS)[number];
 
-export type DocsViewPreferences = { textWidth?: DocsTextWidth };
+type DocsViewPreferences = { textWidth?: DocsTextWidth };
 
 // Narrow, Google's default, for settings that never chose a width or hold one this build doesn't know.
 export function docsTextWidth(settings: UserSettings | undefined): DocsTextWidth {

@@ -34,7 +34,7 @@ export type PinRoutingContext = {
 
 // An all-unbound context (each heading points at the other endpoint): the default when no bound context is
 // threaded — an interior-segment drag never reads it, so only end-segment drags of unbound arrows care.
-export const UNBOUND_PIN_CONTEXT: PinRoutingContext = {
+const UNBOUND_PIN_CONTEXT: PinRoutingContext = {
     startBound: false,
     endBound: false,
     startHeadingHorizontal: false,

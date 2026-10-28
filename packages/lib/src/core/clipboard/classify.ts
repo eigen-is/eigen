@@ -1,3 +1,6 @@
+// One pass over a paste's DataTransfer that reads every clipboard flavor once, such as Eigen's own items, an SVG
+// or plain text. Each app's paste handler then reads the fields in its own order.
+
 import type { EigenClipboardData, EigenClipboardItem } from '../../types/clipboard';
 import { readEigenClipboard, readSvgClipboardWithItems } from './clipboard';
 
@@ -9,7 +12,7 @@ export type ClassifiedSvg = {
     items: EigenClipboardItem[];
 };
 
-export type ClassifiedPaste = {
+type ClassifiedPaste = {
     svg?: ClassifiedSvg;
     eigen?: EigenClipboardData;
     imageFiles: File[];

@@ -1,3 +1,7 @@
+// How a file looks wherever it is listed: its icon, its accent color and the name of its kind, picked from the MIME
+// type, the Drive type and the file name. It holds data only, so React-free surfaces such as the command palette
+// can use it; a wrapper in the UI package draws the icon.
+
 import type { LucideIcon } from 'lucide-react';
 import {
     File,
@@ -99,7 +103,7 @@ export function getFileIconComponent(mimeType: string, type: string, name: strin
 
 // `colorVar` / `softColorVar` come pre-wrapped in `var(...)` so callers drop
 // them straight into `style={{ background: presentation.softColorVar }}`.
-export type FilePresentation = {
+type FilePresentation = {
     icon: LucideIcon;
     colorVar: string;
     softColorVar: string;

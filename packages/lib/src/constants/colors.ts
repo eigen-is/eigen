@@ -8,8 +8,8 @@ export type EigenColor = {
     value: string; // hex value
 };
 
-export const EIGEN_COLOR_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
-export const EIGEN_COLOR_NAMES = [
+const EIGEN_COLOR_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
+const EIGEN_COLOR_NAMES = [
     'red',
     'orange',
     'amber',

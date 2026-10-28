@@ -6,7 +6,7 @@
 // Vendored verbatim to pin z-order behavior; the Eigen repair layer follows below.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const BASE_62_DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const BASE_62_DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
 // `a` may be empty string, `b` is null or non-empty string.
 // `a < b` lexicographically if `b` is non-null.
@@ -250,7 +250,7 @@ export function generateNKeysBetween(
 // plain materialized objects, so repair mutates `index` in place.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type IndexedElement = { id: string; index: string };
+type IndexedElement = { id: string; index: string };
 
 // Format-check `index`, then confirm it sits strictly between its neighbors.
 export function isValidFractionalIndex(

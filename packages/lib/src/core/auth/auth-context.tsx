@@ -1,3 +1,7 @@
+// The signed-in user for every app. AuthProvider reads the session through better-auth's client and shares it, with
+// login and logout, through useAuth. The router context of each app carries the same value, so a route's
+// beforeLoad can check it before anything renders.
+
 import { useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React, { createContext, useEffect, useState } from 'react';
@@ -14,7 +18,7 @@ export type AuthUser = {
     updatedAt: Date;
 };
 
-export type AuthContextType = {
+type AuthContextType = {
     isAuthenticated: boolean;
     isLoading: boolean;
     user: AuthUser | null;

@@ -1,3 +1,6 @@
+// Draws a file's icon as a React element. The icon choice lives in the lib package, which stays free of JSX; this
+// wrapper renders it for the UI.
+
 import { getFileIconComponent } from '@workspace/lib/file-presentation';
 import type { File } from 'lucide-react';
 import type React from 'react';
@@ -6,7 +9,7 @@ import type React from 'react';
 // lib) because lib stays DOM-free — getFileIcon returns React elements, while
 // the underlying getFileIconComponent / getFilePresentation are pure data and
 // are reachable from FE-only lib code (e.g. the command palette).
-export { type FilePresentation, getFileIconComponent, getFilePresentation } from '@workspace/lib/file-presentation';
+export { getFileIconComponent, getFilePresentation } from '@workspace/lib/file-presentation';
 
 type FileIconProps = React.ComponentProps<typeof File>;
 
