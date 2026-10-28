@@ -1,3 +1,7 @@
+// A yes/no dialog for one action, such as deleting a team, that may await a mutation: the buttons wait while it runs,
+// and it closes once the action succeeds. With nothing to edit, a server refusal closes it too, since another try gets
+// the same no; a failure another try could get past keeps it open beside the error toast.
+
 import type { ReactNode } from 'react';
 import { useDialogPending } from '../hooks/use-dialog-pending';
 import { Button } from './button';
@@ -24,7 +28,7 @@ export function ConfirmDialog({
     confirmText = 'Confirm',
     destructive = false,
 }: ConfirmDialogProps) {
-    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
+    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange, { closeOnRefusal: true });
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
