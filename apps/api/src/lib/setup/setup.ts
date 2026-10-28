@@ -3,7 +3,7 @@
 // auth database, after a copy when it holds accounts. The setup route calls it after it has checked the setup link.
 
 import { Database } from 'bun:sqlite';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType, SetupResult, SetupStatus } from '@workspace/lib/types/settings';
@@ -12,23 +12,12 @@ import { auth } from '../auth/auth';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
+import { buildSetupCopyName } from '../config/setup-copies';
 import { ApiError } from '../core/errors';
 import { storedSender } from '../mailer/mailer';
 import { findDefaultTeamId } from '../org';
 import { checkS3Connection } from '../storage/s3-storage';
 import { clearSetupToken } from './setup-token';
-
-// A copy of users3.db that a setup made before it cleared accounts, named by the time in milliseconds. It may be the
-// only copy of real accounts, so nothing deletes it: ./eigen status lists each one for the owner.
-export type SetupCopy = { name: string; createdAt: string };
-const SETUP_COPY_NAME = /^users3\.backup-(\d+)\.db$/;
-
-export function listSetupCopies(): SetupCopy[] {
-    return readdirSync(getServerDataPath()).flatMap((name) => {
-        const at = SETUP_COPY_NAME.exec(name)?.[1];
-        return at ? [{ name, createdAt: new Date(Number(at)).toISOString() }] : [];
-    });
-}
 
 async function resetAuthDatabase(): Promise<void> {
     const dbPath = getServerDataPath(SERVER_DATABASES.users);
@@ -221,7 +210,7 @@ async function resetAuthDatabase(): Promise<void> {
     // snapshot the database first. Clearing is then always recoverable, never destructive.
     const { n: existingUsers } = db.query<{ n: number }, []>('SELECT count(*) AS n FROM "user"').get()!;
     if (existingUsers > 0) {
-        const backupPath = getServerDataPath(`users3.backup-${Date.now()}.db`);
+        const backupPath = getServerDataPath(buildSetupCopyName(new Date()));
         // Its password hashes and sessions are for the API's user alone, as in users3.db.
         writeFileSync(backupPath, db.serialize(), { mode: 0o600 });
         console.warn(
