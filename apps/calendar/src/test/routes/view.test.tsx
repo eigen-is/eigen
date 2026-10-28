@@ -229,13 +229,13 @@ test('deleting one occurrence of a series cancels that day and keeps the series'
     });
 });
 
-// Clicks a day of the grid and saves the New Event it opens as "Dentist".
+// Clicks a day of the grid and saves the New event dialog it opens as "Dentist".
 async function createOnDay(container: HTMLElement, date: string, beforeSave = async () => {}) {
     const day = [...container.querySelectorAll('.grid-cols-7 > div.cursor-pointer')].find(
         (cell) => cell.firstElementChild?.textContent === date,
     );
     await click(day);
-    expect(dialogTitle()).toBe('New Event');
+    expect(dialogTitle()).toBe('New event');
     expect(button('Save')?.hasAttribute('disabled')).toBe(true);
 
     const title = document.querySelector<HTMLInputElement>('input[placeholder="Add title"]');
@@ -253,7 +253,7 @@ async function createOnDay(container: HTMLElement, date: string, beforeSave = as
 // The default start is the next quarter hour of the wall clock, so each test pins the clock.
 afterEach(() => setSystemTime());
 
-test('a click on a day opens New Event there, and Save creates it in the default calendar', async () => {
+test('a click on a day opens New event there, and Save creates it in the default calendar', async () => {
     setSystemTime(new Date(2026, 9, 27, 10, 7));
     const { container } = await open();
     const input = await createOnDay(container, '9');

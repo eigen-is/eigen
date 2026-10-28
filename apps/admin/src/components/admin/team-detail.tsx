@@ -36,7 +36,7 @@ export function TeamDetailToolbar({ team, organizationId }: TeamDetailToolbarPro
             <DeleteDialog
                 open={showDelete}
                 onOpenChange={setShowDelete}
-                title="Delete Team"
+                title="Delete team"
                 description={`Delete team "${team.name}"? Its drives, their files and its calendar are deleted too. This cannot be undone.`}
                 onDelete={handleRemove}
             />

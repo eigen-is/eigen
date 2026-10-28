@@ -7,7 +7,7 @@ tags: [mail, getting-started, email, inbox]
 related: [mail/read-and-reply, mail/compose-and-send, drive/get-started]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-12
+updated: 2026-10-28
 ---
 
 Mail is your email in Eigen. You read, write, and organize messages without leaving the browser. This page is a quick tour of the layout, so you know where everything is.
@@ -45,16 +45,16 @@ Click a message to open it in the reading pane on the right. You see the subject
 
 The toolbar above the message has the actions you'll use most:
 
-- **Reply**, **Reply All**, and **Forward** to respond or pass the message on.
+- **Reply**, **Reply all**, and **Forward** to respond or pass the message on.
 - **Archive** to move it to the Archive.
-- **Report Spam** to move it to Spam.
+- **Report spam** to move it to Spam.
 - **Delete** to send it to the Trash.
 
 The **More actions** menu (the **⋮** button) adds **Print**, **Download**, and **Move to folder**.
 
 ## Write a message
 
-Click **Compose** at the top of the sidebar to start a new message. To reply to one you're reading, use **Reply** or **Reply All**. See [Compose and send an email](/support/mail/compose-and-send) for the details, and [Read and reply to email](/support/mail/read-and-reply) for working through your Inbox.
+Click **Compose** at the top of the sidebar to start a new message. To reply to one you're reading, use **Reply** or **Reply all**. See [Compose and send an email](/support/mail/compose-and-send) for the details, and [Read and reply to email](/support/mail/read-and-reply) for working through your Inbox.
 
 You can add a signature that's included on the messages you write. See [Create an email signature](/support/mail/email-signature).
 

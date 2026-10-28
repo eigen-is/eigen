@@ -6,7 +6,7 @@ category: Basics
 tags: [getting-started, sign-in, profile, space]
 related: [getting-started/about-eigen, drive/get-started]
 order: 2
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 Eigen brings your mail, files, calendar, and more together in one place, each as its own app. This page shows you how to sign in, set up your profile, and move between the apps.
@@ -26,7 +26,7 @@ That's it. You arrive at your apps, ready to work.
 Once you're in, take a minute to set up your account in **Space**, your own corner of Eigen. Open it from your picture in the top-right corner, or use the links below.
 
 - Add your name and a photo on the [**Personal info**](/space/user) page.
-- Make your account safer: [**Change password**](/space/security/password) and turn on [**Two factor authentication**](/space/security/2fa).
+- Make your account safer: [**Change password**](/space/security/password) and turn on [**Two-factor authentication**](/space/security/2fa).
 - Set up [**Integrations**](/space/services) if you want to use Eigen with other apps on your computer, such as a desktop mail client or your computer's file browser.
 
 <div class="eigen-callout">

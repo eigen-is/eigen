@@ -119,6 +119,6 @@ test('the Celebrations switch shows the setting, on when unset, and a flip saves
 
 test('Personal info holds the profile without Celebrations', async () => {
     const text = await open('/user');
-    expect(text()).toContain('Edit Profile');
+    expect(text()).toContain('Edit profile');
     expect(text()).not.toContain('Celebrations');
 });

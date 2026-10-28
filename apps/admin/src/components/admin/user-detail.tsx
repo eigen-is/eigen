@@ -166,7 +166,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
                 <DangerZone
                     description="Permanently delete this user account and all associated data."
                     buttonLabel="Delete user"
-                    confirmTitle="Delete User"
+                    confirmTitle="Delete user"
                     confirmDescription={`Permanently delete ${user.name} and all their data? This removes the user account, files, emails, contacts, and calendars. This cannot be undone.`}
                     onConfirm={handleDelete}
                 />

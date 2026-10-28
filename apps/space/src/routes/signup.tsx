@@ -1,3 +1,5 @@
+// The sign-up page a person reaches from an invite link. It checks the invite and creates their account.
+
 import { createFileRoute } from '@tanstack/react-router';
 import { useInviteRegister, useValidateInviteToken } from '@workspace/lib/auth';
 import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
@@ -132,7 +134,7 @@ function SignupPage() {
                             </Field>
 
                             <Field>
-                                <FieldLabel htmlFor="confirmPassword">Confirm Password</FieldLabel>
+                                <FieldLabel htmlFor="confirmPassword">Confirm password</FieldLabel>
                                 <FieldContent>
                                     <Input
                                         id="confirmPassword"
@@ -147,7 +149,7 @@ function SignupPage() {
                         </FieldGroup>
 
                         <Button type="submit" className="w-full" disabled={register.isPending}>
-                            {register.isPending ? 'Creating account...' : 'Create Account'}
+                            {register.isPending ? 'Creating account...' : 'Create account'}
                         </Button>
                     </form>
                 </CardContent>

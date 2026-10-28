@@ -1,3 +1,6 @@
+// The storage type choice for users' Drive files, local or an S3 bucket, with the S3 fields when a bucket is
+// picked. The setup wizard and the server settings page both use it.
+
 import { STORAGE_TYPE_HINTS, STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult, ServerStorageType } from '@workspace/lib/types/settings';
@@ -42,7 +45,7 @@ export function StorageTypePicker({
     return (
         <div className="space-y-4">
             <div className="space-y-1.5">
-                <Label>Storage Type</Label>
+                <Label>Storage type</Label>
                 <Select
                     value={storageType}
                     onValueChange={(value) => isServerStorageType(value) && handleStorageTypeChange(value)}

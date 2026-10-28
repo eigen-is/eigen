@@ -1,3 +1,6 @@
+// Space's Integrations page: the addresses and usernames that connect a calendar, contacts or mail app to Eigen,
+// and the app passwords those apps sign in with.
+
 import { createFileRoute } from '@tanstack/react-router';
 import { API_HOST, DAV_HOST, SERVER_HOSTNAME } from '@workspace/lib/api';
 import { useAppPasswords, useAuth, useCreateAppPassword, useDeleteAppPassword } from '@workspace/lib/auth';
@@ -207,7 +210,7 @@ function ServicesComponent() {
                                     </CardHeader>
                                     <CardContent className="grid grid-cols-2 gap-3">
                                         <CopyInput label="IMAP server" value={host} />
-                                        <CopyInput label="IMAP Port" value="993" />
+                                        <CopyInput label="IMAP port" value="993" />
                                         <CopyInput label="Security" value="SSL/TLS" />
                                         <CopyInput label="Username" value={user?.email ?? ''} />
                                         <CopyInput label="SMTP server" value={host} />

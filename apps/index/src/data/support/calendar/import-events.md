@@ -6,7 +6,7 @@ category: Basics
 tags: [calendar, import, ics]
 related: [calendar/get-started, calendar/export-events, calendar/external-invitations, drive/preview-a-file]
 order: 90
-updated: 2026-09-29
+updated: 2026-10-28
 ---
 
 Most calendar programs can save events as an `.ics` file, the standard calendar format. Eigen reads those files, so you can bring a conference schedule, a season of matches, or a whole calendar from another provider into one of your own calendars.
@@ -24,7 +24,7 @@ Start from the calendar the events should go into, the same way you import conta
 
 An **Importing events** dialog shows while the file imports. When it closes, the events are in your calendar, and a message tells you what happened, for example "Imported 12 events, skipped 3 duplicates".
 
-Your own calendars under **My Calendars** offer the entry, and so does a team calendar under **Team Calendars** that you can edit. A calendar someone shared with you from their own account does not, and neither does a team calendar you can only read.
+Your own calendars under **My calendars** offer the entry, and so does a team calendar under **Team calendars** that you can edit. A calendar someone shared with you from their own account does not, and neither does a team calendar you can only read.
 
 ## Import from a file
 
@@ -39,7 +39,7 @@ To read the file before you import it, select it and press **Space**, or choose 
 
 ## Choose the calendar
 
-When you start from a file, the dialog lists your own calendars under **My Calendars**, with your default one already selected. Any team calendar you can edit is listed below it under **Team Calendars**, so a schedule the whole team needs can go straight where everyone sees it. Choose **New calendar** instead to make a fresh one for the file. Eigen names it after the file, and you can change the name before you import. A new calendar is always one of your own. If nothing ends up going in, because every event in the file was already in your calendar, the new calendar is removed again.
+When you start from a file, the dialog lists your own calendars under **My calendars**, with your default one already selected. Any team calendar you can edit is listed below it under **Team calendars**, so a schedule the whole team needs can go straight where everyone sees it. Choose **New calendar** instead to make a fresh one for the file. Eigen names it after the file, and you can change the name before you import. A new calendar is always one of your own. If nothing ends up going in, because every event in the file was already in your calendar, the new calendar is removed again.
 
 A calendar someone shared with you from their own account is not in the list, and neither is a team calendar you can only read.
 

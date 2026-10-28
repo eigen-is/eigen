@@ -1,3 +1,6 @@
+// One chat room: its messages and the composer, the toolbar that shares and renames the room, and the dialog
+// that deletes a message. The user's permissions on the room decide what they can do.
+
 import { createFileRoute } from '@tanstack/react-router';
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useCheckPermissions } from '@workspace/lib/drive';
@@ -121,7 +124,7 @@ function ChatView() {
             <DeleteDialog
                 open={!!editing.deleteTarget}
                 onOpenChange={(open) => !open && editing.setDeleteTarget(null)}
-                title="Delete Message"
+                title="Delete message"
                 description="Are you sure you want to delete this message? This cannot be undone."
                 onDelete={editing.handleDeleteConfirm}
             />

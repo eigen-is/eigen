@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, import, excel, xlsx, spreadsheet]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 110
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 You can bring an Excel workbook into Sheets in two ways: import it into a spreadsheet you have open, as new sheets or in place of its content, or convert an `.xlsx` file stored in Drive into a new spreadsheet.
@@ -33,7 +33,7 @@ When you replace, Eigen saves a version of the spreadsheet first, so you can get
 If you have an `.xlsx` file sitting in Drive, you can turn it into a Sheets spreadsheet without opening it first. This leaves the original file in place and creates a new spreadsheet alongside it.
 
 1. Open [Drive](/drive) and find the `.xlsx` file.
-2. Right-click the file (or open the **⋮** menu) and choose **Convert to Sheet**.
+2. Right-click the file (or open the **⋮** menu) and choose **Convert to sheet**.
 
 Drive creates a new spreadsheet in the same folder and opens it in Sheets.
 

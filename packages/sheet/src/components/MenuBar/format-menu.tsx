@@ -277,11 +277,11 @@ function RotationSubmenu() {
     // Positive = CCW / "up", negative = CW / "down". 0 clears rotation.
     const presets: { label: string; value: number | 'vertical' }[] = [
         { label: 'None', value: 0 },
-        { label: 'Tilt Up', value: 45 },
-        { label: 'Tilt Down', value: -45 },
-        { label: 'Stack Vertically', value: 'vertical' },
-        { label: 'Rotate Up', value: 90 },
-        { label: 'Rotate Down', value: -90 },
+        { label: 'Tilt up', value: 45 },
+        { label: 'Tilt down', value: -45 },
+        { label: 'Stack vertically', value: 'vertical' },
+        { label: 'Rotate up', value: 90 },
+        { label: 'Rotate down', value: -90 },
     ];
 
     return (
@@ -467,8 +467,8 @@ function MergeCellsSubmenu() {
 
     const mergeItems = [
         { text: 'Merge all', value: 'merge-all' },
-        { text: 'Merge Horizontally', value: 'merge-horizontal' },
-        { text: 'Merge Vertically', value: 'merge-vertical' },
+        { text: 'Merge horizontally', value: 'merge-horizontal' },
+        { text: 'Merge vertically', value: 'merge-vertical' },
         { text: 'Unmerge', value: 'merge-cancel' },
     ];
 

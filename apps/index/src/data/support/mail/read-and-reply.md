@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, reply, forward]
 related: [mail/compose-and-send, mail/get-started]
 order: 20
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 Once an email arrives, you can read it, write back to the sender, write back to everyone on the thread, or pass it along to someone new. This page covers all four.
@@ -33,14 +33,14 @@ You can also right-click a message in the list and choose **Reply** from the men
 
 ## Reply to everyone
 
-Use **Reply All** when a message went to several people and you want them all to see your answer.
+Use **Reply all** when a message went to several people and you want them all to see your answer.
 
 1. Open the message.
-2. Click **Reply All** in the toolbar.
+2. Click **Reply all** in the toolbar.
 3. The new message is addressed to the sender and everyone else who was on the original, all in the **To** field. Your own address is left out, so you do not write to yourself.
 4. Type your reply and click **Send**.
 
-Check the recipients before you send. **Reply All** writes to everyone on the thread, which is more people than **Reply**.
+Check the recipients before you send. **Reply all** writes to everyone on the thread, which is more people than **Reply**.
 
 ## Forward a message
 
@@ -56,7 +56,7 @@ The attachments go out with your forward. To leave one out, click the **X** on i
 
 ## Nothing sends until you click Send
 
-**Reply**, **Reply All**, and **Forward** all open a draft for you to finish. They never send on their own. Your message goes out only when you click **Send**, so you can change the wording, add or remove people, or attach a file first.
+**Reply**, **Reply all**, and **Forward** all open a draft for you to finish. They never send on their own. Your message goes out only when you click **Send**, so you can change the wording, add or remove people, or attach a file first.
 
 If you have a signature set up, it is added to your reply or forward above the quoted message. See [Create an email signature](/support/mail/email-signature).
 

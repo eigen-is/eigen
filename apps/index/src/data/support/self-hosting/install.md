@@ -6,7 +6,7 @@ category: Install
 tags: [self-hosting, install, setup, docker, dns]
 related: [self-hosting/requirements, admin/get-started, self-hosting/host-your-mail, self-hosting/keep-your-mail]
 order: 30
-updated: 2026-10-02
+updated: 2026-10-28
 ---
 
 This takes you from an empty server to your first sign-in. The install itself is two lines. Check [what you need](/support/self-hosting/requirements) first. If your server already runs a web server for other sites, read [Run Eigen behind your own web server](/support/self-hosting/behind-your-web-server) before you start.
@@ -75,7 +75,7 @@ Then setup saves your answers, lists the DNS records to add, and starts Eigen. R
 
 ## 6. Finish in your browser
 
-Setup ends with a link that works once, like `https://eigen.example.com/admin/#setup=…`. Open it to name your organization, pick the sender of Eigen's own mail, choose where files are stored, and create your admin account. [Set up your Eigen server](/support/admin/get-started) walks through that form. Then **Go to Login** takes you to the sign-in page.
+Setup ends with a link that works once, like `https://eigen.example.com/admin/#setup=…`. Open it to name your organization, pick the sender of Eigen's own mail, choose where files are stored, and create your admin account. [Set up your Eigen server](/support/admin/get-started) walks through that form. Then **Go to login** takes you to the sign-in page.
 
 Lost the link? Run `./eigen setup` again for a fresh one.
 

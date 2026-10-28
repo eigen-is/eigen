@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, cards, attachments, files, drive]
 related: [stickies/add-and-edit-cards, stickies/card-comments, drive/get-started]
 order: 32
-updated: 2026-10-14
+updated: 2026-10-28
 ---
 
 A card can carry files: a screenshot of the bug, the PDF you are reviewing, the document the work is written in. Everyone with access to the board can open them. You need write access to add one.
@@ -16,7 +16,7 @@ A card can carry files: a screenshot of the bug, the PDF you are reviewing, the 
 2. Click the paperclip button (**Add attachment**) in the bottom-left corner of the dialog.
 3. The **Attach file** dialog opens on your Drive. Click the file you want, or hold Shift or Ctrl (Cmd on a Mac) to pick several.
 4. Click **Select**. The button shows a count, such as **Select (2)**, when you pick more than one.
-5. The files appear as chips in the dialog. Click **Save**, or **Add Sticky** on a new card, to attach them.
+5. The files appear as chips in the dialog. Click **Save**, or **Add sticky** on a new card, to attach them.
 
 To use a file that isn't in Drive yet, click **Upload from device** at the bottom of the **Attach file** dialog and pick the files in the chooser that opens.
 

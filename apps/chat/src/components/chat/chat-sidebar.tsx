@@ -1,3 +1,6 @@
+// Chat's sidebar: the user's personal chat rooms, then their teams' rooms under one heading, each with its
+// members' avatars and a dot when it has unread messages.
+
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useChatSections, useUnreadChatIds } from '@workspace/lib/chat';
@@ -63,7 +66,7 @@ export function ChatSidebar({ condensed = false }: ChatSidebarProps) {
     const { personal, teams, isLoading } = useChatSections();
     const [createChatOpen, setCreateChatOpen] = useState(false);
 
-    // Team chats render under a single "Team Chats" heading, flattened in useMyTeams order.
+    // Team chats render under a single "Team chats" heading, flattened in useMyTeams order.
     const teamChats = teams.flatMap((t) => t.chats);
 
     return (
@@ -96,7 +99,7 @@ export function ChatSidebar({ condensed = false }: ChatSidebarProps) {
                 )}
 
                 {teamChats.length > 0 && (
-                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Chats'}>
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team chats'}>
                         {teamChats.map((chat) => (
                             <ChatItem
                                 key={chat.id}

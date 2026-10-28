@@ -1,4 +1,4 @@
-// The New Event dialog, opened from the toolbar or from a click on a day. It starts at the next quarter hour, on the
+// The New event dialog, opened from the toolbar or from a click on a day. It starts at the next quarter hour, on the
 // clicked day when there is one, for half an hour, in the default calendar, and saves through useCreateEvent.
 
 import { useAuth } from '@workspace/lib/auth';
@@ -108,7 +108,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent size="md">
                 <DialogHeader>
-                    <DialogTitle>New Event</DialogTitle>
+                    <DialogTitle>New event</DialogTitle>
                     <DialogDescription className="sr-only">
                         Set the title, time, guests and details for the new event.
                     </DialogDescription>

@@ -1,3 +1,6 @@
+// Builds the command palette's sections from what each provider found for one query, such as files, mail and
+// commands, in the order the palette shows them.
+
 import type { PaletteResult, PaletteScope, Sections } from '@workspace/lib/types/command-palette';
 import { structuralMatchQuality } from './rank';
 
@@ -130,8 +133,8 @@ export function buildSections(input: BuildInput): Sections {
     const groups: Sections['groups'] = [];
     if (suggestionsList.length > 0) groups.push({ id: 'smart', heading: 'Suggestions', items: suggestionsList });
     if (scopedSelection.length > 0) groups.push({ id: 'selection', heading: 'Selection', items: scopedSelection });
-    if (docList.length > 0) groups.push({ id: 'doc-content', heading: 'In Document', items: docList });
-    if (docCommentList.length > 0) groups.push({ id: 'doc-comments', heading: 'In Comments', items: docCommentList });
+    if (docList.length > 0) groups.push({ id: 'doc-content', heading: 'In document', items: docList });
+    if (docCommentList.length > 0) groups.push({ id: 'doc-comments', heading: 'In comments', items: docCommentList });
     if (fileList.length > 0) groups.push({ id: 'file', heading: 'Files', items: fileList });
     if (mailList.length > 0) groups.push({ id: 'mail', heading: 'Mail', items: mailList });
     if (contactList.length > 0) groups.push({ id: 'contacts', heading: 'Contacts', items: contactList });

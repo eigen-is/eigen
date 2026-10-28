@@ -1,3 +1,6 @@
+// Calendar's sidebar: the Create event button, the month and week shortcuts, and the calendar lists (the user's
+// own, those shared with them, and their teams'), each with a checkbox that shows or hides its events.
+
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import type { ViewMode } from '@workspace/lib/calendar';
@@ -201,7 +204,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                 <SidebarSection condensed={condensed}>
                     <SidebarItem
                         icon={<CalendarDays className="h-4 w-4" />}
-                        label="View Month"
+                        label="View month"
                         to="/view/$mode/$from/$to"
                         params={{ mode: 'month', from: String(monthRange.from), to: String(monthRange.to) }}
                         onClick={(e) => navigateToCurrentPeriod(e, 'month')}
@@ -209,7 +212,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     />
                     <SidebarItem
                         icon={<CalendarRange className="h-4 w-4" />}
-                        label="View Week"
+                        label="View week"
                         to="/view/$mode/$from/$to"
                         params={{ mode: 'week', from: String(weekRange.from), to: String(weekRange.to) }}
                         onClick={(e) => navigateToCurrentPeriod(e, 'week')}
@@ -220,7 +223,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                 <div className="app-gutter-bleed overflow-auto flex-1">
                     <SidebarSection
                         condensed={condensed}
-                        title="My Calendars"
+                        title="My calendars"
                         loading={calendarsLoading}
                         action={
                             <TooltipButton icon={Plus} tooltipText="Add new calendar" onClick={handleCreateCalendar} />
@@ -258,7 +261,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     )}
 
                     {teamShared.length > 0 && (
-                        <SidebarSection condensed={condensed} title="Team Calendars" loading={sharedLoading}>
+                        <SidebarSection condensed={condensed} title="Team calendars" loading={sharedLoading}>
                             {teamShared.map((sc) => {
                                 const display = {
                                     ...sc,

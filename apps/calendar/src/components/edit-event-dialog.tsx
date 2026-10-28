@@ -1,3 +1,6 @@
+// The Edit event dialog: every field of an existing event, its guests, and the choice of which occurrences of a
+// repeating event a change applies to. The event detail dialog opens it.
+
 import { useAuth } from '@workspace/lib/auth';
 import {
     heldAttendees,
@@ -251,7 +254,7 @@ export function EditEventDialog({
             <Dialog open={open && !showRecurringDialog && !showMoveConfirm} onOpenChange={onOpenChange}>
                 <DialogContent size="md">
                     <DialogHeader>
-                        <DialogTitle>Edit Event</DialogTitle>
+                        <DialogTitle>Edit event</DialogTitle>
                         <DialogDescription className="sr-only">
                             Change the title, time, guests and details of this event.
                         </DialogDescription>

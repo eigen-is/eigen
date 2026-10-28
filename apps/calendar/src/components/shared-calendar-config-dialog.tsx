@@ -1,3 +1,6 @@
+// The settings of a calendar someone else owns, such as one shared with the user or a team's: the color the user
+// sees it in, and for a shared one, removing it from their list. The sidebar opens it.
+
 import { useAuth } from '@workspace/lib/auth';
 import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
@@ -68,7 +71,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
             <Dialog open={open && !showDeleteConfirmation} onOpenChange={onOpenChange}>
                 <DialogContent size="sm">
                     <DialogHeader>
-                        <DialogTitle>Shared Calendar Settings</DialogTitle>
+                        <DialogTitle>Shared calendar settings</DialogTitle>
                         <DialogDescription>
                             {sharedCalendar.calendarName} — {sharedCalendar.permission} access
                         </DialogDescription>
@@ -156,7 +159,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
             <DeleteDialog
                 open={showDeleteConfirmation}
                 onOpenChange={setShowDeleteConfirmation}
-                title="Remove Shared Calendar"
+                title="Remove shared calendar"
                 description="Remove this shared calendar from your view? You can be re-added by the owner."
                 itemName={sharedCalendar.calendarName}
                 onDelete={handleDelete}

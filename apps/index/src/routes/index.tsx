@@ -1,3 +1,6 @@
+// The public site's landing page: what Eigen is, the apps it has, and the buttons the server's admin turned on,
+// such as the waitlist form.
+
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { getDemoEnterUrl, getSpaceAppUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -87,7 +90,7 @@ export function HomeComponent() {
                         </Button>
                         {waitlistEnabled && (
                             <Button variant="outline" className="px-6 py-2 flex-1" onClick={handleShowWaitlist}>
-                                Join Waitlist
+                                Join waitlist
                             </Button>
                         )}
                         {landingLinks.map((link) => (
@@ -145,7 +148,7 @@ export function HomeComponent() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="notes">Notes (Optional)</Label>
+                                <Label htmlFor="notes">Notes (optional)</Label>
                                 <Textarea
                                     id="notes"
                                     placeholder="Tell us why you're interested"

@@ -7,7 +7,7 @@ tags: [stickies, kanban, cards, columns, getting-started]
 related: [stickies/create-board, stickies/add-and-edit-cards, stickies/move-cards, stickies/card-comments]
 crossSections: [getting-started]
 order: 10
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 Stickies is a kanban board. You organize work into columns, and each column holds cards. A card has a title, an optional description, a color, and its own comment thread where you can discuss it with the people you share the board with. This page is a quick tour of what you can do.
@@ -22,7 +22,7 @@ You can see who else is on the board. When someone has a card open or is draggin
 
 ## Columns
 
-Columns run left to right across the board. Each one has a header with its title and two small buttons: a plus icon to add a card, and a pencil icon to open **Column Settings** where you can rename the column or delete it.
+Columns run left to right across the board. Each one has a header with its title and two small buttons: a plus icon to add a card, and a pencil icon to open **Column settings** where you can rename the column or delete it.
 
 To add a new column, open the **Insert** menu in the toolbar and choose **Column**.
 
@@ -30,7 +30,7 @@ You can reorder columns by dragging their header left or right.
 
 ## Cards
 
-To add a card to a column, click **Add a sticky** at the bottom of that column (or the plus icon in the column header). The **Add Sticky** dialog opens, where you fill in a title, an optional description, and pick a color. Click **Add Sticky** to save it.
+To add a card to a column, click **Add a sticky** at the bottom of that column (or the plus icon in the column header). The **Add sticky** dialog opens, where you fill in a title, an optional description, and pick a color. Click **Add sticky** to save it.
 
 To edit a card you have already added, open it by clicking on it, then click the pencil icon in the card detail view.
 

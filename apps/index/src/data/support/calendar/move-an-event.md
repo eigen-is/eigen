@@ -5,15 +5,15 @@ type: how-to
 tags: [calendar, events, calendars, sharing]
 related: [calendar/create-event, calendar/share-calendar, calendar/show-hide-calendars]
 order: 35
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
-If you put an event on the wrong calendar, you can move it without retyping anything. You change the calendar from the same **Edit Event** dialog you use for every other change.
+If you put an event on the wrong calendar, you can move it without retyping anything. You change the calendar from the same **Edit event** dialog you use for every other change.
 
 ## Move an event
 
 1. Click the event in the calendar. Its detail panel opens.
-2. Click the pencil icon in the bottom-left corner of the panel. The **Edit Event** dialog opens.
+2. Click the pencil icon in the bottom-left corner of the panel. The **Edit event** dialog opens.
 3. At the bottom of the dialog, open the calendar picker (the dropdown next to the calendar icon) and choose the calendar you want. The picker appears once you have more than one calendar to pick from.
 4. Click **Save**.
 

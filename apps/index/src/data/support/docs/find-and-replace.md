@@ -7,7 +7,7 @@ tags: [docs, search, find, replace, editing]
 related: [docs/create-and-edit, docs/comments, getting-started/search-and-command-palette]
 crossSections: [sheets]
 order: 25
-updated: 2026-10-18
+updated: 2026-10-28
 ---
 
 Every Eigen editor has a find bar for searching the document you already have open. It works the same way in Docs, Sheets, Slides, Stickies boards, drawings, and the text and code editors built into Drive, and in some of them it replaces what it finds as well.
@@ -66,7 +66,7 @@ In Sheets, a replace rewrites the contents of a cell. Cells holding a formula ar
 
 The find bar looks at the text of the document itself. Comments aren't part of that.
 
-To search the discussion on a document or a board, open the command palette with **⌘K** (**Ctrl+K**) while the file is open, then type `doc:` followed by your term. Matches in the text appear under **In Document**, and matches in comment threads under **In Comments**. Press **Enter** on one to jump to it. See [Find anything with search and the command palette](/support/getting-started/search-and-command-palette) for the rest of what the palette can do.
+To search the discussion on a document or a board, open the command palette with **⌘K** (**Ctrl+K**) while the file is open, then type `doc:` followed by your term. Matches in the text appear under **In document**, and matches in comment threads under **In comments**. Press **Enter** on one to jump to it. See [Find anything with search and the command palette](/support/getting-started/search-and-command-palette) for the rest of what the palette can do.
 
 ## Close the find bar
 

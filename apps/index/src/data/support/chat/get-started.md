@@ -7,7 +7,7 @@ tags: [chat, getting-started, messages, rooms, teams]
 related: [chat/personal-and-team-chats, chat/send-messages]
 crossSections: [getting-started]
 order: 10
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 Chat lets you send messages to other people in Eigen, organize conversations into named rooms, and share files without leaving the browser. This page is a quick tour of what you can do.
@@ -19,7 +19,7 @@ All your rooms are listed in the sidebar on the left. Each room shows a small in
 The sidebar is split into two areas:
 
 - Your personal rooms are at the top. You create these yourself and share them with whoever you want.
-- **Team Chats** appears below a divider if you belong to any teams that have chat rooms. Team rooms are shared with everyone in that team.
+- **Team chats** appears below a divider if you belong to any teams that have chat rooms. Team rooms are shared with everyone in that team.
 
 ## Create a room
 

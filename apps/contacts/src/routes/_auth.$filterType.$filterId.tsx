@@ -202,7 +202,7 @@ function ContactsRoute() {
                 onOpenChange={(open) => {
                     if (!open) setDeleteTargets([]);
                 }}
-                title="Delete Contact"
+                title="Delete contact"
                 description={
                     deleteTargets.length > 1
                         ? `Are you sure you want to delete ${deleteTargets.length} contacts`

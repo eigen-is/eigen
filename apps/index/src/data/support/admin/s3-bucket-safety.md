@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, storage, s3, settings, backup]
 related: [admin/storage-quotas, admin/server-settings]
 order: 70
-updated: 2026-10-02
+updated: 2026-10-28
 ---
 
 When Eigen stores files in an S3 bucket, it writes the whole file again on every save. If the bucket has no versioning, the previous copy is replaced and nothing can bring it back. The **Bucket safety** panel tells you where the bucket stands and can set it right for you.
@@ -15,12 +15,12 @@ Only the server owner can reach these settings.
 ## Open the panel
 
 1. Sign in as the owner and go to [Admin](/admin), then click **Settings** in the sidebar.
-2. Under **Defaults**, set **Storage Type** to **S3 bucket**. The **S3 Configuration** form appears.
-3. Fill in **Endpoint**, **Bucket**, **Region**, **Access Key ID**, and **Secret Access Key**. Fill in **Prefix** as well if your files live under a path inside the bucket.
-4. Click **Test Connection**.
+2. Under **Defaults**, set **Storage type** to **S3 bucket**. The **S3 configuration** form appears.
+3. Fill in **Endpoint**, **Bucket**, **Region**, **Access key ID**, and **Secret access key**. Fill in **Prefix** as well if your files live under a path inside the bucket.
+4. Click **Test connection**.
 5. When the test reports that the connection worked, the **Bucket safety** panel appears below the form.
 
-The same **S3 Configuration** form, with the same panel, appears when you give a team its own storage. Open the team from **Teams** in the sidebar, then click **Add** in the **Mounts** section to reach **Add Mount**, or **Mount settings** on a mount that is already there to reach **Edit Mount**.
+The same **S3 configuration** form, with the same panel, appears when you give a team its own storage. Open the team from **Teams** in the sidebar, then click **Add** in the **Mounts** section to reach **Add mount**, or **Mount settings** on a mount that is already there to reach **Edit mount**.
 
 ## What the panel tells you
 
@@ -78,4 +78,4 @@ The lifecycle command replaces the bucket's whole lifecycle configuration. If th
 
 ## Check it later
 
-Come back to **Settings**, click **Test Connection** again, and read the two lines. They are read from the bucket each time, so they always show what the bucket says right now, not what you set last month.
+Come back to **Settings**, click **Test connection** again, and read the two lines. They are read from the bucket each time, so they always show what the bucket says right now, not what you set last month.

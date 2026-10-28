@@ -72,7 +72,7 @@ test('a convertible Drive file draws Quick preview, the converts and the downloa
         }),
     );
     const { cleanup } = await openMenu({ subject: docx });
-    expect(menuRows()).toEqual(['Quick preview', '—', 'Convert to Document', '—', 'Download']);
+    expect(menuRows()).toEqual(['Quick preview', '—', 'Convert to document', '—', 'Download']);
     await cleanup();
 });
 

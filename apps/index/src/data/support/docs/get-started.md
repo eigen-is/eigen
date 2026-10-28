@@ -7,7 +7,7 @@ tags: [docs, getting-started, editor, collaboration, writing]
 related: [docs/export, docs/comments, docs/share-a-document]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 Docs is where you write in Eigen. You can create a document, format it, insert images and tables, and share it with other people who can edit alongside you in real time. This page is a quick tour of what you can do.
@@ -50,7 +50,7 @@ To download a copy of the document, open the **File** menu and go to **Download*
 
 - **Microsoft Word (.docx)**
 - **PDF (.pdf)**
-- **Web Page (.html)**
+- **Web page (.html)**
 
 To replace the current document with a Word file, open the **File** menu and choose **Import…**. See [Export to Word, PDF, or HTML](/support/docs/export) and [Import a Word document](/support/docs/import-word) for more.
 

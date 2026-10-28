@@ -37,14 +37,14 @@ async function openMenu(messageIds: string[]) {
     return menuRows();
 }
 
-test('a message reads Reply | Archive, Report Spam, Move to folder | Download, Print | Delete', async () => {
+test('a message reads Reply | Archive, Report spam, Move to folder | Download, Print | Delete', async () => {
     expect(await openMenu(['m1'])).toEqual([
         'Reply',
-        'Reply All',
+        'Reply all',
         'Forward',
         '—',
         'Archive',
-        'Report Spam',
+        'Report spam',
         'Move to folder',
         '—',
         'Download',
@@ -58,7 +58,7 @@ test('a message reads Reply | Archive, Report Spam, Move to folder | Download, P
 test('a selection drops the single-message rows', async () => {
     expect(await openMenu(['m1', 'm2'])).toEqual([
         'Archive 2 emails',
-        'Report Spam',
+        'Report spam',
         'Move to folder',
         '—',
         'Delete 2 emails',

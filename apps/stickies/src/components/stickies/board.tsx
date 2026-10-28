@@ -1,3 +1,6 @@
+// A Stickies board: its columns of cards, dragging cards and columns into a new order, and the dialogs that add,
+// edit and delete cards and columns. The board route shows it for one board file.
+
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useAuth } from '@workspace/lib/auth';
@@ -436,8 +439,8 @@ export function StickiesBoard({
                                             allowAttachments={!!mediaFolderId}
                                             members={members}
                                             currentUserEmail={user?.email}
-                                            dialogTitle="Add Sticky"
-                                            submitLabel="Add Sticky"
+                                            dialogTitle="Add sticky"
+                                            submitLabel="Add sticky"
                                         />
 
                                         <AddColumnDialog
@@ -462,7 +465,7 @@ export function StickiesBoard({
                                         <DeleteDialog
                                             open={!!deleteCardId}
                                             onOpenChange={(open) => !open && setDeleteCardId(null)}
-                                            title="Delete Card"
+                                            title="Delete card"
                                             description="This will permanently delete the card. This action cannot be undone."
                                             onDelete={() => {
                                                 if (deleteCardId) {

@@ -1,3 +1,6 @@
+// The dialog that adds a user to a team. It searches the users who are not members yet and hands the pick to
+// the team's members section, which saves it.
+
 import type { OrgMember } from '@workspace/lib/types/admin';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -32,7 +35,7 @@ export function AddMemberDialog({ open, onOpenChange, availableMembers, onAdd }:
         >
             <DialogContent size="sm">
                 <DialogHeader>
-                    <DialogTitle>Add Member to Team</DialogTitle>
+                    <DialogTitle>Add member to team</DialogTitle>
                     <DialogDescription className="sr-only">
                         Search your users and add one to the team.
                     </DialogDescription>

@@ -58,8 +58,8 @@ function LogoutDialog({
             onOpenChange={onOpenChange}
             title="Log out?"
             description="Logging out will end your current session. You will be logged out of your account and will need to log in again to continue."
-            cancelText="Go Back"
-            confirmText="Log Out"
+            cancelText="Go back"
+            confirmText="Log out"
             onConfirm={onLogout}
         />
     );

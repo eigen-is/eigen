@@ -6,7 +6,7 @@ category: Basics
 tags: [search, command-palette, navigation, getting-started]
 related: [getting-started/your-first-steps, account/light-and-dark-theme, drive/get-started]
 order: 3
-updated: 2026-10-12
+updated: 2026-10-28
 ---
 
 Eigen has one box that searches your files and email, jumps to any app, and runs quick actions. It's called the command palette, and you reach it from anywhere with a single keystroke. This page shows you how to open it and what it can do.
@@ -56,7 +56,7 @@ So `mail: invoice` searches only your email, and `@alice` looks only for the con
 
 **Help** searches this help center from wherever you are, so you don't have to leave the app to look something up. Matches appear under a **Help** heading and open the article.
 
-**In document** searches the document, spreadsheet, presentation, drawing, or board you have open. Matches in the text appear under **In Document** and matches in its comments under **In Comments**. Press **Enter** on one and the find bar opens with that match highlighted. Without a document open the palette tells you so.
+**In document** searches the document, spreadsheet, presentation, drawing, or board you have open. Matches in the text appear under **In document** and matches in its comments under **In comments**. Press **Enter** on one and the find bar opens with that match highlighted. Without a document open the palette tells you so.
 
 ## Jump to an app or run an action
 

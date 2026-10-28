@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, export, powerpoint, pdf, download]
 related: [slides/get-started, slides/present]
 order: 90
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 You can download a presentation as a PowerPoint file, a PDF, or a self-contained web page. All three include every slide and the images you have added. In Drive, right-click the presentation (or click the **⋮** button next to it) and point to **Download** to get the same formats without opening it.
@@ -46,6 +46,6 @@ The web page export produces a single `.html` file with all slides laid out on o
 1. Open the presentation in Slides.
 2. Click **File** in the toolbar.
 3. Point to **Download** in the menu.
-4. Click **Web Page (.html)**.
+4. Click **Web page (.html)**.
 
 The file downloads in the same way as the PDF export.

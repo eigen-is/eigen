@@ -1,4 +1,4 @@
-// The fields the New Event and event detail dialogs share: title, dates and times, all day, repeat, calendar, place
+// The fields the New event and event detail dialogs share: title, dates and times, all day, repeat, calendar, place
 // and notes. The dialogs own the state; this file keeps an end after its start when the start or all day changes.
 
 import { toLocalDateString } from '@workspace/lib/calendar';

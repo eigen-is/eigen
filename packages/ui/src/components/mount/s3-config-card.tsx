@@ -1,3 +1,6 @@
+// The S3 configuration fields, a button that tests the connection, and a panel that shows whether the bucket
+// keeps old versions of files and cleans them up. Storage and backup settings use it.
+
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import {
     S3_ABORT_INCOMPLETE_UPLOAD_DAYS,
@@ -84,7 +87,7 @@ export function S3ConfigCard({
 
     return (
         <div className="space-y-3 border rounded-lg p-4">
-            <h4 className="text-sm font-medium">S3 Configuration</h4>
+            <h4 className="text-sm font-medium">S3 configuration</h4>
 
             {isEdit && (
                 <Alert>
@@ -130,7 +133,7 @@ export function S3ConfigCard({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label>Access Key ID</Label>
+                    <Label>Access key ID</Label>
                     <Input
                         value={value.accessKeyId}
                         onChange={(e) => updateField('accessKeyId', e.target.value)}
@@ -138,7 +141,7 @@ export function S3ConfigCard({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label>Secret Access Key</Label>
+                    <Label>Secret access key</Label>
                     <Input
                         type="password"
                         value={value.secretAccessKey}
@@ -151,7 +154,7 @@ export function S3ConfigCard({
             <div className="flex items-center gap-3">
                 <Button type="button" variant="outline" size="sm" onClick={handleCheck} disabled={!valid || checking}>
                     {checking ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Wifi className="h-4 w-4 mr-1" />}
-                    Test Connection
+                    Test connection
                 </Button>
 
                 {result && (

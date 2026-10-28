@@ -5,14 +5,14 @@ type: how-to
 tags: [contacts, export, download, vcard, vcf]
 related: [contacts/import-contacts, contacts/work-with-several-contacts, connect/contacts-client]
 order: 100
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 Contacts can hand you a vCard file, the `.vcf` format address book apps read. Use it to move people into another app, to send someone a card, or to keep a copy of your own.
 
 ## Export your whole address book
 
-1. Open [Contacts](/contacts) and click **My Contacts** in the sidebar.
+1. Open [Contacts](/contacts) and click **My contacts** in the sidebar.
 2. Click the **⋮** button at the top of the list.
 3. Click **Export all contacts**.
 

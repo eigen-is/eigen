@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit, docs/page-setup]
 order: 100
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, images, charts, and equations.
@@ -31,7 +31,7 @@ An **Importing docx file** dialog shows while the file imports. When it closes, 
 If the `.docx` file is already in Drive and you want to turn it into a new document rather than overwrite an existing one:
 
 1. Right-click the `.docx` file in Drive (or open its **⋮** menu).
-2. Click **Convert to Document**.
+2. Click **Convert to document**.
 
 Eigen creates a new document in the same folder, with the same name as the Word file. The original `.docx` file stays in place.
 

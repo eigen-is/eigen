@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, attachments, files, drive]
 related: [mail/attach-files, mail/read-and-reply, drive/get-started]
 order: 105
-updated: 2026-10-14
+updated: 2026-10-28
 ---
 
 When someone sends you a file, you can keep it in Drive rather than in your mailbox. Attachments appear as chips above the message in the reading pane. Click one to look at it first, or save it straight to a folder of your choosing.
@@ -20,7 +20,7 @@ The file opens in a preview over the message. Use the arrows at the top to step 
 
 Pictures, PDFs, video and sound play in the preview. Text and code files (such as `.txt`, `.md`, `.json`, `.yaml`), contact files, forwarded messages and calendar files are shown there too: a `.vcf` reads as the contact cards it holds, an `.eml` as the message it holds and an `.ics` as the events it holds, not as raw text. An invitation attached to the message is a chip like any other, with the invitation card still under the message itself. Anything else shows its name and an icon, with the same buttons along the bottom. Text files over 1 MB show the file card instead.
 
-Along the bottom of the preview are the things you can do with the file: **Download**, **Save to Drive…**, and, depending on the file, **Convert to Sheet** for an `.xlsx` spreadsheet, **Convert to Document** for a `.docx` document, **Convert to Slides** for a `.pptx` presentation, **Import to Contacts** for a `.vcf` contact file, **Import to Mail** for an `.eml` message, or **Import to Calendar** for an `.ics` calendar file. On a message with more than one file the bar ends with **Save all**, followed by the number of files.
+Along the bottom of the preview are the things you can do with the file: **Download**, **Save to Drive…**, and, depending on the file, **Convert to sheet** for an `.xlsx` spreadsheet, **Convert to document** for a `.docx` document, **Convert to Slides** for a `.pptx` presentation, **Import to Contacts** for a `.vcf` contact file, **Import to Mail** for an `.eml` message, or **Import to Calendar** for an `.ics` calendar file. On a message with more than one file the bar ends with **Save all**, followed by the number of files.
 
 ## Save one attachment
 

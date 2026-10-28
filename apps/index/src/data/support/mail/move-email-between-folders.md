@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, folders, organize]
 related: [mail/get-started, mail/archive-delete-spam, mail/work-with-several-emails]
 order: 50
-updated: 2026-09-20
+updated: 2026-10-28
 ---
 
 You can move a message out of the folder it's in and into another one, to keep your Inbox tidy or file something where you'll find it later. There are two ways to do it: drag the message onto a folder, or use the **Move to folder** menu. Both move the message for good, so it leaves its old folder and appears in the new one.
@@ -35,6 +35,6 @@ You don't have to move messages one by one. Select more than one in the list, th
 
 <div class="eigen-callout">
 
-For the folders you reach for most, the toolbar above an open message has shortcuts: **Archive** files it in Archive, **Report Spam** sends it to Spam, and **Delete** sends it to the Trash. See [Archive, delete, and report spam](/support/mail/archive-delete-spam).
+For the folders you reach for most, the toolbar above an open message has shortcuts: **Archive** files it in Archive, **Report spam** sends it to Spam, and **Delete** sends it to the Trash. See [Archive, delete, and report spam](/support/mail/archive-delete-spam).
 
 </div>

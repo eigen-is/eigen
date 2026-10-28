@@ -1,3 +1,6 @@
+// One open message: its toolbar of actions, the headers, the body and its attachments. The mail route shows it
+// beside the list.
+
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import type { Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
 import { isCalendarPart } from '@workspace/lib/types/mail';
@@ -44,7 +47,7 @@ export function EmailDetailToolbar({
                 {email.mailbox !== MAILBOX_JUNK && (
                     <TooltipButton
                         icon={AlertTriangle}
-                        tooltipText="Report Spam"
+                        tooltipText="Report spam"
                         onClick={() => onReportSpam(email.id)}
                     />
                 )}
@@ -52,7 +55,7 @@ export function EmailDetailToolbar({
             </div>
             <div className="flex items-center gap-1">
                 <TooltipButton icon={Reply} tooltipText="Reply" onClick={() => onReply(email.id)} />
-                <TooltipButton icon={ReplyAll} tooltipText="Reply All" onClick={() => onReplyAll(email.id)} />
+                <TooltipButton icon={ReplyAll} tooltipText="Reply all" onClick={() => onReplyAll(email.id)} />
                 <TooltipButton icon={Forward} tooltipText="Forward" onClick={() => onForward(email.id)} />
                 <Separator orientation="vertical" className="h-6 mx-1" />
                 <DropdownMenu>

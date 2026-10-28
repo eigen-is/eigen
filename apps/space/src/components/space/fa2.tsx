@@ -1,3 +1,6 @@
+// The steps that turn on two-factor authentication: confirm the password, scan the QR code or type the key into
+// an authenticator app, check a code, and save the backup codes. Space's two-factor page shows it.
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CopyInput } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -132,7 +135,7 @@ export function TwoFactorSetup({
                             name="password"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Current Password</FormLabel>
+                                    <FormLabel>Current password</FormLabel>
                                     <FormControl>
                                         <Input
                                             type="password"
@@ -148,7 +151,7 @@ export function TwoFactorSetup({
 
                         <div className="flex justify-end gap-3">
                             <Button type="submit" disabled={isLoading}>
-                                {isLoading ? 'Setting up...' : 'Enable Two-Factor Authentication'}
+                                {isLoading ? 'Setting up...' : 'Enable two-factor authentication'}
                             </Button>
                         </div>
                     </form>
@@ -222,7 +225,7 @@ export function TwoFactorSetup({
                             name="verificationCode"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Verification Code</FormLabel>
+                                    <FormLabel>Verification code</FormLabel>
                                     <FormControl>
                                         <Input
                                             placeholder="Enter 6-digit code"
@@ -245,7 +248,7 @@ export function TwoFactorSetup({
                                 Back
                             </Button>
                             <Button type="submit" disabled={isLoading}>
-                                {isLoading ? 'Verifying...' : 'Verify and Enable'}
+                                {isLoading ? 'Verifying...' : 'Verify and enable'}
                             </Button>
                         </div>
                     </form>

@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, photo, birthday, details, edit]
 related: [contacts/add-a-contact, contacts/edit-or-delete]
 order: 40
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 Contacts can hold more than a name and email address. You can attach a photo, record where someone works, store their birthday and postal address, and add free-form notes. All of these fields are optional and can be filled in when you first create a contact or added later.
@@ -23,7 +23,7 @@ After you pick a file, the image uploads and the preview updates straight away. 
 
 ## Workplace details
 
-In the **Basic Information** section:
+In the **Basic information** section:
 
 - **Company**: the organization this person works for.
 - **Job title**: their role at that organization.
@@ -38,7 +38,7 @@ Labels must exist before you can assign them. See [Organize contacts with labels
 
 ## Postal addresses
 
-In the **Contact Information** section, find the **Addresses** area. An empty address block is shown by default. Fill in as many of these sub-fields as you know:
+In the **Contact information** section, find the **Addresses** area. An empty address block is shown by default. Fill in as many of these sub-fields as you know:
 
 - **Street**
 - **City**
@@ -50,11 +50,11 @@ To add a second address, click **Add** next to the **Addresses** heading. Each a
 
 ## Birthday
 
-In the **Additional Information** section, click the **Birthday** field and pick a date. The birthday appears in the contact detail view with a calendar icon.
+In the **Additional information** section, click the **Birthday** field and pick a date. The birthday appears in the contact detail view with a calendar icon.
 
 ## Notes
 
-The **Notes** field in the **Additional Information** section is a free-text area. Use it to record anything else you want to remember: how you met, preferred contact method, or any other context. Notes appear in the contact detail view below the other information.
+The **Notes** field in the **Additional information** section is a free-text area. Use it to record anything else you want to remember: how you met, preferred contact method, or any other context. Notes appear in the contact detail view below the other information.
 
 ## Save your changes
 

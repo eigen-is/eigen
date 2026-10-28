@@ -5,7 +5,7 @@ type: overview
 tags: [chat, rooms, teams, sharing, personal]
 related: [chat/get-started, chat/create-room, chat/share-room]
 order: 20
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 Chat has two kinds of rooms: personal rooms that you own and share yourself, and team rooms that belong to a team and are open to every team member. Both appear in the same sidebar, and messaging works the same way in both. The difference is in who has access and who controls it.
@@ -24,7 +24,7 @@ A team room belongs to a team. Any team member can see every room the team has, 
 
 When you open a team room, the toolbar shows the team's avatar rather than a list of individuals. You cannot change the access list for a team room the same way you can for a personal room: access follows team membership. Adding or removing someone from a team room means changing their team membership, which requires admin access.
 
-Team rooms appear in the **Team Chats** section of the sidebar, separated from your personal rooms by a divider. The section only appears if you belong to at least one team that has chat rooms.
+Team rooms appear in the **Team chats** section of the sidebar, separated from your personal rooms by a divider. The section only appears if you belong to at least one team that has chat rooms.
 
 ## Unread indicators
 

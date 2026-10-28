@@ -1,3 +1,5 @@
+// Space's Change password page, which shows the password form and returns to Space's start page when it is done.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useChangePassword } from '@workspace/lib/auth';
 import { Column, ColumnLayout, ToolbarTitle } from '@workspace/ui';
@@ -22,7 +24,7 @@ function PasswordComponent() {
 
     return (
         <ColumnLayout>
-            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Change Password</ToolbarTitle>}>
+            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Change password</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
                     <div className="w-full max-w-3xl app-gutter">
                         <ChangePassword onPasswordChange={handlePasswordChange} />

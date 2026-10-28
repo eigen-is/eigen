@@ -1,3 +1,6 @@
+// The dialog that creates one of the user's own calendars or edits it: name, color and the people it is shared
+// with. It also deletes the calendar. The sidebar opens it.
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@workspace/lib/auth';
 import { useCreateCalendar, useDeleteCalendar, useUpdateCalendar } from '@workspace/lib/calendar';
@@ -101,7 +104,7 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
             <Dialog open={open && !showDeleteConfirmation} onOpenChange={onOpenChange}>
                 <DialogContent size="md">
                     <DialogHeader>
-                        <DialogTitle>{isEditMode ? 'Edit Calendar' : 'New Calendar'}</DialogTitle>
+                        <DialogTitle>{isEditMode ? 'Edit calendar' : 'New calendar'}</DialogTitle>
                         <DialogDescription>
                             {isEditMode ? 'Edit calendar settings and sharing.' : 'Create a new calendar.'}
                         </DialogDescription>
@@ -146,7 +149,7 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
                                     name="name"
                                     render={({ field, fieldState }) => (
                                         <FormItem className="flex-1">
-                                            <FormLabel>Calendar Name</FormLabel>
+                                            <FormLabel>Calendar name</FormLabel>
                                             <FormControl>
                                                 <Input
                                                     placeholder="Enter calendar name"
@@ -200,7 +203,7 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
             <DeleteDialog
                 open={showDeleteConfirmation}
                 onOpenChange={setShowDeleteConfirmation}
-                title="Delete Calendar"
+                title="Delete calendar"
                 description="Are you sure you want to delete this calendar? All events in it will be lost."
                 itemName={calendar?.name}
                 onDelete={handleDelete}

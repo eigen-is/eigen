@@ -1,3 +1,6 @@
+// One column of a board: its header with the add and settings buttons, and its cards, which can be dragged within
+// the column and to other columns.
+
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -100,7 +103,7 @@ export const Column = memo(function Column({
                         />
                         <TooltipButton
                             icon={Pencil}
-                            tooltipText="Edit Column"
+                            tooltipText="Edit column"
                             onClick={() => onEditColumn(column.id)}
                             className="h-6 w-6 opacity-50 hover:opacity-100"
                         />

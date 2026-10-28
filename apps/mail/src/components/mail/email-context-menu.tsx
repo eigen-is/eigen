@@ -1,3 +1,6 @@
+// The menu of things to do with one message or a selection of them, such as reply, archive, move or delete. The
+// message list shows it on right-click, and the open message shows it from its toolbar.
+
 import { getMailMessageDownloadUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import {
@@ -66,7 +69,7 @@ export function EmailContextMenu({
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={run(() => onReplyAll?.(firstId))}>
                             <ReplyAll />
-                            Reply All
+                            Reply all
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={run(() => onForward?.(firstId))}>
                             <Forward />
@@ -86,7 +89,7 @@ export function EmailContextMenu({
                     {currentMailboxId !== MAILBOX_JUNK && (
                         <DropdownMenuItem onClick={run(() => onReportSpam?.(messageIds))}>
                             <AlertTriangle />
-                            Report Spam
+                            Report spam
                         </DropdownMenuItem>
                     )}
                     <DropdownMenuSub>

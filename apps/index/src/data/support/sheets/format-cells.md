@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, formatting, cells, numbers, alignment, borders]
 related: [sheets/conditional-formatting]
 order: 60
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 Sheets lets you change how cells look without changing the values inside them. You can apply text styles, number formats, colors, borders, and alignment from the **Format** menu in the toolbar.
@@ -114,7 +114,7 @@ By default, text that is wider than a cell overflows into the next empty cell. Y
 To rotate text inside a cell:
 
 1. Select the cells.
-2. Open **Format → Text rotate** and choose a preset: **None**, **Tilt Up**, **Tilt Down**, **Stack Vertically**, **Rotate Up**, or **Rotate Down**.
+2. Open **Format → Text rotate** and choose a preset: **None**, **Tilt up**, **Tilt down**, **Stack vertically**, **Rotate up**, or **Rotate down**.
 
 ## Borders
 
@@ -139,8 +139,8 @@ Merging combines several cells into one. The content of the top-left cell is kep
 1. Select the cells to merge.
 2. Open **Format → Merge cells** and choose an option:
    - **Merge all**: merges the entire selection into one cell.
-   - **Merge Horizontally**: merges each row in the selection separately.
-   - **Merge Vertically**: merges each column in the selection separately.
+   - **Merge horizontally**: merges each row in the selection separately.
+   - **Merge vertically**: merges each column in the selection separately.
 
 To split merged cells back apart, select the merged cell and choose **Format → Merge cells → Unmerge**.
 

@@ -1,3 +1,6 @@
+// The picker that imports an .ics file into a calendar: the user's own calendars, the team calendars they can
+// edit, or a new calendar. The file actions open it for a calendar file.
+
 import { useAuth } from '@workspace/lib/auth';
 import {
     isTransferableCalendarHome,
@@ -134,12 +137,12 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
-                                    <SelectLabel>My Calendars</SelectLabel>
+                                    <SelectLabel>My calendars</SelectLabel>
                                     {ownTargets.map(renderTarget)}
                                 </SelectGroup>
                                 {teamTargets.length > 0 && (
                                     <SelectGroup>
-                                        <SelectLabel>Team Calendars</SelectLabel>
+                                        <SelectLabel>Team calendars</SelectLabel>
                                         {teamTargets.map(renderTarget)}
                                     </SelectGroup>
                                 )}

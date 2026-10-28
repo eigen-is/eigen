@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, compose, send]
 related: [mail/read-and-reply, mail/get-started]
 order: 90
-updated: 2026-10-02
+updated: 2026-10-28
 ---
 
 Composing a message in Mail takes a few seconds: add who it's going to, write a subject and a message, and click **Send**. This page walks through writing a brand-new email from start to finish.
@@ -56,4 +56,4 @@ You don't have to finish a message in one sitting. Mail saves your draft as you 
 
 ## Reply instead of starting fresh
 
-If you're answering a message you've received rather than writing a new one, you don't need to compose from scratch. Open the email and use **Reply**, **Reply All**, or **Forward**. See [Read and reply to email](/support/mail/read-and-reply) for how that works.
+If you're answering a message you've received rather than writing a new one, you don't need to compose from scratch. Open the email and use **Reply**, **Reply all**, or **Forward**. See [Read and reply to email](/support/mail/read-and-reply) for how that works.

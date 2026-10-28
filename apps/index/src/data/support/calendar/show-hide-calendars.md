@@ -5,14 +5,14 @@ type: how-to
 tags: [calendar, calendars, visibility, shared, team]
 related: [calendar/get-started, calendar/share-calendar, calendar/export-events]
 order: 60
-updated: 2026-09-21
+updated: 2026-10-28
 ---
 
 You can have several calendars in Calendar, for example one for work and one for personal events, plus calendars that other people have shared with you. The sidebar lets you show or hide any of them without deleting anything.
 
 ## Show or hide one of your own calendars
 
-Your calendars are listed under **My Calendars** in the sidebar on the left.
+Your calendars are listed under **My calendars** in the sidebar on the left.
 
 Each calendar has a small colored square next to its name. That square is a toggle:
 
@@ -23,27 +23,27 @@ Click the square to switch between visible and hidden. The change takes effect s
 
 ## Show or hide a shared calendar
 
-Calendars that other people have shared with you appear under **Shared with me**. Team calendars from groups you belong to appear under **Team Calendars**. Both work the same way: click the colored square next to a calendar's name to show or hide it.
+Calendars that other people have shared with you appear under **Shared with me**. Team calendars from groups you belong to appear under **Team calendars**. Both work the same way: click the colored square next to a calendar's name to show or hide it.
 
 ## Change a calendar's color or name
 
-Each calendar has a **⋮** button on the right that appears when you hover over it. Click it, then click **Edit calendar** to open the **Edit Calendar** dialog. From there you can:
+Each calendar has a **⋮** button on the right that appears when you hover over it. Click it, then click **Edit calendar** to open the **Edit calendar** dialog. From there you can:
 
-- Change the calendar's name in the **Calendar Name** field.
+- Change the calendar's name in the **Calendar name** field.
 - Pick a new color by clicking the color swatch on the left.
 
 Click **Save** when you are done.
 
-For calendars under **Shared with me** or **Team Calendars**, the same **Edit calendar** item opens **Shared Calendar Settings**. You can choose a different display color for that calendar. This only affects how the calendar looks for you; it does not change the color the owner set.
+For calendars under **Shared with me** or **Team calendars**, the same **Edit calendar** item opens **Shared calendar settings**. You can choose a different display color for that calendar. This only affects how the calendar looks for you; it does not change the color the owner set.
 
 ## Delete a calendar you own
 
-Open the **Edit Calendar** dialog for the calendar you want to remove, then click **Delete**. This removes the calendar and all the events in it permanently.
+Open the **Edit calendar** dialog for the calendar you want to remove, then click **Delete**. This removes the calendar and all the events in it permanently.
 
 You cannot delete your default calendar.
 
 ## Remove a shared calendar from your view
 
-If you no longer want to see a calendar under **Shared with me**, open its **Shared Calendar Settings** (the **⋮** button on hover, then **Edit calendar**) and click **Remove**. The calendar disappears from your sidebar. The owner's calendar and events are not affected, and the owner can add you again if needed.
+If you no longer want to see a calendar under **Shared with me**, open its **Shared calendar settings** (the **⋮** button on hover, then **Edit calendar**) and click **Remove**. The calendar disappears from your sidebar. The owner's calendar and events are not affected, and the owner can add you again if needed.
 
-Team calendars under **Team Calendars** do not have a **Remove** option.
+Team calendars under **Team calendars** do not have a **Remove** option.
