@@ -11,6 +11,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
+import { adminAc, userAc } from 'better-auth/plugins/admin/access';
 import { and, eq, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import {
@@ -42,7 +43,7 @@ import { sendMail } from '../mailer/mailer';
 import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
 import { getTeamExists } from '../team';
 import type { User } from '../user';
-import { getOrgRole, isGuest } from '../user';
+import { getOrgRole, getUserById, isGuest } from '../user';
 
 const publicOrigin = getPublicOrigin();
 // The dev apps each run on their own port, from 3000 to 3014.
@@ -215,6 +216,13 @@ export const auth = betterAuth({
             if ((await getOrgRole(targetId)) === 'owner' && session.user.id !== targetId) {
                 throw new APIError('FORBIDDEN', { message: "Only the owner can change the owner's account" });
             }
+            // A guest's account belongs to the emailed-code sign-in, and nothing turns a guest into a user.
+            if (
+                (ctx.path === '/admin/set-role' || ctx.path === '/admin/update-user') &&
+                isGuest(await getUserById(targetId))
+            ) {
+                throw new APIError('FORBIDDEN', { message: "A guest's account can't be changed" });
+            }
             // remove-user drops the sessions and the password before user.delete.before can refuse, with no rollback.
             // Admins only: anyone else gets the plugin's 403, not word of a running job.
             if (ctx.path === '/admin/remove-user' && session.user['role'] === 'admin') {
@@ -256,7 +264,8 @@ export const auth = betterAuth({
                 },
             },
         }),
-        admin(),
+        // Only these two roles may be set. A guest's role is written by the guest sign-in alone.
+        admin({ roles: { admin: adminAc, user: userAc } }),
         // Eigen uses the organization plugin for its data model only, the members, teams and roles, and not for
         // its invitations, so no sendInvitationEmail is wired. People arrive through the waitlist or an admin. The
         // user-create hook joins them to the default org and team, and the admin UI adds them to other teams.
