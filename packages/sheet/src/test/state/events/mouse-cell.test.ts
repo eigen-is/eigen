@@ -43,8 +43,21 @@ function tickBoxContext(): Context {
 // empty style yields is NaN, the painter's middle default.
 const PAINTED_BOX = checkboxRect(cellTextBox(0, 20, 74, 40), checkboxAlign(null, TICK_BOX, 'FALSE'), Number.NaN);
 
+function quietCache(state: Partial<GlobalCache> = {}): GlobalCache {
+    return {
+        undoList: [],
+        redoList: [],
+        scrollLeft: 0,
+        scrollTop: 0,
+        scrollListeners: new Set(),
+        notifyScrollListeners: () => {},
+        ...state,
+    };
+}
+
 // Returns whether the handler kept the browser from acting on the press, such as moving the focus out of the editor.
-function mouseDownAt(ctx: Context, x: number, y: number, globalCache: Partial<GlobalCache> = {}): boolean {
+function mouseDownAt(ctx: Context, x: number, y: number, cacheState: Partial<GlobalCache> = {}): boolean {
+    const globalCache = quietCache(cacheState);
     const container = win.document.createElement('div') as unknown as HTMLDivElement;
     container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
     const cellInput = win.document.createElement('div') as unknown as HTMLDivElement;
@@ -53,7 +66,7 @@ function mouseDownAt(ctx: Context, x: number, y: number, globalCache: Partial<Gl
         prevented = true;
     };
     const event = { button: 0, pageX: x, pageY: y, shiftKey: false, preventDefault } as unknown as MouseEvent;
-    handleCellAreaMouseDown(ctx, globalCache as GlobalCache, event, cellInput, container);
+    handleCellAreaMouseDown(ctx, globalCache, event, cellInput, container);
     return prevented;
 }
 
@@ -126,7 +139,7 @@ describe('handleCellAreaMouseDown — a press that closes a menu', () => {
 // are the fill handle's grab and the 2px inside every edge the move band's.
 describe('cell glyphs over the selection drag handles', () => {
     const LIST_RULE: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
-    const GLOBAL_CACHE = { scrollLeft: 0, scrollTop: 0 } as GlobalCache;
+    const GLOBAL_CACHE = quietCache();
 
     function selectedA1(): Context {
         const ctx = contextFactory() as Context;

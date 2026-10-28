@@ -14,6 +14,7 @@ import { cancelFunctionrangeSelected, mergeMoveMain, updateCell } from '../modul
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
 import { checkProtectionAllSelected } from '../modules/protection';
 import type { GlobalCache } from '../types';
+import { swallowMenuPress } from './mouse-cell';
 import { extendSelectionGeometry } from './mouse-drag';
 import { fixPositionOnFrozenCells } from './mouse-resize';
 
@@ -25,6 +26,7 @@ export function handleRowHeaderMouseDown(
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null,
 ) {
+    if (swallowMenuPress(ctx, globalCache, e)) return;
     if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
         return;
     }
@@ -329,6 +331,7 @@ export function handleColumnHeaderMouseDown(
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null,
 ) {
+    if (swallowMenuPress(ctx, globalCache, e)) return;
     if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
         return;
     }

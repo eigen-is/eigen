@@ -407,6 +407,10 @@ export const SheetOverlay: React.FC = () => {
             className="sheet-overlay"
             ref={containerRef}
             tabIndex={-1}
+            // Radix closes an open menu on the pointerdown, before the mousedown of the cells or a header reads this.
+            onPointerDownCapture={() => {
+                refs.globalCache.pressClosedMenu = pressClosesMenu();
+            }}
             style={{
                 width: context.tableContentSize[0],
                 height: context.tableContentSize[1],
@@ -429,10 +433,6 @@ export const SheetOverlay: React.FC = () => {
                 <div
                     ref={refs.cellArea}
                     className="sheet-cell-area"
-                    // Radix closes an open menu on the pointerdown, before the mousedown reads this.
-                    onPointerDownCapture={() => {
-                        refs.globalCache.pressClosedMenu = pressClosesMenu();
-                    }}
                     onMouseDown={cellAreaMouseDown}
                     onDoubleClick={cellAreaDoubleClick}
                     onContextMenu={cellAreaContextMenu}

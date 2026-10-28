@@ -73,6 +73,15 @@ function takesFormulaReference(ctx: Context): boolean {
     );
 }
 
+// Swallows the press on the grid that only closes a menu while a formula waits for a reference, and returns whether it
+// did. Like a reference press it keeps the browser from moving the focus out of the editor, which would put the caret
+// back at the start.
+export function swallowMenuPress(ctx: Context, globalCache: GlobalCache, e: MouseEvent): boolean {
+    if (!globalCache.pressClosedMenu || !takesFormulaReference(ctx)) return false;
+    e.preventDefault();
+    return true;
+}
+
 // Returns true when the filter button consumed the click (the caller must then
 // skip the cell-input focus, whose auto-scroll would close the just-opened menu).
 export function handleCellAreaMouseDown(
@@ -87,12 +96,7 @@ export function handleCellAreaMouseDown(
     ctx.filterContextMenu = undefined;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
-    // The press that closes an open menu puts no reference into the formula being composed. Like a reference press it
-    // keeps the browser from moving the focus out of the editor, which would put the caret back at the start.
-    if (globalCache.pressClosedMenu && takesFormulaReference(ctx)) {
-        e.preventDefault();
-        return;
-    }
+    if (swallowMenuPress(ctx, globalCache, e)) return;
 
     deselectFloatingObject(ctx);
     const rect = container.getBoundingClientRect();
