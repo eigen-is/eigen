@@ -2034,7 +2034,7 @@ export function fillTouchesMerge(ctx: Context, copyRange: SingleRange, applyRang
     );
 }
 
-// Ctrl+D / Ctrl+R: copy the top row (or left column) of the range over the rest of it.
+// Fill down and fill right (⌘D and ⌘R): copy the top row (or left column) of the range over the rest of it.
 export function fillFromEdge(ctx: Context, range: SingleRange, direction: 'down' | 'right') {
     const { row, column } = range;
     if (direction === 'down') {
