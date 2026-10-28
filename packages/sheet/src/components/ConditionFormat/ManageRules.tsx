@@ -9,7 +9,7 @@ import { X } from 'lucide-react';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { getSheetByIndex } from '../../state';
+import { findSheet } from '../../state';
 import { RULE_COPY } from './ConditionRules';
 
 function formatRange(range: SingleRange): string {
@@ -119,12 +119,12 @@ export function ManageRules() {
     const { hideDialog } = useDialog();
 
     const rules = useMemo(() => {
-        return getSheetByIndex(context, context.currentSheetId)?.conditionalFormatRules ?? [];
+        return findSheet(context, context.currentSheetId)?.conditionalFormatRules ?? [];
     }, [context]);
 
     const deleteRule = (ruleIndex: number) => {
         setContext((ctx) => {
-            const arr = getSheetByIndex(ctx, ctx.currentSheetId)?.conditionalFormatRules;
+            const arr = findSheet(ctx, ctx.currentSheetId)?.conditionalFormatRules;
             if (arr) arr.splice(ruleIndex, 1);
         });
     };

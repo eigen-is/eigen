@@ -1,13 +1,14 @@
+// Sheet protection: whether a cell is locked, whether a click may select it and whether the sheet allows formatting.
+// Callers such as the mouse handlers, find and replace and conditional formats ask before they act. A sheet is
+// protected only when its `config.authority.sheet` is set and not 0. A cell's own `lo` flag, an explicit per-cell
+// lock, overrides that for checkCellIsLocked.
+
 import { isNil } from 'es-toolkit/compat';
 import type { Context } from '../context';
-import { getSheetByIndex } from '../utils';
-
-// All four readers gate on `aut.sheet`: a missing authority field, missing
-// `sheet`, or `sheet === 0` means the sheet is unprotected. The cell-level
-// `lo` flag (an explicit per-cell lock) overrides this for `checkCellIsLocked`.
+import { findSheet } from '../utils';
 
 export function checkCellIsLocked(ctx: Context, r: number, c: number, sheetId: string) {
-    const sheetFile = getSheetByIndex(ctx, sheetId);
+    const sheetFile = findSheet(ctx, sheetId);
     if (isNil(sheetFile)) {
         return false;
     }
@@ -23,7 +24,7 @@ export function checkCellIsLocked(ctx: Context, r: number, c: number, sheetId: s
 }
 
 export function checkProtectionSelectLockedOrUnLockedCells(ctx: Context, r: number, c: number, sheetId: string) {
-    const sheetFile = getSheetByIndex(ctx, sheetId);
+    const sheetFile = findSheet(ctx, sheetId);
     if (isNil(sheetFile)) {
         return true;
     }
@@ -41,7 +42,7 @@ export function checkProtectionSelectLockedOrUnLockedCells(ctx: Context, r: numb
 }
 
 export function checkProtectionAllSelected(ctx: Context, sheetId: string) {
-    const sheetFile = getSheetByIndex(ctx, sheetId);
+    const sheetFile = findSheet(ctx, sheetId);
     if (isNil(sheetFile)) {
         return true;
     }
@@ -54,9 +55,9 @@ export function checkProtectionAllSelected(ctx: Context, sheetId: string) {
     return selectunLocked && selectLocked;
 }
 
-// formatCells authority, bl cl fc fz ff ct  border etc.
+// A protected sheet refuses a format change and puts its hint text in the warning dialog.
 export function checkProtectionFormatCells(ctx: Context) {
-    const sheetFile = getSheetByIndex(ctx, ctx.currentSheetId);
+    const sheetFile = findSheet(ctx, ctx.currentSheetId);
     if (isNil(sheetFile)) {
         return true;
     }

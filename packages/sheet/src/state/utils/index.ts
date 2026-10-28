@@ -3,7 +3,7 @@
 
 import { parseRgb } from '@workspace/lib/constants/colors';
 import { parseCellKey } from '@workspace/lib/sheets';
-import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
+import { every, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { checkCellIsLocked } from '../modules';
@@ -55,15 +55,9 @@ export function getSheetIdByName(ctx: Context, name: string) {
     return null;
 }
 
-export function getSheetByIndex(ctx: Context, id: string) {
-    if (isNil(id)) {
-        id = ctx.currentSheetId;
-    }
-    const i = getSheetIndex(ctx, id);
-    if (isNil(i)) {
-        return null;
-    }
-    return ctx.sheets[i];
+// The sheet with this id, or undefined. getSheet in the API is the one that throws for a missing sheet.
+export function findSheet(ctx: Context, id: string) {
+    return ctx.sheets.find((sheet) => sheet.id === id);
 }
 
 // get the current date and time
