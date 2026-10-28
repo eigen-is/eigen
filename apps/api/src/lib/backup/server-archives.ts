@@ -36,8 +36,8 @@ export async function readServerSidecar(archivePath: string): Promise<ServerArch
     return text === null ? null : parseServerArchiveSidecar(text);
 }
 
-// Every server archive and refused attempt in the backups folder, once each, newest first.
-function listServerRecords() {
+// Every server archive and refused attempt in the backups folder by its name, once each, newest first.
+function listServerArchiveNames() {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) return [];
     const names = new Set(
@@ -53,7 +53,7 @@ function listServerRecords() {
 // The owner's list, newest first, from names and sidecars alone.
 export async function listServerArchives(): Promise<ServerArchive[]> {
     const archives: ServerArchive[] = [];
-    for (const { name, level, reason, at, archivePath } of listServerRecords()) {
+    for (const { name, level, reason, at, archivePath } of listServerArchiveNames()) {
         archives.push({
             name,
             level,
@@ -67,10 +67,6 @@ export async function listServerArchives(): Promise<ServerArchive[]> {
 }
 
 type ArchiveLine = { name: string; createdAt: string; error: string | null };
-
-function line({ name, createdAt }: ServerArchive, error: string | undefined): ArchiveLine {
-    return { name, createdAt: createdAt.toISOString(), error: error ?? null };
-}
 
 // What the Backup row is judged on. `newest` is the newest archive or refused attempt of any
 // reason, its state null when its record does not read.
@@ -87,11 +83,6 @@ export type ServerBackupStatus = {
     newestGoodFullAt: string | null;
 };
 
-// A job that ended done on an archive that restores every home whole.
-function isGood(record: ServerArchiveSidecar | null): boolean {
-    return record?.state === 'done' && isCompleteArchive(record.manifest);
-}
-
 export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
     const archives = await listServerArchives();
     const [newest] = archives;
@@ -107,12 +98,12 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
     return {
         scheduleEnabled: schedule.enabled,
         newest: newest
-            ? { ...line(newest, newest.record?.error), state: newest.record?.state ?? null, bytes: newest.bytes }
+            ? { ...archiveLine(newest, newest.record?.error), state: newest.record?.state ?? null, bytes: newest.bytes }
             : null,
-        scheduledFailure: scheduled?.record?.state === 'failed' ? line(scheduled, scheduled.record.error) : null,
-        scheduledNotUploaded: notUploaded ? line(scheduled, scheduled.record?.upload?.error) : null,
+        scheduledFailure: scheduled?.record?.state === 'failed' ? archiveLine(scheduled, scheduled.record.error) : null,
+        scheduledNotUploaded: notUploaded ? archiveLine(scheduled, scheduled.record?.upload?.error) : null,
         warned: warned
-            ? line(
+            ? archiveLine(
                   warned,
                   warned.record?.manifest?.homes
                       .filter((home) => home.warnings?.length)
@@ -124,10 +115,21 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
     };
 }
 
+// A job that ended done on an archive that restores every home whole.
+function isGood(record: ServerArchiveSidecar | null): boolean {
+    return record?.state === 'done' && isCompleteArchive(record.manifest);
+}
+
+function archiveLine({ name, createdAt }: ServerArchive, error: string | undefined): ArchiveLine {
+    return { name, createdAt: createdAt.toISOString(), error: error ?? null };
+}
+
 // The schedule's one question. A failed or refused attempt left its record, so it counts: a night
 // that fails is one alert, not a retry every tick.
 export function hasScheduledAttemptOn(day: string): boolean {
-    return listServerRecords().some(({ reason, at }) => reason === 'scheduled' && at.toISOString().startsWith(day));
+    return listServerArchiveNames().some(
+        ({ reason, at }) => reason === 'scheduled' && at.toISOString().startsWith(day),
+    );
 }
 
 // An archive and its record go together. Only a running job refuses, as it would write the record back: a record
@@ -138,15 +140,14 @@ export async function deleteServerArchive(name: string): Promise<void> {
     const recordPath = serverSidecarPath(archivePath);
     if (!fs.existsSync(archivePath) && !fs.existsSync(recordPath)) throw new ApiError(404, 'Archive not found');
     if (runningJobOn(name)) throw new ApiError(409, `${name} is still being written`);
-    fs.rmSync(archivePath, { force: true });
-    fs.rmSync(recordPath, { force: true });
+    removeServerArchive(archivePath);
 }
 
 // Retention by each sidecar: an archive is good only when its job ended done and no home in it has warnings.
 export async function pruneLocalArchives(): Promise<void> {
     const archives: RetainedArchive[] = [];
     const unread: string[] = [];
-    for (const record of listServerRecords()) {
+    for (const record of listServerArchiveNames()) {
         const sidecar = await readServerSidecar(record.archivePath);
         if (sidecar) {
             archives.push({
@@ -164,10 +165,13 @@ export async function pruneLocalArchives(): Promise<void> {
     const { keep } = getServerSettings().backups.schedule;
     for (const name of pruneServerArchives(archives, keep, process.env[API_IMAGE_KEY])) {
         if (runningJobOn(name)) continue;
-        const archivePath = path.join(backupsDirPath(), name);
-        fs.rmSync(archivePath, { force: true });
-        fs.rmSync(serverSidecarPath(archivePath), { force: true });
+        removeServerArchive(path.join(backupsDirPath(), name));
     }
+}
+
+function removeServerArchive(archivePath: string): void {
+    fs.rmSync(archivePath, { force: true });
+    fs.rmSync(serverSidecarPath(archivePath), { force: true });
 }
 
 // Boot: a job or an upload killed mid-run left its record running, and nothing will ever end it, so it becomes a
@@ -175,7 +179,7 @@ export async function pruneLocalArchives(): Promise<void> {
 export async function recoverInterruptedServerBackups(): Promise<void> {
     const interrupted: string[] = [];
     const notUploaded: string[] = [];
-    for (const { name, archivePath } of listServerRecords()) {
+    for (const { name, archivePath } of listServerArchiveNames()) {
         const sidecar = await readServerSidecar(archivePath);
         if (sidecar?.state === 'running') {
             await writeServerSidecar(archivePath, {
