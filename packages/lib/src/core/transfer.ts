@@ -1,9 +1,12 @@
+// What every import of a file shares, such as contacts from a .vcf or events from an .ics: the raw upload of the
+// file's bytes, the toast that reports what was imported, and the counted lines a preview of the same file ends on.
+
 import { toast } from 'sonner';
 import type { ImportCountsResult } from '../types/transfer';
 
 // What a file's unreadable members are called, spelled once for the import toast and for the counted
 // line a quick look of the same file ends on.
-export function unreadableLine(count: number, noun: string): string {
+function unreadableLine(count: number, noun: string): string {
     return `${count} ${noun}${count === 1 ? '' : 's'} could not be read`;
 }
 

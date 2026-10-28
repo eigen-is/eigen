@@ -95,7 +95,7 @@ export type { NormalStyle } from './normal-style';
 export { DEFAULT_NORMAL_STYLE, normalStyleProperties, readNormalStyle, STYLE_ROOT } from './normal-style';
 export type { OutlineEntry, OutlineHeading } from './outline';
 export { outlineEntry, readOutline } from './outline';
-export type { PageMargin, PageSetup, PaperSizeName } from './page';
+export type { PageMargin, PageSetup } from './page';
 export {
     cmText,
     DEFAULT_PAGE_SETUP,
@@ -104,7 +104,6 @@ export {
     matchPaperSize,
     mmToPt,
     mmToPx,
-    mmToTwips,
     PAGE_ROOT,
     PAPER_SIZES,
     pageBoxStyle,

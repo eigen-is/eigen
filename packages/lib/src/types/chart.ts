@@ -22,7 +22,7 @@ export const CHART_STACKINGS = ['none', 'stacked', 'percent'] as const;
 
 export type ChartType = (typeof CHART_TYPES)[number];
 export type LegendPosition = (typeof LEGEND_POSITIONS)[number];
-export type ChartBlanks = (typeof CHART_BLANKS)[number];
+type ChartBlanks = (typeof CHART_BLANKS)[number];
 export type ChartStacking = (typeof CHART_STACKINGS)[number];
 
 // Column and bar charts stack their series by their plot's stacking. A line or a pie keeps a stacking it is given, but
@@ -36,11 +36,11 @@ export type CellRangeRef = { sheetId: string; row: [number, number]; column: [nu
 
 // Fixed, never minted, so two peers who each add the second value axis write the same key: x the category axis (up a
 // bar chart's side), y the value axis, x2 and y2 the second pair. This build draws x and y and keeps the others.
-export const CHART_AXIS_IDS = ['x', 'y', 'x2', 'y2'] as const;
+const CHART_AXIS_IDS = ['x', 'y', 'x2', 'y2'] as const;
 export const CHART_AXIS_KINDS = ['category', 'value'] as const;
 
 export type ChartAxisId = (typeof CHART_AXIS_IDS)[number];
-export type ChartAxisKind = (typeof CHART_AXIS_KINDS)[number];
+type ChartAxisKind = (typeof CHART_AXIS_KINDS)[number];
 
 // visible false draws no labels and no axis line, as Excel's c:delete or a c:tickLblPos of none; the title and
 // gridlines are their own. format is an Excel number format, null General or linked to the source cells. min and max
@@ -56,7 +56,7 @@ export type ChartAxis = {
 };
 
 // A plot type's own options, which every series drawn in that type shares. stacking: column and bar only.
-export type ChartPlot = { stacking: ChartStacking };
+type ChartPlot = { stacking: ChartStacking };
 
 // A series' style, by its id. plot null draws in the chart's type, and yAxis names the axis it plots against; this build
 // draws every series in the chart's type on y. A null color is the palette's at the series' index (chartColor), so a

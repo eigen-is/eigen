@@ -1,3 +1,7 @@
+// The popover a filtered column's header button opens: sort ascending or descending, and filter the column by color,
+// by a condition or by its values, with a tree of dates for a date column. Each choice saves the column's filter
+// through the filter module, which hides the rows that fail it.
+
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Input } from '@workspace/ui/components/input';
@@ -26,6 +30,18 @@ import {
 } from '../../state';
 
 type ColorKind = 'bgColors' | 'fcColors';
+
+// The menu's sections top to bottom, with `|` for a divider.
+const FILTER_MENU_ITEMS = [
+    'sort-by-asc',
+    'sort-by-desc',
+    '|',
+    'filter-by-color',
+    '|',
+    'filter-by-condition',
+    '|',
+    'filter-by-value',
+];
 
 const menuItemClass =
     'relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground';
@@ -121,7 +137,7 @@ const DateSelectTree: React.FC<{
 );
 
 export const FilterMenu: React.FC = () => {
-    const { context, setContext, settings } = useContext(WorkbookContext);
+    const { context, setContext } = useContext(WorkbookContext);
     const contextRef = useRef<Context>(context);
     const { filterContextMenu } = context;
     const { startRow, startCol, endRow, endCol, col } = filterContextMenu || {
@@ -293,7 +309,7 @@ export const FilterMenu: React.FC = () => {
                 className="flex w-auto min-w-96 flex-col p-1 text-sm"
                 onContextMenu={(e) => e.stopPropagation()}
             >
-                {settings.filterContextMenu?.map((name, i) => {
+                {FILTER_MENU_ITEMS.map((name, i) => {
                     if (name === '|') {
                         // biome-ignore lint/suspicious/noArrayIndexKey: divider in static config menu
                         return <div key={`divider-${i}`} className="h-px my-1 bg-border" />;

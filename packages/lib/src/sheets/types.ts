@@ -219,7 +219,7 @@ type CFRuleBase = { cellrange: SingleRange[] };
 
 export type DataBarRule = CFRuleBase & { type: 'dataBar'; format: string[] };
 export type ColorGradationRule = CFRuleBase & { type: 'colorGradation'; format: string[] };
-export type IconsRule = CFRuleBase & { type: 'icons' };
+type IconsRule = CFRuleBase & { type: 'icons' };
 export type DefaultConditionalFormatRule = CFRuleBase & {
     type: 'default';
     format: { textColor?: string | null; cellColor?: string | null };

@@ -35,7 +35,7 @@ export const PAPER_SIZES = [
     { name: 'B5', width: 176, height: 250 },
 ] as const;
 
-export type PaperSizeName = (typeof PAPER_SIZES)[number]['name'];
+type PaperSizeName = (typeof PAPER_SIZES)[number]['name'];
 
 export const DEFAULT_PAGE_SETUP: PageSetup = {
     width: A4.width,
@@ -160,7 +160,7 @@ export const pxToPt = (px: number) => (px / 96) * 72;
 export const TWIPS_PER_POINT = 20;
 export const ptToTwips = (pt: number) => pt * TWIPS_PER_POINT;
 export const twipsToPt = (twips: number) => twips / TWIPS_PER_POINT;
-export const mmToTwips = (mm: number) => (mm * 1440) / 25.4;
+const mmToTwips = (mm: number) => (mm * 1440) / 25.4;
 export const twipsToMm = (twips: number) => (twips * 25.4) / 1440;
 
 // A length as Docs' fields show it, in cm to `decimals` places, without trailing zeros.

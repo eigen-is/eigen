@@ -1,7 +1,13 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { addSheet, setSheetOrder } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
 import { contextFactory, selectionFactory } from '../factories/context';
+
+const NEW_ID = '00000000-0000-4000-8000-000000000003';
+
+afterEach(() => {
+    mock.restore();
+});
 
 describe('sheet/core/api/workbook', () => {
     const getContext = () =>
@@ -11,20 +17,10 @@ describe('sheet/core/api/workbook', () => {
 
     test('addSheet', () => {
         const ctx = getContext();
-        // Settings is Required<…> for the runtime call, but every other field has
-        // a default in the addSheet implementation — only the four exercised here
-        // matter for this assertion. biome-ignore: Partial<Settings> would require
-        // touching the source-of-truth Settings type, out of scope for this test.
-        // biome-ignore lint/suspicious/noExplicitAny: test fixture covers happy path
-        const settings: any = {
-            allowEdit: true,
-            row: 60,
-            column: 84,
-            generateSheetId: () => 'id_3',
-        };
-        addSheet(ctx, settings);
+        spyOn(crypto, 'randomUUID').mockReturnValue(NEW_ID);
+        addSheet(ctx);
         expect(ctx.sheets.length).toBe(3);
-        expect(ctx.sheets[2].id).toBe('id_3');
+        expect(ctx.sheets[2].id).toBe(NEW_ID);
     });
 
     test('setSheetOrder', () => {

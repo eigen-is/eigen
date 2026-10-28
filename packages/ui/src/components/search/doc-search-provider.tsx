@@ -23,7 +23,7 @@ export const FIND_REPLACE_HOTKEY = 'Mod+Shift+H';
 const DEFAULT_OPTIONS: DocSearchOptions = { matchCase: false, wholeWord: false, regex: false };
 const DEBOUNCE_MS = 150;
 
-export type DocSearchBarContextValue = {
+type DocSearchBarContextValue = {
     // Opens the bar, or focuses and selects its field when it is open, as ⌘F, a toolbar button or Edit › Find do.
     open: () => void;
     // Opens the bar to replace where the surface can, and to search where it can't, as ⇧⌘H does.

@@ -14,7 +14,7 @@ export type ArrangeOp =
     | 'match-width'
     | 'match-height';
 
-export type ArrangePatch = { id: string; x?: number; y?: number; width?: number; height?: number };
+type ArrangePatch = { id: string; x?: number; y?: number; width?: number; height?: number };
 export type ArrangeItem = { id: string; x: number; y: number; width: number; height: number };
 
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };

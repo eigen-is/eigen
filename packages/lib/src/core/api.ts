@@ -1,3 +1,7 @@
+// The browser's way to the API and to the other apps. It resolves the API host, builds the Eden Treaty clients every
+// domain hook calls, and spells the URLs that Eden can't serve, such as downloads, uploads, previews and the
+// WebSocket for collaboration. It also builds the links between apps, such as openDocument for a Drive item.
+
 import type { app } from '@apps/api';
 import { treaty } from '@elysiajs/eden';
 import type { DocumentImportOptions, DriveItemRef, DrivePath } from '../types/drive';
@@ -94,21 +98,21 @@ export const backupApi = api.admin.backup;
 export const serverBackupApi = api.admin['server-backup'];
 
 // An env file from before an app existed lacks its key: unset is a same-origin relative link, what production serves.
-export const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL ?? '';
-export const MAIL_APP_URL = import.meta.env.VITE_APP_MAIL_URL ?? '';
-export const CONTACTS_APP_URL = import.meta.env.VITE_APP_CONTACTS_URL ?? '';
-export const DRIVE_APP_URL = import.meta.env.VITE_APP_DRIVE_URL ?? '';
-export const DOCS_APP_URL = import.meta.env.VITE_APP_DOCS_URL ?? '';
-export const STICKIES_APP_URL = import.meta.env.VITE_APP_STICKIES_URL ?? '';
-export const CHAT_APP_URL = import.meta.env.VITE_APP_CHAT_URL ?? '';
-export const SLIDES_APP_URL = import.meta.env.VITE_APP_SLIDES_URL ?? '';
-export const SHEETS_APP_URL = import.meta.env.VITE_APP_SHEETS_URL ?? '';
-export const VECTOR_APP_URL = import.meta.env.VITE_APP_VECTOR_URL ?? '';
-export const CALENDAR_APP_URL = import.meta.env.VITE_APP_CALENDAR_URL ?? '';
-export const ADMIN_APP_URL = import.meta.env.VITE_APP_ADMIN_URL ?? '';
+const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL ?? '';
+const MAIL_APP_URL = import.meta.env.VITE_APP_MAIL_URL ?? '';
+const CONTACTS_APP_URL = import.meta.env.VITE_APP_CONTACTS_URL ?? '';
+const DRIVE_APP_URL = import.meta.env.VITE_APP_DRIVE_URL ?? '';
+const DOCS_APP_URL = import.meta.env.VITE_APP_DOCS_URL ?? '';
+const STICKIES_APP_URL = import.meta.env.VITE_APP_STICKIES_URL ?? '';
+const CHAT_APP_URL = import.meta.env.VITE_APP_CHAT_URL ?? '';
+const SLIDES_APP_URL = import.meta.env.VITE_APP_SLIDES_URL ?? '';
+const SHEETS_APP_URL = import.meta.env.VITE_APP_SHEETS_URL ?? '';
+const VECTOR_APP_URL = import.meta.env.VITE_APP_VECTOR_URL ?? '';
+const CALENDAR_APP_URL = import.meta.env.VITE_APP_CALENDAR_URL ?? '';
+const ADMIN_APP_URL = import.meta.env.VITE_APP_ADMIN_URL ?? '';
 // Only set in dev, where each app runs on its own port. In production the index app is
 // served same-origin at root, so an unset value falls back to a relative `/support` link.
-export const INDEX_APP_URL = import.meta.env.VITE_APP_INDEX_URL ?? '';
+const INDEX_APP_URL = import.meta.env.VITE_APP_INDEX_URL ?? '';
 
 const trimTrailingSlash = (url: string) => url.replace(/\/+$/, '');
 
@@ -236,7 +240,7 @@ export const getDriveItemThumbnail = (path: DrivePath): { showThumbnail: boolean
 };
 export const getCollabWebSocketUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST.replace('http', 'ws')}/ws/collab/${ownerId}/${mountId}/${pathId}`;
-export const getInlineEditUrl = (ownerId: string, mountId: string, pathId: string) =>
+const getInlineEditUrl = (ownerId: string, mountId: string, pathId: string) =>
     getDriveAppUrl(`edit/${ownerId}/${mountId}/${pathId}`);
 export const getMailMessageDownloadUrl = (ownerId: string, messageId: string) =>
     `${API_HOST}/mail/${ownerId}/message/${messageId}/download`;
@@ -249,8 +253,6 @@ export const getMailAttachmentEmbedUrl = (
     fileName: string,
 ) =>
     `${API_HOST}/mail/${ownerId}/message/${messageId}/attachment/${attachmentIndex}/embed/${encodeURIComponent(fileName)}`;
-export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: string) =>
-    `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/access`;
 
 function getDocumentUrl(path: DriveItemRef): string | undefined {
     if (path.type === DRIVE_TYPE_DOC) return getDocUrl(path.ownerId, path.mountId, path.id);

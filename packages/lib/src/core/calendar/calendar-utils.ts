@@ -1,3 +1,7 @@
+// Pure calendar helpers the Calendar app and its cards share: the month and week ranges, the events of one day, time
+// zones, how an event's time and recurrence read, and invitations. It also turns an edit of one occurrence into the
+// change saved on the whole series.
+
 import { RRule } from 'rrule';
 import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
 import type { Attendee, CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
@@ -253,7 +257,7 @@ export type SeriesEdit = {
     endTime: Date;
 };
 
-export type SeriesEditPatch = {
+type SeriesEditPatch = {
     title?: string;
     description?: string | null;
     location?: string | null;

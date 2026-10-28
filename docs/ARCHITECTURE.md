@@ -183,7 +183,7 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 
 ### A primitive is shared only when its barrel exports it
 
-**A primitive isn't "shared" until its barrel exports it**: reusable values go through the package's public entry (`@workspace/ui`, `@workspace/lib/<domain>`), reusable types through `@workspace/lib/types/<domain>`. An unexported primitive is invisible to the next author, who rebuilds it. The inverse is also a smell: deep-importing past a barrel (`@workspace/lib/core/…`) usually means the thing you reached for should have been exported
+**A primitive isn't "shared" until its barrel exports it**: reusable values go through the package's public entry (`@workspace/ui`, `@workspace/lib/<domain>`), reusable types through `@workspace/lib/types/<domain>`. An unexported primitive is invisible to the next author, who rebuilds it. The inverse is also a smell: deep-importing past a barrel (`@workspace/lib/core/…`) usually means the thing you reached for should have been exported. And an export needs a user outside its file, which the standards script checks ([CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates))
 
 ### Third copy → shared wrapper
 

@@ -1,3 +1,6 @@
+// The types of the sheet engine: the cell and range shapes it shares with the rest of Eigen, the editor's extra
+// sheet settings, and the engine's own types for formulas, their dependencies and the parser.
+
 import type { SheetConfig } from '@workspace/lib/sheets';
 import type { DependencyIndex } from './dependency-index';
 import type { CellCoordinate } from './parser/helper/cell';
@@ -13,18 +16,13 @@ export type {
     CellStyle,
     CellType,
     CellWithRowAndCol,
-    ColorGradationRule,
-    ConditionalFormatConditionName,
     ConditionalFormatRule,
-    DataBarRule,
     DefaultConditionalFormatRule,
-    IconsRule,
     InlineStringSegment,
     Range,
     SheetWithCalcChain,
     SingleRange,
 } from '@workspace/lib/sheets';
-export type { CellCoordinate };
 
 import type { CalcChainEntry, Cell, CellMatrix } from '@workspace/lib/sheets';
 

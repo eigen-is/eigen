@@ -42,20 +42,6 @@ export function drawRowHeader(
 
         const firstOffset = rowStart === r ? -2 : 0;
         const lastOffset = rowEnd === r ? -2 : 0;
-        // Triggered before row header cell render; return false to skip
-        if (
-            sheetCtx.hooks.beforeRenderRowHeaderCell?.(
-                `${r + 1}`,
-                r,
-                startY + offsetTop + firstOffset,
-                sheetCtx.rowHeaderWidth - 1,
-                endY - startY + 1 + lastOffset - firstOffset,
-                renderCtx,
-            ) === false
-        ) {
-            continue;
-        }
-
         if (rowhidden?.[r] == null) {
             renderCtx.fillStyle = colors.headerBackground;
             renderCtx.fillRect(
@@ -110,15 +96,6 @@ export function drawRowHeader(
         }
 
         prevEndY = endY;
-
-        sheetCtx.hooks.afterRenderRowHeaderCell?.(
-            `${r + 1}`,
-            r,
-            startY + offsetTop + firstOffset,
-            sheetCtx.rowHeaderWidth - 1,
-            endY - startY + 1 + lastOffset - firstOffset,
-            renderCtx,
-        );
     }
 
     renderCtx.restore(); // header clip
@@ -157,20 +134,6 @@ export function drawColumnHeader(
         const endX = colEndX(sheetCtx.visibledatacolumn, c, scrollWidth);
 
         const columnLabel = columnIndexToLabel(c);
-        // Triggered before column header cell render; return false to skip
-        if (
-            sheetCtx.hooks.beforeRenderColumnHeaderCell?.(
-                columnLabel,
-                c,
-                startX + offsetLeft - 1,
-                endX - startX,
-                sheetCtx.columnHeaderHeight - 1,
-                renderCtx,
-            ) === false
-        ) {
-            continue;
-        }
-
         if (colhidden?.[c] == null) {
             renderCtx.fillStyle = colors.headerBackground;
             renderCtx.fillRect(startX + offsetLeft - 1, 0, endX - startX, sheetCtx.columnHeaderHeight - 1);
@@ -221,15 +184,6 @@ export function drawColumnHeader(
         renderCtx.closePath();
 
         prevEndX = endX;
-
-        sheetCtx.hooks.afterRenderColumnHeaderCell?.(
-            columnLabel,
-            c,
-            startX + offsetLeft - 1,
-            endX - startX,
-            sheetCtx.columnHeaderHeight - 1,
-            renderCtx,
-        );
     }
 
     renderCtx.restore(); // header clip

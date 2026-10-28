@@ -16,7 +16,7 @@ export type StandardMailbox =
     | typeof MAILBOX_JUNK
     | typeof MAILBOX_ARCHIVE;
 
-export type SpecialMailbox = {
+type SpecialMailbox = {
     path: StandardMailbox;
     // RFC 6154 special-use attribute (plus `\Inbox`), as carried on every mailbox row's `flags`.
     flag: string;
@@ -24,7 +24,7 @@ export type SpecialMailbox = {
     label: string;
 };
 
-export const SPECIAL_MAILBOXES: Record<StandardMailbox, SpecialMailbox> = {
+const SPECIAL_MAILBOXES: Record<StandardMailbox, SpecialMailbox> = {
     [MAILBOX_INBOX]: { path: MAILBOX_INBOX, flag: '\\Inbox', label: 'Inbox' },
     [MAILBOX_SENT]: { path: MAILBOX_SENT, flag: '\\Sent', label: 'Sent' },
     [MAILBOX_DRAFTS]: { path: MAILBOX_DRAFTS, flag: '\\Drafts', label: 'Drafts' },
@@ -50,8 +50,8 @@ export const SIDEBAR_MAILBOXES: readonly SpecialMailbox[] = (
 ).map((path) => SPECIAL_MAILBOXES[path]);
 
 // Every mailbox row carries one of these two; a special one adds its special-use flag after it.
-export const MAILBOX_HAS_CHILDREN_FLAG = '\\HasChildren';
-export const MAILBOX_NO_CHILDREN_FLAG = '\\HasNoChildren';
+const MAILBOX_HAS_CHILDREN_FLAG = '\\HasChildren';
+const MAILBOX_NO_CHILDREN_FLAG = '\\HasNoChildren';
 
 const BY_FLAG = new Map<string, SpecialMailbox>(Object.values(SPECIAL_MAILBOXES).map((box) => [box.flag, box]));
 

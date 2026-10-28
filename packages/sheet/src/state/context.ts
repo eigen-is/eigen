@@ -192,8 +192,6 @@ export type Context = {
     showGridLines: boolean;
     allowEdit: boolean;
 
-    fontList: unknown[];
-
     formatPainterOn: boolean;
     formatPainterOnce: boolean;
 
@@ -341,8 +339,6 @@ export function defaultContext(refs: RefValues): Context {
         showGridLines: true,
         allowEdit: true,
 
-        fontList: [],
-
         formatPainterOn: false,
         formatPainterOnce: false,
 
@@ -425,12 +421,12 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
 
 // Gives a sheet whose id another sheet already has a fresh one, and leaves exactly one sheet active: the first one
 // marked active, or else the first sheet.
-export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {
+export function ensureSheetIndex(data: Sheet[]) {
     if (data.length === 0) return;
     const ids = new Set<string>();
     let hasActive = false;
     for (const item of data) {
-        if (ids.has(item.id)) item.id = generateSheetId();
+        if (ids.has(item.id)) item.id = crypto.randomUUID();
         else ids.add(item.id);
         item.status ??= 0;
         if (item.status === 1) {

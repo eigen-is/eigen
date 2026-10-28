@@ -1,6 +1,10 @@
+// Recipient lists of a mail draft: address groups flattened to their members, and to, cc and bcc merged into one
+// list without duplicates. The server's send path and the compose dialog's share preview both use it, so they agree
+// on who gets access.
+
 import type { AddressObject, EmailAddress } from '@workspace/lib/types/mail';
 
-export type RecipientField = 'to' | 'cc' | 'bcc';
+type RecipientField = 'to' | 'cc' | 'bcc';
 
 export type CanonicalRecipient = { name: string; address: string; field: RecipientField };
 

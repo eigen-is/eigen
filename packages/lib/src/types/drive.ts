@@ -38,14 +38,14 @@ export const DRIVE_MIME_SHEETS = 'application/eigensheets' as const;
 export const DRIVE_MIME_CHAT = 'application/eigenchat' as const;
 export const DRIVE_MIME_VECTOR = 'application/eigenvector' as const;
 
-export type DriveTypeDoc = typeof DRIVE_TYPE_DOC;
-export type DriveTypeStickies = typeof DRIVE_TYPE_STICKIES;
-export type DriveTypeSlides = typeof DRIVE_TYPE_SLIDES;
-export type DriveTypeSheets = typeof DRIVE_TYPE_SHEETS;
-export type DriveTypeChat = typeof DRIVE_TYPE_CHAT;
-export type DriveTypeVector = typeof DRIVE_TYPE_VECTOR;
-export type DriveTypeFolder = typeof DRIVE_TYPE_FOLDER;
-export type DriveTypeFile = typeof DRIVE_TYPE_FILE;
+type DriveTypeDoc = typeof DRIVE_TYPE_DOC;
+type DriveTypeStickies = typeof DRIVE_TYPE_STICKIES;
+type DriveTypeSlides = typeof DRIVE_TYPE_SLIDES;
+type DriveTypeSheets = typeof DRIVE_TYPE_SHEETS;
+type DriveTypeChat = typeof DRIVE_TYPE_CHAT;
+type DriveTypeVector = typeof DRIVE_TYPE_VECTOR;
+type DriveTypeFolder = typeof DRIVE_TYPE_FOLDER;
+type DriveTypeFile = typeof DRIVE_TYPE_FILE;
 
 export type DrivePathType =
     | DriveTypeDoc
@@ -107,7 +107,7 @@ export type DocumentImportOptions = { mode: ImportMode; afterFrameId?: string };
 // the version-restore walker to force-type both the live doc and the snapshot
 // doc before pair-walking them — needed because Y.applyUpdate hydrates as
 // AbstractType, so `instanceof` checks would otherwise fail. Omitted for chat.
-export type EigenDocTypeInfo = {
+type EigenDocTypeInfo = {
     type: EigenDocType;
     mime: string;
     urlSlug: string;
@@ -209,7 +209,7 @@ export const EIGEN_DOC_TYPE_INFO = {
     },
 } as const satisfies Record<EigenDocType, EigenDocTypeInfo>;
 
-export const DRIVE_EXTENSIONS = {
+const DRIVE_EXTENSIONS = {
     doc: EIGEN_DOC_TYPE_INFO.doc.extension,
     stickies: EIGEN_DOC_TYPE_INFO.stickies.extension,
     slides: EIGEN_DOC_TYPE_INFO.slides.extension,
@@ -259,8 +259,8 @@ export function stripEigenExtension(name: string): string {
     return name;
 }
 
-export type DriveCollabType = DriveTypeDoc | DriveTypeStickies | DriveTypeSlides | DriveTypeSheets | DriveTypeVector;
-export type DriveChatType = DriveTypeChat;
+type DriveCollabType = DriveTypeDoc | DriveTypeStickies | DriveTypeSlides | DriveTypeSheets | DriveTypeVector;
+type DriveChatType = DriveTypeChat;
 export type DriveContainerType = DriveTypeFolder | DriveCollabType | DriveChatType;
 
 export function isFolderType(type: DrivePathType) {

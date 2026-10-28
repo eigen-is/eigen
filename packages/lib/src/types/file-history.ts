@@ -1,3 +1,7 @@
+// The history of a Drive item: the events the server records, such as created, renamed or a card added, the shapes
+// written and read, and the words a timeline row says for each. The server writes most events itself; a client may
+// post only a few kinds.
+
 import { formatChatPreview } from '../core/chat/format-preview';
 import { formatFileSize } from '../core/format';
 import type { DrivePathType } from './drive';
@@ -29,7 +33,7 @@ export type FileEventType = 'created' | 'edited' | 'trashed' | 'restored' | 'del
 // Lower-signal structural verbs (slide reorder/add/remove, sheet row/col ops, doc edits)
 // are deferred to the in-doc history feature that consumes them — see
 // docs/FILE-HISTORY.md. Until then those changes surface as the generic 'edited'.
-export const CLIENT_FILE_EVENT_TYPES = [
+const CLIENT_FILE_EVENT_TYPES = [
     'sticky-added',
     'sticky-moved',
     'sticky-removed',
@@ -38,7 +42,7 @@ export const CLIENT_FILE_EVENT_TYPES = [
 // More than the two clamped lines an activity row shows, so a clip is never visible; the client-post route caps its details at it.
 export const CARD_TITLE_MAX_LENGTH = 200;
 
-export type ClientFileEventType = (typeof CLIENT_FILE_EVENT_TYPES)[number];
+type ClientFileEventType = (typeof CLIENT_FILE_EVENT_TYPES)[number];
 
 export function isClientFileEventType(t: string): t is ClientFileEventType {
     return CLIENT_FILE_EVENT_TYPES.some((x) => x === t);

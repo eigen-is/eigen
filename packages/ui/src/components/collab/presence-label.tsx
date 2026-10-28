@@ -7,7 +7,7 @@
 const PRESENCE_CARET_CLASS = 'collaboration-cursor__caret';
 const PRESENCE_LABEL_CLASS = 'collaboration-cursor__label';
 
-export type PresenceUser = {
+type PresenceUser = {
     name: string;
     color: string;
 };

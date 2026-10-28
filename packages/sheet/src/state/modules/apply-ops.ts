@@ -56,7 +56,7 @@ export function applyOpBatch(ctx: Context, ops: Op[]): { ctx: Context; moved: Ap
                 } else if (op.op === 'addSheet' && op.value?.id) {
                     // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
                     const value = cloneDeep(op.value);
-                    addSheet(draft, undefined, value.id, false, undefined, value, true);
+                    addSheet(draft, value.id, false, undefined, value, true);
                     const index = getSheetIndex(draft, value.id);
                     if (index == null) continue;
                     initSheetData(draft, index, value);

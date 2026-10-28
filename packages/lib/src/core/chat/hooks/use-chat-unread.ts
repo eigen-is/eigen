@@ -1,3 +1,6 @@
+// Unread state of chats and comments, read from the notification list. A Drive row asks which items hold an unread
+// thread, and an open chat or comment card marks its own notifications read while it is on screen.
+
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 import type { Notification } from '../../../types/notification';
@@ -44,7 +47,7 @@ export function useAutoMarkChatRead(userId: string, pathId: string, chatName?: s
     }, [pathId, chatName, hasUnread, markChatRead]);
 }
 
-export function useMarkChatRead(userId: string) {
+function useMarkChatRead(userId: string) {
     const queryClient = useQueryClient();
 
     return useCallback(

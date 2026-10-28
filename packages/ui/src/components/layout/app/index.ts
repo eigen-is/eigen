@@ -11,7 +11,6 @@ export { EigenDocRouteStatus } from './eigen-doc-route-status';
 export { EmptyState } from './empty-state';
 export { ErrorBoundary } from './error-boundary';
 export { ErrorState } from './error-state';
-export type { LayoutContextType } from './layout-context';
 export { LayoutContext, useApp, useLayout } from './layout-context';
 export { LeaveGuard } from './leave-guard';
 export { ListDetailLayout } from './list-detail-layout';

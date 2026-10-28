@@ -1,7 +1,8 @@
-// Viewer-facing sentence templates, one per built-in emote key. {name} is the actor,
-// {target} the target. Shared by the live chat renderer (formatEmoteForViewer, apps/api)
-// and the activity-preview formatter (formatChatPreview) so the phrasing lives in one place.
-export type EmoteDefinition = {
+// The built-in chat emotes, such as greet and wave, as sentence templates. The actor, the target and everyone else
+// each read their own line; {name} stands for the actor and {target} for the target. The chat that renders an emote
+// and the activity preview both read these, so the phrasing lives in one place.
+
+type EmoteDefinition = {
     firstPerson?: string;
     thirdPerson?: string;
     targetedFirstPerson?: string;

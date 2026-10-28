@@ -238,9 +238,7 @@ describe('every sheet entry carries a charts map', () => {
         const ctx = contextFactory() as Context;
         initSheetData(ctx, 0, ctx.sheets[0]);
         expect(ctx.sheets[0].charts).toEqual({});
-        // biome-ignore lint/suspicious/noExplicitAny: addSheet reads only these settings
-        const settings: any = { allowEdit: true, row: 10, column: 4, generateSheetId: () => 'id_3' };
-        addSheet(ctx, settings);
+        addSheet(ctx);
         expect(ctx.sheets[2].charts).toEqual({});
     });
 

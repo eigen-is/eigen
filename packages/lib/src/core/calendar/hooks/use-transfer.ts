@@ -1,3 +1,7 @@
+// The hooks that move events in and out of a calendar: the .ics export, and imports from a file on the device, from
+// a mail part or chat attachment, or into a new calendar. Each import reports its counts with the wording every
+// counted import shares.
+
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { calendarApi, getCalendarExportUrl, getCalendarImportUrl } from '@workspace/lib/api';
@@ -84,7 +88,7 @@ export function useImportCalendar() {
     });
 }
 
-export type ImportCalendarTarget =
+type ImportCalendarTarget =
     | { kind: 'existing'; ownerId: string; calendarId: string }
     | { kind: 'new'; name: string; color: string };
 

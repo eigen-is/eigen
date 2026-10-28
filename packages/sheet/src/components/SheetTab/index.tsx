@@ -27,7 +27,7 @@ const iconButtonClass =
     'inline-flex w-6 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:bg-background hover:text-foreground';
 
 export const SheetTab: React.FC = () => {
-    const { context, setContext, settings, refs } = useContext(WorkbookContext);
+    const { context, setContext, refs } = useContext(WorkbookContext);
     const tabContainerRef = useRef<HTMLDivElement>(null);
     const [isShowScrollBtn, setIsShowScrollBtn] = useState<boolean>(false);
     const [isShowBoundary, setIsShowBoundary] = useState<boolean>(true);
@@ -91,7 +91,7 @@ export const SheetTab: React.FC = () => {
                                 refs.cellInput.current,
                             );
                         }
-                        addSheet(draftCtx, settings);
+                        addSheet(draftCtx);
                     },
                     { addSheetOp: true },
                 );
@@ -100,7 +100,7 @@ export const SheetTab: React.FC = () => {
                     setIsShowScrollBtn(tabCurrent.scrollWidth > tabCurrent.clientWidth);
                 }
             }),
-        [refs.cellInput, setContext, settings],
+        [refs.cellInput, setContext],
     );
 
     const stats = [

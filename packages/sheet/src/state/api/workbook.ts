@@ -4,17 +4,15 @@
 import { sortBy } from 'es-toolkit/compat';
 import type { Context, Sheet } from '..';
 import { addSheet as addSheetInternal } from '../modules';
-import type { Settings } from '../settings';
 
 export function addSheet(
     ctx: Context,
-    settings?: Required<Settings>,
     newSheetID?: string,
     isPivotTable: boolean = false,
     sheetname: string | undefined = undefined,
     sheetData: Sheet | undefined = undefined,
 ) {
-    addSheetInternal(ctx, settings, newSheetID, isPivotTable, sheetname, sheetData);
+    addSheetInternal(ctx, newSheetID, isPivotTable, sheetname, sheetData);
 }
 
 export function setSheetOrder(ctx: Context, orderList: Record<string, number>) {

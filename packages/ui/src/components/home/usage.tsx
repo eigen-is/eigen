@@ -1,3 +1,6 @@
+// How much storage a Home uses: a total, a fill bar and the split between Drive and Mail. The sidebar shows the
+// signed-in user's own, and other surfaces, such as an admin's user detail, draw it from data they already hold.
+
 import { formatFileSize } from '@workspace/lib/format';
 import { useHomeSize } from '@workspace/lib/home';
 import { useHomeDataLabel } from '@workspace/lib/public';
@@ -6,7 +9,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
 import { EigenLoader } from '../braket/eigen-loader';
 
-export type StorageData = {
+type StorageData = {
     homeData: { used: number; max: number };
     drive: { default: { used: number; max: number } };
     total: { used: number; max: number };
@@ -17,18 +20,22 @@ type StorageUsageProps = {
     condensed?: boolean;
 };
 
-export const getStorageUsageColor = (storageUsed: number): string => {
-    if (!storageUsed || Number.isNaN(storageUsed) || storageUsed === Infinity) return '';
-    else if (storageUsed > 0.85) return 'bg-destructive';
-    else if (storageUsed > 0.65) return 'bg-warning';
+// The fill bar turns amber past 65% of the quota and red past 85%.
+function getStorageUsageColor(ratio: number) {
+    if (ratio > 0.85) return 'bg-destructive';
+    if (ratio > 0.65) return 'bg-warning';
     return '';
-};
+}
+
+// Clamp: over-quota users exist in prod, and Progress must not exceed 100%. No quota reads as empty.
+function usageRatio(total: { used: number; max: number }) {
+    return total.max > 0 ? Math.min(total.used / total.max, 1) : 0;
+}
 
 // Presentational storage breakdown: total line + fill bar + Drive/Mail rows. Shared by the admin
 // user detail pane and any other surface that already has a StorageData in hand.
 export function StorageUsageBars({ data, className }: { data: StorageData; className?: string }) {
-    // Clamp: over-quota users exist in prod, and Progress must not exceed 100%.
-    const ratio = data.total.max > 0 ? Math.min(data.total.used / data.total.max, 1) : 0;
+    const ratio = usageRatio(data.total);
     const homeDataLabel = useHomeDataLabel();
 
     return (
@@ -60,8 +67,8 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
     const homeDataLabel = useHomeDataLabel();
 
     const totalUsed = storageData?.total.used ?? 0;
-    const totalMax = storageData?.total.max ?? 1;
-    const ratio = totalUsed / totalMax;
+    const totalMax = storageData?.total.max ?? 0;
+    const ratio = usageRatio({ used: totalUsed, max: totalMax });
 
     return (
         <button
@@ -85,11 +92,7 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
                         </span>
                     </div>
                 )}
-                <Progress
-                    value={storageLoading || !storageData ? 0 : ratio * 100}
-                    indicatorClassName={getStorageUsageColor(storageLoading || !storageData ? 0 : ratio)}
-                    className="h-1.5"
-                />
+                <Progress value={ratio * 100} indicatorClassName={getStorageUsageColor(ratio)} className="h-1.5" />
             </div>
 
             <div

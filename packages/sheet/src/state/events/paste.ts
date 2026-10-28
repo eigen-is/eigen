@@ -1057,10 +1057,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             }
         }
 
-        if (ctx.hooks.beforePaste?.(ctx.selections, txtdata) === false) {
-            return;
-        }
-
         if (
             txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
             ctx.copyState?.copyRange != null &&
@@ -1324,10 +1320,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 export function handlePasteByClick(ctx: Context, clipboardData: string, triggerType?: string) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
-
-    if (ctx.hooks.beforePaste?.(ctx.selections, clipboardData) === false) {
-        return;
-    }
 
     // If we have an internal copy/cut save, use that
     if (ctx.copyState?.copyRange != null && ctx.copyState.copyRange.length > 0) {

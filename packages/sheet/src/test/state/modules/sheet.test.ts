@@ -68,21 +68,12 @@ describe('changeSheet', () => {
         expect(ctx.currentSheetId).toBe('id_1');
     });
 
-    test('a forced switch skips the veto hook', () => {
-        const ctx = twoSheetContext();
-        ctx.hooks = { beforeActivateSheet: () => false };
-        changeSheet(ctx, 'id_2');
-        expect(ctx.currentSheetId).toBe('id_1');
-        changeSheet(ctx, 'id_2', true);
-        expect(ctx.currentSheetId).toBe('id_2');
-    });
-
     test('closes the cell editor and any formula range selection', () => {
         const ctx = twoSheetContext();
         ctx.editingCellPosition = [1, 1];
         ctx.formulaCache.rangestart = true;
         ctx.formulaRangeSelect = { rangeIndex: 0, left: 0, top: 0, width: 10, height: 10 };
-        changeSheet(ctx, 'id_2', true);
+        changeSheet(ctx, 'id_2');
         expect(ctx.editingCellPosition).toEqual([]);
         expect(ctx.formulaCache.rangestart).toBe(false);
         expect(ctx.formulaRangeSelect).toBeUndefined();
@@ -134,7 +125,6 @@ describe('leaving a sheet that goes away', () => {
         ctx.scrollTop = 500;
         changeSheet(ctx, 'd');
         changeSheet(ctx, 'a');
-        ctx.hooks = { beforeActivateSheet: () => false };
         hideSheet(ctx, 'a');
         expect(ctx.sheets[0].hide).toBe(1);
         expect(ctx.currentSheetId).toBe('b');
@@ -152,8 +142,7 @@ describe('leaving a sheet that goes away', () => {
 
     test('deleting the current sheet switches to the first visible sheet in tab order', () => {
         const ctx = tabOrderContext();
-        ctx.hooks = { beforeActivateSheet: () => false };
-        changeSheet(ctx, 'd', true);
+        changeSheet(ctx, 'd');
         deleteSheet(ctx, 'd');
         expect(ctx.currentSheetId).toBe('b');
         expect(ctx.defaultrowlen).toBe(SHEET_DEFAULT_ROW_HEIGHT);

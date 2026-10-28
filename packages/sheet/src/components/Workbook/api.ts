@@ -6,7 +6,6 @@ import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@works
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import type { Box, ZOp } from '@workspace/lib/vector';
 import { current, produce } from 'immer';
-import { v4 as uuidv4 } from 'uuid';
 import type { SetContextOptions } from '../../context';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
 import { setUpChartRange } from '../../engine/chart-range';
@@ -144,7 +143,7 @@ export function generateAPIs(
         // select the new chart; the recipe runs later, so a dry run on this state tells a viewer or
         // a missing sheet apart, which inserts nothing and returns null.
         insertChart: (box: ChartInsertBox, spec: ChartSpec): string | null => {
-            const id = uuidv4();
+            const id = crypto.randomUUID();
             const recipe = (draftCtx: Context) => insertChart(draftCtx, id, box, spec);
             if (produce(context, recipe) === context) return null;
             setContext(recipe);

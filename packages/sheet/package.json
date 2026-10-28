@@ -23,12 +23,10 @@
     "immer": "^9.0.21",
     "numeral": "^2.0.6",
     "numfmt": "^3.2.6",
-    "tiny-emitter": "^2.1.0",
-    "uuid": "^9.0.1"
+    "tiny-emitter": "^2.1.0"
   },
   "devDependencies": {
     "@types/numeral": "^2.0.5",
-    "@types/uuid": "^9.0.8",
     "happy-dom": "^20.14.6"
   },
   "peerDependencies": {

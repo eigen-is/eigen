@@ -4,7 +4,6 @@
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import { isNil, times } from 'es-toolkit/compat';
-import { v4 as uuidv4 } from 'uuid';
 import { MAX_SHEET_NAME_LENGTH } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
@@ -12,7 +11,6 @@ import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
-import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex, sheetOrder } from '../utils';
 import { cancelNormalSelected } from './cell';
@@ -25,12 +23,7 @@ export function storeSheetSelections(ctx: Context) {
     file.selections = ctx.selections;
 }
 
-export function changeSheet(
-    ctx: Context,
-    id: string,
-    // The current sheet is going away (deleted, hidden, undone): no veto.
-    force = false,
-) {
+export function changeSheet(ctx: Context, id: string) {
     if (id === ctx.currentSheetId) {
         return;
     }
@@ -39,10 +32,6 @@ export function changeSheet(
     if (idx == null) return;
     const file = ctx.sheets[idx];
     if (file.hide === 1) return;
-
-    if (!force && ctx.hooks.beforeActivateSheet?.(id) === false) {
-        return;
-    }
 
     storeSheetSelections(ctx);
     ctx.sheetScrollRecord[ctx.currentSheetId] = {
@@ -62,19 +51,13 @@ export function changeSheet(
     ctx.selections = file.selections;
     ctx.formulaRangeSelections = [];
     applySheetView(ctx);
-
-    if (ctx.hooks.afterActivateSheet) {
-        setTimeout(() => {
-            ctx.hooks.afterActivateSheet?.(id);
-        });
-    }
 }
 
 // False when no other visible sheet is left to land on.
 export function leaveCurrentSheet(ctx: Context, excludeId?: string) {
     const next = firstVisibleSheetId(ctx, excludeId);
     if (next == null) return false;
-    changeSheet(ctx, next, true);
+    changeSheet(ctx, next);
     return true;
 }
 
@@ -100,7 +83,6 @@ export function applySheetView(ctx: Context) {
 
 export function addSheet(
     ctx: Context,
-    settings?: Required<Settings>,
     // A copy or a peer's add names the new sheet's id, and the add then stays on the current sheet.
     newSheetID: string | undefined = undefined,
     isPivotTable = false,
@@ -114,7 +96,7 @@ export function addSheet(
     }
     const order = ctx.sheets.length;
     // The add switches to the sheet it adds, so a sheet that comes with an id keeps it.
-    const id = newSheetID ?? sheetData?.id ?? settings?.generateSheetId() ?? uuidv4();
+    const id = newSheetID ?? sheetData?.id ?? crypto.randomUUID();
     const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable);
     if (!isNil(sheetData)) delete sheetData.data;
     const sheetconfig: Sheet = isNil(sheetData)
@@ -132,10 +114,6 @@ export function addSheet(
         : sheetData;
     normalizeSheetConfig(sheetconfig);
     if (sheetName !== undefined) sheetconfig.name = sheetName;
-    if (ctx.hooks.beforeAddSheet?.(sheetconfig) === false) {
-        return;
-    }
-    // Only an add that goes ahead moves the other sheets along.
     if (!isNil(sheetData)) {
         const insertAt = sheetOrder(sheetData);
         for (const sheet of ctx.sheets) {
@@ -148,12 +126,6 @@ export function addSheet(
 
     if (!newSheetID) {
         changeSheet(ctx, id);
-    }
-
-    if (ctx.hooks.afterAddSheet) {
-        setTimeout(() => {
-            ctx.hooks.afterAddSheet?.(sheetconfig);
-        });
     }
 }
 
@@ -196,10 +168,6 @@ export function deleteSheet(
         return;
     }
 
-    if (ctx.hooks.beforeDeleteSheet?.(id) === false) {
-        return;
-    }
-
     const deletedOrder = sheetOrder(ctx.sheets[arrIndex]);
     ctx.sheets = ctx.sheets.map((sheet) => {
         const order = sheetOrder(sheet);
@@ -209,12 +177,6 @@ export function deleteSheet(
 
     ctx.sheets.splice(arrIndex, 1);
     if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
-
-    if (ctx.hooks.afterDeleteSheet) {
-        setTimeout(() => {
-            ctx.hooks.afterDeleteSheet?.(id);
-        });
-    }
 }
 
 export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
@@ -226,10 +188,6 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     }
     const oldtxt = editable.dataset.oldText || '';
     const txt = editable.innerText;
-
-    if (ctx.hooks.beforeUpdateSheetName?.(ctx.currentSheetId, oldtxt, txt) === false) {
-        return;
-    }
 
     if (txt.length === 0) {
         editable.innerText = oldtxt;
@@ -256,12 +214,6 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     }
 
     ctx.sheets[index].name = txt;
-
-    if (ctx.hooks.afterUpdateSheetName) {
-        setTimeout(() => {
-            ctx.hooks.afterUpdateSheetName?.(ctx.currentSheetId, oldtxt, txt);
-        });
-    }
 }
 
 export function expandRowsAndColumns(data: CellMatrix, rowsToAdd: number, columnsToAdd: number) {

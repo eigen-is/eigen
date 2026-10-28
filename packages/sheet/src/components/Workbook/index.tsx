@@ -24,7 +24,6 @@ import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cloneDeep, isEqual } from 'es-toolkit/compat';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import type { RefValues, SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
@@ -358,9 +357,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         // !sheet.data || length === 0), so their frozen contents are never mutated.
                         draftCtx.sheets = originalData.map((sheet) => ({
                             ...sheet,
-                            id: sheet.id ?? mergedSettings.generateSheetId(),
+                            id: sheet.id ?? crypto.randomUUID(),
                         }));
-                        ensureSheetIndex(draftCtx.sheets, mergedSettings.generateSheetId);
+                        ensureSheetIndex(draftCtx.sheets);
                         for (const [index, sheet] of draftCtx.sheets.entries()) {
                             if (!sheet.data || sheet.data.length === 0) {
                                 initSheetData(draftCtx, index, sheet);
@@ -383,7 +382,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     }
                     draftCtx.allowEdit = mergedSettings.allowEdit;
                     draftCtx.hooks = mergedSettings.hooks;
-                    draftCtx.fontList = mergedSettings.fontList;
                     if (!draftCtx.currentSheetId) {
                         initSheetIndex(draftCtx);
                     }
@@ -432,13 +430,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             mergedSettings.devicePixelRatio,
             mergedSettings.allowEdit,
             mergedSettings.hooks,
-            mergedSettings.generateSheetId,
             setContextWithProduce,
             mergedSettings.rowHeaderWidth,
             mergedSettings.columnHeaderHeight,
             mergedSettings.addRows,
             mergedSettings.currency,
-            mergedSettings.fontList,
         ]);
 
         const onKeyDown = useCallback(
@@ -627,7 +623,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                             ? copySheetChartSpec(copied.chart)
                                             : pastedChartFields(parts, newSheetChartSpecParts);
                                         if (!fields) continue;
-                                        pasteChart(draftCtx, uuidv4(), fields, { width, height }, look);
+                                        pasteChart(draftCtx, crypto.randomUUID(), fields, { width, height }, look);
                                     }
                                 });
                             }
