@@ -6,7 +6,7 @@ category: Editing
 tags: [slides, shapes, arrows, lines, drawing]
 related: [slides/insert-content, slides/style-objects, slides/arrange-and-align]
 order: 45
-updated: 2026-09-29
+updated: 2026-10-28
 ---
 
 The middle of the toolbar holds the drawing tools. Use them to place shapes, draw freehand, add arrows and lines, and connect an arrow to a shape so it follows when you move things around. You need editor access to draw. If you can only view the presentation, the tools are not shown.
@@ -52,6 +52,10 @@ On a narrow window the tool cluster folds into the menus. Find the shapes under 
 To place several shapes in a row without reaching for the tool each time, turn on **Keep selected tool** in the **Edit** menu (shortcut **Q**). The tool then stays active until you switch to another one. **Draw** and the **Eraser** always stay active this way.
 
 To style a shape after placing it, open the properties panel on the right. See [Style objects on a slide](/support/slides/style-objects) for fill, stroke, corners, and the sketch look.
+
+## Type in a shape
+
+A rectangle, diamond, or ellipse can hold text. Double-click the shape, or select it and press **Enter**, and type. The text starts in the middle of the shape, and goes with the shape when you move, rotate, copy, or delete it. When you resize the shape, the text wraps again at the same size. A shape does not grow to fit its text: text that does not fit spills out past its edge. Press **Escape** or click outside to finish. See [Insert text and images](/support/slides/insert-content) for formatting.
 
 ## Draw an arrow or a line
 

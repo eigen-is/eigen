@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, text, images, charts, objects, canvas]
 related: [slides/get-started, slides/add-slides, slides/style-objects, slides/draw-shapes-and-arrows]
 order: 40
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 You build slides by placing text boxes, images, and charts on the canvas. They work the same way: add one from the toolbar, then move, resize, and adjust it from the properties panel on the right.
@@ -19,7 +19,9 @@ You need editor access to add or change content. If you can only view the presen
 3. Click once on the slide to drop a text box, or drag to draw one at the size you want.
 4. Type your text, then click outside the box when you are done.
 
-While you are editing, a small formatting toolbar floats above the text for basics like **Bold** and **Italic**. When the text box is selected but not in edit mode, the properties panel on the right holds the full set of options: font, size, weight, color, alignment, letter spacing, and line height.
+While you are editing, a small formatting toolbar floats above the text for basics like **Bold** and **Italic**. When the text box is selected but not in edit mode, the properties panel on the right holds the full set of options: font, size, color, **Bold**, **Italic**, **Underline**, and **Strikethrough**, alignment, letter spacing, and line height.
+
+A rectangle, diamond, or ellipse holds text too. Double-click it, or select it and press **Enter**, and type. A text box grows to fit its text. A shape keeps its size, and text that does not fit spills out past its edge.
 
 ## Add an image
 

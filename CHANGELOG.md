@@ -28,6 +28,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **What a download left out** — after a download, or a print from Docs, a message counts what the file left out or drew simpler, and says when part of it couldn't be read
 - **Preferences in Space** — a new page for the theme (Light, Dark or System) and Celebrations
 - **Celebrations** — now and then, ticking the last box of a checklist on a Stickies card or a comment card bursts confetti
+- **Text in shapes** — in Vector and Slides, double-click a rectangle, diamond or ellipse, or select it and press Enter, to type in it. The text moves, rotates, copies and deletes with the shape, and wraps again when you resize it. A shape does not grow, so text that does not fit spills out past its edge
 
 ### Changed
 
@@ -39,6 +40,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Decimals** — Docs margins show two decimals, such as 2.00 cm. Number fields in Slides and Vector show at most two, and line height and letter spacing at least one, such as 1.0
 - **Shortcuts in the Sheets menus** — **Edit** shows the shortcut of Undo, Redo, Cut, Copy, Paste, Find and Find and replace, and **Format → Text** shows it for Bold, Italic and Underline
 - **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width. A web page download keeps more while all its rows fit
+- **Shapes in PowerPoint files** — a shape with text imports as one shape that holds its text, and exports as one shape. A text box or a title still imports as a text box, and text on a line, an arrow or turned text still comes as a box on top
 - **Forwarding email** — a forward brings the original's attachments, inline pictures too. Remove one with the **X** on its chip
 - **Contacts** — the list fills the page until you open a contact. A link to a deleted contact opens to **Contact not found**
 - **Teams in Admin** — teams get a list page, like users. To add people, select them on the **Users** page, right-click and choose **Add to team…**, which replaces dragging them onto a team

@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, styling, fill, stroke, colors, text]
 related: [vector/draw-shapes-and-text, vector/connect-with-arrows, vector/arrange-and-align]
 order: 50
-updated: 2026-10-23
+updated: 2026-10-28
 ---
 
 Select an object in a drawing and the panel on the right fills with its style controls. The sections change to match what you picked: a shape has a fill, an arrow does not, text has its own typography rows. This page lists every section, in the order it appears, and what each control does.
@@ -26,7 +26,7 @@ Position, size, and rotation. Shown for any selection.
 
 ## Text
 
-Shown only for text objects. It styles the text itself. The box behind the text uses the **Fill** and **Stroke** sections below.
+Shown for text boxes and for the shapes that hold text: rectangles, diamonds, ellipses, and closed freeform shapes from an imported file. It styles the text itself. The box or shape behind the text uses the **Fill** and **Stroke** sections below.
 
 | Control | What it does |
 |---|---|
@@ -39,13 +39,13 @@ Shown only for text objects. It styles the text itself. The box behind the text 
 
 ## Spacing
 
-Shown with the **Text** section, for text objects.
+Shown with the **Text** section.
 
 | Control | What it does |
 |---|---|
 | **Letter** | Letter spacing in pixels |
 | **Line** | Line height |
-| **Padding** | The gap between the text and the edge of its box |
+| **Padding** | The gap between the text and the edge of its box or shape |
 
 ## Image
 
@@ -110,7 +110,7 @@ Sections show only where they mean something for the object you picked.
 | **Transform**, **Stroke**, **Sketch**, **Appearance** | Every object |
 | **Fill** | Shapes, text, and charts, plus a closed line or drawing |
 | **Labels** | Charts |
-| **Text**, **Spacing** | Text |
+| **Text**, **Spacing** | Text boxes, rectangles, diamonds, ellipses, and closed freeform shapes from an imported file |
 | **Image** | Images |
 | **Shape** (**Corners**) | Rectangles, diamonds, text, and images |
 | **Shape** (**Edges**) | Lines |
