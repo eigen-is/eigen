@@ -1,4 +1,4 @@
-// shadcn's Badge: a small rounded label, such as a status or a count, in a few colour variants.
+// shadcn's Badge: a small rounded label, such as a status or a count, in a few color variants.
 // asChild renders the badge's look on its child instead, such as a link.
 
 import { cn } from '@workspace/ui/lib/utils';

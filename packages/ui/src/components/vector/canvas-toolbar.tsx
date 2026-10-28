@@ -1,7 +1,7 @@
-// The toolbar both canvas apps mount: File + Edit menus, the Insert menu, the shape-tool cluster and
-// the share/comments/activity cluster. The apps differ only in their File-menu identity (export
-// formats, the "New …" row) and in the deck's extra actions, which arrive as slots — so the tool
-// cluster, the undo wiring and the compact-breakpoint rule cannot drift between them.
+// The toolbar a canvas app mounts, such as Vector's or Slides': the File and Edit menus, the Insert menu, the
+// shape tools, and the share, comments and activity buttons. The apps differ only in their File menu, such as
+// its export formats and its New row, and in the deck's extra actions, which arrive as slots. So the tools, the
+// undo wiring and the compact layout's breakpoint cannot drift apart between them.
 
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { useIsCompactToolbar } from '@workspace/lib/media';

@@ -1,4 +1,5 @@
 // Space's Change password page, which shows the password form and returns to Space's start page when it is done.
+// The form checks the fields, and useChangePassword sends the change to the server.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useChangePassword } from '@workspace/lib/auth';

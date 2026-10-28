@@ -1,3 +1,8 @@
+// CanvasEditor, the live canvas a host mounts, such as Vector's infinite drawing or one Slides page. It draws a layer
+// per element and runs every gesture on them: pan and zoom, drag-create, select, move, the transform grips, text
+// editing, paste and drop, and the keyboard. A gesture previews in local state and writes one Yjs transaction when it
+// ends, so one gesture is one undo step.
+
 import {
     isPendingMediaName,
     useCopyToMediaFolder,
@@ -60,7 +65,7 @@ import { ImageIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
-import { useDialogOpen } from '../../hooks/use-dialog-open';
+import { useDialogOpen, useMenuOpen } from '../../hooks/use-dialog-open';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
@@ -492,10 +497,12 @@ export function CanvasEditor({
     // off while ANY text surface is open — the textarea's native undo/typing owns keys in-session, and
     // the lib's ignoreInputs default does not cover a ProseMirror contenteditable, so a tool letter
     // would otherwise be swallowed as a keystroke inside the in-place editor. An open dialog stands the
-    // keymap down too, or Delete on its button would delete the selection behind it.
+    // keymap down too, or Delete on its button would delete the selection behind it. So does an open
+    // menu, whose arrow keys would otherwise also nudge the selection.
     const dialogOpen = useDialogOpen();
+    const menuOpen = useMenuOpen();
     useCanvasKeyboard({
-        enabled: canEdit && !textEditing && !dialogOpen,
+        enabled: canEdit && !textEditing && !dialogOpen && !menuOpen,
         elements: visibleElements,
         selectedIds,
         setTool,
@@ -572,9 +579,10 @@ export function CanvasEditor({
     escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked, dialogOpen };
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            // A dialog or a palette input owns its own Escape (close, clear); no gesture can be active
-            // while one is up, so skipping the whole handler is safe.
-            if (e.key !== 'Escape' || isTypingTarget() || escRef.current.dialogOpen) return;
+            // A dialog, a menu or a palette input owns its own Escape (close, clear). No gesture can be
+            // active while one is up, so skipping the whole handler is safe. A menu closes in the capture
+            // phase and is gone before this runs, but Radix marks the Escape it handled as prevented.
+            if (e.key !== 'Escape' || e.defaultPrevented || isTypingTarget() || escRef.current.dialogOpen) return;
             const g = gestureRef.current;
             const s = escRef.current;
             if (g) {
@@ -1096,9 +1104,9 @@ export function CanvasEditor({
         if (touch.onPointerDown(e)) return;
         // A press that closes an open menu, such as File, only closes it.
         if (closesMenu) return;
-        // A pointerdown that reaches the CONTAINER is outside the editor (the editor stops its own), so
-        // it ends the session; the session's viewport freeze is lifted by its effect on the next render,
-        // so this click only closes — the following one selects or draws.
+        // The open text editor stops its own presses, so a press that reaches the container lands outside
+        // it and ends the session. The session's effect lifts the viewport freeze on the next render. So
+        // this click only closes the editor, and the next one selects or draws.
         if (richTextEditRef.current) closeRichText();
         // The surface is select-none, so a run selected elsewhere would survive this click and keep
         // owning ⌘C/⌘X instead of the element it selects.

@@ -100,7 +100,8 @@ export function MemberCommandList({
             {showSearch && (
                 <CommandInput
                     placeholder="Find person…"
-                    // The caret's keys: a menu around the list would close its submenu or move to the next bar menu.
+                    // ArrowLeft and ArrowRight move the caret in the field. Let them through and a menu around the
+                    // list would close its submenu or move to the next bar menu.
                     onKeyDown={(event) => {
                         if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') event.stopPropagation();
                     }}

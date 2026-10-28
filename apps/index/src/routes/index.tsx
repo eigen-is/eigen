@@ -130,7 +130,7 @@ export function HomeComponent() {
                 <Card className="w-full max-w-md">
                     <CardHeader>
                         <CardTitle>
-                            Join the Waitlist <small>(Exclusive Access Only)</small>
+                            Join the waitlist <small>(exclusive access only)</small>
                         </CardTitle>
                     </CardHeader>
                     <form onSubmit={handleWaitlistSubmit}>

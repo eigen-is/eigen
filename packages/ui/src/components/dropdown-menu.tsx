@@ -42,7 +42,7 @@ const MobileMenuContext = createContext<MobileMenuState | null>(null);
 const ROOT_PAGE = { id: null };
 const PageContext = createContext<{ id: string | null }>(ROOT_PAGE);
 
-// A sub's id + the label lifted from its trigger, shared by its trigger and its content.
+// A submenu's id and the label read from its trigger, which its trigger and its content share.
 const SubContext = createContext<{ id: string; label: React.ReactNode } | null>(null);
 
 // The Radix parts a row renders. Radix gives each kind of menu its own contexts, so a DropdownMenu row inside a Menubar
@@ -115,8 +115,8 @@ function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrim
     const isMobile = useIsMobile();
     const { value, reset } = useMobileMenu();
 
-    // A controlled root can close via an external open→false flip that never fires onOpenChange
-    // (e.g. context menus whose plain-button rows call close()); reset so the next open is root.
+    // A controlled menu can close when its owner sets open to false, which fires no onOpenChange. A context
+    // menu whose plain button rows call close() does that. Reset, so the next open starts at the root page.
     useEffect(() => {
         if (props.open === false) reset();
     }, [props.open]);

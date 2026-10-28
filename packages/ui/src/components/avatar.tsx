@@ -1,6 +1,6 @@
 // shadcn's Avatar on Radix: a round picture with a fallback, such as a user's initials while their
 // photo loads or when it fails. AvatarIcon is our own part, for an avatar that shows an icon instead.
-// The user, contact and member components build their avatars from these parts.
+// Components such as the user and member avatars build theirs from these parts.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { Avatar as AvatarPrimitive } from 'radix-ui';

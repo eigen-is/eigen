@@ -1,5 +1,5 @@
 // The form that creates or edits a contact: names, emails, phone numbers, addresses, labels, birthday and notes.
-// The new-contact and edit routes show it and save what it returns.
+// Routes such as the new-contact route show it and save what it returns.
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLabels } from '@workspace/lib/contacts';

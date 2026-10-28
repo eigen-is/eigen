@@ -19,7 +19,7 @@ import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
-const ORG_NAME_PLACEHOLDER = 'My Organization';
+const ORG_NAME_PLACEHOLDER = 'My organization';
 
 export function SetupWizard({ status, setupToken }: { status: SetupStatus; setupToken: string | undefined }) {
     if (!setupToken) {

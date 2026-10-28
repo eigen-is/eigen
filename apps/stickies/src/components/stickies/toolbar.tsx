@@ -48,7 +48,6 @@ export function Toolbar({
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
     const isCompact = useIsCompactToolbar();
-    // The bar's open menu, held here so an assignee, status or clear pick in Filter can close it; a color toggle keeps it open.
     const [openMenu, setOpenMenu] = useState('');
 
     return (

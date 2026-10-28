@@ -1,4 +1,5 @@
 // The blog's overview page on the public site: the newest post large at the top, and the other posts below it.
+// The list comes from the blog's content files, and each of the other posts links to its own page.
 
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { formatDateOnly } from '@workspace/lib/date';

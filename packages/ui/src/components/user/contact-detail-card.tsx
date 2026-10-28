@@ -1,5 +1,5 @@
-// One contact shown as a card: name, company, emails, phone numbers, addresses, birthday and notes. Contacts
-// shows it for the selected contact, and the file preview shows it for a .vcf file.
+// One contact shown as a card: name, company, emails, phone numbers, addresses, birthday and notes. Views such as
+// Contacts' detail and the .vcf preview show it.
 
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatDateOnly } from '@workspace/lib/date';

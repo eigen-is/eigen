@@ -1,3 +1,8 @@
+// The Calendar app's queries and mutations: the owner's calendars and events, the calendars shared with them,
+// RSVPs and free/busy. A mutation refetches what it changed through the calendar keys' invalidators, and a
+// failure toasts through onMutationError. Helpers such as useCalendarOptions list the owner's own calendars and
+// the shared ones they may write to, for a picker.
+
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';

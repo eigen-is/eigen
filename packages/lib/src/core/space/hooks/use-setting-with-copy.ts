@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { spaceApi } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import type { UserSettings } from '@workspace/lib/types/settings';
+import { toMerged } from 'es-toolkit';
 import { useEffect, useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateSpaceSettings, spaceKeys } from './keys';
@@ -57,10 +58,11 @@ export function useSettingWithCopy<T>(setting: SettingWithCopy<T>): {
             writeCopy(copyKey, setting.serialize(next));
             await queryClient.cancelQueries({ queryKey: spaceKeys.settings(ownerId) });
             const prev = queryClient.getQueryData<UserSettings>(spaceKeys.settings(ownerId));
-            queryClient.setQueryData<UserSettings>(spaceKeys.settings(ownerId), (old) => ({
-                ...old,
-                ...setting.patch(next),
-            }));
+            // The server deep-merges a change into the settings, so this does too: a patch that sets one
+            // field of a group, such as the text width in docsView, keeps the group's other fields.
+            queryClient.setQueryData<UserSettings>(spaceKeys.settings(ownerId), (old) =>
+                toMerged(old ?? {}, setting.patch(next)),
+            );
             return { prev, prevCopy };
         },
         onError: (error, _next, context) => {

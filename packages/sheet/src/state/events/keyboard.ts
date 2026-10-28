@@ -5,6 +5,7 @@
 
 import type { Hotkey } from '@tanstack/react-hotkeys';
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
+import { REDO_ALT_HOTKEY, REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/constants/hotkeys';
 import { cloneDeep, isEmpty, isNil } from 'es-toolkit/compat';
 import { cellValue } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
@@ -23,11 +24,12 @@ import { getNowDateTime, getSheetIndex, isAllowEdit } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy } from './copy';
 
-// Mod is ⌘ on a Mac and Ctrl elsewhere. A menu row shows its shortcut with formatForDisplay.
+// Mod is ⌘ on a Mac and Ctrl elsewhere. A menu row shows its shortcut with formatForDisplay. Undo and redo are the
+// keys of every other editor.
 export const SHEET_HOTKEYS = {
-    undo: 'Mod+Z',
-    redo: 'Mod+Shift+Z',
-    redoAlt: 'Mod+Y',
+    undo: UNDO_HOTKEY,
+    redo: REDO_HOTKEY,
+    redoAlt: REDO_ALT_HOTKEY,
     cut: 'Mod+X',
     copy: 'Mod+C',
     paste: 'Mod+V',

@@ -1,4 +1,5 @@
 // The sign-up page a person reaches from an invite link. It checks the invite and creates their account.
+// The username and password are checked here first, and a new account lands on Space's start page.
 
 import { createFileRoute } from '@tanstack/react-router';
 import { useInviteRegister, useValidateInviteToken } from '@workspace/lib/auth';
