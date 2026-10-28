@@ -73,6 +73,7 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
             // The box fills the shape, but the text inside it may not. A press on the rest of the box would move
             // the focus to the canvas and end the typing, so it puts the caret at the end of the text instead.
             onMouseDown={(e) => {
+                if (e.button !== 0) return;
                 const editor = editorRef.current;
                 const text = editor?.view.dom;
                 if (editor && text && e.target instanceof Node && e.target !== text && e.target.contains(text)) {

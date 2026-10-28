@@ -96,7 +96,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Last active in Admin** — a mail, calendar or file client that signs in with an account's password no longer counts, so it shows when the person last used Eigen in a browser
 - **Picking a theme** — the theme changes the moment you pick it, without a **Settings saved** message
 - **Deleting a team in Admin** — removes its drives, files and calendar from the server. The default team has no delete button. A team being backed up or restored can't be deleted, and the dialog stays open with the reason
-- **Backups on a shared server** — `data/`, backups, `./eigen`'s log and what a backup, check or restore unpacks are readable by Eigen's own user alone, 0.4.0's home backups too from the next start. A restore of a user or team being deleted is refused
+- **Backups on a shared server** — `data/`, backups, `./eigen`'s log and what a backup, check or restore unpacks are readable by Eigen's own user alone, 0.4.0's home backups too from the next start. `backups/` stays readable. A user or team being deleted can't be restored
 - **Updates on the main channel** — an update to a new build of `main` makes a Full backup when a change not released yet is marked as needing one
 - **Restore and rollback** — when one would set aside the folder of a user or team made since the backup, it lists them and asks again before it stops Eigen
 - **Setup copies of the accounts** — `./eigen status` lists each copy of the login database that setup kept, and how to delete it

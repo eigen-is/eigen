@@ -51,6 +51,7 @@ export function getStagingRoot(): string {
 
 // The chmod closes a staging root that was made with the umask's mode, such as an older build's.
 export function getBackupStagingDir(jobId: string): string {
+    // Makes backups/ first with its own mode, or the recursive mkdir below would make it 0700 too.
     getBackupsDir();
     const root = getStagingRoot();
     fs.mkdirSync(root, { recursive: true, mode: STAGING_MODE });
