@@ -5,9 +5,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { generateId } from '@better-auth/core/utils/id';
-import { hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
-import { account, user as userTable, verification } from '../../../auth-schema';
+import { user as userTable, verification } from '../../../auth-schema';
 import { getDomain, getOrgName, isInternalAddress } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
@@ -26,36 +25,27 @@ function generateOtp(): string {
     return String(num % 1_000_000).padStart(6, '0');
 }
 
-// Writes a password derived from the scope and the email onto the account, then signs in with it and returns
-// the response that carries the session cookie. The password is written on every call, so one that was changed
-// heals, and one visitor cannot lock out the next.
+// Writes a password derived from the scope and the email onto the credential account, then signs in with it and
+// returns the response that carries the session cookie. The password is written on every call, so one that was
+// changed heals, and one visitor cannot lock out the next.
 export async function signInWithScopedPassword(
     scope: 'guest' | 'demo',
     userId: string,
     email: string,
 ): Promise<Response> {
-    const db = getAuthDrizzleDb();
     // Nobody sees it: it only lets auth.api.signInEmail sign the cookie. Scoped so the two flows never collide.
     const password = new Bun.CryptoHasher('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
-    const hashedPassword = await hashPassword(password);
-    const existingAccount = db.select().from(account).where(eq(account.userId, userId)).get();
-    if (existingAccount) {
-        db.update(account)
-            .set({ password: hashedPassword, updatedAt: new Date() })
-            .where(eq(account.id, existingAccount.id))
-            .run();
+    const context = await auth.$context;
+    const hash = await context.password.hash(password);
+    if (await context.internalAdapter.findCredentialAccount(userId)) {
+        await context.internalAdapter.updatePassword(userId, hash);
     } else {
-        db.insert(account)
-            .values({
-                id: generateId(),
-                accountId: userId,
-                providerId: 'credential',
-                userId,
-                password: hashedPassword,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            })
-            .run();
+        await context.internalAdapter.createAccount({
+            userId,
+            providerId: 'credential',
+            accountId: userId,
+            password: hash,
+        });
     }
     return auth.api.signInEmail({ body: { email, password }, asResponse: true });
 }

@@ -28,6 +28,36 @@ describe('Guest Auth', () => {
         expect((await signIn('demo')).status).toBe(401);
     });
 
+    test("a scoped sign-in writes the credential account and leaves another provider's account alone", async () => {
+        const email = `scoped-provider-${randomUUID()}@example.com`;
+        const created = await auth.api.createUser({ body: { email, name: 'Scoped Provider', role: 'user' } });
+        const context = await auth.$context;
+        // The other provider's row comes first, so a lookup by user alone finds it before the credential row.
+        await context.internalAdapter.createAccount({
+            userId: created.user.id,
+            providerId: 'oidc',
+            accountId: `oidc-${randomUUID()}`,
+        });
+        await context.internalAdapter.createAccount({
+            userId: created.user.id,
+            providerId: 'credential',
+            accountId: created.user.id,
+            password: await context.password.hash(randomUUID()),
+        });
+
+        expect((await signInWithScopedPassword('guest', created.user.id, email)).status).toBe(200);
+        const accounts = await context.internalAdapter.findAccounts(created.user.id);
+        expect(accounts.find((account) => account.providerId === 'oidc')?.password).toBeFalsy();
+    });
+
+    test('a scoped sign-in creates the credential account when there is none', async () => {
+        const email = `scoped-none-${randomUUID()}@example.com`;
+        const created = await auth.api.createUser({ body: { email, name: 'Scoped None', role: 'user' } });
+
+        expect((await signInWithScopedPassword('demo', created.user.id, email)).status).toBe(200);
+        expect(await (await auth.$context).internalAdapter.findCredentialAccount(created.user.id)).not.toBeNull();
+    });
+
     let ctx: TestCtx;
     let aliceRootId: string;
 
