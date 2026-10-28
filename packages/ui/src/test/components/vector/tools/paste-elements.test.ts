@@ -132,23 +132,6 @@ describe('planElementsPaste', () => {
 
 // ⌘C in a deck, ⌘V in a drawing, and back: the wire, the reader and the planner carry a size as stored, so a pptx's
 // unsnapped 117.33… px comes home to the bit, whatever each app shows of it.
-describe('a forged shape record', () => {
-    // Any web page can write our MIME, so a rectangle's `html` is as hostile as a text box's.
-    test("a rectangle's html is sanitized before it reaches the doc", () => {
-        const forged: VectorElement = {
-            ...BASE,
-            ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),
-            id: 'r1',
-            type: 'rectangle',
-            index: 'a0',
-            seed: 1,
-            html: '<p>label</p><script>alert(1)</script><img src="https://evil.example/x.png">',
-        };
-        const { partials } = planElementsPaste([forged], [], null);
-        expect(partials[0]).toMatchObject({ type: 'rectangle', html: '<p>label</p>' });
-    });
-});
-
 describe('a size copied between a deck and a drawing', () => {
     const SIZE = 117.33333333333334;
 
@@ -172,5 +155,22 @@ describe('a size copied between a deck and a drawing', () => {
         expect(readVectorFromDoc(drawing).elements.map((el) => 'fontSize' in el && el.fontSize)).toEqual([SIZE, SIZE]);
         const back = pasteInto(drawing, SLIDES_STYLE_DEFAULTS);
         expect(readVectorFromDoc(back).elements.map((el) => 'fontSize' in el && el.fontSize)).toEqual([SIZE, SIZE]);
+    });
+});
+
+describe('a forged shape record', () => {
+    // Any web page can write our MIME, so a rectangle's `html` is as hostile as a text box's.
+    test("a rectangle's html is sanitized before it reaches the doc", () => {
+        const forged: VectorElement = {
+            ...BASE,
+            ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),
+            id: 'r1',
+            type: 'rectangle',
+            index: 'a0',
+            seed: 1,
+            html: '<p>label</p><script>alert(1)</script><img src="https://evil.example/x.png">',
+        };
+        const { partials } = planElementsPaste([forged], [], null);
+        expect(partials[0]).toMatchObject({ type: 'rectangle', html: '<p>label</p>' });
     });
 });
