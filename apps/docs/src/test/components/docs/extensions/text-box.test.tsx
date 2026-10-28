@@ -346,3 +346,14 @@ test('Insert › Text box puts an open, empty box in the flow after the caret', 
     expect(session.current?.anchor).toMatchObject({ type: 'textBox', pos: 7 });
     expect(a.state.doc.nodeAt(7)?.attrs).toMatchObject({ layout: 'block', alignment: 'left' });
 });
+
+// The positioned figures measure a box by its view's frame, as they measure an image, to keep it in place on a switch
+// to in front of the text and on a drag.
+test("the box's view holds the frame alone, its content box first inside it", async () => {
+    const { a } = await setup();
+    const dom = a.view.nodeDOM(BOX);
+    const frame = dom instanceof Element ? dom.firstElementChild : null;
+    expect(frame?.classList.contains('figure')).toBe(true);
+    expect(frame?.firstElementChild?.firstElementChild?.classList.contains('text-box')).toBe(true);
+    expect(dom instanceof Element ? dom.querySelector('[data-node-view-content-react]') : 'none').toBeNull();
+});

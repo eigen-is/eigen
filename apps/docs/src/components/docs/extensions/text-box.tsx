@@ -207,11 +207,14 @@ export const TextBox = TextBoxNode.extend<TextBoxOptions>({
             },
         };
         return (props: NodeViewRendererProps) => {
-            const view =
-                'contentComponent' in props.editor && props.editor.contentComponent
-                    ? new TextBoxNodeView(TextBoxView, props, options)
-                    : ReactNodeViewRenderer(TextBoxView, options)(props);
-            if ('innerDecorations' in view && view.dom) registerStoryView(view.dom, view);
+            if (!('contentComponent' in props.editor && props.editor.contentComponent))
+                return ReactNodeViewRenderer(TextBoxView, options)(props);
+            const view = new TextBoxNodeView(TextBoxView, props, options);
+            // ReactNodeView made a content element for a node with content and put it in the view's DOM, where the
+            // frame's geometry, such as the box a figure is measured by, would take it for the box.
+            view.contentDOMElement?.remove();
+            view.contentDOMElement = null;
+            registerStoryView(view.dom, view);
             return view;
         };
     },
