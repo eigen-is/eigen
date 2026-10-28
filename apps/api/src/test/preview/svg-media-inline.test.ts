@@ -306,7 +306,7 @@ describe('export media path (prepareMedia, then sanitizeExportMedia in the trans
 
     // The figure a document names, as its export asks for it.
     const collectFigure = (container: DrivePath, name: string) =>
-        collectExportMedia(mount, container, 'html', [name], new AbortController().signal);
+        collectExportMedia(mount, container, [name], new AbortController().signal);
 
     test('a name-ref svg figure reaches export html as a data: URI', async () => {
         // collectExportMedia runs the real getScreenPreview (inlines) → sanitizeExportMedia (keeps data:

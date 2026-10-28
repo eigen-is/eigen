@@ -29,10 +29,10 @@ export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
 }
 
 // Document media crossing the boundary: prepared on the main thread for an export
-// (Mount I/O + screen previews), extracted from the upload by an import.
+// (Mount I/O and a re-encode from the source), extracted from the upload by an import.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
-// An export's media; only an Office format's raster carries the thumbnail Worker's width and height. Their arms add an
+// An export's media; a raster carries the thumbnail Worker's width and height, the source's. The Office arms add an
 // SVG's size inside the transform process.
 export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 

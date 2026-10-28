@@ -50,7 +50,7 @@ import { windowedSheet } from './window';
 // Image sources by media name: data: URIs for an export, the prepared preview URLs for a preview.
 type MediaUrls = Map<string, string>;
 
-// The pixels each raster decodes to, by media name, read from its header when the export loads its media.
+// The pixels WeasyPrint decodes of each picture, by media name. A JPEG has none, as WeasyPrint embeds it as it is.
 export type MediaPixels = Map<string, number>;
 
 type ContentSize = { width: number; height: number };
@@ -91,12 +91,13 @@ const CELL_BYTES = 50;
 // cost little by their sources alone, but each still writes these bytes.
 const IMAGE_TAG_BYTES = 200;
 
-// The decoded pixels that cost a cell. An export's rasters reach WeasyPrint as their screen previews, WebPs of at most
-// 2560 px a side, and it decodes each whole and writes its pixels into the PDF, so many distinct pictures cost it far
-// more than their bytes say. Distinct 2560 by 1440 previews of real photos took it 0.58 s of CPU each, 60 in 35 s, and
-// flat colour 0.06 s. At 800 pixels a cell such a photo costs 4,608 cells beside the 3,075 of its 115 KB, so the cap
-// holds 32, which take about the 19 s its 2,000 pages take. WeasyPrint decodes a picture once however many tags show
-// it, so its pixels are charged once.
+// The decoded pixels that cost a cell. An export's rasters reach WeasyPrint as PNGs or JPEGs of at most 2560 px a side.
+// It decodes a PNG whole and writes its pixels into the PDF again, so many distinct pictures cost it far more than their
+// bytes say. A 2560 by 1440 PNG of a real photo took it 0.78 s of CPU, 210 ns a pixel. At 800 pixels a cell such a
+// picture costs 4,608 cells beside those of its bytes. The rate was set on WebPs of real photos, 0.58 s each, so that
+// the 32 the cap held took about the 19 s its 2,000 pages take. A JPEG it embeds as it is and decodes nothing, so a
+// JPEG costs its bytes alone: the most pixels a cap of JPEGs can carry, 241 flat 2560 px squares of 39 KB each, took it
+// 1.3 s. WeasyPrint decodes a picture once however many tags show it, so its pixels are charged once.
 const PIXELS_PER_CELL = 800;
 
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.

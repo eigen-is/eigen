@@ -861,18 +861,19 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
-// Both last moved when the text box's font, size, line height and color joined the prose base rule's selector list
-// (`.eigen-prose, .eigen-doc .text-box`) instead of repeating it, the only bytes that changed.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '377cbeee6c018cf9a051e682ee0c6ddf208a66441052e3a9087ae3003d890a7b';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'f9adf729d36d4688ae5e567b96e0fbcf5f3b73ea895423841f1f340c046fc9c8';
+// Both last moved when the golden image went in as the PNG made from its source instead of its WebP preview, the only
+// bytes that changed.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '8fbed4b7dfb11e4a333f84dc977270365c87fd477ad328b60ca7ecea42d544a4';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'bee17594de70f61e713d76e29ae83aecf9743136716d3a827c6dd00da7d8d208';
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
 // libdeflate. It last moved with the wps namespace a text box needs, which every document part declares.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'c3a15846b8e2b9d1a095a816aa9d8bfe25ba59d8a148770401e309767fe7c1fd';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
-// The two exports embed canvas-text.css whole, its comments too, so they last moved with its header comment.
+// The two exports last moved when the golden image went in as the PNG made from its source instead of its WebP
+// preview, the only bytes that changed.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'ecaf8cfcc7d68e1388c6c291039d74a500b894a6bb5bccbe3dd5ffb5c6aab5d6';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '4dcf24f76d0d0d82df636bfcd9f14fd327bf728c0d8840a9fb80f8199b5b1c3b';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '229e652241d88e7bde74d2812d96a8b2645ecb6d1effcb2727b77f8e495da910';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '7934b0860b6f9cc8c9dc43f580cea1972075a8f2033f69e786b31d045da0829f';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.
@@ -1024,7 +1025,7 @@ describe('document transform (eigendoc)', () => {
 
     test('export media crosses the boundary as copies the caller keeps', async () => {
         const { mount, path } = golden;
-        const media = await collectExportMedia(mount, path, 'html', [GOLDEN_MEDIA_NAME], new AbortController().signal);
+        const media = await collectExportMedia(mount, path, [GOLDEN_MEDIA_NAME], new AbortController().signal);
         expect(media).toHaveLength(1);
         expect(media[0].name).toBe(GOLDEN_MEDIA_NAME);
 
@@ -1049,7 +1050,7 @@ describe('document transform (eigendoc)', () => {
         // The child named the figure's media, got a copy, and the bytes came back as a data URI.
         expect(asked).toEqual([[GOLDEN_MEDIA_NAME]]);
         expect(media[0].data.byteLength).toBeGreaterThan(0);
-        expect(Buffer.from(exportBytes(response)).toString('utf-8')).toContain('src="data:image/webp;base64,');
+        expect(Buffer.from(exportBytes(response)).toString('utf-8')).toContain('src="data:image/png;base64,');
     }, 120_000);
 
     test("an SVG figure's own bytes are sanitized as XML inside the Worker", async () => {
@@ -1156,7 +1157,9 @@ describe('document transform (eigendoc)', () => {
         for (let i = 0; i < 8; i++) {
             await seedDocumentMedia(doc.mount, doc.path, `unused-${i}.svg`, unused, 'image/svg+xml');
         }
-        const read = spyOn(previewCache, 'getScreenPreview');
+        // An SVG is read through its preview, a raster re-encoded from its source.
+        const svgs = spyOn(previewCache, 'getScreenPreview');
+        const rasters = spyOn(thumbnails, 'generateImagePreview');
         let names: string[] = [];
         try {
             const { data: html } = await runDocumentExport(
@@ -1164,10 +1167,14 @@ describe('document transform (eigendoc)', () => {
                 doc.mount,
                 doc.path,
             );
-            names = read.mock.calls.map(([, file]) => file.name);
-            expect(html.toString('utf-8')).toContain('src="data:image/webp;base64,');
+            names = [
+                ...svgs.mock.calls.map(([, file]) => file.name),
+                ...rasters.mock.calls.map(([, , fileName]) => fileName),
+            ];
+            expect(html.toString('utf-8')).toContain('src="data:image/png;base64,');
         } finally {
-            read.mockRestore();
+            svgs.mockRestore();
+            rasters.mockRestore();
         }
         expect(names).toEqual(['shown.png']);
     }, 120_000);
@@ -1197,8 +1204,8 @@ describe('document transform (eigendoc)', () => {
         }
     }
 
-    // HTML and PDF send each raster's screen preview, at most 2560 px of WebP, whatever the photo weighs.
-    test('photos past MAX_DECOMPRESSED_BYTES in all export as their previews', async () => {
+    // The cap holds what is sent, at most 2560 px of PNG or JPEG a raster, so only a source past it alone is refused.
+    test('photos past MAX_DECOMPRESSED_BYTES in all export, each made again from its source', async () => {
         const half = MAX_DECOMPRESSED_BYTES / 2 + 1;
         const photos: [string, string, number][] = [
             ['a.png', 'image/png', half],
@@ -1210,7 +1217,7 @@ describe('document transform (eigendoc)', () => {
                 doc.mount,
                 doc.path,
             );
-            expect(html.toString('utf-8').match(/src="data:image\/webp;base64,/g)).toHaveLength(2);
+            expect(html.toString('utf-8').match(/src="data:image\/png;base64,/g)).toHaveLength(2);
         });
     }, 120_000);
 
@@ -1322,12 +1329,12 @@ describe('document transform (eigendoc)', () => {
             },
             {
                 ...EXPORT_OPTIONS,
-                prepareMedia: (names, signal) => collectExportMedia(mount, path, 'docx', names, signal),
+                prepareMedia: (names, signal) => collectExportMedia(mount, path, names, signal),
             },
         );
         const docx = Buffer.from(exportBytes(response));
         const persisted = await readPersistedDoc(mount, path);
-        const media = await collectExportMedia(mount, path, 'docx', [GOLDEN_MEDIA_NAME], new AbortController().signal);
+        const media = await collectExportMedia(mount, path, [GOLDEN_MEDIA_NAME], new AbortController().signal);
         const direct = writeDocx(
             {
                 json: readEigendocFromDoc(persisted),
@@ -1576,7 +1583,7 @@ describe('document transform (eigenslides)', () => {
                 },
                 {
                     ...EXPORT_OPTIONS,
-                    prepareMedia: (names, signal) => collectExportMedia(mount, path, 'html', names, signal),
+                    prepareMedia: (names, signal) => collectExportMedia(mount, path, names, signal),
                 },
             );
             expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });

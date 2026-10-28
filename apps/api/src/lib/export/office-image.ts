@@ -1,5 +1,5 @@
-// The images the docx, pptx and xlsx writers embed: the PNG or JPEG a source becomes, the PNG an SVG falls back to, and
-// the media parts of one package.
+// The pictures an export embeds: the PNG or JPEG every format takes of a raster source, and for the docx, pptx and xlsx
+// writers the PNG an SVG falls back to and the media parts of one package.
 
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { ExportMedia } from '../document/transform/protocol';
@@ -13,10 +13,10 @@ import type { ImageResult, WorkerInput } from '../shared/thumbnail-worker';
 // read inside the transform process, so it never crosses the boundary on ExportMedia.
 export type OfficeMedia = ExportMedia & { png?: ArrayBuffer };
 
-// An Office image's largest side: the raster the main thread re-encodes and the PNG an SVG falls back to.
-export const OFFICE_IMAGE_MAX_SIZE = 2560;
+// An exported picture's largest side: the raster made from a source, and the PNG an SVG falls back to.
+export const EXPORT_IMAGE_MAX_SIZE = 2560;
 
-// The part extension of each type encodeOfficeImage writes, which an Office package embeds as is.
+// The part extension of each type encodeExportImage writes, which an Office package embeds as is.
 const RASTER_TYPES = new Set(['image/png', 'image/jpeg']);
 const RASTER_EXTENSIONS = new Map(
     [...IMAGE_EXTENSION_BY_MIME].filter(([contentType]) => RASTER_TYPES.has(contentType)),
@@ -35,10 +35,11 @@ const PNG_SOURCES = new Set(['image/png', 'image/gif']);
 // How far into a WebP the chunk walk reads.
 export const WEBP_SCAN_BYTES = 64 * 1024;
 
-// An Office image is a PNG or JPEG made from its source, since Word and PowerPoint for the web and Google Docs show no
-// WebP. `encode` is sharpResize, in the thumbnail Worker for a media file and in the transform process for a data:
-// src; its re-encode drops the EXIF, GPS included. `webp` is the start of a WebP source, at least WEBP_SCAN_BYTES of it.
-export async function encodeOfficeImage(
+// An exported picture is a PNG or JPEG made from its source. Word and PowerPoint for the web and Google Docs show no
+// WebP, and WeasyPrint embeds a JPEG's bytes as they are where it decodes a WebP and writes it again as a PNG. `encode`
+// is sharpResize, in the thumbnail Worker for a media file and in the transform process for a data: src; its re-encode
+// drops the EXIF, GPS included. `webp` is the start of a WebP source, at least WEBP_SCAN_BYTES of it.
+export async function encodeExportImage(
     name: string,
     mime: string,
     webp: Buffer | null,
@@ -56,7 +57,7 @@ export async function encodeOfficeImage(
         at += 8 + size + (size & 1);
     }
     const encodeAs = (format: 'png' | 'jpeg') =>
-        encode({ format, maxSize: OFFICE_IMAGE_MAX_SIZE, quality: 80, fit: 'inside' });
+        encode({ format, maxSize: EXPORT_IMAGE_MAX_SIZE, quality: 80, fit: 'inside' });
     let result = await encodeAs(format);
     // JPEG has no alpha: a source that holds one (a VP8X WebP, an AVIF, a PNG stored as JPEG) takes PNG.
     if (result?.hasAlpha && format === 'jpeg') {
@@ -84,7 +85,7 @@ export async function withSvgFallbacks(media: ExportMedia[]): Promise<OfficeMedi
             const image = sharp(svg);
             const { width = 0, height = 0 } = await image.metadata();
             const png = await image
-                .resize(OFFICE_IMAGE_MAX_SIZE, OFFICE_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
+                .resize(EXPORT_IMAGE_MAX_SIZE, EXPORT_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
                 .png()
                 .timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS })
                 .toBuffer();

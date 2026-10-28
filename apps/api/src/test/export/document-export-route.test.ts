@@ -5,6 +5,8 @@ import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive';
 import { serializeFill } from '@workspace/lib/vector';
 import type { MathRow } from '@workspace/math';
 import { writeMathml } from '@workspace/math';
+import type { Sharp } from 'sharp';
+import sharp from 'sharp';
 import { EXPORT_CSP } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
@@ -19,6 +21,7 @@ import {
     seedDocumentMedia,
     seedEigendoc,
 } from '../fixtures/golden-documents';
+import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // Response contract of GET /drive/:ownerId/:mountId/file/:pathId/export/:format for
@@ -103,7 +106,7 @@ describe('Eigendoc export route — response contract', () => {
         // Full document, not the budgeted preview: blocks past the 20-block cap render,
         // media embeds as a data URI, and hostile fixture content stays sanitized.
         expect(html).toContain(GOLDEN_BEYOND_CAP);
-        expect(html).toContain('src="data:image/webp;base64,');
+        expect(html).toContain('src="data:image/png;base64,');
         expect(html).not.toMatch(/<script/i);
     }, 120_000);
 
@@ -149,7 +152,7 @@ describe('Eigenslides export route — response contract', () => {
         // Every slide renders (no 8-slide preview cap), media embeds as a data URI,
         // and the injected script never survives into the download.
         expect(html).toContain(GOLDEN_BEYOND_CAP);
-        expect(html).toContain('data:image/webp;base64,');
+        expect(html).toContain('data:image/png;base64,');
         expect(html).not.toMatch(/<script/i);
         expect(html).toContain('<div class="deck">');
     }, 120_000);
@@ -255,6 +258,67 @@ suite('Document export routes — PDF (WeasyPrint end-to-end)', () => {
             curves += content.match(/ c\n/g)?.length ?? 0;
         }
         expect(curves).toBeGreaterThan(20);
+    }, 120_000);
+
+    // A new doc or sheet showing one picture, printed to PDF: the filter of each image the PDF holds, and how many soft
+    // masks carry an image's alpha.
+    async function printedPicture(type: 'doc' | 'sheets', name: string, mimeType: string, bytes: Buffer) {
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        const created = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${root.id}/create/${type}`,
+            { fileName: `Printed ${type} ${name}` },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const { doc } = await home.drive.getCollabDocument(mountId, created.id);
+        if (type === 'doc') {
+            const figure = { type: 'figure', attrs: { mediaName: name, width: 320 } };
+            seedEigendoc(doc, { type: 'doc', content: [{ type: 'paragraph', content: [figure] }] });
+        } else {
+            const image = { id: 'picture', index: 'a0', x: 10, y: 10, width: 320, height: 200, mediaName: name };
+            writeSheetsToYjs(doc, [{ name: 'One', celldata: [], images: { picture: image } }], { computed: false });
+        }
+        const { mount, path } = await home.drive.resolveFile(mountId, created.id);
+        await seedDocumentMedia(mount, path, name, bytes, mimeType);
+        const res = await exportRequest(created.id, 'pdf');
+        expect(res.status).toBe(200);
+        const pdf = Buffer.from(await res.arrayBuffer()).toString('latin1');
+        const images = [...pdf.matchAll(/\/Subtype \/Image(.*?)>>\s*stream/gs)].map(([, image]) => image);
+        const filterOf = (image: string) => image.match(/\/Filter \/(\w+)/)?.[1];
+        return {
+            images: images.filter((image) => !image.includes('/DeviceGray')).map(filterOf),
+            masks: images.filter((image) => image.includes('/DeviceGray')).length,
+        };
+    }
+
+    // A gradient, so the picture is no flat colour an encoder could shrink to nothing.
+    function gradient(channels: 3 | 4): Sharp {
+        const pixels = Buffer.alloc(600 * 400 * channels);
+        for (let i = 0; i < 600 * 400; i++)
+            pixels.set([i % 256, (i * 7) % 256, (i * 13) % 256, 128].slice(0, channels), i * channels);
+        return sharp(pixels, { raw: { width: 600, height: 400, channels } });
+    }
+
+    // WeasyPrint embeds a JPEG's own bytes under DCTDecode and decodes nothing. Any other raster, a WebP among them, it
+    // decodes and writes again as a Flate stream, 40 times the CPU for a photo.
+    test.each([
+        ['doc', 'doc'],
+        ['sheet', 'sheets'],
+    ] as const)(
+        'a photo in a %s prints as the JPEG WeasyPrint embeds as it is',
+        async (_, type) => {
+            const printed = await printedPicture(type, 'photo.jpg', 'image/jpeg', await gradient(3).jpeg().toBuffer());
+            expect(printed).toEqual({ images: ['DCTDecode'], masks: 0 });
+        },
+        120_000,
+    );
+
+    // JPEG has no alpha, so a lossy WebP with one prints as a PNG, its alpha a soft mask beside it.
+    test('a picture with alpha prints as a PNG, its alpha a soft mask', async () => {
+        const printed = await printedPicture('doc', 'clear.webp', 'image/webp', await gradient(4).webp().toBuffer());
+        expect(printed).toEqual({ images: ['FlateDecode'], masks: 1 });
     }, 120_000);
 
     test('eigenslides pdf export serves a rendered PDF as an attachment', async () => {

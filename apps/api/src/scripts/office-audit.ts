@@ -318,7 +318,7 @@ export async function roundtripChild(
 // An import's pictures as the export's media prep makes them (export/media.ts): a raster re-encoded as PNG or JPEG, an
 // SVG as it is, and any the writer draws itself, each SVG with its PNG beside it.
 export async function officeMedia(media: ImportedMedia[], drawn: ExportMedia[] = []): Promise<OfficeMedia[]> {
-    const { encodeOfficeImage, WEBP_SCAN_BYTES, withSvgFallbacks } = await import('../lib/export/office-image');
+    const { encodeExportImage, WEBP_SCAN_BYTES, withSvgFallbacks } = await import('../lib/export/office-image');
     const { sharpResize } = await import('../lib/shared/sharp-resize');
     const prepared: ExportMedia[] = [];
     for (const { name, contentType, data } of media) {
@@ -327,7 +327,7 @@ export async function officeMedia(media: ImportedMedia[], drawn: ExportMedia[] =
             continue;
         }
         const webp = contentType === 'image/webp' ? data.subarray(0, WEBP_SCAN_BYTES) : null;
-        const item = await encodeOfficeImage(name, contentType, webp, (options) => sharpResize(data, options));
+        const item = await encodeExportImage(name, contentType, webp, (options) => sharpResize(data, options));
         if (item) prepared.push(item);
     }
     return withSvgFallbacks([...prepared, ...drawn]);

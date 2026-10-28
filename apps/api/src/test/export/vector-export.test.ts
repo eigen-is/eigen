@@ -253,8 +253,8 @@ describe('Eigenvector export — the pdf-html document (what WeasyPrint is hande
     test('a round-cornered image clips through the shared outline path', async () => {
         const html = await pdfHtml();
         expect(html).toContain('<clipPath');
-        // Mime-agnostic on purpose: collectExportMedia embeds the SCREEN PREVIEW of each media
-        // child (webp today), not the stored bytes. What matters is that it is a data: URI.
+        // Mime-agnostic on purpose: collectExportMedia embeds a PNG or JPEG made from each media
+        // child, not the stored bytes. What matters is that it is a data: URI.
         expect(html).toMatch(/href="data:image\/[a-z+]+;base64,/);
     }, 120_000);
 
