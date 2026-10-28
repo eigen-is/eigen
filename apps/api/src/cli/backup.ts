@@ -1,3 +1,7 @@
+// ./eigen backup and the backup ./eigen update makes first: it starts a whole-server backup on the running API
+// through the control socket and prints each step until the job ends. Its exit code tells a script whether the
+// archive verified and whether it reached the backup bucket.
+
 import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatFileSize } from '@workspace/lib/format';

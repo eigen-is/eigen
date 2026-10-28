@@ -64,6 +64,7 @@ export function writeDocx(
             styleDefinitions(normal, { contents: outline.entries.length > 0 }).map((style) => [style.id, style]),
         ),
         paper: page.width,
+        pageless: setup.pageless,
         lost,
     };
     const column = page.width - page.margin.left - page.margin.right;
@@ -138,7 +139,7 @@ export function writeDocx(
             ...pkg.charts.parts,
             ['word/styles.xml', stylesXml(pkg), `${WML}.styles+xml`],
             ['word/numbering.xml', numberingXml(pkg.abstractNums, pkg.numToAbstract), `${WML}.numbering+xml`],
-            ['word/settings.xml', settingsXml(pkg.footnotes.length > 0), `${WML}.settings+xml`],
+            ['word/settings.xml', settingsXml(pkg.footnotes.length > 0, setup.pageless), `${WML}.settings+xml`],
             ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
             ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
         ],

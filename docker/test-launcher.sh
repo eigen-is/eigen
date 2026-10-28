@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 # The launcher alone, without a stack: under dash (debian:bookworm-slim), BusyBox sh and this host's /bin/sh, with a
-# stub docker on PATH that answers info and compose version and fails on demand. Covers every command's help, unknown
-# commands and arguments, the preflight refusals, local-build and release mode, need_install, update and rollback
-# refused in a local build, a failing compose config, stop, what update asks the CLI and names the builds, on a release
-# and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
-# api image that is not here, the files an unfinished update left, the backup an update makes on the running API before
-# it writes anything and hands over, typed on a terminal too, update --no-backup with Eigen stopped, an update refused
-# while eigen-api reads a .env.production replaced since it started or cannot be asked, and backup refused and restart
-# stopping eigen-api first then, what setup
-# downloads with and without pins and the build it records, backup on the running API, restore's stage and swap and
-# what each failure leaves, an archive uid 1000 cannot read, a running server backup or its upload waited out before a stop, a restore that cannot write its files, an
-# update interrupted in that wait that stops and restarts nothing, a swap
-# that was cut off and finished first, with no .env.production too, a restore on a new machine from the launcher
-# alone, what rollback runs or prints, a lock without a pid, the group and mode every start gives .env.production first but on Docker Desktop,
-# and what status passes the CLI about backups/, the files of an unfinished update and the newest build of main, and
-# its folder; setup in a folder that holds the launcher alone, with the registry or the build .env.production names,
-# and the installer script apps/index/public/install on this host, as a file and on stdin, for setup and restore.
+# stub docker on PATH that answers info and compose version and fails on demand. It covers:
+#   - every command's help, unknown commands and arguments, the preflight refusals, need_install, and a lock
+#     without a pid;
+#   - local-build and release mode, with update and rollback refused in a local build, and a failing compose config;
+#   - update: what it asks the CLI and how it names the builds, on a release and on the main channel; the tags it
+#     refuses; a build whose images differ; a tag that moves during the update; a pinned api image that is not here;
+#     the files an unfinished update left; the backup it makes on the running API before it writes anything, and
+#     the handover, typed on a terminal too; --no-backup with Eigen stopped; a refusal while eigen-api reads a
+#     .env.production replaced since it started, or cannot be asked; an interrupt in the backup wait, which stops and
+#     restarts nothing;
+#   - backup on the running API, refused in the same .env.production cases, and restart stopping eigen-api first;
+#   - stop, and a running server backup or its upload waited out before it;
+#   - restore: the stage and the swap and what each failure leaves, an archive uid 1000 cannot read, a restore that
+#     cannot write its files, a swap that was cut off and finished first (with no .env.production too), and a
+#     restore on a new machine from the launcher alone;
+#   - what rollback runs or prints;
+#   - setup: what it downloads with and without pins and the build it records, and setup in a folder that holds the
+#     launcher alone, with the registry or the build .env.production names;
+#   - the group and mode every start gives .env.production first, except on Docker Desktop;
+#   - what status passes the CLI about backups/, the files of an unfinished update, the newest build of main, and its
+#     folder;
+#   - the installer script apps/index/public/install on this host, as a file and on stdin, for setup and restore.
 #
 # Usage:  ./docker/test-launcher.sh
 # Needs:  docker (pulls debian:bookworm-slim and busybox once).
@@ -29,9 +35,9 @@ FIX=$(cd "$FIX" && pwd -P)
 trap 'rm -rf "$FIX"' EXIT
 
 # The stub logs every call to $STUB_LOG. STUB_INFO (version, architecture, operating system) and STUB_COMPOSE answer
-# info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail
-# on an image the launch has not pulled;
-# STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
+# info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that
+# fail; STUB_IMAGE=1 makes image inspect fail on an image the launch has not pulled; STUB_LATEST and STUB_REVISION
+# are the version and commit the registry's manifest of any api tag names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
 # image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the registry
 # digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --staged also

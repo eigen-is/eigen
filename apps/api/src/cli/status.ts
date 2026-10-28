@@ -1,3 +1,7 @@
+// ./eigen status: one report on the install, from what the launcher gathers on the host (the services, the mail
+// queue, the newest release) and what the running API answers on its control socket (backups, disk, the
+// certificate). With Eigen stopped it still reports, reading the backup names in backups/.
+
 import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';

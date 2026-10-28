@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, charts, graphs]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 147
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 You can turn a table of numbers into a chart that floats over the grid. The chart reads its cells, so it changes as soon as you change a value.
@@ -32,6 +32,8 @@ Click a chart to select it, and a panel headed **Chart** opens on the right. Its
 - **Use row 1 as headers** and **Use column A as labels** say whether the first row and column hold names or values.
 
 Below that you pick the axis titles, whether each axis shows (**Show axis**), whether the category axis runs the other way (**Reverse axis order**), the lowest and highest value on the value axis (a percent on a **100%** stack, and automatic again when you switch to or from **100%**), the gridlines, and a color for each series or pie slice, which reads **Automatic** until you pick one.
+
+**Data labels**, at the top of the **Series** section, writes each value on the chart in the cells' number format: past the end of a bar, in the middle of a stacked bar, and above each point of a line. When two labels would overlap, one of them hides, and a bigger bar keeps its own. A chart with more than 200 values shows no data labels. The box shows a dash when only some series show their values, as in some imported charts; click it to show them on every series. A pie always labels its slices with their names and shares.
 
 Below them, **Labels** sets the **Color** of all the chart's text. **Fill** sets the chart's background, and its **Style** how the bars and slices are drawn: **Solid**, **Hachure**, **Cross-hatch**, or **Zigzag**. Solid bars and slices have no outline; hatched ones get an outline in their own color. **Stroke** sets the color, width, and style of the axes and gridlines, and the width of a line chart's lines, except in a chart imported from Office, which keeps its own, and **Sketch** how rough the chart looks, from **Architect** (clean) to **Cartoonist**. A new chart starts clean and solid, like a Google Sheets chart. A chart with more than 200 values (for a pie, more than 200 slices) draws its bars, lines, and slices smooth and solid whatever the sketch, so it stays quick to show; the **Sketch** section says so. The chart prints and downloads in its look.
 
@@ -74,6 +76,6 @@ A pasted chart keeps its look, and a chart copied from Docs, Slides, or Vector p
 
 <div class="eigen-callout">
 
-Charts appear in the PDF and web page downloads and in the preview of the file in Drive. When you download the spreadsheet as Excel, each chart comes along as a chart you can edit in Excel. A rotated chart sits upright there, a sketched or hatched look is drawn plain, and a gradient background becomes its middle color.
+Charts appear in the PDF and web page downloads and in the preview of the file in Drive. When you download the spreadsheet as Excel, each chart comes along as a chart you can edit in Excel, its data labels included. A rotated chart sits upright there, a sketched or hatched look is drawn plain, and a gradient background becomes its middle color.
 
 </div>

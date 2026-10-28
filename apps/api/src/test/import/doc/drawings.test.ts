@@ -475,6 +475,21 @@ describe('placement', () => {
     });
 });
 
+// Word's extent is what Word drew, stretched or not, so a picture keeps both sides, the height capped with the width.
+describe('size', () => {
+    const EMU = 9525;
+    const sized = (cx: number, cy: number) =>
+        GOLDEN_DOCX_IMAGE_RUN.replaceAll('cx="381000" cy="381000"', `cx="${cx * EMU}" cy="${cy * EMU}"`);
+
+    test('a picture keeps the height its extent gives, scaled with a width capped at the column', async () => {
+        const { json } = await importDocxBody(paragraph(sized(40, 20)) + paragraph(sized(1202, 300)));
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [40, 20],
+            [601, 150],
+        ]);
+    });
+});
+
 // VML's office attributes are read by their namespace, whatever prefix binds it.
 describe('VML', () => {
     const OFFICE = 'urn:schemas-microsoft-com:office:office';
@@ -486,6 +501,15 @@ describe('VML', () => {
             `${paragraph(vml(`xmlns:office="${OFFICE}" office:hr="t"`))}${paragraph(vml('xmlns:o="urn:other" o:hr="t"'))}`,
         );
         expect(nodesOfType(json, 'horizontalRule')).toHaveLength(1);
+    });
+
+    test("a picture's size is its style's width and height", async () => {
+        const { json } = await importDocxBody(
+            paragraph(vml('style="width:100pt;height:50pt"', '<v:imagedata r:id="rId4"/>')),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [133, 67],
+        ]);
     });
 
     test("a picture's alt text is the office namespace's title, not a prefix's", async () => {

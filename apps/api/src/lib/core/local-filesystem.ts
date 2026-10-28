@@ -10,6 +10,8 @@ let warnedDirSyncUnsupported = false;
 
 // What marks a staged file as `writeAtomic`'s, for the writer and the sweep alike.
 const ATOMIC_TEMP_INFIX = '.tmp-';
+// A staged file older than this is a crash's leftover, never a write still in flight.
+export const STALE_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 // "The file is gone" is the only fs error a caller may treat as an outcome; anything else, errno or not, is real.
 export function isEnoent(e: unknown): boolean {

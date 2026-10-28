@@ -1,3 +1,7 @@
+// Small helpers the sheet's state modules share, such as finding a sheet by id or name, a new sheet's name, a color
+// as hex and whether a selection may be edited. The op-to-patch translation lives beside them and is re-exported here.
+
+import { parseRgb } from '@workspace/lib/constants/colors';
 import { parseCellKey } from '@workspace/lib/sheets';
 import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
 import type { Context } from '../context';
@@ -28,16 +32,9 @@ export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean) {
     return `Sheet${index + 1}`;
 }
 
-// color: convert rgb to hex
+// A browser's rgb() or rgba() as the #rrggbb the sheet stores, its alpha dropped. Any other color comes back as it is.
 export function rgbToHex(color: string): string {
-    const stripped = color.indexOf('rgba') > -1 ? color.replace('rgba(', '') : color.replace('rgb(', '');
-    const rgb = stripped.replace(')', '').split(',');
-
-    const r = Number(rgb[0]);
-    const g = Number(rgb[1]);
-    const b = Number(rgb[2]);
-
-    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+    return parseRgb(color)?.hex ?? color;
 }
 
 export function getSheetIndex(ctx: Context, id: string) {

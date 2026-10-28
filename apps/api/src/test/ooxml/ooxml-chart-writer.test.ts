@@ -145,10 +145,13 @@ describe('writeChart with range data', () => {
         expect(throughRanges(spec).axes.y.labels.format).toBeNull();
     });
 
-    test('a percent-stacked chart keeps a format of its own', () => {
+    test("a percent-stacked chart's axis stays 0% whatever its format, which an xlsx's cells carry instead", () => {
         const spec = rangeSpec('column', stacked('column', 'percent'));
-        const own = { ...spec, axes: { ...spec.axes, y: { ...spec.axes.y, labels: { format: '0.0%' } } } };
-        expect(throughRanges(own).axes.y.labels.format).toBe('0.0%');
+        const own = { ...spec, axes: { ...spec.axes, y: { ...spec.axes.y, labels: { format: '#,##0' } } } };
+        const [axis] = find(root(writeChart(own, { ranges, look: FLAT_CHART_LOOK, frame: FRAME })), 'valAx');
+        const [numFmt] = find(axis, 'numFmt');
+        expect([xmlAttr(numFmt, '', 'formatCode'), xmlAttr(numFmt, '', 'sourceLinked')]).toEqual(['0%', '0']);
+        expect(throughRanges(own).axes.y.labels.format).toBeNull();
     });
 
     test('a line chart keeps its markers and smooth lines', () => {
@@ -377,6 +380,89 @@ describe('writeChart with inline data', () => {
             writeChart(sampleChartSpec('column'), { look: FLAT_CHART_LOOK, frame: { ...FRAME, emuPerPx: 100 } }),
         );
         expect(new Set(find(chart, 'defRPr', A_NS).map((run) => xmlAttr(run, '', 'sz')))).toEqual(new Set(['100']));
+    });
+});
+
+describe('data labels', () => {
+    const LABELLED: [ChartType, ChartStacking][] = [
+        ['column', 'none'],
+        ['bar', 'stacked'],
+        ['column', 'percent'],
+        ['line', 'none'],
+    ];
+    // Three series, the second labelled, in the values' format.
+    const labelled = (type: ChartType, stacking: ChartStacking, format: string | null = '#,##0') => {
+        const spec = parsed(
+            defaultChartSpec(type, {
+                source: 'inline',
+                categories: ['North', 'South'],
+                series: [1, 2, 3].map((n) => ({ id: `s-${n}`, name: `S${n}`, values: [n * 1000, n * 1500] })),
+            }),
+        );
+        return {
+            ...spec,
+            plots: { ...spec.plots, [type]: { stacking } },
+            axes: { ...spec.axes, y: { ...spec.axes.y, labels: { format } } },
+            series: { ...spec.series, 's-2': styled(null, { labels: { visible: true } }) },
+        };
+    };
+    const seriesOf = (spec: ChartSpec) => find(root(writeChart(spec, INLINE)), 'ser');
+
+    test.each(LABELLED)(
+        'a %s chart stacked %s labels one series of three, and reads back as itself',
+        (type, stacking) => {
+            const spec = labelled(type, stacking);
+            expect(read(writeChart(spec, INLINE), 'cache')).toEqual(spec);
+            expect(read(writeChart(spec, { ...INLINE, workbook: 'rId1' }), 'cache')).toEqual(spec);
+            expect(seriesOf(spec).map((ser) => find(ser, 'dLbls').length)).toEqual([0, 1, 0]);
+        },
+    );
+
+    test.each(LABELLED)('a %s chart stacked %s writes its labels where the schema puts them', (type, stacking) => {
+        const [, ser] = seriesOf(labelled(type, stacking));
+        const names = xmlElements(ser).map((child) => child.local);
+        const at = names.indexOf('dLbls');
+        expect(names[at - 1]).toBe(type === 'line' ? 'marker' : 'invertIfNegative');
+        expect(names[at + 1]).toBe('cat');
+        const [labels] = find(ser, 'dLbls');
+        expect(xmlElements(labels).map((child) => child.local)).toEqual([
+            'numFmt',
+            'dLblPos',
+            'showLegendKey',
+            'showVal',
+            'showCatName',
+            'showSerName',
+            'showPercent',
+            'showBubbleSize',
+        ]);
+        const position = type === 'line' ? 't' : stacking === 'none' ? 'outEnd' : 'ctr';
+        expect([val(labels, 'dLblPos'), val(labels, 'showVal')]).toEqual([position, '1']);
+    });
+
+    test("the labels state the values' format only when the spec has one", () => {
+        const [, own] = seriesOf(labelled('column', 'none'));
+        const [numFmt] = find(own, 'numFmt');
+        expect([xmlAttr(numFmt, '', 'formatCode'), xmlAttr(numFmt, '', 'sourceLinked')]).toEqual(['#,##0', '0']);
+        const [, general] = seriesOf(labelled('column', 'none', null));
+        expect(find(general, 'numFmt')).toEqual([]);
+    });
+
+    test("a chart without labels writes no c:dLbls but a pie's own", () => {
+        for (const type of ['column', 'bar', 'line'] as const) {
+            expect(writeChart(sampleChartSpec(type), INLINE)).not.toContain('dLbls');
+        }
+        const pie = sampleChartSpec('pie');
+        const labelledPie = { ...pie, series: { 's-1': styled(null, { labels: { visible: true } }) } };
+        expect(writeChart(labelledPie, INLINE)).toBe(writeChart(pie, INLINE));
+    });
+
+    test("a 100% chart's axis is 0% unlinked, its format on the cache and labels, and reads back from the cache", () => {
+        const spec = labelled('column', 'percent');
+        const part = root(writeChart(spec, INLINE));
+        const [numFmt] = find(find(part, 'valAx')[0], 'numFmt');
+        expect([xmlAttr(numFmt, '', 'formatCode'), xmlAttr(numFmt, '', 'sourceLinked')]).toEqual(['0%', '0']);
+        expect(new Set(find(part, 'formatCode').map(xmlTrimmedText))).toEqual(new Set(['#,##0']));
+        expect(read(writeChart(spec, INLINE), 'cache').axes.y.labels.format).toBe('#,##0');
     });
 });
 

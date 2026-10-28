@@ -1,10 +1,14 @@
+// Mounts better-auth's own HTTP routes under /auth and gives every other router the `auth` macro, which turns the
+// session cookie into the signed-in user or answers 401. A guard in front of the mount refuses self sign-up, and
+// in demo mode the auth calls a visitor must not make.
+
 import { Elysia } from 'elysia';
 import { auth } from '../lib/auth/auth';
 import { isDemo } from '../lib/config/env';
 import { ApiError } from '../lib/core';
 
-// Auth mutations a demo visitor must not reach: api keys are live IMAP/CalDAV/WebDAV credentials,
-// 2FA enrollment would lock a persona out of the pool, revoke-sessions griefs other visitors.
+// The auth calls a demo visitor must not make. An app password is a live mail and DAV credential, turning on 2FA
+// takes a persona out of the pool, and revoking sessions signs out the other visitors on that persona.
 const DEMO_BLOCKED_AUTH_PATHS = new Set([
     '/auth/api-key/create',
     '/auth/api-key/update',

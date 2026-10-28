@@ -149,6 +149,40 @@ test('a source cell edit redraws the chart; an edit on another sheet or a select
     }
 });
 
+const fire = (target: EventTarget, type: string, init: PointerEventInit = {}) =>
+    act(async () => {
+        target.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, ...init }));
+    });
+
+// A sketched chart's rough layout is slow to draw at a large size, so a held grip scales the drawing it has.
+test('a resize scales the drawing while the grip is held and draws it once on release', async () => {
+    const renders = spyOn(chartData, 'renderSheetChartSvg');
+    try {
+        const { box, container, charts } = await mount();
+        const el = box()?.firstElementChild;
+        if (!el) throw new Error('no chart');
+        await fire(el, 'pointerdown');
+        await fire(document, 'pointerup');
+        const corner = container.querySelectorAll('.eigen-selection-handle')[3];
+        if (!corner) throw new Error('no grip');
+        Object.defineProperty(corner, 'setPointerCapture', { value: () => {} });
+        const drawn = renders.mock.calls.length;
+        await fire(corner, 'pointerdown', { clientX: 0, clientY: 0 });
+        for (let move = 1; move <= 10; move += 1) {
+            await fire(document, 'pointermove', { clientX: move * 40, clientY: move * 30 });
+        }
+        expect(renders.mock.calls.length).toBe(drawn);
+        const scaled = box()?.querySelector<HTMLElement>('svg')?.parentElement;
+        expect(scaled?.style.transform).toBe('scale(2, 2)');
+        await fire(document, 'pointerup', { clientX: 400, clientY: 300 });
+        expect(charts()?.c1).toMatchObject({ width: 800, height: 600 });
+        expect(renders.mock.calls.length).toBe(drawn + 1);
+        expect(box()?.querySelector<HTMLElement>('svg')?.parentElement?.style.transform).toBe('');
+    } finally {
+        renders.mockRestore();
+    }
+});
+
 test('selecting a chart reports its panel, which follows the chart and closes with the selection', async () => {
     const { box, container, panels, step } = await mount();
     const el = box()?.firstElementChild;

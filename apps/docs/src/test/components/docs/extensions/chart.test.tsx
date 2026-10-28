@@ -100,7 +100,7 @@ test('a corner grip resizes a selected chart freely and writes its width and hei
     expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ width: 500, height: 200 });
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
 
-    // The column caps the width, and each side keeps the floor.
+    // The column caps the width, and the height keeps to a chart's floor, which an image's thin divider has not.
     await drag(box, '-bottom-2.5 -right-2.5', 400, -400);
     expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ width: 600, height: 100 });
 });

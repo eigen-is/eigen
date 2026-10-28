@@ -20,8 +20,15 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
+import { restoreShares } from '../../lib/backup/materialize';
 import * as pathsModule from '../../lib/backup/paths';
-import { ARCHIVE_AVATAR_DIR, buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import {
+    ARCHIVE_AVATAR_DIR,
+    ARCHIVE_SHARES_FILE,
+    buildArtifactName,
+    buildHomeFolderName,
+    getBackupsDir,
+} from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getAvatarsDir } from '../../lib/config/paths';
@@ -837,6 +844,26 @@ describe('Backup restore after the user is deleted', () => {
         await Bun.write(avatarPath, TEST_PNG_BYTES);
 
         artifact = await backup(deleted.id, new Date());
+    });
+
+    test('stores a share target from the archive lowercased', async () => {
+        const folder = mkdtempSync(join(TEST_DATA_DIR, 'restore-shares-'));
+        try {
+            writeFileSync(
+                join(folder, ARCHIVE_SHARES_FILE),
+                JSON.stringify([{ targetIdentifier: 'Mixed.Case@External.Test' }]),
+            );
+            await restoreShares(deleted.id, folder);
+        } finally {
+            rmSync(folder, { recursive: true, force: true });
+        }
+        const rows = (await getEigenDb())
+            .select()
+            .from(shareRegistry)
+            .where(eq(shareRegistry.fromUserId, deleted.id))
+            .all();
+        expect(rows.map((row) => row.targetIdentifier)).toContain('mixed.case@external.test');
+        expect(rows.map((row) => row.targetIdentifier)).not.toContain('Mixed.Case@External.Test');
     });
 
     test('re-inserts the auth and share rows, and the user can sign in again', async () => {

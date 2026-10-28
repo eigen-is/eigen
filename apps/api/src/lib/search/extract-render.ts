@@ -1,8 +1,11 @@
 // A collab document's body text for the search index, cut to the index's byte budget. It runs in the transform
-// process, so it reaches neither the Mount nor the transform seam. Each reader loads through a dynamic import, so a
-// doc's extract never loads the sheet engine. Light reads, such as a sticky or a chat, stay on the main thread.
+// process, so it reaches neither the Mount nor the transform seam. Each heavy reader loads through a dynamic import, so
+// a doc's extract never loads the sheet engine; the React-free chart reader is a static import. Light reads, such as a
+// sticky or a chat, stay on the main thread.
 
 import type { JSONContent } from '@tiptap/core';
+import { chartSearchText, readChartSpec } from '@workspace/lib/charts';
+import { isRecord } from '@workspace/lib/guards';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { ElementKindRegistry, VectorElement } from '@workspace/lib/vector';
 import type { cellDisplay } from '@workspace/sheet/engine';
@@ -66,7 +69,8 @@ function collectProseMirrorText(
     return out.parts.join(' ');
 }
 
-// `textOf` rides in from the caller's dynamic import of the sheet engine, as `kinds` does below.
+// A sheet's cells, then its charts' titles and series names. `textOf` rides in from the caller's dynamic import, as
+// `kinds` does below. A peer can store anything under a chart's id, so an entry that is no object is no chart.
 function collectSheetsText(sheets: Sheet[], textOf: typeof cellDisplay, cap: number): string {
     const out: CappedText = { parts: [], bytes: 0 };
     for (const sheet of sheets) {
@@ -74,6 +78,11 @@ function collectSheetsText(sheets: Sheet[], textOf: typeof cellDisplay, cap: num
             const display = textOf(cd.v);
             if (display == null) continue;
             if (!appendCapped(out, String(display), cap)) return out.parts.join(' ');
+        }
+        for (const chart of Object.values(sheet.charts ?? {})) {
+            if (!isRecord(chart)) continue;
+            const text = chartSearchText(readChartSpec(chart).spec);
+            if (text !== '' && !appendCapped(out, text, cap)) return out.parts.join(' ');
         }
     }
     return out.parts.join(' ');
@@ -92,8 +101,8 @@ function collectCanvasText(elements: VectorElement[], kinds: ElementKindRegistry
     return out.parts.join('\n');
 }
 
-// Body text for one collab document, capped at about 100 KB. Sheets index their stored values only: as for the
-// preview, the read never recalculates, so a formula cell with no value adds nothing.
+// Body text for one collab document, capped at about 100 KB. Sheets index their stored values and their charts' text:
+// as for the preview, the read never recalculates, so a formula cell with no value adds nothing.
 export async function extractCollabText(
     documentType: ExtractTextJob['documentType'],
     doc: Y.Doc,
@@ -121,7 +130,8 @@ export async function extractCollabText(
             // No recalc: the index serves stored values — a legacy never-computed
             // workbook must not cost a full recalc inside the 30s extract deadline.
             const { sheets } = readSheetsFromDoc(doc, { recalc: false });
-            return { text: collectSheetsText(sheets, engine.cellDisplay, CONTENT_INDEX_MAX_BYTES), warnings: [] };
+            const text = collectSheetsText(sheets, engine.cellDisplay, CONTENT_INDEX_MAX_BYTES);
+            return { text, warnings: [] };
         }
         case 'eigenslides':
         case 'eigenvector': {

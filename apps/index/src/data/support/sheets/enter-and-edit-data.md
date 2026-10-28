@@ -6,7 +6,7 @@ category: Basics
 tags: [sheets, cells, data, editing, keyboard, formula-bar]
 related: [sheets/get-started, sheets/create-and-edit, sheets/formulas]
 order: 30
-updated: 2026-09-23
+updated: 2026-10-27
 ---
 
 You can enter text, numbers, and formulas into any cell in Sheets, then edit or clear them at any time. Changes are saved automatically.
@@ -41,7 +41,7 @@ Press **Alt+Enter** (Mac: **⌥+Enter**) while a cell is open for editing. The c
 
 ## Clear cell contents
 
-Select one or more cells, then press **Delete** or **Backspace**. The values and formulas are removed.
+Select one or more cells, then press **Delete** or **Backspace**. The values, formulas and links are removed, and the cells keep their formatting, such as colors, bold and number format. To remove the formatting too, use **Format → Clear formatting**.
 
 To clear contents from the right-click menu, right-click the selection and choose **Clear contents**. The same option is available under **Edit → Delete → Clear contents**.
 
@@ -64,6 +64,6 @@ Sheets copies each cell whole: its value or formula, formatting, borders, data v
 ## Undo and redo
 
 - **Ctrl+Z** (Mac: **⌘Z**) undoes the last change.
-- **Ctrl+Shift+Z** (Mac: **⌘⇧Z**) redoes it.
+- **Ctrl+Shift+Z** (Mac: **⇧⌘Z**) redoes it.
 
 Both are also available under **Edit → Undo** and **Edit → Redo**.

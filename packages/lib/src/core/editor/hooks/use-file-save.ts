@@ -1,3 +1,7 @@
+// The mutation that saves a text file from Drive's inline editor. It sends the content and the etag the
+// editor loaded, and returns the server's answer: the new etag, or a conflict. A save that landed
+// refreshes the file's row and its editor content.
+
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
@@ -7,7 +11,7 @@ import { editorKeys } from './keys';
 type SaveParams = {
     content: string;
     frontmatter?: string;
-    expectedUpdatedAt: Date;
+    expectedEtag: string;
     force?: boolean;
 };
 

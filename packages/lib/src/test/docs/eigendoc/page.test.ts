@@ -29,6 +29,7 @@ const LANDSCAPE: PageSetup = {
     headerDistance: 8,
     footerDistance: 12.7,
     differentFirstPage: true,
+    pageless: true,
 };
 
 describe('page setup', () => {
@@ -40,6 +41,7 @@ describe('page setup', () => {
             headerDistance: 12.7,
             footerDistance: 12.7,
             differentFirstPage: false,
+            pageless: false,
         });
     });
 
@@ -88,6 +90,7 @@ describe('page setup', () => {
             headerDistance: 720,
             footerDistance: 720,
             differentFirstPage: false,
+            pageless: false,
         });
         expect(pageTwips(LANDSCAPE)).toEqual({
             width: 16838,
@@ -96,6 +99,7 @@ describe('page setup', () => {
             headerDistance: 454,
             footerDistance: 720,
             differentFirstPage: true,
+            pageless: true,
         });
     });
 
@@ -140,6 +144,7 @@ describe('the stored page', () => {
             headerDistance: 8,
             footerDistance: 12.7,
             differentFirstPage: true,
+            pageless: true,
         });
         expect(readPageSetup(pageRecord(LANDSCAPE))).toEqual(LANDSCAPE);
         const letter: PageSetup = {
@@ -149,6 +154,7 @@ describe('the stored page', () => {
             headerDistance: 15,
             footerDistance: 25.4,
             differentFirstPage: false,
+            pageless: false,
         };
         expect(readPageSetup(pageRecord(letter))).toEqual(letter);
     });
@@ -178,6 +184,14 @@ describe('the stored page', () => {
             expect(readPageSetup({ differentFirstPage: stored }).differentFirstPage).toBe(false);
         }
         expect(readPageSetup({ differentFirstPage: true }).differentFirstPage).toBe(true);
+    });
+
+    // A doc without the key, every doc from before page-less mode, is paged.
+    test('pageless reads as true only when it is stored as true', () => {
+        for (const stored of [undefined, false, 'true', 1, null, {}]) {
+            expect(readPageSetup({ pageless: stored }).pageless).toBe(false);
+        }
+        expect(readPageSetup({ pageless: true }).pageless).toBe(true);
     });
 
     test("the paper is kept between 5 cm and 55.88 cm, Word's 22 inches", () => {

@@ -11,7 +11,9 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
-const window = installHappyDom();
+// happy-dom lays nothing out: a test that needs the editor's width stubs it and fires these.
+let resizes: (() => void)[] = [];
+const window = installHappyDom({ onResizeObserver: (resize) => resizes.push(resize) });
 
 const Y = await import('yjs');
 const { WebsocketProvider } = await import('y-websocket');
@@ -117,6 +119,8 @@ async function render({
     width?: number;
 }) {
     window.happyDOM.setViewport({ width, height: 1000 });
+    // Only this render's observers, as an unmounted one observes nothing.
+    resizes = [];
     function Editor() {
         const [writer, setWriter] = useState(canWrite);
         setCanWrite = setWriter;
@@ -259,6 +263,81 @@ test('a double-click in the top margin edits the header in place, and one in the
     expect(editing()).toEqual(['footer']);
     expect(document.activeElement === bandView('footer')).toBe(true);
     expect([labels('header'), labels('footer')]).toEqual([[], ['Footer']]);
+});
+
+const pageBox = () => document.querySelector<HTMLElement>('[data-document]');
+const pageStyles = () => [...document.querySelectorAll('style')].map((style) => style.textContent ?? '').join('\n');
+
+test("a page-less doc draws no paper and no bands, never scales, and its text column is the reader's Narrow", async () => {
+    write('header', 'Acme');
+    doc.getMap(PAGE_ROOT).set('pageless', true);
+    await render({ ...WRITER, width: 390 });
+    expect(pageBox()?.hasAttribute('data-pageless')).toBe(true);
+    expect(pageBox()?.className).not.toMatch(/rounded|shadow/);
+    expect(pageBox()?.style.transform).toBe('');
+    expect(margin('header')).toBeNull();
+    expect(band('header')).toBeNull();
+    expect(pageStyles()).toContain('max-width: 696px');
+    // The paper still prints: the page's own @page rule stays.
+    expect(pageStyles()).toContain('@page { size: 210mm 297mm');
+});
+
+test('each reader draws a page-less doc at their own text width, which the doc never holds', async () => {
+    doc.getMap(PAGE_ROOT).set('pageless', true);
+    localStorage.setItem('eigen-docs-text-width:u1', 'wide');
+    await render(WRITER);
+    expect(pageStyles()).toContain('max-width: 1056px');
+    expect(Object.keys(doc.getMap(PAGE_ROOT).toJSON())).toEqual(['pageless']);
+});
+
+// The page-less column the editor lays out in a scroll box `width` px wide, as its left edge and its width.
+async function pagelessColumnAt(width: number) {
+    const scrollBox = pageBox()?.parentElement;
+    if (!scrollBox) throw new Error('no scroll box');
+    scrollBox.getBoundingClientRect = () => new DOMRect(0, 0, width, 900);
+    await act(async () => {
+        for (const resize of resizes) resize();
+    });
+    const column = pageStyles().match(/\[data-pageless\] \{ width: (\d+)px; margin-left: (\d+)px/);
+    return { left: Number(column?.[2]), width: Number(column?.[1]) };
+}
+
+test('the outline over the left of a page-less doc narrows its column, at Wide and at Full', async () => {
+    doc.getMap(PAGE_ROOT).set('pageless', true);
+    localStorage.setItem('eigen-docs-text-width:u1', 'full');
+    await render(WRITER);
+    expect(await pagelessColumnAt(1440)).toEqual({ left: 48, width: 1344 });
+    await unmount();
+
+    localStorage.setItem('eigen-docs-outline', 'shown');
+    await render(WRITER);
+    // The outline's 240 px cover the scroll box's 16 px gutter too, which leaves that gutter between it and the text.
+    expect(await pagelessColumnAt(1440)).toEqual({ left: 240, width: 1152 });
+    await unmount();
+
+    localStorage.setItem('eigen-docs-text-width:u1', 'wide');
+    await render(WRITER);
+    expect(await pagelessColumnAt(1440)).toEqual({ left: 240, width: 1008 });
+    // Room enough beside it, a Wide column stays centred.
+    expect(await pagelessColumnAt(1920)).toEqual({ left: 432, width: 1056 });
+});
+
+test("a switch to page-less, a collaborator's too, leaves the band being edited and hides the bands", async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    expect(editing()).toEqual(['header']);
+    await act(async () => doc.getMap(PAGE_ROOT).set('pageless', true));
+    expect(editing()).toEqual([]);
+    expect(margin('header')).toBeNull();
+    await openMenu('Insert');
+    expect(menuItems()).not.toContain(`Page break${formatForDisplay('Mod+Enter')}`);
+    // The menus act on the body again, whose schema holds the chart a band's leaves out.
+    const chart = [...document.querySelectorAll('[role="menuitem"]')].find(
+        (item) => item.textContent?.trim() === 'Chart',
+    );
+    expect(chart?.hasAttribute('data-disabled')).toBe(false);
+    await openSubmenu('Page elements');
+    expect(menuItems().filter((item) => item === 'Header' || item === 'Footer')).toEqual([]);
 });
 
 test('a single click in a margin enters nothing', async () => {

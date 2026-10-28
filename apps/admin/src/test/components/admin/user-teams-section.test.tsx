@@ -8,8 +8,9 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
 
-// The public config names the default team; stubbed so the section reads it without a server.
-const realPublic = await import('@workspace/lib/public');
+// The public config names the default team; stubbed so the section reads it without a server. A copy,
+// because mock.module rewrites a loaded module's exports in place, and afterAll puts the original back.
+const realPublic = { ...(await import('@workspace/lib/public')) };
 mock.module('@workspace/lib/public', () => ({
     ...realPublic,
     usePublicConfig: () => ({ data: { orgId: 'org-1', defaultTeamId: 't0' } }),

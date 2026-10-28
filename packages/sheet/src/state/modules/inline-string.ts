@@ -4,6 +4,7 @@
 // characters, writes the runs back as spans and puts the selection back. updateCell commits what
 // committedRuns reads, so the cell gets what the editor shows.
 
+import { isHexColor } from '@workspace/lib/constants/colors';
 import { readCssFontSize } from '@workspace/lib/constants/fonts';
 import { escapeHtml } from '@workspace/lib/html';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
@@ -25,8 +26,6 @@ type InlineStringCell = Cell & { ct: { t: 'inlineStr'; s: InlineStringSegment[] 
 type PendingStyle = { at: number; style: Partial<RunStyle> };
 
 export const DEFAULT_TEXT_COLOR = '#000000';
-
-const HEX_COLOR = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/;
 
 const TAG_STYLES: Record<string, Partial<RunStyle>> = {
     B: { bl: 1 },
@@ -248,7 +247,7 @@ function elementStyle(element: HTMLElement, inherited: RunStyle): RunStyle {
 export function hexColor(color: unknown): string | undefined {
     if (typeof color !== 'string') return undefined;
     const hex = color.startsWith('rgb') ? rgbToHex(color) : color.toLowerCase();
-    return HEX_COLOR.test(hex) ? hex : undefined;
+    return isHexColor(hex, [3, 4, 6, 8]) ? hex : undefined;
 }
 
 function styleValue(key: RunStyleKey, value: string | number): Partial<RunStyle> {

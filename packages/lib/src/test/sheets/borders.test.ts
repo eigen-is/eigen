@@ -158,6 +158,17 @@ describe('borderInfoExtent', () => {
         });
     });
 
+    // A lookup builds the key from the cell, so a key that isn't the cell's own spelling borders nothing.
+    test('a key no lookup finds sizes nothing', () => {
+        const borderInfo = { '1e3_0': { l: SIDE }, '-1_0': { l: SIDE }, '2_03': { l: SIDE }, '1.5_1': { l: SIDE } };
+        expect(borderInfoExtent({ ...borderInfo, NaN_0: { l: SIDE }, '2_3': { b: SIDE } })).toEqual({
+            minRow: 2,
+            minCol: 3,
+            maxRow: 2,
+            maxCol: 3,
+        });
+    });
+
     test('empty map is an inverted box that merges as a no-op', () => {
         expect(borderInfoExtent({})).toEqual({
             minRow: Number.MAX_SAFE_INTEGER,

@@ -108,3 +108,63 @@
         line-height: 1.4;
     }
 }
+
+/* A figure in front of or behind the text in the editor: its node view writes the place as custom properties, which
+   this rule draws and the page-less one below clamps. The exports write the place inline and never read this file. */
+.eigen-doc .figure[data-layout="front"],
+.eigen-doc .figure[data-layout="behind"],
+.eigen-doc [data-figure-chrome] {
+    left: var(--figure-left);
+    width: var(--figure-width, auto);
+}
+
+/* ===== Docs page-less: the editor's page box carries data-pageless, and --breakout, the room right of its text column ===== */
+@media screen {
+    [data-pageless] {
+        /* A table in the body starts at the text's left edge and scrolls sideways in a strip that reaches the editor's
+           right edge, or a panel's. One with no stored widths fills the column, not the strip. */
+        .ProseMirror > .tableWrapper {
+            margin-right: calc(-1 * var(--breakout, 0px));
+        }
+
+        .ProseMirror > .tableWrapper > table {
+            width: calc(100% - var(--breakout, 0px));
+        }
+
+        /* A block image or chart wider than the column grows into the strip from the column's left edge, and shrinks
+           to the room there instead of scrolling. One that fits draws in the column as on a page. */
+        .ProseMirror > p .figure[data-layout="block"][data-alignment="center"] {
+            align-items: safe center;
+        }
+
+        .ProseMirror > p .figure[data-layout="block"][data-alignment="right"] {
+            align-items: safe flex-end;
+        }
+
+        .ProseMirror > p .figure[data-layout="block"] > div {
+            width: max-content;
+            max-width: calc(100% + var(--breakout, 0px));
+        }
+
+        /* A figure in front of or behind the text draws clamped into the column and the strip, from the place its
+           node view writes as custom properties. The .ProseMirror makes this rule outweigh the one that draws them. */
+        .ProseMirror .figure[data-layout="front"],
+        .ProseMirror .figure[data-layout="behind"],
+        .ProseMirror [data-figure-chrome] {
+            /* The widest left that keeps the box's right edge in the strip, resolved where left is. */
+            --figure-max-left: calc(100% + var(--breakout, 0px) - var(--figure-width, 0px));
+            left: clamp(0px, var(--figure-left), var(--figure-max-left));
+            width: min(var(--figure-width, auto), calc(100% + var(--breakout, 0px)));
+        }
+
+        /* No pages, so a page break draws nothing; the PDF still breaks there. */
+        .page-break {
+            border: none;
+            margin: 0;
+        }
+
+        .page-break::after {
+            content: none;
+        }
+    }
+}

@@ -23,6 +23,7 @@ import type { PackagePart } from '../../../../lib/ooxml/opc';
 import { DRAWING_CONTENT_TYPE, pxToColumnWidth } from '../../../../lib/ooxml/spreadsheetml';
 import { MAX_DECOMPRESSED_BYTES, openZip } from '../../../../lib/ooxml/zip';
 import { seriesIdsByPlace } from '../../../../scripts/office-audit';
+import { withDataLabels } from '../../../fixtures/chart-parts';
 import { PIXEL_PNG } from '../../../fixtures/pptx';
 import { exportXlsx, xlsxFixture } from '../../../fixtures/xlsx';
 
@@ -151,6 +152,22 @@ describe('drawingOf', () => {
         expect(charts.map((chart) => readChartSpec(chart).spec).map((spec) => spec && seriesIdsByPlace(spec))).toEqual(
             written.map((chart) => readChartSpec(chart).spec),
         );
+    });
+
+    test('a 100% stacked chart with data labels reads back with its labels, its axis a share', () => {
+        const spec = readChartSpec(RANGED).spec;
+        if (!spec) throw new Error('the fixture reads');
+        const labelled = withDataLabels({ ...spec, plots: { ...spec.plots, column: { stacking: 'percent' } } }, [
+            's-1',
+        ]);
+        const { sheets, lost } = roundTrip([
+            { ...SUMMARY, charts: byId({ ...RANGED, ...newSheetChartSpecParts(labelled) }) },
+            MY_DATA,
+        ]);
+        expect(lost).toEqual([]);
+        const [back] = Object.values(sheets[0].charts ?? {});
+        const read = readChartSpec(back).spec;
+        expect(read && seriesIdsByPlace(read)).toEqual(labelled);
     });
 
     test("a chart's background, label color and stroke read back as they were; one without a look reads flat", () => {

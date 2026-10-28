@@ -6,7 +6,7 @@
 import { isMailAppEnabled } from '../config/env';
 import { ApiError } from '../core/errors';
 import type { User } from '../user';
-import { getMemberships, getOrgRole } from '../user';
+import { getMemberships, getOrgRole, isGuest } from '../user';
 import type { Route, TrustedNetworks } from './trusted-networks';
 import { matchesCidr, normalizeIp, readRouteTable, scopeTrustedNetworks } from './trusted-networks';
 
@@ -78,7 +78,7 @@ export function requireSelf(ownerId: string, userId: string): void {
 }
 
 export function requireNonGuest(user: Pick<User, 'role'>): void {
-    if (user.role === 'guest') {
+    if (isGuest(user)) {
         throw new ApiError(403, 'Guests cannot access this resource');
     }
 }

@@ -64,8 +64,8 @@ test('a width below its minimum is still clamped before it is written', async ()
 });
 
 // A coupled edit divides by the ratio the gesture STARTED from. Re-deriving it per keystroke reads
-// it back off the rounded box the previous one wrote: 100x50 typed up to 250 walks 2x1, 25x13 and
-// lands on 250x130 instead of 250x125.
+// it back off the whole px the host shows, as Vector's panel does: 100x50 typed up to 250 walks 2x1,
+// 25x13 and lands on 250x130 instead of 250x125.
 test('an aspect-locked width keeps the ratio it started the edit with', async () => {
     const container = document.createElement('div');
     document.body.append(container);
@@ -77,8 +77,8 @@ test('an aspect-locked width keeps the ratio it started the edit with', async ()
                 createElement(TransformSection, {
                     x: 0,
                     y: 0,
-                    width: box.width,
-                    height: box.height,
+                    width: Math.round(box.width),
+                    height: Math.round(box.height),
                     angle: 0,
                     aspectLocked: true,
                     onAspectLockChange: () => {},

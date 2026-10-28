@@ -4,7 +4,11 @@
 
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { domOutputSpecToHTMLString, renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
+import {
+    domOutputSpecToHTMLString,
+    renderToHTMLString,
+    serializeChildrenToHTMLString,
+} from '@tiptap/static-renderer/pm/html-string';
 import { readChartSpec } from '@workspace/lib/charts';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { ChartAttrs, FigureAttrs, FigureFrameAttrs, OutlineHeading } from '@workspace/lib/docs/eigendoc';
@@ -94,6 +98,8 @@ export function renderDocHtml(
                         `<span data-type="page-number" data-kind="${readPageNumberKind(node.attrs['kind'])}"></span>`,
                 }),
             },
+            // Comments are not exported, so a commented text draws as plain text, with no highlight.
+            markMapping: { comment: ({ children }) => serializeChildrenToHTMLString(children) },
         },
     });
     return footnotes ? `${html}${footnotes.list()}` : html;
@@ -159,17 +165,27 @@ function renderFigureFrame(attrs: FigureFrameAttrs & { width?: number | null }, 
 function renderFigureNode(
     attrs: FigureAttrs,
     resolveImgSrc: FigureImgSrcResolver,
-    options?: { lazy?: boolean },
+    options?: { lazy?: boolean; print?: boolean },
 ): string {
     const imgSrc = resolveImgSrc(attrs.mediaName ?? null, attrs.src ?? null);
     const alt = escapeHtml(attrs.alt ?? '');
     const width = Math.round(attrs.width ?? 0);
-    const imgStyle = width ? `width: ${width}px; ` : '';
+    const height = Math.round(attrs.height ?? 0);
     const lazy = options?.lazy ? ' loading="lazy"' : '';
-    const img = imgSrc
-        ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}"${lazy} style="${imgStyle}max-width: 100%" />`
-        : '';
-    return renderFigureFrame(attrs, img);
+    if (!imgSrc) return renderFigureFrame(attrs, '');
+    const source = `src="${escapeHtml(imgSrc)}" alt="${alt}"${lazy}`;
+    // A stretched picture draws at its stored box, and keeps that shape when a narrower column shrinks it. WeasyPrint
+    // ignores aspect-ratio on an image, so on paper the picture fills a box whose padding gives it the stored ratio.
+    if (options?.print && width && height) {
+        const ratio = `padding-top: ${(height / width) * 100}%`;
+        return renderFigureFrame(
+            attrs,
+            `<span style="display: inline-block; width: ${width}px; max-width: 100%"><span style="display: block; position: relative; ${ratio}"><img ${source} style="position: absolute; top: 0; left: 0; width: 100%; height: 100%" /></span></span>`,
+        );
+    }
+    const stretch = width && height ? `aspect-ratio: ${width} / ${height}; ` : '';
+    const imgStyle = width ? `width: ${width}px; ${stretch}` : '';
+    return renderFigureFrame(attrs, `<img ${source} style="${imgStyle}max-width: 100%" />`);
 }
 
 // Inline, so its labels draw in the page's fonts; an <img> of an SVG can't reach the page's @font-face.

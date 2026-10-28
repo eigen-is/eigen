@@ -2188,6 +2188,28 @@ describe('Sheets HTML export — the window over forged keys', () => {
         }
     });
 
+    // All borders store a right side on every cell of the merge, and the editor draws only the last one's.
+    test('a merge the window cuts draws no side on the cut, and its stored edges inside the window', () => {
+        const side = { style: 1, color: '#000000' };
+        const cols = PREVIEW_SHEET_BUDGET.maxCols + 10;
+        const borderInfo: Record<string, CellBorderSides> = {};
+        for (let c = 0; c < cols; c++) borderInfo[`0_${c}`] = { t: side, b: side, l: side, r: side };
+        const sheet: Sheet = {
+            id: 'wide',
+            name: 'Wide',
+            order: 0,
+            celldata: [{ r: 0, c: 0, v: { v: 'm', m: 'm' } }],
+            config: { merge: { '0_0': { r: 0, c: 0, rs: 1, cs: cols } }, borderInfo },
+        };
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        const style = html.match(/<td colspan="50" style="([^"]*)"/)?.[1].split(';');
+        expect(style?.filter((d) => d.startsWith('border-')).sort()).toEqual([
+            'border-bottom:1px solid #000000',
+            'border-left:1px solid #000000',
+            'border-top:1px solid #000000',
+        ]);
+    });
+
     test('a null rule, a rule with no ranges, or a range with no rows, is dropped and the export still renders', () => {
         const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
         const valid: ConditionalFormatRule = {

@@ -1,3 +1,7 @@
+// The command line inside the API image, which the eigen launcher runs for every step that reads or writes the
+// install, such as configure, status, backup and restore. It parses one command's flags the same way for all of
+// them, prints the usage on --help, and refuses an unknown flag or argument with exit code 2, as the launcher does.
+
 import type { ParseArgsConfig } from 'node:util';
 import { parseArgs } from 'node:util';
 import { BACKUP_OPTIONS, BACKUP_USAGE, backup } from './backup';

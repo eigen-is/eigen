@@ -112,6 +112,20 @@ describe('richTextSvg', () => {
         expect(attrs).toBe(' font-family="Excalifont, cursive" font-size="20px" fill="#1e1e1e"');
     });
 
+    // A computed color in rgb() becomes a hex and an opacity; any other color is written as the browser gave it.
+    test.each([
+        ['rgb(30,30,30)', ' fill="#1e1e1e"'],
+        ['rgb(30 30 30 / 50%)', ' fill="#1e1e1e" fill-opacity="0.5"'],
+        ['rgba(30, 30, 30, 0.25)', ' fill="#1e1e1e" fill-opacity="0.25"'],
+        ['rgb(1.4, 2.6, 3)', ' fill="#010303"'],
+        ['color(display-p3 1 0 0)', ' fill="color(display-p3 1 0 0)"'],
+    ])('the color %p is written as %p', (color, fill) => {
+        const attrs = tspans(
+            richTextSvg({ texts: [text(line('a', 0, 0), { color })], rules: [], discs: [], justify: false }),
+        )[0].attrs;
+        expect(attrs).toEndWith(fill);
+    });
+
     test("a number marker is its own tspan left of the item's text, which keeps its own start", () => {
         const marker = text(line('1. ', 6, 0, 4));
         const item = text(line('Item', 18, 0));

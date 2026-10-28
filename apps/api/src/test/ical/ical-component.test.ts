@@ -20,6 +20,7 @@ import {
     serializeResource,
     stripEigenStamps,
 } from '../../lib/ical';
+import { cpuClock } from '../cpu-time';
 import { vcal } from '../ics-test-helpers';
 
 const CTX = { now: new Date('2026-06-01T10:00:00Z'), actorIsOrganizer: true };
@@ -551,9 +552,9 @@ describe('stamp trust', () => {
         }
         const incoming = parseResource(vcal(VTZ_AMS, clientSeries(...exdates)));
 
-        const started = performance.now();
+        const cpuMs = cpuClock();
         restampResource(incoming, stored());
-        expect(performance.now() - started).toBeLessThan(1500);
+        expect(cpuMs()).toBeLessThan(1500);
         expect(masterOf(incoming).getAllProperties('x-eigen-exdate')).toHaveLength(20_000);
     });
 

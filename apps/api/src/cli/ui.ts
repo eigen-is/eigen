@@ -1,3 +1,7 @@
+// How every CLI command talks to the operator: the questions, the notes and the error lines, drawn with the same
+// glyphs as the launcher's own lines. On a terminal the questions are interactive prompts. In a script, or when
+// flags are given, each question reads one line from stdin, and a missing answer names the flag that gives it.
+
 import type { Interface } from 'node:readline';
 import { createInterface } from 'node:readline';
 import { styleText } from 'node:util';

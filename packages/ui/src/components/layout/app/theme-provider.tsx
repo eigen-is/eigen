@@ -1,8 +1,15 @@
+// Draws every app in the user's theme: it reads the personal settings and puts the dark class on the page,
+// following the computer's own setting for System. The choice is cached in the browser, so the inline
+// THEME_FLASH_SCRIPT can draw the right theme before React loads, and so can this provider before the
+// settings arrive.
+
 import { useSpaceSettings } from '@workspace/lib/space';
+import type { UserTheme } from '@workspace/lib/types/settings';
+import { isUserTheme } from '@workspace/lib/types/settings';
 import { useEffect } from 'react';
 
-// Keep in sync with themeFlashPlugin() in vite.shared.config.ts
-function applyTheme(theme: 'light' | 'dark' | 'system') {
+// Keep in sync with THEME_FLASH_SCRIPT, which reads the same cache.
+function applyTheme(theme: UserTheme) {
     const isDark =
         theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
@@ -12,10 +19,10 @@ function applyTheme(theme: 'light' | 'dark' | 'system') {
     } catch {}
 }
 
-function getCachedTheme(): 'light' | 'dark' | 'system' {
+function getCachedTheme(): UserTheme {
     try {
         const v = localStorage.getItem('eigen-theme');
-        if (v === 'light' || v === 'dark' || v === 'system') return v;
+        if (v && isUserTheme(v)) return v;
     } catch {}
     return 'light';
 }

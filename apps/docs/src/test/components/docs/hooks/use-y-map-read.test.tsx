@@ -18,6 +18,7 @@ const LETTER_LANDSCAPE: PageSetup = {
     headerDistance: 15,
     footerDistance: 10,
     differentFirstPage: false,
+    pageless: false,
 };
 
 let unmount = async () => {};

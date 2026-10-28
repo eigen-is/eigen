@@ -3,7 +3,14 @@ import type { JSONContent } from '@tiptap/core';
 import { EditorState } from '@tiptap/pm/state';
 import { fixTables } from '@tiptap/pm/tables';
 import { docSchema } from '../../../lib/document/doc-schema';
-import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
+import { docxToPmJson } from '../../../lib/import/doc/from-docx';
+import {
+    buildDocxWithBands,
+    GOLDEN_DOCX_IMAGE_RUN,
+    importDocxBody,
+    marksOfType,
+    nodesOfType,
+} from '../../fixtures/golden-docx';
 
 // Rows and cells, merges, header rows and the writer's floating figure.
 
@@ -159,6 +166,45 @@ describe('column widths', () => {
             gridded([3000, 3000], [`<w:tc>${nested}${paragraph('')}</w:tc>`, cell('b')]),
         );
         expect(colwidths(json)).toEqual([[200], [88], [88], [200]]);
+    });
+});
+
+// Word's Web Layout is how a page-less doc's docx opens, so the file imports page-less, and its tables keep the widths
+// the editor draws past the text column, each column within the paper.
+describe('a file in Web Layout', () => {
+    const gridded = (grid: number[], cells: string[]) =>
+        `<w:tbl><w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(cells)}</w:tbl>`;
+    const colwidths = (json: JSONContent) => nodesOfType(json, 'tableCell').map((node) => node.attrs?.['colwidth']);
+    const imported = async (body: string, view: string) =>
+        docxToPmJson(Buffer.from(await buildDocxWithBands([], { body, settings: `<w:view w:val="${view}"/>` })));
+
+    test('imports page-less, its tables at their own widths, a column no wider than the paper', async () => {
+        const { json, page } = await imported(
+            `${gridded([10005, 10005], [cell('a'), cell('b')])}${gridded([15000, 1500], [cell('c'), cell('d')])}`,
+            'web',
+        );
+        expect(page.pageless).toBe(true);
+        // A4's 210 mm is 793.7 px.
+        expect(colwidths(json)).toEqual([[667], [667], [793], [100]]);
+    });
+
+    test("a nested table still scales down to its cell's width", async () => {
+        const nested = gridded([4500, 4500], [cell('x'), cell('y')]);
+        const { json } = await imported(
+            gridded([3000, 3000], [`<w:tc>${nested}${paragraph('')}</w:tc>`, cell('b')]),
+            'web',
+        );
+        expect(colwidths(json)).toEqual([[200], [88], [88], [200]]);
+    });
+
+    test('any other view imports paged, its tables fitted to the text column', async () => {
+        const { json, page } = await imported(gridded([10005, 10005], [cell('a'), cell('b')]), 'print');
+        expect(page.pageless).toBe(false);
+        expect(
+            colwidths(json)
+                .flat()
+                .reduce((sum, width) => sum + width, 0),
+        ).toBe(COLUMN_PX);
     });
 });
 

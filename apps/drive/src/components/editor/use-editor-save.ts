@@ -1,3 +1,7 @@
+// The save story of Drive's inline editors: Mod+S, the dirty state, the guard on a closing tab and the
+// discard dialog. Each save sends the etag the editor loaded, or the one its last save answered, so
+// a file that changed since answers a conflict, which opens the conflict dialog.
+
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useFileSave } from '@workspace/lib/editor';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -8,15 +12,15 @@ type EditorSaveOptions = {
     ownerId: string;
     mountId: string;
     pathId: string;
-    updatedAt: Date;
+    etag: string;
     getContent: () => string;
     getFrontmatter?: () => string | undefined;
 };
 
-export function useEditorSave({ ownerId, mountId, pathId, updatedAt, getContent, getFrontmatter }: EditorSaveOptions) {
+export function useEditorSave({ ownerId, mountId, pathId, etag, getContent, getFrontmatter }: EditorSaveOptions) {
     const [saveState, setSaveState] = useState<SaveState>('saved');
     const [showConflict, setShowConflict] = useState(false);
-    const updatedAtRef = useRef(updatedAt);
+    const etagRef = useRef(etag);
     const isDirtyRef = useRef(false);
     const fileSave = useFileSave(ownerId, mountId, pathId);
 
@@ -33,7 +37,7 @@ export function useEditorSave({ ownerId, mountId, pathId, updatedAt, getContent,
                 const result = await fileSave.mutateAsync({
                     content: getContent(),
                     frontmatter: getFrontmatter?.(),
-                    expectedUpdatedAt: updatedAtRef.current,
+                    expectedEtag: etagRef.current,
                     force,
                 });
                 if (result.conflict) {
@@ -41,7 +45,7 @@ export function useEditorSave({ ownerId, mountId, pathId, updatedAt, getContent,
                     setShowConflict(true);
                     return false;
                 }
-                if (result.updatedAt) updatedAtRef.current = result.updatedAt;
+                etagRef.current = result.etag;
                 isDirtyRef.current = false;
                 setSaveState('saved');
                 return true;

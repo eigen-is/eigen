@@ -18,6 +18,13 @@ describe('.parse() function', () => {
         });
     });
 
+    // Google Sheets writes a function Excel lacks as `__xludf.DUMMYFUNCTION(…)` into an xlsx, and Excel
+    // prefixes newer functions with `_xlfn.`. Such a name is an unknown function, not a syntax error.
+    test('a function name may start with an underscore', () => {
+        expect(parser!.parse('__xludf.DUMMYFUNCTION("x")')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('_xlfn.NOSUCH(1, 2)')).toMatchObject({ error: '#NAME?', result: null });
+    });
+
     test('should evaluate function with arguments passed as an stringified array', () => {
         expect(parser!.parse('SUM([])')).toMatchObject({ error: null, result: 0 });
         expect(parser!.parse('SUM([1])')).toMatchObject({ error: null, result: 1 });

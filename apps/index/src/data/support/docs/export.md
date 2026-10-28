@@ -53,7 +53,7 @@ The PDF, the web page, and the Word file use the editor's spacing, including the
 - Quotes keep the bar along their left edge.
 - Equations become Word equations that you can edit in Word, and a displayed one stays on its own line. The LaTeX you typed stays behind, since Word has no place for it, so after a round trip through Word the **LaTeX** field shows Eigen's way of writing the equation, which may differ from yours.
 
-The PDF, the web page, and the Word file use the document's paper size, orientation, and margins, as set under **File → Page setup…**.
+The PDF, the web page, and the Word file use the document's paper size, orientation, and margins, as set under **File → Page setup…**. A page-less document prints on that paper too, with its header, footer and page numbers, and in the PDF and the web page a table wider than the text shrinks to fit the page. Its Word file keeps the table's width.
 
 <div class="eigen-callout">
 

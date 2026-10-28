@@ -22,7 +22,7 @@ import { sanitizeSceneHtml } from '../../../lib/export/sanitize';
 import { writePptx } from '../../../lib/export/slides/pptx/to-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { seriesIdsByPlace } from '../../../scripts/office-audit';
-import { axesOf, sampleChartParts } from '../../fixtures/chart-parts';
+import { axesOf, sampleChartParts, withDataLabels } from '../../fixtures/chart-parts';
 import { box, buildPptx, dspSp, PIXEL_PNG, para, scheme, smartArt, solid, sp, textBox } from '../../fixtures/pptx';
 
 // A deck exported to .pptx and read back: what the writer states, the reader reads the same.
@@ -256,14 +256,14 @@ describe('a deck exported and read back', () => {
 });
 
 describe('charts exported and read back', () => {
-    const stacked = (type: 'column' | 'bar', stacking: ChartStacking) => {
+    const stacked = (type: 'column' | 'bar', stacking: ChartStacking, labelled: string[] = []) => {
         const spec = sampleChartSpec(type);
-        return newChartSpecParts({ ...spec, plots: { ...spec.plots, [type]: { stacking } } });
+        return newChartSpecParts(withDataLabels({ ...spec, plots: { ...spec.plots, [type]: { stacking } } }, labelled));
     };
     const CHARTS: NewVectorElement[] = [
         sampleChartParts('column'),
-        stacked('bar', 'stacked'),
-        stacked('column', 'percent'),
+        stacked('bar', 'stacked', ['s-1', 's-2', 's-3']),
+        stacked('column', 'percent', ['s-2']),
         sampleChartParts('line'),
         sampleChartParts('pie', 'Source Serif 4'),
     ].map((parts, i) => ({ type: 'chart', x: 40 + i * 300, y: 100, width: 280, height: 200, angle: 0, ...parts }));

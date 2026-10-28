@@ -2328,7 +2328,7 @@ async function docxRoundtripChild(
     options: { writer: string; reports: string; dump?: string },
 ): Promise<void> {
     const { docxToPmJson: read } = await import('../lib/import/doc/from-docx');
-    const { pastedFigureMedia } = await import('../lib/export/doc/docx/drawings');
+    const { pastedFigureMedia } = await import('../lib/export/doc/pasted-media');
     const module: unknown = await import(options.writer);
     const write = typeof module === 'object' && module !== null && 'writeDocx' in module && module.writeDocx;
     if (!isWriter(write)) throw new Error(`${options.writer} exports no writeDocx`);

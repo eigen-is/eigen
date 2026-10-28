@@ -16,6 +16,9 @@ type OutlineColumnProps = {
     onClose: () => void;
 };
 
+// The outline's width on a desktop, which the editor's page-less column starts clear of.
+export const OUTLINE_WIDTH_PX = 240;
+
 // Tailwind finds only whole class names, so each level's indent is written out.
 const LEVEL_INDENT = ['pl-2.5', 'pl-5', 'pl-7.5', 'pl-10', 'pl-12.5', 'pl-15'];
 
@@ -35,7 +38,7 @@ export function OutlineColumn({ editor, onJump, onClose }: OutlineColumnProps) {
     return (
         <Column
             id="outline"
-            width="15rem"
+            width={`${OUTLINE_WIDTH_PX}px`}
             className={cn('bg-background', !isMobile && 'border-r')}
             onBack={onClose}
             toolbarBorder="always"

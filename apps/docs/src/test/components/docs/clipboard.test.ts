@@ -144,6 +144,18 @@ test("a viewer's menu Copy of a figure writes what an editor's copy writes", () 
     expect({ eigen, plain }).toEqual({ eigen: expected.eigen, plain: expected.text });
 });
 
+// Another app places the copy at the box it is given: a stretched picture's, or one at its own ratio.
+test("a copied figure's box is its stored width and height", () => {
+    const { eigen } = copy([
+        paragraph({ type: 'figure', attrs: { mediaName: 'chart.png', width: 200, height: 50 } }),
+        paragraph(figure('map.png')),
+    ]);
+    expect(eigen?.items).toMatchObject([
+        { type: 'image', width: 200, height: 50 },
+        { type: 'image', width: 200, height: 150 },
+    ]);
+});
+
 // A figure whose file does not resolve, as one still uploading, has no item; its paragraph stays in the text.
 test('a figure that does not resolve is left out', async () => {
     const clipboard = copy([

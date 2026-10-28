@@ -35,7 +35,7 @@ export {
     keepOnPaper,
     POSITIONED_SELECTOR,
     readFigureFrameAttrs,
-    readFrameWidth,
+    readFrameSide,
     setFigureAttributes,
 } from './nodes/figure-frame';
 export { selectionFontSizes } from './nodes/font-size';
@@ -105,4 +105,4 @@ export {
     selectionParagraphFormat,
 } from './paragraph-format';
 export { attributeSearchText } from './search-text';
-export { MIN_TABLE_COLUMN_PX } from './table';
+export { columnFit, fitColumnWidths, MIN_TABLE_COLUMN_PX } from './table';

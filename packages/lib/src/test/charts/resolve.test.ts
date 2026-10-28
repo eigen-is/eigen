@@ -105,6 +105,17 @@ describe('parseChartSpec', () => {
         expect(style({ line: true, marker: 'circle' })).toEqual(DEFAULT_CHART_SERIES_STYLE);
     });
 
+    test("a series' data labels show only when stored as true, a pie's spec included", () => {
+        const visible = (labels: unknown, type = 'column') =>
+            parseChartSpec(stored({ chart: { type }, series: { 's-1': { labels } } }))?.series['s-1'].labels.visible;
+        expect(parseChartSpec(stored({}))?.series['s-1'].labels).toEqual({ visible: false });
+        expect(visible({ visible: true })).toBe(true);
+        expect(visible({ visible: false })).toBe(false);
+        for (const junk of ['yes', 1, { on: true }, null]) expect(visible({ visible: junk })).toBe(false);
+        expect(visible(true)).toBe(false);
+        expect(visible({ visible: true }, 'pie')).toBe(true);
+    });
+
     test('every series in data has a style, and a style for a series data no longer names is left out', () => {
         const spec = parseChartSpec(stored({ series: { 's-1': { color: '#eb6834' }, 's-9': { color: '#000000' } } }));
         expect(Object.keys(spec?.series ?? {})).toEqual(['s-1', 's-2', 's-3']);

@@ -1,8 +1,9 @@
 // The grid's keyboard. The Workbook hands each keydown to handleGlobalKeyDown, which moves the selection, commits an
 // open edit on Enter or Tab, runs the ⌘ shortcuts and opens a cell when a key types into it. While a cell is open,
-// the in-cell editor handles every other key. The ⌘ letter shortcuts match through TanStack's hotkey matcher, as
-// the other apps' shortcuts do.
+// the in-cell editor handles every other key. SHEET_HOTKEYS defines every letter shortcut once: the key handlers
+// match against it through TanStack's hotkey matcher, as the other apps' shortcuts do, and the menus show it.
 
+import type { Hotkey } from '@tanstack/react-hotkeys';
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { cloneDeep, isEmpty, isNil } from 'es-toolkit/compat';
 import { cellValue } from '../../engine/format';
@@ -16,11 +17,28 @@ import { cellFocus, checkboxChange, getCellDataVerification } from '../modules/d
 import { fillFromEdge } from '../modules/drop-cell';
 import { handleFormulaInput } from '../modules/formula-editor';
 import { moveHighlightCell, moveHighlightRange, selectAll, selectionCache } from '../modules/selection';
-import { handleBold } from '../modules/toolbar';
+import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
 import type { GlobalCache, Selection } from '../types';
 import { getNowDateTime, getSheetIndex, isAllowEdit } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy } from './copy';
+
+// Mod is ⌘ on a Mac and Ctrl elsewhere. A menu row shows its shortcut with formatForDisplay.
+export const SHEET_HOTKEYS = {
+    undo: 'Mod+Z',
+    redo: 'Mod+Shift+Z',
+    redoAlt: 'Mod+Y',
+    cut: 'Mod+X',
+    copy: 'Mod+C',
+    paste: 'Mod+V',
+    bold: 'Mod+B',
+    italic: 'Mod+I',
+    underline: 'Mod+U',
+    selectAll: 'Mod+A',
+    fillDown: 'Mod+D',
+    fillRight: 'Mod+R',
+    focusLock: 'Control+Shift+F',
+} as const satisfies Record<string, Hotkey>;
 
 // Enter and Tab commit the open edit and select the edited cell, then each moves on from it.
 function commitEdit(ctx: Context, cellInput: HTMLDivElement, canvas?: CanvasRenderingContext2D) {
@@ -198,14 +216,14 @@ export function handleWithCtrlOrMetaKey(
         }
     } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         handleControlPlusArrowKey(ctx, e, false);
-    } else if (matchesKeyboardEvent(e, 'Mod+C')) {
-        // Ctrl + C: copy. A selected chart or image copies itself in the Workbook's copy listener, and the
-        // cells behind it are not marked copied.
+    } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.copy)) {
+        // A selected chart or image copies itself in the Workbook's copy listener, and the cells behind it are not
+        // marked copied.
         if (!floatingObjectSelected(ctx)) handleCopy(ctx);
         e.stopPropagation();
         return;
-    } else if (matchesKeyboardEvent(e, 'Mod+V')) {
-        // Ctrl + V: paste — multi-range selections are not supported, bail
+    } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.paste)) {
+        // A paste into several ranges is not supported.
         if ((ctx.selections?.length ?? 0) > 1) {
             return;
         }
@@ -213,24 +231,27 @@ export function handleWithCtrlOrMetaKey(
         selectionCache.isPasteAction = true;
         e.stopPropagation();
         return;
-    } else if (matchesKeyboardEvent(e, 'Mod+X')) {
+    } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.cut)) {
         if (!floatingObjectSelected(ctx)) handleCut(ctx);
         e.stopPropagation();
         return;
-    } else if (matchesKeyboardEvent(e, 'Mod+B')) {
-        // Bold comes after cut. The matcher falls back to the physical key, and Dvorak types x on the B key.
+    } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.bold)) {
+        // Bold comes after cut, and italic after copy. The matcher falls back to the physical key, and Dvorak types
+        // x on the B key and c on the I key.
         handleBold(ctx, cellInput);
-    } else if (matchesKeyboardEvent(e, 'Mod+A')) {
-        // Ctrl + A: select all
+    } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.italic)) {
+        handleItalic(ctx, cellInput);
+    } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.underline)) {
+        handleUnderline(ctx, cellInput);
+    } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.selectAll)) {
         selectAll(ctx);
-    } else if (matchesKeyboardEvent(e, 'Mod+D') || matchesKeyboardEvent(e, 'Mod+R')) {
-        // Ctrl + D / Ctrl + R: fill down / right
+    } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.fillDown) || matchesKeyboardEvent(e, SHEET_HOTKEYS.fillRight)) {
         const range = ctx.selections?.[0];
         if (!range) return;
 
         e.preventDefault();
         e.stopPropagation();
-        fillFromEdge(ctx, range, matchesKeyboardEvent(e, 'Mod+D') ? 'down' : 'right');
+        fillFromEdge(ctx, range, matchesKeyboardEvent(e, SHEET_HOTKEYS.fillDown) ? 'down' : 'right');
     }
 
     e.preventDefault();
@@ -347,11 +368,11 @@ export function handleGlobalKeyDown(
         return;
     }
 
-    // Ctrl + Shift + F toggles the sheet's focus lock: released, keys fall through to the host
+    // Ctrl+Shift+F toggles the sheet's focus lock: released, keys fall through to the host
     // app so a keyboard user can tab out of the grid. Runs independently of sheetFocused so the
     // lock can be re-taken from anywhere inside the workbook — the keydown listener is on the
     // workbook container, so focus that has left it can't come back this way.
-    if (e.ctrlKey && e.shiftKey && kstr === 'F') {
+    if (matchesKeyboardEvent(e, SHEET_HOTKEYS.focusLock)) {
         ctx.sheetFocused = !ctx.sheetFocused;
         e.preventDefault();
 

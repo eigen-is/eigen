@@ -1,3 +1,7 @@
+// The API's errors. ApiError carries the HTTP status a route answers, and handleApiError, the app's
+// error handler, turns it into that response. The helpers here build the common ones, such as a
+// storage outage or a body too large, and StaleWriteError is the failed precondition of an overwrite.
+
 import type { Context } from 'elysia';
 
 export class ApiError extends Error {
@@ -34,10 +38,11 @@ export function isOutOfMemory(error: unknown): error is RangeError {
     return error instanceof RangeError && error.message.startsWith('Out of memory');
 }
 
-// An overwrite whose base updatedAt the file no longer carries; the inline editor answers it as a conflict.
+// An overwrite whose If-Match the file's etag no longer matches. WebDAV answers it as a 412, and the
+// inline editor as a conflict.
 export class StaleWriteError extends ApiError {
-    public constructor(public readonly currentUpdatedAt: Date) {
-        super(409, 'File changed since it was loaded');
+    public constructor(public readonly currentEtag: string) {
+        super(412, 'File changed since it was loaded');
     }
 }
 

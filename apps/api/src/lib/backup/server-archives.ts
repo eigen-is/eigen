@@ -1,3 +1,7 @@
+// The whole-server archives and their records (sidecars) in the backups folder: what the owner's list in Settings
+// and ./eigen status read, what a delete takes with it, local retention, and the boot step that marks a record left
+// running as failed. Running a backup is startServerBackup's.
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ServerArchive, ServerArchiveSidecar, ServerArchiveUpload } from '@workspace/lib/types/backup';
@@ -17,9 +21,6 @@ import { listBackupJobs, runningJobOn } from './jobs';
 import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath } from './paths';
 import type { RetainedArchive } from './retention';
 import { pruneServerArchives } from './retention';
-
-// The server archives and their records in the backups folder: what the owner's list and the status read, what a
-// delete takes with it, retention, and the boot that ends a record left running. Running a backup is server-job.ts.
 
 const INTERRUPTED = 'interrupted by a restart';
 

@@ -366,7 +366,7 @@ const lexerRules: RegExp[] = [
     /^(?:\s+)/,
     /^(?:"(\\["]|[^"])*")/,
     /^(?:'(\\[']|[^'])*'[^'!])/,
-    /^(?:[A-Za-z]{1,}[A-Za-z_0-9\.]+(?=[(]))/,
+    /^(?:[A-Za-z_][A-Za-z_0-9\.]+(?=[(]))/,
     /^(?:#[A-Z0-9\/]+(!|\?)?)/,
     ABSOLUTE_CELL,
     MIXED_CELL_COL,
@@ -1018,7 +1018,7 @@ export class Parser {
                 break;
             case 47: {
                 const text = $$[$0];
-                this.$ = () => yy.throwError(text);
+                this.$ = () => yy.errorValue(text);
                 break;
             }
             case 48:

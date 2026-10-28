@@ -156,6 +156,13 @@ test('a note put in and taken out before the open one keeps its editor, its focu
     expect(body.state.doc.textContent).toContain('Second note!');
 });
 
+// The prose stylesheet gives a figure its own line by its data-layout, which a closed note's HTML must carry for a block
+// image too, or it draws beside the note's text until the note opens.
+test("a closed note's block image carries its layout, so it draws on a line of its own", async () => {
+    const { items } = await setup(paragraph(text('See'), { type: 'figure', attrs: { mediaName: 'logo.png' } }));
+    expect(items()[1]?.querySelector('.figure')?.getAttribute('data-layout')).toBe('block');
+});
+
 // React draws an image's node view; mounted inside a layout effect, its flushSync draws a warning, and here it mounts
 // as the note opens.
 test('a note holding an image opens with no flushSync from a layout effect', async () => {

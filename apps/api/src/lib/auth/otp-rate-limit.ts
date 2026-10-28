@@ -1,14 +1,11 @@
+// The limits on guest sign-in codes. Asking for a code costs a slot per email and per IP for an hour, so open
+// signup cannot be used to mail codes to anyone without end, and each code gets a fixed number of guesses. A
+// successful sign-in hands its slots back. The state lives in this process, which is enough while Eigen runs one API
+// process.
+
 import { ApiError } from '../core/errors';
 
-// In-memory sliding-window limiter for /guest-auth/request-otp. Prevents the open
-// signup endpoint from being weaponized as a free OTP-blaster: each call costs one
-// slot in the email bucket and one in the IP bucket, both expire after WINDOW_MS.
-// A successful sign-in hands its slots back, so only requests that never prove the
-// mailbox count; the per-IP cap leaves room for an office of guests behind one address.
-// State is process-local — fine while Eigen runs as a single API process. Swap to
-// a DB-backed store behind the same `checkOtpRateLimit` signature if we ever shard.
-// Not a WindowLimiter: a refund takes one email's hits out of a shared IP bucket, so each hit
-// carries its email.
+// Not a WindowLimiter: a refund takes one email's hits out of a shared IP bucket, so each hit carries its email.
 
 const WINDOW_MS = 60 * 60 * 1000;
 export const MAX_OTP_REQUESTS_PER_EMAIL = 10;

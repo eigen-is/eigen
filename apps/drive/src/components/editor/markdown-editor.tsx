@@ -1,3 +1,7 @@
+// The markdown editor for a .md file in Drive: a Tiptap WYSIWYG view with a CodeMirror source mode.
+// It keeps the file's list marker and line endings, so a save changes only what the user changed.
+// The frontmatter stays out of the Tiptap document and goes back unchanged with each save.
+
 import { redo, undo } from '@codemirror/commands';
 import type { EditorView } from '@codemirror/view';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
@@ -71,7 +75,7 @@ function useMarkdownExtensions(content: string) {
 type MarkdownEditorProps = {
     content: string;
     frontmatter: string | null;
-    updatedAt: Date;
+    etag: string;
     ownerId: string;
     mountId: string;
     pathId: string;
@@ -86,7 +90,7 @@ type MarkdownEditorProps = {
 export function MarkdownEditor({
     content,
     frontmatter,
-    updatedAt,
+    etag,
     ownerId,
     mountId,
     pathId,
@@ -143,7 +147,7 @@ export function MarkdownEditor({
         ownerId,
         mountId,
         pathId,
-        updatedAt,
+        etag,
         getContent,
         getFrontmatter,
     });

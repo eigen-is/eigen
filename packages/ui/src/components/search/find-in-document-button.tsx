@@ -1,10 +1,13 @@
+// The entry points to the find bar outside its own keys: a toolbar button, a kebab-menu row, and the hook that
+// gives the bar the focus back after a menu that opened it closes.
+
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { Search } from 'lucide-react';
 import type { RefObject } from 'react';
 import { useRef } from 'react';
 import { DropdownMenuItem } from '../dropdown-menu';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
-import { useOptionalDocSearchBar } from './doc-search-provider';
+import { FIND_HOTKEY, useOptionalDocSearchBar } from './doc-search-provider';
 
 // Toolbar ⌕ entry point for the find bar (mobile has no ⌘F). Null-safe: a toolbar rendered
 // outside a DocSearchProvider shows no button.
@@ -14,7 +17,7 @@ export function FindInDocumentButton() {
     return (
         <TooltipButton
             icon={Search}
-            tooltipText={`Find in document (${formatForDisplay('Mod+F')})`}
+            tooltipText={`Find in document (${formatForDisplay(FIND_HOTKEY)})`}
             onClick={docSearchBar.open}
         />
     );
