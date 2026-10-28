@@ -861,7 +861,7 @@ function fillDateSeries(
     rollWeekend: boolean,
 ) {
     const applyData: Cell[] = [];
-    // Set on each round's first cell, which the loop reaches first.
+    // Set on each round's first cell. A round that starts on an empty cell keeps the step before it, 0 at first.
     let step = 0;
 
     for (let i = 1; i <= len; i += 1) {

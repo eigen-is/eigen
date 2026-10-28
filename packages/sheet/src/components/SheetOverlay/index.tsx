@@ -74,7 +74,7 @@ export const SheetOverlay: React.FC = () => {
             if (e.button !== 2) {
                 // onContextMenu event will not call onMouseDown
                 setContext((draftCtx) => {
-                    // The handlers run only once the grid is mounted, so every ref is set.
+                    // The recipe can run after the grid unmounts, and then its refs are unset.
                     const cellInput = refs.cellInput.current;
                     const cellArea = refs.cellArea.current;
                     if (!cellInput || !cellArea) return;

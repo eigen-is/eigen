@@ -100,7 +100,7 @@ export function FxEditor() {
             }
             lastKeyDownEventRef.current = new KeyboardEvent(e.type, e.nativeEvent);
             const { key } = e;
-            // The key arrives on the fx box itself, so its ref is set.
+            // The key arrives on the fx box itself, so its ref is unset only once the box unmounts.
             const fxInput = refs.fxInput.current;
             if (!fxInput) return;
             recentText.current = fxInput.innerText;
