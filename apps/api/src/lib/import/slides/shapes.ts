@@ -282,8 +282,12 @@ function readShape(walk: Walk, leaf: Leaf): void {
         ...text,
         padding: isBordered(paint) ? Math.max(0, text.padding - paint.strokeWidth) : text.padding,
     };
+    // txBox marks a text box. A marked straight rectangle is one, and any other marked shape keeps its text in a box
+    // on top.
+    const cNvSpPr = childOf(nonVisualOf(shape) ?? shape, shape.ns, 'cNvSpPr');
+    const marked = isOn(cNvSpPr && xmlAttr(cNvSpPr, '', 'txBox'));
     // Text in the shape's own box and level goes into the shape. Text with a box of its own, or turned, sits on top.
-    const inside = !textAt && turn === 0 ? framed : undefined;
+    const inside = !textAt && turn === 0 && !marked ? framed : undefined;
     const textOnTop = () =>
         text &&
         push(walk, {
@@ -302,10 +306,9 @@ function readShape(walk: Walk, leaf: Leaf): void {
             textOnTop();
         }
     };
-    // The file says which straight rectangle is a text box: one marked txBox, or a placeholder such as a title or a
-    // footer. A text box grows with its text, where a rectangle lets it spill.
-    const cNvSpPr = childOf(nonVisualOf(shape) ?? shape, shape.ns, 'cNvSpPr');
-    const textBoxed = own !== undefined || isOn(cNvSpPr && xmlAttr(cNvSpPr, '', 'txBox'));
+    // A placeholder such as a title or a footer is a text box too. A text box grows with its text, where a rectangle
+    // lets it spill.
+    const textBoxed = own !== undefined || marked;
     if (framed && textBoxed && !textAt && kind?.type === 'rectangle' && kind.corners === 'straight')
         push(walk, { type: 'richtext', ...textBox, ...framed, ...paint, corners: 'straight' });
     else if (kind) shapeAndText(kind);

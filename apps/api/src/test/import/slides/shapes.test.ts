@@ -319,19 +319,39 @@ describe('kinds', () => {
     test('a straight rect with text is a text box by txBox or any placeholder, and otherwise a rectangle holding it', () => {
         const rect = (options: { txBox?: boolean; ph?: string }) =>
             sp({ xfrm: box(0, 0, 200, 100), geom: 'rect', spPr: FILLED, text: para('Label'), ...options });
+        const marked = (value: string) => rect({}).replace('<p:cNvSpPr/>', `<p:cNvSpPr txBox="${value}"/>`);
         const found = elementsOf(
             rect({ txBox: true }) +
+                marked('true') +
                 rect({ ph: '<p:ph type="title"/>' }) +
                 rect({ ph: '<p:ph type="ftr" sz="quarter" idx="11"/>' }) +
-                rect({}),
+                rect({ ph: '<p:ph type="dt" sz="half" idx="10"/>' }) +
+                rect({ ph: '<p:ph type="sldNum" sz="quarter" idx="12"/>' }) +
+                rect({}) +
+                marked('0'),
         );
         expect(found.map((element) => [element.type, element.html, element.corners])).toEqual([
-            ['richtext', '<p>Label</p>', 'straight'],
-            ['richtext', '<p>Label</p>', 'straight'],
-            ['richtext', '<p>Label</p>', 'straight'],
+            ...Array.from({ length: 6 }, () => ['richtext', '<p>Label</p>', 'straight']),
+            ['rectangle', '<p>Label</p>', 'straight'],
             ['rectangle', '<p>Label</p>', 'straight'],
         ]);
-        expect(JSON.parse(String(found[3].fill))).toMatchObject({ color: '#ff0000' });
+        expect(JSON.parse(String(found[6].fill))).toMatchObject({ color: '#ff0000' });
+    });
+
+    test('a shape marked txBox that is not a straight rect is drawn with its text in a box on top', () => {
+        const marked = (spPr: string, geom?: string) =>
+            sp({ xfrm: box(0, 0, 200, 100), geom, spPr, text: para('Label'), txBox: true });
+        const found = elementsOf(
+            marked(FILLED, 'roundRect') + marked(FILLED, 'ellipse') + marked(custGeom(TRIANGLE) + FILLED),
+        );
+        expect(found.map((element) => [element.type, element.html])).toEqual([
+            ['rectangle', undefined],
+            ['richtext', '<p>Label</p>'],
+            ['ellipse', undefined],
+            ['richtext', '<p>Label</p>'],
+            ['path', undefined],
+            ['richtext', '<p>Label</p>'],
+        ]);
     });
 
     test("a preset kind, a pie and a one-path preset hold their text, with the file's inset less the border", () => {

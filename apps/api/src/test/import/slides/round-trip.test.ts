@@ -452,19 +452,40 @@ describe('paths exported and read back', () => {
     });
 
     test('a rounded diamond and a painted rounded text box, which the writer draws as custGeom, come back as paths', () => {
-        const [diamond, box] = slide.elements.slice(PATHS.length);
-        expect(slide.elements).toHaveLength(PATHS.length + 2);
+        const [diamond, box, text] = slide.elements.slice(PATHS.length);
+        expect(slide.elements).toHaveLength(PATHS.length + 3);
         expect(diamond).toMatchObject({ type: 'path', closed: true, fill: solid });
         expect(String(diamond.path)).toMatch(/^M [^MZ]* C [^MZ]* Z$/);
-        // The text box's text comes back inside its path, as any closed path holds it.
-        expect(box).toMatchObject({ type: 'path', closed: true, fill: solid, html: '<p>Rounded</p>' });
+        // The writer marks the text box txBox, so its text comes back in a text box on top of its path.
+        expect(box).toMatchObject({ type: 'path', closed: true, fill: solid });
+        expect(box.html).toBeUndefined();
+        expect(text).toMatchObject({ type: 'richtext', html: '<p>Rounded</p>' });
         for (const [found, element] of [
             [diamond, ROUNDED[0]],
             [box, ROUNDED[1]],
+            [text, ROUNDED[1]],
         ] as const) {
             expectPx(found.x, Number(element.x));
             expectPx(found.width, Number(element.width));
         }
+    });
+
+    test("a painted text box with the deck's default corners keeps its text in a text box", () => {
+        const painted: NewVectorElement = {
+            type: 'richtext',
+            x: 100,
+            y: 100,
+            width: 600,
+            height: 200,
+            html: '<p>Hello</p>',
+            fill: solid,
+        };
+        const { sent, deck } = roundTrip([painted]);
+        expect(sent[0]).toMatchObject({ corners: 'curved' });
+        expect(deck.slides[0].elements.map((found) => [found.type, found.html])).toEqual([
+            ['path', undefined],
+            ['richtext', '<p>Hello</p>'],
+        ]);
     });
 });
 
