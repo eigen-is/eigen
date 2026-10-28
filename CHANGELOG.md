@@ -6,99 +6,85 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Added
 
-- **Slides on a phone** — a row of slide thumbnails sits under the slide. Tap one to jump straight to it
-- **SmartArt in PowerPoint files** — a SmartArt graphic comes into Slides as the shapes and text PowerPoint shows, each one a shape you can move, resize and edit. Editing its text doesn't rearrange the others
-- **SmartArt saved without its shapes** — a graphic saved that way, as LibreOffice saves one, leaves its **SmartArt not imported** box with the graphic's text listed in it
-- **Bra-ket notation in equations** — a Docs equation reads `\bra{\phi}`, `\ket{\psi}` and `\braket{\phi|\psi}`, and `\expval`, `\mel` and `\ketbra` for expectation values, matrix elements and outer products. Their brackets grow with what's inside them
-- **Images behind or in front of the text** — in Docs, put an image or a chart behind the text or in front of it and drag it anywhere on the page. It moves with its paragraph when you type above it
-- **Image layouts on a phone** — **Format → Image** has every way to place an image: in line, wrapped left or right, behind or in front of the text
-- **Word files** — an image or a chart behind or in front of the text stays there when you import a Word file or download a document as Word
-- **Table borders in Docs** — give the selected cells all borders, a box around them, or none, and pick the border color, in the **Table** panel or under **Format › Table**. A row or column you add takes the borders and fill of the one beside it
-- **Table borders in Word files** — a Word table keeps its borders, their colors, widths and dashes, when it comes in and when you download a document as Word. A table without borders in Word has none in Docs
-- **Styling part of a cell in Sheets** — while you edit a cell, select some of its words and make them bold, italic, underlined, struck through, or another color, font or size. **Ctrl+B**, **Ctrl+I** and **Ctrl+U** (Mac: **⌘B**, **⌘I**, **⌘U**) work as you type, and a style you pick with no words selected applies to what you type next. Text you type or paste over selected words takes their style, and text you paste comes in as plain text, as in Google Sheets. The cell keeps its styles when you download it as Excel
-- **Outline in Docs** — **Tools → Show outline** lists the document's headings on the left, over the document, and a click jumps to one. It stays shown or hidden in your browser from one document to the next. On a phone it opens from the **⋮** menu
-- **Table of contents in Docs** — **Insert → Table of contents** lists the document's headings to Heading 3, and keeps the list up to date as you or anyone else edits them. Click a line to jump to its heading. The PDF shows each heading's page number, and the Word file holds Word's own table of contents, which fills in its page numbers when Word updates it. Reload a document left open since the update before you add one, or the older tab removes it
-- **Tables of contents in Word files** — a Word file's table of contents comes in as one that lists the document's headings. The message after an import says when those differ from the entries Word saved
-- **Celebrations** — tick the last box of a card's checklist in Stickies, or of a comment card elsewhere, and now and then confetti bursts from it. Turn it off on the **Preferences** page in Space
-- **Page-less documents in Docs** — **File → Page setup…** has **Pages** and **Page-less** tabs, as in Google Docs, and **Format** switches between them. A page-less document is one continuous column of text without page breaks, headers or footers, for everyone who opens it. It still prints on its paper
-- **Text width** — in a page-less document, pick **Narrow**, **Medium**, **Wide** or **Full** on the **Page-less** tab. The width is yours: it follows you to every page-less document and device, and the people you share with keep theirs
-- **Wide tables and images** — in a page-less document a table can grow past the text and scrolls sideways, and an image or a chart can be as wide as the paper. A Word file saved in Web Layout opens page-less with its tables at their widths, and a page-less document downloads as a Word file in Web Layout
-- **Preferences in Space** — a page of its own, right below Personal info, where you pick the theme (Light, Dark or System) and turn Celebrations on or off
-- **What a download left out** — after you download a document, spreadsheet, deck or drawing, a message counts what the file left out, cut short or drew simpler, such as a hatched fill a PowerPoint file draws solid. It also says when part of the document couldn't be read
-- **What a printout left out** — printing a Docs document gives the same message once the PDF opens
-- **Italic and underline shortcuts in Sheets** — select cells and press **Ctrl+I** or **Ctrl+U** (Mac: **⌘I**, **⌘U**) to make them italic or underlined, as **Ctrl+B** makes them bold
-- **Chart data labels** — in Docs, Sheets, Slides and Vector, the **Data labels** box in a chart's **Series** section writes each value on a column, bar or line chart, in the values' number format. Labels that would overlap hide, and the bigger bar keeps its own
-- **Data labels in Office files** — a chart's data labels come in from Excel, Word and PowerPoint files and go out when you download one
-- **Image and chart size in Docs** — the **Image** and **Chart** panels set the width and the height in centimeters, with **Keep aspect ratio** as in Slides. Uncheck it to stretch an image, which keeps that size when you print, download it as PDF, a web page or Word, or open the Word file again
-- **Text boxes in Docs** — **Insert › Text box** adds a box with paragraphs of its own, which you type in right where it stands. Put it on its own line, beside the text, or behind or in front of it, and drag it anywhere on the page
-- **A text box's look** — the **Text box** panel sets a box's size, fill, outline and rounded corners, the space around its text, and whether its text sits at the top, middle or bottom. The box grows when its text needs more room
-- **Text boxes in Word files** — a Word text box comes into Docs as a text box, at its place and with its look, and a document downloads as Word with Word's own text boxes. A text box in a header, footer or footnote, or in a group or a drawing canvas, still comes in as its text
+- **Page-less documents in Docs** — **File → Page setup…** or **Format** turns a document into one continuous column with no page breaks, headers or footers, as in Google Docs. It still prints on its paper
+- **Text width** — pick **Narrow**, **Medium**, **Wide** or **Full** for page-less documents. Your width follows you to every device, and the people you share with keep theirs
+- **Wide tables and images** — in a page-less document, a table can grow past the text and scroll sideways, and an image or chart can be as wide as the paper. A Word file in Web Layout opens page-less, and a page-less document downloads in Web Layout
+- **Text boxes in Docs** — **Insert › Text box** adds a box you type in where it stands. Place it in line, beside, behind or in front of the text, and drag it anywhere
+- **A text box's look** — the **Text box** panel sets its size, fill, outline, corners, padding and where its text sits. The box grows with its text
+- **Text boxes in Word files** — come in and go out as text boxes, in place and with their look. One inside a header, footer, footnote, group or drawing canvas comes in as text
+- **Images behind or in front of the text** — in Docs, an image or chart can sit behind or in front of the text, anywhere on the page, and moves with its paragraph. Word files keep it there. On a phone, **Format → Image** has every layout
+- **Image and chart size in Docs** — set the width and height in centimeters, with **Keep aspect ratio**. A stretched image stays stretched in prints, downloads and Word files
+- **Table borders in Docs** — all borders, a box or none, in any color, from the **Table** panel or **Format › Table**. A new row or column copies its neighbor's borders and fill
+- **Table borders in Word files** — keep their colors, widths and dashes both ways, and a borderless Word table stays borderless
+- **Outline in Docs** — **Tools → Show outline** lists the headings on the left, and stays open across documents. Click one to jump there. On a phone it's in the **⋮** menu
+- **Table of contents in Docs** — **Insert → Table of contents** lists the headings down to Heading 3 and stays up to date. Click a line to jump. PDFs show page numbers, and Word downloads hold Word's own
+- **Tables of contents in Word files** — come in as a live table of contents, and the import message says when its entries differed. A **Contents** title above it stays normal text, not a Heading 1
+- **Bra-ket notation in equations** — `\bra`, `\ket`, `\braket`, `\expval`, `\mel` and `\ketbra` in Docs equations, with brackets that grow to fit
+- **Styling part of a cell in Sheets** — while you edit a cell, make selected words bold, italic, underlined, struck through, or another color, font or size. Pasted text comes in plain, as in Google Sheets. Excel downloads keep the styles
+- **Italic and underline shortcuts in Sheets** — **Ctrl+I** and **Ctrl+U** (Mac: **⌘I**, **⌘U**) work on selected cells, and with **Ctrl+B** on selected words in a cell
+- **Slides on a phone** — a row of slide thumbnails sits under the slide. Tap one to jump to it
+- **SmartArt in PowerPoint files** — comes in as shapes and text you can edit. One saved without its shapes, as LibreOffice does, leaves a **SmartArt not imported** box with its text
+- **Chart data labels** — **Data labels** writes each value on a column, bar or line chart, in Docs, Sheets, Slides and Vector. Labels that would overlap hide, and Office files keep them both ways
+- **What a download left out** — after a download, or a print from Docs, a message counts what the file left out or drew simpler, and says when part of it couldn't be read
+- **Preferences in Space** — a new page for the theme (Light, Dark or System) and Celebrations
+- **Celebrations** — now and then, ticking the last box of a checklist on a Stickies card or a comment card bursts confetti
 
 ### Changed
 
-- **Labels in sentence case** — buttons, menus, dialog titles and fields in Admin, Calendar, Chat, Contacts, Docs, Drive, Mail, Sheets, Space and Stickies capitalize only the first word and names, such as **New event**, **Reply all** and **Web page (.html)**, as the rest of Eigen already does
-- **Open documents after the update** — reload any Docs document you have open: a tab still on the previous version deletes the text boxes it receives
-- **Forwarding email** — a forward brings the original's attachments along, pictures in the message included. Take one off with the **X** on its chip before you send
-- **Space home** — an admin gets an Admin tile next to the apps. The **Help and support** tile takes the help center's teal
-- **Help center colors** — the Admin section wears the Admin app's color, and a section page shows its title in its section's color, such as amber for Mail
-- **Contacts** — the contact list fills the page until you open a contact. Its details then open beside a narrower list, and **Close** returns to the full list. A link to a contact that was deleted opens to **Contact not found**
-- **Admin teams** — teams have their own list page, like users, instead of a list in the sidebar. Create a team with the **+** next to the search bar, and click a team to open its details
-- **Adding people to a team** — dragging users onto a team is gone with the sidebar list. To add several people at once, select them on the **Users** page, right-click and choose **Add to team…**. A team's **Members** section still adds one person at a time
-- **Admin users** — a user's details list their teams under the role, leaving out the team named after your organization that everyone joins. Add the user to a team with **Add to team**, or take them out of one with its **×**
-- **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width, because the page cuts off the rest. A web page download keeps more columns while all of the sheet's rows fit
-- **Links** — a link is underlined, as in Word and Google Docs: in Docs, its previews and its web page and PDF downloads, and in Stickies, the email you write in Mail, the help center and the blog. A footnote's number and its ↩ in a web page download stay plain
-- **Number fields in Slides and Vector** — a number in the side panel shows at most two decimals, and the line height and letter spacing show at least one, such as 1.0. While you type, the field shows what you typed
-- **Spreadsheet downloads** — a cell's text stays inside its row in a web page or PDF download, as it does in the editor. A wrapped cell taller than its row shows the part that fits
-- **Tables in Docs** — a table keeps its column widths when wider margins, a turn to portrait or a smaller paper size leave less room for the text, and scrolls sideways inside the page instead of shrinking. A table in a list or a cell still shrinks to fit. When you print or download a PDF, a table wider than the page shrinks to fit it
-- **Page setup in Docs** — the margins show two decimals, such as 2.00 cm
-- **Shortcuts in the Sheets menus** — the **Edit** and **Format → Text** menus show each shortcut next to its item, such as **⌘B** for bold on a Mac and **Ctrl+B** elsewhere
-- **Menus in Docs, Sheets, Slides, Vector and Stickies** — with one menu open, point at another, such as **Edit**, to open it, or move across with the left and right arrow keys. One click on **Edit** while **Format** is open opens **Edit**, and so does one click on a menu while the font or style picker is open. A click outside an open menu also reaches the page, such as selecting a cell
+- **Open documents after the update** — reload any Docs document you have open. A tab still on the previous version deletes the text boxes and tables of contents it receives, and can shrink wide tables for everyone
+- **Labels in sentence case** — buttons, menus, dialogs and fields in Admin, Calendar, Chat, Contacts, Docs, Drive, Mail, Sheets, Space and Stickies capitalize only the first word and names, such as **Reply all**
+- **Menus in Docs, Sheets, Slides, Vector and Stickies** — with a menu open, point at another or use the arrow keys to open it. One click switches menus, and a click outside one reaches the page
+- **Links** — underlined, as in Word and Google Docs, in Docs and its downloads, Stickies, the email you write in Mail, the help center and the blog
+- **Tables in Docs** — a table keeps its column widths when the page gets narrower, and scrolls sideways. A table in a list or a cell still shrinks, and a PDF shrinks one wider than the page
+- **Decimals** — Docs margins show two decimals, such as 2.00 cm. Number fields in Slides and Vector show at most two, and line height and letter spacing at least one, such as 1.0
+- **Shortcuts in the Sheets menus** — **Edit** and **Format → Text** show each item's shortcut
+- **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width. A web page download keeps more while all its rows fit
+- **Spreadsheet downloads** — a cell's text stays inside its row in web page and PDF downloads, as in the editor
+- **Forwarding email** — a forward brings the original's attachments, inline pictures too. Remove one with the **X** on its chip
+- **Contacts** — the list fills the page until you open a contact. A link to a deleted contact opens to **Contact not found**
+- **Teams in Admin** — teams get a list page, like users. To add people, select them on the **Users** page, right-click and choose **Add to team…**, which replaces dragging them onto a team
+- **Users in Admin** — a user's details list their teams, with **Add to team** and a **×** to take them out of one
+- **Space home** — admins get an Admin tile, and **Help and support** takes the help center's teal
+- **Help center colors** — each section shows its title in its app's color, such as amber for Mail
 
 ### Fixed
 
-- **Sheets menus on a phone** — the six menus, File to Data, fit across a phone screen instead of the last one running under the **⋮** button
-- **Deleting a team in Admin** — when the server won't delete a team, such as the organization's default team, the dialog closes and the message says why
-- **Finding a person in a filter** — **Home** and **End** in the person search of a filter or an assignee picker, such as Stickies' **Filter › Assigned to**, move the cursor in what you typed on Windows and Linux, instead of picking the first or last person
-- **Picking a theme** — the new theme shows the moment you pick it in the account menu or on **Preferences**, without a **Settings saved** message
-- **Color scales in Sheets** — a color scale whose colors are written short, such as `#f00`, shades its cells instead of leaving them blank
-- **Sharing a calendar** — when the owner stops sharing a calendar with you, the list of who has access refreshes at once, as it does when they share it
-- **Contents title in Word files** — the title Word puts above a table of contents, such as **Contents**, comes in as normal text instead of a Heading 1, so it no longer lists itself in the outline
-- **Trash in Drive** — a file or folder deleted for good disappears from the Trash open in your other tabs too
-- **Unread counts in Mail** — a message you read in another mail app clears its unread count in Eigen's sidebar at once
-- **Saving a text file in Drive** — when someone else changed the file since you opened it, even within the same second, Drive shows **File conflict** instead of overwriting their change
-- **Recent activity in Drive** — saving a text file in Drive's editor shows as edited, not as an upload
-- **Long tables in Docs PDFs** — a table too tall for what is left of a page starts there and continues on the next page, instead of jumping whole to the next page and leaving a gap. A tall row splits across the pages too, as Word does by default
-- **Pasted photos in Docs downloads** — a web page or PDF download draws a pasted image without the camera details and location it carried, as the Word download already did. An animated GIF pasted that way shows its first frame, and one pasted in a form the download can't clean is left out
-- **Merged cells in spreadsheet previews** — a merged cell too wide or too tall for the Drive preview, or for a download cut to fit, shows no border where the preview cuts it off
-- **Spreadsheet previews** — an image or chart on a sheet with hidden columns shows in the Drive preview when it sits within the preview's first 50 visible columns
-- **Search in Sheets** — searching your files finds a spreadsheet by a chart's title, axis titles and series names
-- **Comments in downloads** — a Docs web page download and the Drive preview show commented text without its yellow highlight, as the PDF and Word downloads already do
-- **Shared with me in Drive** — a text file or folder someone shared with you shows its full path at the top, starting with Shared with me, then the shared folder and every folder below it. Click Shared with me to go back to the list
-- **Public files in Drive** — a public file or folder that nobody shared with you shows its path from the first folder you can open, without Shared with me
-- **100% stacked charts in Office files** — a 100% stacked chart downloaded as Excel, Word or PowerPoint shows its axis from 0% to 100%, also when its numbers have a format of their own
-- **Closing a shared text file** — closing a text file that was shared with you on its own takes you back to Shared with me instead of a page asking for access to its folder
-- **Text files on a team drive** — the path above the file starts with the team drive's name, as its folder does, and each folder in it opens that folder
-- **Excel named ranges** — a formula that uses a named range, such as `=SUM(Sales)`, keeps working after you edit the cells it reads, and a dropdown list from a named range comes in as a list. Sheets writes the cells the name stands for into the formula, so the name itself isn't kept. A named range that points at another workbook or at several separate ranges is counted in the message after the import
-- **Excel files** — a row whose height is set to normal in Excel comes in at normal height, even when its text wraps. A spreadsheet you download as Excel keeps the row heights Eigen shows
-- **Spreadsheet PDF** — a spreadsheet with thousands of small sheets prints its first 2,000 sheets instead of failing
-- **Long code blocks** — a Docs document with many long code blocks and no language set downloads and previews at once. Past about 65,000 characters of such code in all, the rest comes without syntax colors
-- **Copied charts** — a chart you copy from Sheets into Docs, Slides or Vector keeps the number format of its axis, so a column of percentages reads 25%, not 0.25
-- **Sheets undo while others edit** — undo changes your own cell where it now is after someone else inserts or deletes rows or columns, or deletes another sheet, formulas pointing at the moved rows included. It skips a cell someone else changed after you, and a formula still undoes when someone changed a cell it reads. Undoing or redoing your own row, column or sheet change keeps the edits others made since, and everyone sees the same result. Undoing a row delete brings back the formulas it broke, on every sheet. Closing a spreadsheet leaves everyone else's view and undo history as they are
-- **Delete in Sheets** — Delete and Backspace clear what the selected cells hold and keep their formatting, such as colors, bold and number format, as in Excel and Google Sheets. A link goes with its text
-- **Errors in Sheets formulas** — an error you type into a formula, such as `#N/A`, is a value a function can check, so `=ISERROR(#N/A)` gives TRUE and `=ERROR.TYPE(#N/A)` gives 7, as in Excel. A function Excel lacks in a Google Sheets file saved as Excel shows #NAME? instead of #ERROR!
-- **Resizing a chart in Sheets** — a chart stretches as you drag its corner and draws sharp at its new size when you let go, so a large sketched chart keeps up with the pointer
-- **Sheets edits from others** — someone else's edit shows up for you, also on a sheet you never opened, such as a fresh copy or a sheet brought back with undo, and while your spreadsheet is still opening or reloading. A copy you never opened comes back with its cells when you undo its delete
-- **Sheets undo** — after an undo or redo, every formula it touches shows the value its cells give now, also when someone else changed one of them in the meantime
-- **Sheets** — a cell you are typing in moves with its row or column when someone else inserts or deletes rows or columns above it, so pressing Enter writes into your cell and not into theirs. If they delete your cell, the edit closes
-- **Sheets** — a formula that points at another sheet follows the rows and columns someone inserts or deletes there in downloads, previews and for whoever opens the spreadsheet next, as it does on screen
-- **Spreadsheet PDF** — a sheet with one cell of thousands of lines prints on one page instead of thousands
-- **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads as a web page or PDF with the ones that fit and leaves the rest out, instead of failing. Its preview shows the charts that fit instead of nothing
-- **Sheets** — a wrapped cell that mixes styles, such as one from an Excel file, breaks its lines between words instead of keeping a long styled stretch on one line
-- **Sheets** — turning on **Format → Wrapping → Wrap**, or picking a bigger size in the font size box or **Format → Font size**, makes the row tall enough for the cell's text
-- **Deleting a team in Admin** — deletes the team's drives with every file on them, and its calendar, instead of leaving them on the server. While a backup or a restore of the team runs, the team can't be deleted, and the team named after your organization, which everyone joins, can't be deleted at all
-- **Sheets shortcuts on other keyboard layouts** — on Dvorak, **Ctrl+C** (Mac: **⌘C**) copies the selected cells and **Ctrl+X** (Mac: **⌘X**) cuts them, instead of doing nothing or making them bold. On a Russian or Greek layout, **Ctrl+B**, **Ctrl+I** and **Ctrl+U** style the words you select while typing in a cell. On a Mac the shortcuts take **⌘**, not Ctrl, as in Docs
-- **Undo while you type in a cell** — in Sheets, **Ctrl+Z** (Mac: **⌘Z**) in an open cell undoes your typing and leaves the spreadsheet's earlier changes alone
-- **New events late in the evening in Calendar** — a new event made after 23:15 ends half an hour after it starts, on the next day, instead of before it starts. Turning off **All day** that late does the same
+- **Undo in Sheets while others edit** — undo finds your cell after others insert or delete rows, columns or sheets, and skips a cell someone changed after you. Undoing a row, column or sheet change keeps their edits, and undoing a row delete restores the formulas it broke
+- **Formulas after an undo** — every formula an undo or redo touches shows what its cells give now, also when someone else changed one
+- **Others' edits in Sheets** — show up on a sheet you never opened, and while the spreadsheet is still opening. Closing a spreadsheet leaves everyone else's view and undo history alone
+- **Typing in a cell while others edit** — your cell moves with its row or column as others insert or delete them, so Enter writes where you meant. If they delete it, the edit closes
+- **Formulas across sheets** — a formula that points at another sheet follows the rows and columns inserted or deleted there, in downloads and previews too, and for whoever opens it next
+- **Undo while you type in a cell** — **Ctrl+Z** (Mac: **⌘Z**) undoes only your typing
+- **Delete in Sheets** — Delete and Backspace clear cells, links too, and keep their formatting, as in Excel and Google Sheets
+- **Errors in Sheets formulas** — a typed error such as `#N/A` is a value, so `=ISERROR(#N/A)` gives TRUE. A Google Sheets-only function in an Excel file shows #NAME?, not #ERROR!
+- **Sheets shortcuts on other keyboard layouts** — copy and cut work on Dvorak, and bold, italic and underline work in a cell on Russian and Greek layouts. On a Mac they take **⌘**, as in Docs
+- **Row height in Sheets** — **Wrap** or a bigger font size makes the row tall enough for the text
+- **Wrapped text in Sheets** — a cell that mixes styles breaks its lines between words
+- **Color scales in Sheets** — short colors such as `#f00` shade cells instead of leaving them blank
+- **Resizing a chart in Sheets** — a large sketched chart keeps up with the pointer
+- **Sheets menus on a phone** — all six fit across the screen
+- **Searching for spreadsheets** — search finds a spreadsheet by its charts' titles, axis titles and series names
+- **Excel named ranges** — a formula like `=SUM(Sales)` keeps working as its cells change, though the name itself isn't kept, and a dropdown from a named range comes in as a list. Names Eigen can't follow are counted in the import message
+- **Excel row heights** — a normal-height row with wrapped text stays normal, and Excel downloads keep the heights Eigen shows
+- **Copied charts** — a chart copied from Sheets into Docs, Slides or Vector keeps its axis number format, so 25% doesn't turn into 0.25
+- **100% stacked charts in Office downloads** — the axis runs from 0% to 100%
+- **Spreadsheet PDF** — thousands of small sheets print the first 2,000 instead of failing, and a cell of thousands of lines prints on one page
+- **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads with the ones that fit instead of failing, and its preview shows them
+- **Spreadsheet previews** — a merged cell cut off at the edge shows no border there. An image or chart on a sheet with hidden columns shows within the first 50 visible columns
+- **Long tables in Docs PDFs** — a table continues on the next page instead of jumping there whole, and a tall row splits, as in Word
+- **Pasted photos in Docs downloads** — web page and PDF downloads strip a pasted photo's camera details and location, as Word downloads did. An animated GIF shows its first frame, and an image that can't be cleaned is left out
+- **Comments in downloads** — web page downloads and Drive previews show commented text without the yellow highlight
+- **Long code blocks** — many long code blocks with no language set no longer stall a download or preview. Past about 65,000 characters in all, the rest has no syntax colors
+- **Saving a text file in Drive** — a save over someone else's newer change shows **File conflict** instead of overwriting it. Recent activity lists your save as an edit, not an upload
+- **Paths in Drive** — a file or folder shared with you shows its path from **Shared with me**, a public one from the first folder you can open, and one on a team drive from the drive's name. Each folder in it is a link
+- **Closing a shared text file** — takes you back to **Shared with me**, not to an access request for its folder
+- **Trash in Drive** — a file or folder deleted for good leaves the Trash in your other tabs too
+- **Unread counts in Mail** — reading a message in another mail app clears its count at once
+- **Sharing a calendar** — the list of who has access refreshes at once in every open tab when a calendar is shared or stops being shared
+- **New events late in the evening** — in Calendar, a new event made after 23:15 ends on the next day instead of before it starts. So does one with **All day** turned off that late
+- **Finding a person in a filter** — **Home** and **End** in a person search, such as Stickies' **Filter › Assigned to**, move the cursor on Windows and Linux
+- **Picking a theme** — the theme changes the moment you pick it, without a **Settings saved** message
+- **Deleting a team in Admin** — removes its drives, files and calendar from the server. The organization's own team, and a team being backed up or restored, can't be deleted. A refused delete closes the dialog with the reason
 
 ## [0.4.0] - 2026-10-26
 

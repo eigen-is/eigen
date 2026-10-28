@@ -5,49 +5,51 @@ description: Use when adding to, rewriting, polishing or reviewing Eigen's `CHAN
 
 # Changelog
 
-`CHANGELOG.md` is read by people who use eigen.is and by people who self-host Eigen, and `./eigen update` reads it too. Write every line for someone who has never seen the code.
+`CHANGELOG.md` is read by people who use eigen.is and by people who self-host Eigen, and `./eigen update` reads it too. Write every line for someone who has never seen the code. The `[0.4.0]` section is the model: match its shape and voice, and write a little tighter than it.
 
 ## What goes in
 
-A change goes in when a user or self-hoster notices it, measured against the last release tag (`git describe --tags --abbrev=0`), not against the last commit:
+One bullet per thing a person notices since the last release tag (`git describe --tags --abbrev=0`), not since the last commit, so most commits get none. That leaves out:
 
-- A regression introduced and fixed between two tags gets no bullet: nobody on a release ever had it.
-- Refactors, moved files, lint rules, test speed, internal renames and review fixes get none.
-- Eigen runs on a Linux server in Docker (`docs/SELF-HOSTING.md`); a change seen only on a developer's Mac gets none.
+- a regression introduced and fixed between two tags, since nobody on a release had it
+- refactors, renames, lint rules, cast counts, tests, check timings and review fixes, since nobody outside the repo sees them
+- what only a developer's Mac shows, since Eigen runs on Linux in Docker ([SELF-HOSTING.md](../../../docs/SELF-HOSTING.md))
+
+A self-hoster's change goes in when they can see it on their server, in plain words and with the number they can check, as 0.4.0's **Server memory** bullet does.
 
 ## How a bullet reads
 
-A bullet is the effect alone: what a person sees, does or can rely on now, in one or two sentences. The cause, the fix and where it lives are in the commit, so the bullet holds none of them. "A notification to a large team arrives without stalling the server" is a whole bullet.
+A reader skims, so a bullet gives the effect and stops:
 
-- The file's own shape: Keep a Changelog headings (`### Added`, `### Changed`, `### Fixed`), each bullet `- **Label** — text`, no closing full stop, one bullet per line. Never hard-wrap.
-- One idea per bullet. Split a bullet that chains clauses with semicolons.
-- Short sentences in plain words, present tense: what the person sees or does now. No "is now", no hedges, no em dashes inside the text.
-- What a user sees in place of the internals: no type, function, file, field or library names (`isSameFill`, `ApiError(404)`, Yjs, etag). "Saving a form someone else changed meanwhile is refused instead of overwriting their change", not "a stale form gets a 412".
-- Name the apps a change touches ("Docs, Sheets, Slides and Vector"), never "every app" unless it is.
-- Keep every fact a user can use. Shorten only what says nothing to them.
+- **Shape**: Keep a Changelog headings (`### Added`, `### Changed`, `### Fixed`), each bullet `- **Label** — text`, one line, no hard wrap, no closing full stop. Bullets sit grouped by app within a section.
+- **Length**: one or two short sentences, three at most. 0.4.0 averages 29 words a bullet; stay under that, and split or cut one past 40.
+- **Label**: what the reader looks for, such as **Formulas in Sheets** or **Paths in Drive**. Never a bare app name repeated down the list, since four bullets labelled **Sheets** tell a skimmer nothing.
+- **Words**: present tense, plain, about what a person sees or does. No "is now", no hedges, no em dash inside the text, no type, function, file, field or library names. "Saving a form someone else changed meanwhile is refused instead of overwriting their change", not "a stale form gets a 412".
+- **Apps**: name the ones a change touches ("Docs, Sheets, Slides and Vector"), never "every app" unless it is.
+
+Keep every fact a reader can act on: a menu path, a shortcut, a limit, a loss. Cut what doesn't change what they do:
+
+- the how and the why, which live in the commit
+- a qualifier for a rare case ("even within the same second", "also when its numbers have a format of their own")
+- a second example, and a sentence that restates the first one's consequence
+- what a person already expects, and what didn't change ("still adds one person at a time")
+
+Merge bullets a reader would see as one change, such as two fixes to the same path bar. A Word, Excel or PowerPoint round trip keeps its own bullet, as in 0.4.0.
 
 ## Markers `./eigen update` reads
 
-`apps/api/src/cli/update-check.ts` matches substrings: any line containing `(breaking)` makes the update ask first, and any line containing `(full backup)` makes it take a full backup. Write them only on purpose, put them in the label (`**Backups (breaking)**`), and never let either string appear by accident. The first paragraph under a version heading is the intro `./eigen update --check` shows.
+`apps/api/src/cli/update-check.ts` matches substrings: a line containing `(breaking)` makes the update ask first, and one containing `(full backup)` makes it take a full backup. Put them in a label on purpose (`**Backups (breaking)**`), never in running text, where they would fire by accident.
 
 ## The intro is the GitHub release
 
-`bun run release publish` posts that intro as the whole GitHub release, with a link to the full section ([TESTING.md § A GitHub release says what changed in a few lines](../../../docs/TESTING.md#a-github-release-says-what-changed-in-a-few-lines)). Write it for someone who has never used Eigen: two to five short sentences that name the main things added or changed, in plain words. A note an updater needs (reload open documents, a breaking change) closes it in one sentence. No bullet list and no internal names.
+`bun run release publish` posts the paragraph under the version heading as the whole GitHub release ([TESTING.md § A GitHub release says what changed in a few lines](../../../docs/TESTING.md#a-github-release-says-what-changed-in-a-few-lines)), and `./eigen update --check` shows it. Write it at release time, for someone who has never used Eigen: two to five plain sentences naming the main changes, no list and no internal names. A note an updater needs, such as reloading open documents, closes it in one sentence. Until the release, `[Unreleased]` has no intro, and that note is the first `### Changed` bullet.
 
 ## Every claim is checked
 
-Before a bullet stays, find what backs it: the commit (`git log --since … --until …` around the release date) and the code that does it. A claim you can't back is cut or corrected. Shortcuts, limits, counts and lists ("XLOOKUP, TEXTJOIN and …") are checked one by one. Before a tag, check `[Unreleased]` against `git log` since the last tag: it has missed whole rounds.
+Commit messages overclaim, and they speak from the code's side: "refreshes the owner's access list" is not the list the person you shared with sees. So back each bullet with the code that does it, check shortcuts, limits, counts and lists one by one, and make sure a claim holds for every case it names. Before a tag, check `[Unreleased]` against `git log` since the last tag, since it has missed whole rounds.
+
+On a polish pass, `[Unreleased]` gets the real work and released sections get small consistency edits only.
 
 ## When you hand it back
 
-Report: what you added or changed per section, every factual correction with its evidence (commit or `file:line`), word counts before and after per section, and three before/after sample bullets. Run `bun scripts/check-docs-links.ts` and `bunx --bun @biomejs/biome check CHANGELOG.md` first.
-
-## Common mistakes
-
-| Mistake | Instead |
-|---|---|
-| A bullet per commit | One bullet per thing a user notices; most commits get none |
-| Comparing with the last commit | Compare with the last release tag |
-| Rewriting old releases wholesale on a polish pass | Small consistency edits there; the unreleased section gets the real work |
-| Trusting the commit message | Check the code; commit messages overclaim |
-| `(breaking)` in running text | Only in a label, on purpose |
+Run `bun scripts/check-docs-links.ts` and `bunx --bun @biomejs/biome check CHANGELOG.md`. Report the character count before and after, what you merged or cut and why, and every claim you corrected, with its evidence (a commit or `file` and symbol).
