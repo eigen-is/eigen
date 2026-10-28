@@ -93,7 +93,7 @@ export function setCellValue(
     const { data } = sheet;
 
     if (value == null || value.toString().length === 0) {
-        dropFormula(ctx, sheet.id!, data, row, column);
+        dropFormula(ctx, sheet.id, data, row, column);
         setCellValueInternal(ctx, row, column, data, value);
     } else if (value instanceof Object) {
         if (!data) throw sheetNotFound();
@@ -120,10 +120,10 @@ export function setCellValue(
             if (value.m != null) {
                 curv.m = value.m;
             }
-            if (value.f == null) dropFormula(ctx, sheet.id!, data, row, column);
+            if (value.f == null) dropFormula(ctx, sheet.id, data, row, column);
             else delFunctionGroup(ctx, row, column, sheet.id);
             setCellValueInternal(ctx, row, column, data, curv); // update text value
-            if (value.f != null) setFormulaCellInfo(ctx, { r: row, c: column, id: sheet.id! }, data, sheet.id);
+            if (value.f != null) setFormulaCellInfo(ctx, { r: row, c: column, id: sheet.id }, data, sheet.id);
         }
         forEach(value, (v, attr) => {
             if (FORMAT_KEYS.has(attr)) {
@@ -140,7 +140,7 @@ export function setCellValue(
         if (value.toString().substr(0, 1) === '=' || value.toString().substr(0, 5) === '<span') {
             updateCell(ctx, row, column, cellInput, value); // update formula value or convert inline string html to object
         } else {
-            dropFormula(ctx, sheet.id!, data, row, column);
+            dropFormula(ctx, sheet.id, data, row, column);
             setCellValueInternal(ctx, row, column, data, value);
         }
     }
@@ -168,7 +168,7 @@ export function clearCell(ctx: Context, row: number, column: number, options: Co
         delete cell.m;
         delete cell.v;
 
-        if (cell.f != null) dropFormula(ctx, sheet.id!, sheet.data, row, column);
+        if (cell.f != null) dropFormula(ctx, sheet.id, sheet.data, row, column);
     }
 }
 

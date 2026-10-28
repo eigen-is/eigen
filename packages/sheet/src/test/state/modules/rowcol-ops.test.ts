@@ -6,13 +6,14 @@
 // including the undo-of-delete path that restores non-derivable config.
 
 import { describe, expect, test } from 'bun:test';
+import type { Sheet as LibSheet, SheetWithCalcChain } from '@workspace/lib/sheets';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import { replaySheetsOps } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Context } from '../../../state/context';
 import { undoEntry } from '../../../state/modules/history';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
-import type { Op, Sheet } from '../../../state/types';
+import type { Op } from '../../../state/types';
 import { filterPatch, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
@@ -107,7 +108,7 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
 describe('BE replay converges with FE state from the slim ops alone', () => {
     // calcChain is deliberately absent: it isn't shipped on plain inserts/deletes
     // (the BE replay never reads it, clients re-derive it) — see sheetMetadataOps.
-    function expectConverged(replayed: Sheet[], next: Context) {
+    function expectConverged(replayed: LibSheet[], next: Context) {
         for (const [i, sheet] of replayed.entries()) {
             expect(sheet.data).toEqual(next.sheets[i].data);
             expect(sheet.config ?? {}).toEqual(next.sheets[i].config ?? {});
@@ -149,7 +150,7 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         const deleteOps = deleted.ops;
         const { ops: undoOps } = undoEntry(deleted.next, deleted.entry);
 
-        const replayed: Sheet[] = replaySheetsOps(baseSheets, [deleteOps, undoOps]);
+        const replayed: SheetWithCalcChain[] = replaySheetsOps(baseSheets, [deleteOps, undoOps]);
         expect(replayed[0].data).toEqual(base.sheets[0].data);
         // rowlen/rowhidden of the deleted rows aren't derivable from the delete +
         // insert ops alone — the config metadata op must restore them.
@@ -255,7 +256,7 @@ describe("a row or column op racing a peer's unfreeze", () => {
             };
             sheet.alternateFormatRules = [{ cellrange: { row: [1, 3], column: [1, 3] } }];
         });
-    const size = (sheets: Sheet[]) => [sheets[0].data!.length, sheets[0].data![0].length];
+    const size = (sheets: LibSheet[]) => [sheets[0].data!.length, sheets[0].data![0].length];
     const rows = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: 'id_1' } as const;
     const columns = { ...rows, type: 'column' } as const;
     const deletedRows = { type: 'row', start: 0, end: 0, id: 'id_1' } as const;

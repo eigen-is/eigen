@@ -1,3 +1,7 @@
+// The range calls of the Workbook's imperative API: reading and setting the selection, reading the cells or the HTML
+// of a range, and writing a block of values or one format attribute over a range. Each finds its sheet with getSheet,
+// by id or index, and writes cell by cell through the cell calls.
+
 import { cloneDeep, isPlainObject } from 'es-toolkit/compat';
 import type { Cell } from '../../engine/types';
 import type { Selection } from '..';
@@ -63,12 +67,12 @@ export function getCellsByRange(ctx: Context, range: Selection, options: CommonO
         throw invalidParams();
     }
     const sheet = getSheet(ctx, options);
-    return getdatabyselection(ctx, range, sheet.id!);
+    return getdatabyselection(ctx, range, sheet.id);
 }
 
 export function getHtmlByRange(ctx: Context, range: Range, options: CommonOptions = {}) {
     const sheet = getSheet(ctx, options);
-    return rangeValueToClipboard(ctx, sheet.id!, range)?.html ?? null;
+    return rangeValueToClipboard(ctx, sheet.id, range)?.html ?? null;
 }
 
 export function setSelection(ctx: Context, range: Range, options: CommonOptions) {

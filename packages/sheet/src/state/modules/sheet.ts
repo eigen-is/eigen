@@ -101,7 +101,8 @@ export function applySheetView(ctx: Context) {
 export function addSheet(
     ctx: Context,
     settings?: Required<Settings>,
-    newSheetID: string | undefined = undefined, // if action is from websocket, there will be a new sheetID
+    // A copy or a peer's add names the new sheet's id, and the add then stays on the current sheet.
+    newSheetID: string | undefined = undefined,
     isPivotTable = false,
     sheetName: string | undefined = undefined,
     sheetData: Sheet | undefined = undefined,
@@ -112,7 +113,8 @@ export function addSheet(
         return;
     }
     const order = ctx.sheets.length;
-    const id = newSheetID ?? settings?.generateSheetId() ?? uuidv4();
+    // The add switches to the sheet it adds, so a sheet that comes with an id keeps it.
+    const id = newSheetID ?? sheetData?.id ?? settings?.generateSheetId() ?? uuidv4();
     const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable);
     if (!isNil(sheetData)) delete sheetData.data;
     const sheetconfig: Sheet = isNil(sheetData)
@@ -130,8 +132,6 @@ export function addSheet(
         : sheetData;
     normalizeSheetConfig(sheetconfig);
     if (sheetName !== undefined) sheetconfig.name = sheetName;
-    // A sheet that comes without an id takes the one the add switches to.
-    sheetconfig.id ??= id;
     if (ctx.hooks.beforeAddSheet?.(sheetconfig) === false) {
         return;
     }

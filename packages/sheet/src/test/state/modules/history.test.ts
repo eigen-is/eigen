@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { DEFAULT_CHART_SERIES_STYLE, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
@@ -82,8 +83,8 @@ function session(base: Context) {
 }
 
 // What a user sees of a sheet. A sheet restored from its stored cells keeps them as celldata until it is opened.
-const cells = (s: Sheet) => (s.data ? dataToCelldata(s.data) : (s.celldata ?? []));
-const view = (sheets: Sheet[]) =>
+const cells = (s: LibSheet) => (s.data ? dataToCelldata(s.data) : (s.celldata ?? []));
+const view = (sheets: LibSheet[]) =>
     sheets.map((s) => ({ id: s.id, name: s.name, order: s.order, cells: cells(s), merge: s.config?.merge ?? {} }));
 
 function expectAgree(s: ReturnType<typeof session>) {

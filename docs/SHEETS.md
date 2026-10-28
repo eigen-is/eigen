@@ -171,7 +171,7 @@ Every cell is guarded, so one poisoned formula never aborts the pass.
 
 ## The editor builds its formula map when idle
 
-At mount the Workbook materializes each sheet's `data` and `seedCalcChain` records the formula cells without evaluating them. Displayed values come straight from the stored workbook, and an edit recomputes only the affected sub-graph (`execFunctionGroup`), so recalc cost follows the edit, not the workbook.
+At mount the Workbook materializes each sheet's `data` and `seedCalcChain` records the formula cells without evaluating them. Its `data` prop takes the stored sheets, whose `id` is optional, and the mount gives a sheet without one an id, so the editor's own `Sheet` type (`state/types.ts`) requires it. Displayed values come straight from the stored workbook, and an edit recomputes only the affected sub-graph (`execFunctionGroup`), so recalc cost follows the edit, not the workbook.
 
 The dependency map (`ctx.formulaCache.formulaCellInfoMap` and its reverse `dependencyIndex`) is built from an idle callback, so the first edit on a large workbook doesn't pay a multi-second rebuild. It is all or nothing: whichever comes first, the idle build, an edit or a paste, builds the whole map, from a plain `current()` snapshot, because reading every formula through an immer draft is slow.
 

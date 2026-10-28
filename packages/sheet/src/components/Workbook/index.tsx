@@ -356,7 +356,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         // (auto-freeze copies their refs into the draft), but that's fine: for
                         // already-populated sheets initSheetData is skipped (guarded below by
                         // !sheet.data || length === 0), so their frozen contents are never mutated.
-                        draftCtx.sheets = originalData.map((sheet) => ({ ...sheet }));
+                        draftCtx.sheets = originalData.map((sheet) => ({
+                            ...sheet,
+                            id: sheet.id ?? mergedSettings.generateSheetId(),
+                        }));
                         ensureSheetIndex(draftCtx.sheets, mergedSettings.generateSheetId);
                         for (const [index, sheet] of draftCtx.sheets.entries()) {
                             if (!sheet.data || sheet.data.length === 0) {

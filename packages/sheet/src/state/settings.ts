@@ -2,7 +2,7 @@
 // edit, a comment or a chart, with the defaults for every setting it leaves out.
 
 import type { useCommentLifecycle } from '@workspace/lib/comments';
-import type { SheetChart, SheetFloatingItem } from '@workspace/lib/sheets';
+import type { Sheet as LibSheet, SheetChart, SheetFloatingItem } from '@workspace/lib/sheets';
 import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
@@ -170,7 +170,8 @@ export type Settings = {
     showToolbar?: boolean;
     showFormulaBar?: boolean;
     showSheetTabs?: boolean;
-    data: Sheet[];
+    // The stored sheets the Workbook mounts on. A sheet without an id gets one there.
+    data: LibSheet[];
     config?: SheetConfig;
     devicePixelRatio?: number;
     forceCalculation?: boolean;
