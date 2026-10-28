@@ -5,6 +5,7 @@ import {
     assertJson,
     authedRequest,
     chatPost,
+    createTestUser,
     driveGet,
     drivePost,
     drivePut,
@@ -167,6 +168,23 @@ describe('Comment search', () => {
             await commentSearch(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'mindblown'),
         );
         expect(key.some((m) => m.id === 'thread-emote.eigenchat')).toBe(false);
+    });
+
+    test('an emote names its sender and target by display name, so a search for the name finds it', async () => {
+        const dana = await createTestUser('dana@test.eigen.is', 'testpassword123', 'Dana Quillfeather');
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docId}/acl`, {
+            add: [{ id: dana.email, read: true, write: true }],
+        });
+        const t6 = await createThread(ctx, mountId, chatFolderId, 'thread-emote-name');
+        await chatPost<ChatMessage>(dana.sessionToken, ctx.alice.user.id, mountId, `${t6.id}/messages`, {
+            content: `/wave ${ctx.charlie.user.email}`,
+        });
+
+        const res = await assertJson<DocCommentMatch[]>(
+            await commentSearch(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'quillfeather'),
+        );
+        const hit = findOrFail(res, (m: DocCommentMatch) => m.id === 'thread-emote-name.eigenchat');
+        expect(hit.label).toBe('Dana Quillfeather waves at Charlie Test.');
     });
 
     // The 403 comes from getCommentIndex → SharedDrive.getPath → requireRead,

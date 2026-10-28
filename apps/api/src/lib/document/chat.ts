@@ -1,3 +1,6 @@
+// A chat's body for Drive's content search: its newest messages as plain text, one line per message.
+// The content reindex queue reads it when a chat file is due, the way it extracts any other document.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { and, sql } from 'drizzle-orm';
 import { searchableMessageText } from '../chat/commands';
@@ -35,7 +38,7 @@ export async function readChatContent(mount: Mount, drivePath: DrivePath, capByt
             .limit(CHAT_CONTENT_PAGE)
             .all();
         for (const row of page) {
-            const piece = `${row.authorEmail}: ${searchableMessageText(row)}\n`;
+            const piece = `${row.authorEmail}: ${await searchableMessageText(row)}\n`;
             if (out.length + piece.length > capBytes) return out;
             out += piece;
         }
