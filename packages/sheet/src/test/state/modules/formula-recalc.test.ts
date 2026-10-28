@@ -237,4 +237,36 @@ describe('execFunctionGroup — index-driven recalc', () => {
         expect(ctx.sheets[0].data![0][2]?.v).toBe('x');
         expect(ctx.sheets[0].data![0][3]?.v).toBe(7);
     });
+
+    it('an error a formula computes is one to the formulas that read it, on its sheet and another', () => {
+        const ctx = makeCtx();
+        const one = ctx.sheets[0].data!;
+        one[0][2] = { f: '=1/(A1-7)', v: -0.5, m: '-0.5' };
+        one[0][3] = { f: '=IFERROR(C1,"none")', v: -0.5, m: '-0.5' };
+        one[1][0] = { f: '=ISERROR(C1)', v: false, m: 'FALSE' };
+        one[1][1] = { f: '=C1+1', v: 0.5, m: '0.5' };
+        ctx.sheets[1].data![1][0] = { f: '=ERROR.TYPE(One!C1)', v: '#N/A', m: '#N/A' };
+        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 0, c: 3, id: 'id_1' });
+        ctx.sheets[0].calcChain!.push({ r: 1, c: 0, id: 'id_1' }, { r: 1, c: 1, id: 'id_1' });
+        ctx.sheets[1].calcChain!.push({ r: 1, c: 0, id: 'id_2' });
+        warmFormulaCellInfoMap(ctx);
+
+        editCell(ctx, 0, 0, 7, 'id_1');
+
+        expect([one[0][2]?.v, one[0][3]?.v, one[1][0]?.v, one[1][1]?.v]).toEqual(['#DIV/0!', 'none', true, '#DIV/0!']);
+        expect(ctx.sheets[1].data![1][0]?.v).toBe(2);
+    });
+
+    // The FILTER cell's #NAME? stands in for a value Excel computed, so IFERROR one cell away hands it on too.
+    it('a #NAME? one cell away from a function the engine lacks is no error IFERROR traps', () => {
+        const ctx = makeCtx();
+        ctx.sheets[0].data![0][2] = { f: '=FILTER(A1:A3,A1:A3>1)', v: 5, m: '5' };
+        ctx.sheets[0].data![0][3] = { f: '=IFERROR(C1,"none")', v: 5, m: '5' };
+        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 0, c: 3, id: 'id_1' });
+        warmFormulaCellInfoMap(ctx);
+
+        editCell(ctx, 0, 0, 7, 'id_1');
+
+        expect(ctx.sheets[0].data![0][3]?.v).toBe('#NAME?');
+    });
 });

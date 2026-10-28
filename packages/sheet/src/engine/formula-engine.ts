@@ -1,11 +1,20 @@
 // The formula engine the editor and the server's recalc share. It owns one Parser, answers its cell and range reads
 // from a computed value in execFunctionGlobalData first and the CellResolver after, and turns each result into a cell
-// value, a display string and a type. Every range read is clamped to the sheet's grid and counted against maxCellsRead.
+// value, a display string and a type. An error a cell holds reads back as an error, so ISERROR and IFERROR see it.
+// Every range read is clamped to the sheet's grid and counted against maxCellsRead.
 
 import { DependencyIndex } from './dependency-index';
 import { cellValue } from './format';
-import { ERROR_REF, Parser } from './parser';
-import { ERROR_VALUE } from './parser/error';
+import { Parser } from './parser';
+import errorParser, {
+    ERROR,
+    ERROR_NAME,
+    ERROR_REF,
+    ERROR_VALUE,
+    toFormulaError,
+    UNSUPPORTED_FUNCTION,
+    valueIsError,
+} from './parser/error';
 import { dateToSerial } from './parser/helper/number';
 import type {
     Cell,
@@ -23,18 +32,25 @@ export function isFormula(value: unknown): boolean {
     return typeof value === 'string' && value.length > 1 && value[0] === '=';
 }
 
+// A cell holds an error as its text, such as `#DIV/0!`. A formula reads it back as formulajs's error object, because
+// ISERROR and IFERROR recognize only those. A cell that holds such text as text (`ct.t === 's'`) stays text. A `#NAME?`
+// doesn't say whether it comes from a typo or stands in for a function the engine lacks. So it reads as the latter,
+// which no function traps, because a fallback would read as the value Excel computed.
 function getCellValue(cell: Cell | null | undefined): unknown {
     if (cell?.ct?.t === 'n') {
         const n = Number(cell.v);
         return Number.isNaN(n) ? cell.v : n;
     }
-    return cellValue(cell);
+    const value = cellValue(cell);
+    if (typeof value !== 'string' || cell?.ct?.t === 's' || !valueIsError(value)) return value;
+    return value === errorParser(ERROR_NAME) ? UNSUPPORTED_FUNCTION : toFormulaError(Error(value));
 }
 
 function inferType(value: unknown): EvaluationResult['type'] {
     if (typeof value === 'number') return 'number';
     if (typeof value === 'boolean') return 'boolean';
-    if (typeof value === 'string' && value.startsWith('#')) return 'error';
+    // A text result that reads as an error is stored as one, as the editor's setCellValue stores it.
+    if (typeof value === 'string' && valueIsError(value)) return 'error';
     return 'string';
 }
 
@@ -154,14 +170,15 @@ export class FormulaEngine {
         try {
             const { error, result: evaluated } = this.parser.evaluate(compiled, { sheetId, rowOffset, colOffset });
 
-            if (error != null) {
-                return { value: error, display: error, type: 'error' };
-            }
-
             // The engine has no spill, so an array result, such as a bare range or TRANSPOSE, keeps its top-left
             // value. That is the value Excel's spill anchor holds, so a recalc of an imported anchor lands on Excel's.
+            // The value may be an error a cell holds, as in `=A1:B2`.
             let result = evaluated;
             while (Array.isArray(result)) result = result[0];
+            const failure = result instanceof Error ? (errorParser(result.message) ?? errorParser(ERROR)) : error;
+            if (failure != null) {
+                return { value: failure, display: failure, type: 'error' };
+            }
 
             if (result instanceof Date) {
                 // A Date result stores as its Excel serial, as the parser's operators read a Date operand. As a string,

@@ -269,3 +269,100 @@ describe('engine/formula-engine — compiled formula at an offset', () => {
         expect(onGrid('=A1', 0, 5)).toBe(shifted('=A1', 0, 5));
     });
 });
+
+// ─── An error held in a cell ────────────────────────────────────────────────
+
+describe('engine/formula-engine — an error held in a cell', () => {
+    const engine = new FormulaEngine();
+    // A cell holding an error, as the editor and recalc write one.
+    const failed = (v: string) => ({ f: '=X', v, m: v, ct: { fa: 'General', t: 'e' } });
+    const number = (v: number) => ({ v, m: String(v), ct: { fa: 'General', t: 'n' } });
+    const text = (v: string) => ({ v, m: v, ct: { fa: 'General', t: 's' } });
+    const errors = ['#NULL!', '#DIV/0!', '#VALUE!', '#REF!', '#NUM!', '#N/A'];
+    const errorResolver = createArrayResolver([
+        {
+            id: 'errors',
+            name: 'Errors',
+            data: [
+                // Row 1: an error per column, Excel's ERROR.TYPE order but #NAME?, which the test below pins apart.
+                errors.map(failed),
+                // Rows 2–4: a column of numbers with an error inside, and a lookup table whose match holds an error.
+                [number(1), text('a'), number(1)],
+                [failed('#DIV/0!'), text('b'), failed('#N/A')],
+                [number(3), text('c'), number(3)],
+                // Row 5: a cell holding the text #DIV/0!, typed with a leading apostrophe, and a #NAME?.
+                [{ v: '#DIV/0!', m: '#DIV/0!', ct: { fa: '@', t: 's' }, qp: 1 }, failed('#NAME?')],
+            ],
+            calculationChain: [],
+            dynamicArrayCompute: [],
+        },
+        { id: 'other', name: 'Other', data: [[failed('#N/A')]], calculationChain: [], dynamicArrayCompute: [] },
+    ]);
+    const evaluate = (formula: string) => engine.evaluate(formula, 'errors', errorResolver).value;
+    const columns = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+    test('ISERROR, ISERR, ISNA and ERROR.TYPE see each error a cell holds, as Excel does', () => {
+        expect(columns.map((c) => evaluate(`=ISERROR(${c}1)`))).toEqual([true, true, true, true, true, true]);
+        expect(columns.map((c) => evaluate(`=ISERR(${c}1)`))).toEqual([true, true, true, true, true, false]);
+        expect(columns.map((c) => evaluate(`=ISNA(${c}1)`))).toEqual([false, false, false, false, false, true]);
+        expect(columns.map((c) => evaluate(`=ERROR.TYPE(${c}1)`))).toEqual([1, 2, 3, 4, 6, 7]);
+    });
+
+    test('IFERROR traps each error a cell holds, and IFNA only #N/A', () => {
+        expect(columns.map((c) => evaluate(`=IFERROR(${c}1,"none")`))).toEqual(errors.map(() => 'none'));
+        expect(columns.map((c) => evaluate(`=IFNA(${c}1,"none")`))).toEqual([...errors.slice(0, 5), 'none']);
+    });
+
+    test('an operator and a function hand a referenced error on', () => {
+        expect(engine.evaluate('=B1+1', 'errors', errorResolver)).toEqual({
+            value: '#DIV/0!',
+            display: '#DIV/0!',
+            type: 'error',
+        });
+        expect(evaluate('=-F1')).toBe('#N/A');
+        expect(evaluate('=ABS(C1)')).toBe('#VALUE!');
+        expect(evaluate('=B1:C1')).toBe('#DIV/0!');
+    });
+
+    test('a range with an error inside gives the error, which IFERROR traps', () => {
+        expect(evaluate('=SUM(A2:A4)')).toBe('#DIV/0!');
+        expect(evaluate('=IFERROR(SUM(A2:A4),0)')).toBe(0);
+    });
+
+    test('a lookup that returns an error cell returns its error', () => {
+        expect(evaluate('=VLOOKUP("b",B2:C4,2,FALSE)')).toBe('#N/A');
+        expect(evaluate('=IFNA(VLOOKUP("b",B2:C4,2,FALSE),"none")')).toBe('none');
+        expect(evaluate('=ISNA(INDEX(C2:C4,2))')).toBe(true);
+    });
+
+    test('an error held on another sheet is one too', () => {
+        expect(evaluate('=ISNA(Other!A1)')).toBe(true);
+        expect(evaluate('=IFERROR(\'Other\'!A1,"none")')).toBe('none');
+    });
+
+    test('a cell holding the text #DIV/0! stays text', () => {
+        expect(evaluate('=ISERROR(A5)')).toBe(false);
+        expect(evaluate('=ISTEXT(A5)')).toBe(true);
+        expect(evaluate('=LEN(A5)')).toBe(7);
+        expect(evaluate('=IFERROR(A5,"none")')).toBe('#DIV/0!');
+        expect(evaluate('=ERROR.TYPE(A5)')).toBe('#N/A');
+    });
+
+    test('a text result that starts with # is text, not an error', () => {
+        expect(engine.evaluate('="#tag"', 'errors', errorResolver)).toEqual({
+            value: '#tag',
+            display: '#tag',
+            type: 'string',
+        });
+    });
+
+    // A cell's #NAME? may be the stand-in for a value Excel computed with a function the engine lacks, and the cell
+    // can't tell. So it is handed on, as that function's own #NAME? is, and no fallback reads as Excel's answer.
+    test('a #NAME? a cell holds is handed on, as the #NAME? of a function the engine lacks is', () => {
+        for (const formula of ['=ISERROR(B5)', '=IFERROR(B5,"none")', '=ERROR.TYPE(B5)', '=ISNA(B5)', '=B5+1']) {
+            expect([formula, evaluate(formula)]).toEqual([formula, '#NAME?']);
+        }
+        expect(evaluate('=IF(TRUE,1,B5)')).toBe(1);
+        expect(evaluate('=IFERROR(SUM(A5:B5),0)')).toBe('#NAME?');
+    });
+});

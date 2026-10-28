@@ -17,7 +17,7 @@ export function booleanDisplay(value: boolean): string {
 }
 
 // Excel's General alignment, for a cell without its own, as the editor and the HTML export draw it: numbers and dates right, booleans and errors centred, text
-// left. An imported error keeps a text type, so its value decides too.
+// left. A snapshot may hold an error with a text type, as the xlsx import once stored one, so its value decides too.
 export function generalAlign(cell: Cell | null | undefined): '0' | '1' | '2' {
     const value = cell?.v;
     if (typeof value === 'number') return '2';
