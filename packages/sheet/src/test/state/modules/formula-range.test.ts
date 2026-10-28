@@ -22,6 +22,7 @@ const g = globalThis as any;
 const win = new Window();
 g.window = win;
 g.document = win.document;
+g.HTMLElement = win.HTMLElement;
 g.DOMParser = win.DOMParser;
 
 // The span index and the caret are module/window state: each case starts clean.

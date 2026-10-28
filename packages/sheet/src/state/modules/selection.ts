@@ -1433,35 +1433,32 @@ export function deleteSelectedCellText(ctx: Context): string {
             for (let r = row[0]; r <= row[1]; r += 1) {
                 data[r] ??= [];
                 for (let c = column[0]; c <= column[1]; c += 1) {
-                    const cell = data[r][c];
-                    const format = cell && cellFormat(cell);
-                    if (format) {
-                        changed.push({ r, c, id: ctx.currentSheetId });
-                        data[r][c] = format;
-                    }
                     if (hyperlinkMap?.[`${r}_${c}`]) {
                         delete hyperlinkMap[`${r}_${c}`];
+                    }
+                    // Delete leaves a cell its format, as Excel and Google Sheets do. The value, the formula, a rich
+                    // cell's runs and a link go, and the link's blue underline goes with the link, as removeHyperlink
+                    // does. A formatted cell with no contents is left alone, so it writes nothing.
+                    const cell = data[r][c];
+                    if (!cell) continue;
+                    const { v, m, f, qp, hl, ct, ...format } = cell;
+                    if (v == null && m == null && f == null && qp == null && hl == null && ct?.s == null) continue;
+                    if (hl) {
+                        delete format.fc;
+                        delete format.un;
+                    }
+                    changed.push({ r, c, id: ctx.currentSheetId });
+                    if (ct) {
+                        const { s: _runs, ...type } = ct;
+                        data[r][c] = { ...format, ct: type.t === 'inlineStr' ? { ...type, t: 'g' } : type };
+                    } else {
+                        data[r][c] = format;
                     }
                 }
             }
         }
     }
     return 'success';
-}
-
-// What Delete leaves of a cell: its format, as Excel and Google Sheets keep it. The value, the formula, a rich
-// cell's runs and a link go, and the link's blue underline goes with the link, as removeHyperlink does. Null
-// when the cell holds no contents, so a Delete over formatted empty cells writes nothing.
-function cellFormat(cell: Cell): Cell | null {
-    const { v, m, f, qp, hl, ct, ...format } = cell;
-    if (v == null && m == null && f == null && qp == null && hl == null && ct?.s == null) return null;
-    if (hl) {
-        delete format.fc;
-        delete format.un;
-    }
-    if (!ct) return format;
-    const { s: _runs, ...type } = ct;
-    return { ...format, ct: type.t === 'inlineStr' ? { ...type, t: 'g' } : type };
 }
 
 // Whether selections overlap. Accepts the editor `Selection[]` (default) or a

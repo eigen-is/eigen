@@ -10,7 +10,7 @@ import { api, createContextResolver, execfunction, setCellValue as setCellValueI
 import type { Context } from '../context';
 import { leaveCurrentSheet } from '../modules';
 import type { FormulaCell, SingleRange } from '../types';
-import { getSheetIndex } from '../utils';
+import { getSheetIndex, sheetOrder } from '../utils';
 import { dataToCelldata, getSheet } from './common';
 
 export function getAllSheets(ctx: Context) {
@@ -39,8 +39,7 @@ export function copySheet(ctx: Context, sheetId: string) {
     if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
-    // A sheet without an order sorts as 0, as the tab strip sorts it.
-    const order = (ctx.sheets[index].order ?? 0) + 1;
+    const order = sheetOrder(ctx.sheets[index]) + 1;
     const sheetName = copySheetName(
         ctx.sheets[index].name,
         ctx.sheets.map((sheet) => sheet.name),

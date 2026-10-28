@@ -380,7 +380,8 @@ function judgeDate(data: (Cell | null | undefined)[]) {
 // The extend preview renders once per overlay pane region; write every copy —
 // each region's clip shows exactly its portion.
 export function showDropCellSelection({ width, height, top, left }: Rect, container: HTMLDivElement) {
-    for (const selectedExtend of container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-extend')) {
+    for (const selectedExtend of container.querySelectorAll('.sheet-cell-selected-extend')) {
+        if (!(selectedExtend instanceof HTMLElement)) continue;
         selectedExtend.style.left = toPx(left);
         selectedExtend.style.width = toPx(width);
         selectedExtend.style.top = toPx(top);
@@ -390,7 +391,8 @@ export function showDropCellSelection({ width, height, top, left }: Rect, contai
 }
 
 export function hideDropCellSelection(container: HTMLDivElement) {
-    for (const selectedExtend of container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-extend')) {
+    for (const selectedExtend of container.querySelectorAll('.sheet-cell-selected-extend')) {
+        if (!(selectedExtend instanceof HTMLElement)) continue;
         selectedExtend.style.display = 'none';
     }
 }
@@ -2032,7 +2034,7 @@ export function fillTouchesMerge(ctx: Context, copyRange: SingleRange, applyRang
     );
 }
 
-// Ctrl+D / Ctrl+R: copy the top row (or left column) of the range over the rest of it.
+// Fill down and fill right (⌘D and ⌘R): copy the top row (or left column) of the range over the rest of it.
 export function fillFromEdge(ctx: Context, range: SingleRange, direction: 'down' | 'right') {
     const { row, column } = range;
     if (direction === 'down') {
@@ -2179,7 +2181,8 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
 
         updateDropCell(ctx);
 
-        for (const selectedMoveEle of container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-move')) {
+        for (const selectedMoveEle of container.querySelectorAll('.sheet-cell-selected-move')) {
+            if (!(selectedMoveEle instanceof HTMLElement)) continue;
             selectedMoveEle.style.display = 'none';
         }
     }

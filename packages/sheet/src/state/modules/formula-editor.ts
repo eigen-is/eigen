@@ -87,7 +87,6 @@ function functionHTML(txt: string) {
             str += "'";
             matchConfig.squote = matchConfig.squote === 0 ? 1 : 0;
         } else if (s === ',' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
-            // matchConfig.comma += 1;
             function_str += `${functionHTML(str)}<span dir="auto" class="sheet-formula-text-comma">,</span>`;
             str = '';
         } else if (s === '&' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
@@ -149,7 +148,6 @@ function functionHTML(txt: string) {
         }
 
         if (i === funcstack.length - 1) {
-            // function_str += str;
             if (iscelldata(trim(str))) {
                 const rangeIndex =
                     formulaUIState.rangeIndexes.length > formulaUIState.functionHTMLIndex
@@ -160,7 +158,6 @@ function functionHTML(txt: string) {
             } else if (matchConfig.dquote > 0) {
                 function_str += `${escapeHtml(str)}</span>`;
             } else if (str.indexOf('</span>') === -1 && str.length > 0) {
-                // Trimming moves no brace, so the match in the text is the one in its trimmed form.
                 const arrayMatch = /{.*?}/.exec(str);
 
                 if (arrayMatch) {
@@ -214,20 +211,6 @@ function getRangeIndexes($editor: HTMLDivElement) {
 }
 
 function searchFunction(ctx: Context, searchtxt: string) {
-    // // This logic has been modified from the original project
-    // if (isNil($editer)) {
-    //   return;
-    // }
-    // const inputContent = $editer.innerText.toUpperCase();
-    // const reg = /^=([a-zA-Z_]+)\(?/;
-    // const match = inputContent.match(reg);
-    // if (!match) {
-    //   ctx.functionCandidates = [];
-    //   return;
-    // }
-
-    // const searchtxt = match[1];
-
     const f: FormulaFunctionEntry[] = [];
     const s: FormulaFunctionEntry[] = [];
     const t: FormulaFunctionEntry[] = [];
@@ -585,7 +568,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
                 pfri[0] += 1;
                 pfri[1] = 1;
             } else if (!isNil(p) && p.length > 2 && p.substring(0, 1) === '"' && p.substring(p.length - 1, 1) === '"') {
-                // pfri[1] = n.length-1;
+                // A quoted string leaves the position as it is.
             } else if (!isNil(v_a[i]) && v_a[i] === '")') {
                 pfri[1] = 1;
             } else if (!isNil(v_a[i]) && v_a[i] === '"}') {

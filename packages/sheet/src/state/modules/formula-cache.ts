@@ -6,7 +6,7 @@ import { isNil } from 'es-toolkit/compat';
 import { current, isDraft } from 'immer';
 import type { DependencyIndex } from '../../engine/dependency-index';
 import { FormulaEngine } from '../../engine/formula-engine';
-import { iscelldata } from '../../engine/formula-utils';
+import { iscelldata, isFunctionRange } from '../../engine/formula-utils';
 import type {
     CalcChainEntry,
     Cell,
@@ -21,7 +21,7 @@ import { getFlowdata } from '../context';
 import type { FormulaCell, History, Selection } from '../types';
 import { getSheetIdByName } from '../utils';
 import { getcellFormula } from './cell';
-import { execfunction, getcellrange, isFunctionRange, warmFormulaCellInfoMap } from './formula-exec';
+import { execfunction, getcellrange, warmFormulaCellInfoMap } from './formula-exec';
 
 // Shared mutable state accessed by formula-editor.ts and formula-range.ts.
 // Wrapped in an object so mutations are visible across module boundaries.
@@ -232,7 +232,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
 
     const formulaDependency: FormulaDependency[] = [];
     if (isOffsetFunc) {
-        isFunctionRange(ctx, calc_funcStr, formulaCell.id, (str_nb: string) => {
+        isFunctionRange(calc_funcStr, (str_nb: string) => {
             const range = getcellrange(ctx, str_nb.trim(), formulaCell.id, cellData);
             if (!isNil(range)) {
                 formulaDependency.push(range);

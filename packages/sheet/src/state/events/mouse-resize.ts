@@ -66,8 +66,8 @@ export function handleColSizeHandleMouseDown(
 
     ctx.colsResizing = true;
     ctx.scrolling = true;
-    const changeSizeLine = workbookContainer.querySelector<HTMLDivElement>('.sheet-change-size-line');
-    if (changeSizeLine) {
+    const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
+    if (changeSizeLine instanceof HTMLElement) {
         changeSizeLine.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
         changeSizeLine.style.borderWidth = '0 1px 0 0';
         changeSizeLine.style.top = '0';
@@ -111,8 +111,8 @@ export function handleRowSizeHandleMouseDown(
 
     ctx.rowsResizing = true;
     ctx.scrolling = true;
-    const changeSizeLine = workbookContainer.querySelector<HTMLDivElement>('.sheet-change-size-line');
-    if (changeSizeLine) {
+    const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
+    if (changeSizeLine instanceof HTMLElement) {
         changeSizeLine.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
         changeSizeLine.style.borderWidth = '0 0 1px 0';
         changeSizeLine.style.top = `${row}px`;
@@ -144,8 +144,8 @@ export function handleColFreezeHandleMouseDown(
 
     ctx.colsFreezeDragging = true;
     ctx.scrolling = true;
-    const freezeDragLine = workbookContainer.querySelector<HTMLDivElement>('.sheet-freeze-drag-line');
-    if (freezeDragLine) {
+    const freezeDragLine = workbookContainer.querySelector('.sheet-freeze-drag-line');
+    if (freezeDragLine instanceof HTMLElement) {
         freezeDragLine.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
         freezeDragLine.style.borderWidth = '0 3px 0 0';
         freezeDragLine.style.top = '0';
@@ -153,8 +153,8 @@ export function handleColFreezeHandleMouseDown(
         freezeDragLine.style.width = '1px';
     }
     // Reuse change-size-line to show a thin resize indicator alongside the freeze line
-    const changeSizeLine = workbookContainer.querySelector<HTMLDivElement>('.sheet-change-size-line');
-    if (changeSizeLine) {
+    const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
+    if (changeSizeLine instanceof HTMLElement) {
         changeSizeLine.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
         changeSizeLine.style.borderWidth = '0 1px 0 0';
         changeSizeLine.style.top = '0';
@@ -185,8 +185,8 @@ export function handleRowFreezeHandleMouseDown(
 
     ctx.rowsFreezeDragging = true;
     ctx.scrolling = true;
-    const freezeDragLine = workbookContainer.querySelector<HTMLDivElement>('.sheet-freeze-drag-line');
-    if (freezeDragLine) {
+    const freezeDragLine = workbookContainer.querySelector('.sheet-freeze-drag-line');
+    if (freezeDragLine instanceof HTMLElement) {
         freezeDragLine.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
         freezeDragLine.style.borderWidth = '0 0 3px 0';
         freezeDragLine.style.top = `${row - 3}px`;
@@ -194,8 +194,8 @@ export function handleRowFreezeHandleMouseDown(
         freezeDragLine.style.height = '1px';
     }
     // Reuse change-size-line to show a thin resize indicator alongside the freeze line
-    const changeSizeLine = workbookContainer.querySelector<HTMLDivElement>('.sheet-change-size-line');
-    if (changeSizeLine) {
+    const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
+    if (changeSizeLine instanceof HTMLElement) {
         changeSizeLine.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
         changeSizeLine.style.borderWidth = '0 0 1px 0';
         changeSizeLine.style.top = `${row - 3}px`;
