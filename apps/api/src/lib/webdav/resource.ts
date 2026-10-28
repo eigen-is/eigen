@@ -138,7 +138,7 @@ export async function handlePut(args: {
         ) ?? Buffer.alloc(0);
 
     const mimeType = Bun.file(name).type || 'application/octet-stream';
-    // An overwrite answers the etag it committed, not the row's, which a later PUT can have changed already.
+    // An overwrite answers the row it committed, not a fresh read, which a later PUT can have changed already.
     const { path, etag } = existing
         ? await drive.writeFileContent(mountId, existing.id, data, { user, ifMatch: ifMatch || undefined })
         : await drive

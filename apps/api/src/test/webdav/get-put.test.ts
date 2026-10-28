@@ -157,8 +157,10 @@ describe('WebDAV PUT', () => {
     });
 
     // A PUT without If-Match lands after the first one lets go of the file's lock and before it answers.
-    // The first still answers its own etag, so its next PUT is a 412 and doesn't overwrite the other change.
-    test("a PUT answers its own write's etag, not that of a write landing right after it", async () => {
+    // The first still answers its own etag and Last-Modified, so its next PUT is a 412 and doesn't
+    // overwrite the other change. The other change is dated years back, so a Last-Modified read from
+    // the row after it shows.
+    test("a PUT answers its own write's etag and Last-Modified, not those of a write landing right after it", async () => {
         const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-own-etag.txt`;
         expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'original' })).status).toBe(201);
         const etag = (await webdavRequest(ctx.alice.user.email, 'HEAD', url)).headers.get('ETag') ?? '';
@@ -170,8 +172,11 @@ describe('WebDAV PUT', () => {
         const write = spyOn(mount, 'writeFileFromTemp').mockImplementationOnce(async (...args) => {
             const written = await writeFileFromTemp(...args);
             expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'theirs' })).status).toBe(204);
+            await drive.touchUpdatedAt(mountId, file.id, theirsUpdatedAt);
             return written;
         });
+        const theirsUpdatedAt = new Date('2001-02-03T04:05:06Z');
+        const startedAt = Math.floor(Date.now() / 1000) * 1000;
         let mine: Response;
         try {
             mine = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
@@ -182,6 +187,7 @@ describe('WebDAV PUT', () => {
             write.mockRestore();
         }
         expect(mine.status).toBe(204);
+        expect(Date.parse(mine.headers.get('Last-Modified') ?? '')).toBeGreaterThanOrEqual(startedAt);
 
         const next = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
             body: 'mine again',

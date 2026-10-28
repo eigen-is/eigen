@@ -339,6 +339,13 @@ describe('Mount (local-key storage)', () => {
         expect(file!.size).toBe(15);
     });
 
+    // The row keeps updatedAt in whole seconds, so an answer built from the clock would differ from a later read.
+    test('an overwrite answers the row it committed, the one a fresh read gives', async () => {
+        const fileId = await mount.createFile(rootId, 'committed.txt', 'text/plain', 0, undefined);
+        const committed = await mount.writeFile(fileId, Buffer.from('committed content'));
+        expect(committed).toEqual(await mount.getActivePath(fileId));
+    });
+
     test('writeFile refuses a file trashed with its folder and keeps its bytes', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashedWithFolder');
         const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
