@@ -39,7 +39,7 @@ import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
-import { getMemberships, getUserByEmail, getUserById, isGuest, updateUser } from '../user';
+import { getMemberships, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
 import { getHome, getTeamHome, loadedHome, openHome, requestedSince } from './get-home';
 import { homeSize } from './home';
 import { TeamHome } from './team-home';
@@ -226,17 +226,14 @@ export async function broadcastToOwnerAndMembers(
 }
 
 // Tells the open tabs of each member once, but for the owner, who heard it already. In a user's home the
-// owner is one of the members. A member without an account is skipped, and so is one whose lookup fails:
-// a broadcast is best effort.
+// owner is one of the members. The members are looked up in one query, because a team can have many. A
+// member without an account is skipped.
 export async function relayEventToMembers(ownerId: string, members: EffectiveMember[], event: SSEvent): Promise<void> {
-    const emails = new Set(members.map((member) => member.email));
+    const users = await getUsersByEmails([...new Set(members.map((member) => member.email))]);
     await Promise.all(
-        [...emails].map(async (email) => {
-            try {
-                const user = await getUserByEmail(email);
-                if (user && user.id !== ownerId) await sendToHome(user.id, { type: 'broadcast', event });
-            } catch {}
-        }),
+        users
+            .filter((user) => user.id !== ownerId)
+            .map((user) => sendToHome(user.id, { type: 'broadcast', event }).catch(() => {})),
     );
 }
 
