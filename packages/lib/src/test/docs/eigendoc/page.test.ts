@@ -11,6 +11,7 @@ import {
     PAGE_ROOT,
     PAPER_SIZES,
     pageBoxStyle,
+    pageColumnWidth,
     pagePx,
     pageRecord,
     pageStylesheet,
@@ -43,6 +44,12 @@ describe('page setup', () => {
             differentFirstPage: false,
             pageless: false,
         });
+    });
+
+    test('pageColumnWidth is the paper less its left and right margins, in the unit of the page it reads', () => {
+        expect(pageColumnWidth(DEFAULT_PAGE_SETUP)).toBe(170);
+        expect(pageColumnWidth(LANDSCAPE)).toBe(297 - 15 - 30);
+        expect(pageColumnWidth(pagePx(DEFAULT_PAGE_SETUP))).toBeCloseTo(mmToPx(170), 6);
     });
 
     test('pagePx is CSS px at 96 dpi, unrounded', () => {

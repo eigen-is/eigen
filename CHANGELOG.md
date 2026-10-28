@@ -36,7 +36,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
-- **Labels in sentence case** — buttons, menus, dialog titles and fields in Admin, Calendar, Chat, Contacts, Drive, Mail, Sheets, Space and Stickies capitalize only the first word and names, such as **New event**, **Reply all** and **Web page (.html)**, as the rest of Eigen already does
+- **Labels in sentence case** — buttons, menus, dialog titles and fields in Admin, Calendar, Chat, Contacts, Docs, Drive, Mail, Sheets, Space and Stickies capitalize only the first word and names, such as **New event**, **Reply all** and **Web page (.html)**, as the rest of Eigen already does
 - **Open documents after the update** — reload any Docs document you have open: a tab still on the previous version deletes the text boxes it receives
 - **Forwarding email** — a forward brings the original's attachments along, pictures in the message included. Take one off with the **X** on its chip before you send
 - **Space home** — an admin gets an Admin tile next to the apps. The **Help and support** tile takes the help center's teal

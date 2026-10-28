@@ -120,7 +120,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                     : editor.state;
             const active = (name: string | null, attributes?: Record<string, unknown>) =>
                 isActive(state, name, attributes);
-            // isActive sums the matched nodes' ranges, so a list's own range would outweigh its centred items, and
+            // isActive sums the matched nodes' ranges, so a list's own range would outweigh its centered items, and
             // getAttributes reads the last heading. A cell selection has a range per cell, as setTextAlign aligns it.
             const alignments = new Set<TextAlign>();
             const styles = new Set<string | undefined>();

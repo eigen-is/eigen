@@ -9,8 +9,7 @@ import { DropdownMenuItem } from '../dropdown-menu';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { FIND_HOTKEY, useOptionalDocSearchBar } from './doc-search-provider';
 
-// Toolbar ⌕ entry point for the find bar (mobile has no ⌘F). Null-safe: a toolbar rendered
-// outside a DocSearchProvider shows no button.
+// The toolbar's find button, which a phone needs as it has no ⌘F. A toolbar outside a DocSearchProvider shows none.
 export function FindInDocumentButton() {
     const docSearchBar = useOptionalDocSearchBar();
     if (!docSearchBar) return null;
@@ -23,9 +22,8 @@ export function FindInDocumentButton() {
     );
 }
 
-// Kebab-menu counterpart of FindInDocumentButton, used by DocumentShareCluster on mobile.
-// focusFindBarRef (from useFindBarRefocus) flags the pick so the menu's onCloseAutoFocus can
-// re-focus the bar after Radix's exit steals focus back to the trigger.
+// The find button's row in a phone's kebab menu. The pick sets focusFindBarRef from useFindBarRefocus, so the menu
+// can give the bar the focus back once Radix has moved it to the trigger.
 export function FindInDocumentMenuItem({ focusFindBarRef }: { focusFindBarRef: RefObject<boolean> }) {
     const docSearchBar = useOptionalDocSearchBar();
     if (!docSearchBar) return null;
@@ -42,11 +40,10 @@ export function FindInDocumentMenuItem({ focusFindBarRef }: { focusFindBarRef: R
     );
 }
 
-// Radix keeps focus inside the closing menu until its exit finishes, so a focus set by a Find pick is
-// stolen back to the trigger. A pick flags focusFindBarRef; onCloseAutoFocus then suppresses the
-// trigger-restore AND re-opens the bar (open() re-focuses when already open). Shared by the doc + sheet
-// Edit menus and the mobile kebab: pass onCloseAutoFocus to the menu, and hand focusFindBarRef to the
-// Find item(s).
+// Radix keeps the focus inside a closing menu until its exit finishes, and then gives it to the trigger, so a focus
+// set by a Find pick is lost. A pick sets focusFindBarRef. The menu's onCloseAutoFocus then keeps the focus off the
+// trigger and opens the bar again, which focuses its field when it is already open. A menu with a Find row, such
+// as an Edit menu, passes onCloseAutoFocus to the menu and focusFindBarRef to its Find rows.
 export function useFindBarRefocus() {
     const docSearchBar = useOptionalDocSearchBar();
     const focusFindBarRef = useRef(false);

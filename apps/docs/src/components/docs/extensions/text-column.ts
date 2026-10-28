@@ -4,6 +4,7 @@
 // menus and editor plugins read them.
 
 import type { Editor } from '@tiptap/core';
+import { pageColumnWidth } from '@workspace/lib/docs/eigendoc';
 
 // The width inside an element's padding, or null for one not laid out.
 export function contentWidth(element: Element): number | null {
@@ -29,6 +30,6 @@ export function pageScale(inside: HTMLElement): number {
 // The page map's paper width and text column in page px, never the screen's, as every stored width is page px. A
 // page-less doc draws its text in the reader's own column, so its caps read these instead.
 export function pageWidths(editor: Editor): { paper: number; column: number; pageless: boolean } {
-    const { width, margin, pageless } = editor.storage.positionedFigures.page();
-    return { paper: width, column: width - margin.left - margin.right, pageless };
+    const page = editor.storage.positionedFigures.page();
+    return { paper: page.width, column: pageColumnWidth(page), pageless: page.pageless };
 }

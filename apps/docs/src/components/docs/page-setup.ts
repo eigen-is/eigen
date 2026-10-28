@@ -1,6 +1,6 @@
-// The doc's page as the editor writes it, and the reader's text width on a page-less doc. A page setup change, from Page
-// setup, a band's bar or Format › Switch to page-less, is one write to the page map and one undo step beside the
-// typing. The text width is no part of the doc: each reader keeps their own.
+// The doc's page as the editor writes it, and the reader's text width on a page-less doc. A page setup change, such as
+// one from the Page setup dialog or a band's bar, is one write to the page map and one undo step beside the typing.
+// The text width is no part of the doc: each reader keeps their own.
 
 import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';

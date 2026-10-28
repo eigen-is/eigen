@@ -18,7 +18,7 @@ import {
 import type { Box } from '@workspace/lib/vector';
 import type React from 'react';
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { FigureFrameOptions } from './figure-frame';
+import type { FigureFrameOptions, FigureSize } from './figure-frame';
 import { FigureFrame, figureFramePlugins, figureMaxWidth, useFigureResize } from './figure-frame';
 import { behindFigureAt } from './positioned-figure';
 import { StaticStory } from './static-story';
@@ -63,8 +63,7 @@ function TextBoxView(props: NodeViewProps) {
 
     const getMaxWidth = useCallback(() => figureMaxWidth(editor, attrs.layout), [editor, attrs.layout]);
     const stored = useCallback(
-        ({ width, height }: { width: number; height: number }) =>
-            height === drawn.current ? { width } : { width, height },
+        ({ width, height }: FigureSize) => (height === drawn.current ? { width } : { width, height }),
         [],
     );
     const resize = useFigureResize({ editor, getPos, node, getMaxWidth, fit: fitTextBox, stored });

@@ -50,6 +50,10 @@ export type FigureFrameAttrs = {
 export const readFrameSide = (value: unknown): number | null =>
     typeof value === 'number' && value > 0 ? Math.min(MAX_PAPER_PX, value) : null;
 
+// The height a box takes at `width` if it keeps its shape, such as a stretched figure capped to a narrower column.
+export const heightAtWidth = (box: { width: number; height: number }, width: number) =>
+    (box.height * width) / box.width;
+
 const readOffset = (value: unknown) =>
     typeof value === 'number' && Number.isFinite(value) ? Math.min(MAX_PAPER_PX, Math.max(-MAX_PAPER_PX, value)) : null;
 

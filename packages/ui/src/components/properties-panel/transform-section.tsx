@@ -1,7 +1,7 @@
-// The shared X, Y, W, H and angle fields of a canvas object's panel, with Keep aspect ratio, as Slides, Vector and
-// Sheets show them. It only presents: the host passes merged values in Box field names and its own units, and writes
-// each edit in one transaction, a locked W or H edit as one width and height. The host owns the lock (useAspectLock),
-// so the same choice drives ObjectTransform's grips, and it is never stored on an element.
+// The shared X, Y, W, H and angle fields of a canvas object's panel, with Keep aspect ratio, as a host such as Slides
+// shows them. The section only presents. The host passes merged values in Box field names and its own units, and it
+// writes each edit in one transaction, so a locked W or H edit is one write of both sides. The host also owns the lock,
+// through useAspectLock, so the same choice drives ObjectTransform's grips. The lock is never stored on an element.
 
 import { normalizeAngle } from '@workspace/lib/vector';
 import { MergedNumberInput } from './merged-number-input';
@@ -10,7 +10,7 @@ import { PropertyRow, PropertySection } from './properties-panel';
 import { PropertyCheckbox } from './property-checkbox';
 import { useCoupledSize } from './use-coupled-size';
 
-// Canonical geometry fields (Box names). The host maps these to its own element update + units.
+// The geometry fields under their Box names. The host maps them to its own element update and units.
 export type TransformFields = Partial<{
     x: number;
     y: number;
@@ -26,15 +26,15 @@ type TransformSectionProps = {
     height: MergedValue<number>;
     angle: MergedValue<number>;
     onChange: (fields: TransformFields) => void;
-    // W/H disabled for derived-dims selections (vector text — size lives in fontSize, the measurement
-    // util is the sole dim writer). The aspect checkbox is hidden with them: locking W↔H is
-    // meaningless when neither is editable, and it must never override text's forced 'aspect' mode.
+    // Disables W and H for a selection whose size another value decides, such as Vector text, whose size follows
+    // its font size. The aspect checkbox hides with them, as a lock means nothing when neither side can be edited,
+    // and it must never override the forced 'aspect' mode of text.
     sizeDisabled?: boolean;
-    // Disables ONLY the angle input, W/H untouched (an elbow arrow pins angle 0 — its rotation is moot).
+    // Disables the angle field alone, such as for an elbow arrow, whose angle is always 0.
     angleDisabled?: boolean;
-    // Disables EVERY input (read-only viewers): a visible read-out whose fields can't be edited.
+    // Disables every field, for a read-only viewer, who still sees the values.
     disabled?: boolean;
-    // Aspect-ratio checkbox. Controlled by the host; omit `onAspectLockChange` to hide it entirely.
+    // Keep aspect ratio, controlled by the host. Without `onAspectLockChange` the checkbox is hidden.
     aspectLocked?: boolean;
     onAspectLockChange?: (locked: boolean) => void;
 };
@@ -80,8 +80,8 @@ export function TransformSection({
                     onCheckedChange={(locked) => onAspectLockChange?.(locked)}
                 />
             )}
-            {/* No min/max: the row is built to take an out-of-range entry and WRAP it — bounds here
-                would clamp a typed -90 to 0 before normalizeAngle ever saw it. */}
+            {/* The angle has no min or max, as the row takes an out-of-range entry and wraps it. A bound would clamp
+                a typed -90 to 0 before normalizeAngle sees it. */}
             <PropertyRow label="Angle">
                 <MergedNumberInput
                     value={angle}

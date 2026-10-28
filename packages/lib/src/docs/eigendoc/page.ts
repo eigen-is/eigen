@@ -168,6 +168,9 @@ export const cmText = (mm: number, decimals: number) => String(Math.round(mm * 1
 // A cm field's text in mm, to 0.01 mm, or a typed 1.91 cm reads as 19.099999999999998 mm. NaN for no number.
 export const readCm = (text: string) => (text.trim() === '' ? Number.NaN : Math.round(Number(text) * 1000) / 100);
 
+// The text column's width: the paper less its left and right margins, in the unit the page is in.
+export const pageColumnWidth = ({ width, margin }: PageSetup) => width - margin.left - margin.right;
+
 export function pagePx(setup: PageSetup): PageSetup {
     return convert(setup, mmToPx);
 }

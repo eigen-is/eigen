@@ -1,5 +1,5 @@
 // Google Docs' Custom spacing (line spacing, and before and after in points) and Indentation options (left and right in
-// centimetres, a first line or hanging indent): each opens on what the selection's first paragraph draws, and Apply
+// centimeters, a first line or hanging indent): each opens on what the selection's first paragraph draws, and Apply
 // writes only the fields that changed, to every paragraph selected.
 import { afterEach, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
@@ -143,7 +143,7 @@ test('Custom spacing refuses a line spacing or a spacing out of range', async ()
 });
 
 // Google's and Word's Left is where the body lines stand, and a hanging first line starts left of it.
-test('Indentation options opens on no indent in centimetres, and Left with a hanging indent sets the body lines', async () => {
+test('Indentation options opens on no indent in centimeters, and Left with a hanging indent sets the body lines', async () => {
     await open(IndentationOptionsDialog, paragraphs({}));
     expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Indentation options');
     expect(['Left', 'Right', 'Special indent'].map(value)).toEqual(['0', '0', 'None']);

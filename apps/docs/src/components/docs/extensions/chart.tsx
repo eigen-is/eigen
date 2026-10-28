@@ -8,7 +8,7 @@ import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
 import { ChartNode, chartSvg, readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { useCallback, useMemo } from 'react';
-import type { FigureFrameOptions } from './figure-frame';
+import type { FigureFrameOptions, FigureSize } from './figure-frame';
 import {
     aspectLockedIn,
     CHART_MIN_HEIGHT,
@@ -25,7 +25,7 @@ export type ChartOptions = FigureFrameOptions & {
 };
 
 // A chart keeps both sides, whole.
-const storedSize = ({ width, height }: { width: number; height: number }) => ({
+const storedSize = ({ width, height }: FigureSize) => ({
     width,
     height: Math.round(height),
 });

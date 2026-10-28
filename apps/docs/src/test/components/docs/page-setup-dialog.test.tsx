@@ -1,7 +1,7 @@
-// Page setup is Google Docs' Pages and Page-less tabs: on Pages, orientation, paper size and margins in centimetres; on
+// Page setup is Google Docs' Pages and Page-less tabs: on Pages, orientation, paper size and margins in centimeters; on
 // Page-less, the reader's own text width. A writer changes the doc's page and format with OK; a viewer reads them and
 // sets only their own text width. A band's Header format… and Footer format… open Google's Headers & footers
-// dialog: the bands' distances from the paper's edge, in centimetres, and Different first page, applied with Apply.
+// dialog: the bands' distances from the paper's edge, in centimeters, and Different first page, applied with Apply.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import type { DocsTextWidth } from '@workspace/lib/types/settings';
@@ -103,7 +103,7 @@ test("a writer sees the doc's page in Google's controls, all of them enabled", a
     expect(controls.length).toBe(7);
     for (const element of controls) expect(element.disabled).toBe(false);
     expect(button('Close')).toBeUndefined();
-    expect(dialog()?.textContent).toContain('Margins (centimetres)');
+    expect(dialog()?.textContent).toContain('Margins (centimeters)');
 });
 
 test('a cm field shows two decimals, as its step, but keeps what is typed until it is left', async () => {
@@ -361,12 +361,12 @@ async function renderBandFormat(setup: PageSetup = DEFAULT_PAGE_SETUP) {
 }
 
 const distances = () =>
-    ['Header (centimetres from top)', 'Footer (centimetres from bottom)'].map((label) => {
+    ['Header (centimeters from top)', 'Footer (centimeters from bottom)'].map((label) => {
         const input = control(label);
         return input instanceof HTMLInputElement ? input.value : null;
     });
 
-test('Headers and footers shows the distances from the edge in centimetres, and Different first page', async () => {
+test('Headers and footers shows the distances from the edge in centimeters, and Different first page', async () => {
     await renderBandFormat({ ...DEFAULT_PAGE_SETUP, headerDistance: 9.5, differentFirstPage: true });
     expect(dialog()?.querySelector('h2')?.textContent).toBe('Headers and footers');
     expect(dialog()?.querySelector('legend')?.textContent).toBe('Margins');
@@ -377,7 +377,7 @@ test('Headers and footers shows the distances from the edge in centimetres, and 
 test('Apply writes the distances and Different first page; an untouched distance keeps its exact size', async () => {
     const setup = { ...DEFAULT_PAGE_SETUP, footerDistance: 12.345 };
     await renderBandFormat(setup);
-    await type('Header (centimetres from top)', '1');
+    await type('Header (centimeters from top)', '1');
     await click(control('Different first page'));
     await click(button('Apply'));
     expect(onSetupChange.mock.calls).toEqual([[setup, { ...setup, headerDistance: 10, differentFirstPage: true }]]);
@@ -385,9 +385,9 @@ test('Apply writes the distances and Different first page; an untouched distance
 });
 
 test.each([
-    ['a header past its 2 cm margin', 'Header (centimetres from top)', '2.5'],
-    ['a negative footer distance', 'Footer (centimetres from bottom)', '-1'],
-    ['an empty distance', 'Header (centimetres from top)', ''],
+    ['a header past its 2 cm margin', 'Header (centimeters from top)', '2.5'],
+    ['a negative footer distance', 'Footer (centimeters from bottom)', '-1'],
+    ['an empty distance', 'Header (centimeters from top)', ''],
 ])('%s shows an error and Apply does nothing', async (_, label, value) => {
     await renderBandFormat();
     await type(label, value);
@@ -403,7 +403,7 @@ test('Headers and footers writes through the page map, as one undo step', async 
     const doc = new Y.Doc();
     const undoManager = createDocUndoManager(doc);
     await renderBandFormat(readPageSetup(doc.getMap(PAGE_ROOT).toJSON()));
-    await type('Footer (centimetres from bottom)', '0.8');
+    await type('Footer (centimeters from bottom)', '0.8');
     await click(button('Apply'));
     const [[from, to] = []] = onSetupChange.mock.calls;
     if (!from || !to) throw new Error('OK wrote nothing');

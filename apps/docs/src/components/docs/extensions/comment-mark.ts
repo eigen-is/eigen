@@ -1,6 +1,6 @@
 // The Docs comment anchor: the mark a card holds on a run of text, and the attribute it holds on a node the Yjs binding
 // keeps no mark on, such as an image or a text box. It adds, finds, selects and removes a card's anchors, quotes the
-// anchored text for the card, and paints each card's colour from the comment panel's state as decorations, which the
+// anchored text for the card, and paints each card's color from the comment panel's state as decorations, which the
 // editor component updates and a figure's node view draws as its corner mark.
 
 import type { Editor } from '@tiptap/core';

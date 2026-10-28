@@ -509,7 +509,7 @@ test('Options › Footer format… sets the footer’s distance from the bottom,
     expect(menuItems()).not.toContain('Header format…');
     await pick('Footer format…');
     const field = [...document.querySelectorAll('label')].find(
-        (l) => l.textContent === 'Footer (centimetres from bottom)',
+        (l) => l.textContent === 'Footer (centimeters from bottom)',
     );
     const input = field && document.getElementById(field.htmlFor);
     if (!(input instanceof HTMLInputElement)) throw new Error('no footer distance field');

@@ -1,6 +1,6 @@
-// The chart editor every host's panel shows: Google's Customise rows over one ChartSpec. It knows nothing of
-// where the chart lives (a canvas element, a docs node, a sheet): it reads a spec and hands back a change of
-// the fields a row edits, which the host applies onto the spec it stores. A typed field writes as the user goes
+// The chart editor every host's panel shows: Google's Customize rows over one ChartSpec. It knows nothing of
+// where the chart lives, such as a canvas element or a sheet. It reads a spec and hands back a change of the
+// fields a row edits, which the host applies onto the spec it stores. A typed field writes as the user goes,
 // inside the host's gesture (PropertyGestureContext), so a typed title is one undo step.
 
 import { chartColor, chartPointColor, chartSeriesStyle, MAX_CHART_LABEL_LENGTH } from '@workspace/lib/charts';

@@ -207,7 +207,7 @@ export function textOutsideStories(
 
 const guardKey = new PluginKey('storyFormatting');
 
-// The body never formats a story's text: in Google Docs a bold, a colour, a comment or Clear formatting across a
+// The body never formats a story's text: in Google Docs a bold, a color, a comment or Clear formatting across a
 // reference leaves the note alone, and in Word across a box's anchor the box. ProseMirror's mark and block commands
 // descend into the story, so a body transaction that left a story's text as it was and changed its marks or attributes
 // gets the story back as it was. Find and replace changes the text and stays; the open story's editor, a peer and undo

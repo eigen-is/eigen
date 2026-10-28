@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, page-setup, paper, margins, orientation, layout]
 related: [docs/page-less, docs/print, docs/headers-and-footers, docs/import-word]
 order: 110
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 A new document is A4, portrait, with 2 cm margins on every side. You can change the paper, the way it's turned, and the margins for the whole document.
@@ -21,7 +21,7 @@ The window has two tabs. **Pages** holds the paper and margins described here. *
 
 1. On the **Pages** tab, under **Orientation**, pick **Portrait** or **Landscape**.
 2. In **Paper size**, pick a paper: **Letter**, **Tabloid**, **Legal**, **Statement**, **Executive**, **Folio**, **A3**, **A4**, **A5**, **B4**, or **B5**. Each shows its size in centimeters. Turning the page keeps the paper, so A4 stays A4 in landscape.
-3. Under **Margins (centimetres)**, type the **Top**, **Bottom**, **Left**, and **Right** margin.
+3. Under **Margins (centimeters)**, type the **Top**, **Bottom**, **Left**, and **Right** margin.
 4. Click **OK**, or **Cancel** to leave the page as it was.
 
 A margin can be 0 cm or more, but it has to leave room for your text. If it doesn't, the window says so and **OK** stays off until you fix it.

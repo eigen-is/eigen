@@ -18,7 +18,7 @@ A text box holds paragraphs of its own in a box with a size, a fill, and an outl
 3. Type the box's text. It wraps inside the box, and the box grows to fit it.
 4. Press **Esc** when you're done. The box stays selected, so you can change how it looks.
 
-A new box sits on its own line, 6 cm wide, white with a thin black outline. **Text box** is greyed out in a header or footer, in a footnote, inside another text box, and in a code block. On a phone, **Insert** has no **Text box**.
+A new box sits on its own line, 6 cm wide, white with a thin black outline. **Text box** is grayed out in a header or footer, in a footnote, inside another text box, and in a code block. On a phone, **Insert** has no **Text box**.
 
 ## Edit the text in a box
 

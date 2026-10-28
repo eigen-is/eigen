@@ -18,6 +18,7 @@ import type { FigureFrameAttrs, FigureFrameNode, FigureLayout } from '@workspace
 import {
     cmText,
     figureLayoutStyle,
+    heightAtWidth,
     isPositioned,
     pxToMm,
     readFigureAttrs,
@@ -27,6 +28,7 @@ import {
 import type { Box } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui';
 import { CommentIndicator } from '@workspace/ui/components/comments';
+import type { CoupledSize } from '@workspace/ui/components/properties-panel';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import type { ReactNode, RefObject } from 'react';
@@ -35,15 +37,16 @@ import type { PaperRoom } from './positioned-figure';
 import { roomOnPaper } from './positioned-figure';
 import { pageScale, pageWidths, textColumnWidth } from './text-column';
 
-// The resize floor of a figure's width (px). An image's height has none but a pixel, so a thin divider keeps its shape,
-// and a chart's has the width's, as an axis and its labels need the room.
+// The resize floor of a figure's width, in px. An image's height has no floor but a pixel, so a thin divider keeps its
+// shape. A chart's height has the width's floor, as an axis and its labels need the room.
 const FIGURE_MIN_WIDTH = 100;
 const IMAGE_MIN_HEIGHT = 1;
 export const CHART_MIN_HEIGHT = 100;
 
-// The widest a resize makes a figure: the text column, half of it for a wrapped figure, and the paper of the page map
-// for one in front of or behind the text. A page-less doc's block figure may grow past the reader's column up to the
-// paper, and its wrap keeps half the page map's column, so neither depends on the reader's text width.
+// The widest a resize makes a figure. A figure in the flow gets the text column, and a wrapped one half of it. A figure
+// in front of or behind the text gets the paper of the page map. In a page-less doc a block figure may grow past the
+// reader's column up to the paper, and a wrapped one keeps half the page map's column. Neither depends on the
+// reader's own text width.
 export function figureMaxWidth(editor: Editor, layout: FigureLayout | null | undefined) {
     const { paper, column, pageless } = pageWidths(editor);
     const wrap = layout === 'wrap-left' || layout === 'wrap-right';
@@ -57,22 +60,18 @@ export function clampFigureWidth(width: number, maxWidth: number) {
     return Math.round(Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width)));
 }
 
-// What a size edit writes: a side it leaves out stays as stored.
-export type FigureSizeEdit = { width?: number; height?: number };
+// A figure's drawn box, such as an image's, a chart's or a text box's, in page px.
+export type FigureSize = { width: number; height: number };
 
 // A size the panel asks for, fitted to `maxWidth`: the width within the floor and the cap, and a height that comes with
 // it scaled alongside, so the figure keeps the shape it was given, above `minHeight`. Unlike a grip's, it stays
 // unrounded, as a typed cm gives a fraction of a px.
-export function fitFigureSize(
-    size: FigureSizeEdit,
-    maxWidth: number,
-    minHeight: number = IMAGE_MIN_HEIGHT,
-): FigureSizeEdit {
+export function fitFigureSize(size: CoupledSize, maxWidth: number, minHeight: number = IMAGE_MIN_HEIGHT): CoupledSize {
     const { width, height } = size;
     if (width === undefined) return height === undefined ? {} : { height: Math.max(minHeight, height) };
     const fitted = Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width));
     if (height === undefined) return { width: fitted };
-    return { width: fitted, height: Math.max(minHeight, (height * fitted) / width) };
+    return { width: fitted, height: Math.max(minHeight, heightAtWidth({ width, height }, fitted)) };
 }
 
 // A dragged box fitted to the column. With a ratio, the width is the one the box allows at that ratio and the height
@@ -108,7 +107,11 @@ export function setFigureLayout(
     const maxWidth = layout ? figureMaxWidth(editor, layout) : Infinity;
     if (!width || width <= maxWidth) return write(attributes);
     const fitted = clampFigureWidth(width, maxWidth);
-    return write({ ...attributes, width: fitted, ...(height && { height: Math.round((height * fitted) / width) }) });
+    return write({
+        ...attributes,
+        width: fitted,
+        ...(height && { height: Math.round(heightAtWidth({ width, height }, fitted)) }),
+    });
 }
 
 // The Image panel's and Format › Image's write of a layout or an alignment.
@@ -118,8 +121,9 @@ export const setImageLayout = (editor: Editor, attributes: FigureFrameAttrs) =>
     );
 
 // A positioned box's place: its top inline, and its left and width as custom properties, which one prose rule draws.
-// A page-less doc's rule draws the box clamped into its text column and the strip beside it from them instead, so the
-// stored place, which only the page map clamps, draws again on pages. The export writes the place inline.
+// In a page-less doc another rule reads the same properties and clamps the box into the text column and the strip
+// beside it. The stored place is left as it is, so it draws unchanged when the doc goes back to pages. The export
+// writes the place inline instead.
 const placeStyle = (top: number, left: number, width: number | undefined): Record<string, string | number> => ({
     top,
     '--figure-left': `${left}px`,
@@ -138,8 +142,6 @@ export type FigureFrameOptions = {
 // How far a grip moved a box's left and top edges, in page px. A west or a north grip moves them, as the opposite edge
 // stays put, which a figure in front of or behind the text follows with its offsets.
 type FigureShift = { dx: number; dy: number };
-
-type FigureSize = { width: number; height: number };
 
 // The offsets of a positioned figure whose grip moved its edges by `shift`; none for a figure in the flow.
 function shiftedOffsets({ layout, offsetX, offsetY }: FigureFrameAttrs, { dx, dy }: FigureShift) {
@@ -394,15 +396,16 @@ export function FigureFrame({
             showRotate={false}
             resizeMode={resizeMode}
             formatSize={figureSize}
-            // Default minSize (1): in aspect mode the component floors BOTH dims, which would inflate
-            // wide images (a 100 floor on a 4:1 banner's height forces width 400). The host's fit clamps.
+            // The default minSize of 1 stays: in aspect mode the component floors both sides, so a floor of
+            // 100 would force a 4:1 banner to 400 px wide. The host's fit clamps the size instead.
             onTransform={onTransform}
             onCommit={onCommit}
             onGestureEnd={onGestureEnd}
         />
     );
-    // After the transform, so its NE grip never covers the mark. A button, so ProseMirror leaves its press alone (no node
-    // select); a prevented press keeps focus in the editor and starts no drag.
+    // The mark comes after the transform, so the transform's top-right grip never covers it. It is a button, so
+    // ProseMirror leaves its press alone and selects no node. Its press is prevented, which keeps the focus in the
+    // editor and starts no drag.
     const comment = commentCardId && (
         <button
             type="button"
