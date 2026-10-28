@@ -2,7 +2,7 @@
 
 > **TLDR:** A drawing and a slide deck are the same thing underneath: a page of elements (shapes, lines, arrows, text boxes, images, freehand strokes) that people place freely and edit together. One engine stores, draws and edits both. `packages/lib/src/vector/` is the half without React, which the server runs too. `packages/ui/src/components/vector/` is the editor, `CanvasEditor`. The Vector app mounts it as an infinite canvas, and the Slides app shows one slide-sized page at a time ([SLIDES.md](SLIDES.md)).
 
-A drawing is a `.eigenvector` file and a deck is a `.eigenslides` file. Both are collab documents ([COLLAB.md](COLLAB.md)): the content is a Yjs document that every open editor holds a copy of, and the server relays and stores the changes. Both use the same three roots in it. `elements` holds one small map per element: its type, position, size, rotation, colors, and whatever that type needs, such as the points of a line or the HTML of a text box. `frames` holds the slides of a deck. A frame is one page of fixed size, and an element on a slide names its frame. Only a deck writes frames, so a drawing has none. `meta` holds the background.
+A drawing is a `.eigenvector` file and a deck is a `.eigenslides` file. Both are collab documents ([COLLAB.md](COLLAB.md)): the content is a Yjs document that every open editor holds a copy of, and the server relays and stores the changes. Both use the same three roots in it. `elements` holds one small map per element: its type, position, size, rotation, colors, and whatever that type needs, such as the points of a line or the HTML of a text box. A shape holds text the same way a text box does. `frames` holds the slides of a deck. A frame is one page of fixed size, and an element on a slide names its frame. Only a deck writes frames, so a drawing has none. `meta` holds the background.
 
 An element's type is called its kind. Each kind is one `defineKind` module that answers every question the engine has about it: its defaults, how to read and validate it, its bounds, whether a click hits it, and how to draw it. Rendering, bounds, hit testing and the panel never ask "is this a rectangle". They ask the kind. Adding a shape is adding that module, plus its name in `VectorElementType` and its entries in `ELEMENT_KINDS` and `ELEMENT_KIND_UI`.
 
@@ -42,7 +42,7 @@ A pasted clipboard record goes through the same `readElementFromFields`, so a fo
 
 ## A kind is one registry entry
 
-Each kind is one `defineKind` file in `packages/lib/src/vector/kinds/`. Besides defaults, `read`, bounds, hit test and `render`, it gives the outline and the `searchText` that feeds both ⌘F and the server search index. A bindable kind may give its own `anchorPoints`, the points a bound arrow snaps to; without them they are the box's four edge midpoints. `defineKind` derives the kind's stored `fields` from its `defaults`, so a kind names its keys once. It also re-narrows through the kind's own guard in every method, so no caller casts and a mis-dispatch degrades quietly instead of throwing mid-render. Presentation (icon, label, shortcut, in-place editor, edit dialog, panel section) is the matching `ELEMENT_KIND_UI` entry in `packages/ui/src/components/vector/kinds/`. A kind edited in a dialog rather than in place, the chart, declares an `EditDialog`, which a double-click opens. The canvas mounts it inside a wrapper that stops pointer, double-click, paste and drag-start events, because React bubbles a portaled dialog's events up the component tree, and the canvas' own handlers would select, marquee, paste or cancel a drag under it.
+Each kind is one `defineKind` file in `packages/lib/src/vector/kinds/`. Besides defaults, `read`, bounds, hit test and `render`, it gives the outline and the `searchText` that feeds both ⌘F and the server search index. A bindable kind may give its own `anchorPoints`, the points a bound arrow snaps to; without them they are the box's four edge midpoints. `defineKind` derives the kind's stored `fields` from its `defaults`, so a kind names its keys once. It also re-narrows through the kind's own guard in every method, so no caller casts and a mis-dispatch degrades quietly instead of throwing mid-render. Presentation (icon, label, shortcut, edit dialog) is the matching `ELEMENT_KIND_UI` entry in `packages/ui/src/components/vector/kinds/`. A kind edited in a dialog rather than in place, the chart, declares an `EditDialog`, which a double-click opens. The canvas mounts it inside a wrapper that stops pointer, double-click, paste and drag-start events, because React bubbles a portaled dialog's events up the component tree, and the canvas' own handlers would select, marquee, paste or cancel a drag under it.
 
 `kinds/index.ts` derives the rest: `ELEMENT_FIELDS`, the type validator, the toolbar tools, `baseDefaultsFor` (so a panel reset restores exactly what create gave). A host's style table (`VECTOR_STYLE_DEFAULTS`, `SLIDES_STYLE_DEFAULTS`) decides how a new element looks, never which kinds exist. `geometry.ts` and the kind registry import each other. A kind calls geometry only inside its methods, so the registry can evaluate before geometry's body does. Any entry works except one that reaches geometry through a kind's own module or `kind.ts`, such as `kinds/rectangle.ts` imported first: the registry then evaluates while that module is in its TDZ and throws a `ReferenceError`.
 
@@ -53,6 +53,24 @@ Adding a kind: add it to `VectorElementType`, write its file, add one line to `E
 The `pie` kind is a sector of the ellipse its box inscribes, like OOXML's `pie`. It stores `startAngle` and `sweepAngle` in degrees, clockwise from 3 o'clock, measured in the box-normalized circle, so a resize scales a slice like any other shape. It stores a sweep, not an end angle, because a 360° slice has no distinct end. Its outline is a polygon and its anchors sit on the slice, so an arrow docks on the slice rather than on its box. No tool draws one: slices arrive from charts and Convert to shapes.
 
 The `chart` kind holds one chart's stored spec, a string per part, each kept as stored, and draws it as the canvas's own shapes plus SVG text, each shape through its own kind ([CHARTS.md](CHARTS.md)). Its fill is its background and its stroke its axes; these fields are the chart's look, which a doc's chart stores under the same names ([CHARTS.md](CHARTS.md#one-look-a-canvas-charts-own-fields-paints-a-chart-in-every-app)). No tool draws one either: Insert → Chart places the sample chart at the viewport center (`CanvasHandle.insertChart`), 640 × 400 on a drawing and 1200 × 675 on a slide.
+
+## Text is one block that a text box and the closed shapes share
+
+The `Textual` block (`kinds/textual.ts`) is the twelve stored text fields: `html`, the font family, size, weight, style and decoration, the color, the horizontal and vertical alignment, the letter spacing, the line height and the `padding`. The text box (`richtext`), the rectangle, the ellipse, the diamond, the pie and a closed path compose it, so the editor, the renderer, search and the panel work on any of them with one implementation. The text box is the only kind whose text is its purpose. A shape's text starts in its middle, 10 px in from its edge (`DEFAULT_SHAPE_TEXT_PROPS`), and a text box's at the top left with no inset.
+
+The reader fills every missing or corrupt text field from the kind's defaults, so a shape stored before shapes held text reads with empty `html` and draws the bytes it drew before. `textRender` returns the shape's svg alone while `html` is empty, and the text over it once it is not.
+
+`textual.ts` imports only leaf modules, never geometry, the renderer helpers or a kind. The chart's shape builders call `textualDefaults`, and a deeper import would load the kind registry from them.
+
+## A text box grows and a shape spills
+
+A text box grows to fit its text: `useRichTextAutoFit` (`packages/ui/src/components/vector/text-fit.ts`) writes the measured height, and acts only on `richtext`. A shape keeps its size and lets text that does not fit spill out of it, as PowerPoint does, so a shape never changes under the user's hand. The text area is the box minus `padding` and minus the border, for both.
+
+A drawing's PDF, preview and SVG download are sized from the element boxes (`sceneBounds`), so text that spills past the outermost element of the drawing is cut off there ([ROADMAP](ROADMAP.md)).
+
+## An open path keeps its text but reads as empty
+
+`capabilitiesOf` gives an open path no `text`, so it has no panel rows and no editor. Its stored text fields stay in the map, but the path kind's `read` returns `html` as `''` while `closed` is false. Render, search, export and measuring then need no open-path check, and closing the path shows the text again.
 
 ## A path is stored in its unit box
 
@@ -68,7 +86,9 @@ The outline is the outer contour, the subpath with the largest area, with every 
 
 ## Capabilities are asked of the element
 
-`capabilitiesOf(el)` answers what an element supports: fill, hatch, dash, corners, bindable, how it is created. The panel, the tools and the binding code gate on it, never on a type list. It takes the element, not the kind, because some answers depend on geometry: an open line or freehand stroke has nothing to fill until its path closes.
+`capabilitiesOf(el)` answers what an element supports: fill, hatch, dash, corners, bindable, text, how it is created. The panel, the tools and the binding code gate on it, never on a type list. It takes the element, not the kind, because some answers depend on geometry: an open line or freehand stroke has nothing to fill until its path closes.
+
+`isTextual(el)` is the `text` capability as a type guard, for the element kinds that hold a `Textual` block. An open path is not one.
 
 `paintsNothing(el)` is the kind's answer to "is this invisible": an empty text box, a shape with no fill and no border, an image with no picture. The editor rings those with a dashed outline in its chrome layer while editing, so they stay findable. Thumbnails, present mode and exports show the page as it is.
 
@@ -154,13 +174,15 @@ Fixups that must never be undone write under a non-null origin, which the UndoMa
 
 ## Rich text is edited inside its own layer
 
-Double-click opens the kind's `InPlaceEditor` inside the element's own layer, over the box's painted fill and border. Each change writes `html` straight through, unsealed, so the session is one undo step and peers see it live. On exit an empty box is deleted, sealed first. Otherwise the delete would merge into the last keystroke, and whether it is its own step would depend on how fast the user clicked away.
+Double-click, or Enter on the one selected element, opens the text of any element with the `text` capability in the editor, inside the element's own layer, over its painted fill and border (`RichTextInPlaceEditor`, `kinds/richtext.tsx`, mounted by `canvas-editor.tsx`). The editor is not a per-kind field of `ELEMENT_KIND_UI`: a shape and a text box share it. Each change writes `html` straight through, unsealed, so the session is one undo step and peers see it live. On exit an empty text box is deleted, sealed first, and only a text box: an empty, unpainted shape stays. `closeRichText` tests `el.type === 'richtext'` for that, or a shape drawn and left empty would vanish. Otherwise the delete would merge into the last keystroke, and whether it is its own step would depend on how fast the user clicked away.
+
+Enter does what a double-click on the element does, so it also opens an arrow's label and a chart's data dialog. `useCanvasKeyboard` acts, and takes the key, only for a sole selection and only when focus is on the canvas or the page, so a focused button or rail thumbnail keeps its own Enter.
 
 During a text session the canvas keymap is disabled, because `ignoreInputs` does not cover ProseMirror. The viewport freezes so the editor stays on its element.
 
 Outside a text editor the canvas cancels every `dragstart`. With text selected over the scene, Safari drags that selection from a press anywhere on the canvas, and Chrome from selectable text; the page then gets no pointerup, so the shape never moves and the text shows as a ghost image.
 
-A box's height only grows (`richTextFitHeight`): the stored height is the user's minimum, and the room below the text is what vertical alignment uses. The layer measures its own text, so every change re-fits in one place. Every client measures the same box and only a shortfall of 1 px or more is written, so concurrent writers converge instead of echoing. The typing user's fit is tracked, so ⌘Z takes back the text and the growth together.
+A text box's height only grows (`richTextFitHeight`): the stored height is the user's minimum, and the room below the text is what vertical alignment uses. The layer measures its own text, so every change re-fits in one place. Every client measures the same box and only a shortfall of 1 px or more is written, so concurrent writers converge instead of echoing. The typing user's fit is tracked, so ⌘Z takes back the text and the growth together.
 
 ## Escape is layered per host, on purpose
 

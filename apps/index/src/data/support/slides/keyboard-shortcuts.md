@@ -6,7 +6,7 @@ category: Reference
 tags: [slides, shortcuts, keyboard, search]
 related: [slides/get-started, slides/arrange-and-align, slides/present]
 order: 100
-updated: 2026-09-29
+updated: 2026-10-28
 ---
 
 Slides gives you a keyboard shortcut for every tool and most editing actions, so you can build a deck without reaching for the toolbar. This page covers how to find text across a presentation, and lists every shortcut grouped so you can look one up fast.
@@ -51,6 +51,7 @@ By default a tool goes back to **Select** once you've drawn a shape. Press **Q**
 | Delete the selection | `Delete` or `Backspace` | `Delete` or `Backspace` |
 | Undo | `⌘Z` | `Ctrl+Z` |
 | Redo | `⌘⇧Z` or `⌘Y` | `Ctrl+Shift+Z` or `Ctrl+Y` |
+| Edit the text of the selected object | `Enter` | `Enter` |
 | Nudge the selection by 1px | Arrow keys | Arrow keys |
 | Nudge the selection by 5px | `⇧` + arrow keys | `Shift` + arrow keys |
 | Finish a multi-point arrow or line | `Enter` | `Enter` |

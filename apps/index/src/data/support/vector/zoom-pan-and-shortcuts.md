@@ -6,7 +6,7 @@ category: Reference
 tags: [vector, shortcuts, keyboard, zoom, navigation, search]
 related: [vector/get-started, vector/arrange-and-align]
 order: 60
-updated: 2026-09-29
+updated: 2026-10-28
 ---
 
 Vector gives you an endless canvas to draw on. This page covers how to move around it, how to find text in a drawing, and every keyboard shortcut, grouped so you can look one up fast.
@@ -71,6 +71,7 @@ By default a tool goes back to **Select** once you've drawn a shape. Press **Q**
 | Delete the selection | `Delete` or `Backspace` | `Delete` or `Backspace` |
 | Undo | `⌘Z` | `Ctrl+Z` |
 | Redo | `⌘⇧Z` or `⌘Y` | `Ctrl+Shift+Z` or `Ctrl+Y` |
+| Edit the text of the selected object | `Enter` | `Enter` |
 | Nudge the selection by 1px | Arrow keys | Arrow keys |
 | Nudge the selection further | `⇧` + arrow keys | `Shift` + arrow keys |
 | Cancel the current action, or clear the selection | `Esc` | `Esc` |

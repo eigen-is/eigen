@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, drawing, shapes, text, images, charts]
 related: [vector/get-started, vector/connect-with-arrows, vector/style-objects]
 order: 20
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 You build a drawing in Vector by placing objects on the canvas. Pick a tool, then click or drag to add a shape, a freehand line, a text box, or an image. Charts come from the **Insert** menu. This page covers each tool and what happens after you place something.
@@ -45,9 +45,15 @@ The **Draw** and **Eraser** tools stay active on their own, whether or not **Kee
 3. Type your text. A floating toolbar appears with formatting options such as bold, italic, and lists.
 4. Press **Escape** or click outside the box to finish.
 
-To edit a text object later, double-click it. You can also double-click an empty spot on the canvas to start a new text box there, without picking the **Text** tool first.
+To edit a text object later, double-click it, or select it and press **Enter**. You can also double-click an empty spot on the canvas to start a new text box there, without picking the **Text** tool first.
 
 Once a text object is selected but not being edited, the properties panel on the right shows the full set of text options: font, size, color, alignment, and spacing.
+
+## Type in a shape
+
+A rectangle, diamond, or ellipse can hold text. Double-click the shape, or select it and press **Enter**, and type. The text starts in the middle of the shape. Press **Escape** or click outside to finish.
+
+The text belongs to the shape. When you move, rotate, copy, or delete the shape, the text goes with it. When you resize the shape, the text wraps again at the same size. A text box grows to fit its text, but a shape does not: text that does not fit spills out past the edge of the shape. The properties panel shows the same text options for a shape as for a text box.
 
 ## Add an image
 

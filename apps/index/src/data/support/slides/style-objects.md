@@ -6,12 +6,12 @@ category: Editing
 tags: [slides, styling, fill, stroke, colors, text]
 related: [slides/insert-content, slides/draw-shapes-and-arrows, slides/arrange-and-align]
 order: 50
-updated: 2026-10-23
+updated: 2026-10-28
 ---
 
 Select an object on a slide and the panel on the right fills with its style controls. This page lists every section, top to bottom, and what each control does.
 
-Which sections you see depends on the object. **Stroke**, **Sketch**, and **Appearance** show for everything. **Fill** shows for shapes, text boxes, and charts, not for images or arrows. **Labels** shows for charts. The **Text**, **Image**, and arrow sections each show only for their own kind of object. With more than one object selected, you see the controls they share.
+Which sections you see depends on the object. **Stroke**, **Sketch**, and **Appearance** show for everything. **Fill** shows for shapes, text boxes, and charts, not for images or arrows. **Labels** shows for charts. The **Text**, **Image**, and arrow sections each show only for their own kind of object. **Text** shows for text boxes and for shapes. With more than one object selected, you see the controls they share.
 
 With nothing selected, the panel shows the slide background instead. See [Slide backgrounds](/support/slides/slide-backgrounds).
 
@@ -28,7 +28,7 @@ Position, size, and rotation, in slide units.
 
 ## Text
 
-Shows for a text box. Controls the type itself; the box behind it uses the **Fill** and **Stroke** sections below.
+Shows for a text box and for a shape that holds text: a rectangle, diamond, ellipse, or closed freeform shape from an imported file. Controls the type itself; the box or shape behind it uses the **Fill** and **Stroke** sections below.
 
 | Control | What it does |
 |---|---|
@@ -45,7 +45,7 @@ Shows for a text box. Controls the type itself; the box behind it uses the **Fil
 |---|---|
 | **Letter** | Space between letters, in points |
 | **Line** | Line height |
-| **Padding** | Inset between the text and the box edge |
+| **Padding** | Inset between the text and the edge of the box or shape |
 
 ## Image
 
