@@ -94,7 +94,7 @@ export function InsertMenu() {
                 onClick={() => {
                     setContext(
                         (draftCtx) => {
-                            addSheet(draftCtx, settings);
+                            addSheet(draftCtx);
                         },
                         { addSheetOp: true },
                     );

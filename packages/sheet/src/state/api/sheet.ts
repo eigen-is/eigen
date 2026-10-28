@@ -60,7 +60,7 @@ export function copySheet(ctx: Context, sheetId: string) {
     sheetData.charts = Object.fromEntries(
         Object.values(sheetData.charts ?? {}).map((chart) => withFreshId(mapChartRefs(chart, toCopy))),
     );
-    api.addSheet(ctx, undefined, copyId, ctx.sheets[index].isPivotTable, sheetName, sheetData);
+    api.addSheet(ctx, copyId, ctx.sheets[index].isPivotTable, sheetName, sheetData);
     const sheetOrderList: Record<string, number> = {};
     sheetOrderList[copyId] = order;
     api.setSheetOrder(ctx, sheetOrderList);

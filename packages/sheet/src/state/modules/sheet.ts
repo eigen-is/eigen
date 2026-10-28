@@ -11,7 +11,6 @@ import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
-import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex, sheetOrder } from '../utils';
 import { cancelNormalSelected } from './cell';
@@ -84,7 +83,6 @@ export function applySheetView(ctx: Context) {
 
 export function addSheet(
     ctx: Context,
-    settings?: Required<Settings>,
     // A copy or a peer's add names the new sheet's id, and the add then stays on the current sheet.
     newSheetID: string | undefined = undefined,
     isPivotTable = false,
@@ -98,7 +96,7 @@ export function addSheet(
     }
     const order = ctx.sheets.length;
     // The add switches to the sheet it adds, so a sheet that comes with an id keeps it.
-    const id = newSheetID ?? sheetData?.id ?? settings?.generateSheetId() ?? crypto.randomUUID();
+    const id = newSheetID ?? sheetData?.id ?? crypto.randomUUID();
     const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable);
     if (!isNil(sheetData)) delete sheetData.data;
     const sheetconfig: Sheet = isNil(sheetData)

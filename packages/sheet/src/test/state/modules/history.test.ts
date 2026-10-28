@@ -2,7 +2,7 @@
 // and undo steps, and checks what a user sees: the cell the undo lands in, on A, on B and for a joiner who replays
 // every batch. The three must always agree.
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { DEFAULT_CHART_SERIES_STYLE, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
@@ -20,7 +20,6 @@ import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet } from '../../../state/modules/sheet';
-import { defaultSettings } from '../../../state/settings';
 import type { History, Op, Sheet } from '../../../state/types';
 import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
@@ -30,6 +29,12 @@ import { typed } from '../factories/edit-cycle';
 const ONE = 's1';
 const TWO = 's2';
 const THREE = 's3';
+// The id the next added sheet gets: each test that adds one stubs crypto.randomUUID to return it.
+const FOUR = '00000000-0000-4000-8000-000000000004';
+
+afterEach(() => {
+    mock.restore();
+});
 
 // 'B10' → [9, 1].
 function at(a1: string): [number, number] {
@@ -289,11 +294,11 @@ describe("a peer's batch shifts the undo stacks once it applied", () => {
         const base = workbook({}, { A1: text('old') });
         const a = tab(base);
         const b = tab(base);
-        const settings = { ...defaultSettings, generateSheetId: () => 's4' };
-        const added = tabEdit(b, (ctx) => addSheet(ctx, settings), { addSheetOp: true });
+        spyOn(crypto, 'randomUUID').mockReturnValue(FOUR);
+        const added = tabEdit(b, (ctx) => addSheet(ctx), { addSheetOp: true });
         const name = b.ctx.sheets[3].name;
         tabEdit(a, typedAt('A1', `=${name}!B10`, TWO));
-        const inserted = tabEdit(b, ...insertRows(2, 2, 's4'));
+        const inserted = tabEdit(b, ...insertRows(2, 2, FOUR));
         // One API, built on A's last render, takes both batches, as the Workbook's does between two renders.
         let next = a.ctx;
         const setContext = (recipe: (ctx: Context) => void) => {
@@ -779,14 +784,14 @@ describe('a structural undo or redo applies exactly what it sends', () => {
 
     test('undoing a sheet add removes it everywhere, and redo brings it back', () => {
         const s = session(workbook());
-        const settings = { ...defaultSettings, generateSheetId: () => 's4' };
-        s.edit(s.a, (ctx) => addSheet(ctx, settings), { addSheetOp: true });
-        expect(view(s.b.ctx.sheets).map((x) => x.id)).toEqual([ONE, TWO, THREE, 's4']);
+        spyOn(crypto, 'randomUUID').mockReturnValue(FOUR);
+        s.edit(s.a, (ctx) => addSheet(ctx), { addSheetOp: true });
+        expect(view(s.b.ctx.sheets).map((x) => x.id)).toEqual([ONE, TWO, THREE, FOUR]);
         s.undo(s.a);
         expect(view(s.a.ctx.sheets).map((x) => x.id)).toEqual([ONE, TWO, THREE]);
         expectAgree(s);
         s.redo(s.a);
-        expect(view(s.a.ctx.sheets).map((x) => x.id)).toEqual([ONE, TWO, THREE, 's4']);
+        expect(view(s.a.ctx.sheets).map((x) => x.id)).toEqual([ONE, TWO, THREE, FOUR]);
         expectAgree(s);
     });
 });

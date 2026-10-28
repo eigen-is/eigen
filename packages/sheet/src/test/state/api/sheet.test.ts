@@ -156,7 +156,7 @@ describe('sheet order on a copy, an add and a delete', () => {
 
     test('an add counts a sheet without an order as 0', () => {
         const next = produce(threeSheets(unordered), (draft: Context) =>
-            addSheet(draft, undefined, 'id_d', false, 'D', { name: 'D', id: 'id_d', order: 1 }),
+            addSheet(draft, 'id_d', false, 'D', { name: 'D', id: 'id_d', order: 1 }),
         );
         expect(orders(next)).toEqual([
             ['A', undefined],
@@ -176,7 +176,7 @@ describe('sheet order on a copy, an add and a delete', () => {
 
     test('an added sheet keeps its id, and the add switches to it', () => {
         const next = produce(threeSheets(), (draft: Context) =>
-            addSheet(draft, undefined, undefined, false, 'D', { name: 'D', id: 'id_d', order: 3 }),
+            addSheet(draft, undefined, false, 'D', { name: 'D', id: 'id_d', order: 3 }),
         );
         expect(next.sheets[3].id).toBe('id_d');
         expect(next.currentSheetId).toBe('id_d');

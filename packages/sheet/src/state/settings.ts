@@ -79,7 +79,6 @@ export type Settings = {
     devicePixelRatio?: number;
     rowHeaderWidth?: number;
     columnHeaderHeight?: number;
-    generateSheetId?: () => string;
     hooks?: Hooks;
     currency?: string;
     // Keep aspect ratio for the selected image's or chart's corner grips. The app owns it (via
@@ -100,7 +99,6 @@ export const defaultSettings: Required<Settings> = {
     allowEdit: true, // whether to allow editing in the frontend
     rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
     columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
-    generateSheetId: () => crypto.randomUUID(),
     hooks: {},
     currency: '€',
     aspectLocked: false,
