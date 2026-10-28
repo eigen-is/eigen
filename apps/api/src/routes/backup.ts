@@ -8,7 +8,7 @@ import type { BackupArtifact, BackupJob, BackupProgress, BackupSafetyCopy } from
 import { BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { requireAdmin } from '../lib/auth/access';
-import { deleteArtifact, landUpload, listArtifacts, resolveArtifact } from '../lib/backup/artifacts';
+import { deleteArtifact, landUpload, listArtifacts, requireArtifact, resolveArtifact } from '../lib/backup/artifacts';
 import { requireBackableHome } from '../lib/backup/home-dir';
 import {
     getBackupJob,
@@ -49,15 +49,15 @@ async function requireExistingHome(ownerId: string): Promise<void> {
     if (!(await getUserById(owner.id))) throw new ApiError(404, 'User not found');
 }
 
-// A server backup's job is the owner's alone, as its routes are (server-backup.ts): it names the
-// archive and the homes that failed.
+// A server backup's job is the owner's alone, as its routes are, because it names the archive and the
+// homes that failed.
 async function jobsVisibleTo(userId: string): Promise<(job: BackupJob) => boolean> {
     const owner = (await getOrgRole(userId)) === 'owner';
     return (job) => owner || !isServerJob(job.kind);
 }
 
-// A restored home is opened at once, so a remote mount's upload queue (Mount.init) drains its staged files even when
-// nobody visits it. It reaches into another user's home, which belongs behind home-relay.ts once homes can move.
+// A restored home is opened at once, so a remote mount's upload queue drains its staged files even when nobody
+// visits it.
 function startRestoreJob(
     ownerId: string,
     adminId: string,
@@ -76,9 +76,8 @@ function startRestoreJob(
     return { jobId: job.id };
 }
 
-// Server-wide admin surface, the settings.ts carve-out: no `:ownerId` second segment, every handler
-// behind requireAdmin. The routes start jobs and read the backups folder; the jobs themselves are
-// in-memory (lib/backup/jobs.ts) and the folder is the durable record.
+// A server-wide admin surface, so its paths carry no `:ownerId` second segment, and every handler is
+// behind requireAdmin.
 export const backupRouter = new Elysia({ name: 'backup' })
     .use(betterAuth)
 
@@ -132,9 +131,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/artifacts',
         async ({ query, request, user }): Promise<{ name: string }> => {
             await requireAdmin(user.id);
-            // Name in the query, not a header: see getBackupUploadUrl. It has to be a name this
-            // server writes — the ownerId in it is what the artifact list groups by, and it is the
-            // name the bytes land under.
+            // The name travels in the query, not a header, as getBackupUploadUrl builds it. It has to be a
+            // name this server writes: the artifact list groups by the ownerId in it, and the bytes land
+            // under it.
             if (!parseBackupArtifactName(query.name)) {
                 throw new ApiError(400, 'The name parameter must be a backup artifact name');
             }
@@ -175,8 +174,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/artifacts/:name',
         async ({ params, user }): Promise<{ success: boolean }> => {
             await requireAdmin(user.id);
-            const { artifactPath, ownerId } = resolveArtifact(params.name);
-            if (!fs.existsSync(artifactPath)) throw new ApiError(404, 'Artifact not found');
+            const { artifactPath, ownerId } = requireArtifact(params.name);
             requireHomeSlotFree(ownerId);
             deleteArtifact(artifactPath);
             return { success: true };
@@ -188,8 +186,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/artifacts/:name/verify',
         async ({ params, user }): Promise<{ jobId: string }> => {
             await requireAdmin(user.id);
-            const { artifactPath, ownerId } = resolveArtifact(params.name);
-            if (!fs.existsSync(artifactPath)) throw new ApiError(404, 'Artifact not found');
+            const { ownerId } = requireArtifact(params.name);
             const job = startBackupJob('verify', ownerId, user.id, (started, onProgress) =>
                 runArtifactVerify(params.name, started, onProgress),
             );
