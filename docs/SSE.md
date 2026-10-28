@@ -14,6 +14,8 @@ A home's first stream also starts its mail folder watchers, so a change another 
 
 The stream sends a keepalive at once when it opens and every 15 s after. The first one stops a proxy such as Apache from timing out a stream that has had nothing to say yet. Each later one calls `getHome()`, which touches the Home so it does not idle out under an open tab. When the Home was evicted and rebuilt meanwhile, the stream moves its listener to the new one, or it would go silent while the tab still looks connected.
 
+The keepalive reaches the tab as an ordinary message, `{"event":"keepalive"}`, because Elysia writes every item of a returned stream as a `data:` line. `SSEKeepalive` in `packages/lib/src/types/sse.ts` types it, and `useSSE` drops it before `handleSSEvent`, so a domain handler only ever gets an `SSEvent` with a `type`. `apps/api/src/test/server/sse.test.ts` pins the shape the tab tests for.
+
 `useSSE` reconnects after a stream closes on an HTTP error such as a 502, which `EventSource` does not do on its own: from 1 s, doubling up to 30 s, with up to 20% jitter so a restarted server is not hit by every tab at once.
 
 ## An event carries only what invalidation needs
