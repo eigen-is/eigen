@@ -1087,13 +1087,15 @@ export function CanvasEditor({
     touchResetRef.current = touch.reset;
 
     const onPointerDown = (e: React.PointerEvent) => {
+        // Read first: Radix closes the menu on this same press, and a touch handler may take its turn before the check.
+        const closesMenu = pressClosesMenu();
         // Focus the tabIndex=-1 container so a following paste lands on our onPaste — a bare canvas
         // div never holds focus, so image paste would otherwise bubble past us to the body.
         containerRef.current?.focus();
-        // A press that closes an open menu, such as File, only closes it.
-        if (pressClosesMenu()) return;
         // Touch gestures get first dibs (a second finger must intercept even while frozen).
         if (touch.onPointerDown(e)) return;
+        // A press that closes an open menu, such as File, only closes it.
+        if (closesMenu) return;
         // A pointerdown that reaches the CONTAINER is outside the editor (the editor stops its own), so
         // it ends the session; the session's viewport freeze is lifted by its effect on the next render,
         // so this click only closes — the following one selects or draws.

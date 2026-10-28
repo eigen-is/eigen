@@ -68,9 +68,9 @@ export function focusLeftToEditor(): boolean {
 
 // Whether a press lands while a menu is open, such as a bar menu, and so only closes it. The menu leaves the page live,
 // so the press reaches what lies under it too, where an eraser or a text tool would act on it. A pointerdown handler
-// asks this before Radix closes the menu on the same press.
+// asks this before Radix closes the menu on the same press. A menu still fading out after a pick is not open.
 export function pressClosesMenu(): boolean {
-    return document.querySelector('[role="menu"]') !== null;
+    return document.querySelector('[role="menu"][data-state="open"]') !== null;
 }
 
 export { Menubar, MenubarContent, MenubarMenu, MenubarTrigger };

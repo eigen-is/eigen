@@ -164,3 +164,34 @@ test('a press with the text tool that closes File places no text box', async () 
     await clickCanvas();
     expect(elementIds()).toHaveLength(2);
 });
+
+// The press that closes the menu is still the first finger of a pinch: the touch handler sees it, so the second
+// finger, which lands with the menu gone, makes two and the lift of both places nothing, as a single tap would.
+test('a finger that closes File still counts toward a pinch', async () => {
+    await render('richtext');
+    await openFile();
+    const surface = container.querySelector('.origin-top-left')?.parentElement;
+    if (!surface) throw new Error('no canvas');
+    surface.setPointerCapture = () => {};
+    surface.releasePointerCapture = () => {};
+    const touch = (type: string, pointerId: number) =>
+        act(async () => {
+            surface.dispatchEvent(
+                new PointerEvent(type, {
+                    bubbles: true,
+                    cancelable: true,
+                    button: 0,
+                    pointerId,
+                    pointerType: 'touch',
+                    clientX: 40 + pointerId * 10,
+                    clientY: 50,
+                }),
+            );
+        });
+    await touch('pointerdown', 1);
+    await touch('pointerdown', 2);
+    await touch('pointerup', 2);
+    await touch('pointerup', 1);
+    expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
+    expect(elementIds()).toEqual(['box']);
+});
