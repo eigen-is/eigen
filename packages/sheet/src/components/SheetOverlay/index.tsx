@@ -195,8 +195,14 @@ export const SheetOverlay: React.FC = () => {
                         const cellArea = refs.cellArea.current;
                         const cellInput = refs.cellInput.current;
                         if (!container || !cellArea || !cellInput) return;
-                        // Skip link-card hover detection during active selection drag
-                        if (!draftCtx.selectionActive && !draftCtx.scrolling) {
+                        // Skip link-card hover detection during active selection drag, and while the pointer is
+                        // over a menu or dialog portaled above the grid: the cell under it is not hovered.
+                        if (
+                            !draftCtx.selectionActive &&
+                            !draftCtx.scrolling &&
+                            ev.target instanceof Node &&
+                            cellArea.contains(ev.target)
+                        ) {
                             overShowLinkCard(draftCtx, refs.globalCache, ev, container, cellArea);
                         }
                         handleOverlayMouseMove(
