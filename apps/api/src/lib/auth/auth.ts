@@ -17,7 +17,14 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as authSchema from '../../../auth-schema';
 import { isProduction, isTest } from '../config/env';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
-import { getAuthSecret, getDomain, getOrgName, getServerConfig, isRoleAddress } from '../config/server-config';
+import {
+    getAuthSecret,
+    getDomain,
+    getOrgName,
+    getServedOrigin,
+    getServerConfig,
+    isRoleAddress,
+} from '../config/server-config';
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
@@ -106,8 +113,8 @@ export const auth = betterAuth({
             },
             delete: {
                 // Every better-auth deletion passes here while the user row still exists, so Eigen's whole
-                // teardown runs here. A member row left behind would break listMembers for the whole org.
-                // The import is lazy because delete-user imports this file directly, so a static import would be a cycle.
+                // teardown runs here. A member row left behind would break listMembers for the whole org. The
+                // import is lazy because delete-user imports this file directly, so a static import would be a cycle.
                 before: async (deleted) => {
                     const user = await getUserById(deleted.id);
                     if (!user) return;
@@ -237,10 +244,9 @@ export const auth = betterAuth({
     secret: getAuthSecret(),
 });
 
-// The origins better-auth and CORS accept. Production serves every app from https://DOMAIN, which is
-// https://localhost for an install on localhost. The dev origins are trusted only outside production.
+// The origins better-auth and CORS accept: the served origin, and the dev origins only outside production.
 export function getTrustedOrigins(): string[] {
-    const served = `https://${getDomain()}`;
+    const served = getServedOrigin();
     return isProduction() ? [served] : [served, ...DEV_ORIGINS];
 }
 

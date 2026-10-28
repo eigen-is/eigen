@@ -73,10 +73,14 @@ export function getDomain(): string {
     return process.env['DOMAIN'] || 'localhost';
 }
 
+// The origin a production install serves every app from, https://localhost for an install on localhost.
+export function getServedOrigin(): string {
+    return `https://${getDomain()}`;
+}
+
 // The address users reach the server at, for a link that leaves it; a dev server's localhost has none.
 export function getPublicOrigin(): string | undefined {
-    const domain = getDomain();
-    return domain === 'localhost' ? undefined : `https://${domain}`;
+    return getDomain() === 'localhost' ? undefined : getServedOrigin();
 }
 
 // Mail address suffix — defaults to the web domain. Set MAIL_DOMAIN to decouple, e.g. web at
