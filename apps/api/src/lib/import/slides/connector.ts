@@ -3,7 +3,7 @@
 // arrow through points along its curve. The shape reader calls connectorArrow with the path the connector's preset
 // draws, after the flips.
 
-import type { Arrowhead, Box, NewVectorElement, PathCommand, Point, StrokeStyle } from '@workspace/lib/vector';
+import type { Arrowhead, Box, NewVectorElement, PathCommand, Point, VectorArrowElement } from '@workspace/lib/vector';
 import {
     distance,
     linearLocalToScene,
@@ -15,7 +15,9 @@ import {
     validateElbowPoints,
 } from '@workspace/lib/vector';
 
-export const CONNECTORS: ReadonlyMap<string, 'bent' | 'curved'> = new Map([
+type Connector = 'bent' | 'curved';
+
+export const CONNECTORS: ReadonlyMap<string, Connector> = new Map([
     ['bentConnector2', 'bent'],
     ['bentConnector3', 'bent'],
     ['bentConnector4', 'bent'],
@@ -27,17 +29,17 @@ export const CONNECTORS: ReadonlyMap<string, 'bent' | 'curved'> = new Map([
 ]);
 
 // A curve gets a point about every 40 px, so its last chord, which a head points along, is long enough for a whole
-// head. The canvas's curve through them stays within a few px of PowerPoint's. The cap bounds a hostile extent.
+// head. The canvas's curve through them stays within about a pixel of PowerPoint's. The cap bounds a hostile extent.
 const CURVE_STEP_PX = 40;
 const MAX_STEPS_PER_CURVE = 8;
 
-type Stroke = { strokeColor: string; strokeWidth: number; strokeStyle: StrokeStyle };
+type Stroke = Pick<VectorArrowElement, 'strokeColor' | 'strokeWidth' | 'strokeStyle'>;
 
-// `path` is the preset's path in the unit box, `box` the shape's place on the slide. An elbow arrow pins a bend only
-// between two others and draws only right angles, so a two-leg bend, or one turned off a quarter turn, is a sharp arrow
-// through its corners instead.
+// `path` is the preset's path in the unit box, `box` the shape's place on the slide. An elbow arrow pins only a leg
+// between two others and draws only right angles, so a connector of two legs, or one turned off a quarter turn, is a
+// sharp arrow through its corners instead.
 export function connectorArrow(
-    connector: 'bent' | 'curved',
+    connector: Connector,
     path: string,
     box: Box,
     { strokeColor, strokeWidth, strokeStyle }: Stroke,
