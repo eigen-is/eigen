@@ -1,6 +1,6 @@
 // An export's media, prepared on the main thread beside the Mount for the transform process, which has none: a PNG or
 // JPEG made from the source of each raster the document names, and an SVG's own bytes. Every format takes the same,
-// the Office files, the PDF WeasyPrint prints and the HTML download. What is sent is held to an import source's cap.
+// such as a docx, the PDF WeasyPrint prints or the HTML download. What is sent is held to an import source's cap.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
