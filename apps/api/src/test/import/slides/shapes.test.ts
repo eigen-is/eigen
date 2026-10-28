@@ -354,6 +354,32 @@ describe('kinds', () => {
         ]);
     });
 
+    test("a custGeom of one closed path holds its text, unpainted or past paths that draw nothing, inset by the path's own border", () => {
+        // An open line the shape gives no paint to.
+        const noise =
+            '<a:path w="2" h="2" fill="none"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="2" y="0"/></a:lnTo></a:path>';
+        const unstroked = TRIANGLE.replace('<a:path w="2" h="2">', '<a:path w="2" h="2" stroke="0">');
+        const bordered = `${FILLED}<a:ln w="${4 * PX}">${solid('00FF00')}</a:ln>`;
+        const shape = (paths: string, spPr: string) =>
+            sp({ xfrm: box(0, 0, 100, 100), spPr: `${custGeom(paths)}${spPr}`, text: para('T') }).replace(
+                '<a:bodyPr/>',
+                `<a:bodyPr lIns="${20 * PX}" rIns="${20 * PX}"/>`,
+            );
+        const found = elementsOf(
+            shape(TRIANGLE, '<a:noFill/>') + shape(TRIANGLE + noise, FILLED) + shape(unstroked, bordered),
+        );
+        expect(found.map((element) => [element.type, element.html, element.closed])).toEqual([
+            ['path', '<p>T</p>', true],
+            ['path', '<p>T</p>', true],
+            ['path', '<p>T</p>', true],
+        ]);
+        expect(found[0]).toMatchObject({ strokeColor: TRANSPARENT_COLOR });
+        expect(JSON.parse(String(found[0].fill))).toMatchObject({ color: TRANSPARENT_COLOR });
+        // The path draws no line, so the shape's border takes nothing from the inset.
+        expect(found[2]).toMatchObject({ strokeColor: TRANSPARENT_COLOR });
+        expect(found[2].padding).toBeCloseTo(20, 6);
+    });
+
     test("a preset kind, a pie and a one-path preset hold their text, with the file's inset less the border", () => {
         const bordered = `${FILLED}<a:ln w="${4 * PX}">${solid('00FF00')}</a:ln>`;
         const shape = (geom: string, spPr = bordered) =>

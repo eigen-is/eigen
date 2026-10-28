@@ -278,10 +278,12 @@ function readShape(walk: Walk, leaf: Leaf): void {
     };
     const painted = paint.fill !== TRANSPARENT_FILL_JSON || paint.strokeColor !== TRANSPARENT_COLOR;
     // The canvas insets a bordered element's text past its border too, where PowerPoint's inset runs from the edge.
-    const framed = text && {
-        ...text,
-        padding: isBordered(paint) ? Math.max(0, text.padding - paint.strokeWidth) : text.padding,
-    };
+    const framedBy = (stroke: Stroke) =>
+        text && {
+            ...text,
+            padding: isBordered(stroke) ? Math.max(0, text.padding - stroke.strokeWidth) : text.padding,
+        };
+    const framed = framedBy(paint);
     // txBox marks a text box. A marked straight rectangle is one, and any other marked shape keeps its text in a box
     // on top.
     const cNvSpPr = childOf(nonVisualOf(shape) ?? shape, shape.ns, 'cNvSpPr');
@@ -340,9 +342,23 @@ function readShape(walk: Walk, leaf: Leaf): void {
             const paths = pathsOf(outline, box, paint);
             // A path has no arrowheads, and PowerPoint draws a line's ends only on an open one, such as an arc's.
             if (headed && outline.some((g) => g.stroked && !g.closed)) lost('shapes-simplified');
-            // A shape drawn as one closed path holds its text, as a kind does.
-            if (inside && paths.length === 1 && paths[0].closed) {
-                push(walk, { ...paths[0], ...inside });
+            // A shape drawn as one closed path holds its text, as a kind does, and so does one that paints nothing.
+            // The text is inset past the border that path draws, which a path marked stroke="0" does not.
+            const holder: (NewVectorElement & Stroke) | undefined =
+                paths.length === 1
+                    ? paths[0]
+                    : more.length === 0
+                      ? {
+                            type: 'path',
+                            ...box,
+                            path: line.path,
+                            closed: line.closed,
+                            fill: TRANSPARENT_FILL_JSON,
+                            ...NO_STROKE,
+                        }
+                      : undefined;
+            if (inside && holder?.closed) {
+                push(walk, { ...holder, ...framedBy(holder) });
                 return;
             }
             for (const element of paths) push(walk, element);
@@ -538,8 +554,8 @@ function outlineOf(
 
 // Each geometry a path at the shape's box: a filled one in the shape's fill, shaded where it says, a stroked one in its
 // line. A filled path with an open subpath fills it closed, as PowerPoint does, and strokes it open beside.
-function pathsOf(outline: GeometryPath[], box: Box, paint: { fill: string } & Stroke): NewVectorElement[] {
-    const paths: NewVectorElement[] = [];
+function pathsOf(outline: GeometryPath[], box: Box, paint: { fill: string } & Stroke): (NewVectorElement & Stroke)[] {
+    const paths: (NewVectorElement & Stroke)[] = [];
     const { fill: shapeFill, ...stroke } = paint;
     for (const { path, closed, filled, stroked, shade } of outline) {
         const fill = filled ? shadedFill(shapeFill, shade) : TRANSPARENT_FILL_JSON;

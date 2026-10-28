@@ -294,6 +294,26 @@ describe('a deck exported and read back', () => {
         }
     });
 
+    test('keeps the text of a closed path that paints nothing inside it', () => {
+        const unpainted: NewVectorElement = {
+            type: 'path',
+            x: 100,
+            y: 100,
+            width: 400,
+            height: 200,
+            path: 'M 0 0 L 1 0 L 0.5 1 Z',
+            closed: true,
+            fill: serializeFill(TRANSPARENT_FILL),
+            strokeColor: 'transparent',
+            html: '<p>Unpainted</p>',
+        };
+        const back = roundTrip([unpainted]).deck.slides[0].elements;
+        expect(back.map((found) => [found.type, found.html, found.strokeColor])).toEqual([
+            ['path', '<p>Unpainted</p>', 'transparent'],
+        ]);
+        expect(parseFill(String(back[0].fill))).toEqual(TRANSPARENT_FILL);
+    });
+
     test("keeps the slide's name, which no title gives it", () => {
         expect(roundTrip([], 'Agenda').deck.slides[0].name).toBe('Agenda');
     });
