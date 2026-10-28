@@ -39,7 +39,8 @@ type MobileMenuState = {
 const MobileMenuContext = createContext<MobileMenuState | null>(null);
 
 // The page a row sits on: null = root, otherwise the enclosing sub's id.
-const PageContext = createContext<{ id: string | null }>({ id: null });
+const ROOT_PAGE = { id: null };
+const PageContext = createContext<{ id: string | null }>(ROOT_PAGE);
 
 // A sub's id + the label lifted from its trigger, shared by its trigger and its content.
 const SubContext = createContext<{ id: string; label: React.ReactNode } | null>(null);
@@ -159,9 +160,12 @@ function DropdownMenuTrigger({ ...props }: React.ComponentProps<typeof DropdownM
     return <DropdownMenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />;
 }
 
+// Its rows take the DropdownMenu's parts and start on its root page, also where the menu sits inside another menu's rows,
+// such as a picker in a bar menu.
 function DropdownMenuContent({
     className,
     sideOffset = 4,
+    children,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
     return (
@@ -174,7 +178,11 @@ function DropdownMenuContent({
                     className,
                 )}
                 {...props}
-            />
+            >
+                <MenuPartsContext.Provider value={DropdownMenuPrimitive}>
+                    <PageContext.Provider value={ROOT_PAGE}>{children}</PageContext.Provider>
+                </MenuPartsContext.Provider>
+            </DropdownMenuPrimitive.Content>
         </DropdownMenuPrimitive.Portal>
     );
 }

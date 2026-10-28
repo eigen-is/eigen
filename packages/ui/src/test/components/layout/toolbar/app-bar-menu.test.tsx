@@ -17,7 +17,9 @@ afterAll(() => {
 });
 
 const { act, createElement } = await import('react');
-const { ChoiceMenuSub, DropdownMenuItem } = await import('../../../../components/dropdown-menu');
+const { ChoiceMenuSub, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } = await import(
+    '../../../../components/dropdown-menu'
+);
 const { Menubar } = await import('../../../../components/menubar');
 const { AppBarMenu } = await import('../../../../components/layout/toolbar/app-bar-menu');
 const { CommentFilterMenuItems } = await import('../../../../components/comments/comment-filter-menu-items');
@@ -198,6 +200,37 @@ test('on a phone a submenu is a page of the bar menu, and the menu reopens at it
     expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
     await press('Format');
     expect(shownRows()).toEqual(['Bold', 'Line spacing']);
+});
+
+// A DropdownMenu inside a bar menu's rows, such as a picker, is a menu of its own: a pick closes it and leaves the bar
+// menu open.
+test("a DropdownMenu nested in a bar menu's rows closes on a pick and leaves the bar menu open", async () => {
+    window.happyDOM.setViewport({ width: 1600, height: 900 });
+    const onSelect = mock(() => {});
+    ({ unmount } = await renderInDocument(
+        createElement(
+            Menubar,
+            null,
+            createElement(AppBarMenu, {
+                label: 'Format',
+                children: createElement(
+                    DropdownMenu,
+                    { modal: false },
+                    createElement(DropdownMenuTrigger, null, 'Picker'),
+                    createElement(DropdownMenuContent, null, createElement(DropdownMenuItem, { onSelect }, 'Deep')),
+                ),
+            }),
+        ),
+    ));
+    await press('Format');
+    const picker = [...document.querySelectorAll('[role="menu"] button')].find((b) => b.textContent === 'Picker');
+    await act(async () => {
+        picker?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+    });
+    expect(document.querySelectorAll('[role="menu"]').length).toBe(2);
+    await clickRow('Deep');
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(openMenu()).toBe('Format');
 });
 
 // A long member list has a search box. Its arrow keys move the caret, where in a bar menu they would move to the next
