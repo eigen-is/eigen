@@ -9,7 +9,7 @@ import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive';
 import Elysia from 'elysia';
 import { rateLimit } from 'elysia-rate-limit';
 import { clientIpKey } from './lib/auth/access';
-import { trustedOrigins } from './lib/auth/auth';
+import { getTrustedOrigins } from './lib/auth/auth';
 import { caldavRouter } from './lib/caldav/caldav-router';
 import { carddavRouter } from './lib/carddav/carddav-router';
 import { isProduction } from './lib/config/env';
@@ -88,7 +88,7 @@ export const app = new Elysia({
     })
     .use(
         cors({
-            origin: trustedOrigins,
+            origin: getTrustedOrigins(),
             methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
             credentials: true,
             allowedHeaders: ['Content-Type', 'Authorization'],

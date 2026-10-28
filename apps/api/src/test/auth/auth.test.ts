@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { member as memberSchema } from '../../../auth-schema';
-import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
+import { auth, getAuthDrizzleDb, getTrustedOrigins } from '../../lib/auth/auth';
 import { getOrgRole, getUserByEmail } from '../../lib/user';
-import { assertJson, authedRequest, getTestContext } from '../setup';
+import { restoreEnvAfterEach } from '../env-test-helpers';
+import { app, assertJson, authedRequest, getTestContext } from '../setup';
 
 describe('Auth', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -185,5 +186,50 @@ describe('sign-in org join', () => {
             .where(eq(memberSchema.userId, created!.id))
             .all();
         expect(rows.length).toBe(1);
+    });
+});
+
+describe('trusted origins', () => {
+    restoreEnvAfterEach(['PRODUCTION', 'NODE_ENV', 'DOMAIN']);
+
+    test('outside production the dev apps on their localhost ports are trusted too', () => {
+        process.env['DOMAIN'] = 'eigen.example.org';
+        delete process.env['PRODUCTION'];
+        expect(getTrustedOrigins()).toEqual(
+            expect.arrayContaining([
+                'https://eigen.example.org',
+                'http://localhost',
+                'https://localhost',
+                'http://localhost:3000',
+                'http://localhost:3014',
+            ]),
+        );
+    });
+
+    test('in production only the served origin is trusted', () => {
+        process.env['DOMAIN'] = 'eigen.example.org';
+        process.env['PRODUCTION'] = '1';
+        expect(getTrustedOrigins()).toEqual(['https://eigen.example.org']);
+    });
+
+    // A release install with --domain localhost serves the apps at https://localhost.
+    test('a production install on localhost trusts https://localhost and no dev port', () => {
+        process.env['DOMAIN'] = 'localhost';
+        process.env['PRODUCTION'] = '1';
+        expect(getTrustedOrigins()).toEqual(['https://localhost']);
+    });
+
+    test("the API answers a trusted origin's preflight and no other", async () => {
+        const preflight = (origin: string) =>
+            app.handle(
+                new Request('http://localhost/auth/get-session', {
+                    method: 'OPTIONS',
+                    headers: { Origin: origin, 'Access-Control-Request-Method': 'GET' },
+                }),
+            );
+        expect((await preflight('http://localhost:3000')).headers.get('access-control-allow-origin')).toBe(
+            'http://localhost:3000',
+        );
+        expect((await preflight('https://elsewhere.example')).headers.get('access-control-allow-origin')).toBeNull();
     });
 });

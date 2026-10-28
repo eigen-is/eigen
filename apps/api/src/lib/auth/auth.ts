@@ -27,16 +27,9 @@ import {
     user as userScheme,
     verification as verificationScheme,
 } from '../../../auth-schema';
-import { isTest } from '../config/env';
+import { isProduction, isTest } from '../config/env';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
-import {
-    getAuthSecret,
-    getDomain,
-    getOrgName,
-    getPublicOrigin,
-    getServerConfig,
-    isRoleAddress,
-} from '../config/server-config';
+import { getAuthSecret, getDomain, getOrgName, getServerConfig, isRoleAddress } from '../config/server-config';
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
@@ -45,14 +38,19 @@ import { getTeamExists } from '../team';
 import type { User } from '../user';
 import { getOrgRole, getUserById, isGuest } from '../user';
 
-const publicOrigin = getPublicOrigin();
-// The dev apps each run on their own port, from 3000 to 3014.
-export const trustedOrigins = [
+// A dev checkout serves each app on its own port, from 3000 to 3014.
+const DEV_ORIGINS = [
     'http://localhost',
     'https://localhost',
     ...Array.from({ length: 15 }, (_, index) => `http://localhost:${3000 + index}`),
-    ...(publicOrigin ? [publicOrigin] : []),
 ];
+
+// The origins better-auth and CORS accept. Production serves every app from https://DOMAIN, which is
+// https://localhost for an install on localhost. The dev origins are trusted only outside production.
+export function getTrustedOrigins(): string[] {
+    const served = `https://${getDomain()}`;
+    return isProduction() ? [served] : [served, ...DEV_ORIGINS];
+}
 
 const authSchema = {
     user: userScheme,
@@ -315,7 +313,7 @@ export const auth = betterAuth({
             rateLimit: { enabled: false },
         }),
     ],
-    trustedOrigins,
+    trustedOrigins: getTrustedOrigins(),
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
