@@ -165,7 +165,7 @@ export function archiveServerPath(relPath: string): string {
     return `${SERVER_DIR}/${relPath}`;
 }
 
-// The name a new artifact takes. Without the rule above, two backups of one home inside a second
+// The name a new artifact takes. Without `nextFreeTime` below, two backups of one home inside a second
 // would land on one name and the second would overwrite the first.
 export function freeArtifactName(ownerId: string, at: Date): string {
     const free = nextFreeTime(at, (candidate) =>

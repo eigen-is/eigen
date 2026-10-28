@@ -114,7 +114,7 @@ type StagedRestore = { archive: string; level: BackupLevel; appVersion: string }
 // Written by the swap before its first rename, read by the launcher's preflight: while it is there, a swap was cut
 // off, and --swap finishes it.
 export const SWAP_MARKER = '.eigen/restore-swap';
-// LightEntry by a swap from before it reads the marker until it exits: .eigen/ is there all along, data/ is not.
+// Held by a swap from before it reads the marker until it exits: .eigen/ is there all along, data/ is not.
 export const SWAP_LOCK = '.eigen/restore.lock';
 // In data/.restoring, held by the stage that fills it: a second one would wipe its tree.
 export const STAGE_LOCK = 'stage.lock';
@@ -135,7 +135,7 @@ type LightEntry = { path: string; dir: boolean };
 const UNSAFE_FIND_ARGS =
     '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
 
-// LightEntry until exit, like the API holds the data lock while it runs. False when another process holds `file`.
+// Held until exit, like the API holds the data lock while it runs. False when another process holds `file`.
 const locks: Database[] = [];
 
 function holdLock(file: string): boolean {
