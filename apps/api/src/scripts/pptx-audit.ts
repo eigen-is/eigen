@@ -221,7 +221,7 @@ export function diffDecks(a: Deck, b: Deck): RoundtripDifference[] {
 export const PPTX_LISTED: Listed<RoundtripDifference, PptxRoundtripContext>[] = [
     {
         kind: 'pictures re-encoded',
-        why: 'The export re-encodes a raster as PNG (a lossless source) or JPEG, no larger than EXPORT_IMAGE_MAX_SIZE, so its type or size comes back as the export made it',
+        why: 'The export re-encodes a raster as JPEG, or PNG for a source that shows through, no larger than EXPORT_IMAGE_MAX_SIZE, so its type or size comes back as the export made it',
         matches: ({ feature, at, b }, context) => {
             if (feature === 'image mediaName') {
                 const element = elementAt(context.a, at);
