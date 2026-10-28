@@ -1,5 +1,6 @@
 // Handles the contact and label events from the stream. Any card change refetches the owner's whole
-// contact list once per burst; a label change refetches the labels, and a rename or delete the cards too.
+// contact list, once per burst. A label change refetches the labels, and a rename or delete refetches
+// the cards too.
 
 import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';

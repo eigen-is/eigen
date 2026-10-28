@@ -1,6 +1,6 @@
 // Hands one event from the stream to every domain's handler, such as the drive's or the mail's. Each
 // handler picks the events of its own domain and invalidates the queries they name. useSSE calls this
-// for each message.
+// for every event the stream sends.
 
 import type { QueryClient } from '@tanstack/react-query';
 import { handleAdminSSEvent } from '@workspace/lib/admin';
