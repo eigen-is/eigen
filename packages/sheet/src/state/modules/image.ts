@@ -7,7 +7,6 @@ import type { SheetImage } from '@workspace/lib/sheets';
 import { nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
 import { mapValues } from 'es-toolkit';
 import type { Patch } from 'immer';
-import { v4 as uuidv4 } from 'uuid';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { GlobalCache, Sheet } from '../types';
@@ -91,7 +90,7 @@ export function selectedCellOrigin(ctx: Context): { x: number; y: number } {
 export function insertImage(ctx: Context, mediaName: string, width: number, height: number, angle = 0) {
     const sheet = editableCurrentSheet(ctx);
     if (!sheet) return;
-    const id = uuidv4();
+    const id = crypto.randomUUID();
     const scale = Math.min(1, CHART_MAX_SIDE / width, CHART_MAX_SIDE / height);
     const images = (sheet.images ??= {});
     const box = sheetFloatingBox({ ...selectedCellOrigin(ctx), width: width * scale, height: height * scale, angle });

@@ -1,16 +1,15 @@
+// What images and charts share. Each writer touches one object of the current sheet and nothing else, field by field,
+// so a write on an object a peer deleted is dropped on every client and in the replay. What writes a whole object,
+// redoing its insert or undoing its delete, brings one a peer deleted back only where the delete arrived first.
+
 import type { SheetFloatingKind } from '@workspace/lib/sheets';
 import { floatingItems, floatingWriteFilter, nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
 import type { Box, ZOp } from '@workspace/lib/vector';
 import { DUPLICATE_OFFSET, zOrderKeys } from '@workspace/lib/vector';
 import type { Patch } from 'immer';
-import { v4 as uuidv4 } from 'uuid';
 import { copySheetChartSpec } from '../../engine/chart-data';
 import type { Context } from '../context';
 import { getSheetIndex } from '../utils';
-
-// What images and charts share. Each writer touches one object of the current sheet and nothing else, field by field,
-// so a write on an object a peer deleted is dropped on every client and in the replay. What writes a whole object,
-// redoing its insert or undoing its delete, brings one a peer deleted back only where the delete arrived first.
 
 export type FloatingRef = { kind: SheetFloatingKind; id: string };
 
@@ -52,7 +51,7 @@ export function duplicateFloatingObject(ctx: Context, { kind, id }: FloatingRef)
     const sheet = editableCurrentSheet(ctx);
     const original = sheet?.[FIELD[kind]]?.[id];
     if (!sheet || !original) return;
-    const copy = uuidv4();
+    const copy = crypto.randomUUID();
     const placed = {
         id: copy,
         index: nextFloatingIndex(sheet),

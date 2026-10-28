@@ -4,7 +4,6 @@
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import { isNil, times } from 'es-toolkit/compat';
-import { v4 as uuidv4 } from 'uuid';
 import { MAX_SHEET_NAME_LENGTH } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
@@ -99,7 +98,7 @@ export function addSheet(
     }
     const order = ctx.sheets.length;
     // The add switches to the sheet it adds, so a sheet that comes with an id keeps it.
-    const id = newSheetID ?? sheetData?.id ?? settings?.generateSheetId() ?? uuidv4();
+    const id = newSheetID ?? sheetData?.id ?? settings?.generateSheetId() ?? crypto.randomUUID();
     const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable);
     if (!isNil(sheetData)) delete sheetData.data;
     const sheetconfig: Sheet = isNil(sheetData)

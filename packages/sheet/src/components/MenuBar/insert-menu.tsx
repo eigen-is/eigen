@@ -1,3 +1,6 @@
+// The Insert menu of the sheet editor's menu bar, with items such as rows and columns beside the selection, a sheet, a
+// chart from the selected range, an image or a comment through the host, and the Auto SUM functions.
+
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -6,7 +9,6 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { useContext } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { WorkbookContext } from '../../context';
 import { CHART_RANGE_REFUSALS } from '../../engine/chart-range';
 import { useAlert } from '../../hooks/useAlert';
@@ -107,7 +109,7 @@ export function InsertMenu() {
                 disabled={selection == null || context.allowEdit === false}
                 onClick={() =>
                     setContext((draftCtx) => {
-                        const refusal = insertChartFromSelection(draftCtx, uuidv4());
+                        const refusal = insertChartFromSelection(draftCtx, crypto.randomUUID());
                         if (refusal) showAlert(CHART_RANGE_REFUSALS[refusal], 'ok');
                     })
                 }

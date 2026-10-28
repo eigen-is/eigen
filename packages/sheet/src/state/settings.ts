@@ -8,7 +8,6 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { v4 as uuidv4 } from 'uuid';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Selection, SheetConfig } from './types';
 
@@ -101,7 +100,7 @@ export const defaultSettings: Required<Settings> = {
     allowEdit: true, // whether to allow editing in the frontend
     rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
     columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
-    generateSheetId: () => uuidv4(),
+    generateSheetId: () => crypto.randomUUID(),
     hooks: {},
     currency: '€',
     aspectLocked: false,

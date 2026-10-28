@@ -24,7 +24,6 @@ import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cloneDeep, isEqual } from 'es-toolkit/compat';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import type { RefValues, SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
@@ -625,7 +624,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                             ? copySheetChartSpec(copied.chart)
                                             : pastedChartFields(parts, newSheetChartSpecParts);
                                         if (!fields) continue;
-                                        pasteChart(draftCtx, uuidv4(), fields, { width, height }, look);
+                                        pasteChart(draftCtx, crypto.randomUUID(), fields, { width, height }, look);
                                     }
                                 });
                             }

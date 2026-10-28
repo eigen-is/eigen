@@ -3,7 +3,6 @@
 
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { cloneDeep } from 'es-toolkit/compat';
-import { v4 as uuidv4 } from 'uuid';
 import { mapChartRefs } from '../../engine/chart-data';
 import { copySheetName } from '../../engine/sheet-name';
 import { api, createContextResolver, execfunction, setCellValue as setCellValueInternal } from '..';
@@ -45,7 +44,7 @@ export function copySheet(ctx: Context, sheetId: string) {
         ctx.sheets.map((sheet) => sheet.name),
     );
     const sheetData = cloneDeep(ctx.sheets[index]);
-    const copyId = uuidv4();
+    const copyId = crypto.randomUUID();
     sheetData.id = copyId;
     delete sheetData.status;
     sheetData.celldata = dataToCelldata(sheetData.data);
@@ -54,7 +53,7 @@ export function copySheet(ctx: Context, sheetId: string) {
     // in Excel and Google.
     const toCopy = (ref: CellRangeRef) => (ref.sheetId === sheetId ? { ...ref, sheetId: copyId } : ref);
     const withFreshId = <T extends { id: string }>(object: T): [string, T] => {
-        const id = uuidv4();
+        const id = crypto.randomUUID();
         return [id, { ...object, id }];
     };
     sheetData.images = Object.fromEntries(Object.values(sheetData.images ?? {}).map(withFreshId));
