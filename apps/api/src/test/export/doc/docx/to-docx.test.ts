@@ -759,6 +759,20 @@ describe('docx writer — text boxes', () => {
         expect(descendants(body, WP, 'inline')).toHaveLength(1);
     });
 
+    // A story never holds a story: Word refuses a note reference in a box, and a forged one writes as its text.
+    test('a note or a box inside a box writes as its text, after a space', async () => {
+        const note = { type: 'footnote', content: [p(text('Noted'))] };
+        const inner = box({ layout: 'block' }, p(text('Inner')));
+        const zip = await unzip(doc(p(box({ layout: 'front' }, p(text('Boxed'), note, inner)))));
+        const body = xmlChild(await part(zip, 'word/document.xml'), W, 'body');
+        if (!body) throw new Error('no w:body');
+        expect(descendants(body, W, 'footnoteReference')).toEqual([]);
+        expect(zip.read('word/footnotes.xml')).toBeUndefined();
+        const content = only(descendants(body, W, 'txbxContent'));
+        expect(descendants(content, WPS, 'wsp')).toEqual([]);
+        expect(xmlChildren(content, W, 'p').map(texts)).toEqual(['Boxed Noted Inner']);
+    });
+
     test('the document declares wps, and a box loses nothing', async () => {
         const zip = await unzip(doc(p(box({ layout: 'front' }))));
         expect(entryText(zip, 'word/document.xml')).toContain(`xmlns:wps="${WPS}"`);

@@ -6,7 +6,14 @@
 import type { JSONContent } from '@tiptap/core';
 import { DOCUMENT_LINE_RATIO } from '@workspace/lib/constants/fonts';
 import type { TextBoxAttrs } from '@workspace/lib/docs/eigendoc';
-import { isPositioned, ptToPx, readTextBoxAttrs, TEXT_BOX_RADIUS, textBoxPadding } from '@workspace/lib/docs/eigendoc';
+import {
+    flattenNestedStories,
+    isPositioned,
+    ptToPx,
+    readTextBoxAttrs,
+    TEXT_BOX_RADIUS,
+    textBoxPadding,
+} from '@workspace/lib/docs/eigendoc';
 import { anchorIndentPx, anchorPaddingPx, BODY, boxSide, cssPt, FIGURE_MARGIN } from '../../../document/looks';
 import { proseValue } from '../../../document/prose-css';
 import { EMU_PER_PX, WPS_NS } from '../../../ooxml/ooxml';
@@ -75,7 +82,8 @@ function textBoxRun(
     const n = ++pkg.lastDrawingId;
     const padding = textBoxPadding(attrs);
     const pen = attrs.outline === 'none' ? null : attrs.outline;
-    // The box's paragraphs, in its column, with no space between them, as a cell's.
+    // The box's paragraphs, in its column, with no space between them, as a cell's. A forged note or box inside is its
+    // text, since Word refuses a note reference or a shape in a box.
     const column = Math.max(1, Math.round((attrs.width - 2 * padding.x - 2 * (pen?.width ?? 0)) * TWIPS_PER_PX));
     const inside: Context = {
         pkg,
@@ -87,7 +95,7 @@ function textBoxRun(
         quotes: 0,
         after: 0,
     };
-    const content = blocksXml(blocksOf(node.content ?? [], {}, inside), pkg.styles);
+    const content = blocksXml(blocksOf(flattenNestedStories(node).content ?? [], {}, inside), pkg.styles);
     // Word clips a box at a fixed height and refits one that fits its text, so a box whose text may run past its
     // height grows: the larger of the two is its extent, and Word refits it on layout.
     const estimate = textHeight(node, attrs, context) + 2 * padding.y + 2 * (pen?.width ?? 0);
