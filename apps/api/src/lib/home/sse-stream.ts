@@ -18,13 +18,8 @@ export function createSSEStream(home: Home): ReadableStream<SSEStreamItem> {
     let keepalive: Timer | null = null;
     let isClosed = false;
 
-    // A stream the client has left has no desiredSize, and enqueue throws on it.
     const send = (item: SSEStreamItem) => {
         if (isClosed || streamController === null) return;
-        if (streamController.desiredSize === null) {
-            isClosed = true;
-            return;
-        }
         try {
             streamController.enqueue(item);
         } catch {
