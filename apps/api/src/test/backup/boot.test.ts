@@ -1,9 +1,16 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
-import { getBackupsDir, wipeBackupStaging } from '../../lib/backup/paths';
-import { recoverInterruptedRestores } from '../../lib/backup/recovery';
+import {
+    buildArtifactName,
+    buildServerArchiveName,
+    getBackupsDir,
+    serverSidecarPath,
+    sidecarPath,
+    wipeBackupStaging,
+} from '../../lib/backup/paths';
+import { recoverBackupsAfterRestart, recoverInterruptedRestores } from '../../lib/backup/recovery';
 import { TEST_DATA_DIR } from '../setup';
 
 // What the server does before it serves its first request: clear the staging folder a killed job
@@ -76,6 +83,34 @@ describe('Backup boot', () => {
             wipeBackupStaging();
             expect(existsSync(join(dir, '.staging'))).toBe(false);
             expect(existsSync(dir)).toBe(true);
+        } finally {
+            if (previous === undefined) delete process.env['EIGEN_BACKUPS_DIR'];
+            else process.env['EIGEN_BACKUPS_DIR'] = previous;
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // A build before 0.4.1 wrote a home archive and its sidecar with the umask's mode. ./eigen reads a server
+    // archive's sidecar as the operator, so that one stays as it is.
+    test('the boot closes the home archives and home sidecars an older build left readable', async () => {
+        const dir = join(TEST_DATA_DIR, 'backups-modes');
+        const at = new Date('2026-10-01T12:00:00Z');
+        const archive = join(dir, buildArtifactName('bootmodesAAAAAAAAAAAAAAAAAAAAAAA', at));
+        // A sidecar whose archive is gone still names every file of the home.
+        const orphanSidecar = sidecarPath(join(dir, buildArtifactName('bootmodesBBBBBBBBBBBBBBBBBBBBBBB', at)));
+        const serverSidecar = serverSidecarPath(join(dir, buildServerArchiveName('manual', 'full', at)));
+        mkdirSync(dir, { recursive: true });
+        for (const file of [archive, sidecarPath(archive), orphanSidecar, serverSidecar]) {
+            writeFileSync(file, '{}');
+            chmodSync(file, 0o644);
+        }
+        const previous = process.env['EIGEN_BACKUPS_DIR'];
+        process.env['EIGEN_BACKUPS_DIR'] = dir;
+        try {
+            await recoverBackupsAfterRestart();
+            const modeOf = (file: string) => statSync(file).mode & 0o777;
+            expect([archive, sidecarPath(archive), orphanSidecar].map(modeOf)).toEqual([0o600, 0o600, 0o600]);
+            expect(modeOf(serverSidecar)).toBe(0o644);
         } finally {
             if (previous === undefined) delete process.env['EIGEN_BACKUPS_DIR'];
             else process.env['EIGEN_BACKUPS_DIR'] = previous;

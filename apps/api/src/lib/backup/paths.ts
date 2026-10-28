@@ -183,7 +183,7 @@ export function freeArtifactName(ownerId: string, at: Date): string {
 
 // Beside the archive, so the list and retention never open one. A home artifact's caches its manifest
 // and last verify; a server archive's is its job's record, which a refused attempt leaves with no archive.
-const SIDECAR_SUFFIX = '.manifest.json';
+export const SIDECAR_SUFFIX = '.manifest.json';
 export const SERVER_SIDECAR_SUFFIX = '.json';
 // Beside a partial archive in the bucket, which may outlive this box's record of it.
 export const BUCKET_PARTIAL_SUFFIX = '.partial';
