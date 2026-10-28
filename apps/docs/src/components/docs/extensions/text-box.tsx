@@ -88,14 +88,15 @@ function TextBoxView(props: NodeViewProps) {
         for (const [name, value] of Object.entries(textBoxHTMLAttributes(look))) element.setAttribute(name, value);
     }, [attrs, preview]);
 
-    // The height as drawn, which its text and its look change. A grip's drag keeps the one it pressed at: its preview
-    // draws the box at the size it asks, and that height read back would be the gesture's own.
+    // The height as drawn, which its text and its look change. The border box's: the box draws at a fixed width with its
+    // padding and line inside it, so a thicker line or more padding changes that box alone. A grip's drag keeps the one
+    // it pressed at: its preview draws the box at the size it asks, and that height read back would be the gesture's own.
     useLayoutEffect(() => {
         const element = boxRef.current;
         if (!element || dragging) return;
         setDrawnHeight(element.offsetHeight);
         const observer = new ResizeObserver(() => setDrawnHeight(element.offsetHeight));
-        observer.observe(element);
+        observer.observe(element, { box: 'border-box' });
         return () => observer.disconnect();
     }, [dragging]);
 

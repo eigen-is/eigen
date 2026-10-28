@@ -2,7 +2,7 @@
 // pulled back, anchored on the story's Yjs element and found again by its id, one history with the body, and the find
 // bar's matches and reveal. Two Y.Docs synced by hand stand in for two tabs.
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import type { JSONContent } from '@tiptap/core';
+import type { Extensions, JSONContent } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -19,6 +19,7 @@ const { useProseMirrorSearchController } = await import(
 const { docEditorOptions } = await import('../../../../components/docs/doc-editor');
 const { createDocUndoManager } = await import('../../../../components/docs/page-setup');
 const { useOpenStory } = await import('../../../../components/docs/hooks/use-open-story');
+const { CommentMark, updateCommentDecorations } = await import('../../../../components/docs/extensions/comment-mark');
 
 type TestEditor = InstanceType<typeof Editor>;
 type Target = Parameters<typeof docEditorOptions>[0]['target'];
@@ -39,7 +40,11 @@ afterEach(async () => {
     for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-function mount(doc: InstanceType<typeof Y.Doc>, target: Target, extensions = [SearchHighlight]): TestEditor {
+function mount(
+    doc: InstanceType<typeof Y.Doc>,
+    target: Target,
+    extensions: Extensions = [SearchHighlight],
+): TestEditor {
     const editor: TestEditor = new Editor({
         element: document.body.appendChild(document.createElement('div')),
         ...docEditorOptions({
@@ -57,8 +62,8 @@ function mount(doc: InstanceType<typeof Y.Doc>, target: Target, extensions = [Se
     return editor;
 }
 
-const bodyOn = (doc: InstanceType<typeof Y.Doc>) =>
-    mount(doc, { undoManager: createDocUndoManager(doc), cardIds: () => new Set() });
+const bodyOn = (doc: InstanceType<typeof Y.Doc>, extensions: Extensions = [SearchHighlight]) =>
+    mount(doc, { undoManager: createDocUndoManager(doc), cardIds: () => new Set() }, extensions);
 
 const text = (t: string, marks?: JSONContent['marks']): JSONContent => ({
     type: 'text',
@@ -73,8 +78,9 @@ const DOC = [paragraph(text('Claim'), footnote(paragraph(text('Hello world'))), 
 
 type Session = ReturnType<typeof useOpenStory>;
 
-// Tab A's body and note editors with the hook, tab B a plain body on a synced doc.
-async function setup(content: JSONContent[] = DOC) {
+// Tab A's body and note editors with the hook, tab B a plain body on a synced doc. Tab A's body takes `extensions`
+// beside the find bar's highlight.
+async function setup(content: JSONContent[] = DOC, extensions: Extensions = []) {
     const yA = new Y.Doc();
     const yB = new Y.Doc();
     // While held, each tab's updates wait, as two tabs' edits cross on the wire.
@@ -99,7 +105,7 @@ async function setup(content: JSONContent[] = DOC) {
             await Promise.resolve();
         });
     };
-    const a = bodyOn(yA);
+    const a = bodyOn(yA, [SearchHighlight, ...extensions]);
     const b = bodyOn(yB);
     a.commands.setContent({ type: 'doc', content });
     const undoManager = yUndoPluginKey.getState(a.state)?.undoManager;
@@ -687,6 +693,56 @@ describe("a peer's cut and paste of the open note's reference", () => {
         expect(noteOf(a)).toBe('Peer Note');
         expect(noteOf(b)).toBe('Peer Note');
     });
+
+    // A peer offline since the note opened, so none of this tab's typing reached it, moves the note and reconnects.
+    const forkPeer = (yA: InstanceType<typeof Y.Doc>) => {
+        const offline = new Y.Doc();
+        Y.applyUpdate(offline, Y.encodeStateAsUpdate(yA));
+        const peer = bodyOn(offline);
+        return async () => {
+            cutAndPaste(peer);
+            await act(async () => {
+                Y.applyUpdate(yA, Y.encodeStateAsUpdate(offline, Y.encodeStateVector(yA)), 'reconnect');
+                await Promise.resolve();
+            });
+        };
+    };
+
+    // The undo pulls this tab's own history into the note: no peer has its text yet, so it still reads as typed.
+    test('keeps what was typed when an undo since then brought text into the note', async () => {
+        const { a, b, yA, note, undoManager, open } = await setup(moved('n1'));
+        await open(9);
+        const reconnect = forkPeer(yA);
+        note.commands.setTextSelection(5);
+        typeInto(note, '!');
+        undoManager.stopCapturing();
+        typeInto(note, '?');
+        await act(async () => {
+            press(note, 'z');
+        });
+        expect(note.state.doc.textContent).toBe('Note!');
+        await reconnect();
+        expect(note.state.doc.textContent).toBe('Note!');
+        expect(noteOf(a)).toBe('Note!');
+        expect(noteOf(b)).toBe('Note!');
+    });
+
+    // The find bar's reveal of a match in the open note opens it again, which is no fresh open.
+    test('keeps what was typed when a body selection inside the open note opened it again', async () => {
+        const { a, b, yA, note, session, open } = await setup(moved('n1'));
+        await open(9);
+        const reconnect = forkPeer(yA);
+        note.commands.setTextSelection(5);
+        typeInto(note, '!');
+        await act(async () => {
+            a.commands.setTextSelection({ from: 11, to: 15 });
+        });
+        expect(session.current?.anchor?.pos).toBe(9);
+        await reconnect();
+        expect(note.state.doc.textContent).toBe('Note!');
+        expect(noteOf(a)).toBe('Note!');
+        expect(noteOf(b)).toBe('Note!');
+    });
 });
 
 // One undo step that typed into the open note and moved its reference, in either order: ⌘Z takes back both, and ⇧⌘Z
@@ -734,7 +790,26 @@ describe('⌘Z of one step that edited the open note and moved its reference', (
     });
 });
 
-// The note's keystroke is in its editor already: the body's change it makes pulls nothing back.
+// The body rebuilds a comment's highlight from its mark, which the typed text joins; the note's own copy of it, mapped,
+// would end before that text until the next body transaction.
+test('text typed at the end of a commented run in the open note takes its highlight at once', async () => {
+    const { a, note, open } = await setup(
+        [paragraph(text('Claim'), footnote(paragraph(text('Hello', [{ type: 'comment', attrs: { cardId: 'c1' } }]))))],
+        [CommentMark],
+    );
+    updateCommentDecorations(a, new Set(), new Map([['c1', '#ff0000']]));
+    await open(6);
+    const highlighted = () =>
+        [...note.view.dom.querySelectorAll('.comment-colored')].map((element) => element.textContent).join('');
+    expect(highlighted()).toBe('Hello');
+    note.commands.setTextSelection(6);
+    typeInto(note, '!');
+    expect(noteOf(a)).toBe('Hello!');
+    expect(highlighted()).toBe('Hello!');
+});
+
+// The note's keystroke is in its editor already: the body's change it makes pulls nothing back, nor its decorations
+// where they stand as the note's editor maps them.
 test('a keystroke in the open note makes one transaction in its editor', async () => {
     const { a, note, open } = await setup();
     await open(6);

@@ -13,8 +13,8 @@ import { DecorationSet } from '@tiptap/pm/view';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { StoryNode } from '@workspace/lib/docs/eigendoc';
 import { isStoryNode, newStoryId, readStoryId, storyDepth } from '@workspace/lib/docs/eigendoc';
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import type { StoryAnchor } from '../extensions/story';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { FoundStory, StoryAnchor } from '../extensions/story';
 import { findStory, STORY_EDIT, STORY_PULL, storyAnchor, storyDecorationsKey } from '../extensions/story';
 
 // How a story opens: with the caret where a press landed or at its end, or with a find bar's match selected and the
@@ -77,8 +77,9 @@ function forwardStory(body: Editor, story: Editor, anchor: StoryAnchor): void {
     );
 }
 
-// Each story editor's doc as it opened, or as the last pull that brought the body's text into it left it. Once its doc
-// differs, it holds keystrokes the body may lack. A pull that brings nothing, as a peer's caret makes, leaves it.
+// Each story editor's doc as it opened, or as the last pull that brought a peer's text into it left it. Once its doc
+// differs, it holds keystrokes a peer may lack. A pull that brings nothing, as a peer's caret makes, leaves it, and so
+// does this tab's own undo or move: no peer has this tab's text from those.
 const pulled = new WeakMap<Editor, PMNode>();
 
 // y-tiptap marks a peer's change and an undo alike. This is the peer's.
@@ -86,6 +87,28 @@ const isPeerChange = (tr: Transaction): boolean => {
     const sync = tr.getMeta(ySyncPluginKey);
     return !!sync && !sync.isUndoRedoOperation;
 };
+
+// The body's decorations inside the story, the find bar's matches and a comment's colour, as a set on the story's doc.
+function storyDecorations(found: FoundStory, doc: PMNode): DecorationSet {
+    const decorations: Decoration[] = [];
+    found.view.innerDecorations.forEachSet((set) => decorations.push(...set.find()));
+    return DecorationSet.create(doc, decorations);
+}
+
+// After the story's own keystroke, the body's decorations inside it where they stand elsewhere than the story's editor
+// mapped them: a comment's colour, built again from its mark, takes in the text typed at its end. Only then, so a
+// keystroke makes one transaction in the story's editor.
+function handDecorations(body: Editor, story: Editor, anchor: StoryAnchor): void {
+    const found = followStory(body, anchor);
+    if (!found) return;
+    const next = storyDecorations(found, story.state.doc);
+    const wanted = next.find();
+    const drawn = storyDecorationsKey.getState(story.state)?.find() ?? [];
+    const moved =
+        wanted.length !== drawn.length ||
+        wanted.some((decoration, i) => decoration.from !== drawn[i]?.from || decoration.to !== drawn[i]?.to);
+    if (moved) story.view.dispatch(story.state.tr.setMeta(storyDecorationsKey, next));
+}
 
 // The body's version of the story into its editor, with the body's decorations inside it. When a peer's change gave the
 // story a new element, the new node may lack the typist's keystrokes of that round trip: they landed in the deleted
@@ -111,16 +134,14 @@ function pullStory(
     const { tr } = story.state;
     const diff = storyDiff(next.content, tr.doc.content);
     if (diff) tr.replace(diff.start, diff.endB, next.slice(diff.start, diff.endA));
-    const decorations: Decoration[] = [];
-    found.view.innerDecorations.forEachSet((set) => decorations.push(...set.find()));
     // The body linked what it links: the story's autolink would read a peer's or an undo's text as typed here.
     story.view.dispatch(
         tr
             .setMeta(STORY_PULL, true)
             .setMeta('preventAutolink', true)
-            .setMeta(storyDecorationsKey, DecorationSet.create(tr.doc, decorations)),
+            .setMeta(storyDecorationsKey, storyDecorations(found, tr.doc)),
     );
-    if (diff) pulled.set(story, story.state.doc);
+    if (diff && transactions.some(isPeerChange)) pulled.set(story, story.state.doc);
     return found.pos;
 }
 
@@ -131,11 +152,14 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
     if (opening && !allowed) setOpening(null);
     const anchor = opening?.anchor ?? null;
     const story = anchor && editors[anchor.type];
+    // The story subscribed below, so `open` tells a fresh open from the find bar's reveal inside the open story.
+    const subscribed = useRef<StoryAnchor | null>(null);
 
     // The story goes into its editor here, before React mounts the editor in the list or the box: a node view React
     // draws, an image's, would otherwise mount inside a layout effect, where React refuses its flushSync. A story with
     // no id, such as a note from an older tab or a box a web page's HTML pasted, takes one first: the box draws the
-    // open editor by it, and a re-anchor finds the story again by it.
+    // open editor by it, and a re-anchor finds the story again by it. Opening the open story again keeps what it typed
+    // as typed.
     const open = useCallback(
         (pos: number, how: Omit<StoryOpening, 'anchor'>) => {
             const node = body.state.doc.nodeAt(pos);
@@ -146,8 +170,9 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
             const anchor = storyAnchor(body, pos);
             if (!anchor) return;
             const story = editors[anchor.type];
+            const fresh = subscribed.current?.element !== anchor.element;
             if (pullStory(body, story, anchor) === null) return;
-            pulled.set(story, story.state.doc);
+            if (fresh) pulled.set(story, story.state.doc);
             setOpening({ anchor, ...how });
         },
         [body, editors],
@@ -189,13 +214,18 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
             appendedTransactions: Transaction[];
         }) => {
             // The story's own keystroke is in its editor already, unless a plugin appended a change to it.
-            if (transaction.getMeta(STORY_FORWARD) && !appendedTransactions.some((tr) => tr.docChanged)) return;
+            if (transaction.getMeta(STORY_FORWARD) && !appendedTransactions.some((tr) => tr.docChanged)) {
+                handDecorations(body, story, anchor);
+                return;
+            }
             pull([transaction, ...appendedTransactions]);
         };
         pull([]);
+        subscribed.current = anchor;
         body.on('transaction', onBody);
         story.on('transaction', forward);
         return () => {
+            subscribed.current = null;
             body.off('transaction', onBody);
             story.off('transaction', forward);
         };
