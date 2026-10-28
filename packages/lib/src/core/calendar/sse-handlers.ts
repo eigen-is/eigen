@@ -17,18 +17,16 @@ import {
 // Debounced for the burst a whole-file import sends. The writing tab's own onSuccess still refetches at once.
 const invalidateEventsSoon = debouncePerOwner(invalidateEventList, 250);
 
-export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
-    if (!event?.type?.startsWith('calendar:')) return false;
-
+export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): void {
     switch (event.type) {
         case SSEventType.CALENDAR_CREATED:
         case SSEventType.CALENDAR_UPDATED:
             invalidateCalendarList(queryClient, event.ownerId);
-            return true;
+            break;
 
         case SSEventType.CALENDAR_DELETED:
             invalidateCalendarDeleted(queryClient, event.ownerId);
-            return true;
+            break;
 
         case SSEventType.CALENDAR_EVENT_CREATED:
         case SSEventType.CALENDAR_EVENT_UPDATED:
@@ -36,14 +34,14 @@ export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, 
         // The batched event stands for a burst of the three above, so it invalidates exactly what they do.
         case SSEventType.CALENDAR_EVENTS_CHANGED:
             invalidateEventsSoon(queryClient, event.ownerId);
-            return true;
+            break;
 
         case SSEventType.CALENDAR_SHARED:
         case SSEventType.CALENDAR_UNSHARED:
             invalidateSharedCalendars(queryClient, userId);
             // The event names the sharing owner, whose share dialog lists who has access.
             invalidateCalendarAccess(queryClient, event.ownerId);
-            return true;
+            break;
 
         // An invitation event names the organizer's home, so these refetch the reader's own ranges.
         case SSEventType.CALENDAR_INVITE_RECEIVED:
@@ -51,9 +49,6 @@ export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, 
         case SSEventType.CALENDAR_INVITE_CANCELLED:
         case SSEventType.CALENDAR_INVITE_RSVP:
             invalidateEventsSoon(queryClient, userId);
-            return true;
-
-        default:
-            return false;
+            break;
     }
 }

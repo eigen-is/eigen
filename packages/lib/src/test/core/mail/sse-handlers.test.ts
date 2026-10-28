@@ -36,7 +36,7 @@ describe('handleMailSSEvent — burst', () => {
 
         for (let i = 0; i < 50; i++) {
             const event = { type: SSEventType.MAIL_RECEIVED, mail: { messageId: `msg-${i}`, mailbox: MAILBOX_INBOX } };
-            expect(handleMailSSEvent(event, queryClient, owner)).toBe(true);
+            handleMailSSEvent(event, queryClient, owner);
         }
 
         expect(countKey(touched, emailKeys.list(owner, MAILBOX_INBOX))).toBe(50);
@@ -75,7 +75,7 @@ test('a flags change refetches the mailbox list with its unread counts', async (
     const { queryClient, touched } = trackingClient();
 
     const event = { type: SSEventType.MAIL_FLAGS_CHANGED, mail: { messageId: 'msg-1', mailbox: MAILBOX_INBOX } };
-    expect(handleMailSSEvent(event, queryClient, owner)).toBe(true);
+    handleMailSSEvent(event, queryClient, owner);
 
     await settle();
     expect(countKey(touched, mailboxKeys.lists(owner))).toBe(1);

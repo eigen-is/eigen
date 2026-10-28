@@ -78,19 +78,15 @@ describe('handleAdminSSEvent', () => {
     test('refetches the poked home on backup:job-updated — the event carries no state of its own', () => {
         const { queryClient, invalidated } = trackingClient();
 
-        const handled = handleAdminSSEvent(
-            { type: SSEventType.BACKUP_JOB_UPDATED, jobId: 'job-1', ownerId: OWNER },
-            queryClient,
-        );
+        handleAdminSSEvent({ type: SSEventType.BACKUP_JOB_UPDATED, jobId: 'job-1', ownerId: OWNER }, queryClient);
 
-        expect(handled).toBe(true);
         expect(invalidated).toEqual([[...backupKeys.artifacts(OWNER)], [...backupKeys.jobs(OWNER)]]);
     });
 
     test('ignores events of other domains', () => {
         const { queryClient, invalidated } = trackingClient();
 
-        const handled = handleAdminSSEvent(
+        handleAdminSSEvent(
             {
                 type: SSEventType.DRIVE_FILE_UPLOADED,
                 path: { ownerId: OWNER, mountId: 'm1', id: 'p1', parentId: 'root', mimeType: 'image/png' },
@@ -98,7 +94,6 @@ describe('handleAdminSSEvent', () => {
             queryClient,
         );
 
-        expect(handled).toBe(false);
         expect(invalidated).toEqual([]);
     });
 });
