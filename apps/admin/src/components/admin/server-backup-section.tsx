@@ -1,3 +1,7 @@
+// The whole-server backup on the owner's Settings page: the schedule, how many backups to keep, an optional S3
+// upload destination, the archives on disk with their jobs, and how to restore one. A restore runs on the server, so
+// the page shows the commands to run there, each with a copy button.
+
 import {
     useCheckBackupDestination,
     useDeleteServerArchive,
@@ -18,6 +22,12 @@ import { DeleteDialog, ErrorState, LoadingState, SettingsSection, TooltipButton 
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
+import {
+    CodeBlock,
+    CodeBlockActions,
+    CodeBlockContent,
+    CodeBlockCopyButton,
+} from '@workspace/ui/components/code-block';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { S3ConfigCard } from '@workspace/ui/components/mount';
@@ -248,11 +258,9 @@ export function ServerBackupSection({
                     <strong>Restore</strong> runs on the server, not here: it replaces the server this page runs on. In
                     the install folder:
                 </p>
-                <pre className="bg-muted rounded p-2 overflow-x-auto">{'./eigen restore <name>'}</pre>
+                <CommandBlock command="./eigen restore <name>" />
                 <p>On a new machine, with nothing set up:</p>
-                <pre className="bg-muted rounded p-2 overflow-x-auto">
-                    {'curl -fsSL https://eigen.is/install | sh -s -- restore <name>'}
-                </pre>
+                <CommandBlock command="curl -fsSL https://eigen.is/install | sh -s -- restore <name>" />
                 <p>
                     <code>./eigen rollback</code> puts back the backup the last update made.{' '}
                     <a
@@ -280,6 +288,18 @@ export function ServerBackupSection({
 }
 
 // A count the route takes from 1 to BACKUP_KEEP_MAX, clamped as it is typed.
+// A command to run in a terminal on the server, with its copy button.
+function CommandBlock({ command }: { command: string }) {
+    return (
+        <CodeBlock size="sm">
+            <CodeBlockActions>
+                <CodeBlockCopyButton value={command} />
+            </CodeBlockActions>
+            <CodeBlockContent>{command}</CodeBlockContent>
+        </CodeBlock>
+    );
+}
+
 function KeepInput({ label, value, onChange }: { label: string; value: number; onChange: (keep: number) => void }) {
     return (
         <div className="space-y-1.5">

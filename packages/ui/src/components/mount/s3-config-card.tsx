@@ -1,7 +1,6 @@
 // The S3 configuration fields, a button that tests the connection, and a panel that shows whether the bucket
 // keeps old versions of files and cleans them up. Forms such as the storage and backup settings use it.
 
-import { copyToClipboard } from '@workspace/lib/clipboard';
 import {
     S3_ABORT_INCOMPLETE_UPLOAD_DAYS,
     S3_LIFECYCLE_RULE_ID,
@@ -12,11 +11,13 @@ import type { S3Config } from '@workspace/lib/types/mount';
 import { isS3ConfigValid } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { cn } from '@workspace/ui/lib/utils';
-import { AlertTriangle, CheckCircle2, Copy, Loader2, ShieldCheck, Wifi } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ShieldCheck, Wifi } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Alert, AlertDescription } from '../alert';
+import { EigenLoader } from '../braket/eigen-loader';
 import { Button } from '../button';
+import { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockCopyButton } from '../code-block';
 import { ConfirmDialog } from '../confirm-dialog';
 import { Input } from '../input';
 import { Label } from '../label';
@@ -153,7 +154,7 @@ export function S3ConfigCard({
 
             <div className="flex items-center gap-3">
                 <Button type="button" variant="outline" size="sm" onClick={handleCheck} disabled={!valid || checking}>
-                    {checking ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Wifi className="h-4 w-4 mr-1" />}
+                    {checking ? <EigenLoader className="mr-1 text-current" /> : <Wifi className="h-4 w-4 mr-1" />}
                     Test connection
                 </Button>
 
@@ -334,16 +335,12 @@ function ManualSteps({
                     there to it first.
                 </p>
             )}
-            <pre className="text-xs bg-muted rounded p-2 overflow-x-auto">{commands}</pre>
-            <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => copyToClipboard(commands, 'Commands copied to clipboard')}
-            >
-                <Copy className="h-4 w-4 mr-1" />
-                Copy commands
-            </Button>
+            <CodeBlock size="sm">
+                <CodeBlockActions>
+                    <CodeBlockCopyButton value={commands} />
+                </CodeBlockActions>
+                <CodeBlockContent>{commands}</CodeBlockContent>
+            </CodeBlock>
         </div>
     );
 }

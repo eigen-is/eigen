@@ -15,8 +15,9 @@ import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { isLayerAbove, useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '@workspace/ui/lib/utils';
-import { ArrowRight, ChevronLeft, ChevronRight, FolderDown, Loader2, X } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, FolderDown, X } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { EigenLoader } from '../braket/eigen-loader';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { EmlPreviewContent, MailEmlPreviewContent } from './eml-preview-content';
 import { getFileIcon } from './file-presentation';
@@ -251,7 +252,7 @@ function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefi
     if (isLoading) {
         return (
             <div className={cn('flex items-center justify-center', PREVIEW_PANE_CLASS)}>
-                <Loader2 className="size-6 text-white animate-spin" />
+                <EigenLoader className="text-2xl text-white" />
             </div>
         );
     }

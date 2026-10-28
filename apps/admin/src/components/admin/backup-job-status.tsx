@@ -1,8 +1,11 @@
+// One line for a backup job, an account's or the server's: a running job's step and progress, or what a finished
+// or failed one leaves until it is dismissed. The account and server backup sections show it under their buttons.
+
 import type { BackupJob } from '@workspace/lib/types/backup';
-import { TooltipButton } from '@workspace/ui';
+import { EigenLoader, TooltipButton } from '@workspace/ui';
 import { Progress } from '@workspace/ui/components/progress';
 import { cn } from '@workspace/ui/lib/utils';
-import { Loader2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 const JOB_LABEL: Record<BackupJob['kind'], string> = {
     backup: 'Creating backup',
@@ -30,7 +33,7 @@ export function BackupJobStatus({ job, onDismiss }: { job: BackupJob; onDismiss:
         return (
             <div className="space-y-1">
                 <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                    {!counting && <Loader2 className="h-3 w-3 shrink-0 animate-spin" />}
+                    {!counting && <EigenLoader className="shrink-0" />}
                     <span>
                         {JOB_LABEL[job.kind]}
                         {total !== 1 && ` · ${step}`}

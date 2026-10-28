@@ -1,3 +1,6 @@
+// The dialog that lists Mail's keyboard shortcuts in groups, each key a Kbd cap, and links to the setting that turns
+// them on when they are off. Mail's list route opens it; useMailShortcuts handles the keys themselves.
+
 import { getSpaceAppUrl } from '@workspace/lib/api';
 import {
     Dialog,
@@ -7,6 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@workspace/ui/components/dialog';
+import { Kbd } from '@workspace/ui/components/kbd';
 
 type Shortcut = { keys: string[]; label: string };
 type ShortcutGroup = { title: string; shortcuts: Shortcut[] };
@@ -112,12 +116,7 @@ export function MailShortcutsDialog({ open, onOpenChange, enabled }: MailShortcu
                                             <span>{shortcut.label}</span>
                                             <span className="flex shrink-0 gap-1">
                                                 {shortcut.keys.map((key) => (
-                                                    <kbd
-                                                        key={key}
-                                                        className="min-w-6 rounded border bg-muted px-1.5 py-0.5 text-center font-mono text-xs text-muted-foreground"
-                                                    >
-                                                        {key}
-                                                    </kbd>
+                                                    <Kbd key={key}>{key}</Kbd>
                                                 ))}
                                             </span>
                                         </li>

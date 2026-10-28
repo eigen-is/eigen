@@ -1,3 +1,6 @@
+// The dialog that picks a Drive folder, and a name where the mode asks one, for a new file, a save-as or a folder
+// pick. Save-to-Drive, a new Eigen document and the app shell open it; it can offer a download instead.
+
 import { useAuth } from '@workspace/lib/auth';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -12,8 +15,9 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { cn } from '@workspace/ui/lib/utils';
-import { Download, Loader2 } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { EigenLoader } from '../braket/eigen-loader';
 import type { DriveLocationValue } from './drive-location-field';
 import { DriveLocationField } from './drive-location-field';
 
@@ -151,7 +155,7 @@ export function DriveLocationPicker({
                             Cancel
                         </Button>
                         <Button onClick={handleSubmit} disabled={pending || (hasName && !name.trim())}>
-                            {pending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            {pending && <EigenLoader className="text-current" />}
                             {resolvedConfirmLabel}
                         </Button>
                     </div>

@@ -14,9 +14,9 @@ import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarOption } from '@workspace/lib/types/calendar';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
-import { Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useDialogPending } from '../../hooks/use-dialog-pending';
+import { EigenLoader } from '../braket/eigen-loader';
 import { Button } from '../button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../dialog';
 import { Input } from '../input';
@@ -171,7 +171,7 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
                         Cancel
                     </Button>
                     <Button onClick={handleSubmit} disabled={pending || isError || !target || (isNew && !name.trim())}>
-                        {pending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        {pending && <EigenLoader className="text-current" />}
                         Import
                     </Button>
                 </DialogFooter>

@@ -1,17 +1,16 @@
+// The topbar's way into the command palette: a search pill with its shortcut from md up, a search icon below. Both
+// read the --topbar-* tokens (globals.css), as NotificationBell and AppSwitcher do. Topbar renders it everywhere, but
+// the marketing-only index app (blog, support) mounts no CommandPaletteProvider, so like PaletteRunner (app-shell.tsx)
+// it renders nothing without one.
+
 import { useOptionalCommandPalette } from '@workspace/lib/command-palette';
 import { useIsDesktop } from '@workspace/lib/media';
 import { Button } from '@workspace/ui/components/button';
+import { Kbd } from '@workspace/ui/components/kbd';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
 import { Search } from 'lucide-react';
 
-// Icons + the search pill read from the --topbar-* tokens (defined in globals.css),
-// so they stay in step with the topbar without branching here — matching
-// NotificationBell and AppSwitcher.
-//
-// Topbar renders this unconditionally, but the marketing-only index app (blog/support)
-// doesn't mount the CommandPaletteProvider — mirror PaletteRunner (app-shell.tsx) and
-// render nothing when no provider is in the tree.
 export function CommandPaletteTrigger({ documentTitle }: { documentTitle?: string }) {
     const palette = useOptionalCommandPalette();
     if (!palette) return null;
@@ -32,7 +31,7 @@ export function CommandPaletteTrigger({ documentTitle }: { documentTitle?: strin
             >
                 <Search className="h-4 w-4 shrink-0" />
                 <span className="flex-1 text-left truncate min-w-0">{documentTitle || 'Search and jump anywhere'}</span>
-                <kbd className="text-xs font-mono shrink-0">{isDesktop && (isMac ? '⌘K' : 'CTRL+K')}</kbd>
+                {isDesktop && <Kbd className="shrink-0">{isMac ? '⌘K' : 'Ctrl+K'}</Kbd>}
             </button>
             <Tooltip>
                 <TooltipTrigger asChild>
