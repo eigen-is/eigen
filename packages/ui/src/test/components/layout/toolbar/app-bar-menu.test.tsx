@@ -234,8 +234,8 @@ test("a DropdownMenu nested in a bar menu's rows closes on a pick and leaves the
 });
 
 // A long member list has a search box. Its arrow keys move the caret, where in a bar menu they would move to the next
-// menu.
-test("the arrow keys in the Filter menu's person search stay in the box", async () => {
+// menu, and Home and End move it to either end, where the list would take them to its first or last person.
+test("the caret keys in the Filter menu's person search stay in the box", async () => {
     window.happyDOM.setViewport({ width: 1600, height: 900 });
     const filter = {
         filter: { assignee: 'all' as const, colors: new Set<string>(), status: 'open' as const },
@@ -266,10 +266,12 @@ test("the arrow keys in the Filter menu's person search stay in the box", async 
     const search = document.querySelector<HTMLInputElement>('[role="menu"] input');
     if (!search) throw new Error('no search box');
     search.focus();
-    for (const key of ['ArrowRight', 'ArrowLeft']) {
+    for (const key of ['ArrowRight', 'ArrowLeft', 'Home', 'End', 'PageUp', 'PageDown']) {
+        const down = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
         await act(async () => {
-            search.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+            search.dispatchEvent(down);
         });
+        expect([key, down.defaultPrevented]).toEqual([key, false]);
         expect(openMenu()).not.toBe('Edit');
         expect(document.activeElement).toBe(search);
     }

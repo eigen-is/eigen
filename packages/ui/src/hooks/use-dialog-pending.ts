@@ -1,9 +1,10 @@
+// The confirm lifecycle of a dialog whose action awaits a mutation, such as ConfirmDialog's: the buttons and every
+// close path wait while it runs, and it closes once the action succeeds. A failure keeps it open beside the error toast
+// for another try, unless the server refused, such as a team it won't delete: another try gets the same no.
+
+import { isRefusal } from '@workspace/lib/api-error';
 import { useState } from 'react';
 
-// The async-confirm lifecycle shared by every dialog whose primary action awaits a mutation: disable
-// the actions in-flight (no double-submit), close only after the callback fulfills, and stay open on
-// rejection so the caller's error toast reads with the retry. `handleOpenChange` blocks every close
-// path (Escape/backdrop/X) while pending so the retry surface survives; opening is always allowed.
 export function useDialogPending(onOpenChange: (open: boolean) => void): {
     pending: boolean;
     run: (action: () => void | Promise<void>) => Promise<void>;
@@ -17,8 +18,9 @@ export function useDialogPending(onOpenChange: (open: boolean) => void): {
         try {
             await action();
             onOpenChange(false);
-        } catch {
-            // Stay open for retry; the mutation's onMutationError already surfaced the toast.
+        } catch (error) {
+            // The mutation's onMutationError already surfaced the toast.
+            if (isRefusal(error)) onOpenChange(false);
         } finally {
             setPending(false);
         }

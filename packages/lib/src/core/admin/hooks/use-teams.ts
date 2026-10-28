@@ -6,7 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { OrgTeam } from '@workspace/lib/types/admin';
-import { getErrorMessage, onMutationError } from '../../api-error';
+import { AppError, getErrorMessage, onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { invalidateMyTeams } from '../../home';
@@ -61,7 +61,10 @@ export function useRemoveTeam(organizationId?: string) {
                 teamId,
                 organizationId,
             });
-            if (error) throw new Error(error.message ?? 'Failed to remove team');
+            // The status says whether the server refused, as it does the default team and the last one.
+            if (error) {
+                throw new AppError({ error: { status: error.status, value: error.message }, status: error.status });
+            }
             return data;
         },
         onSuccess: () => {

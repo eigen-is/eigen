@@ -1,3 +1,7 @@
+// How a failed request reaches the user: AppError reads a readable message and the status from what Eden or a fetch
+// hands back, getErrorMessage turns it into the toast's text, and onMutationError is the onError every mutation hook
+// passes to show it. isRefusal tells a dialog whether another try could go through.
+
 import { toast } from 'sonner';
 import { isRecord } from './guards';
 
@@ -52,6 +56,14 @@ export class AppError extends Error {
 // (503) is worth another go, while a file the parser refuses fails the same way every time.
 export function retryWhenTransformBusy(failureCount: number, error: unknown): boolean {
     return failureCount < 3 && error instanceof AppError && error.status === 503;
+}
+
+// The statuses of the server's settled no, such as a team it won't delete: asking again gets the same answer. A conflict
+// (409), a busy server or a lost connection may go through on another try.
+const REFUSAL_STATUSES = new Set([400, 403, 404, 422]);
+
+export function isRefusal(error: unknown): boolean {
+    return error instanceof AppError && REFUSAL_STATUSES.has(error.status);
 }
 
 export function getErrorMessage(error: unknown): string {
