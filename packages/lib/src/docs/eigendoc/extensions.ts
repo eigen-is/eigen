@@ -1,3 +1,6 @@
+// The Docs schema: every node, mark and extension a doc holds. The editor builds it with its own options, and the server
+// builds it headless to parse, render and export a stored doc. So a node one side writes is one the other can read.
+
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Highlight from '@tiptap/extension-highlight';
 import { TaskItem, TaskList } from '@tiptap/extension-list';

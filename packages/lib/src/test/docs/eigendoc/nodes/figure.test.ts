@@ -80,6 +80,20 @@ describe('figure parse', () => {
         ]);
     });
 
+    test('a pasted width reads as a stored one: past the largest paper as that paper, and no positive number as unset', () => {
+        expect(
+            figuresIn(
+                '<p><img src="a.png" width="99999"></p>' +
+                    '<p><img src="b.png" width="-5"></p>' +
+                    '<p><img src="c.png" style="width: 240px"></p>',
+            ),
+        ).toMatchObject([
+            { src: 'a.png', width: mmToPx(MAX_PAPER_MM) },
+            { src: 'b.png', width: null },
+            { src: 'c.png', width: 240 },
+        ]);
+    });
+
     test('a stretched figure writes its height and survives the HTML round-trip', () => {
         const html = generateHTML(figureDoc({ mediaName: 'a.png', width: 320, height: 90 }), extensions);
         expect(html).toContain('height="90"');

@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { QueryClient } from '@tanstack/react-query';
 import type {
     SSEvent,
     SSEventCalendar,
@@ -11,6 +10,11 @@ import type {
 } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { handleSSEvent } from '../../../core/sse/sse-handlers';
+import { installHappyDom } from '../../happy-dom';
+import { invalidatedBy } from '../../invalidation';
+
+// The epochs handler keeps what it heard in sessionStorage, which only a window has.
+const window = installHappyDom();
 
 type SSEventTypeName = (typeof SSEventType)[keyof typeof SSEventType];
 
@@ -81,15 +85,15 @@ const SAMPLES: { [T in SSEventTypeName]: SSEvent & { type: T } } = {
     [SSEventType.LABEL_UPDATED]: label(SSEventType.LABEL_UPDATED),
     [SSEventType.LABEL_DELETED]: label(SSEventType.LABEL_DELETED),
     [SSEventType.BACKUP_JOB_UPDATED]: { type: SSEventType.BACKUP_JOB_UPDATED, jobId: 'job-1', ownerId: OWNER },
-    [SSEventType.HOME_DATA_EPOCHS]: { type: SSEventType.HOME_DATA_EPOCHS, epochs: {} },
+    [SSEventType.HOME_DATA_EPOCHS]: { type: SSEventType.HOME_DATA_EPOCHS, epochs: { [OWNER]: 'epoch-1' } },
 };
 
-test('every event type has a handler that takes it', () => {
-    const queryClient = new QueryClient();
+// An event acts when it refetches a query, or, for the epochs, when the tab records the epochs it heard.
+test('every event type reaches a handler that acts on it', () => {
     for (const event of Object.values(SAMPLES)) {
-        expect({ type: event.type, handled: handleSSEvent(event, queryClient, OWNER) }).toEqual({
-            type: event.type,
-            handled: true,
-        });
+        window.sessionStorage.clear();
+        const keys = invalidatedBy((queryClient) => handleSSEvent(event, queryClient, OWNER));
+        const acted = keys.length > 0 || window.sessionStorage.length > 0;
+        expect({ type: event.type, acted }).toEqual({ type: event.type, acted: true });
     }
 });

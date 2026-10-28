@@ -84,11 +84,9 @@ export const FigureNode = Node.create({
                 default: null,
                 parseHTML: (element: HTMLElement) => {
                     const img = element.querySelector<HTMLElement>('img') ?? element;
-                    const attr = img.getAttribute('width');
-                    if (attr) return Number.parseFloat(attr) || null;
                     const styleWidth = img.style?.width;
-                    if (styleWidth?.endsWith('px')) return Number.parseFloat(styleWidth) || null;
-                    return null;
+                    const width = img.getAttribute('width') || (styleWidth?.endsWith('px') ? styleWidth : '');
+                    return readFrameSide(Number.parseFloat(width));
                 },
             },
             // Only Eigen's own span: a web page's <img width height> often carries a size its CSS overrides, and would
@@ -115,8 +113,7 @@ export const FigureNode = Node.create({
             {
                 tag: 'img[data-media-name]',
                 priority: 51,
-                getAttrs(dom) {
-                    const el = dom as HTMLElement;
+                getAttrs(el) {
                     return {
                         mediaName: el.getAttribute('data-media-name'),
                         src: el.getAttribute('src'),
@@ -127,8 +124,7 @@ export const FigureNode = Node.create({
             {
                 tag: 'img[src]',
                 priority: 50,
-                getAttrs(dom) {
-                    const el = dom as HTMLElement;
+                getAttrs(el) {
                     return {
                         src: el.getAttribute('src'),
                         alt: el.getAttribute('alt'),

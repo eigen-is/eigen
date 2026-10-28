@@ -1,7 +1,7 @@
 // A sheet's cell borders as every reader and writer sees them: what each stored style number draws, the CSS of a
 // cell's sides, and the walks over the `r_c`-keyed border map, such as its extent or a merge's sides folded onto its
-// first cell. The editor's canvas, the HTML and PDF exports and the xlsx writer share it, so none of them disagrees
-// about a border.
+// first cell. Readers and writers such as the editor's canvas, the exports and the xlsx reader and writer share it,
+// so none of them disagrees about a border.
 
 import type { BorderStyleName, CellBorderSides, MergeCell } from './types';
 
@@ -12,16 +12,11 @@ export const BORDER_SIDE_CSS = [
     ['b', 'bottom'],
 ] as const;
 
-// The one home for the border-style ordinal (1-13, the number stored in `BorderSide.style`):
-// its xlsx style name, its CSS shorthand, and the canvas paint (`dash` = setLineDash pattern in
-// px, `[0]` = solid; `lineWidth` = stroke width in px). Every emitter derives from this — the
-// HTML/PDF export, the xlsx round-trip, the canvas dash pass, the copy-as-HTML serializer — so
-// FE and BE never disagree about what an ordinal means. The canvas nudges any `lineWidth === 2`
-// (the "medium" family) half a pixel across its own axis for a crisp line.
-//
-// `dash`/`lineWidth` encode exactly what the old canvas cascade produced. Two ordinals diverge
-// between screen and print, pre-existing and deliberate: double (7) and slantDashDot (12) paint at
-// `lineWidth` 1 on canvas while their `css` says 3px/2px. Left as-is.
+// What each border style number stored in `BorderSide.style` means, from 1 to 13: its xlsx style name, its CSS
+// shorthand and its canvas paint. `dash` is the setLineDash pattern in px, where `[0]` is solid, and `lineWidth` is the
+// stroke width in px. The canvas nudges a line 2 px wide, the medium styles, half a pixel across its axis so it draws
+// crisp. Double (7) and slantDashDot (12) draw 1 px wide on the canvas on purpose, while their CSS prints them 3 px and
+// 2 px.
 export const BORDER_STYLES: Record<number, { name: BorderStyleName; css: string; dash: number[]; lineWidth: number }> =
     {
         1: { name: 'thin', css: '1px solid', dash: [0], lineWidth: 1 },
@@ -39,29 +34,21 @@ export const BORDER_STYLES: Record<number, { name: BorderStyleName; css: string;
         13: { name: 'thick', css: '3px solid', dash: [0], lineWidth: 3 },
     };
 
-// The CSS shorthand for one border side — `<width> <style> <color>`, no trailing `;`. Internal
-// to `borderSidesToCss` below (its only caller); color checking and `;` handling live with that
-// function's callers.
-function borderSideCss(style: number, color: string): string {
-    return `${BORDER_STYLES[style]?.css ?? '1px solid'} ${color}`;
-}
-
-// The `border-<side>:<shorthand>` declarations for a cell's sides, shared by the HTML/PDF export
-// (BE, a color check for `mapColor`, joins with `;`) and the copy-as-HTML serializer (FE, raw
-// color). `s` (the diagonal) has no CSS equivalent, so it is never emitted — BORDER_SIDE_CSS
-// covers only l/r/t/b. Returns bare declarations with no trailing `;`; each caller owns its join.
+// The `border-<side>:<width> <style> <color>` declarations for a cell's sides, without a trailing `;`, so each caller
+// joins them its own way. mapColor lets a caller check or convert each color, as an export does. The diagonal has no
+// CSS equivalent, so it is never written.
 export function borderSidesToCss(sides: CellBorderSides, mapColor: (color: string) => string = (c) => c): string[] {
     const decls: string[] = [];
     for (const [key, name] of BORDER_SIDE_CSS) {
         const side = sides[key];
-        if (side) decls.push(`border-${name}:${borderSideCss(side.style, mapColor(side.color))}`);
+        if (side) decls.push(`border-${name}:${BORDER_STYLES[side.style]?.css ?? '1px solid'} ${mapColor(side.color)}`);
     }
     return decls;
 }
 
-// Visits the map's entries inside a rectangle. Select-all on a tall sheet is a million-cell
-// rectangle over a near-empty map; a one-cell paste into a huge map is the reverse — and the
-// canvas asks every scroll frame — so walk whichever of the two is smaller.
+// Visits the map's entries inside a rectangle, walking whichever of the two is smaller. Select-all on a tall sheet is
+// a million-cell rectangle over a near-empty map, and a one-cell paste into a huge map is the reverse. The canvas asks
+// on every scroll frame.
 export function forEachInRect(
     map: Record<string, CellBorderSides>,
     rowSt: number,
@@ -99,15 +86,14 @@ export function cloneSides({ l, r, t, b, s }: CellBorderSides): CellBorderSides 
     };
 }
 
-// The "r_c" key every cell-keyed map shares (merge, borderInfo, dataVerification, hyperlink).
+// The "r_c" key every cell-keyed map shares, such as the merges, the borders and the hyperlinks.
 export function parseCellKey(key: string): [row: number, col: number] {
     const sep = key.indexOf('_');
     return [Number(key.substring(0, sep)), Number(key.substring(sep + 1))];
 }
 
-// The row/col bounding box of a `borderInfo` map's keys — the bordered extent, shared by the
-// xlsx writer (which reads max only) and the HTML export's grid-bounds. Empty map → an inverted
-// box (`maxRow`/`maxCol` -1), which merges into a running extent as a no-op.
+// The bounding box of the bordered cells, by row and column. An empty map gives an inverted box, with `maxRow` and
+// `maxCol` at -1, which changes nothing when it merges into a running extent.
 export function borderInfoExtent(borderInfo: Record<string, CellBorderSides>): {
     minRow: number;
     minCol: number;
@@ -131,13 +117,11 @@ export function borderInfoExtent(borderInfo: Record<string, CellBorderSides>): {
     return { minRow, minCol, maxRow, maxCol };
 }
 
-// Folds each merge's perimeter onto its master for readers that address a merge through one
-// cell (an OOXML style, an HTML td). Storage keeps every constituent's sides for an unmerge.
-// `range` is required so the work is bounded: only its cells and the merges crossing it are
-// visited, and a crossing merge is expanded ONLY over its intersection with the range (a legal
-// A1:A100000 merge that crosses the window otherwise built ~100k entries). A constituent that
-// lies outside the range folds nothing — the far edge of a window-crossing merge is off-window,
-// so nothing there is drawn or copied.
+// Folds each merge's outer sides onto its first cell, for readers that address a merge through one cell, such as an
+// OOXML style or an HTML td. Storage keeps every cell's own sides, so an unmerge gets them back. The range bounds the
+// work: only its cells and the merges crossing it are visited. A crossing merge is expanded only where it meets the
+// range, because a legal A1:A100000 merge would otherwise build about 100,000 entries. A cell of the merge outside the
+// range folds nothing, as nothing there is drawn or copied.
 export function mergedBorderSides(
     borderInfo: Record<string, CellBorderSides> | undefined,
     merge: Record<string, MergeCell> | undefined,
@@ -145,7 +129,7 @@ export function mergedBorderSides(
 ): Record<string, CellBorderSides> {
     const folded: Record<string, CellBorderSides> = {};
     if (!borderInfo) return folded;
-    // Nothing to fold onto a master from an empty map — bail before walking the merges' full extent.
+    // An empty map has nothing to fold, so it skips the walk over the merges.
     let empty = true;
     for (const _ in borderInfo) {
         empty = false;

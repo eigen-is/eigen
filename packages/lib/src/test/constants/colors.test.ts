@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { EIGEN_ACCENT_COLORS, EIGEN_ACCENT_COLORS_SHUFFLED, isHexColor, parseRgb } from '../../constants/colors';
+import {
+    EIGEN_ACCENT_COLORS,
+    EIGEN_ACCENT_COLORS_SHUFFLED,
+    hexChannels,
+    isHexColor,
+    isLightColor,
+    lightenColor,
+    parseRgb,
+} from '../../constants/colors';
 
 const ORDER = EIGEN_ACCENT_COLORS_SHUFFLED;
 
@@ -148,6 +156,41 @@ describe('isHexColor', () => {
         ['', [3]],
     ] as const)('%p is not a hex color of %p digits', (value, digits) => {
         expect(isHexColor(value, digits)).toBe(false);
+    });
+});
+
+describe('hexChannels', () => {
+    test.each([
+        ['#e60076', { red: 230, green: 0, blue: 118, alpha: 1 }],
+        ['#E60076', { red: 230, green: 0, blue: 118, alpha: 1 }],
+        ['#e6007680', { red: 230, green: 0, blue: 118, alpha: 128 / 255 }],
+        ['#f08', { red: 255, green: 0, blue: 136, alpha: 1 }],
+        ['#f080', { red: 255, green: 0, blue: 136, alpha: 0 }],
+    ])('%s reads as its channels', (value, channels) => {
+        expect(hexChannels(value, [3, 4, 6, 8])).toEqual(channels);
+    });
+
+    test('a value of another digit count, or no hex at all, has none', () => {
+        expect(hexChannels('#f08', [6, 8])).toBeUndefined();
+        expect(hexChannels('#ggg', [3])).toBeUndefined();
+        expect(hexChannels('rgb(1, 2, 3)', [3, 6])).toBeUndefined();
+    });
+});
+
+describe('isLightColor and lightenColor', () => {
+    test('read #rrggbb, with or without an alpha', () => {
+        expect([isLightColor('#ffffff'), isLightColor('#000000'), isLightColor('#ffffff80')]).toEqual([
+            true,
+            false,
+            true,
+        ]);
+        expect(lightenColor('#000000', 0.5)).toBe('#808080');
+        expect(lightenColor('#00000080', 0.5)).toBe('#808080');
+    });
+
+    test('leave a color that is no #rrggbb as it is, and count it as dark', () => {
+        expect(isLightColor('#fff')).toBe(false);
+        expect(lightenColor('#fff', 0.5)).toBe('#fff');
     });
 });
 

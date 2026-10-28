@@ -2,6 +2,8 @@
 // hands out plain sRGB stops, so canvas, thumbnails, SVG export and PDF all show the same even ramp. A transparent end
 // takes the other end's color at opacity 0, so the ramp fades out and does not pass through black.
 
+import type { ColorChannels } from '../constants/colors';
+import { hexChannels } from '../constants/colors';
 import { TRANSPARENT_COLOR } from '../vector/fill';
 import { round4 } from '../vector/outline';
 
@@ -9,13 +11,15 @@ import { round4 } from '../vector/outline';
 // wants: `stop-color` plus its own `stop-opacity` attribute.
 type GradientStop = { offset: number; color: string; opacity: number };
 
-type Paint = { color: string | null; alpha: number };
+type Paint = { color: ColorChannels | null; alpha: number };
 type Lab = [number, number, number];
 
 // Enough samples that the leftover per-segment sRGB error is invisible (OKLab deviates most in the
 // middle, where 8 segments leave well under a just-noticeable difference), few enough that the emitted
 // defs stay small.
 const GRADIENT_STOP_COUNT = 9;
+
+const BLACK: ColorChannels = { red: 0, green: 0, blue: 0, alpha: 1 };
 
 // The stored gradient as sampled stops. CSS, SVG and WeasyPrint all interpolate two stops in sRGB, which turns red to
 // blue into a washed-out gray-purple. A transparent end borrows its neighbor's color, so an
@@ -24,7 +28,7 @@ const GRADIENT_STOP_COUNT = 9;
 export function gradientStops(from: string, to: string, count: number = GRADIENT_STOP_COUNT): GradientStop[] {
     const start = parsePaint(from);
     const end = parsePaint(to);
-    const fallback = start.color ?? end.color ?? '#000000';
+    const fallback = start.color ?? end.color ?? BLACK;
     const startLab = toLab(start.color ?? fallback);
     const endLab = toLab(end.color ?? fallback);
     const last = Math.max(1, count - 1);
@@ -69,25 +73,23 @@ function cssColor(stop: GradientStop): string {
     return stop.opacity < 1 ? `${stop.color}${hex2(stop.opacity * 255)}` : stop.color;
 }
 
-// #rgb / #rrggbb / #rrggbbaa / the transparent sentinel — the tokens isColorToken admits. The alpha
-// is split out of the hex so both renderers get it in the channel they understand. Anything else is
-// opaque black, which is what a browser does with a color it cannot parse.
+// The tokens isColorToken admits: #rgb, #rrggbb, #rrggbbaa and the transparent sentinel. The alpha is split out of
+// the hex so both renderers get it in the channel they understand. Anything else is opaque black, which is what a
+// browser does with a color it cannot parse.
 function parsePaint(token: string): Paint {
     if (token === TRANSPARENT_COLOR) return { color: null, alpha: 0 };
-    const hex = token.startsWith('#') ? token.slice(1) : '';
-    const wide = hex.length === 3 ? hex.replace(/./g, (c) => c + c) : hex;
-    if (wide.length !== 6 && wide.length !== 8) return { color: '#000000', alpha: 1 };
-    const alpha = wide.length === 8 ? round4(byteAt(wide, 6) / 255) : 1;
+    const channels = hexChannels(token, [3, 6, 8]) ?? BLACK;
+    const alpha = round4(channels.alpha);
     // A fully transparent hex says as little about the ramp's hue as the sentinel does, so it borrows
-    // the other end's color the same way — #e60076 → #00000000 fades out instead of darkening.
-    return { color: alpha === 0 ? null : `#${wide.slice(0, 6).toLowerCase()}`, alpha };
+    // the other end's color the same way. #e60076 to #00000000 fades out instead of darkening.
+    return { color: alpha === 0 ? null : channels, alpha };
 }
 
-// sRGB hex → linear-light → LMS → OKLab, as [L, a, b] (Björn Ottosson's matrices).
-function toLab(color: string): Lab {
-    const r = linearize(byteAt(color.slice(1), 0) / 255);
-    const g = linearize(byteAt(color.slice(1), 2) / 255);
-    const b = linearize(byteAt(color.slice(1), 4) / 255);
+// sRGB → linear-light → LMS → OKLab, as [L, a, b] (Björn Ottosson's matrices).
+function toLab({ red, green, blue }: ColorChannels): Lab {
+    const r = linearize(red / 255);
+    const g = linearize(green / 255);
+    const b = linearize(blue / 255);
     const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
     const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
     const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
@@ -115,11 +117,6 @@ export function linearize(c: number): number {
 function channel(c: number): number {
     const encoded = c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
     return Math.min(255, Math.max(0, encoded * 255));
-}
-
-function byteAt(hex: string, index: number): number {
-    const value = Number.parseInt(hex.slice(index, index + 2), 16);
-    return Number.isNaN(value) ? 0 : value;
 }
 
 function hex2(value: number): string {

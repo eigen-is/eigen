@@ -1,3 +1,7 @@
+// The calendar query keys, each scoped to an owner, and the invalidators that mutations and the SSE
+// handler call after a change. A change to a calendar refetches the owner's calendar list. A change to an
+// event refetches every event range of that owner.
+
 import type { QueryClient } from '@tanstack/react-query';
 import { invalidateHomeSize } from '../../home';
 
@@ -24,18 +28,12 @@ export const calendarKeys = {
     access: (ownerId: string, calendarId: string) => [...calendarKeys.accessAll(ownerId), calendarId] as const,
 };
 
-// --- Invalidation functions (ownerId-scoped, used from mutation onSuccess) ---
-
-export function invalidateCalendarCreated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.calendarList(ownerId) });
-}
-
-export function invalidateCalendarUpdated(queryClient: QueryClient, ownerId: string): void {
+export function invalidateCalendarList(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.calendarList(ownerId) });
 }
 
 export function invalidateCalendarDeleted(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.calendarList(ownerId) });
+    invalidateCalendarList(queryClient, ownerId);
     invalidateEventList(queryClient, ownerId);
 }
 
@@ -49,12 +47,12 @@ export function invalidateSharedCalendarUpdated(queryClient: QueryClient, ownerI
     queryClient.invalidateQueries({ queryKey: calendarKeys.sharedCalendars(ownerId) });
 }
 
-export function invalidateCalendarShared(queryClient: QueryClient, ownerId: string): void {
+// A calendar shared with the owner, or no longer shared, changes both the shared list and the events shown.
+export function invalidateSharedCalendars(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.sharedCalendars(ownerId) });
     queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
 }
 
-export function invalidateCalendarUnshared(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.sharedCalendars(ownerId) });
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
+export function invalidateCalendarAccess(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: calendarKeys.accessAll(ownerId) });
 }

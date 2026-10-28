@@ -15,6 +15,10 @@ export function columnFit(columnPx: number, total: number): (width: number) => n
 
 // A whole table's widths in px fitted into a column `columnPx` wide, by `columnFit`.
 export function fitColumnWidths(widths: number[], columnPx: number): number[] {
-    const total = widths.reduce((sum, width) => sum + width, 0);
-    return total <= columnPx ? widths : widths.map(columnFit(columnPx, total));
+    return widths.map(
+        columnFit(
+            columnPx,
+            widths.reduce((sum, width) => sum + width, 0),
+        ),
+    );
 }

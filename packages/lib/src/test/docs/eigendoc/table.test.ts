@@ -4,8 +4,8 @@ import { columnFit, fitColumnWidths, MIN_TABLE_COLUMN_PX } from '../../../docs/e
 describe('fitColumnWidths', () => {
     test('a table that fits keeps its widths', () => {
         const widths = [200, 300, 100];
-        expect(fitColumnWidths(widths, 600)).toBe(widths);
-        expect(fitColumnWidths(widths, 900)).toBe(widths);
+        expect(fitColumnWidths(widths, 600)).toEqual(widths);
+        expect(fitColumnWidths(widths, 900)).toEqual(widths);
     });
 
     test('a wider table shrinks every column by one factor, floored to whole pixels', () => {
