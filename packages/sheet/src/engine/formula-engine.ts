@@ -32,17 +32,19 @@ export function isFormula(value: unknown): boolean {
     return typeof value === 'string' && value.length > 1 && value[0] === '=';
 }
 
-// A cell holds an error as its text, such as `#DIV/0!`. A formula reads it back as formulajs's error object, because
-// ISERROR and IFERROR recognize only those. A cell that holds such text as text (`ct.t === 's'`) stays text. A `#NAME?`
-// doesn't say whether it comes from a typo or stands in for a function the engine lacks. So it reads as the latter,
-// which no function traps, because a fallback would read as the value Excel computed.
+// A cell holds an error as its text, such as `#DIV/0!`. A formula reads it back as an error object, formulajs's where
+// it has one, because its functions recognize only those. A cell that holds such text as text stays text: a plain
+// (`ct.t === 's'`) or a rich one. A `#NAME?` doesn't say whether it comes from a typo or stands in for a function the
+// engine lacks. So it reads as the latter, which no function traps, because a fallback would read as the value Excel
+// computed.
 function getCellValue(cell: Cell | null | undefined): unknown {
     if (cell?.ct?.t === 'n') {
         const n = Number(cell.v);
         return Number.isNaN(n) ? cell.v : n;
     }
     const value = cellValue(cell);
-    if (typeof value !== 'string' || cell?.ct?.t === 's' || !valueIsError(value)) return value;
+    const text = cell?.ct?.t === 's' || cell?.ct?.t === 'inlineStr';
+    if (typeof value !== 'string' || text || !valueIsError(value)) return value;
     return value === errorParser(ERROR_NAME) ? UNSUPPORTED_FUNCTION : toFormulaError(Error(value));
 }
 

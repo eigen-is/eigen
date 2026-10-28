@@ -247,6 +247,12 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![1][2]?.v).toBe('#NAME?');
     });
 
+    // Only an error string is an error: a cached text that starts with # is a value the guard keeps.
+    test('a cached text that starts with # is kept over a function the engine lacks', () => {
+        const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=FILTER(A1:A2,A1:A2>0)', str('#tag'))]])];
+        expect(recalcSheets(sheets)[0].data![0][1]?.v).toBe('#tag');
+    });
+
     test('imported VLOOKUP with a lower-case FALSE resolves against the looked-up sheet', () => {
         // The real shape of a converted-xlsx formula: Excel writes bare booleans lower-cased,
         // and `false` used to resolve as an unknown variable → #NAME?. Neither cell carries a

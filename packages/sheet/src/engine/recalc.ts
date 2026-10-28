@@ -12,6 +12,7 @@ import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { inlineNames } from './formula-shift';
 import { iscelldata, isFunctionRange, resolveCellRange } from './formula-utils';
+import { valueIsError } from './parser/error';
 import type {
     CalcChainEntry,
     EvaluationResult,
@@ -344,15 +345,10 @@ function usesUnknownName(engine: FormulaEngine, formula: string): boolean {
     return unknown;
 }
 
-// True when a cell holds a value that is no error: not empty, not flagged `ct.t === 'e'`, and no `#` error string.
+// True when a cell holds a value that is no error: not empty, not flagged `ct.t === 'e'`, and no error string.
 function hasNonErrorCachedValue(cell: Cell): boolean {
-    if (cell.v == null || cell.ct?.t === 'e') {
-        return false;
-    }
-    if (typeof cell.v === 'string' && cell.v.startsWith('#')) {
-        return false;
-    }
-    return true;
+    if (cell.v == null || cell.ct?.t === 'e') return false;
+    return typeof cell.v !== 'string' || !valueIsError(cell.v);
 }
 
 // Writes a result as the editor's setCellValue does, where that is cheap: an error shows its sentinel and carries

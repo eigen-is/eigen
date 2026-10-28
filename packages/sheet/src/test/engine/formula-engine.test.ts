@@ -292,6 +292,13 @@ describe('engine/formula-engine — an error held in a cell', () => {
                 [number(3), text('c'), number(3)],
                 // Row 5: a cell holding the text #DIV/0!, typed with a leading apostrophe, and a #NAME?.
                 [{ v: '#DIV/0!', m: '#DIV/0!', ct: { fa: '@', t: 's' }, qp: 1 }, failed('#NAME?')],
+                // Row 6: the errors formulajs has no object for, and a rich-text cell whose runs read #N/A.
+                [
+                    failed('#SPILL!'),
+                    failed('#ERROR!'),
+                    failed('#CALC!'),
+                    { ct: { fa: 'General', t: 'inlineStr', s: [{ v: '#N/' }, { v: 'A', bl: 1 }] } },
+                ],
             ],
             calculationChain: [],
             dynamicArrayCompute: [],
@@ -364,5 +371,77 @@ describe('engine/formula-engine — an error held in a cell', () => {
         }
         expect(evaluate('=IF(TRUE,1,B5)')).toBe(1);
         expect(evaluate('=IFERROR(SUM(A5:B5),0)')).toBe('#NAME?');
+    });
+
+    test('a function hands on the first error in its arguments, ranges included, as Excel does', () => {
+        expect(evaluate('=CONCAT(A2:A4)')).toBe('#DIV/0!');
+        expect(evaluate('=CONCATENATE("a",F1)')).toBe('#N/A');
+        expect(evaluate('=TEXTJOIN(",",TRUE,C2:C4)')).toBe('#N/A');
+        expect(evaluate('=IFERROR(CONCAT(A2:A4),"none")')).toBe('none');
+        expect(evaluate('=STDEV(A2:A4)')).toBe('#DIV/0!');
+        expect(evaluate('=VARA(A2:A4)')).toBe('#DIV/0!');
+        expect(evaluate('=ISEVEN(F1)')).toBe('#N/A');
+        expect(evaluate('=IF(F1,1,2)')).toBe('#N/A');
+        expect(evaluate('=VLOOKUP(F1,B2:C4,2,FALSE)')).toBe('#N/A');
+    });
+
+    test('a function that reads past an error, such as COUNT or a lookup, does not hand it on', () => {
+        expect(evaluate('=COUNT(A2:A4)')).toBe(2);
+        expect(evaluate('=COUNTA(A2:A4)')).toBe(3);
+        expect(evaluate('=COUNTBLANK(A2:A4)')).toBe(0);
+        expect(evaluate('=VLOOKUP("a",B2:C4,2,FALSE)')).toBe(1);
+        expect(evaluate('=MATCH(3,A2:A4,0)')).toBe(3);
+        expect(evaluate('=INDEX(A2:A4,3)')).toBe(3);
+        expect(evaluate('=ROWS(A2:A4)')).toBe(3);
+        expect(evaluate('=TRANSPOSE(A2:A4)')).toBe(1);
+        expect(evaluate('=TYPE(F1)')).toBe(16);
+        expect(evaluate('=ISTEXT(F1)')).toBe(false);
+        expect(evaluate('=IF(TRUE,1,F1)')).toBe(1);
+    });
+
+    test('COUNTIF and its family match an error cell by the text it shows', () => {
+        expect(evaluate('=COUNTIF(A1:F1,"#N/A")')).toBe(1);
+        expect(evaluate('=COUNTIF(A1:F1,"#DIV/0!")')).toBe(1);
+        expect(evaluate('=COUNTIFS(A1:F1,"#N/A",A1:F1,"<>#DIV/0!")')).toBe(1);
+        expect(evaluate('=SUMIF(A2:A4,">0")')).toBe(4);
+        expect(evaluate('=SUMIF(C2:C4,"<>#N/A",A2:A4)')).toBe(4);
+        expect(evaluate('=MAXIFS(A2:A4,C2:C4,"<>#N/A")')).toBe(3);
+        expect(evaluate('=MINIFS(C2:C4,A2:A4,"<>#DIV/0!")')).toBe(1);
+        expect(evaluate('=MAXIFS(A2:C2,A3:C3,"#N/A")')).toBe(1);
+    });
+
+    test('IFS and SWITCH hand on an error they reach, and not one past the value they return', () => {
+        expect(evaluate('=IFS(F1>0,1,TRUE,2)')).toBe('#N/A');
+        expect(evaluate('=IFERROR(IFS(F1>0,1,TRUE,2),"none")')).toBe('none');
+        expect(evaluate('=IFS(TRUE,1,F1>0,2)')).toBe(1);
+        expect(evaluate('=IFS(FALSE,1,TRUE,F1)')).toBe('#N/A');
+        expect(evaluate('=SWITCH(F1,1,"a","b")')).toBe('#N/A');
+        expect(evaluate('=SWITCH(1,F1,"a",1,"b")')).toBe('#N/A');
+        expect(evaluate('=SWITCH(1,1,"a",F1,"b")')).toBe('a');
+        expect(evaluate('=SWITCH(2,1,"a",B1)')).toBe('#DIV/0!');
+    });
+
+    test('AGGREGATE ignores errors under options 2, 3, 6 and 7, and hands them on under the others', () => {
+        expect(evaluate('=AGGREGATE(9,6,A2:A4)')).toBe(4);
+        expect(evaluate('=AGGREGATE(4,7,A2:A4)')).toBe(3);
+        expect(evaluate('=AGGREGATE(14,6,A2:A4,2)')).toBe(1);
+        expect(evaluate('=AGGREGATE(9,4,A2:A4)')).toBe('#DIV/0!');
+        expect(evaluate('=AGGREGATE(9,6,F1)')).toBe(0);
+    });
+
+    test('#SPILL!, #ERROR! and #CALC! a cell holds are errors that IFERROR and ISERROR see', () => {
+        expect(['A6', 'B6', 'C6'].map((c) => evaluate(`=ISERROR(${c})`))).toEqual([true, true, true]);
+        expect(['A6', 'B6', 'C6'].map((c) => evaluate(`=ISERR(${c})`))).toEqual([true, true, true]);
+        expect(['A6', 'B6', 'C6'].map((c) => evaluate(`=IFERROR(${c},"none")`))).toEqual(['none', 'none', 'none']);
+        expect(['A6', 'B6', 'C6'].map((c) => evaluate(`=ERROR.TYPE(${c})`))).toEqual([9, 8, 14]);
+        expect(['A6', 'B6', 'C6'].map((c) => evaluate(`=${c}+1`))).toEqual(['#SPILL!', '#ERROR!', '#CALC!']);
+        expect(evaluate('=ISNA(A6)')).toBe(false);
+        expect(evaluate('=IFNA(A6,"none")')).toBe('#SPILL!');
+    });
+
+    test('a rich-text cell whose runs read #N/A stays text', () => {
+        expect(evaluate('=ISERROR(D6)')).toBe(false);
+        expect(evaluate('=ISTEXT(D6)')).toBe(true);
+        expect(evaluate('=D6')).toBe('#N/A');
     });
 });

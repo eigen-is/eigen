@@ -1,6 +1,6 @@
 // The formula engine's errors: the ids it raises, such as `DIV/0`, the text a cell shows for each, such as `#DIV/0!`,
 // and the error objects formulajs's functions compare against. An error in a formula is a value, not a throw, so
-// IFERROR or ISERROR around it can inspect it, and these objects are what they inspect.
+// IFERROR or ISERROR around it can inspect it, and any other function hands it on.
 
 // @ts-expect-error - No types available for @formulajs/formulajs
 import { utils } from '@formulajs/formulajs';
@@ -8,6 +8,7 @@ import { utils } from '@formulajs/formulajs';
 const formulaErrors: Error[] = Object.values(utils.errors);
 
 export const ERROR = 'ERROR';
+export const ERROR_CALC = 'CALC';
 export const ERROR_DIV_ZERO = 'DIV/0';
 export const ERROR_NAME = 'NAME';
 export const ERROR_NOT_AVAILABLE = 'N/A';
@@ -19,6 +20,7 @@ export const ERROR_VALUE = 'VALUE';
 
 export type ErrorType =
     | typeof ERROR
+    | typeof ERROR_CALC
     | typeof ERROR_DIV_ZERO
     | typeof ERROR_NAME
     | typeof ERROR_NOT_AVAILABLE
@@ -32,6 +34,7 @@ export type ErrorType =
 // literals derives from it (engine/validation.ts included).
 const errors: Record<string, string> = {
     [ERROR]: '#ERROR!',
+    [ERROR_CALC]: '#CALC!',
     [ERROR_DIV_ZERO]: '#DIV/0!',
     [ERROR_NAME]: '#NAME?',
     [ERROR_NOT_AVAILABLE]: '#N/A',
@@ -72,3 +75,20 @@ export function toFormulaError(e: Error): Error {
 // the answer Excel computed. `callFunction` hands it on through every function, unless it sits in a branch IF or
 // CHOOSE skips.
 export const UNSUPPORTED_FUNCTION = Error('#NAME?');
+
+// Any error a cell can show, the ones formulajs has no object for included, such as #SPILL! and #CALC!. formulajs's
+// trapping functions miss those, so the engine's ISERROR and IFERROR ask this instead.
+export function isFormulaError(value: unknown): value is Error {
+    return value instanceof Error && value !== UNSUPPORTED_FUNCTION && valueIsError(value.message);
+}
+
+// The first error in a function's argument, a range's cells included.
+export function firstError(value: unknown): Error | undefined {
+    if (value instanceof Error) return value;
+    if (!Array.isArray(value)) return undefined;
+    for (const item of value) {
+        const found = firstError(item);
+        if (found) return found;
+    }
+    return undefined;
+}

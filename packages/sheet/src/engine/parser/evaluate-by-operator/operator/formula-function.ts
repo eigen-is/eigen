@@ -1,10 +1,16 @@
+// The callable behind each function name the engine registers: formulajs's, found by its name or dotted path, an
+// override where formulajs's result differs from Excel's, or the engine's own. It hands an empty argument slot on as
+// what Excel reads there. The function registry in evaluate-by-operator builds one callable per name in SYMBOL.
+
 // @ts-expect-error - No types available for @formulajs/formulajs
 import * as formulajs from '@formulajs/formulajs';
 import { booleanDisplay, update } from '../../../format';
 import type { FormulaArg, FormulaOutput } from '../../../types';
 import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
+import { errorType, iserr, iserror } from '../../functions/information';
+import { iferror, ifs, switchValue } from '../../functions/logical';
 import { index, xlookup, xmatch } from '../../functions/lookup';
-import { maxifs, minifs } from '../../functions/statistical';
+import { aggregate, errorsAsText, maxifs, minifs } from '../../functions/statistical';
 import { concatenate, textjoin } from '../../functions/text';
 import { toNumber } from '../../helper/number';
 import type { FunctionArg } from '../../omitted';
@@ -110,11 +116,15 @@ function withSignificance(method: FormulajsMethod) {
     return (params: FormulaArg[]) => (params.length === 1 ? method(params[0], 1) : undefined);
 }
 
+// formulajs's COUNTIF family, with each error cell as the text it shows, which a criterion such as "#N/A" matches.
+function byText(method: FormulajsMethod) {
+    return (params: FormulaArg[]) => method(...params.map(errorsAsText));
+}
+
 // formulajs reads a start_num below 1 as 1, where Excel's is #VALUE!, an empty one too.
 function startAboveZero(params: FormulaArg[]): FormulaOutput | undefined {
     if (params.length < 3) return undefined;
     const start = params[2];
-    if (start instanceof Error) return start;
     if (!((toNumber(start ?? 0) ?? Number.NaN) >= 1)) throw Error(ERROR_VALUE);
     return undefined;
 }
@@ -136,8 +146,6 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
     // grid renders cells with, so `TEXT(x, fa)` reads like the formatted cell it mimics.
     TEXT(params) {
         const [value, mask] = params;
-        if (value instanceof Error) return value;
-        if (mask instanceof Error) return mask;
         if (params.length < 2) throw Error(ERROR_VALUE);
         // An empty format_text, typed or a blank cell, is empty text: TEXT(5,"") = "".
         if (mask == null || mask === '') return '';
@@ -164,6 +172,14 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
 
     INDEX: index,
 
+    AGGREGATE: aggregate,
+    COUNTIF: byText(formulajs.COUNTIF),
+    COUNTIFS: byText(formulajs.COUNTIFS),
+    SUMIF: byText(formulajs.SUMIF),
+    SUMIFS: byText(formulajs.SUMIFS),
+    AVERAGEIF: byText(formulajs.AVERAGEIF),
+    AVERAGEIFS: byText(formulajs.AVERAGEIFS),
+
     'CEILING.MATH': withSignificance(formulajs.CEILING.MATH),
     'CEILING.PRECISE': withSignificance(formulajs.CEILING.PRECISE),
     'ISO.CEILING': withSignificance(formulajs.ISO.CEILING),
@@ -175,11 +191,18 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
     'ERFC.PRECISE': ([x]) => formulajs.ERFC(x),
 };
 
-// Functions formulajs 2.9.3 lacks. Unlike an override, a result of `undefined` is a blank, not a fall-through,
-// and an empty argument arrives as OMITTED, for each to read as Excel reads that parameter.
+// Functions formulajs 2.9.3 lacks, and ones the engine replaces whole, such as IFERROR. Unlike an override, a result
+// of `undefined` is a blank, not a fall-through, and an empty argument arrives as OMITTED, for each to read as Excel
+// reads that parameter.
 const FUNCTIONS: Record<string, (params: FunctionArg[]) => FormulaOutput> = {
+    'ERROR.TYPE': errorType,
+    IFERROR: iferror,
+    IFS: ifs,
+    ISERR: iserr,
+    ISERROR: iserror,
     MAXIFS: maxifs,
     MINIFS: minifs,
+    SWITCH: switchValue,
     TEXTJOIN: textjoin,
     XLOOKUP: xlookup,
     XMATCH: xmatch,

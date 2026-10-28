@@ -1,3 +1,7 @@
+// The engine's CONCAT, CONCATENATE and TEXTJOIN, which formula-function.ts registers in place of formulajs's. They join
+// each value as `&` does, a number as the grid writes it and a Date as its serial. An error in an argument never
+// reaches them: the function call hands it on first.
+
 import { valueText } from '../../format';
 import type { FormulaArg, FormulaOutput } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_VALUE } from '../error';
@@ -17,7 +21,6 @@ function texts(arg: FunctionArg): string[] {
 
 function ignoreEmpty(arg: FunctionArg): boolean {
     if (arg === OMITTED) return false;
-    if (arg instanceof Error) throw arg;
     if (Array.isArray(arg) || typeof arg === 'string') throw Error(ERROR_VALUE);
     return Boolean(toNumber(arg ?? 0));
 }
