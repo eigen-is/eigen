@@ -1,7 +1,7 @@
 // One menu of an app's bar, such as Insert, Format or Filter: a trigger with its label and the menu's rows below it.
 // It sits in a Menubar, which the bar renders around its menus, so the menus open, switch and close as one bar.
-// FileMenu and EditMenu are built on it; each app passes its own rows and, for an editor, the handler that hands
-// focus back to the editor as the menu closes.
+// Menus such as FileMenu and EditMenu are built on it. Each app passes its own rows and, for an editor, the handler
+// that hands focus back to the editor as the menu closes.
 
 import type { ReactNode } from 'react';
 import { useRef } from 'react';

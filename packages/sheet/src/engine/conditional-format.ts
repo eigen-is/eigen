@@ -98,8 +98,8 @@ function forEachCellInRanges(data: CellMatrix, ranges: SingleRange[], cb: (r: nu
     }
 }
 
-// A stop's red, green and blue, from a hex, its alpha dropped, or from an rgb(). isWellFormedCfRule keeps any stop
-// that starts with '#', and one that is no hex color reads as black.
+// A stop's red, green and blue, read from a hex or an rgb(). Its alpha is dropped. isWellFormedCfRule keeps any
+// stop that starts with '#', so a stop that is no hex color reads as black.
 function parseColorChannels(color: string): [number, number, number] {
     const { red, green, blue } = hexChannels(parseRgb(color)?.hex ?? color, [3, 6, 8]) ?? { red: 0, green: 0, blue: 0 };
     return [red, green, blue];

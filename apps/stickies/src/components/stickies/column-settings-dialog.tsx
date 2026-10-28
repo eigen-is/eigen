@@ -1,4 +1,5 @@
-// The dialog that renames a column of a board or deletes it, after a confirmation.
+// The dialog that renames a column of a board or deletes it, after a confirmation. It writes to the board's
+// Yjs document itself. A delete takes the column's cards with it, as one undo step.
 
 import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
 import { DeleteDialog } from '@workspace/ui';

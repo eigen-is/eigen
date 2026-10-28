@@ -1,3 +1,6 @@
+// The body of Space's Data export page: what a download of the user's data will hold, and its button. The
+// export is not built yet, so the button stays disabled.
+
 import { Button } from '@workspace/ui/components/button';
 import { Download } from 'lucide-react';
 

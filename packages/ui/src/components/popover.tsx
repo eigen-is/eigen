@@ -1,4 +1,4 @@
-// shadcn's Popover on Radix: a floating panel anchored to a trigger, such as a colour picker or a
+// shadcn's Popover on Radix: a floating panel anchored to a trigger, such as a color picker or a
 // people list. Its content is held to the viewport, so a tall panel scrolls instead of leaving the page.
 
 import { cn } from '@workspace/ui/lib/utils';

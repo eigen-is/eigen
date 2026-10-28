@@ -1,5 +1,5 @@
-// The comment thread beside a document or a card: the messages of its chat room, the composer, and the dialog that
-// deletes a message.
+// The comment thread beside a card, such as a sticky's: the messages of its chat room, the composer, and the dialog
+// that deletes a message.
 
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useMediaResolver } from '@workspace/lib/drive';

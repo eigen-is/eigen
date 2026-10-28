@@ -1,4 +1,5 @@
-// The form that edits the user's name and avatar. Space's profile page shows it.
+// The form that edits the user's name and avatar. Space's Personal info page shows it. It saves them to the
+// user's own contact card, and then returns to Space's start page.
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';

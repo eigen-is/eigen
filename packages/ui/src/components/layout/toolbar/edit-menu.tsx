@@ -1,7 +1,7 @@
-// The Edit menu of every document app's bar: Undo and Redo, a host's own entries such as Cut and Copy, and Find.
-// Each app has its own undo machinery, such as a Yjs UndoManager or Tiptap's history, so the handlers come in as
-// props. The Find entries come from the DocSearchProvider the bar sits under, and a Find pick hands the focus to the
-// find bar rather than to the host's editor.
+// The Edit menu of a document app's bar, such as Docs' or Stickies': Undo and Redo, a host's own entries such as
+// Cut and Copy, and Find. Each app has its own undo machinery, such as a Yjs UndoManager or Tiptap's history, so
+// the handlers come in as props. The Find entries come from the DocSearchProvider the bar sits under, and a Find
+// pick hands the focus to the find bar rather than to the host's editor.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/constants/hotkeys';
@@ -13,9 +13,9 @@ import { useFindBarRefocus } from '../../search/find-in-document-button';
 import { AppBarMenu } from './app-bar-menu';
 
 type EditMenuProps = {
-    // Gates the undo/redo section — pass the same condition the surface used for its icon
-    // buttons (slides also excludes the sub-768px view-only band). Find stays available
-    // regardless; "Find and replace" follows the bar context's canReplace.
+    // Whether the Undo and Redo rows show. Pass the condition the surface uses for its own undo buttons,
+    // such as Slides', which also leaves out the narrow view-only layout. Find shows either way, and
+    // Find and replace follows the bar context's canReplace.
     canEdit: boolean;
     canUndo: boolean;
     canRedo: boolean;

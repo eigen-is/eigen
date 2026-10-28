@@ -80,7 +80,7 @@ export function MountForm({
                 <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Shared Files"
+                    placeholder="e.g. Shared files"
                     autoFocus={!isEdit}
                 />
             </div>

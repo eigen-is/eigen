@@ -1,4 +1,5 @@
-// The dialog that adds a column to a board. It asks for the column's title and hands it to the board.
+// The dialog that adds a column to a board. It asks for the column's title and hands it to the board, which
+// writes the column into the board's document.
 
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';

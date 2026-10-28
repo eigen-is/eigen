@@ -1,4 +1,5 @@
-// shadcn's Switch on Radix: an on/off toggle, for a setting that takes effect at once.
+// shadcn's Switch on Radix: an on/off toggle, for a setting that takes effect at once. Forms such as Space's
+// Preferences use it, with a Label beside it that names the setting.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { Switch as SwitchPrimitive } from 'radix-ui';

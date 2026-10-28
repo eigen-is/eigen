@@ -1,5 +1,5 @@
 // shadcn's Progress on Radix: a horizontal bar that fills to a value from 0 to 100, such as an upload's
-// progress. indicatorClassName is our own prop, so a caller can colour the fill.
+// progress. indicatorClassName is our own prop, so a caller can color the fill.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { Progress as ProgressPrimitive } from 'radix-ui';

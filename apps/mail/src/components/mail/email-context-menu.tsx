@@ -1,5 +1,5 @@
-// The menu of things to do with one message or a selection of them, such as reply, archive, move or delete. The
-// message list shows it on right-click, and the open message shows it from its toolbar.
+// The menu of things to do with one message or a selection of them, such as reply, archive, move or delete. Places
+// such as the message list's right-click show it.
 
 import { getMailMessageDownloadUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';

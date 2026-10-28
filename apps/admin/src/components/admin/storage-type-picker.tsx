@@ -1,5 +1,5 @@
 // The storage type choice for users' Drive files, local or an S3 bucket, with the S3 fields when a bucket is
-// picked. The setup wizard and the server settings page both use it.
+// picked. Forms such as the setup wizard use it.
 
 import { STORAGE_TYPE_HINTS, STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import type { S3Config } from '@workspace/lib/types/mount';

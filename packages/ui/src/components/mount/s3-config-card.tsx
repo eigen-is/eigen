@@ -1,5 +1,5 @@
 // The S3 configuration fields, a button that tests the connection, and a panel that shows whether the bucket
-// keeps old versions of files and cleans them up. Storage and backup settings use it.
+// keeps old versions of files and cleans them up. Forms such as the storage and backup settings use it.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import {
