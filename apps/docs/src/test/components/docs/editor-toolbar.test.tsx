@@ -972,6 +972,44 @@ test('a press on Edit while Format is open opens Edit, and the focus stays in it
     expect(menu?.getAttribute('aria-labelledby')).toBe(menuTrigger('Edit')?.id);
 });
 
+// The press lands on the trigger, which a browser focuses, and Radix would leave the focus there.
+test('a second press on Format closes it and gives focus back to the editor', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    const trigger = menuTrigger('Format');
+    if (!(trigger instanceof HTMLElement)) throw new Error('no Format trigger');
+    await pickInBrowserFrames(async () => {
+        await act(async () => {
+            trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+            trigger.focus();
+        });
+    });
+    expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
+    expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
+// A bar menu leaves the page live, so a press outside it focuses what it lands on, such as the size box, the find bar
+// or a comment's reply box, as the menu closes. The editor leaves the focus there.
+test.each(['Format', 'Normal text', 'Align'])(
+    'a press into the size box while %s is open closes it and the box keeps the focus',
+    async (menu) => {
+        editor.commands.setContent(ONE_PARAGRAPH);
+        editor.commands.setTextSelection(1);
+        await render(1920, true);
+        await openMenu(menu);
+        const box = document.querySelector<HTMLInputElement>('input[aria-label="Font size"]');
+        if (!box) throw new Error('no size box');
+        await pickInBrowserFrames(async () => {
+            await act(async () => {
+                box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+                box.focus();
+            });
+        });
+        expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
+        expect(document.activeElement === box).toBe(true);
+    },
+);
+
 test('a dialog a menu opens keeps focus', async () => {
     await render(1920, true);
     await openMenu('Format');

@@ -100,7 +100,7 @@ Three things keep the bar from closing under the user:
 
 - A bar menu has no exit animation, as shadcn's has none. A closing menu kept on screen while it fades sees the focus move into the next menu, and closes the whole bar.
 - A press on an open menu's trigger closes it. Once a menu is open, though, Radix opens the next one as the pointer moves onto its trigger, before the press the user aimed at it. `AppBarMenu` keeps a menu the pointer opened through that press, with the focus in the menu.
-- An editor that takes the focus back as a menu closes leaves it in a menu the user moved on to. `keepEditorFocus` in Docs and `useCellEditorRefocus` in Sheets return early when the focus sits in a `[role="menu"]`, as they do for a dialog. Otherwise the editor takes the focus and the next menu closes on focus-outside.
+- An editor that takes the focus back as a menu closes takes it only from the page's body, where a pick or Esc leaves it, or from a menu's trigger (`focusLeftToEditor` in `menubar.tsx`). `keepEditorFocus` in Docs and `useCellEditorRefocus` in Sheets ask it. Whatever else took the focus keeps it: the next menu, which would close on focus-outside, a dialog a pick opened, and an input a press outside landed on, such as the size box, the find bar or a comment's reply box.
 
 A bar trigger is a `role="menuitem"` inside the `role="menubar"`, so a test that looks for a menu's rows looks inside `[role="menu"]`.
 

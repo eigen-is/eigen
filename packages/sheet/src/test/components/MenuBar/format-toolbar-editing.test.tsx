@@ -264,6 +264,39 @@ test('with a cell open, a move from Format to Edit opens Edit and leaves the foc
     expect(document.activeElement?.closest('[role="menu"]')?.getAttribute('aria-labelledby')).toBe(edit?.id);
 });
 
+test('Esc on an open menu gives the focus and the selection back to the editor', async () => {
+    const { container, input } = await openEditor('hello big world');
+    await select(input, 6, 9);
+    await openMenu(container, 'Format');
+    await act(async () => {
+        document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await settle();
+    expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
+    expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
+    expect(selectedText()).toBe('big');
+});
+
+// An open menu leaves the page live, so a press outside it focuses what it lands on, such as the size box, as the menu
+// closes. The editor leaves the focus there.
+test.each(['Format', 'Inter'])(
+    'a press into the size box while %s is open leaves the focus in the box',
+    async (menu) => {
+        const { container, input } = await openEditor('hello big world');
+        await select(input, 6, 9);
+        await openMenu(container, menu);
+        const box = sizeBox(container);
+        if (!box) throw new Error('no size box');
+        await act(async () => {
+            box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+            box.focus();
+        });
+        await settle();
+        expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
+        expect(document.activeElement === box).toBe(true);
+    },
+);
+
 // A menu item can open a dialog, such as Data verification, that takes the focus as the menu closes. The
 // editor leaves the focus there.
 test('a closing menu leaves the focus in a dialog that took it', async () => {
@@ -278,6 +311,6 @@ test('a closing menu leaves the focus in a dialog that took it', async () => {
     const close = new Event('focusOutside', { cancelable: true });
     act(() => refocusCellEditor?.(close));
     expect(close.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(field);
+    expect(document.activeElement === field).toBe(true);
     dialog.remove();
 });

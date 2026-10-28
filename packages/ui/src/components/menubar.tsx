@@ -1,7 +1,8 @@
 // shadcn's Menubar on Radix: the row of menus, such as File, Edit and Format, at the left of an app's bar. One open menu
 // leaves the page live, so one press, a hover or an arrow key moves to the next menu. The trigger keeps the bar's
 // ghost-button size and fills while its menu is open. The rows come from the DropdownMenu file: MenubarContent hands
-// them the Menubar's Radix parts, so the same rows serve every bar menu and every dropdown.
+// them the Menubar's Radix parts, so the same rows serve every bar menu and every dropdown. focusLeftToEditor tells an
+// editor beside the bar whether a closing menu leaves it the focus.
 
 import { MenuRows } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
@@ -55,6 +56,14 @@ function MenubarContent({
             </MenubarPrimitive.Content>
         </MenubarPrimitive.Portal>
     );
+}
+
+// Whether a closing menu leaves the focus for the editor to take back: on the page's body, where a pick or Esc leaves it
+// as the menu unmounts, or on a menu's trigger. A press outside the open menu focuses what it lands on, such as an
+// input, and the next menu or a dialog a pick opened takes the focus too; those keep it.
+export function focusLeftToEditor(): boolean {
+    const focused = document.activeElement;
+    return !focused || focused === document.body || focused.matches('[aria-haspopup="menu"]');
 }
 
 export { Menubar, MenubarContent, MenubarMenu, MenubarTrigger };
