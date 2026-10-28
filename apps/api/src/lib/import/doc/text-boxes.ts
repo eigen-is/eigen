@@ -8,6 +8,7 @@ import type { CellBorderStyle, FigureFrameAttrs } from '@workspace/lib/docs/eige
 import {
     cellBorderValue,
     flattenNestedStories,
+    isStoryNode,
     MAX_CELL_BORDER_PX,
     MAX_TEXT_BOX_PADDING,
     MIN_CELL_BORDER_PX,
@@ -16,7 +17,6 @@ import {
     readCellBackground,
     readTextBoxSide,
     TEXT_BOX_INSET,
-    TEXT_BOX_MIN_SIDE,
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
@@ -65,6 +65,13 @@ export function loneTextBox(frame: XmlElement): XmlElement | undefined {
     const [only, ...others] = data ? xmlElements(data) : [];
     if (!only || others.length > 0 || !hasXmlName(only, WPS_NS, 'wsp')) return undefined;
     return xmlChild(only, WPS_NS, 'txbx') || xmlChild(only, WPS_NS, 'linkedTxbx') ? only : undefined;
+}
+
+// Whether Word draws the shape, by its own fill or line or its style's: a box around a lone picture stays one if it does.
+export function paintsBox(reader: Reader, shape: XmlElement): boolean {
+    const spPr = xmlChild(shape, WPS_NS, 'spPr');
+    const style = xmlChild(shape, WPS_NS, 'style');
+    return shapeFill(reader, spPr, style) !== null || shapeOutline(reader, spPr, style) !== null;
 }
 
 // A wps text box at its place and size: its width from the extent, capped at `room`, and its height a minimum, none for
@@ -169,6 +176,8 @@ function textBoxNode(reader: Reader, items: Item[], look: BoxLook, layout: Figur
     const blocks = buildBlocks(items);
     if (blocks.some((block) => block.type !== 'paragraph')) reader.lost('text-simplified');
     const paragraphs = blocks.flatMap(storyParagraphs);
+    if (paragraphs.some((paragraph) => paragraph.content?.some((node) => isStoryNode(node.type))))
+        reader.lost('text-simplified');
     const shows = paragraphs.some((paragraph) => (paragraph.content ?? []).length > 0);
     if (!shows && !look.fill && !look.outline) return null;
     return flattenNestedStories({
@@ -177,7 +186,7 @@ function textBoxNode(reader: Reader, items: Item[], look: BoxLook, layout: Figur
             id: newStoryId(),
             ...layout,
             width: readTextBoxSide(look.width) ?? undefined,
-            height: look.height === null ? null : Math.max(TEXT_BOX_MIN_SIDE, look.height),
+            height: readTextBoxSide(look.height),
             fill: look.fill,
             outline: look.outline,
             paddingX: look.paddingX,

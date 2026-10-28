@@ -816,6 +816,42 @@ describe('text boxes as boxes', () => {
         ]);
     });
 
+    // A box holds no note and no box: each is its text, and the import says it drew the text simpler.
+    test('a note or a box inside a box is its text, counted', async () => {
+        const noted = paragraph('<w:r><w:t>Boxed</w:t></w:r><w:r><w:footnoteReference w:id="1"/></w:r>');
+        const footnotes = `<w:footnote w:id="1">${text('Noted')}</w:footnote>`;
+        const note = await boxesOf(anchored({ content: noted }), { footnotes });
+        expect(note.boxes.map(lines)).toEqual([['Boxed Noted']]);
+        expect(note.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+
+        const nested = await boxesOf(anchored({ content: paragraph(boxRun({ frame: 'inline' })) }));
+        expect(nested.boxes.map(lines)).toEqual([['Boxed']]);
+        expect(nested.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+
+        const vml = `<w:r><w:pict><v:rect xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox><w:txbxContent>${text('Legacy')}</w:txbxContent></v:textbox></v:rect></w:pict></w:r>`;
+        const legacy = await boxesOf(anchored({ content: paragraph(vml) }));
+        expect(legacy.boxes.map(lines)).toEqual([['Legacy']]);
+        expect(legacy.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+    });
+
+    // A box Word draws, by its fill or its line, stays a box around its picture; an unpainted one is the picture.
+    test('a box holding only a picture is a box when it is painted, else the picture, counted', async () => {
+        const parts = {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.png"/>`,
+            media: { 'word/media/image1.png': BYTES },
+        };
+        const content = paragraph(picture('rId9'));
+        const painted = await boxesOf(
+            anchored({ content, spPr: '<a:solidFill><a:srgbClr val="FFEEAA"/></a:solidFill>' }),
+            parts,
+        );
+        expect(painted.boxes.map((box) => nodesOfType(box, 'figure').length)).toEqual([1]);
+        expect(painted.warnings).toEqual([]);
+        const bare = await boxesOf(anchored({ content, spPr: '<a:noFill/><a:ln><a:noFill/></a:ln>' }), parts);
+        expect([bare.boxes, nodesOfType(bare.json, 'figure').length]).toEqual([[], 1]);
+        expect(bare.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+    });
+
     test('in a header a box keeps its paragraphs after the anchor’s', async () => {
         const { json, bands } = docxToPmJson(
             Buffer.from(

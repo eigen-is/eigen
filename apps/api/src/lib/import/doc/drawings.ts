@@ -41,7 +41,7 @@ import { descendants, roundedInt } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks } from './paragraphs';
 import type { RunContext } from './runs';
-import { loneTextBox, readTextBox, readVmlTextBox, textBoxScope } from './text-boxes';
+import { loneTextBox, paintsBox, readTextBox, readVmlTextBox, textBoxScope } from './text-boxes';
 
 // A chart part as the doc holds it: the parts of the spec the node stores, with the part its look is read from at each
 // drawing's size, or the lines a chart left out leaves in its place; and its title, which a band or a note keeps.
@@ -128,15 +128,22 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             figures.length === 0 &&
             boxedFigure &&
             inner.length === 1 &&
-            tail.every(isCaptionLike)
+            tail.every(isCaptionLike) &&
+            !(shape && paintsBox(reader, shape))
         ) {
+            // An unpainted box around a picture is the picture: its place and size are the box's.
+            if (shape) reader.lost('text-simplified');
             const caption =
                 tail.map((para) => inlineText(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
             figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, caption } });
         } else if (shape) {
             const box = readTextBox(reader, shape, extent, layout, room, boxed);
             if (box) figures.push(box);
-        } else for (const item of boxed) context.pending.push(item);
+        } else {
+            // A box holds no box, so one inside another is its paragraphs.
+            if (inBody && context.scope.box && loneTextBox(frame)) reader.lost('text-simplified');
+            for (const item of boxed) context.pending.push(item);
+        }
         for (const figure of figures) context.pieces.push({ kind: 'node', node: figure });
         for (const item of graphicText(reader, frame, context.scope)) context.pending.push(item);
     }
@@ -181,6 +188,8 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
         const inBody = single && context.scope.story === 'body' && !context.scope.box && boxes.length > 0;
         const scope = inBody ? textBoxScope(context.scope) : onShapeFill(context.scope);
         const items = boxes.flatMap((box) => readBlocks(reader, xmlElements(box), scope));
+        if (single && context.scope.story === 'body' && context.scope.box && boxes.length > 0)
+            reader.lost('text-simplified');
         const box = inBody ? readVmlTextBox(reader, shape, reader.columnPx, context.spaceBefore, items) : null;
         if (box) context.pieces.push({ kind: 'node', node: box });
         else for (const item of items) context.pending.push(item);
