@@ -34,7 +34,7 @@ export type StagedAvatarPair = { embed: { bytes: Uint8Array; mediaType: string }
 
 // Both siblings decode from the pristine upload, never through one another, so the vCard PHOTO and the served webp are each generation one.
 export async function uploadAvatar(contacts: Contacts, file: File): Promise<string> {
-    cleanupAvatarImages(contacts).catch((e) => console.warn(`contacts: avatar sweep failed: ${e}`));
+    contacts.sweepAvatars();
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const webp = await generateImagePreview(buffer, file.type, file.name, '', 'avatar', AVATAR_PREVIEW);
@@ -158,10 +158,12 @@ async function cacheCardPhoto(contacts: Contacts, contactId: string, photo: Pars
 }
 
 // Runs under the write lock: every other avatarsBytes mutation holds it too, so the closing recount can't clobber an interleaved delta.
-export function cleanupAvatarImages(contacts: Contacts): Promise<void> {
+// The signal aborts when the contacts close: a sweep waiting for the lock leaves the queue, and a running one stops at its next await.
+export function cleanupAvatarImages(contacts: Contacts, signal: AbortSignal): Promise<void> {
     return contacts.writeLock.run(async () => {
         await contacts.storage.mkdir(PATHS.CONTACTS.AVATARS);
         const files = await contacts.storage.list(PATHS.CONTACTS.AVATARS);
+        signal.throwIfAborted();
 
         // Straight from the index: the public list hides group rows, whose photo caches are referenced too.
         const referenced = new Set(
@@ -178,10 +180,11 @@ export function cleanupAvatarImages(contacts: Contacts): Promise<void> {
         for (const file of files) {
             if (referenced.has(file)) continue;
             const stat = await contacts.storage.stat(`${PATHS.CONTACTS.AVATARS}/${file}`);
+            signal.throwIfAborted();
             if (now - stat.mtimeMs < AVATAR_STAGE_GRACE_MS) continue;
             await contacts.storage.delete(`${PATHS.CONTACTS.AVATARS}/${file}`);
         }
 
         contacts.avatarsBytes = await contacts.storage.dirSize(PATHS.CONTACTS.AVATARS);
-    });
+    }, signal);
 }

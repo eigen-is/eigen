@@ -15,7 +15,7 @@ A figure names its image, and never holds bytes or a URL. The name is a file in 
 The sections cover the schema, the title and subtitle, figures, the page and page-less mode, headers and footers, page numbers, footnotes, the open note, the panels, the outline and the table of contents, the menus, page breaks, equations, comments, the clipboard, what keeps content inside the page, table columns, a cell's fill and border, fonts, sizes and caps, a paragraph's spacing and indents, list numbering, and word count. Five things in them surprise people:
 
 - The side panels overlay the page instead of taking room from it, and the page slides and scales to stay clear ([§ The page keeps its width](#the-page-keeps-its-width-and-slides-then-scales-clear-of-a-panel)).
-- A figure stores its width in the page's own pixels, so the on-screen scale never leaks into the document ([§ A figure stores a name and a width](#a-figure-stores-a-media-name-and-a-width-in-page-pixels)).
+- A figure stores its width in the page's own pixels, and an optional height beside it, so the on-screen scale never leaks into the document ([§ A figure stores a name and a width](#a-figure-stores-a-media-name-and-a-width-in-page-pixels)).
 - Whether a doc is page-less is the doc's, but how wide its text draws is each reader's own ([§ A page-less doc draws a column at the reader's text width](#a-page-less-doc-draws-a-column-at-the-readers-text-width)).
 - Undo reverts only this tab's edits ([§ Undo is the Yjs binding's](#undo-is-the-yjs-bindings-and-reverts-only-this-tabs-edits)).
 - A tab left open across a deploy that adds a node deletes that node for everyone ([§ A tab older than the schema](#a-tab-older-than-the-schema-deletes-the-nodes-it-does-not-know)).

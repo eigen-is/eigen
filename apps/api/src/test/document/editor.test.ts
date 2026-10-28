@@ -184,9 +184,9 @@ describe('Editor', () => {
             const { mount } = await (await getHome(ctx.alice.user.id)).drive.resolveFile(mountId, uploaded.id);
             const writeFile = mount.writeFile.bind(mount);
             const write = spyOn(mount, 'writeFile').mockImplementationOnce(async (...args) => {
-                const etag = await writeFile(...args);
+                const committed = await writeFile(...args);
                 await writeFile(uploaded.id, Buffer.from('theirs'));
-                return etag;
+                return committed;
             });
             let saved: Awaited<ReturnType<typeof editorPut>>;
             try {

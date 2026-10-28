@@ -91,6 +91,9 @@ export class Contacts {
     // Whether card writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
 
+    // Aborted by destruct, so an avatar sweep queued or running then stops before it reads the closed database.
+    private readonly teardown = new AbortController();
+
     // Bulk writes in flight; while any runs, per-card events are held and the last one out closes them.
     private readonly batch = new BroadcastBatch(() => this.home.broadcast(buildContactsChangedEvent()));
 
@@ -162,7 +165,7 @@ export class Contacts {
         // Metering starts only here: the quota lookup opens the Home, which during init would await this very init.
         this.meteredIngest = atHome(this.home.user.id);
 
-        this.cleanupAvatarImages().catch((e) => console.warn(`contacts: avatar sweep failed: ${e}`));
+        this.sweepAvatars();
     }
 
     public async size(): Promise<number> {
@@ -170,12 +173,21 @@ export class Contacts {
     }
 
     public async destruct(): Promise<void> {
+        this.teardown.abort();
         if (this.managedDb) {
             await this.managedDb.close();
         }
     }
 
     // --- Seams used by contacts/*.ts ---
+
+    // Init and every avatar upload start one without waiting for it. A sweep the close stopped rejects with
+    // the abort's own reason, and only that one logs nothing.
+    public sweepAvatars(): void {
+        this.cleanupAvatarImages().catch((e) => {
+            if (e !== this.teardown.signal.reason) console.warn(`contacts: avatar sweep failed: ${e}`);
+        });
+    }
 
     public announce(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
         if (this.batch.hold()) return;
@@ -568,7 +580,7 @@ export class Contacts {
     }
 
     private cleanupAvatarImages(): Promise<void> {
-        return avatars.cleanupAvatarImages(this);
+        return avatars.cleanupAvatarImages(this, this.teardown.signal);
     }
 
     private selfRow() {

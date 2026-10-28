@@ -48,6 +48,8 @@ An upload is staged before the contact exists. It becomes two siblings, each enc
 
 That makes `avatars/` a second source of truth, not a cache. The served webp can carry animation and alpha the Apple-safe `PHOTO` lost, so a backup archives the directory ([BACKUP.md](BACKUP.md)). A `PHOTO;VALUE=uri` stays in the card and is never fetched server-side, to rule out SSRF.
 
+The sweep runs at init and with every upload, under the write lock, and nothing waits for it (`sweepAvatars`). A Home closes on idle, on a restore or on a deletion while one may still be listing the folder, so `destruct` aborts it first: a sweep waiting for the lock leaves the queue, and a running one stops at its next await, before it reads the closed database (`cleanupAvatarImages`). Only that abort is silent; any other failure logs `contacts: avatar sweep failed`.
+
 ## A book's size is two in-memory counters
 
 `Contacts.size()` answers `cardsBytes + avatarsBytes`. Both are seeded at init and moved by delta at every commit, purge and avatar write. A `SUM` per metered write would make a device sync of N cards cost O(N²). Contacts share the home data budget with mail and calendar ([QUOTA.md](QUOTA.md)). `writeCard` credits the size of the card being replaced, so a rewrite that shrinks a card is never refused.
