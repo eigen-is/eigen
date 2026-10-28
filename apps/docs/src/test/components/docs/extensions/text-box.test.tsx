@@ -583,44 +583,60 @@ test('Insert › Text box puts an open, empty box in the flow after the caret', 
     expect(a.state.doc.nodeAt(7)?.attrs).toMatchObject({ layout: 'block', alignment: 'left' });
 });
 
-// Every ResizeObserver built from here on, told that what it watches resized as `resized()` is called.
-function observeResizes(): () => Promise<void> {
-    const observers: (() => void)[] = [];
+// Every ResizeObserver built from here on, told that what it watches resized as `resized()` is called, until it
+// disconnects. A box of a fixed width whose inset or line weight grows changes its border box alone, which reaches only an
+// observer of the border box: `resized('border-box')`.
+function observeResizes(): (only?: ResizeObserverBoxOptions) => Promise<void> {
+    const observed = new Set<{ owner: object; box: ResizeObserverBoxOptions; notify: () => void }>();
     const Observer = globalThis.ResizeObserver;
     globalThis.ResizeObserver = class {
+        readonly #callback: ResizeObserverCallback;
         public constructor(callback: ResizeObserverCallback) {
-            observers.push(() => callback([], this));
+            this.#callback = callback;
         }
-        public observe() {}
+        public observe(_target: Element, options?: ResizeObserverOptions) {
+            observed.add({ owner: this, box: options?.box ?? 'content-box', notify: () => this.#callback([], this) });
+        }
         public unobserve() {}
-        public disconnect() {}
+        public disconnect() {
+            for (const entry of observed) if (entry.owner === this) observed.delete(entry);
+        }
     };
     cleanups.push(() => {
         globalThis.ResizeObserver = Observer;
     });
-    return () =>
+    return (only) =>
         act(async () => {
-            for (const observe of observers) observe();
+            for (const { box, notify } of [...observed]) if (!only || box === only) notify();
         });
 }
 
 // The box's span drawn as tall as its min-height, or as its text, which wraps to 140 px once it is narrower than 200 px
-// and is 100 px otherwise.
-function drawnAsLaidOut(editor: TestEditor) {
+// and is 100 px otherwise, and its inset beyond Word's, which the returned `inset` sets.
+function drawnAsLaidOut(editor: TestEditor): { inset: number } {
     const span = editor.view.dom.querySelector<HTMLElement>('.text-box');
     if (!span) throw new Error('no box drawn');
+    const laidOut = { inset: 0 };
     Object.defineProperty(span, 'offsetHeight', {
         configurable: true,
         get: () =>
             Math.max(
                 Number.parseFloat(span.style.minHeight) || 0,
-                Number.parseFloat(span.style.width) < 200 ? 140 : 100,
+                (Number.parseFloat(span.style.width) < 200 ? 140 : 100) + laidOut.inset,
             ),
     });
+    return laidOut;
 }
 
-// ObjectTransform's grips listen on the document once pressed; happy-dom has no pointer capture.
-async function dragGrip(editor: TestEditor, position: string, dx: number, dy: number) {
+// ObjectTransform's grips listen on the document once pressed; happy-dom has no pointer capture. `during` runs between
+// the move and the release, and `end` ends the gesture, a release by default.
+async function dragGrip(
+    editor: TestEditor,
+    position: string,
+    dx: number,
+    dy: number,
+    { during = async () => {}, end = 'release' }: { during?: () => Promise<void>; end?: 'release' | 'escape' } = {},
+) {
     const grip = [...editor.view.dom.querySelectorAll<HTMLElement>('.eigen-selection-handle')].find((element) =>
         position.split(' ').every((name) => element.classList.contains(name)),
     );
@@ -634,29 +650,62 @@ async function dragGrip(editor: TestEditor, position: string, dx: number, dy: nu
     await act(async () => {
         at('pointermove', dx, dy, document);
     });
+    await during();
     await act(async () => {
-        at('pointerup', dx, dy, document);
+        if (end === 'release') at('pointerup', dx, dy, document);
+        else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
 }
 
-test("the bottom grip writes the box's height, and a narrower width keeps an auto box auto", async () => {
+const BOTTOM = '-bottom-2.5 left-1/2';
+
+async function selectedBox(width: number) {
     const resized = observeResizes();
-    const { a } = await setup();
+    const context = await setup();
     await act(async () => {
-        a.commands.setNodeSelection(BOX);
-        a.commands.updateTextBox({ width: 220 });
+        context.a.commands.setNodeSelection(BOX);
+        context.a.commands.updateTextBox({ width });
     });
-    drawnAsLaidOut(a);
+    const laidOut = drawnAsLaidOut(context.a);
     await resized();
-    await dragGrip(a, 'top-1/2 -right-2.5', -40, 0);
+    return { ...context, resized, laidOut };
+}
+
+// The drag's preview draws the box at the height it asks, which a resize read back mid-drag would take for the drawn
+// height, and the release would then store none.
+test("the bottom grip writes the box's height, and a narrower width keeps an auto box auto", async () => {
+    const { a, resized } = await selectedBox(220);
+    await dragGrip(a, 'top-1/2 -right-2.5', -40, 0, { during: () => resized() });
     expect(a.state.doc.nodeAt(BOX)?.attrs).toMatchObject({ width: 180, height: null });
     await resized();
-    await dragGrip(a, '-bottom-2.5 left-1/2', 0, 50);
+    await dragGrip(a, BOTTOM, 0, 50, { during: () => resized() });
     expect(a.state.doc.nodeAt(BOX)?.attrs).toMatchObject({ width: 180, height: 190 });
 });
 
+test('Esc on a grip drag lets the drawn height follow the box again', async () => {
+    const { a, resized, laidOut } = await selectedBox(220);
+    await dragGrip(a, BOTTOM, 0, 50, {
+        end: 'escape',
+        during: async () => {
+            laidOut.inset = 30;
+            await resized();
+        },
+    });
+    expect(a.state.doc.nodeAt(BOX)?.attrs['height']).toBeNull();
+    await dragGrip(a, BOTTOM, 0, 50);
+    expect(a.state.doc.nodeAt(BOX)?.attrs['height']).toBe(180);
+});
+
+test("a taller inset on an auto box moves its bottom grip, though the box's content box keeps its size", async () => {
+    const { a, resized, laidOut } = await selectedBox(220);
+    laidOut.inset = 30;
+    await resized('border-box');
+    await dragGrip(a, BOTTOM, 0, 50);
+    expect(a.state.doc.nodeAt(BOX)?.attrs['height']).toBe(180);
+});
+
 // An auto box is as tall as its text, which only its drawn box knows, and it changes after the render a write causes, or
-// with no write at all as an image in it loads.
+// with no write at all as an image in it loads, or as its inset grows.
 test("the Text box panel's height follows the box as drawn", async () => {
     const resized = observeResizes();
     const { a } = await setup();
@@ -668,7 +717,7 @@ test("the Text box panel's height follows the box as drawn", async () => {
     const panel = await renderInDocument(createElement(TextBoxPropertiesPanel, { editor: a }));
     cleanups.push(panel.unmount);
     Object.defineProperty(laidOutBox(a), 'offsetHeight', { configurable: true, value: mmToPx(40) });
-    await resized();
+    await resized('border-box');
     const [, height] = document.querySelectorAll<HTMLInputElement>('input[type="number"][step="0.01"]');
     expect(height?.value).toBe('4.00');
 });

@@ -69,7 +69,8 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
         },
     });
     // An auto box is as tall as its text, which only its drawn box knows. That changes after the render a write causes,
-    // and with no write at all as an image in it loads, so the panel watches the box.
+    // and with no write at all as an image in it loads, so the panel watches the box: its border box, which alone
+    // changes with its padding or its line.
     const drawnBox = useEditorState({
         editor,
         selector: ({ editor: e }) => {
@@ -83,7 +84,7 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
         if (!drawnBox) return;
         setDrawnHeight(drawnBox.offsetHeight);
         const observer = new ResizeObserver(() => setDrawnHeight(drawnBox.offsetHeight));
-        observer.observe(drawnBox);
+        observer.observe(drawnBox, { box: 'border-box' });
         return () => observer.disconnect();
     }, [drawnBox]);
     const height = look.height ?? drawnHeight;
