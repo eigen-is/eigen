@@ -11,7 +11,7 @@ import type { Decoration } from '@tiptap/pm/view';
 import { DecorationSet } from '@tiptap/pm/view';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { StoryNode } from '@workspace/lib/docs/eigendoc';
-import { isStoryNode } from '@workspace/lib/docs/eigendoc';
+import { isStoryNode, newStoryId, readStoryId } from '@workspace/lib/docs/eigendoc';
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import type { FoundStory, StoryAnchor } from '../extensions/story';
 import { findStory, STORY_EDIT, STORY_PULL, storyAnchor, storyDecorationsKey } from '../extensions/story';
@@ -108,9 +108,16 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
     const story = anchor && editors[anchor.type];
 
     // The story goes into its editor here, before React mounts the editor in the list or the box: a node view React
-    // draws, an image's, would otherwise mount inside a layout effect, where React refuses its flushSync.
+    // draws, an image's, would otherwise mount inside a layout effect, where React refuses its flushSync. A story with
+    // no id, such as a note from an older tab or a box a web page's HTML pasted, takes one first: the box draws the
+    // open editor by it, and a re-anchor finds the story again by it.
     const open = useCallback(
         (pos: number, how: Omit<StoryOpening, 'anchor'>) => {
+            const node = body.state.doc.nodeAt(pos);
+            if (node && isStoryNode(node.type.name) && !readStoryId(node.attrs['id']))
+                body.view.dispatch(
+                    body.state.tr.setNodeAttribute(pos, 'id', newStoryId()).setMeta('addToHistory', false),
+                );
             const anchor = storyAnchor(body, pos);
             if (!anchor || pullStory(body, editors[anchor.type], anchor) === null) return;
             setOpening({ anchor, ...how });

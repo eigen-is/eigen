@@ -605,12 +605,19 @@ describe("a peer's cut and paste of the open note's reference", () => {
         expect(noteOf(b)).toBe('Note!?');
     });
 
-    test('closes a note without an id, as before', async () => {
-        const { b, session, open, hold, release } = await setup(moved(null));
+    test('keeps a note open that had no id, as it takes one when it opens', async () => {
+        const { a, b, note, session, open, hold, release } = await setup(moved(null));
         await open(9);
+        expect(session.current?.anchor?.id).toEqual(expect.any(String));
+        expect(b.state.doc.nodeAt(9)?.attrs['id']).toBe(session.current?.anchor?.id);
         hold();
-        await act(async () => cutAndPaste(b));
+        await act(async () => {
+            cutAndPaste(b);
+            note.commands.setTextSelection(5);
+            typeInto(note, '!');
+        });
         await release();
-        expect(session.current?.anchor).toBeNull();
+        expect(session.current?.anchor?.pos).toBe(4);
+        expect(noteOf(a)).toBe('Note!');
     });
 });

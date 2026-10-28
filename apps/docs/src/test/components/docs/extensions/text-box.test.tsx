@@ -231,6 +231,18 @@ test("a press on the box's comment mark opens no box, as the mark is a button of
     expect(session.current?.anchor).toBeNull();
 });
 
+// The find bar's reveal selects the match in the body, which opens the story holding it.
+test('a box without an id, as a web page pastes one, takes one as a body selection inside it opens it', async () => {
+    const { a, boxEditor, session } = await setup([paragraph(text('Anchor'), { ...box(), attrs: { id: null } })]);
+    await act(async () => {
+        a.commands.setTextSelection({ from: BOX + 2, to: BOX + 5 });
+    });
+    expect(session.current?.anchor?.id).toEqual(expect.any(String));
+    expect(a.state.doc.nodeAt(BOX)?.attrs['id']).toBe(session.current?.anchor?.id);
+    expect(a.view.nodeDOM(BOX)?.contains(boxEditor.view.dom)).toBe(true);
+    expect(boxEditor.state.doc.textBetween(boxEditor.state.selection.from, boxEditor.state.selection.to)).toBe('Ins');
+});
+
 // A peer's paste of an earlier copy and an undo of the original's delete can leave two boxes with one id.
 const boxTexts = (editor: TestEditor) => {
     const texts: string[] = [];

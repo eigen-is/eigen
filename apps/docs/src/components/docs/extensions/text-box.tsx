@@ -9,8 +9,6 @@ import type { NodeViewProps, NodeViewRendererProps } from '@tiptap/react';
 import { EditorContent, ReactNodeView, ReactNodeViewRenderer } from '@tiptap/react';
 import {
     isPositioned,
-    newStoryId,
-    readStoryId,
     readTextBoxAttrs,
     TEXT_BOX_MIN_SIDE,
     TextBoxNode,
@@ -36,19 +34,6 @@ export const TextBoxContext = createContext<{ anchor: StoryAnchor | null; editor
     anchor: null,
     editor: null,
 });
-
-// The open editor follows a box by its id, so a box a peer's older tab stripped of one gets one as it opens.
-function opened(
-    editor: Editor,
-    pos: number,
-    at: { left: number; top: number } | null,
-    onOpen: TextBoxOptions['onOpen'],
-) {
-    const node = editor.state.doc.nodeAt(pos);
-    if (node && !readStoryId(node.attrs['id']))
-        editor.view.dispatch(editor.state.tr.setNodeAttribute(pos, 'id', newStoryId()).setMeta('addToHistory', false));
-    onOpen(pos, at);
-}
 
 const fitTextBox = (next: Box, maxWidth: number) => ({
     width: Math.round(Math.max(TEXT_BOX_MIN_SIDE, Math.min(maxWidth, next.width))),
@@ -99,7 +84,7 @@ function TextBoxView(props: NodeViewProps) {
         const pos = getPos();
         if (pos === undefined) return;
         e.preventDefault();
-        opened(editor, pos, { left: e.clientX, top: e.clientY }, onOpen);
+        onOpen(pos, { left: e.clientX, top: e.clientY });
     };
     const box: Box | null =
         selected && isEditable && !open
@@ -161,7 +146,7 @@ export const TextBox = TextBoxNode.extend<TextBoxOptions>({
             Enter: () => {
                 const selection = selectedBox();
                 if (!selection || !this.editor.isEditable) return false;
-                opened(this.editor, selection.from, null, this.options.onOpen);
+                this.options.onOpen(selection.from, null);
                 return true;
             },
             // A box in the flow leaves to the caret after it; one in front of or behind the text to its paragraph's
@@ -176,7 +161,6 @@ export const TextBox = TextBoxNode.extend<TextBoxOptions>({
 
     addProseMirrorPlugins() {
         const { onOpen } = this.options;
-        const editor = this.editor;
         return [
             ...figureFramePlugins('textBox'),
             new Plugin({
@@ -190,7 +174,7 @@ export const TextBox = TextBoxNode.extend<TextBoxOptions>({
                             const pos = behindFigureAt(view, event.clientX, event.clientY, false);
                             if (pos === null || view.state.doc.nodeAt(pos)?.type.name !== 'textBox') return false;
                             event.preventDefault();
-                            opened(editor, pos, { left: event.clientX, top: event.clientY }, onOpen);
+                            onOpen(pos, { left: event.clientX, top: event.clientY });
                             return true;
                         },
                     },
