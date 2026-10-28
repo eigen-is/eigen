@@ -324,7 +324,10 @@ export function anchorPaddingPx(textblock: JSONContent, contained: boolean, norm
     return ptToPx(spaceBefore ?? (textblock.type === 'paragraph' ? normal.spaceBefore : 0));
 }
 
-export const LINK_LOOK = { color: proseColor('.eigen-prose a', 'color') };
+export const LINK_LOOK = {
+    color: proseColor('.eigen-prose a', 'color'),
+    underline: proseValue('.eigen-prose a', 'text-decoration') === 'underline',
+};
 
 // eigen-prose.css numbers a list that stores no type by the numbered lists it sits in: `ol`, then Docs' `ol ol` and on.
 const UNTYPED_LIST_FORMATS = Array.from({ length: LIST_LEVELS }, (_, depth) => {

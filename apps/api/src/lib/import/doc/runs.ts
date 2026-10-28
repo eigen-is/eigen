@@ -396,7 +396,7 @@ const SMALL_PRINT = 0.85;
 // Word's Hyperlink style; any color from the theme's link colors underlines too. The editor draws its own, so on a link
 // they are no mark.
 const LINK_LOOKS = new Map([
-    [LINK_LOOK.color, false],
+    [LINK_LOOK.color, LINK_LOOK.underline],
     ['1155CC', true],
     ['0563C1', true],
 ]);

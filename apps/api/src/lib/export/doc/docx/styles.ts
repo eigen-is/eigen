@@ -335,7 +335,7 @@ export function styleDefinitions(normal: NormalStyle, { contents }: { contents: 
             name: STYLE_NAMES.Hyperlink,
             basedOn: 'DefaultParagraphFont',
             uiPriority: 99,
-            rPr: { color: LINK_LOOK.color },
+            rPr: { color: LINK_LOOK.color, underline: LINK_LOOK.underline || undefined },
         },
         {
             type: 'character',

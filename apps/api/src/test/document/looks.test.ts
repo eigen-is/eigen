@@ -146,8 +146,10 @@ describe('the writer draws the editor look from the vocabulary', () => {
         expect(w(prop('Caption', 'rPr', 'color'), 'val')).toBe(CAPTION_LOOK.color);
     });
 
-    test('a link: its color', () => {
+    test('a link: its color and its single underline, as Word draws its own Hyperlink style', () => {
         expect(w(prop('Hyperlink', 'rPr', 'color'), 'val')).toBe(LINK_LOOK.color);
+        expect(LINK_LOOK.underline).toBe(true);
+        expect(w(prop('Hyperlink', 'rPr', 'u'), 'val')).toBe('single');
     });
 
     test('a header cell: its fill', () => {
