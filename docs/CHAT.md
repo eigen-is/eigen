@@ -60,7 +60,7 @@ The mention list in the composer opens on `@` only at the start of the text or a
 
 ## Every change reaches each effective member over SSE
 
-A post, edit or delete broadcasts a `chat:` event to the home that owns the room and relays it to every effective member (`getEffectiveMembers`, then `relayEventToMembers`). Effective members include people who inherit access from a parent folder and the members of a team entry, who have no direct ACL row on the room. A change in a comment thread also sends `chat:comment-index-updated` for the container. The client handler only invalidates queries ([SSE.md](SSE.md)).
+A post, edit or delete sends a `chat:` event to the home that owns the room and to every effective member who may read it (`getEffectiveMembers`, then `broadcastToOwnerAndMembers`). Effective members include people who inherit access from a parent folder and the members of a team entry, who have no direct ACL row on the room. A change in a comment thread also sends `chat:comment-index-updated` for the container. The client handler only invalidates queries ([SSE.md](SSE.md)).
 
 ## Messages page backwards from the newest
 
