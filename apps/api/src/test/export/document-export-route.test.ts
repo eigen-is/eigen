@@ -106,7 +106,7 @@ describe('Eigendoc export route — response contract', () => {
         // Full document, not the budgeted preview: blocks past the 20-block cap render,
         // media embeds as a data URI, and hostile fixture content stays sanitized.
         expect(html).toContain(GOLDEN_BEYOND_CAP);
-        expect(html).toContain('src="data:image/png;base64,');
+        expect(html).toContain('src="data:image/webp;base64,');
         expect(html).not.toMatch(/<script/i);
     }, 120_000);
 
@@ -152,7 +152,7 @@ describe('Eigenslides export route — response contract', () => {
         // Every slide renders (no 8-slide preview cap), media embeds as a data URI,
         // and the injected script never survives into the download.
         expect(html).toContain(GOLDEN_BEYOND_CAP);
-        expect(html).toContain('data:image/png;base64,');
+        expect(html).toContain('data:image/webp;base64,');
         expect(html).not.toMatch(/<script/i);
         expect(html).toContain('<div class="deck">');
     }, 120_000);
@@ -167,13 +167,13 @@ describe('Eigenslides export route — response contract', () => {
         expect(res.headers.get('content-security-policy')).toBe(EXPORT_CSP);
         const zip = openZip(Buffer.from(await res.arrayBuffer()));
         expect(new TextDecoder().decode(zip.read('docProps/core.xml'))).toContain('<dc:title>Deck Contract</dc:title>');
-        // Every slide, the ones past the preview's cap too, and the picture as a PNG from its source.
+        // Every slide, the ones past the preview's cap too, and the opaque picture as a JPEG from its source.
         expect(zip.names().filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))).toHaveLength(10);
         expect(
-            Buffer.from(zip.read('ppt/media/image1.png') ?? [])
-                .subarray(1, 4)
-                .toString(),
-        ).toBe('PNG');
+            Buffer.from(zip.read('ppt/media/image1.jpeg') ?? [])
+                .subarray(0, 3)
+                .toString('hex'),
+        ).toBe('ffd8ff');
         // A deck the pptx holds whole says nothing about losses.
         expect(res.headers.get(EXPORT_SUMMARY_HEADER)).toBeNull();
     }, 120_000);
@@ -314,6 +314,12 @@ suite('Document export routes — PDF (WeasyPrint end-to-end)', () => {
         },
         120_000,
     );
+
+    // A screenshot or chart is an opaque PNG, which WeasyPrint would decode and deflate again: it prints as a JPEG too.
+    test('an opaque PNG prints as a JPEG', async () => {
+        const printed = await printedPicture('doc', 'screenshot.png', 'image/png', await gradient(3).png().toBuffer());
+        expect(printed).toEqual({ images: ['DCTDecode'], masks: 0 });
+    }, 120_000);
 
     // JPEG has no alpha, so a lossy WebP with one prints as a PNG, its alpha a soft mask beside it.
     test('a picture with alpha prints as a PNG, its alpha a soft mask', async () => {

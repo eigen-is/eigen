@@ -32,8 +32,9 @@ export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
 // (Mount I/O and a re-encode from the source), extracted from the upload by an import.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
-// An export's media; a raster carries the thumbnail Worker's width and height, the source's. The Office arms add an
-// SVG's size inside the transform process.
+// An export's media. A raster made from its source carries the width and height of the picture as sent, and the
+// cached preview an HTML download takes carries none. The docx, pptx and xlsx writers add an SVG's size inside the
+// transform process.
 export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 
 // An export's renderer asks for the media its document names once it has read the document, so the main thread

@@ -1,10 +1,12 @@
+// The thumbnail Worker's resize: one image in, resized and encoded to the format asked for, with the source's size and
+// whether it holds alpha or frames. It is its own module so the transform Worker re-encodes a docx's data: figure through
+// it without the thumbnail Worker's message handler.
+
 import type { Sharp } from 'sharp';
 import sharp from 'sharp';
 import { THUMBNAIL_TIMEOUT_SECONDS } from './thumbnail-timeout';
 import type { ImageResult, WorkerInput } from './thumbnail-worker';
 
-// The thumbnail Worker's resize, its own module so the transform Worker re-encodes a docx's data: figure through it
-// without the thumbnail Worker's message handler.
 export async function sharpResize(
     source: Buffer | string,
     options: WorkerInput['options'],
@@ -47,8 +49,12 @@ export async function sharpResize(
         const data = await encoded.timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS }).toBuffer();
 
         // hasAlpha/frameCount describe the pristine source, so the avatar-staging caller can pick the embed
-        // format (opaque still → JPEG, alpha → PNG, animated → GIF) from one decode.
-        return { data, width, height, hasAlpha: metadata.hasAlpha ?? false, frameCount: metadata.pages ?? 1 };
+        // format (opaque still → JPEG, alpha → PNG, animated → GIF) from one decode. A JPEG, which drops alpha, asks
+        // whether any pixel is see-through, as a macOS screenshot carries an alpha channel opaque throughout. That
+        // reads every pixel again, so only a JPEG of a source with the channel pays for it.
+        const hasAlpha =
+            (metadata.hasAlpha ?? false) && (options.format !== 'jpeg' || !(await sharp(source).stats()).isOpaque);
+        return { data, width, height, hasAlpha, frameCount: metadata.pages ?? 1 };
     } catch {
         return null;
     }

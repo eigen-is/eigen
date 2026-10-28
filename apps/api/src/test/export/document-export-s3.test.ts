@@ -54,7 +54,7 @@ describe('Eigendoc export from an S3 mount', () => {
         const res = await exportRequest('docx');
         expect(res.status).toBe(200);
         const zip = openZip(new Uint8Array(await res.arrayBuffer()));
-        expect(zip.names()).toContain('word/media/image1.png');
+        expect(zip.names()).toContain('word/media/image1.jpeg');
         expect(s3.fake.heads.get(mediaKey)).toBe(2);
     }, 120_000);
 

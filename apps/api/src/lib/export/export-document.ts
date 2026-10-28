@@ -150,6 +150,6 @@ export async function runDocumentExport(
             : { kind: 'export', ...job, title: stripEigenExtension(path.name) };
     return runTransformToBytes(mount, path, request, {
         signal,
-        prepareMedia: (names, prepSignal) => collectExportMedia(mount, path, names, prepSignal),
+        prepareMedia: (names, prepSignal) => collectExportMedia(mount, path, job.format, names, prepSignal),
     });
 }

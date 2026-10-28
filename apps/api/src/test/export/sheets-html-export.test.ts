@@ -1525,11 +1525,11 @@ describe('Sheets HTML export — floating images', () => {
     }, 60_000);
 });
 
-// WeasyPrint decodes a PNG whole and embeds a JPEG as it is, so an export charges a PNG the pixels it decodes to, once
+// WeasyPrint decodes a PNG whole and embeds a JPEG as it is, so the PDF charges a PNG the pixels it decodes to, once
 // per picture, on top of the bytes its tags write. The size is the one the main thread sends with the picture.
 describe('Sheets HTML export — decoded pixels', () => {
-    // What collectExportMedia sends: a PNG or JPEG made from the source, with the source's width and height. The bytes
-    // are a few pixels, so the size sent beside them is all the charge can read.
+    // What collectExportMedia sends the PDF: a PNG or JPEG made from the source, with the size it was sent at. The
+    // bytes are a few pixels, so the size sent beside them is all the charge can read.
     async function picture(name: string, format: 'png' | 'jpeg', width: number, height: number): Promise<ExportMedia> {
         const background = { r: 255, g: 119, b: 85 };
         const bytes = await sharp({ create: { width: 4, height: 4, channels: 3, background } })
@@ -1542,8 +1542,8 @@ describe('Sheets HTML export — decoded pixels', () => {
         return Promise.all(Array.from({ length: count }, (_, i) => picture(`picture-${i}`, format, width, height)));
     }
 
-    // A sheet with one tag for each media name in `tags`, exported to the HTML WeasyPrint prints.
-    async function exportPictures(media: ExportMedia[], tags: string[]) {
+    // A sheet with one tag for each media name in `tags`, exported to the HTML WeasyPrint prints or the download.
+    async function exportPictures(media: ExportMedia[], tags: string[], format: 'pdf-html' | 'html' = 'pdf-html') {
         const sheet: Sheet = {
             id: 'sheet-1',
             name: 'Sheet1',
@@ -1555,7 +1555,7 @@ describe('Sheets HTML export — decoded pixels', () => {
         };
         const doc = new Y.Doc();
         doc.getMap('state').set('snapshot', encodeSheetsSnapshot([sheet], { computed: true }));
-        const exported = await renderEigensheetsExport(doc, 'pdf-html', 'Pictures', async () => media);
+        const exported = await renderEigensheetsExport(doc, format, 'Pictures', async () => media);
         const html = new TextDecoder().decode(exported.data);
         return { drawn: html.match(/<img /g)?.length ?? 0, warnings: exported.warnings };
     }
@@ -1572,14 +1572,16 @@ describe('Sheets HTML export — decoded pixels', () => {
         expect(warnings).toEqual([{ code: 'images-dropped', count: 6 }]);
     });
 
-    // The main thread sends the source's size, and a source past 2560 px goes as a picture shrunk to fit inside it.
-    test('a PNG made from a larger source costs the pixels of the 2560 px picture it was sent as', async () => {
-        const media = await pictures(60, 'png', 5120, 2880);
-        const { drawn } = await exportPictures(
+    // The browser that opens the download decodes its pictures, so WeasyPrint's cost has no part in it.
+    test('the HTML download charges no pixels', async () => {
+        const media = await pictures(60, 'png', 2560, 1440);
+        const { drawn, warnings } = await exportPictures(
             media,
             media.map(({ name }) => name),
+            'html',
         );
-        expect(drawn).toBe(54);
+        expect(drawn).toBe(60);
+        expect(warnings).toEqual([]);
     });
 
     // A full cap of the JPEGs with the most pixels a byte can hold, flat 2560 px squares, took WeasyPrint 1.3 s.

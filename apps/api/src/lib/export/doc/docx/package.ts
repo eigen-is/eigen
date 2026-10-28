@@ -9,8 +9,8 @@ import { A_NS, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS, WPS_NS } from '..
 import type { PartRelationships } from '../../../ooxml/opc';
 import type { NOTE_SEPARATORS, StyleId } from '../../../ooxml/wordml';
 import { SINGLE_LINE, WEB_VIEW, WORD_SETTINGS_URI } from '../../../ooxml/wordml';
+import type { OfficeImages } from '../../export-image';
 import type { OfficeCharts } from '../../office-chart';
-import type { OfficeImages } from '../../office-image';
 import type { FontSlot } from './fonts';
 import type { List } from './numbering';
 import type { Block, NumberingRef } from './paragraphs';

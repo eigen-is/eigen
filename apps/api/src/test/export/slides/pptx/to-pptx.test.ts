@@ -17,7 +17,7 @@ import * as Y from 'yjs';
 import type { XmlElement } from '../../../../lib/core/xml';
 import { xmlAttr, xmlChild, xmlElements, xmlText } from '../../../../lib/core/xml';
 import { toTransferableText } from '../../../../lib/document/transform/protocol';
-import type { OfficeMedia } from '../../../../lib/export/office-image';
+import type { OfficeMedia } from '../../../../lib/export/export-image';
 import { sanitizeSceneHtml } from '../../../../lib/export/sanitize';
 import { writePptx } from '../../../../lib/export/slides/pptx/to-pptx';
 import { renderEigenslidesExport } from '../../../../lib/export/slides/transform';

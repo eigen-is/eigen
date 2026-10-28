@@ -73,6 +73,10 @@ describe('collectExportMedia', () => {
         const mediaId = await mount.createFolder(containerId, 'media');
         sources = new Map([
             ['chart.png', await gradient(800, 500).png().toBuffer()],
+            // A gradient under half alpha, which a JPEG would lose.
+            ['overlay.png', await gradient(400, 250).ensureAlpha(0.5).png().toBuffer()],
+            // An alpha channel opaque throughout, as a macOS screenshot carries one.
+            ['screenshot.png', await gradient(400, 250).ensureAlpha(1).png().toBuffer()],
             ['wide.png', await gradient(3000, 1000).png().toBuffer()],
             ['still.gif', await gradient(60, 40).gif().toBuffer()],
             [
@@ -149,17 +153,22 @@ describe('collectExportMedia', () => {
             const mime = mimes[name.split('.').pop() ?? ''] ?? '';
             await mount.createFile(mediaId, name, mime, bytes.length, bytes);
         }
+        // A source whose row says it is past the cap, its stored bytes a small PNG: the size is all the prep reads.
+        await mount.createFile(mediaId, 'huge.png', 'image/png', MAX_DECOMPRESSED_BYTES + 1, sources.get('chart.png'));
     });
 
     afterAll(() => {
         rmSync(dir, { recursive: true, force: true });
     });
 
-    // Every file, as a document naming them all asks for. Every format, a docx or a PDF alike, asks the same.
-    async function collect(signal = new AbortController().signal): Promise<ExportMedia[]> {
+    // Every file, as a document naming them all asks for. A docx, a pptx, an xlsx and the PDF take the same.
+    async function collect(
+        format: 'docx' | 'pdf-html' | 'html' = 'docx',
+        signal = new AbortController().signal,
+    ): Promise<ExportMedia[]> {
         const container = await mount.getPath(containerId);
         if (!container) throw new Error('no container');
-        return collectExportMedia(mount, container, [...sources.keys()], signal);
+        return collectExportMedia(mount, container, format, [...sources.keys(), 'huge.png'], signal);
     }
 
     // An export re-encodes every image from its source on the thumbnail semaphore every upload and preview shares.
@@ -199,6 +208,7 @@ describe('collectExportMedia', () => {
             failure = await collectExportMedia(
                 mount,
                 container,
+                'docx',
                 ['drawing.svg', 'html.svg', 'chart.png'],
                 new AbortController().signal,
             ).catch((err: unknown) => err);
@@ -217,7 +227,7 @@ describe('collectExportMedia', () => {
         });
         let calls = 0;
         try {
-            await collect(controller.signal);
+            await collect('docx', controller.signal);
             calls = spy.mock.calls.length;
         } finally {
             spy.mockRestore();
@@ -225,21 +235,39 @@ describe('collectExportMedia', () => {
         expect(calls).toBe(1);
     }, 60_000);
 
-    test('an export takes a PNG of a lossless source and a JPEG of every other, with the Worker size', async () => {
-        const media = await collect();
-        const kinds = (name: string) => {
-            const { contentType, data, width, height } = find(media, name);
-            return [contentType, signatureOf(data).slice(0, contentType === 'image/png' ? 8 : 6), width, height];
-        };
-        expect(kinds('chart.png')).toEqual(['image/png', PNG_SIGNATURE, 800, 500]);
-        expect(kinds('still.gif')).toEqual(['image/png', PNG_SIGNATURE, 60, 40]);
-        expect(kinds('lossless.webp')).toEqual(['image/png', PNG_SIGNATURE, 320, 200]);
-        expect(kinds('tagged-lossless.webp')).toEqual(['image/png', PNG_SIGNATURE, 320, 200]);
-        expect(kinds('photo.jpg')).toEqual(['image/jpeg', JPEG_SIGNATURE, 600, 400]);
-        expect(kinds('lossy.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
-        expect(kinds('tagged.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
-        expect(kinds('photo.avif')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
-    }, 60_000);
+    // The quality each source was encoded at, by file name, read off the calls to the thumbnail Worker.
+    async function collectWithQuality(format: 'docx' | 'pdf-html'): Promise<[ExportMedia[], Map<string, unknown>]> {
+        const spy = spyOn(thumbnails, 'generateImagePreview');
+        try {
+            const media = await collect(format);
+            const quality = new Map(spy.mock.calls.map(([, , fileName, , , options]) => [fileName, options?.quality]));
+            return [media, quality];
+        } finally {
+            spy.mockRestore();
+        }
+    }
+
+    test.each(['docx', 'pdf-html'] as const)(
+        '%s takes a JPEG at 90 of an opaque lossless source and at 80 of a photo, with the size sent',
+        async (format) => {
+            const [media, quality] = await collectWithQuality(format);
+            const kinds = (name: string) => {
+                const { contentType, data, width, height } = find(media, name);
+                const signature = signatureOf(data).slice(0, contentType === 'image/png' ? 8 : 6);
+                return [contentType, signature, quality.get(name), width, height];
+            };
+            expect(kinds('chart.png')).toEqual(['image/jpeg', JPEG_SIGNATURE, 90, 800, 500]);
+            expect(kinds('screenshot.png')).toEqual(['image/jpeg', JPEG_SIGNATURE, 90, 400, 250]);
+            expect(kinds('lossless.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 90, 320, 200]);
+            expect(kinds('tagged-lossless.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 90, 320, 200]);
+            expect(kinds('photo.jpg')).toEqual(['image/jpeg', JPEG_SIGNATURE, 80, 600, 400]);
+            expect(kinds('lossy.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 80, 320, 200]);
+            expect(kinds('tagged.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 80, 320, 200]);
+            expect(kinds('photo.avif')).toEqual(['image/jpeg', JPEG_SIGNATURE, 80, 320, 200]);
+            expect(kinds('still.gif')).toEqual(['image/jpeg', JPEG_SIGNATURE, 90, 60, 40]);
+        },
+        60_000,
+    );
 
     test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with ICC, EXIF or alpha', () => {
         const chunk = (name: string) => sources.get(name)?.toString('latin1', 12, 16);
@@ -266,20 +294,32 @@ describe('collectExportMedia', () => {
         }
     }, 60_000);
 
-    test('a PNG comes from the source, pixel for pixel, never the lossy preview', async () => {
-        const chart = find(await collect(), 'chart.png');
-        const raw = (bytes: Buffer) => sharp(bytes).removeAlpha().raw().toBuffer();
-        const source = sources.get('chart.png');
+    test('a source with alpha is a PNG of it, pixel for pixel, never the lossy preview', async () => {
+        const overlay = find(await collect(), 'overlay.png');
+        const raw = (bytes: Buffer) => sharp(bytes).raw().toBuffer();
+        const source = sources.get('overlay.png');
         if (!source) throw new Error('no source');
-        expect((await raw(Buffer.from(chart.data))).equals(await raw(source))).toBe(true);
+        expect(overlay.contentType).toBe('image/png');
+        expect((await raw(Buffer.from(overlay.data))).equals(await raw(source))).toBe(true);
     }, 60_000);
 
-    test('a source past 2560 px shrinks to it, its ratio kept, and reports its own size', async () => {
+    test('a source past 2560 px shrinks to it, its ratio kept, and reports the size it was sent at', async () => {
         const wide = find(await collect(), 'wide.png');
         const { width, height } = await sharp(Buffer.from(wide.data)).metadata();
         expect([width, height]).toEqual([2560, 853]);
-        expect([wide.width, wide.height]).toEqual([3000, 1000]);
+        expect([wide.width, wide.height]).toEqual([2560, 853]);
     }, 60_000);
+
+    // The source is read whole, so one past the cap is left out unread, and the document counts it as dropped.
+    test.each(['docx', 'pdf-html'] as const)(
+        '%s leaves out a source past MAX_DECOMPRESSED_BYTES and sends the rest',
+        async (format) => {
+            const names = (await collect(format)).map((item) => item.name);
+            expect(names).not.toContain('huge.png');
+            expect(names).toContain('chart.png');
+        },
+        60_000,
+    );
 
     test("a photo's EXIF, its GPS included, does not reach the export", async () => {
         const source = sources.get('photo.jpg');
@@ -312,5 +352,15 @@ describe('collectExportMedia', () => {
     test("an export shows only what the viewer shows as an image: a PDF's media stays out, whatever its name", async () => {
         const names = (await collect()).map((item) => item.name);
         expect(names).not.toContain('art.ai');
+    }, 60_000);
+
+    // The browser that opens the download draws a WebP, and an animated GIF's preview still moves.
+    test('the HTML download keeps the screen preview: WebP rasters, the SVG as its own bytes, no size', async () => {
+        const media = await collect('html');
+        const rasters = media.filter((item) => item.contentType !== 'image/svg+xml');
+        expect(rasters.map((item) => item.name)).toContain('photo.jpg');
+        for (const item of rasters) expect([item.name, item.contentType]).toEqual([item.name, 'image/webp']);
+        for (const item of media) expect([item.width, item.height]).toEqual([undefined, undefined]);
+        expect(Buffer.from(find(media, 'drawing.svg').data).toString('utf8')).toBe(SVG);
     }, 60_000);
 });

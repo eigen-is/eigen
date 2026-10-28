@@ -39,8 +39,8 @@ import {
 } from '../../document/transform/protocol';
 import { TWIPS_PER_PX } from '../../ooxml/wordml';
 import { dataUriMediaType, isDataUri } from '../../shared/data-uri';
+import { withSvgFallbacks } from '../export-image';
 import { exportHtmlDocument } from '../html-document';
-import { withSvgFallbacks } from '../office-image';
 import { renderEquations, svgEquations } from './equations';
 import { figureMediaKey, pastedFigureMedia } from './pasted-media';
 import { renderDocHtml, withAbsoluteLinks } from './render';

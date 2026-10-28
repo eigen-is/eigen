@@ -20,14 +20,15 @@ import {
     SLIDE_MASTER_TYPE,
     SLIDE_TYPE,
 } from '../../../ooxml/presentationml';
+import type { OfficeMedia } from '../../export-image';
+import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../export-image';
 import { officeChartContentTypes, officeCharts } from '../../office-chart';
-import type { OfficeMedia } from '../../office-image';
-import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
 import type { Deck } from './package';
 import { LAYOUT_XML, MASTER_XML, NAMESPACES, slideXml } from './package';
 
 // A deck → hand-written PresentationML, one slide per frame, each element as the DrawingML shape that draws it. Takes
-// the scene sanitizeSceneHtml returns, and media by name as the Office media prep hands it over (an SVG beside its PNG).
+// the scene sanitizeSceneHtml returns, and media by name as the main thread's media prep hands it over (an SVG beside
+// its PNG).
 export function writePptx(
     scene: VectorScene,
     { title, media, lost }: { title: string; media: OfficeMedia[]; lost: LossCounter['lost'] },

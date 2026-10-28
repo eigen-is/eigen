@@ -225,17 +225,21 @@ describe('deck export — pptx', () => {
         for (const name of zip.names().filter((n) => n.endsWith('.xml') || n.endsWith('.rels'))) {
             expect([name, parseOoxml(zip.read(name) ?? new Uint8Array()) !== null]).toEqual([name, true]);
         }
-        // The PNG re-encoded from its source, the SVG as itself beside the PNG the transform draws from it.
+        // The opaque PNG re-encoded from its source as a JPEG, the SVG as itself beside the PNG the transform draws
+        // from it.
         expect(zip.names().filter((n) => n.startsWith('ppt/media/'))).toEqual([
-            'ppt/media/image1.png',
+            'ppt/media/image1.jpeg',
             'ppt/media/image2.png',
             'ppt/media/image2.svg',
         ]);
         const signature = (name: string) =>
             Buffer.from(zip.read(name) ?? [])
-                .subarray(1, 4)
-                .toString();
-        expect([signature('ppt/media/image1.png'), signature('ppt/media/image2.png')]).toEqual(['PNG', 'PNG']);
+                .subarray(0, 4)
+                .toString('hex');
+        expect([signature('ppt/media/image1.jpeg'), signature('ppt/media/image2.png')]).toEqual([
+            expect.stringMatching(/^ffd8ff/),
+            '89504e47',
+        ]);
         expect(new TextDecoder().decode(zip.read('ppt/media/image2.svg'))).toContain('<rect');
 
         const slide = new TextDecoder().decode(zip.read('ppt/slides/slide1.xml'));

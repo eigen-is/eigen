@@ -16,8 +16,8 @@ import type { LossCounter } from '../../../document/transform/protocol';
 import { A_NS, P_NS, R_NS } from '../../../ooxml/ooxml';
 import type { PartRelationships, Relationship } from '../../../ooxml/opc';
 import { partRelationships } from '../../../ooxml/opc';
+import type { OfficeImages } from '../../export-image';
 import type { OfficeCharts } from '../../office-chart';
-import type { OfficeImages } from '../../office-image';
 import { backgroundXml } from './pictures';
 import { elementXml } from './shapes';
 

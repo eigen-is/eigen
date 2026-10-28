@@ -53,6 +53,9 @@ type MediaUrls = Map<string, string>;
 // The pixels WeasyPrint decodes of each picture, by media name. A JPEG has none, as WeasyPrint embeds it as it is.
 export type MediaPixels = Map<string, number>;
 
+// No picture costs pixels: a browser draws them, as in a preview or the HTML download, not WeasyPrint.
+export const NO_PIXELS: MediaPixels = new Map();
+
 type ContentSize = { width: number; height: number };
 
 // The export interns every cell's style into a class declared in one <style> element. A workbook repeats a few hundred
@@ -91,13 +94,9 @@ const CELL_BYTES = 50;
 // cost little by their sources alone, but each still writes these bytes.
 const IMAGE_TAG_BYTES = 200;
 
-// The decoded pixels that cost a cell. An export's rasters reach WeasyPrint as PNGs or JPEGs of at most 2560 px a side.
-// It decodes a PNG whole and writes its pixels into the PDF again, so many distinct pictures cost it far more than their
-// bytes say. A 2560 by 1440 PNG of a real photo took it 0.78 s of CPU, 210 ns a pixel. At 800 pixels a cell such a
-// picture costs 4,608 cells beside those of its bytes. The rate was set on WebPs of real photos, 0.58 s each, so that
-// the 32 the cap held took about the 19 s its 2,000 pages take. A JPEG it embeds as it is and decodes nothing, so a
-// JPEG costs its bytes alone: the most pixels a cap of JPEGs can carry, 241 flat 2560 px squares of 39 KB each, took it
-// 1.3 s. WeasyPrint decodes a picture once however many tags show it, so its pixels are charged once.
+// The decoded pixels that cost a cell. WeasyPrint decodes a PNG whole and deflates its pixels into the PDF again, so
+// many distinct pictures cost it far more than their bytes say: a 2560 by 1440 PNG of a photo took it 0.78 s of CPU.
+// It decodes a picture once however many tags show it, so its pixels are charged once.
 const PIXELS_PER_CELL = 800;
 
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.
@@ -184,7 +183,7 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
             bounds.maxY > offset.top,
     );
     // The browser draws the preview, so its pictures cost no decoded pixels: WeasyPrint never sees them.
-    const floating = chargeFloating(inClip, mediaUrls, PREVIEW_FLOATING_CELLS, new Map());
+    const floating = chargeFloating(inClip, mediaUrls, PREVIEW_FLOATING_CELLS, NO_PIXELS);
     const first = renderSheet({ ...windowed, floating: floating.kept }, new FormulaEngine(), sheetsResolver(sheets), {
         clip,
         mediaUrls,

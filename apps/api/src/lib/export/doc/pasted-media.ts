@@ -10,7 +10,7 @@ import { sanitizeMedia } from '../../document/media';
 import type { ExportMedia } from '../../document/transform/protocol';
 import { toTransferableBuffer } from '../../document/transform/protocol';
 import { splitDataUri } from '../../shared/data-uri';
-import { encodeExportImage } from '../office-image';
+import { encodeExportImage } from '../export-image';
 
 // The media item a figure draws: its media file, else a pasted base64 data: src, which pastedFigureMedia encodes under
 // that src. A media name holds no `/`, so no src can equal one.
