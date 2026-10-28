@@ -35,7 +35,7 @@ Every app needs work:
 - **Drive**: bulk operations, drag-and-drop improvements
 - **Docs**: import from Markdown, more export polish
 - **Sheets**: sheet engine cleanup (forked from fortune-sheet)
-- **Slides**: more object types, and what the pptx import still leaves out (connector arrowheads, crop, SmartArt without a cached drawing)
+- **Slides**: more object types, and what the pptx import still leaves out (an open path's arrowheads, crop, SmartArt without a cached drawing)
 - **Stickies**: labels, filters, archiving
 - **Calendar**: recurring event edge cases, CalDAV compliance
 - **Contacts**: merge and deduplicate
