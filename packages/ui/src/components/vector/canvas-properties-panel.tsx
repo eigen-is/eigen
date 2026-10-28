@@ -9,7 +9,8 @@
 // Every row gates on a CAPABILITY, never on a type list: `fill` opens the Fill block, `strokeStyle` its
 // dash row, `corners` the Shape section. The Stroke and Sketch sections need no gate — every kind paints
 // a stroke, and every kind is drawn by roughjs. What a capability cannot express — rich text's
-// typography, the image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI.
+// typography, the image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI, or for text from
+// RichTextPanelSection, which any selection of text-holding elements shares.
 
 import { isInlineSketchCapped, readChartSpec } from '@workspace/lib/charts';
 import type { Fill } from '@workspace/lib/types/background';
@@ -53,6 +54,7 @@ import { useCallback } from 'react';
 import type * as Y from 'yjs';
 import { applyZOrder, convertElementToShapes } from './hooks/selection-ops';
 import { ELEMENT_KIND_UI } from './kinds';
+import { RichTextPanelSection } from './kinds/richtext';
 
 // The box kinds' corner treatment — a different question from a shaft's curvature, hence its own row.
 const CORNERS_OPTIONS: { value: Corners; label: string }[] = [
@@ -133,6 +135,8 @@ export function CanvasPropertiesPanel({
     // One kind selected ⇒ its own rows; a mixed selection shows only the generic ones.
     const soleKind =
         has && selectedElements.every((el) => el.type === selectedElements[0].type) ? selectedElements[0].type : null;
+    // The Text and Spacing rows serve every element that holds text, so a rectangle and a text box share them.
+    const showText = all((el) => capabilitiesOf(el).text);
     const KindSection = soleKind ? ELEMENT_KIND_UI[soleKind].PanelSection : undefined;
     // Stroke Style (dashed/dotted) is meaningless for a freehand stroke: it is a filled outline, not a
     // drawn line, and the capability is what says so.
@@ -268,6 +272,17 @@ export function CanvasPropertiesPanel({
                         angleDisabled={allElbow}
                         aspectLocked={aspectLocked}
                         onAspectLockChange={onAspectLockChange}
+                    />
+                )}
+
+                {showText && (
+                    <RichTextPanelSection
+                        elements={selectedElements}
+                        scene={sceneById}
+                        slideWidth={slideWidth}
+                        onChange={applyToAll}
+                        onChangeEach={applyToEach}
+                        onReplace={applyReplace}
                     />
                 )}
 

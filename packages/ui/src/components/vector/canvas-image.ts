@@ -15,12 +15,13 @@ import type {
     MeasuredRule,
     MeasuredText,
     VectorElement,
-    VectorRichTextElement,
+    VectorTextualElement,
 } from '@workspace/lib/vector';
 import {
     canvasImageFaces,
     canvasImageScene,
     eigenMediaHref,
+    isTextual,
     layerInnerHtml,
     richTextCssText,
     richTextSvg,
@@ -58,11 +59,11 @@ export async function downloadCanvasImage(
     downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${name}.svg`);
 }
 
-// Each rich-text box laid out as its canvas layer is, the layer's own markup and style at the box's size under the
+// Each text box and shape with text laid out as its canvas layer is, the layer's own markup and style at the box's size under the
 // app's canvas-text.css, and read back as where every character landed.
 async function measureRichText(elements: VectorElement[]): Promise<Map<string, MeasuredRichText>> {
     const boxes = elements
-        .filter((el): el is VectorRichTextElement => el.type === 'richtext')
+        .filter((el): el is VectorTextualElement => isTextual(el) && el.html !== '')
         .map((el) => {
             const host = document.createElement('div');
             host.style.cssText = `position:fixed;left:0;top:0;width:${el.width}px;height:${el.height}px;visibility:hidden;pointer-events:none`;
@@ -114,7 +115,7 @@ function discOf(item: Element, origin: DOMRect, root: Element): MeasuredDisc {
     };
 }
 
-function readBox(el: VectorRichTextElement, host: HTMLDivElement): MeasuredRichText {
+function readBox(el: VectorTextualElement, host: HTMLDivElement): MeasuredRichText {
     const origin = host.getBoundingClientRect();
     const root = host.firstElementChild;
     if (!root) return { texts: [], rules: [], discs: [], justify: false };

@@ -10,6 +10,7 @@ import { useYjsUndoHotkeys } from '@workspace/lib/collab';
 import type { VectorElement, VectorElementPatch, ZOp } from '@workspace/lib/vector';
 import { NUDGE_STEP, NUDGE_STEP_LARGE } from '@workspace/lib/vector';
 import { holdCapture } from '@workspace/ui/components/properties-panel';
+import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type * as Y from 'yjs';
 import { useZOrderHotkeys } from '../../properties-panel/z-order';
@@ -33,6 +34,11 @@ type CanvasKeyboardParams = {
     reorderElements: (ids: string[], selectedIds: string[], op: ZOp) => void;
     duplicateElements: (ids: string[], dx: number, dy: number) => string[];
     onInsertImage?: () => void;
+    // The canvas element: Enter edits only when focus is on it or on the page itself, so a focused button,
+    // link or rail thumbnail keeps its own Enter.
+    containerRef: RefObject<HTMLElement | null>;
+    // What a double-click on the sole selected element does (the canvas' editElement).
+    onEdit: (el: VectorElement) => void;
 };
 
 // Excalidraw's keys for its image tool and its tool lock; the toolbar shows them beside their rows.
@@ -179,6 +185,24 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
         duplicateSelection(p.selectedIds, p.duplicateElements, p.setSelection, p.undoManager);
     }, []);
     useHotkey('Mod+D', duplicate, onSelectionMod);
+
+    // Enter does what a double-click on the selected element does. It acts, and takes the key, only for a
+    // sole selection and only when focus rests on the canvas or the page, never on a control that owns Enter.
+    const edit = useCallback((e: KeyboardEvent) => {
+        const p = live.current;
+        if (e.target !== document.body && e.target !== p.containerRef.current) return;
+        const el =
+            p.selectedIds.length === 1 ? p.elements.find((candidate) => candidate.id === p.selectedIds[0]) : null;
+        if (!el) return;
+        e.preventDefault();
+        p.onEdit(el);
+    }, []);
+    // The library takes every key it matches, a focused button's Enter too; this handler decides, so it asks for neither.
+    const onEnter = useMemo(
+        () => ({ enabled: enabled && hasSelection, preventDefault: false, stopPropagation: false }),
+        [enabled, hasSelection],
+    );
+    useHotkey('Enter', edit, onEnter);
 
     // Nudge — 1px, Shift 5px (scene units). One transact per press, all of them inside the run's hold.
     const nudge = useCallback((dx: number, dy: number) => {

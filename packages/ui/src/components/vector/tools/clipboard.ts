@@ -90,11 +90,9 @@ function selectionSvg(
     if (selected.length === 0) return undefined;
     if (selected.every((el) => el.type === 'richtext') || selected.every((el) => el.type === 'chart')) return undefined;
     if (selected.length > CLIPBOARD_SVG_MAX_ELEMENTS) return undefined;
-    // Rich text's `html` is a stored scalar, so it arrives verbatim from any peer with write access —
+    // The `html` of a text box or a shape is a stored scalar, so it arrives verbatim from any peer with write access —
     // sanitized here as at every other seam that renders it (the layer mount, the paste planner).
-    const elements = selected.map((el) =>
-        el.type === 'richtext' ? { ...el, html: sanitizeToLightEditorHtml(el.html) } : el,
-    );
+    const elements = selected.map((el) => ('html' in el ? { ...el, html: sanitizeToLightEditorHtml(el.html) } : el));
     const svg = embedClipboardSvgMetadata(
         sceneToSvg(
             { elements, frames: [], meta },

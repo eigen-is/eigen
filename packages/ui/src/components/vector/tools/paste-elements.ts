@@ -20,13 +20,13 @@ export type PastePlan = {
 
 // The whole stored record minus what the writer allocates (id, index, a fresh seed — a copy takes its
 // own jitter, as a duplicate does). `commentCardIds` clears: a copy starts with no comments, the same
-// rule duplicateElementsInDoc follows. Rich text's `html` is forgeable
+// rule duplicateElementsInDoc follows. The `html` of a text box or a shape is forgeable
 // (any web page can write our MIME), so it passes the LightEditor allowlist before it reaches the doc —
 // the same sanitizer the mount seam runs, so nothing hostile is ever stored.
 function pastePartial(el: VectorElement): NewVectorElement {
     const { id, index, seed, ...rest } = el;
     const partial: NewVectorElement = { ...rest, commentCardIds: '' };
-    if (el.type === 'richtext') partial.html = sanitizeToLightEditorHtml(el.html);
+    if ('html' in el) partial.html = sanitizeToLightEditorHtml(el.html);
     return partial;
 }
 

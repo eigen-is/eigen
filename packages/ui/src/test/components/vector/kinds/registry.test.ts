@@ -43,12 +43,12 @@ describe('ELEMENT_KIND_UI', () => {
         }
     });
 
-    test('only the arrow, rich text, the image and the chart carry their own panel rows', () => {
-        // The generic rows (fill, stroke, corners, opacity) gate on capabilities and are the panel's; a
-        // PanelSection exists only for what they cannot express — the arrow's type/heads/label font,
-        // rich text's typography, the image's fit, the chart's spec.
+    test('only the arrow, the image and the chart carry their own panel rows', () => {
+        // The generic rows (fill, stroke, corners, opacity) gate on capabilities and are the panel's, and so
+        // are the text rows; a PanelSection exists only for what they cannot express — the arrow's
+        // type/heads/label font, the image's fit, the chart's spec.
         for (const type of vectorElementTypes()) {
-            const own = type === 'arrow' || type === 'richtext' || type === 'image' || type === 'chart';
+            const own = type === 'arrow' || type === 'image' || type === 'chart';
             expect([type, Boolean(ELEMENT_KIND_UI[type].PanelSection)]).toEqual([type, own]);
         }
     });
@@ -86,17 +86,15 @@ describe('ELEMENT_KIND_UI', () => {
         expect(text.seed).toBe(7);
     });
 
-    test('only rich text has an in-place editor', () => {
+    test('no kind names an in-place editor, because one editor serves every element that holds text', () => {
         for (const type of vectorElementTypes()) {
-            expect(Boolean(ELEMENT_KIND_UI[type].InPlaceEditor)).toBe(type === 'richtext');
+            expect([type, 'InPlaceEditor' in ELEMENT_KIND_UI[type]]).toEqual([type, false]);
         }
     });
 
-    test('only the chart opens a dialog on a double-click, and no kind has both', () => {
+    test('only the chart opens a dialog on a double-click', () => {
         for (const type of vectorElementTypes()) {
-            const { EditDialog, InPlaceEditor } = ELEMENT_KIND_UI[type];
-            expect([type, Boolean(EditDialog)]).toEqual([type, type === 'chart']);
-            expect([type, Boolean(EditDialog && InPlaceEditor)]).toEqual([type, false]);
+            expect([type, Boolean(ELEMENT_KIND_UI[type].EditDialog)]).toEqual([type, type === 'chart']);
         }
     });
 });

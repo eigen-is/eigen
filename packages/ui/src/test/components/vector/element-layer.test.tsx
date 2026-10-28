@@ -232,6 +232,16 @@ describe('the layer body', () => {
         expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('editing'));
     });
 
+    test('an unpainted shape with no text still hosts an open editor', () => {
+        const html = renderToStaticMarkup(
+            <ElementLayer el={rect({ fill: solidFill('transparent'), strokeColor: 'transparent' })}>
+                <p>editing</p>
+            </ElementLayer>,
+        );
+        expect(html).toContain('data-element-id="r1"');
+        expect(html).toContain('editing');
+    });
+
     // A url(#…) lands on the page's first def of that id, so the Slides rail's copy of a shape mid-resize on the
     // canvas would clip the canvas's hatch to the rail's old outline.
     test('a scoped copy of a hatched shape names its defs apart from the canvas', () => {
