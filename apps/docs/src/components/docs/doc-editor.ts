@@ -36,6 +36,7 @@ import {
     pagePx,
     readNormalStyle,
     readPageSetup,
+    STORY_NODES,
     STYLE_ROOT,
 } from '@workspace/lib/docs/eigendoc';
 import {
@@ -354,7 +355,7 @@ export function docEditorOptions({
                 remote: (tr) => !!tr.getMeta(ySyncPluginKey),
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
-                    ...(band || note ? [] : ['footnote', 'textBox']),
+                    ...(band || note ? [] : STORY_NODES),
                     'figure',
                     'chart',
                     'equation',

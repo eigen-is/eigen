@@ -72,6 +72,7 @@ import {
 } from 'lucide-react';
 import { setImageLayout } from './extensions/figure-frame';
 import { inBand, selectionDrawsInLine } from './extensions/positioned-figure';
+import { setTextBoxLayout } from './extensions/text-box';
 import { figureLayoutLooks } from './figure-properties-panel';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
@@ -79,7 +80,6 @@ import type { PageNumberPreset } from './page-numbers';
 import { PageNumberItems } from './page-numbers';
 import { paragraphStylesIn } from './paragraph-styles';
 import { tableMenuSections } from './table-menu-sections';
-import { setTextBoxLayout } from './text-box-properties-panel';
 
 // Format › Align and indent and the icon row's Align dropdown name each alignment alike.
 export const ALIGNMENT_LOOK: Record<TextAlign, { label: string; icon: LucideIcon }> = {

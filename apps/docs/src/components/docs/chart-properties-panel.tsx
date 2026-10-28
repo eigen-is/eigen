@@ -12,7 +12,7 @@ import {
     readChartSpec,
 } from '@workspace/lib/charts';
 import type { ChartAttrs } from '@workspace/lib/docs/eigendoc';
-import { readChartAttrs } from '@workspace/lib/docs/eigendoc';
+import { figurePlacement, readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { ChartSections, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
@@ -44,8 +44,7 @@ function useSelectedChart(editor: Editor) {
             const attrs = readChartAttrs(e.getAttributes('chart'));
             return {
                 parts: Object.fromEntries(CHART_SPEC_PART_KEYS.map((key) => [key, attrs[key]])),
-                layout: attrs.layout || 'block',
-                alignment: attrs.alignment || 'center',
+                ...figurePlacement(attrs),
                 caption: attrs.caption || '',
                 width: attrs.width ?? CHART_DEFAULT_SIZE.width,
                 height: attrs.height ?? CHART_DEFAULT_SIZE.height,

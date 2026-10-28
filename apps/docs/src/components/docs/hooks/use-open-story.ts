@@ -12,7 +12,7 @@ import type { Decoration } from '@tiptap/pm/view';
 import { DecorationSet } from '@tiptap/pm/view';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { StoryNode } from '@workspace/lib/docs/eigendoc';
-import { isStoryNode, newStoryId, readStoryId } from '@workspace/lib/docs/eigendoc';
+import { isStoryNode, newStoryId, readStoryId, storyDepth } from '@workspace/lib/docs/eigendoc';
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import type { StoryAnchor } from '../extensions/story';
 import { findStory, STORY_EDIT, STORY_PULL, storyAnchor, storyDecorationsKey } from '../extensions/story';
@@ -27,6 +27,15 @@ type StoryOpening = {
 };
 
 export type StoryEditors = Record<StoryNode, Editor>;
+
+// The open story's anchor and editor, none while no story is open, and the ways in and out of it.
+type OpenStory = {
+    anchor: StoryAnchor | null;
+    editor: Editor | null;
+    open: (pos: number, how: Omit<StoryOpening, 'anchor'>) => void;
+    leave: () => void;
+    close: () => void;
+};
 
 // Where two versions of a story's paragraphs differ: from `start` to `endA` in the first, to `endB` in the second.
 function storyDiff(a: Fragment, b: Fragment): { start: number; endA: number; endB: number } | null {
@@ -117,7 +126,7 @@ function pullStory(
 
 // Any other selection the body takes leaves the open story, a press in the body's text included. Esc leaves a note with
 // the caret right after its reference, and a text box selected, as Word selects the shape.
-export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boolean) {
+export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boolean): OpenStory {
     const [opening, setOpening] = useState<StoryOpening | null>(null);
     if (opening && !allowed) setOpening(null);
     const anchor = opening?.anchor ?? null;
@@ -211,19 +220,17 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
             if (!transaction.selectionSet || transaction.getMeta(STORY_EDIT) || transaction.getMeta(ySyncPluginKey))
                 return;
             const { $from, to } = body.state.selection;
-            for (let depth = $from.depth; depth > 0; depth--) {
-                if (!isStoryNode($from.node(depth).type.name)) continue;
-                const start = $from.start(depth);
-                if (to <= $from.end(depth)) {
-                    open($from.before(depth), {
-                        focus: false,
-                        at: null,
-                        selection: { from: $from.pos - start, to: to - start },
-                    });
-                    return;
-                }
+            const depth = storyDepth($from);
+            if (depth === null || to > $from.end(depth)) {
+                setOpening(null);
+                return;
             }
-            setOpening(null);
+            const start = $from.start(depth);
+            open($from.before(depth), {
+                focus: false,
+                at: null,
+                selection: { from: $from.pos - start, to: to - start },
+            });
         };
         body.on('transaction', follow);
         return () => {

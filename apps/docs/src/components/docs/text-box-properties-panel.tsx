@@ -4,19 +4,16 @@
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
-import type {
-    CellBorderStyle,
-    FigureFrameAttrs,
-    TextBoxEdit,
-    TextBoxVerticalAlign,
-} from '@workspace/lib/docs/eigendoc';
+import type { CellBorderStyle, TextBoxEdit, TextBoxVerticalAlign } from '@workspace/lib/docs/eigendoc';
 import {
     CELL_BORDER_STYLES,
     cellBorderValue,
+    figurePlacement,
     MAX_CELL_BORDER_PX,
     MIN_CELL_BORDER_PX,
     readCellBackground,
     readTextBoxAttrs,
+    TEXT_BOX_DEFAULT_OUTLINE,
     textBoxPadding,
 } from '@workspace/lib/docs/eigendoc';
 import {
@@ -31,9 +28,9 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, AlignVerticalJustifyStart } from 'lucide-react';
 import { useLayoutEffect, useState } from 'react';
-import { figureMaxWidth, setFigureLayout } from './extensions/figure-frame';
+import { figureMaxWidth } from './extensions/figure-frame';
 import { selectionDrawsInLine } from './extensions/positioned-figure';
-import { fitTextBoxHeight, fitTextBoxWidth } from './extensions/text-box';
+import { fitTextBoxHeight, fitTextBoxWidth, setTextBoxLayout } from './extensions/text-box';
 import { CmField, FigureLayoutSection, FigureSizeSection } from './figure-properties-panel';
 
 const VERTICAL_ALIGN_LOOK: { align: TextBoxVerticalAlign; label: string; icon: LucideIcon }[] = [
@@ -49,13 +46,6 @@ const OUTLINE_STYLE_LABELS: Record<CellBorderStyle, string> = {
     double: 'Double',
 };
 
-// A box's layout, as the Image panel writes a picture's: a wrap halves the width cap, and in front of or behind the
-// text keeps the box where it is drawn.
-export const setTextBoxLayout = (editor: Editor, attributes: FigureFrameAttrs) =>
-    setFigureLayout(editor, attributes, readTextBoxAttrs(editor.getAttributes('textBox')), (written) =>
-        editor.commands.updateTextBox(written),
-    );
-
 export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
     // useEditor re-renders on no transaction, and a write that keeps the box selected fires no selectionUpdate.
     const look = useEditorState({
@@ -67,8 +57,7 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
                 width: attrs.width,
                 height: attrs.height,
                 auto: attrs.height === null,
-                layout: attrs.layout || 'block',
-                alignment: attrs.alignment || 'center',
+                ...figurePlacement(attrs),
                 fill: attrs.fill ?? '',
                 pen: attrs.outline === 'none' ? null : attrs.outline,
                 paddingX: padding.x,
@@ -99,15 +88,9 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
     }, [drawnBox]);
     const height = look.height ?? drawnHeight;
     const write = (attributes: TextBoxEdit) => editor.commands.updateTextBox(attributes);
+    // A box with no line takes the line a new box has, with the change.
     const outline = (change: Partial<{ width: number; style: CellBorderStyle; color: string }>) =>
-        write({
-            outline: cellBorderValue({
-                width: look.pen?.width ?? 1,
-                style: look.pen?.style ?? 'solid',
-                color: look.pen?.color ?? '#000000',
-                ...change,
-            }),
-        });
+        write({ outline: cellBorderValue({ ...(look.pen ?? TEXT_BOX_DEFAULT_OUTLINE), ...change }) });
 
     return (
         <PropertiesPanel title="Text box">
@@ -163,11 +146,7 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
                                 min={MIN_CELL_BORDER_PX}
                                 max={MAX_CELL_BORDER_PX}
                                 step={0.5}
-                                onChange={(width) =>
-                                    outline({
-                                        width: Math.min(MAX_CELL_BORDER_PX, Math.max(MIN_CELL_BORDER_PX, width)),
-                                    })
-                                }
+                                onChange={(width) => outline({ width })}
                             />
                         </PropertyRow>
                         <PropertyRow label="Style">
@@ -189,6 +168,7 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
             </PropertySection>
 
             <PropertySection title="Text">
+                {/* A row's label holds about eight characters, and "Horizontal" would be cut short. */}
                 <PropertyRow label="Horiz.">
                     <CmField px={look.paddingX} onCommit={(px) => write({ paddingX: px })} />
                 </PropertyRow>

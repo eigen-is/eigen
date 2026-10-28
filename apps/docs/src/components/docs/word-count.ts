@@ -34,14 +34,14 @@ function countText(text: string): TextCounts {
     };
 }
 
-// The whole doc, and the selection when it holds any range (a table's cells are several). A footnote's note counts
-// nothing, as in Google Docs, and its reference ends the word before it. A text box's words count, as Word counts them,
-// as words of their own, never run on from its anchor's.
+// A footnote's note counts nothing, as in Google Docs, and its reference ends the word before it. A text box's words
+// count, as Word counts them, as words of their own, never run on from its anchor's.
 function storyText(story: Node): string {
     if (story.type.name !== 'textBox') return '\n';
     return `\n${story.textBetween(0, story.content.size, '\n', leafText)}\n`;
 }
 
+// The whole doc, and the selection when it holds any range (a table's cells are several).
 export function countWords({ doc, selection }: EditorState): { document: TextCounts; selection: TextCounts | null } {
     const textOf = (from: number, to: number) => textOutsideStories(doc, from, to, '\n', storyText, leafText);
     return {

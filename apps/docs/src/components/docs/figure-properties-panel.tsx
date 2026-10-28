@@ -5,7 +5,15 @@
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
 import type { FigureAlignment, FigureFrameAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
-import { cmText, isPositioned, mmToPx, pxToMm, readCm, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import {
+    cmText,
+    figurePlacement,
+    isPositioned,
+    mmToPx,
+    pxToMm,
+    readCm,
+    readFigureAttrs,
+} from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
@@ -232,8 +240,7 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
                     height: attrs.height ?? (attrs.width && ratio ? attrs.width / ratio : undefined),
                     stretched: attrs.height !== null,
                     locked: isAspectLocked(e.state, 'figure'),
-                    layout: attrs.layout || 'block',
-                    alignment: attrs.alignment || 'center',
+                    ...figurePlacement(attrs),
                     alt: attrs.alt || '',
                     caption: attrs.caption || '',
                     mediaName: attrs.mediaName,

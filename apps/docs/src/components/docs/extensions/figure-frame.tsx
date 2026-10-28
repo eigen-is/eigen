@@ -18,6 +18,7 @@ import type { FigureFrameAttrs, FigureFrameNode, FigureLayout } from '@workspace
 import {
     cmText,
     figureLayoutStyle,
+    figurePlacement,
     heightAtWidth,
     isPositioned,
     pxToMm,
@@ -363,6 +364,7 @@ export function FigureFrame({
     const caption = node.attrs.caption || '';
     const isEditable = editor.isEditable;
     const frame = readFigureFrameAttrs(node.attrs);
+    const placement = figurePlacement(frame);
     // The ring insets over the content, shrink-wrapped by the relative wrapper. A figure's size is in the page's pixels,
     // and it draws smaller than that on a page drawn scaled, or when it is wider than the room it has, so a grip's
     // delta divides by its drawn width over its stored one, measured as it is pressed.
@@ -441,8 +443,8 @@ export function FigureFrame({
             <NodeViewWrapper
                 as="span"
                 className={cn('figure', className)}
-                data-layout={frame.layout ?? 'block'}
-                data-alignment={frame.alignment ?? 'center'}
+                data-layout={placement.layout}
+                data-alignment={placement.alignment}
                 // A positioned figure moves by the pointer gesture above, never by the browser's drag and drop. A text
                 // box is draggable only from its edge, which ProseMirror's own press makes draggable, as WebKit starts
                 // the browser's drag from a draggable box even inside its open editor.
