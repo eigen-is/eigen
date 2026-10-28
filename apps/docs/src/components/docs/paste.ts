@@ -16,14 +16,15 @@ import {
     newStoryId,
     POSITIONED_SELECTOR,
     pageColumnWidth,
+    TEXT_BOX_SELECTOR,
     unwrapRenderedMath,
 } from '@workspace/lib/docs/eigendoc';
 
 // Fits pasted HTML to the doc it lands in, before the schema parses it. A drawn equation keeps only its <math>. Fonts
 // map onto the bundled ones, and a font or size the doc already draws goes. Images, charts and tables get no wider than
 // the column, keeping their shape. A comment anchor goes when this doc lacks its card, and a footnote goes where none
-// can sit. A positioned image or chart keeps to the paper instead of the column. Its paragraph's place isn't known
-// here, so an indented one may overhang by its indent until it is dragged.
+// can sit. A positioned image, chart or text box keeps to the paper instead of the column. Its paragraph's place isn't
+// known here, so an indented one may overhang by its indent until it is dragged.
 export function cleanPastedHTML(
     html: string,
     page: PageSetup,
@@ -101,12 +102,14 @@ export function cleanPastedHTML(
         }
     }
 
-    // Offsets count from the paragraph, taken as starting at the column's top left corner.
+    // Offsets count from the paragraph, taken as starting at the column's top left corner. A text box keeps its width
+    // on its own span inside the frame, an image on the frame or its picture.
     const corner = { left: page.margin.left, top: page.margin.top };
     for (const el of doc.querySelectorAll<HTMLElement>(POSITIONED_SELECTOR)) {
         const x = Number(el.getAttribute('data-offset-x'));
         const y = Number(el.getAttribute('data-offset-y'));
-        const width = Number(el.getAttribute('data-width') ?? el.querySelector('img')?.getAttribute('width')) || 0;
+        const sized = el.querySelector(TEXT_BOX_SELECTOR) ?? el;
+        const width = Number(sized.getAttribute('data-width') ?? el.querySelector('img')?.getAttribute('width')) || 0;
         const { offsetX, offsetY } = keepOnPaper({ x, y, width }, corner, page.width);
         if (el.hasAttribute('data-offset-x') && Number.isFinite(x)) el.setAttribute('data-offset-x', String(offsetX));
         if (el.hasAttribute('data-offset-y') && Number.isFinite(y)) el.setAttribute('data-offset-y', String(offsetY));
