@@ -193,6 +193,19 @@ test('a press on its edge band opens nothing', async () => {
     expect(a.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
 });
 
+test('a box with less padding than the edge band keeps the band off its text', async () => {
+    const tight = { ...box('front'), attrs: { id: 'box-1', layout: 'front', paddingX: 0, paddingY: 2 } };
+    const { a, session } = await setup([paragraph(tight, text('Anchor'))]);
+    // On its text, 2 px in from the left edge.
+    await pressAt(laidOutBox(a), 102, 150);
+    expect(session.current?.anchor).toMatchObject({ type: 'textBox', pos: 1 });
+    await act(async () => session.current?.close());
+    // In its 2 px padding along the top.
+    await pressAt(laidOutBox(a), 150, 101);
+    expect(session.current?.anchor).toBeNull();
+    expect(a.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
+});
+
 test('typing in the open box forwards as one undo step, and ⌘Z in the box takes it back', async () => {
     const { a, b, boxEditor, undoManager } = await opened();
     await act(async () => {

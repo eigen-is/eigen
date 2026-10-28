@@ -101,7 +101,7 @@ function TextBoxView(props: NodeViewProps) {
             onCommit={resize.onCommit}
             onGestureEnd={resize.onGestureEnd}
             label="Resize text box"
-            dragSurface={{ onInsidePress: open || !isEditable ? null : openAt }}
+            dragSurface={{ onInsidePress: open || !isEditable ? null : openAt, text: boxRef }}
         >
             <span ref={boxRef}>
                 {open ? (

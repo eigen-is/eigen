@@ -29,7 +29,7 @@ import { ObjectTransform } from '@workspace/ui';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PaperRoom } from './positioned-figure';
 import { roomOnPaper } from './positioned-figure';
@@ -301,18 +301,29 @@ type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'ex
     keyShortcuts?: string;
     className?: string;
     // A text box's: the move, the drag and the selection start on a band along its edge alone, and a press inside it
-    // goes to `onInsidePress`, which opens it, or to its open editor when there is none.
-    dragSurface?: { onInsidePress: ((e: React.PointerEvent) => void) | null };
+    // goes to `onInsidePress`, which opens it, or to its open editor when there is none. `text` is the element whose
+    // border and padding hold the band.
+    dragSurface?: { onInsidePress: ((e: React.PointerEvent) => void) | null; text: RefObject<HTMLElement | null> };
     children: ReactNode;
 };
 
 // How close to a box's edge, in screen px, a press moves or drags it instead of reaching its text.
 const EDGE_BAND = 6;
 
-const inEdgeBand = (element: Element, { clientX: x, clientY: y }: React.PointerEvent) => {
-    const { left, right, top, bottom } = element.getBoundingClientRect();
-    return x < left + EDGE_BAND || x > right - EDGE_BAND || y < top + EDGE_BAND || y > bottom - EDGE_BAND;
-};
+// The band never reaches the text: on a side with less border and padding than the band, it is that border and padding.
+function inEdgeBand(edge: Element, text: HTMLElement | null, { clientX: x, clientY: y }: React.PointerEvent) {
+    const { left, right, top, bottom, width } = edge.getBoundingClientRect();
+    const style = text && getComputedStyle(text);
+    // The padding is in the page's px, which a page drawn scaled draws smaller.
+    const scale = text && text.offsetWidth > 0 ? width / text.offsetWidth : 1;
+    const band = (side: 'left' | 'right' | 'top' | 'bottom') => {
+        if (!style) return EDGE_BAND;
+        const inset = parseFloat(style.getPropertyValue(`padding-${side}`)) || 0;
+        const border = parseFloat(style.getPropertyValue(`border-${side}-width`)) || 0;
+        return Math.min(EDGE_BAND, (inset + border) * scale);
+    };
+    return x < left + band('left') || x > right - band('right') || y < top + band('top') || y > bottom - band('bottom');
+}
 
 // The figure box the node view draws: the wrapper the page's .figure rules lay out, the selection ring and the
 // transform chrome over the content, the comment mark and the caption. A positioned figure's wrapper is its absolute
@@ -404,7 +415,7 @@ export function FigureFrame({
     const press = (move: ((e: React.PointerEvent) => void) | undefined) => (e: React.PointerEvent) => {
         if (e.target instanceof Element && e.target.closest('button')) return;
         const edge = contentRef.current;
-        if (!dragSurface || !edge || inEdgeBand(edge, e)) move?.(e);
+        if (!dragSurface || !edge || inEdgeBand(edge, dragSurface.text.current, e)) move?.(e);
         else if (e.button === 0) dragSurface.onInsidePress?.(e);
     };
 
