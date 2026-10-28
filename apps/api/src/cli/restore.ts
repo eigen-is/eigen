@@ -30,6 +30,7 @@ import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
 import { buildBackupStamp } from '@workspace/lib/validation';
 import { copyArchiveMember } from '../lib/backup/archive';
 import { isLightSkipped } from '../lib/backup/archive-layout';
+import { enumerateHomes } from '../lib/backup/enumerate-homes';
 import { describeError } from '../lib/backup/errors';
 import {
     backupsDirPath,
@@ -51,6 +52,7 @@ import {
     homeDirUnder,
     ORG_HOMES_DIR,
     PATHS,
+    SERVER_DATABASES,
     SERVER_DIR,
     TEAM_HOMES_DIR,
     USER_HOMES_DIR,
@@ -107,9 +109,10 @@ export async function restore(archive: string | undefined, flags: Flags): Promis
     return swap();
 }
 
-// Written last by the stage, so a stage cut off halfway is never swapped in.
+// Written last by the stage, so a stage cut off halfway is never swapped in. `orphans` are the home folders here that
+// no account in the archive owns, relative to data/, which a Light swap sets aside.
 const STAGE_RECORD = 'staged.json';
-type StagedRestore = { archive: string; level: BackupLevel; appVersion: string };
+type StagedRestore = { archive: string; level: BackupLevel; appVersion: string; orphans: string[] };
 
 // Written by the swap before its first rename, read by the launcher's preflight: while it is there, a swap was cut
 // off, and --swap finishes it.
@@ -184,7 +187,9 @@ function isStagedRestore(value: unknown): value is StagedRestore {
         'level' in value &&
         BACKUP_LEVELS.some((level) => level === value.level) &&
         'appVersion' in value &&
-        typeof value.appVersion === 'string'
+        typeof value.appVersion === 'string' &&
+        'orphans' in value &&
+        isPaths(value.orphans)
     );
 }
 
@@ -356,9 +361,17 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         s3FromArchive: flags['s3-from-archive'] === true,
         onStep: (step) => console.log(glyphLine('bar', step)),
     }).catch((error) => refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.'));
-    const record: StagedRestore = { archive: name, level: manifest.level, appVersion: manifest.appVersion };
+    // Read now, as the API's user: the swap runs as root, which must not open a database the API opens after it.
+    const { orphans } =
+        manifest.level === 'light'
+            ? enumerateHomes(join(restoring, RESTORING_DATA_DIR, SERVER_DIR, SERVER_DATABASES.users))
+            : { orphans: [] };
+    const record: StagedRestore = { archive: name, level: manifest.level, appVersion: manifest.appVersion, orphans };
     writeFileSync(join(restoring, STAGE_RECORD), JSON.stringify(record));
     console.log(glyphLine('ok', `Staged ${name} in data/${RESTORING_DIR}`));
+    if (orphans.length) {
+        console.log(glyphLine('warn', `Homes no account in the archive owns go aside: ${orphans.join(', ')}`));
+    }
     if (notReplayed.settled) {
         console.log(
             glyphLine(
@@ -438,11 +451,13 @@ async function unsafeEntry(restoring: string): Promise<string | null> {
 
 // Light: server/, org/, dkim/ and certs/ go aside whole, and the staged ones move in. In a home here, every file of
 // its light set goes aside first, whether the archive holds it or not, because a -wal left beside another database
-// would be replayed onto it. A folder only here stays. A folder or a home only in the archive moves in whole.
-// `merged` are the homes here the archive merges into, relative to data/.
+// would be replayed onto it. A folder only here stays. A folder or a home only in the archive moves in whole. A home
+// here that no account in the archive owns, such as that of a user made since, goes aside whole: nobody would sign
+// in to it. `merged` are the homes here the archive merges into, relative to data/.
 function planLight(
     staged: string,
     aside: string,
+    orphans: string[],
 ): { renames: [string, string][]; merged: string[] } | { conflict: string } {
     const renames: [string, string][] = [];
     const merged: string[] = [];
@@ -450,6 +465,10 @@ function planLight(
         if (!existsSync(join(staged, top))) continue;
         if (pathExists(join(DATA, top))) renames.push([join(DATA, top), join(aside, top)]);
         renames.push([join(staged, top), join(DATA, top)]);
+    }
+    // Named at the stage; a home deleted since is gone already.
+    for (const orphan of orphans) {
+        if (pathExists(join(DATA, orphan))) renames.push([join(DATA, orphan), join(aside, orphan)]);
     }
     for (const kind of [USER_HOMES_DIR, TEAM_HOMES_DIR]) {
         if (!existsSync(join(staged, kind))) continue;
@@ -621,7 +640,7 @@ async function swap(): Promise<void> {
     if (env) renames.push([stagedEnv, ENV_PATH]);
     let leftover = restoring;
     if (record.level === 'light') {
-        const plan = planLight(stagedData, dataAside);
+        const plan = planLight(stagedData, dataAside, record.orphans);
         if ('conflict' in plan)
             return ui.fail(
                 `${record.archive} cannot be swapped in: ${plan.conflict}.`,

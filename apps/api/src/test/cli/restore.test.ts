@@ -590,6 +590,8 @@ describe('restore --stage and --swap', () => {
             writeFileSync(join(live, 'mounts', aliceMountId, PATHS.DRIVE.STAGING_DIR, 'upload'), 'staged here');
             mkdirSync(join(dir, 'data/certs'));
             writeFileSync(join(dir, 'data/certs/key.pem'), 'the key here');
+            // A safety copy of the home no account in the archive owns: no home of its own, so it stays.
+            mkdirSync(join(dir, 'data/home/old.pre-restore-20260101-000000'));
 
             const output = await stageAndSwap(dir, basename(lightArchive));
             expect(output).toMatch(/light/i);
@@ -613,9 +615,13 @@ describe('restore --stage and --swap', () => {
             const upload = join(PATHS.DRIVE.STAGING_DIR, 'upload');
             expect(readFileSync(join(live, 'mounts', aliceMountId, upload), 'utf8')).toBe('staged here');
             expect(readFileSync(join(mountAside, upload), 'utf8')).toBe('staged here');
-            // The live server/ went aside whole, epoch and all; a home the archive does not hold stays put.
+            // The live server/ went aside whole, epoch and all, and so did a home no account in the archive owns,
+            // such as that of a user made since: nothing would sign in to it.
             expect(readFileSync(join(dir, aside, 'server', SERVER_RUNTIME_FILES.epoch), 'utf8')).toBe('epoch-before');
-            expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+            expect(output).toContain('Homes no account in the archive owns go aside: home/old');
+            expect(existsSync(join(dir, 'data/home/old'))).toBe(false);
+            expect(readFileSync(join(dir, aside, 'home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+            expect(existsSync(join(dir, 'data/home/old.pre-restore-20260101-000000'))).toBe(true);
             expect(existsSync(join(dir, 'data/server', SERVER_DATABASES.users))).toBe(true);
             // The archive's TLS certificate in, the one here aside.
             expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe(TLS_KEY);

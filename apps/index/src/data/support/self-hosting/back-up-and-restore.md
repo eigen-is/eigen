@@ -80,7 +80,7 @@ With Eigen stopped there is nothing to run the backup, so `./eigen backup` refus
 - `docker-compose.override.yml`, if you made one.
 - A way into the backup bucket. Its keys are inside the backups, which are in that bucket, so keep a copy of them yourself.
 - Guests' workspaces. After a restore of a Full backup, a guest keeps their account and starts with an empty workspace. A restore of a Light backup leaves guests' workspaces as they are.
-- A user or team folder that no account owns. The backup's record in `backups/`, the file with its name and `.json` at the end, lists it under `orphans`. After a restore of a Full backup it is only in `data.pre-restore-<date>-<time>`.
+- A user or team folder that no account owns. The backup's record in `backups/`, the file with its name and `.json` at the end, lists it under `orphans`. After a restore it is only in `data.pre-restore-<date>-<time>`.
 
 ## Drives in an S3 bucket
 
@@ -129,6 +129,7 @@ A Light backup holds no files and no mail. Its restore puts back the accounts, t
 - A file deleted for good since comes back without its content.
 - Calendars and contacts go back to the time of the backup.
 - Mail stays as it is now.
+- The folder of a user or team made since the backup, which has no account any more, moves to `data.pre-restore-<date>-<time>`. The restore names these folders before it stops Eigen.
 
 Nothing is deleted from disk, and what the restore replaced is in `data.pre-restore-<date>-<time>`. A rollback after a usual update is a Light restore: see [Update Eigen](/support/self-hosting/update#go-back-with-a-rollback).
 
