@@ -26,13 +26,12 @@ export type EmailSettings = {
     autoAdvance?: 'older' | 'newer' | 'list';
 };
 
-// The themes a user picks from, in the order every picker lists them.
-export const THEMES = [
-    { value: 'light', label: 'Light' },
-    { value: 'dark', label: 'Dark' },
-    { value: 'system', label: 'System' },
-] as const;
-export type UserTheme = (typeof THEMES)[number]['value'];
+// The themes a user picks from, in the order every picker lists them. The bare list is what the settings route
+// validates against.
+export const USER_THEMES = ['light', 'dark', 'system'] as const;
+export type UserTheme = (typeof USER_THEMES)[number];
+const THEME_LABELS: Record<UserTheme, string> = { light: 'Light', dark: 'Dark', system: 'System' };
+export const THEMES = USER_THEMES.map((value) => ({ value, label: THEME_LABELS[value] }));
 
 export function isUserTheme(value: string): value is UserTheme {
     return THEMES.some((theme) => theme.value === value);

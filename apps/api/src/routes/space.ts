@@ -4,7 +4,7 @@
 
 import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
 import type { UserSettings } from '@workspace/lib/types/settings';
-import { DOCS_TEXT_WIDTHS, THEMES } from '@workspace/lib/types/settings';
+import { DOCS_TEXT_WIDTHS, USER_THEMES } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/auth/access';
 import { getUserHome } from '../lib/home';
@@ -34,7 +34,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
         },
         {
             body: t.Object({
-                theme: t.Optional(t.Union(THEMES.map(({ value }) => t.Literal(value)))),
+                theme: t.Optional(t.UnionEnum(USER_THEMES)),
                 email: t.Optional(
                     t.Object({
                         signatures: t.Optional(
