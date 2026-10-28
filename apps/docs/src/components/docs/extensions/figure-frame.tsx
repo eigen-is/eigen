@@ -240,9 +240,8 @@ function useFigureMove({ editor, getPos, selected }: Pick<NodeViewProps, 'editor
     const startMove = (e: React.PointerEvent) => {
         const pos = getPos();
         if (e.button !== 0 || !editor.isEditable || pos === undefined) return;
-        // A finger on an image that isn't selected scrolls the page, and the comment mark is a button of its own.
-        if ((e.pointerType === 'touch' && !selected) || (e.target instanceof Element && e.target.closest('button')))
-            return;
+        // A finger on an image that isn't selected scrolls the page.
+        if (e.pointerType === 'touch' && !selected) return;
         // ProseMirror then sees no mousedown, so it neither selects text nor starts the browser's drag.
         e.preventDefault();
         if (!selected) {
@@ -400,8 +399,10 @@ export function FigureFrame({
     );
 
     // A press moves a positioned figure. On a text box only a press on its edge band does: one inside it goes to its
-    // text, and a box in the flow drags from its edge as ProseMirror drags a node.
+    // text, and a box in the flow drags from its edge as ProseMirror drags a node. The comment mark is a button of its
+    // own, which neither moves nor opens the box.
     const press = (move: ((e: React.PointerEvent) => void) | undefined) => (e: React.PointerEvent) => {
+        if (e.target instanceof Element && e.target.closest('button')) return;
         const edge = contentRef.current;
         if (!dragSurface || !edge || inEdgeBand(edge, e)) move?.(e);
         else if (e.button === 0) dragSurface.onInsidePress?.(e);

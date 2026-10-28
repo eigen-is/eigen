@@ -221,6 +221,16 @@ test("a peer's edit to the box pulls into the open editor, and a peer's delete h
     expect(a.view.dom.querySelector('.text-box')).toBeNull();
 });
 
+test("a press on the box's comment mark opens no box, as the mark is a button of its own", async () => {
+    const commented = { ...box(), attrs: { id: 'box-1', layout: 'block', commentCardId: 'card-1' } };
+    const { a, session } = await setup([paragraph(text('Anchor'), commented, text('. More'))]);
+    laidOutBox(a);
+    const mark = a.view.dom.querySelector('button[aria-label="Open comment"]');
+    if (!mark) throw new Error('no comment mark');
+    await pressAt(mark, 150, 150);
+    expect(session.current?.anchor).toBeNull();
+});
+
 // A peer's paste of an earlier copy and an undo of the original's delete can leave two boxes with one id.
 const boxTexts = (editor: TestEditor) => {
     const texts: string[] = [];
