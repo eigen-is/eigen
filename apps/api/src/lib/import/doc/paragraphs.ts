@@ -37,7 +37,9 @@ import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
 import {
+    BODY_TEXT_OUTLINE_LEVEL,
     CHECKBOX_GLYPHS,
+    DEEPEST_HEADING_LEVEL,
     DEFAULT_RUN_SIZE,
     LIST_LEVELS,
     NO_TOC_ENTRIES,
@@ -46,6 +48,7 @@ import {
     STYLE_NAMES,
     TWIPS_PER_PX,
     textAlignOf,
+    tocLevel,
 } from '../../ooxml/wordml';
 import type { MediaFiles } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
@@ -91,7 +94,7 @@ export type Reader = {
     tocs: OpenToc[];
     // The parts of a SmartArt's or a band's chart read: each is read once.
     graphicParts: Set<string>;
-    // The theme's colours a chart's series take, and each chart part as read.
+    // The theme's colors a chart's series take, and each chart part as read.
     colors: DrawingTheme;
     charts: Map<XmlElement, DocxChart>;
     // The body's size in half-points, its complex script's, and its color, which no run needs a mark for.
@@ -337,12 +340,14 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const style = styles.get(styleId);
     const styled = mergePara(styles.docPara, styles.para(styleId));
     let role: Role = styles.role(styleId) ?? { kind: 'paragraph' };
-    // A custom heading style gives its outline level; one set on a paragraph directly, or a TOC entry's, draws as body text.
+    // A custom heading style gives its outline level. A level set on a paragraph directly, or a TOC entry's, draws as
+    // body text.
     const outline = styles.para(styleId).outlineLvl;
-    if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
+    const tocEntry = style !== undefined && tocLevel(style.name) !== undefined;
+    if (role.kind === 'paragraph' && outline !== undefined && outline < DEEPEST_HEADING_LEVEL && !tocEntry)
         role = { kind: 'heading', level: outline + 1 };
-    // Outline level 9 is Word's body text, so a style based on a heading that sets it, as TOC Heading does, is no heading.
-    if (role.kind === 'heading' && outline === 9) role = { kind: 'paragraph' };
+    // A style based on a heading that sets body text's level, as TOC Heading does, is no heading.
+    if (role.kind === 'heading' && outline === BODY_TEXT_OUTLINE_LEVEL) role = { kind: 'paragraph' };
     const paraRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
     const numId = direct.numId ?? styled.numId;
     const listed = numId !== undefined && numId !== '0';
@@ -392,10 +397,51 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const itemsOf = (pieces: Piece[], ends: ParagraphEnds) => paragraphItems(reader, setting, context, pieces, ends);
     const cuts = (context.tocCuts ?? []).filter((cut) => cut !== runOn);
     if (cuts.length === 0) return [...released, ...itemsOf(context.pieces, WHOLE)];
-    // What the paragraph gives besides its own lines, when a result holds them all.
+
+    // A table of contents' result runs through this paragraph. The result's pieces are cut out. Word's saved entry,
+    // its text up to the tab before its page number, is kept to compare.
+    const { pieces } = context;
+    for (const { toc, from, to } of cuts) {
+        const text = pieces
+            .slice(from, to)
+            .map((piece) => (piece.kind === 'node' ? (piece.node.text ?? '') : ''))
+            .join('');
+        const saved = text.includes('\t') ? text.slice(0, text.lastIndexOf('\t')) : text;
+        if (saved.trim() && saved.trim() !== NO_TOC_ENTRIES) toc.saved.push(saved);
+    }
+    // What the paragraph gives besides its own lines, such as its section break, which follows the result.
     const extras: Item[] = [...context.pending];
     if (direct.sectionBreak && scope.story === 'body') extras.push({ kind: 'break' });
-    return [...released, ...cutTocResults(cuts, context.pieces, itemsOf, extras)];
+    // A paragraph that holds only the result waits until the field ends.
+    const [first] = cuts;
+    if (cuts.length === 1 && first && !first.opened && first.to === undefined) {
+        first.toc.held.push({ cut: extras, whole: itemsOf(pieces, WHOLE) });
+        return released;
+    }
+    const tocItem = (toc: OpenToc): Item => ({
+        kind: 'block',
+        node: { type: 'tableOfContents', attrs: { levels: toc.levels } },
+    });
+    // A result begun above and ended here gives what it held.
+    const items = cuts.flatMap(({ toc, opened, to }) =>
+        opened || to === undefined ? [] : toc.held.flatMap(({ cut }) => cut),
+    );
+    const goesOn = cuts.some(({ opened, to }) => opened && to === undefined);
+    const kept = pieces.filter((_, index) => !cuts.some(({ from, to }) => index >= from && index < (to ?? Infinity)));
+    if (isShown(kept) || kept.some((piece) => piece.kind === 'break'))
+        items.push(...itemsOf(kept, { before: true, after: !goesOn }));
+    else if (!goesOn) items.push(...extras);
+    // The node stands after what the paragraph keeps, where its field began. The result in the paragraph that begins
+    // a field which goes on is held too, with the paragraph's extras after it.
+    for (const { toc, from, to, opened } of cuts) {
+        if (opened && to === undefined)
+            toc.held.push({
+                cut: [tocItem(toc), ...extras],
+                whole: itemsOf(pieces.slice(from), { before: false, after: true }),
+            });
+        else if (opened) items.push(tocItem(toc));
+    }
+    return [...released, ...items];
 }
 
 // What a paragraph's properties and its style make of it, read before its runs.
@@ -447,7 +493,7 @@ function paragraphItems(
     const textAlign = textAlignOf(props.jc, props.bidi);
 
     // Google Docs flattens the Code Block style: every run holding text monospace on the writer's fill, or on a light
-    // grey of any shade, as other editors shade code.
+    // gray of any shade, as other editors shade code.
     const texts = pieces.filter((piece) => piece.kind === 'node' && piece.node.type === 'text');
     const mono = (piece: Piece) => piece.kind === 'node' && isMonospaceFont(piece.font, reader.fontTable);
     const allMono =
@@ -675,53 +721,6 @@ function paragraphItems(
     }
     for (const leftOut of context.leftOut) leftOut.textAlign = textAlign;
     if (props.sectionBreak && scope.story === 'body') items.push({ kind: 'break' });
-    return items;
-}
-
-// A paragraph a table of contents' result runs through. The result's pieces are cut, and Word's saved entry, its text
-// up to the tab before its page number, kept to compare. The node stands after what the paragraph keeps, where the field
-// began. A paragraph all result is held until the field ends, and so is the result in the paragraph that begins it,
-// with what the paragraph gives after its lines, which follows the result.
-function cutTocResults(
-    cuts: TocCut[],
-    pieces: Piece[],
-    itemsOf: (pieces: Piece[], ends: ParagraphEnds) => Item[],
-    extras: Item[],
-): Item[] {
-    for (const { toc, from, to } of cuts) {
-        const text = pieces
-            .slice(from, to)
-            .map((piece) => (piece.kind === 'node' ? (piece.node.text ?? '') : ''))
-            .join('');
-        const saved = text.includes('\t') ? text.slice(0, text.lastIndexOf('\t')) : text;
-        if (saved.trim() && saved.trim() !== NO_TOC_ENTRIES) toc.saved.push(saved);
-    }
-    const [first] = cuts;
-    if (cuts.length === 1 && first && !first.opened && first.to === undefined) {
-        first.toc.held.push({ cut: extras, whole: itemsOf(pieces, WHOLE) });
-        return [];
-    }
-    const node = (toc: OpenToc): Item => ({
-        kind: 'block',
-        node: { type: 'tableOfContents', attrs: { levels: toc.levels } },
-    });
-    // A result begun above and ended here gives what it held.
-    const items = cuts.flatMap(({ toc, opened, to }) =>
-        opened || to === undefined ? [] : toc.held.flatMap(({ cut }) => cut),
-    );
-    const goesOn = cuts.some(({ opened, to }) => opened && to === undefined);
-    const kept = pieces.filter((_, index) => !cuts.some(({ from, to }) => index >= from && index < (to ?? Infinity)));
-    if (isShown(kept) || kept.some((piece) => piece.kind === 'break'))
-        items.push(...itemsOf(kept, { before: true, after: !goesOn }));
-    else if (!goesOn) items.push(...extras);
-    for (const { toc, from, to, opened } of cuts) {
-        if (opened && to === undefined)
-            toc.held.push({
-                cut: [node(toc), ...extras],
-                whole: itemsOf(pieces.slice(from), { before: false, after: true }),
-            });
-        else if (opened) items.push(node(toc));
-    }
     return items;
 }
 

@@ -6,13 +6,19 @@ import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { readFontSize } from '@workspace/lib/constants/fonts';
 import type { Caps, PageNumberKind } from '@workspace/lib/docs/eigendoc';
-import { PAGE_NUMBER_KINDS, readTocLevels } from '@workspace/lib/docs/eigendoc';
+import { PAGE_NUMBER_KINDS } from '@workspace/lib/docs/eigendoc';
 import { MathError, readOmml, readOmmlText, writeMathml } from '@workspace/math';
 import type { XmlElement } from '../../core/xml';
 import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
 import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../ooxml/ooxml';
-import { DEFAULT_HIGHLIGHT, DEFAULT_RUN_SIZE, PAGE_NUMBER_FIELDS } from '../../ooxml/wordml';
+import {
+    DEFAULT_HIGHLIGHT,
+    DEFAULT_RUN_SIZE,
+    isTocField,
+    PAGE_NUMBER_FIELDS,
+    tocFieldLevels,
+} from '../../ooxml/wordml';
 import type { Item, ParagraphItem } from './assemble';
 import { isDark, isFill, isLight, isLightNeutral, markColor } from './colors';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
@@ -49,14 +55,15 @@ type Link = { href?: string; title: string | null };
 // its code, the link its result shows, and whether it is a table of contents.
 export type Field = { inCode: boolean; code: string; link?: Link; checkbox?: boolean; toc?: boolean };
 
-// A table of contents field whose result the body is in. Word's saved entries are derived again, so the result is cut
-// from the paragraphs it spans. `saved` is each entry's text, which the import compares with its own. A paragraph all
-// result is held until the field ends, as its `cut` if it does and as a paragraph again, `whole`, if a heading, a table
-// or the body's end comes first.
+// A table of contents field that is open while the reader walks the body. The import builds the entries again from
+// the headings, so Word's saved entries are cut out of the paragraphs the field spans. `saved` keeps each saved entry's
+// text, which the import compares with its own. A paragraph that holds only the field's result waits in `held` until
+// the field ends. If the field ends, only the paragraph's `cut` stays, such as its section break. If a heading, a table
+// or the body's end comes first, the paragraph comes back `whole`.
 export type OpenToc = { field: Field; levels: number; saved: string[]; held: { cut: Item[]; whole: Item[] }[] };
 
-// A result's pieces in one paragraph, from `from` up to `to`, or on to the paragraph's end while the result goes on.
-// `opened` when its field began here.
+// The part of one paragraph that a table of contents' result covers: its pieces from `from` up to `to`. Without `to`,
+// the result goes on past the paragraph's end. `opened` says that the field began in this paragraph.
 export type TocCut = { toc: OpenToc; from: number; to?: number; opened: boolean };
 
 // Each node draws the whole outline in the editor, so a crafted file of thousands of fields would make thousands of
@@ -270,9 +277,9 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
         if (field) {
             field.inCode = (outer?.inCode ?? false) || pageNumberKind(field.code) !== undefined;
             field.link = hyperlinkField(reader, field.code) ?? outer?.link;
-            field.toc = outer?.toc || /^TOC\b/i.test(field.code.trim());
+            field.toc = outer?.toc || isTocField(field.code);
             // Only between the body's blocks, as the editor inserts one: in a cell or a note it stays its paragraphs.
-            const levels = outer || !context.tocCuts ? undefined : tocLevels(field.code);
+            const levels = outer || !context.tocCuts ? undefined : tocFieldLevels(field.code);
             if (levels !== undefined && reader.tocs.length >= MAX_TABLES_OF_CONTENTS) reader.lost('blocks-flattened');
             else if (levels !== undefined) {
                 reader.openToc = { field, levels, saved: [], held: [] };
@@ -292,16 +299,6 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
         if (field?.checkbox !== undefined) context.pieces.push({ kind: 'checkbox', checked: field.checkbox });
         else if (kind) context.pieces.push({ kind: 'node', node: { type: 'pageNumber', attrs: { kind } } });
     }
-}
-
-// A table of contents' deepest level: \o "a-b" lists to b, a bare \o every level and none Word's default 1 to 3. A \t
-// switch's numbers are the levels its styles list at, not headings'. A table of figures (\c, \a) is no table of contents.
-function tocLevels(code: string): number | undefined {
-    const trimmed = code.trim();
-    if (!/^TOC\b/i.test(trimmed) || /\\[ac]\b/i.test(trimmed)) return undefined;
-    const outline = /\\o\b(?:\s*"\s*\d+\s*-\s*(\d+)\s*")?/i.exec(trimmed);
-    if (!outline) return readTocLevels(undefined);
-    return outline[1] === undefined ? 6 : readTocLevels(Number(outline[1]));
 }
 
 // PAGE and NUMPAGES whatever their switches, which may follow the name with no space; a field's name is
