@@ -88,10 +88,11 @@ export async function landUpload(body: ReadableStream<Uint8Array>, name: string,
     // restore. writeTempWithHash is the stream-into-a-temp seam; its sha256 is incidental.
     const tempPath = getBackupTempPath(BACKUP_ARTIFACT_EXTENSION);
     try {
+        // Made before the first byte, since the stream writes into the file it finds and keeps its mode.
+        fs.writeFileSync(tempPath, '', { mode: ARCHIVE_MODE });
         const { size } = await writeTempWithHash(tempPath, body);
         // Content-Length is the client's word for it; the bytes are what count.
         if (size !== declared) throw new ApiError(400, 'Upload does not match its Content-Length');
-        fs.chmodSync(tempPath, ARCHIVE_MODE);
         landUploadedArtifact(tempPath, artifactPath);
     } finally {
         fs.rmSync(tempPath, { force: true });

@@ -6,11 +6,12 @@ import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
+import { BACKUP_ARTIFACT_EXTENSION, FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
+import { landUpload } from '../../lib/backup/artifacts';
 import { withHomeSlot } from '../../lib/backup/jobs';
 import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { measureFolder } from '../../lib/backup/safety-copy';
@@ -313,6 +314,27 @@ describe('Backup routes', () => {
         const name = buildArtifactName(target.id, new Date('2020-02-02T03:04:05Z'));
         const res = await uploadRequest(name, Uint8Array.from([1, 2, 3]), 2 * 1024 * 1024 * 1024);
         expect(res.status).toBe(413);
+        expect(existsSync(join(getBackupsDir(), name))).toBe(false);
+    });
+
+    test('an upload is staged 0600 from its first byte, so no other user reads one that is refused', async () => {
+        const name = buildArtifactName(target.id, new Date('2020-02-03T03:04:05Z'));
+        const bytes = Uint8Array.from([1, 2, 3]);
+        const modes: number[] = [];
+        const rm = fs.rmSync;
+        const spy = spyOn(fs, 'rmSync').mockImplementation((path, options) => {
+            if (String(path).endsWith(BACKUP_ARTIFACT_EXTENSION)) modes.push(statSync(path).mode & 0o777);
+            rm(path, options);
+        });
+        try {
+            // One byte more than the body: refused once the body is in, before anything lands.
+            await expect(landUpload(new Blob([bytes]).stream(), name, bytes.byteLength + 1)).rejects.toThrow(
+                'Upload does not match its Content-Length',
+            );
+        } finally {
+            spy.mockRestore();
+        }
+        expect(modes).toEqual([0o600]);
         expect(existsSync(join(getBackupsDir(), name))).toBe(false);
     });
 
