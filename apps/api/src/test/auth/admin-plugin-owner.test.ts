@@ -98,4 +98,14 @@ describe("better-auth's admin routes against the owner", () => {
         const res = await adminCall(ctx.alice.user.sessionToken, 'impersonate-user', { userId: admin.id });
         expect(res.status).toBe(404);
     });
+
+    test('ban and unban are closed, even for the owner', async () => {
+        const member = await createTestUser('ban-admin-plugin@test.eigen.is', 'testpassword123', 'Ban Plugin');
+        const ban = await adminCall(ctx.alice.user.sessionToken, 'ban-user', { userId: member.id });
+        const unban = await adminCall(ctx.alice.user.sessionToken, 'unban-user', { userId: member.id });
+        expect(ban.status).toBe(404);
+        expect(unban.status).toBe(404);
+        expect((await getUserById(member.id))?.banned).not.toBe(true);
+        expect(await hasSession(member.sessionToken)).toBe(true);
+    });
 });

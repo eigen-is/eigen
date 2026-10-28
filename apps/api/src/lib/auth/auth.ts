@@ -303,9 +303,10 @@ export const auth = betterAuth({
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
-    // set-user-password revokes no sessions or app passwords (admins reset through PUT
-    // /settings/user/:userId/password); impersonation would hand an admin any member's session.
-    disabledPaths: ['/admin/set-user-password', '/admin/impersonate-user'],
+    // set-user-password revokes no sessions or app passwords, so admins reset through PUT
+    // /settings/user/:userId/password instead. Impersonation would hand an admin any member's session. Eigen
+    // offers no bans: a ban ends the browser sessions, but the app passwords would keep working.
+    disabledPaths: ['/admin/set-user-password', '/admin/impersonate-user', '/admin/ban-user', '/admin/unban-user'],
     logger: { disabled: isTest() },
     secret: getAuthSecret(),
 });
