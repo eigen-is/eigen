@@ -16,6 +16,7 @@ import {
     capabilitiesOf,
     cornerRadius,
     diamondOutline,
+    hasText,
     isBordered,
     isTextual,
     isTransparentFill,
@@ -47,7 +48,7 @@ export function elementXml(el: VectorElement, slide: Slide): string {
     const opacity = el.opacity / 100;
     countPlainLook(el, slide);
     // A shape writes a text body only once it holds text. A text box writes one even empty, as PowerPoint does.
-    const text = isTextual(el) && (el.type === 'richtext' || el.html !== '') ? textXml(el, slide, opacity) : '';
+    const text = isTextual(el) && (el.type === 'richtext' || hasText(el)) ? textXml(el, slide, opacity) : '';
     switch (el.type) {
         case 'rectangle':
             return spXml(
@@ -96,8 +97,8 @@ export function elementXml(el: VectorElement, slide: Slide): string {
                 return drawingAngle(degrees(Math.atan2(el.height * Math.sin(theta), el.width * Math.cos(theta))));
             };
             const [adj1, adj2] = [visual(el.startAngle), visual(el.startAngle + el.sweepAngle)];
-            // A pie whose angles meet draws the whole disc: a slice that thin draws nothing, one that full the disc. The
-            // thin one keeps its text, in its geometry unpainted.
+            // A pie whose angles meet draws the whole disc. So a slice that thin draws nothing, and one that full
+            // draws the disc. The thin one keeps its text, in its geometry unpainted.
             if (adj1 === adj2 && el.sweepAngle < 180)
                 return text && spXml(slide, 'Pie', el, presetXml('pie', { adj1, adj2 }), '<a:noFill/>', NO_LINE, text);
             const geometry =

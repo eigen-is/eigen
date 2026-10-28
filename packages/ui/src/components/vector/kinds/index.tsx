@@ -2,7 +2,7 @@
 // fields, geometry, paint and search text; this answers how a kind is PRESENTED: the icon and label
 // every surface shows, the tool shortcut, the dialog a kind opens when it is edited on the canvas, and
 // the panel rows the generic capability rows do not cover. Text is edited in place for every kind that
-// holds it, so rich-text.tsx owns that editor and no kind names one.
+// holds it, so the rich-text UI owns that editor and no kind names one.
 // Adding a kind = one entry here and one in lib; TypeScript forces both.
 
 import type { LetterKey, NumberKey } from '@tanstack/react-hotkeys';
@@ -26,19 +26,12 @@ import { ArrowPanelSection } from './arrow';
 import { ChartEditDialog, ChartPanelSection } from './chart';
 import { ImagePanelSection } from './image';
 
-// Mounted inside the element's own layer while its text is being edited on the canvas. `onChange` writes
-// straight through (unsealed, so keystrokes coalesce into one undo step); `onExit` ends the session.
-export type InPlaceEditorProps = {
-    element: VectorElement;
-    onChange: (fields: VectorElementPatch) => void;
-    onExit: () => void;
-};
-
 // Rows for a homogeneous selection of this kind. `onChange` applies ONE patch to every selected element
 // and `onChangeEach` a patch computed per element (a label's measured width, an arrow's re-docked
 // route), each in one sealed transact (the panel owns the sealing). `scene` resolves an element the
 // selection does not hold — an arrow's bound shape. `onReplace` swaps a sole selected element for new ones
-// and selects them, one undo step (a chart's Convert to shapes). `slideWidth` is the deck's, for its pt; a drawing has none.
+// and selects them, one undo step (a chart's Convert to shapes). `slideWidth` is the deck's, for its pt; a
+// drawing has none.
 export type KindPanelSectionProps = {
     elements: VectorElement[];
     scene: Map<string, VectorElement>;

@@ -31,7 +31,7 @@ export { NEW_TEXT_BOX_SIZE, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from 
 export { richTextFitHeight } from './richtext';
 // The text block every kind with text shares. The in-place editor paints its box with the SAME string the
 // renderer emits (richTextCssText), so the two cannot drift.
-export { richTextCssText, textualDefaults } from './textual';
+export { hasText, richTextCssText, textualDefaults } from './textual';
 
 // Each entry keeps its own element type, so `ELEMENT_KINDS.richtext.defaults(style)` is rich text's
 // field set and a generic `ELEMENT_KINDS[el.type]` lookup still answers with the union.
@@ -81,7 +81,7 @@ export function isBindable(el: VectorElement): el is VectorBindableElement {
 }
 
 // The elements that hold rich text, such as a text box or a rectangle: the ones the in-place editor, the panel's
-// text rows and the renderer act on. Read through the capability accessor, so an open path, a line, holds none.
+// text rows and the renderer act on. Read through the capability accessor.
 export function isTextual(el: VectorElement): el is VectorTextualElement {
     return capabilitiesOf(el).text;
 }

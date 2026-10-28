@@ -622,9 +622,10 @@ export function CanvasEditor({
     // shape lives in the pure text-editing module; the canvas only picks the selection and opens.
     const openEditArrowLabel = (el: VectorArrowElement) => {
         const ed = arrowLabelEditing(el, arrowRoute(el, committedById));
-        if (!ed) return; // a degenerate arrow (< 2 points) has no label anchor
+        if (!ed) return false; // a degenerate arrow (< 2 points) has no label anchor
         setSelectedIds([el.id]);
         setEditing(ed);
+        return true;
     };
 
     // What this canvas sees (frame-scoped in frame mode) — the snap builder, the resize/move selection
@@ -761,10 +762,9 @@ export function CanvasEditor({
         setRichTextEditId(id);
     };
 
-    // Close it: a text box that paints nothing at all is deleted (empty invisible chrome — the kind answers
-    // that, the same predicate the unpainted ring uses), a shape stays because the user drew it, otherwise the trailing seal closes the session's
-    // coalesced writes. Reads the LIVE element — the session wrote through updateElement, so React state
-    // may be one tick behind.
+    // Close it. An empty text box that paints nothing is deleted. A shape stays, because the user drew it.
+    // Otherwise the trailing seal closes the session's writes. Reads the LIVE element: the session wrote
+    // through updateElement, so React state may be one tick behind.
     const closeRichText = useCallback(() => {
         const id = richTextEditRef.current;
         richTextEditRef.current = null;
@@ -1007,12 +1007,17 @@ export function CanvasEditor({
 
     // What opening an element does, for a double-click, a double-tap and Enter. An arrow opens the label overlay; a
     // kind with an edit dialog opens that (a chart's data); an element that holds text opens the in-place editor
-    // inside its own layer; anything else does nothing.
+    // inside its own layer; anything else does nothing. It says whether it opened anything.
     const editElement = (el: VectorElement) => {
-        if (!mayEdit()) return;
+        if (!mayEdit()) return false;
         if (el.type === 'arrow') return openEditArrowLabel(el);
-        if (ELEMENT_KIND_UI[el.type].EditDialog) return setEditDialogId(el.id);
-        if (isTextual(el)) openRichText(el.id);
+        if (ELEMENT_KIND_UI[el.type].EditDialog) {
+            setEditDialogId(el.id);
+            return true;
+        }
+        if (!isTextual(el)) return false;
+        openRichText(el.id);
+        return true;
     };
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
@@ -1230,7 +1235,8 @@ export function CanvasEditor({
         // A freehand stroke / eraser swipe / line draft (incl. its hover trailing point) is handled by
         // the tools hook, which consumes the move.
         if (drawing.onPointerMove(e)) return;
-        // Hover affordance (idle select): one hitTestTopmost on this same move path (no separate scanner) flips the `move` cursor; a gesture never pays for it.
+        // Hover affordance (idle select): one hitTestTopmost on this same move path flips the `move` cursor.
+        // A gesture never pays for it.
         if (!g && tool === 'select' && !textEditing) {
             const over = hitTestTopmost(ordered, scene, viewportRef.current.zoom, committedById, coarse) !== null;
             if (over !== hoveringSelectable) setHoveringSelectable(over);
@@ -1348,8 +1354,7 @@ export function CanvasEditor({
             // Trailing seal: nothing inside the 500ms capture window may merge into this gesture's
             // undo step (the leading seal fired at pointerdown).
             undoManager?.stopCapturing();
-            // A kind with an in-place editor opens it on creation — an empty box you cannot type into is
-            // not a text tool.
+            // A new text box opens its editor at once: an empty box you cannot type into is not a text tool.
             if (id && c.type === 'richtext') openRichText(id);
             return;
         }
@@ -1461,7 +1466,7 @@ export function CanvasEditor({
                 if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
                 // The layer still paints the box's backdrop; only its text body gives way to the
                 // in-place editor inside it, styled with the same CSS the renderer would have emitted.
-                if (el.id === richTextEditId) {
+                if (el.id === richTextEditId && isTextual(el)) {
                     return node(
                         renderEl(el),
                         <RichTextInPlaceEditor

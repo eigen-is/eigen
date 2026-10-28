@@ -1,9 +1,11 @@
 // Rich text's UI entry for every element that holds text, a text box or a closed shape: the in-place editor the
-// canvas mounts inside the element's own layer, and the typography rows ported from slides' TextProperties — one home for "how does text look", so the deck
-// shell and the drawing app cannot drift. The box background is the generic Fill row, its border the
+// canvas mounts inside the element's own layer, and the typography rows. It is one home for "how does text look",
+// so the deck shell and the drawing app cannot drift. The box background is the generic Fill row, its border the
 // generic Stroke row; this section is the text itself.
 
+import type { Editor } from '@tiptap/react';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
+import type { VectorElementPatch, VectorTextualElement } from '@workspace/lib/vector';
 import { isTextual, RICH_TEXT_CLASS, richTextCssText, round, slidePtToPx, slidePxToPt } from '@workspace/lib/vector';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import {
@@ -29,7 +31,15 @@ import {
     Underline,
 } from 'lucide-react';
 import { useLayoutEffect, useMemo, useRef } from 'react';
-import type { InPlaceEditorProps, KindPanelSectionProps } from './index';
+import type { KindPanelSectionProps } from './index';
+
+// Mounted inside the element's own layer while its text is being edited on the canvas. `onChange` writes
+// straight through (unsealed, so keystrokes coalesce into one undo step); `onExit` ends the session.
+type InPlaceEditorProps = {
+    element: VectorTextualElement;
+    onChange: (fields: VectorElementPatch) => void;
+    onExit: () => void;
+};
 
 // The box the user types in IS the box the renderer paints: same CSS string, applied through
 // setAttribute because React's `style` prop takes an object and an object form of the builder would be a
@@ -38,19 +48,19 @@ import type { InPlaceEditorProps, KindPanelSectionProps } from './index';
 // see it live.
 export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEditorProps) {
     const boxRef = useRef<HTMLDivElement>(null);
+    const editorRef = useRef<Editor | null>(null);
     // Not a state mirror: the element's own paint/typography, re-applied when a panel row changes it
     // mid-session. React never manages this attribute, so nothing fights over it.
-    const css = isTextual(element) ? richTextCssText(element) : '';
+    const css = richTextCssText(element);
     // LightEditor reads `content` once, at creation — and the parent re-renders on every keystroke, so
     // sanitizing in the render body would re-parse a body of up to MAX_HTML_BYTES each time.
-    const initialHtml = useMemo(() => sanitizeToLightEditorHtml(isTextual(element) ? element.html : ''), []);
+    const initialHtml = useMemo(() => sanitizeToLightEditorHtml(element.html), []);
     // Layout effect, not an effect: the box would otherwise paint once unstyled before the CSS lands,
     // flashing the text at the app's font on every session open.
     useLayoutEffect(() => {
         boxRef.current?.setAttribute('style', css);
     }, [css]);
 
-    if (!isTextual(element)) return null;
     return (
         <div
             ref={boxRef}
@@ -60,6 +70,16 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
             // double-click here must not re-open a session over the open one.
             onPointerDown={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
+            // The box fills the shape, but the text inside it may not. A press on the rest of the box would move
+            // the focus to the canvas and end the typing, so it puts the caret at the end of the text instead.
+            onMouseDown={(e) => {
+                const editor = editorRef.current;
+                const text = editor?.view.dom;
+                if (editor && text && e.target instanceof Node && e.target !== text && e.target.contains(text)) {
+                    e.preventDefault();
+                    editor.commands.focus('end');
+                }
+            }}
             onKeyDown={(e) => {
                 // The text-edit layer of the layered Escape stack (CANVAS.md): claimed here, so the
                 // canvas' own document listener never sees it while a session is open.
@@ -82,14 +102,17 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
                 // box the renderer paints, and the auto-fit measures one height for both.
                 className={`${RICH_TEXT_CLASS} min-h-0 break-words`}
                 containerClassName="relative flex flex-col w-full"
-                onReady={({ editor }) => editor.chain().focus('end').run()}
+                onReady={({ editor }) => {
+                    editorRef.current = editor;
+                    editor.chain().focus('end').run();
+                }}
             />
         </div>
     );
 }
 
 export function RichTextPanelSection({ elements, slideWidth, onChange, onChangeEach }: KindPanelSectionProps) {
-    // The panel mounts this section only when every selected element holds text, so this narrows rather than filters.
+    // The panel mounts this section only when every selected element holds text, so this only narrows.
     const boxes = elements.filter(isTextual);
     const fontFamily = getMergedValue(boxes, (el) => el.fontFamily);
     const fontWeight = getMergedValue(boxes, (el) => el.fontWeight);

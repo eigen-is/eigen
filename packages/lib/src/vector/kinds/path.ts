@@ -12,7 +12,7 @@ import { DEFAULT_SHAPE_TEXT_PROPS } from '../types';
 import { boxAnchorPoints, defineKind } from './kind';
 import { bool, fillField, parseNormalizedPath } from './read-fields';
 import { renderRoughShape } from './render-utils';
-import { plainText, readTextual, textRender, textualDefaults } from './textual';
+import { hasText, plainText, readTextual, textRender, textualDefaults } from './textual';
 
 // A new path fills its box until a caller gives it a contour.
 const DEFAULT_PATH = 'M 0 0 L 1 0 L 1 1 L 0 1 Z';
@@ -96,8 +96,7 @@ export const pathKind = defineKind<VectorPathElement>({
             rotatePoint(nearestOnPolyline(outer, rotatePoint(m, center, -el.angle)), center, el.angle),
         );
     },
-    paintsNothing: (el) =>
-        !isBordered(el) && (!el.closed || isTransparentFill(parseFill(el.fill))) && plainText(el) === '',
+    paintsNothing: (el) => !isBordered(el) && (!el.closed || isTransparentFill(parseFill(el.fill))) && !hasText(el),
     render: (el) => textRender(el, renderRoughShape(el)),
     searchText: plainText,
 });

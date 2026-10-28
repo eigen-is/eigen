@@ -1,7 +1,8 @@
-// The image writer behind Download image and Vector's File › Download › SVG: canvas elements, or a doc's or a sheet's
-// chart, drawn by the browser as one standalone SVG. Rich text is written as SVG text from the browser's own layout
-// of each box, the faces it and the labels draw in are embedded, and images are inlined from the canvas's own media,
-// so the file draws the same in any SVG reader. DOM work, so the measuring lives here and the writing in lib.
+// The image writer behind Download image and Vector's File › Download › SVG: canvas elements, or a doc's or a
+// sheet's chart, drawn by the browser as one standalone SVG. Rich text is written as SVG text from the browser's
+// own layout of each box, the faces it and the labels draw in are embedded, and images are inlined from the
+// canvas's own media, so the file draws the same in any SVG reader. DOM work, so the measuring lives here and the
+// writing in lib.
 
 import { inlineSvgMedia } from '@workspace/lib/clipboard';
 import { fontFaceCss } from '@workspace/lib/constants/fonts';
@@ -21,6 +22,7 @@ import {
     canvasImageFaces,
     canvasImageScene,
     eigenMediaHref,
+    hasText,
     isTextual,
     layerInnerHtml,
     richTextCssText,
@@ -59,11 +61,11 @@ export async function downloadCanvasImage(
     downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${name}.svg`);
 }
 
-// Each text box and shape with text laid out as its canvas layer is, the layer's own markup and style at the box's size under the
-// app's canvas-text.css, and read back as where every character landed.
+// Each text box and shape with text, laid out as its canvas layer is: the layer's own markup and style at
+// the box's size, under the app's canvas-text.css. It is read back as where every character landed.
 async function measureRichText(elements: VectorElement[]): Promise<Map<string, MeasuredRichText>> {
     const boxes = elements
-        .filter((el): el is VectorTextualElement => isTextual(el) && el.html !== '')
+        .filter((el): el is VectorTextualElement => isTextual(el) && (el.type === 'richtext' || hasText(el)))
         .map((el) => {
             const host = document.createElement('div');
             host.style.cssText = `position:fixed;left:0;top:0;width:${el.width}px;height:${el.height}px;visibility:hidden;pointer-events:none`;

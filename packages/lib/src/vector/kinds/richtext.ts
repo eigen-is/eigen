@@ -9,7 +9,7 @@ import { CORNERS, DEFAULT_CORNERS, DEFAULT_RICHTEXT_PROPS } from '../types';
 import { defineKind } from './kind';
 import { fillField, oneOf } from './read-fields';
 import { renderRoughShape } from './render-utils';
-import { plainText, readTextual, richTextCssText, textualDefaults } from './textual';
+import { hasText, plainText, readTextual, richTextCssText, textualDefaults } from './textual';
 
 export const richTextKind = defineKind<VectorRichTextElement>({
     type: 'richtext',
@@ -44,7 +44,7 @@ export const richTextKind = defineKind<VectorRichTextElement>({
     outline: (el, inflate) =>
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
     // An empty box with no paint of its own draws literally nothing — the case the canvas rings.
-    paintsNothing: (el) => isUnpainted(el) && plainText(el) === '',
+    paintsNothing: (el) => isUnpainted(el) && !hasText(el),
     render: (el) => ({ html: el.html, style: richTextCssText(el), svg: isUnpainted(el) ? '' : renderRoughShape(el) }),
     searchText: plainText,
 });

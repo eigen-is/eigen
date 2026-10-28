@@ -10,7 +10,7 @@ import { CORNERS, DEFAULT_CORNERS, DEFAULT_SHAPE_TEXT_PROPS } from '../types';
 import { defineKind } from './kind';
 import { fillField, oneOf } from './read-fields';
 import { renderRoughShape } from './render-utils';
-import { plainText, readTextual, textRender, textualDefaults } from './textual';
+import { hasText, plainText, readTextual, textRender, textualDefaults } from './textual';
 
 // Excalidraw shrinks a rectangle's projection diagonals by 15px at each end
 // (getDiagonalsForBindableElement) — the focus points behave oddly right at the corners.
@@ -59,7 +59,7 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
             [rot(up[0]), rot(up[1])],
         ];
     },
-    paintsNothing: (el) => isUnpainted(el) && plainText(el) === '',
+    paintsNothing: (el) => isUnpainted(el) && !hasText(el),
     render: (el) => textRender(el, renderRoughShape(el)),
     searchText: plainText,
 });

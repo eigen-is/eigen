@@ -1,6 +1,6 @@
 // The text a kind holds, such as a text box's or a rectangle's: one implementation that every kind with text
 // composes. It gives a new element its text fields, reads and clamps the stored ones, turns the typography into
-// CSS and chooses the render arm. It imports only leaf modules, never geometry or a kind, so the chart's shape
+// CSS and chooses the render arm. It imports no geometry, render-utils, kind or registry, so the chart's shape
 // builders can use it without loading the kind registry.
 
 import { getFontFamily } from '../../constants/fonts';
@@ -94,11 +94,16 @@ export function richTextCssText(el: TextElement): string {
 // A shape's render: its own svg alone while it holds no text, so it draws the bytes it drew before shapes held
 // text, and the text over that svg once it does.
 export function textRender(el: TextElement, svg: string): RenderOutput {
-    return el.html === '' ? { svg } : { html: el.html, style: richTextCssText(el), svg };
+    return hasText(el) ? { html: el.html, style: richTextCssText(el), svg } : { svg };
 }
 
-// The text without its markup, which search reads and which decides whether an unpainted element shows anything.
-// stripTagsServer needs no DOM, so this runs on the server too.
+// The text without its markup, which search reads. stripTagsServer needs no DOM, so this runs on the server too.
 export function plainText(el: Textual): string {
     return stripTagsServer(el.html).trim();
+}
+
+// Whether any text is left once the markup is gone. A list the user emptied is markup alone, so it counts as none.
+// Drawing, the empty ring, measuring and export all ask this one question.
+export function hasText(el: Textual): boolean {
+    return plainText(el) !== '';
 }

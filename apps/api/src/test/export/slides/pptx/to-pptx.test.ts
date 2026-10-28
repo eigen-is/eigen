@@ -920,6 +920,11 @@ describe('pptx text', () => {
         expect(descendants(all[8], P, 'txBody')).toHaveLength(1);
     });
 
+    test('a shape whose list the user emptied holds no text, so it writes no body', () => {
+        const shape = only(pptx(sceneOf([element('rectangle', { html: '<ul><li><p></p></li></ul>' })])));
+        expect(descendants(shape, P, 'txBody')).toEqual([]);
+    });
+
     test('a slice too thin to draw still writes its text, unpainted', () => {
         const shape = only(
             pptx(

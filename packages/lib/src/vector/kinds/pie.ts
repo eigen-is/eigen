@@ -13,7 +13,7 @@ import { DEFAULT_SHAPE_TEXT_PROPS } from '../types';
 import { defineKind } from './kind';
 import { fillField, num } from './read-fields';
 import { renderRoughShape } from './render-utils';
-import { plainText, readTextual, textRender, textualDefaults } from './textual';
+import { hasText, plainText, readTextual, textRender, textualDefaults } from './textual';
 
 // A new slice is a quarter from 12 o'clock, where a pie chart's first slice starts.
 const DEFAULT_START_ANGLE = 270;
@@ -70,7 +70,7 @@ export const pieKind = defineKind<VectorPieElement>({
             c,
         ].map((p) => rotatePoint(p, c, el.angle));
     },
-    paintsNothing: (el) => isUnpainted(el) && plainText(el) === '',
+    paintsNothing: (el) => isUnpainted(el) && !hasText(el),
     render: (el) => textRender(el, renderRoughShape(el)),
     searchText: plainText,
 });

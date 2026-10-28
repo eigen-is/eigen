@@ -1,7 +1,7 @@
 // Every canvas keyboard command except the layered Escape (that one lives in the canvas because it
 // reads live gesture state to cancel an in-progress create/marquee/move) and the z-order brackets
 // (shared `useZOrderHotkeys`, which owns the manual event.code listener). Bindings go through
-// @tanstack/react-hotkeys (available from packages/ui) mirroring the slides editor's useHotkey +
+// @tanstack/react-hotkeys mirroring the slides editor's useHotkey +
 // enabled-gating discipline, so shortcuts keep working while focus sits off-canvas and auto-ignore
 // text inputs.
 
@@ -20,7 +20,7 @@ import { VECTOR_TOOLS } from './use-tool';
 
 type CanvasKeyboardParams = {
     enabled: boolean;
-    // An open menu owns the arrows, Delete, letters and Escape, but the Edit menu lists ⌘Z and ⇧⌘Z, so undo stays on.
+    // An open menu owns the arrows, Delete, letters and Escape. The Edit menu lists ⌘Z and ⇧⌘Z, so undo stays on.
     menuOpen: boolean;
     elements: VectorElement[];
     selectedIds: string[];
@@ -37,8 +37,8 @@ type CanvasKeyboardParams = {
     // The canvas element: Enter edits only when focus is on it or on the page itself, so a focused button,
     // link or rail thumbnail keeps its own Enter.
     containerRef: RefObject<HTMLElement | null>;
-    // What a double-click on the sole selected element does (the canvas' editElement).
-    onEdit: (el: VectorElement) => void;
+    // What a double-click on the sole selected element does (the canvas' editElement), and whether it did anything.
+    onEdit: (el: VectorElement) => boolean;
 };
 
 // Excalidraw's keys for its image tool and its tool lock; the toolbar shows them beside their rows.
@@ -193,11 +193,10 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
         if (e.target !== document.body && e.target !== p.containerRef.current) return;
         const el =
             p.selectedIds.length === 1 ? p.elements.find((candidate) => candidate.id === p.selectedIds[0]) : null;
-        if (!el) return;
-        e.preventDefault();
-        p.onEdit(el);
+        if (el && p.onEdit(el)) e.preventDefault();
     }, []);
-    // The library takes every key it matches, a focused button's Enter too; this handler decides, so it asks for neither.
+    // The library takes every key it matches, a focused button's Enter too. This handler decides, so it asks
+    // for neither.
     const onEnter = useMemo(
         () => ({ enabled: enabled && hasSelection, preventDefault: false, stopPropagation: false }),
         [enabled, hasSelection],

@@ -67,3 +67,19 @@ test('a shape with no text is written as its drawing alone', async () => {
     expect(svg).not.toContain('<text');
     expect(svg).not.toContain('foreignObject');
 });
+
+test('a shape whose list the user emptied is written as its drawing alone, with no stray bullet', async () => {
+    const svg = await download([shape('<ul><li><p></p></li></ul>')]);
+    expect(svg).not.toContain('<circle');
+    expect(svg).not.toContain('foreignObject');
+});
+
+test('an empty text box is measured like one with text, so it writes no foreignObject', async () => {
+    const box: VectorElement = {
+        ...shape(''),
+        ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
+        type: 'richtext',
+    };
+    const svg = await download([box]);
+    expect(svg).not.toContain('foreignObject');
+});
