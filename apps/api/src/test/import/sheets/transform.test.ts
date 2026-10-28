@@ -98,6 +98,22 @@ describe('an imported rich-text cell', () => {
     });
 });
 
+// An insert adds the file's weight to the open workbook's, so it is counted as the reader charges the cells.
+describe("an imported workbook's weight", () => {
+    test("is its cells and their text, never the snapshot's JSON", () => {
+        const xlsx = xlsxFixture({
+            sheets: [
+                {
+                    data: '<row r="1"><c r="A1" t="inlineStr"><is><t>hello</t></is></c><c r="B1"><v>12.5</v></c><c r="C1"><f>B1*2</f><v>25</v></c></row>',
+                },
+            ],
+        });
+        const { weight } = importXlsxToSheetsSnapshot(toTransferableBuffer(Buffer.from(xlsx)), JOB);
+        // "hello" as its value and display, "12.5" and "25" as displays, the formula, and General for each cell.
+        expect(weight).toEqual({ cells: 3, text: 5 + 5 + 4 + 2 + '=B1*2'.length + 3 * 'General'.length });
+    });
+});
+
 // The pictures cross back beside the snapshot, each the file an image names, for the main thread to write.
 describe('an imported picture', () => {
     test('comes back as the media its image names', async () => {

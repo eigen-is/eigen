@@ -5,12 +5,15 @@ import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheet
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
-import { appendSheetsToYjs, readSheetsFromDoc, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
+import {
+    appendSheetsToYjs,
+    readLiveSheets,
+    readSheetsFromDoc,
+    writeSheetsSnapshotToYjs,
+} from '../../lib/document/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
-import { IMPORT_MESSAGES } from '../../lib/import/messages';
-import { MAX_CELLS, MAX_TEXT } from '../../lib/import/sheets/limits';
 import type { Mount } from '../../lib/mount';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { readPersistedDoc } from '../fixtures/transform-results';
@@ -821,13 +824,18 @@ describe('document/sheets — appendSheetsToYjs', () => {
         return doc;
     }
 
+    // As the import's write calls it, with the workbook it has just read.
+    function append(doc: Y.Doc, snapshotJson: string): void {
+        appendSheetsToYjs(doc, snapshotJson, readLiveSheets(doc));
+    }
+
     test("the sheets arrive as one batch of addSheet ops under fresh ids, after the workbook's own", () => {
         const doc = workbook();
         const pending: Op[] = [{ op: 'replace', id: 'own', path: ['name'], value: 'Data' }];
         doc.getArray('ops').push([pending]);
         const snapshot = doc.getMap('state').get('snapshot');
 
-        appendSheetsToYjs(doc, encodeSheetsSnapshot(file, { computed: true }));
+        append(doc, encodeSheetsSnapshot(file, { computed: true }));
 
         expect(doc.getMap('state').get('snapshot')).toBe(snapshot);
         const batches = doc.getArray<Op[]>('ops').toArray();
@@ -846,7 +854,7 @@ describe('document/sheets — appendSheetsToYjs', () => {
 
     test('every ref the file makes to a renamed sheet follows its new name, and every id ref its new id', () => {
         const doc = workbook();
-        appendSheetsToYjs(doc, encodeSheetsSnapshot(file, { computed: true }));
+        append(doc, encodeSheetsSnapshot(file, { computed: true }));
         const { sheets } = readSheetsFromDoc(doc, { recalc: false });
         const [, data, summary] = sheets;
         const cell = (r: number, c: number) => summary.celldata?.find((e) => e.r === r && e.c === c)?.v;
@@ -868,14 +876,14 @@ describe('document/sheets — appendSheetsToYjs', () => {
 
     test('a computed file keeps its calc chain, under the new id', () => {
         const doc = workbook();
-        appendSheetsToYjs(doc, encodeSheetsSnapshot(file, { computed: true }));
+        append(doc, encodeSheetsSnapshot(file, { computed: true }));
         const added = doc.getArray<Op[]>('ops').toArray()[0][1].value;
         expect(added.calcChain).toEqual([{ r: 0, c: 0, id: added.id }]);
     });
 
     test('a workbook never flushed takes the file beside the default sheet the editor opens on', () => {
         const doc = new Y.Doc();
-        appendSheetsToYjs(doc, encodeSheetsSnapshot([{ ...file[0], name: 'Sheet1' }], { computed: true }));
+        append(doc, encodeSheetsSnapshot([{ ...file[0], name: 'Sheet1' }], { computed: true }));
         const { sheets } = readSheetsFromDoc(doc, { recalc: false });
         expect(sheets.map((sheet) => sheet.name)).toEqual(['Sheet1', 'Sheet1(Copy)']);
     });
@@ -883,89 +891,10 @@ describe('document/sheets — appendSheetsToYjs', () => {
     test("a name nobody holds is kept, and a ref to a sheet the file doesn't bring stays as written", () => {
         const doc = workbook();
         const json = encodeSheetsSnapshot([{ ...file[1], name: 'Summary' }], { computed: true });
-        appendSheetsToYjs(doc, json);
+        append(doc, json);
         const [summary] = decodeSheetsSnapshot(json);
         const added = doc.getArray<Op[]>('ops').toArray()[0][0].value;
         expect(added.name).toBe('Summary');
         expect(added.celldata[0].v.f).toBe(summary.celldata?.[0]?.v?.f);
-    });
-
-    // Each file is bounded alone, so a workbook grown by inserts is weighed with the file against the caps one import
-    // has. A pending sheet stands for an insert no tab has flushed yet: the workbook holds it only as an op. It stays
-    // small, because replaying any op over a large workbook costs seconds.
-    describe('against the caps of one import', () => {
-        const refused = { status: 413, message: IMPORT_MESSAGES.xlsx.tooLarge };
-        const sheetOf = (name: string, cells: number, text?: string): Sheet => ({
-            id: name,
-            name,
-            order: 0,
-            config: {},
-            celldata: Array.from({ length: cells }, (_, i) => ({
-                r: Math.floor(i / 26),
-                c: i % 26,
-                v: { v: text ?? i },
-            })),
-        });
-        const fileOf = (cells: number, text?: string) =>
-            encodeSheetsSnapshot([sheetOf('File', cells, text)], { computed: true });
-        function workbookOf(snapshot: string, pending?: Sheet): Y.Doc {
-            const doc = new Y.Doc();
-            doc.getMap('state').set('snapshot', snapshot);
-            if (pending)
-                doc.getArray<Op[]>('ops').push([[{ op: 'addSheet', id: pending.id, path: [], value: pending }]]);
-            return doc;
-        }
-        function thrown(append: () => void): unknown {
-            try {
-                append();
-            } catch (error) {
-                return error;
-            }
-            return null;
-        }
-
-        // A thousand cells short of the cap.
-        let nearlyFull: string;
-        beforeAll(() => {
-            nearlyFull = encodeSheetsSnapshot([sheetOf('Stored', MAX_CELLS - 1_000)], { computed: true });
-        });
-
-        test('a file that fits alone is refused when the workbook would pass the cell cap, and the workbook is unchanged', () => {
-            const doc = workbookOf(nearlyFull);
-            const before = Y.encodeStateVector(doc);
-
-            expect(thrown(() => appendSheetsToYjs(doc, fileOf(1_001)))).toMatchObject(refused);
-            expect(Y.encodeStateVector(doc)).toEqual(before);
-            expect(doc.getArray('ops')).toHaveLength(0);
-        }, 30_000);
-
-        test('a file that fills the workbook to the cell cap goes in', () => {
-            const doc = workbookOf(nearlyFull);
-            appendSheetsToYjs(doc, fileOf(1_000));
-            expect(
-                doc
-                    .getArray<Op[]>('ops')
-                    .toArray()[0]
-                    .map((op) => op.value.name),
-            ).toEqual(['File']);
-        }, 30_000);
-
-        test('the cells of a sheet no tab has flushed count with the stored ones', () => {
-            const doc = workbookOf(
-                encodeSheetsSnapshot([sheetOf('Stored', 0)], { computed: true }),
-                sheetOf('Pending', 10),
-            );
-            expect(thrown(() => appendSheetsToYjs(doc, fileOf(MAX_CELLS - 9)))).toMatchObject(refused);
-        }, 30_000);
-
-        test("the stored snapshot's text, the pending sheets' and the file's together pass the text cap", () => {
-            const third = 'a'.repeat(MAX_TEXT / 3);
-            const stored = encodeSheetsSnapshot([sheetOf('Stored', 1, third)], { computed: true });
-            const doc = workbookOf(stored, sheetOf('Pending', 1, third));
-            const before = Y.encodeStateVector(doc);
-
-            expect(thrown(() => appendSheetsToYjs(doc, fileOf(1, third)))).toMatchObject(refused);
-            expect(Y.encodeStateVector(doc)).toEqual(before);
-        }, 30_000);
     });
 });

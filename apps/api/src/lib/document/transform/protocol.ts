@@ -232,9 +232,12 @@ export type PreviewResult = Omit<TextPreviewResult, 'mode'>;
 export type ExtractTextResult = { text: string };
 // `zoom` is the one htmlToPdf hands WeasyPrint for a PDF document laid out at 1:1: a deck's, from its width.
 export type ExportTransformResult = { data: ArrayBuffer; zoom?: number };
-// The UTF-8 bytes of the lean Sheet[] JSON, which the main thread commits without parsing it. The pictures its
-// images name come beside it, and the main thread writes them through Mount.
-export type SheetsImportTransformResult = { snapshotJson: ArrayBuffer; images: TransformMedia[] };
+// A workbook's stored cells and the characters of their text, as sheetsWeight counts them.
+export type SheetsWeight = { cells: number; text: number };
+// The UTF-8 bytes of the lean Sheet[] JSON, which the main thread commits without parsing it, and its weight, which an
+// insert adds to the open workbook's. The pictures its images name come beside it, and the main thread writes them
+// through Mount.
+export type SheetsImportTransformResult = { snapshotJson: ArrayBuffer; weight: SheetsWeight; images: TransformMedia[] };
 // A ready Yjs update plus the images extracted from the docx, its page and its Normal: the main thread
 // only commits the update, the page and the Normal and writes the media through Mount.
 export type DocImportTransformResult = {
@@ -310,6 +313,18 @@ function isTransformMedia(value: unknown): boolean {
     );
 }
 
+// A weight that is no count would slip past the caps it is compared against.
+function isSheetsWeight(value: unknown): boolean {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'cells' in value &&
+        'text' in value &&
+        Number.isFinite(value.cells) &&
+        Number.isFinite(value.text)
+    );
+}
+
 // Which result pairs with which request. The runner checks this at the trust boundary, so every seam past it
 // narrows without checking again. It is exhaustive over the kind, and for an import over the type it produces, so
 // a new arm of the union is a compile error instead of a silent fallthrough.
@@ -321,6 +336,7 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
               data?: unknown;
               zoom?: unknown;
               snapshotJson?: unknown;
+              weight?: unknown;
               update?: unknown;
               page?: unknown;
               style?: unknown;
@@ -356,6 +372,7 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
                 case 'eigensheets':
                     return (
                         r?.snapshotJson instanceof ArrayBuffer &&
+                        isSheetsWeight(r.weight) &&
                         Array.isArray(r.images) &&
                         r.images.every(isTransformMedia)
                     );

@@ -36,6 +36,7 @@ type TestDirective = {
         | 'export-malformed'
         | 'import-ok'
         | 'import-malformed'
+        | 'import-unweighed'
         | 'import-doc-malformed-images';
     ms?: number;
     // Dies before acknowledging the job, as a child that fails to load does.
@@ -183,7 +184,11 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
             const snapshotJson = new TextEncoder().encode(JSON.stringify({ received })).buffer as ArrayBuffer;
             const response: ChildResponseEnvelope = {
                 jobId,
-                response: { ok: true, result: { snapshotJson, images: [] }, warnings: [] },
+                response: {
+                    ok: true,
+                    result: { snapshotJson, weight: { cells: 0, text: 0 }, images: [] },
+                    warnings: [],
+                },
             };
             send(response);
             return;
@@ -192,6 +197,13 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
             // Right discriminant, result missing the snapshot payload.
             send({ jobId, response: { ok: true, result: {}, warnings: [] } });
             return;
+        case 'import-unweighed': {
+            // A sheets import's snapshot is there, but its weight is no count.
+            const snapshotJson = new ArrayBuffer(2);
+            const weight = { cells: Number.NaN, text: 0 };
+            send({ jobId, response: { ok: true, result: { snapshotJson, weight, images: [] }, warnings: [] } });
+            return;
+        }
         case 'import-doc-malformed-images': {
             // A docx import's update is there, but the images array holds junk.
             const update = new Uint8Array([1, 2]).buffer as ArrayBuffer;

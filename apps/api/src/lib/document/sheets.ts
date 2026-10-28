@@ -1,9 +1,9 @@
 // A workbook's Yjs doc, read and written on the server. The transform process reads it as Sheet[] for an export, a
 // preview or a search extract, replaying the pending ops over the snapshot as a browser does. An xlsx import writes it:
-// a replace as a new snapshot, an insert as addSheet ops, weighed with the workbook against the caps of one import.
+// a replace as a new snapshot, an insert as addSheet ops after the sheets an open tab shows.
 
 import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot } from '@workspace/lib/sheets';
 import {
     copySheetName,
     createDefaultSheets,
@@ -16,9 +16,6 @@ import {
     withMaterializedData,
 } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
-import { ApiError } from '../core/errors';
-import { IMPORT_MESSAGES } from '../import/messages';
-import { MAX_CELLS, MAX_TEXT } from '../import/sheets/limits';
 
 // What the server's recalc lets an untrusted workbook's formulas cost. Past either bound the recalc fails like any
 // other, and the sheets keep the values they hold.
@@ -69,6 +66,14 @@ export function readSheetsSnapshotJson(doc: Y.Doc): string | undefined {
     return doc.getMap<string>('state').get('snapshot');
 }
 
+// The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets before the first flush,
+// with every pending op replayed.
+export function readLiveSheets(doc: Y.Doc): Sheet[] {
+    const snapshot = readSheetsSnapshotJson(doc);
+    const stored = snapshot ? decodeSheetsSnapshot(snapshot) : createDefaultSheets();
+    return replaySheetsOps(stored, doc.getArray<Op[]>('ops').toArray());
+}
+
 // A replacing import's commit. The transform's snapshot goes into the live doc as it came, never parsed here, and the
 // pending ops go with the workbook they edited.
 export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string): void {
@@ -83,25 +88,9 @@ export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string): void
 // arrives, so an open tab adds them live and keeps its unflushed edits. Each takes a fresh id, and one whose name the
 // workbook holds is renamed as Duplicate names a copy. What the file says about its own sheets follows: formulas,
 // conditional formats, list sources and links name a sheet by name; charts, link cells and the calc chain by id.
-export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string): void {
-    const snapshot = readSheetsSnapshotJson(doc);
-    const ops = doc.getArray<Op[]>('ops');
-    // A doc never flushed opens on the default sheets, as the editor and readSheetsFromDoc both read it.
-    const stored = snapshot ? decodeSheetsSnapshot(snapshot) : createDefaultSheets();
-    const current = replaySheetsOps(stored, ops.toArray());
+// `current` is the workbook as readLiveSheets reads it in the same write, which the caller weighs the file against.
+export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: Sheet[]): void {
     const imported: SheetWithCalcChain[] = decodeSheetsSnapshot(snapshotJson);
-
-    // The reader bounds each file alone, so the file is weighed here with the workbook it joins, against the same caps.
-    // The cells are counted on the sheets this append decodes anyway, and the text is the snapshot's length. A sheet
-    // added since the last flush is only an op until an open tab writes a new snapshot, so it is encoded to be measured.
-    const { tooLarge } = IMPORT_MESSAGES.xlsx;
-    const cells = [...current, ...imported].reduce((sum, sheet) => sum + (sheet.celldata?.length ?? 0), 0);
-    if (cells > MAX_CELLS) throw new ApiError(413, tooLarge);
-    const storedIds = new Set(stored.map((sheet) => sheet.id));
-    const unflushed = current.filter((sheet) => !storedIds.has(sheet.id));
-    const unflushedText = unflushed.length > 0 ? encodeSheetsSnapshot(unflushed, { computed: false }).length : 0;
-    if ((snapshot?.length ?? 0) + unflushedText + snapshotJson.length > MAX_TEXT) throw new ApiError(413, tooLarge);
-
     const taken = current.map((sheet) => sheet.name);
     const renames = new Map<string, string>();
     const fresh = imported.map((sheet) => {
@@ -146,5 +135,5 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string): void {
         const value: Sheet = { ...sheet, id, name, order: current.length + i, charts };
         return { op: 'addSheet', id, path: [], value };
     });
-    ops.push([added]);
+    doc.getArray<Op[]>('ops').push([added]);
 }

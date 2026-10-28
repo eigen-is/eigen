@@ -20,6 +20,7 @@ import type {
     ExtractTextJob,
     PreviewResult,
     SheetsImportJob,
+    SheetsWeight,
     SlidesImportJob,
     SlidesImportTransformResult,
     TransformError,
@@ -196,7 +197,12 @@ export async function runBytesTransformToText(
 // the caller commits: the snapshot JSON (decoded, never parsed, on the main thread)
 // for sheets, a ready Yjs update for documents and decks, each with its extracted media.
 // The warnings come back too, for the summary an import answers with.
-export type SheetsImportSnapshot = { snapshotJson: string; images: TransformMedia[]; warnings: TransformWarning[] };
+export type SheetsImportSnapshot = {
+    snapshotJson: string;
+    weight: SheetsWeight;
+    images: TransformMedia[];
+    warnings: TransformWarning[];
+};
 
 export async function runImportToSnapshotJson(
     job: SheetsImportJob,
@@ -204,7 +210,8 @@ export async function runImportToSnapshotJson(
     opts: TransformOptions,
 ): Promise<SheetsImportSnapshot> {
     const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
-    return { snapshotJson: new TextDecoder().decode(result.snapshotJson), images: result.images, warnings };
+    const snapshotJson = new TextDecoder().decode(result.snapshotJson);
+    return { snapshotJson, weight: result.weight, images: result.images, warnings };
 }
 
 export async function runImportToDocumentUpdate(
