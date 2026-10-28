@@ -260,6 +260,11 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         rmSync(restoring, { recursive: true, force: true });
         return ui.fail(message, next);
     };
+    const decline = (): never => {
+        rmSync(restoring, { recursive: true, force: true });
+        ui.outro('Nothing was changed.');
+        return process.exit(DECLINED);
+    };
 
     const read = await readServerArchive(archivePath);
     const manifest = read.manifest;
@@ -353,11 +358,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
             initial: false,
             flag: '--yes',
         });
-        if (!go) {
-            rmSync(restoring, { recursive: true, force: true });
-            ui.outro('Nothing was changed.');
-            process.exit(DECLINED);
-        }
+        if (!go) decline();
     }
 
     const notReplayed = await stageServerArchive(archived, restoring, {
@@ -369,12 +370,21 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         manifest.level === 'light'
             ? enumerateHomes(join(restoring, RESTORING_DATA_DIR, SERVER_DIR, SERVER_DATABASES.users))
             : { orphans: [] };
+    // The first yes came before anyone knew of these homes, so the operator says yes to them on their own.
+    if (orphans.length) {
+        console.log(glyphLine('warn', `Homes no account in the archive owns go aside: ${orphans.join(', ')}`));
+        if (!flags.yes) {
+            const go = await ui.confirm({
+                message: `Set these homes aside and swap ${name} in? Eigen stops for the swap.`,
+                initial: false,
+                flag: '--yes',
+            });
+            if (!go) decline();
+        }
+    }
     const record: StagedRestore = { archive: name, level: manifest.level, appVersion: manifest.appVersion, orphans };
     writeFileSync(join(restoring, STAGE_RECORD), JSON.stringify(record));
     console.log(glyphLine('ok', `Staged ${name} in data/${RESTORING_DIR}`));
-    if (orphans.length) {
-        console.log(glyphLine('warn', `Homes no account in the archive owns go aside: ${orphans.join(', ')}`));
-    }
     if (notReplayed.settled) {
         console.log(
             glyphLine(

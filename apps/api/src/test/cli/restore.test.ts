@@ -18,6 +18,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
+import { DECLINED } from '../../cli/install';
 import { STAGE_LOCK, SWAP_LOCK, SWAP_MARKER } from '../../cli/restore';
 import { copyArchiveMember, createServerArchiveWriter, extractArtifact, packFolder } from '../../lib/backup/archive';
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
@@ -90,8 +91,9 @@ function install(env = RELEASE_ENV): string {
     return dir;
 }
 
-// `preamble` runs before cli/restore.ts loads, to spy on what the run cannot show from outside.
-async function restoreCli(dir: string, args: string[], { preamble = [], env = {} }: CliSeams = {}) {
+// `preamble` runs before cli/restore.ts loads, to spy on what the run cannot show from outside. `input` answers the
+// questions, a line each.
+async function restoreCli(dir: string, args: string[], { preamble = [], env = {}, input }: CliSeams = {}) {
     const script = [
         `import { parseArgs } from 'node:util';`,
         ...preamble,
@@ -110,7 +112,7 @@ async function restoreCli(dir: string, args: string[], { preamble = [], env = {}
             EIGEN_BACKUPS_DIR: getBackupsDir(),
             ...env,
         },
-        stdin: 'ignore',
+        stdin: input === undefined ? 'ignore' : new Blob([input]),
         stdout: 'pipe',
         stderr: 'pipe',
     });
@@ -122,7 +124,7 @@ async function restoreCli(dir: string, args: string[], { preamble = [], env = {}
     return { stdout, stderr, code };
 }
 
-type CliSeams = { preamble?: string[]; env?: Record<string, string> };
+type CliSeams = { preamble?: string[]; env?: Record<string, string>; input?: string };
 
 // Every ownAs of the run into `log`, a line each, with whether the swap marker was there yet. Nothing is chowned.
 function spyOwnAs(log: string): string[] {
@@ -626,6 +628,32 @@ describe('restore --stage and --swap', () => {
             // The archive's TLS certificate in, the one here aside.
             expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe(TLS_KEY);
             expect(readFileSync(join(dir, aside, 'certs/key.pem'), 'utf8')).toBe('the key here');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a Light stage that would set homes aside names them and asks again, and a no leaves nothing staged',
+        async () => {
+            const dir = install();
+            const declined = await restoreCli(dir, [basename(lightArchive), '--stage'], { input: 'y\nn\n' });
+            expect(declined.stderr).toBe('');
+            expect(declined.code).toBe(DECLINED);
+            expect(declined.stdout).toContain('Homes no account in the archive owns go aside: home/old');
+            expect(declined.stdout).toContain('Set these homes aside');
+            expectUntouched(dir);
+
+            const agreed = await restoreCli(dir, [basename(lightArchive), '--stage'], { input: 'y\ny\n' });
+            expect(agreed.code).toBe(0);
+            expect(existsSync(join(dir, 'data/.restoring/staged.json'))).toBe(true);
+
+            // With no home to set aside there is one question.
+            const bare = install();
+            rmSync(join(bare, 'data/home/old'), { recursive: true });
+            const once = await restoreCli(bare, [basename(lightArchive), '--stage'], { input: 'y\n' });
+            expect(once.stderr).toBe('');
+            expect(once.code).toBe(0);
+            expect(once.stdout).not.toContain('Set these homes aside');
         },
         JOB_TIMEOUT_MS,
     );
