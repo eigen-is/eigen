@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { createHmac } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { user as userSchema, verification as verificationSchema } from '../../../auth-schema';
@@ -19,7 +18,9 @@ describe('Guest Auth', () => {
             body: { email, password: crypto.randomUUID(), name: 'Scoped', role: 'user' },
         });
         const signIn = (scope: string) => {
-            const password = createHmac('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
+            const password = new Bun.CryptoHasher('sha256', auth.options.secret)
+                .update(`${scope}:${email}`)
+                .digest('hex');
             return auth.api.signInEmail({ body: { email, password }, asResponse: true });
         };
 
