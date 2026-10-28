@@ -5,7 +5,7 @@ import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import type { Raster } from '../pdf-test-helpers';
 import { pageCount, pixelAt, rasterize, rasterizer } from '../pdf-test-helpers';
-import { NO_MEDIA } from '../setup';
+import { NO_MEDIA, NO_PIXELS } from '../setup';
 
 // The page margin the export sets, in CSS px, and the points a CSS px prints at.
 const MARGIN = 40;
@@ -36,6 +36,7 @@ const suite = weasyPrint && rasterizer ? describe : describe.skip;
             title: 'Rows',
             sheets: [sheet],
             mediaUrls: NO_MEDIA,
+            mediaPixels: NO_PIXELS,
             mode: 'pdf',
             lost: () => {},
         });
@@ -115,6 +116,7 @@ suite('sheets PDF — a cell draws its text as the editor does', () => {
             title: 'Look',
             sheets: [sheet],
             mediaUrls: NO_MEDIA,
+            mediaPixels: NO_PIXELS,
             mode: 'pdf',
             lost: () => {},
         });
@@ -156,6 +158,7 @@ suite('sheets PDF — a rotated chart', () => {
             title: 'Chart',
             sheets: [sheet],
             mediaUrls: NO_MEDIA,
+            mediaPixels: NO_PIXELS,
             mode: 'pdf',
             lost: () => {},
         });

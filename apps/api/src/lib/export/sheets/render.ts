@@ -50,6 +50,9 @@ import { windowedSheet } from './window';
 // Image sources by media name: data: URIs for an export, the prepared preview URLs for a preview.
 type MediaUrls = Map<string, string>;
 
+// The pixels each raster decodes to, by media name, read from its header when the export loads its media.
+export type MediaPixels = Map<string, number>;
+
 type ContentSize = { width: number; height: number };
 
 // The export interns every cell's style into a class declared in one <style> element. A workbook repeats a few hundred
@@ -88,6 +91,14 @@ const CELL_BYTES = 50;
 // cost little by their sources alone, but each still writes these bytes.
 const IMAGE_TAG_BYTES = 200;
 
+// The decoded pixels that cost a cell. An export's rasters reach WeasyPrint as their screen previews, WebPs of at most
+// 2560 px a side, and it decodes each whole and writes its pixels into the PDF, so many distinct pictures cost it far
+// more than their bytes say. Distinct 2560 by 1440 previews of real photos took it 0.58 s of CPU each, 60 in 35 s, and
+// flat colour 0.06 s. At 800 pixels a cell such a photo costs 4,608 cells beside the 3,075 of its 115 KB, so the cap
+// holds 32, which take about the 19 s its 2,000 pages take. WeasyPrint decodes a picture once however many tags show
+// it, so its pixels are charged once.
+const PIXELS_PER_CELL = 800;
+
 // The default columns one PDF page holds. A cut sheet keeps at least that many, so its first page is never narrow.
 const PAGE_COLUMNS = Math.floor(MAX_PDF_PAGE_PX / SHEET_DEFAULT_COL_WIDTH);
 
@@ -123,16 +134,18 @@ export function sheetsHtmlDocument({
     title,
     sheets,
     mediaUrls,
+    mediaPixels,
     mode,
     lost,
 }: {
     title: string;
     sheets: Sheet[];
     mediaUrls: MediaUrls;
+    mediaPixels: MediaPixels;
     mode: HtmlExportMode;
     lost: LossCounter['lost'];
 }): string {
-    const { html, css, cut, leftOut, floatingLeftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode);
+    const { html, css, cut, leftOut, floatingLeftOut, size } = renderSheetsHtml(sheets, mediaUrls, mode, mediaPixels);
     for (const sheet of cut) lost('sheets-cut', sheet);
     for (const sheet of leftOut) lost('sheets-left-out', sheet);
     for (const { kind, object } of floatingLeftOut)
@@ -169,7 +182,7 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
             bounds.maxX > offset.left &&
             bounds.maxY > offset.top,
     );
-    const floating = chargeFloating(inClip, mediaUrls, PREVIEW_FLOATING_CELLS);
+    const floating = chargeFloating(inClip, mediaUrls, PREVIEW_FLOATING_CELLS, new Map());
     const first = renderSheet({ ...windowed, floating: floating.kept }, new FormulaEngine(), sheetsResolver(sheets), {
         clip,
         mediaUrls,
@@ -182,13 +195,14 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
 // One engine and one resolver serve every sheet, so a rule's formula such as `=Sheet2!A1>10` reads the other sheet.
 // The resolver reads the stored values: only a rule's own formula is evaluated. The sheets spend one MAX_EXPORT_CELLS
 // in tab order, so a sheet gets the cells the ones before it left, and in a PDF one that draws costs at least a page.
-// A sheet's images and charts spend what its cells left. `cut` holds the sheets cut to the cap, `leftOut` the sheets it
-// left no row or page of, `floatingLeftOut` the images and charts it left no room for, and `size` is the widest and
-// tallest sheet as rendered.
+// A sheet's images and charts spend what its cells left, and a picture's pixels are charged on the first tag drawn.
+// `cut` holds the sheets cut to the cap, `leftOut` the sheets it left no row or page of, `floatingLeftOut` the images
+// and charts it left no room for, and `size` is the widest and tallest sheet as rendered.
 export function renderSheetsHtml(
     sheets: Sheet[],
     mediaUrls: MediaUrls,
     mode: HtmlExportMode,
+    mediaPixels: MediaPixels,
 ): {
     html: string;
     css: string;
@@ -205,6 +219,7 @@ export function renderSheetsHtml(
     const floatingLeftOut: SheetFloatingItem[] = [];
     const size = { width: 0, height: 0 };
     const bodies: string[] = [];
+    const unpaidPixels = new Map(mediaPixels);
     let cellsLeft = MAX_EXPORT_CELLS;
     for (const sheet of shownSheets(sheets)) {
         const budget = (rows: number, cols: number) => exportWindow(mode, cellsLeft, rows, cols);
@@ -236,7 +251,7 @@ export function renderSheetsHtml(
         cellsLeft -= cells;
         if (windowed.truncated) cut.push(sheet);
         if (!draws) continue;
-        const floating = chargeFloating(windowed.floating, mediaUrls, cellsLeft);
+        const floating = chargeFloating(windowed.floating, mediaUrls, cellsLeft, unpaidPixels);
         cellsLeft -= floating.cells;
         floatingLeftOut.push(...floating.leftOut);
         const rendered = renderSheet({ ...windowed, floating: floating.kept }, engine, resolver, { styles, mediaUrls });
@@ -290,11 +305,13 @@ function printedPages({ sheet, rows, offset, floating }: WindowedSheet, most: nu
 
 // The images and charts that fit `cellsLeft`, in paint order, and the ones left out. A chart costs CHART_CELLS and
 // the points it draws. An image costs the bytes of its tag and source at CELL_BYTES a cell, since every tag repeats
-// the whole source. One whose media resolves to nothing draws nothing and costs nothing.
+// the whole source. The first image drawn of a picture also costs the pixels `unpaidPixels` holds for it, which are
+// then paid. One whose media resolves to nothing draws nothing and costs nothing.
 function chargeFloating(
     floating: FloatingObject[],
     mediaUrls: MediaUrls,
     cellsLeft: number,
+    unpaidPixels: MediaPixels,
 ): { kept: FloatingObject[]; cells: number; leftOut: SheetFloatingItem[] } {
     const kept: FloatingObject[] = [];
     const leftOut: SheetFloatingItem[] = [];
@@ -304,13 +321,17 @@ function chargeFloating(
         const src = item.kind === 'image' ? mediaUrls.get(item.object.mediaName) : undefined;
         let cost = 0;
         if (item.kind === 'chart') cost = CHART_CELLS + sheetChartPoints(item.object);
-        else if (src !== undefined) cost = Math.ceil((IMAGE_TAG_BYTES + src.length) / CELL_BYTES);
+        else if (src !== undefined) {
+            const pixels = unpaidPixels.get(item.object.mediaName) ?? 0;
+            cost = Math.ceil((IMAGE_TAG_BYTES + src.length) / CELL_BYTES) + Math.ceil(pixels / PIXELS_PER_CELL);
+        }
         if (cells + cost > cellsLeft) {
             leftOut.push(item);
             continue;
         }
         cells += cost;
         kept.push(object);
+        if (item.kind === 'image') unpaidPixels.delete(item.object.mediaName);
     }
     return { kept, cells, leftOut };
 }
