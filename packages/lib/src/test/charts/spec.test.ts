@@ -184,21 +184,21 @@ describe('the stored parts', () => {
 
     test("data labels on two series of three write those two series' entries, and a newer key survives a color edit", () => {
         const { stored } = readChartSpec(sheet());
-        const labelled = { ...DEFAULT_CHART_SERIES_STYLE, labels: { visible: true } };
+        const labeled = { ...DEFAULT_CHART_SERIES_STYLE, labels: { visible: true } };
         expect(
             sheetChartSpecWrites(stored, [
                 { op: 'set', path: ['series', 's-1', 'labels', 'visible'], value: true },
                 { op: 'set', path: ['series', 's-2', 'labels', 'visible'], value: true },
             ]),
         ).toEqual([
-            { key: 'specSeries', entry: 's-1', value: JSON.stringify(labelled) },
+            { key: 'specSeries', entry: 's-1', value: JSON.stringify(labeled) },
             {
                 key: 'specSeries',
                 entry: 's-2',
                 value: JSON.stringify({ ...styled.series['s-2'], labels: { visible: true } }),
             },
         ]);
-        const newer = { ...labelled, labels: { visible: true, position: 'inEnd' } };
+        const newer = { ...labeled, labels: { visible: true, position: 'inEnd' } };
         const kept = readChartSpec(sheet({ specSeries: { ...sheet().specSeries, 's-3': JSON.stringify(newer) } }));
         expect(
             sheetChartSpecWrites(kept.stored, [{ op: 'set', path: ['series', 's-3', 'color'], value: '#000000' }]),

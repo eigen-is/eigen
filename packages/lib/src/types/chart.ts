@@ -60,8 +60,8 @@ export type ChartPlot = { stacking: ChartStacking };
 
 // A series' style, by its id. plot null draws in the chart's type, and yAxis names the axis it plots against; this build
 // draws every series in the chart's type on y. A null color is the palette's at the series' index (chartColor), so a
-// palette change reaches it and deleting a series shifts the ones after it. line and marker apply to line charts only, and
-// labels, the value on each bar or point, to column, bar and line charts: a pie keeps its own labels.
+// palette change reaches it and deleting a series shifts the ones after it. line and marker apply to line charts only.
+// labels shows the value on each bar or point of a column, bar or line chart. A pie keeps its own labels.
 export type ChartSeriesStyle = {
     plot: ChartType | null;
     yAxis: string;
