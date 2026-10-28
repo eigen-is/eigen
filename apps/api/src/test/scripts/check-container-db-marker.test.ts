@@ -41,6 +41,13 @@ describe('previousRelease', () => {
         expect(previousRelease(tags, '0.4.0-rc.2')).toBe('0.3.10');
         expect(previousRelease(tags, '0.2.0')).toBeNull();
     });
+
+    test('on main, whose package.json keeps the last release until the next, is the highest release tag up to it', () => {
+        const tags = ['v0.3.10', 'v0.4.0', 'v0.4.1-rc.1'];
+        expect(previousRelease(tags, '0.4.0', true)).toBe('0.4.0');
+        expect(previousRelease(tags, '0.4.1', true)).toBe('0.4.0');
+        expect(previousRelease(tags, '0.3.9', true)).toBeNull();
+    });
 });
 
 describe('containerDbMarkerError', () => {
@@ -63,6 +70,14 @@ describe('containerDbMarkerError', () => {
 
     test('a marker under [Unreleased] or under the previous release does not count', () => {
         expect(containerDbMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, moved)).not.toBeNull();
+    });
+
+    test('on main, a move since the release it runs on passes with the marker under [Unreleased] and fails without', () => {
+        expect(containerDbMarkerError(CHANGELOG, '0.3.3', '0.3.3', before, moved, true)).toBeNull();
+        const unmarked = CHANGELOG.replace('**Chat (full backup)**', '**Chat**');
+        const error = containerDbMarkerError(unmarked, '0.3.3', '0.3.3', before, moved, true);
+        expect(error).toContain('comment-index 5 → 6');
+        expect(error).toContain('under ## [Unreleased]');
     });
 });
 

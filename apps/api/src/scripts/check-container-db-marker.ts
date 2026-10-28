@@ -1,8 +1,9 @@
 // Fails a release that migrates a container's database since the previous release unless CHANGELOG.md marks it
 // (full backup): a Light backup leaves those databases out, so only the Full one the marker gets ./eigen update to make
-// lets a rollback bring them back. publish.yml runs it on a version tag.
+// lets a rollback bring them back. publish.yml runs it on a version tag, and with --main on a push to main, where the
+// mark goes under [Unreleased] since the main channel reads it there.
 //
-// Usage: bun apps/api/src/scripts/check-container-db-marker.ts <version>
+// Usage: bun apps/api/src/scripts/check-container-db-marker.ts <version> [--main]
 //
 // The previous release's versions come from its tag through git grep and git show: a worktree of the tag would resolve
 // @workspace/* through this checkout's node_modules.
@@ -32,12 +33,15 @@ export function shallowCloneError(): string | null {
 
 // The release `version` follows: the highest release tag below it, so a backport compares with its own line.
 // Prerelease tags are skipped, so a release whose candidates' sections were folded into its own still compares
-// with the release before them.
-export function previousRelease(tags: string[], version: string): string | null {
+// with the release before them. On main, package.json keeps the version of the last release until the next one, so
+// there it is the highest release tag up to `version`.
+export function previousRelease(tags: string[], version: string, onMain = false): string | null {
     let previous: string | null = null;
     for (const tag of tags) {
         const release = RELEASE_TAG.exec(tag)?.[1];
-        if (!release || Bun.semver.order(release, version) >= 0) continue;
+        if (!release) continue;
+        const order = Bun.semver.order(release, version);
+        if (order > 0 || (order === 0 && !onMain)) continue;
         if (!previous || Bun.semver.order(release, previous) > 0) previous = release;
     }
     return previous;
@@ -64,27 +68,32 @@ export function containerDbVersionsAt(ref: string): Map<string, number> {
 }
 
 // Why `version` cannot be released, or null: a container database it moved since `previous`, with no (full backup)
-// line in the CHANGELOG sections after `previous` up to it.
+// line in the CHANGELOG sections after `previous` up to it, or on main under [Unreleased] too.
 export function containerDbMarkerError(
     changelog: string,
     previous: string,
     version: string,
     before: ReadonlyMap<string, number>,
     after: ContainerDbVersion[],
+    onMain = false,
 ): string | null {
     const moved = after.flatMap(({ name, currentVersion }) => {
         const old = before.get(name);
         return old === undefined || old === currentVersion ? [] : [`${name} ${old} → ${currentVersion}`];
     });
     if (moved.length === 0) return null;
-    if (releaseNotes(changelog, previous, version).some(({ fullBackup }) => fullBackup.length > 0)) return null;
-    return `Eigen ${version} migrates container databases since ${previous} (${moved.join(', ')}), which a Light backup leaves out. Mark the change ${FULL_BACKUP_MARKER} under ## [${version}] in CHANGELOG.md, so ./eigen update makes a Full backup first.`;
+    const notes = releaseNotes(changelog, previous, version, onMain);
+    if (notes.some(({ fullBackup }) => fullBackup.length > 0)) return null;
+    const build = onMain ? 'This build of main' : `Eigen ${version}`;
+    const section = onMain ? 'Unreleased' : version;
+    return `${build} migrates container databases since ${previous} (${moved.join(', ')}), which a Light backup leaves out. Mark the change ${FULL_BACKUP_MARKER} under ## [${section}] in CHANGELOG.md, so ./eigen update makes a Full backup first.`;
 }
 
 if (import.meta.main) {
-    const [version] = Bun.argv.slice(2);
-    if (!version || !VERSION_PATTERN.test(version)) {
-        console.error('Usage: bun apps/api/src/scripts/check-container-db-marker.ts <version>');
+    const [version, channel, ...rest] = Bun.argv.slice(2);
+    const onMain = channel === '--main';
+    if (!version || !VERSION_PATTERN.test(version) || (channel !== undefined && !onMain) || rest.length > 0) {
+        console.error('Usage: bun apps/api/src/scripts/check-container-db-marker.ts <version> [--main]');
         process.exit(1);
     }
     const shallow = shallowCloneError();
@@ -92,7 +101,7 @@ if (import.meta.main) {
         console.error(shallow);
         process.exit(1);
     }
-    const previous = previousRelease(git(['tag', '--list', 'v*']).stdout.split('\n'), version);
+    const previous = previousRelease(git(['tag', '--list', 'v*']).stdout.split('\n'), version, onMain);
     if (!previous) {
         console.log(`No release before ${version} to compare with.`);
         process.exit(0);
@@ -104,6 +113,7 @@ if (import.meta.main) {
         version,
         containerDbVersionsAt(`v${previous}`),
         after,
+        onMain,
     );
     if (error) {
         console.error(error);
