@@ -1,9 +1,11 @@
 // The detail of one team on the Admin app's teams page: its name, avatar and settings, then its mounts,
-// backups and members as sections, and the toolbar above it that deletes the team. A user's detail
-// has the same section layout, so the two read as one design.
+// backups and members as sections, and the toolbar above it that deletes the team. The organization's
+// default team, which every user joins, can't be deleted, so it has no delete button and its detail
+// says so. A user's detail has the same section layout, so the two read as one design.
 
 import { useNavigate } from '@tanstack/react-router';
 import { useRemoveTeam } from '@workspace/lib/admin';
+import { usePublicConfig } from '@workspace/lib/public';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { DeleteDialog, TooltipButton } from '@workspace/ui';
@@ -24,6 +26,7 @@ export function TeamDetailToolbar({ team, organizationId }: TeamDetailToolbarPro
     const [showDelete, setShowDelete] = useState(false);
     const removeTeam = useRemoveTeam(organizationId);
     const navigate = useNavigate();
+    const { data: config } = usePublicConfig();
 
     const handleRemove = async () => {
         await removeTeam.mutateAsync(team.id);
@@ -32,14 +35,18 @@ export function TeamDetailToolbar({ team, organizationId }: TeamDetailToolbarPro
 
     return (
         <div className="flex items-center gap-1 ml-auto">
-            <TooltipButton icon={Trash2} tooltipText="Delete team" onClick={() => setShowDelete(true)} />
-            <DeleteDialog
-                open={showDelete}
-                onOpenChange={setShowDelete}
-                title="Delete team"
-                description={`Delete team "${team.name}"? Its drives, their files and its calendar are deleted too. This cannot be undone.`}
-                onDelete={handleRemove}
-            />
+            {team.id !== config?.defaultTeamId && (
+                <>
+                    <TooltipButton icon={Trash2} tooltipText="Delete team" onClick={() => setShowDelete(true)} />
+                    <DeleteDialog
+                        open={showDelete}
+                        onOpenChange={setShowDelete}
+                        title="Delete team"
+                        description={`Delete team "${team.name}"? Its drives, their files and its calendar are deleted too. This cannot be undone.`}
+                        onDelete={handleRemove}
+                    />
+                </>
+            )}
         </div>
     );
 }
@@ -50,9 +57,17 @@ type TeamDetailProps = {
 };
 
 export function TeamDetail({ team, organizationId }: TeamDetailProps) {
+    const { data: config } = usePublicConfig();
+
     return (
         <div className="app-gutter space-y-6 h-full overflow-y-auto">
             <TeamSettingsSection team={team} organizationId={organizationId} />
+
+            {team.id === config?.defaultTeamId && (
+                <p className="text-xs text-muted-foreground">
+                    This is the organization's default team, which every user joins. It can't be deleted.
+                </p>
+            )}
 
             <Separator />
 
