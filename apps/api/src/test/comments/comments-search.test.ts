@@ -1,6 +1,7 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { ChatMessage, DrivePath } from '@workspace/lib/types';
 import type { DocCommentMatch } from '@workspace/lib/types/doc-search';
+import * as userModule from '../../lib/user/user';
 import {
     assertJson,
     authedRequest,
@@ -170,21 +171,57 @@ describe('Comment search', () => {
         expect(key.some((m) => m.id === 'thread-emote.eigenchat')).toBe(false);
     });
 
-    test('an emote names its sender and target by display name, so a search for the name finds it', async () => {
+    test('an emote names its sender and target by name and email, so a search for either finds it', async () => {
         const dana = await createTestUser('dana@test.eigen.is', 'testpassword123', 'Dana Quillfeather');
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docId}/acl`, {
             add: [{ id: dana.email, read: true, write: true }],
         });
         const t6 = await createThread(ctx, mountId, chatFolderId, 'thread-emote-name');
         await chatPost<ChatMessage>(dana.sessionToken, ctx.alice.user.id, mountId, `${t6.id}/messages`, {
-            content: `/wave ${ctx.charlie.user.email}`,
+            content: `/wave ${CHARLIE_EMAIL}`,
         });
 
-        const res = await assertJson<DocCommentMatch[]>(
+        const byName = await assertJson<DocCommentMatch[]>(
             await commentSearch(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'quillfeather'),
         );
-        const hit = findOrFail(res, (m: DocCommentMatch) => m.id === 'thread-emote-name.eigenchat');
-        expect(hit.label).toBe('Dana Quillfeather waves at Charlie Test.');
+        const hit = findOrFail(byName, (m: DocCommentMatch) => m.id === 'thread-emote-name.eigenchat');
+        expect(hit.label).toStartWith('Dana Quillfeather (dana@test.eigen.is) waves at Charlie');
+
+        const byEmail = await assertJson<DocCommentMatch[]>(
+            await commentSearch(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, dana.email),
+        );
+        expect(byEmail.some((m) => m.id === 'thread-emote-name.eigenchat')).toBe(true);
+    });
+
+    test('an email typed in a /me text stays searchable as typed', async () => {
+        const t7 = await createThread(ctx, mountId, chatFolderId, 'thread-me-email');
+        await postComment(ctx, mountId, t7.id, `/me hands the minutes to ${CHARLIE_EMAIL}`);
+
+        const res = await assertJson<DocCommentMatch[]>(
+            await commentSearch(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, CHARLIE_EMAIL),
+        );
+        // The snippet is ten words long, so it cuts the email short: the hit itself is the proof.
+        expect(res.some((m) => m.id === 'thread-me-email.eigenchat')).toBe(true);
+    });
+
+    test('a failed name lookup indexes the email alone and still updates the thread', async () => {
+        const getUserByEmail = userModule.getUserByEmail;
+        const lookup = spyOn(userModule, 'getUserByEmail').mockImplementation(async (email) => {
+            if (email === CHARLIE_EMAIL) throw new Error('users database unavailable');
+            return getUserByEmail(email);
+        });
+        try {
+            const t8 = await createThread(ctx, mountId, chatFolderId, 'thread-lookup-fails');
+            await postComment(ctx, mountId, t8.id, `/wave ${CHARLIE_EMAIL}`);
+
+            const res = await assertJson<DocCommentMatch[]>(
+                await commentSearch(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, CHARLIE_EMAIL),
+            );
+            const hit = findOrFail(res, (m: DocCommentMatch) => m.id === 'thread-lookup-fails.eigenchat');
+            expect(hit.label).toContain('waves at charlie@');
+        } finally {
+            lookup.mockRestore();
+        }
     });
 
     // The 403 comes from getCommentIndex → SharedDrive.getPath → requireRead,

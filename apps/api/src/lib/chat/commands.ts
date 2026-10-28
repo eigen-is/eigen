@@ -1,6 +1,7 @@
 // The chat commands the server stores as messages, such as a built-in emote, /me and /whisper. A chat post
 // runs parseCommand on what the user typed to get the message row. A stored emote is phrased again for
-// each reader by formatEmoteForViewer, and searchableMessageText is the text the search indexes keep.
+// each reader by formatEmoteForViewer, and searchableMessageText is the text the search indexes keep, with
+// each person in it named by searchablePerson.
 
 import { BUILT_IN_EMOTES } from '@workspace/lib/chat/built-in-emotes';
 import { resolveEmoteKey } from '@workspace/lib/chat/emotes';
@@ -84,18 +85,27 @@ export function formatEmoteForViewer(content: string, authorEmail: string, viewe
     return `${authorEmail} ${content}`;
 }
 
+// How every search index names a person: the display name with the email after it, so a search finds them by
+// either. An address with no account or an empty name stays the bare email, and so does a failed lookup: it is
+// logged, and the text is still indexed.
+export async function searchablePerson(email: string): Promise<string> {
+    try {
+        const name = (await getUserByEmail(email))?.name.trim();
+        return name ? `${name} (${email})` : email;
+    } catch (error) {
+        console.error(`Failed to look up ${email} for the search index:`, error);
+        return email;
+    }
+}
+
 // What every search indexes for a stored message: the text a bystander reads. A built-in emote is its
-// third-person sentence, not its key. The people an emote names appear by display name, as the chat
-// shows them, so a search for a name finds it. Whispers never get here (SEARCHABLE_MESSAGES).
+// third-person sentence, not its key. Every email in the sentence, typed in a /me text or not, keeps its
+// place and gains the name before it (searchablePerson). Whispers never get here (SEARCHABLE_MESSAGES).
 export async function searchableMessageText(
     message: Pick<ChatMessage, 'type' | 'content' | 'authorEmail'>,
 ): Promise<string> {
     if (message.type !== 'emote') return message.content;
     const sentence = formatEmoteForViewer(message.content, message.authorEmail);
-    const names = await Promise.all(
-        (sentence.match(EMAIL_FIND_REGEX) ?? []).map(
-            async (email) => (await getUserByEmail(email))?.name.trim() || email,
-        ),
-    );
-    return sentence.replace(EMAIL_FIND_REGEX, () => names.shift() ?? '');
+    const people = await Promise.all((sentence.match(EMAIL_FIND_REGEX) ?? []).map(searchablePerson));
+    return sentence.replace(EMAIL_FIND_REGEX, () => people.shift() ?? '');
 }
