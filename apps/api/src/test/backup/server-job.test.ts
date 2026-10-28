@@ -31,7 +31,7 @@ import { getServerDataPath, PATHS, SERVER_DATABASES } from '../../lib/config/pat
 import { getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { ApiError } from '../../lib/core';
-import { getHome } from '../../lib/home/get-home';
+import { clearHomeDeleting, getHome, markHomeDeleting } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import type { TestContext } from '../setup';
@@ -383,6 +383,31 @@ describe('Server backup job', () => {
             expect((await readServerSidecar(archivePath))?.state).toBe('done');
             await Bun.sleep(50);
             expect(alertTitlesTo(relay, ctx.alice.user.id)).toEqual([]);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a home marked deleted whose row is still there is skipped, not failed',
+        async () => {
+            quietRelay();
+            const marked = await createTestUser(`marked-${Date.now()}@test.eigen.is`, 'testpassword123', 'Marked');
+            await getHome(marked.id);
+            spies.push(
+                spyOn(jobs, 'waitForHomeSlot').mockImplementation(async (ownerId, holder) => {
+                    if (ownerId === marked.id) markHomeDeleting(ownerId);
+                    return waitForHomeSlot(ownerId, holder);
+                }),
+            );
+            try {
+                const { archivePath } = await runJob();
+                const { manifest } = await readServerManifest(archivePath);
+                const home = manifest.homes.find((entry) => entry.ownerId === marked.id);
+                expect(home?.failed).toBeUndefined();
+                expect(home?.skipped).toBe('deleted during the backup');
+            } finally {
+                clearHomeDeleting(marked.id);
+            }
         },
         JOB_TIMEOUT_MS,
     );

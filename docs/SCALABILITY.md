@@ -42,6 +42,7 @@ The Calendar and Drive `receive*` methods write the database, broadcast the SSE 
 | Yjs documents | In memory in the process that opened them | Editors connect to the owner's process |
 | SSE streams | In the process that serves the user | A user connects to their Home's process ([SSE.md](SSE.md)) |
 | Backup jobs and the restore mark | The in-memory job map and `markHomeRestoring` ([BACKUP.md § A restore deletes nothing and writes identity last](BACKUP.md#a-restore-deletes-nothing-and-writes-identity-last)), per process | Home jobs run where the Home lives. The whole-server job reaches every Home through `pullHomeSnapshot`, which becomes a pull, and its slot and schedule tick need one owner ([BACKUP.md](BACKUP.md)) |
+| The deletion mark | `markHomeDeleting` (`apps/api/src/lib/home/get-home.ts`), per process, from the teardown of a home until better-auth has deleted the owner's row | Set where the delete runs, and it must be seen by the process that serves the Home. A deletion that fails after the folder is gone keeps it until a restart ([ROADMAP.md](ROADMAP.md)) |
 | Data epochs | Read once per process (`apps/api/src/lib/home/data-epoch.ts`), so no other process sees a rotation | The Home's process owns its epoch, and a stream or collab open elsewhere reads it through a pull ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)) |
 
 ## The first step is several processes on one machine
