@@ -75,6 +75,15 @@ describe('engine/conditional-format — colorGradation', () => {
         expect(mid).toBe('rgb(128, 128, 0)');
     });
 
+    test('interpolates between short hex stops as their long forms', () => {
+        const data = buildMatrix([[0], [5], [10]]);
+        const styles = evaluateConditionalFormat(
+            [{ type: 'colorGradation', cellrange: [{ row: [0, 2], column: [0, 0] }], format: ['#f00', '#0f0'] }],
+            data,
+        );
+        expect(styles['1_0']?.cellColor).toBe('rgb(128, 128, 0)');
+    });
+
     test('interpolates between rgb() stops, their alpha dropped', () => {
         const data = buildMatrix([[0], [5], [10]]);
         const styles = evaluateConditionalFormat(

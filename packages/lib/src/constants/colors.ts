@@ -1,6 +1,7 @@
 // Eigen's color palette, based on Tailwind's colors, with the pink column's accent row as Eigen's accent, and the
 // one reader of a written color. Readers such as a sheet cell's fill, a doc's text color and the Office exports
-// check a hex with isHexColor and read an rgb() with parseRgb, so they agree on what a color is.
+// check a hex with isHexColor, read its channels with hexChannels and read an rgb() with parseRgb, so they agree on
+// what a color is.
 
 export type EigenColor = {
     label: string;
@@ -254,10 +255,10 @@ export const EIGEN_COLORS_MAP = [
 export const EIGEN_ACCENT_COLOR_ROW = 5;
 export const EIGEN_STICKIES_COLOR_ROW = 1;
 
-export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) =>
+export const EIGEN_COLORS: EigenColor[][] = EIGEN_COLORS_MAP.map((col, i) =>
     col.map((hex, s) => ({ label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex })),
-) as EigenColor[][];
-export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]) as EigenColor[];
+);
+export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]);
 // The order calendars, labels, chart series and presence hand the accents out in. Pink, Eigen's accent, comes first;
 // each next one is the furthest (CIEDE2000) from those before it for normal vision and simulated deuteranopia, then
 // protanopia and tritanopia. Yellow and lime (under 2:1 on white) sit past the eighth, and rose and fuchsia, which sit
@@ -304,18 +305,20 @@ export const EIGEN_STICKIES_INDICATOR_MAP: Map<string, string> = new Map(
     ]),
 );
 
+// Whether black text reads better than white on a #rrggbb color. Anything else counts as dark.
 export function isLightColor(hex: string): boolean {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5;
+    const channels = hexChannels(hex, [6, 8]);
+    if (!channels) return false;
+    const { red, green, blue } = channels;
+    return (0.299 * red + 0.587 * green + 0.114 * blue) / 255 > 0.5;
 }
 
+// A #rrggbb color moved toward white by an amount from 0 to 1. A color that is no hex stays as it is.
 export function lightenColor(hex: string, amount: number): string {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `#${[r, g, b]
+    const channels = hexChannels(hex, [6, 8]);
+    if (!channels) return hex;
+    const { red, green, blue } = channels;
+    return `#${[red, green, blue]
         .map((c) =>
             Math.round(c + (255 - c) * amount)
                 .toString(16)
@@ -330,10 +333,24 @@ export function isHexColor(value: string, digits: readonly (3 | 4 | 6 | 8)[]): b
     return /^#[0-9a-f]+$/i.test(value) && digits.some((count) => value.length === count + 1);
 }
 
+export type ColorChannels = { red: number; green: number; blue: number; alpha: number };
+
+// A hex color's channels, from 0 to 255, and its alpha, from 0 to 1, for the digit counts the caller takes. A short
+// form doubles each digit, as CSS does. Undefined for any other value.
+export function hexChannels(value: string, digits: readonly (3 | 4 | 6 | 8)[]): ColorChannels | undefined {
+    if (!isHexColor(value, digits)) return undefined;
+    const hex = value.length <= 5 ? value.slice(1).replace(/./g, (digit) => digit + digit) : value.slice(1);
+    const byte = (index: number) => Number.parseInt(hex.slice(2 * index, 2 * index + 2), 16);
+    return { red: byte(0), green: byte(1), blue: byte(2), alpha: hex.length === 8 ? byte(3) / 255 : 1 };
+}
+
 // A number is digits with an optional fraction, or a bare fraction. The two branches start on different characters, so
 // a long run of digits has one way to match and a hostile stored color costs a linear scan.
-const NUM = String.raw`(\d+(?:\.\d+)?|\.\d+)`;
-const RGB_COLOR = new RegExp(String.raw`^rgba?\(\s*${NUM}[\s,]+${NUM}[\s,]+${NUM}(?:\s*[,/]\s*${NUM}(%?))?\s*\)$`, 'i');
+const RGB_NUMBER = String.raw`(\d+(?:\.\d+)?|\.\d+)`;
+const RGB_COLOR = new RegExp(
+    String.raw`^rgba?\(\s*${RGB_NUMBER}[\s,]+${RGB_NUMBER}[\s,]+${RGB_NUMBER}(?:\s*[,/]\s*${RGB_NUMBER}(%?))?\s*\)$`,
+    'i',
+);
 
 // An rgb() or rgba() color, as a browser computes it or a stylesheet writes it: commas or spaces, channels
 // rounded to whole numbers, and an alpha as a number or a percent. It reads as #rrggbb and an alpha from 0 to 1.
