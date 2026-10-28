@@ -1,5 +1,6 @@
 // Where backups live and what they are called. It builds the names of archives, home folders and safety copies,
-// and the places inside an archive where each part of a home goes. It also resolves a path inside a folder without
+// and the places inside an archive where each part of a home goes. It makes the private staging folder every job
+// works in. It also resolves a path inside a folder without
 // ever leaving it, which every restore step needs before it touches the disk.
 
 import * as fs from 'node:fs';
@@ -40,14 +41,21 @@ export function getBackupsDir(): string {
 
 // Every job's scratch space lives under one folder in the backups folder, wiped at boot.
 export const STAGING_DIR = '.staging';
+// A job stages a home unpacked, auth rows and keys included, with the umask's modes. The backups folder stays
+// listable for ./eigen, so the staging folders are what keep other users of the host out.
+const STAGING_MODE = 0o700;
 
 export function getStagingRoot(): string {
     return path.join(backupsDirPath(), STAGING_DIR);
 }
 
+// The chmod closes a staging root that was made with the umask's mode, such as an older build's.
 export function getBackupStagingDir(jobId: string): string {
-    const dir = path.join(getStagingRoot(), jobId);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const root = path.join(getBackupsDir(), STAGING_DIR);
+    fs.mkdirSync(root, { recursive: true, mode: STAGING_MODE });
+    fs.chmodSync(root, STAGING_MODE);
+    const dir = path.join(root, jobId);
+    fs.mkdirSync(dir, { recursive: true, mode: STAGING_MODE });
     return dir;
 }
 
