@@ -31,7 +31,14 @@ import type { HastNode } from '../../../document/lowlight';
 import { lowlight } from '../../../document/lowlight';
 import { proseValueIfSet } from '../../../document/prose-css';
 import type { StyleId } from '../../../ooxml/wordml';
-import { BORDER_SIDES, codeBlockStyle, JUSTIFICATION, LIST_FORMATS, LIST_LEVELS } from '../../../ooxml/wordml';
+import {
+    BODY_TEXT_OUTLINE_LEVEL,
+    BORDER_SIDES,
+    codeBlockStyle,
+    JUSTIFICATION,
+    LIST_FORMATS,
+    LIST_LEVELS,
+} from '../../../ooxml/wordml';
 import { anchoredFigure, figureOf } from './drawings';
 import { useFace } from './fonts';
 import { CLEAR_FLOATS, checkboxXml, itemOf, listOf } from './numbering';
@@ -284,7 +291,7 @@ export function blocksOf(
         let own = scale === 1 ? props : { ...props, spacing: { ...props.spacing, line: Math.round(line * scale) } };
         // Word's navigator lists every paragraph at an outline level, so a heading a figure splits keeps one entry.
         if (pieces.length > 0 && props.style && context.pkg.styles.get(props.style)?.pPr?.outlineLvl !== undefined)
-            own = { ...own, outlineLvl: 9 };
+            own = { ...own, outlineLvl: BODY_TEXT_OUTLINE_LEVEL };
         pieces.push(blocks.push({ props: own, runs }) - 1);
         inline = [];
     };

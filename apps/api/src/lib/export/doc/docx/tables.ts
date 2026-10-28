@@ -4,7 +4,7 @@
 import type { JSONContent } from '@tiptap/core';
 import {
     CELL_BORDER_SIDES,
-    fitColumnWidths,
+    columnFit,
     MIN_TABLE_COLUMN_PX,
     readCellBackground,
     readCellBorder,
@@ -191,12 +191,10 @@ function gridWidths(
     const known = widths.filter((width) => width !== undefined);
     const sum = known.reduce((total, width) => total + width, 0);
     const unknown = widths.length - known.length;
-    const kept =
-        paperPx === undefined ? fitColumnWidths(known, columnPx) : known.map((width) => Math.min(width, paperPx));
+    const fit = paperPx === undefined ? columnFit(columnPx, sum) : (width: number) => Math.min(width, paperPx);
     const fitted = paperPx === undefined ? Math.min(sum, columnPx) : sum;
     const share = unknown > 0 ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor((columnPx - fitted) / unknown)) : 0;
-    let next = 0;
-    const px = widths.map((width) => (width === undefined ? share : (kept[next++] ?? width)));
+    const px = widths.map((width) => (width === undefined ? share : fit(width)));
     return { dxa: px.map((width) => Math.round(width * TWIPS_PER_PX)), fixed: unknown === 0 };
 }
 

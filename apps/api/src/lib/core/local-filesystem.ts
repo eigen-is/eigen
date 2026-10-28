@@ -1,3 +1,7 @@
+// File access under one base folder, such as a home's folder or the server's data folder. Every path resolves within
+// the base, so a caller can't reach outside it. Besides plain reads and writes it offers the durable forms, which
+// fsync the bytes and the folder, and atomic writes, which a reader sees whole or not at all.
+
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
@@ -13,7 +17,7 @@ const ATOMIC_TEMP_INFIX = '.tmp-';
 // A staged file older than this is a crash's leftover, never a write still in flight.
 export const STALE_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-// "The file is gone" is the only fs error a caller may treat as an outcome; anything else, errno or not, is real.
+// "The file is gone" is the only fs error a caller may treat as an outcome. Any other error is a real failure.
 export function isEnoent(e: unknown): boolean {
     return e instanceof Error && 'code' in e && e.code === 'ENOENT';
 }
@@ -37,8 +41,9 @@ export class LocalFilesystem {
         return await Bun.write(fullPath, data);
     }
 
-    // A rename or unlink reaches the platter only once its directory is fsynced, and a mount that refuses the fsync must not fail it.
-    // On macOS fsync here and in writeDurable only reaches the drive's cache (no F_FULLFSYNC), so a power loss can still lose a write.
+    // A rename or an unlink reaches the disk only once its folder is fsynced. A mount that refuses the fsync must not fail
+    // the rename, so the refusal is only logged. On macOS an fsync without F_FULLFSYNC reaches only the drive's cache,
+    // so a power loss can still lose a write there.
     public async syncDir(dirPath: string): Promise<void> {
         try {
             const handle = await fsPromises.open(this.getFilePath(dirPath), 'r');
@@ -74,7 +79,8 @@ export class LocalFilesystem {
         }
     }
 
-    // Destination-only: a staging name nothing indexes gets swept, so a second fsync would tax every delivery.
+    // Only the destination folder is fsynced. A staging name that nothing indexes is swept anyway, so a second fsync
+    // would only slow every delivery.
     public async renameDurable(oldPath: string, newPath: string): Promise<void> {
         await this.rename(oldPath, newPath);
         await this.syncDir(path.dirname(newPath));
@@ -87,7 +93,8 @@ export class LocalFilesystem {
         if (fromDir !== path.dirname(to)) await this.syncDir(fromDir);
     }
 
-    // A file already gone is the outcome the caller wanted; the fsync stops a power loss resurrecting the name.
+    // A file that is already gone is the outcome the caller wanted. The fsync stops a power loss from bringing the name
+    // back.
     public async unlinkDurable(filePath: string): Promise<void> {
         try {
             await fsPromises.unlink(this.getFilePath(filePath));
@@ -97,7 +104,8 @@ export class LocalFilesystem {
         await this.syncDir(path.dirname(filePath));
     }
 
-    // A reader only ever sees the whole old file or the whole new one; the temp is `.`-prefixed so a sweep finds it.
+    // A reader only ever sees the whole old file or the whole new one. The temp name starts with a `.`, so a sweep finds
+    // it.
     public async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
         const tempPath = path.join(
             path.dirname(filePath),
@@ -113,7 +121,8 @@ export class LocalFilesystem {
         }
     }
 
-    // Age-gated since a young temp may be a live write about to rename; unlink, since `delete` reaps the emptied parent.
+    // Only an old temp goes, because a young one may be a live write about to rename. It goes through unlink, because
+    // `delete` would also remove the parent folder once it is empty.
     public async sweepAtomicTemps(dir: string, maxAgeMs: number): Promise<void> {
         const now = Date.now();
         for (const name of await this.list(dir)) {
@@ -146,7 +155,8 @@ export class LocalFilesystem {
         return await this.file(filePath).exists();
     }
 
-    // For a library that opens a file by name (bun:sqlite) instead of going through this class; still resolved within the base.
+    // For a library that opens a file by name instead of through this class, such as bun:sqlite. The path is still
+    // resolved within the base.
     public absolutePath(filePath: string): string {
         return this.getFilePath(filePath);
     }

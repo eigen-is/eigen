@@ -4,7 +4,8 @@
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { getDataRoot, homeDirUnder } from '../config/paths';
 import { ApiError } from '../core/errors';
-import { getUserById, isGuest } from '../user/user';
+import { isGuest } from '../user/guest';
+import { getUserById } from '../user/user';
 import type { BackableOwner } from './paths';
 import { requireBackableOwner } from './paths';
 

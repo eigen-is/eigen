@@ -13,8 +13,8 @@ import { extractVideoFrame } from './video-thumbnail';
 
 export type ThumbnailFormat = 'webp' | 'jpeg' | 'png' | 'gif';
 
-// The postMessage protocol with thumbnails.ts, which imports these type-only — the worker module (and its
-// sharp import) never loads on the main thread.
+// The messages between this Worker and the main thread. The main thread imports these types only, so this module
+// and its sharp import never load there.
 export type WorkerInput = {
     source: string | ArrayBuffer;
     mimeType: string;
@@ -36,9 +36,9 @@ export type WorkerOutput =
       }
     | { ok: false };
 
-// The main thread terminates this Worker THUMBNAIL_TIMEOUT_SECONDS after it starts it, which stops the timers that kill
-// exiftool but not exiftool. So its calls end this long before that, a margin for the Worker's start and the resize of
-// what exiftool found.
+// The main thread terminates this Worker at THUMBNAIL_TIMEOUT_SECONDS. That stops the Worker's timers, but not an
+// exiftool process it started, which would then run on. So exiftool gets a deadline this much earlier, which leaves
+// time for the Worker to start and to resize the preview exiftool found.
 const EXIFTOOL_SPARE_MS = 5_000;
 
 export type ImageResult = ImageDimensions & {

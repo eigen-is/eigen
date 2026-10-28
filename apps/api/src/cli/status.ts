@@ -19,11 +19,13 @@ type Service = { service: string; state: string; health: string };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CERT_WARN_DAYS = 14;
 
-// --install is the folder on the host, which the CLI sees as /install. --latest is the newest release of a release
-// install, or on a channel the commit of its newest build: empty when the check failed, left out on a local build.
-// --files is the build the launcher and Compose files were last written from, passed only while it is not the one
-// .env.production pins: an update that failed halfway is not finished. --backups lists backups/, for the Backup row
-// while the API does not run.
+// The launcher passes what it gathers on the host as flags.
+// - --install is the install folder on the host. The CLI sees it as /install.
+// - --latest is the newest release, or on a channel the commit of its newest build. It is empty when the check failed,
+//   and left out on a local build.
+// - --files is the build the launcher and Compose files were last written from. The launcher passes it only when it
+//   differs from the build .env.production pins, which means an update stopped halfway.
+// - --backups lists the backups folder, for the Backup row while the API does not run.
 export const STATUS_OPTIONS = {
     install: { type: 'string' },
     services: { type: 'string' },

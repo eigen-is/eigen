@@ -8,7 +8,8 @@ import { styleText } from 'node:util';
 
 type Validate = (value: string) => string | undefined;
 
-// `help` says what a question is for, under it; interactive only, so scripts and logs stay one line per question.
+// `help` says what a question is for, shown under it. It shows only on a terminal, so a script's log keeps one line
+// per question.
 type Question = { message: string; help?: string; flag: string };
 type Choice = { value: boolean; label: string; hint: string };
 
@@ -38,7 +39,8 @@ const GLYPHS = {
 
 export type Glyph = keyof typeof GLYPHS;
 
-// The launcher's say(): the glyph always, its color only on a terminal without NO_COLOR, which styleText ignores.
+// A line as the launcher's say() prints it. The glyph is always there. It has its color only on a terminal without
+// NO_COLOR, because styleText does not check NO_COLOR itself.
 export function glyphLine(glyph: Glyph, text: string): string {
     const [color, mark] = GLYPHS[glyph];
     const shown = process.stdout.isTTY && !process.env['NO_COLOR'] ? styleText(color, mark) : mark;
@@ -63,7 +65,8 @@ export function wrap(text: string, width: number): string[] {
     return lines;
 }
 
-// Clack only on a terminal, without flags or NO_COLOR (its styleText ignores it): a scripted run never loads it.
+// The Clack prompts only run on a terminal, when no flags are given and NO_COLOR is not set. Clack's styleText does
+// not check NO_COLOR itself. A scripted run never loads Clack.
 export async function createUi(flagsGiven: boolean): Promise<Ui> {
     const interactive = process.stdin.isTTY && process.stdout.isTTY && !flagsGiven;
     if (interactive && !process.env['NO_COLOR']) {

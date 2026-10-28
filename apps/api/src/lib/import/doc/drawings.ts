@@ -4,7 +4,7 @@
 
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
-import type { FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
+import type { FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import { isFigureFrameNode, mmToPx, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
@@ -211,7 +211,7 @@ function partPath(id: string | undefined, scope: Scope): string | undefined {
 
 // A picture's size in px off the extent Word drew it at, stretched or not: the width capped at `columnPx`, and the
 // height scaled with it. One with no extent takes its own size once it loads.
-function pictureSize(width: number, height: number | null, columnPx: number): FigureSize {
+function pictureSize(width: number, height: number | null, columnPx: number): Pick<FigureAttrs, 'width' | 'height'> {
     const scale = Math.min(1, columnPx / width);
     return {
         width: Math.min(columnPx, Math.max(1, Math.round(width))),
@@ -219,8 +219,7 @@ function pictureSize(width: number, height: number | null, columnPx: number): Fi
     };
 }
 
-type FigureSize = { width: number | null; height: number | null };
-const NO_SIZE: FigureSize = { width: null, height: null };
+const NO_SIZE: Pick<FigureAttrs, 'width' | 'height'> = { width: null, height: null };
 
 const NOT_IMPORTED: DocxChart = { title: '', dropped: [CHART_NOT_IMPORTED] };
 

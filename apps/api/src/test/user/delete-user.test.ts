@@ -238,6 +238,34 @@ describe('Delete user', () => {
         expect(existsSync(preRestore)).toBe(false);
     });
 
+    test('a home slot taken after the pre-check still answers 409 from the delete hook, as a team delete does', async () => {
+        const { auth } = await import('../../lib/auth/auth');
+        const jobs = await import('../../lib/backup/jobs');
+        const signUp = await auth.api.signUpEmail({
+            body: { email: 'late-slot@test.eigen.is', password: 'testpassword123', name: 'Late Slot' },
+        });
+        const userId = signUp.user.id;
+        await getHome(userId);
+        await evictHome(userId);
+
+        const release = await jobs.waitForHomeSlot(userId, 'restore');
+        // The admin pre-check passes once, as if a job took the slot right after it.
+        const preCheck = spyOn(jobs, 'requireHomeSlotFree').mockImplementationOnce(() => {});
+        try {
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/admin/remove-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId }),
+            });
+            expect(res.status).toBe(409);
+            expect(existsSync(join(TEST_DATA_DIR, 'home', userId))).toBe(true);
+        } finally {
+            preCheck.mockRestore();
+            release();
+        }
+        await deleteUserCompletely(userId, null);
+    });
+
     test('deleting same user again returns 404', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${deleteTarget.id}`, {
             method: 'DELETE',

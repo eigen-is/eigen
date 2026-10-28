@@ -1,18 +1,7 @@
-// Audits a docx importer on a corpus: per file, what Word shows, counted from the OOXML with the style chain resolved,
-// beside what reached the imported eigendoc JSON, and the raw OOXML elements the file holds.
-//
-// Usage:
-//   bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]
-//   bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>
-//   bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]
-//
-// The importer module exports `docxToPmJson` with that function's signature. It runs in a Worker, and the source is
-// read in another, so a hang is cut at the time cap and a crash is a result. Every importer is measured by the same
-// code. The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
-//
-// roundtrip is the docx writer's gate, on the round-trip gate the Office audits share. Each file the reader imports is
-// written by the writer (`--writer`, writeDocx's signature) and imported again. The two eigendoc JSON documents, their
-// bands, page and Normal are compared node by node, a picture by its type and pixel size.
+// Audits a docx importer on a corpus. For each file it counts what Word shows, from the OOXML with the style chain
+// resolved, beside what reached the imported eigendoc JSON. Its roundtrip command is the docx writer's gate: each file
+// is imported, written and imported again, and the two documents are compared node by node. Every import runs in a
+// Worker, so a hang is cut at the time cap and a crash is a result. A run with no valid arguments prints its usage.
 
 import * as fs from 'node:fs';
 import path from 'node:path';
@@ -1494,6 +1483,8 @@ export function auditImported(json: JSONContent, normalFont = DOCUMENT_FONT): Ta
 
 // ── Comparing the two sides ─────────────────────────────────────────────────────────────────────────────────────
 
+// The per-file JSON keeps only this many of the words that differ, so the out folder of a private corpus can stay
+// out of the repo.
 const SAMPLE = 20;
 
 // Text, marks and item numbers match as multisets of words and numbers, so a word moved, a mark on another word or
@@ -1772,7 +1763,7 @@ function isReply(data: unknown): data is WorkerReply {
     }
 }
 
-// Another importer may answer with a Promise.
+// The module `--importer` names exports `docxToPmJson` with this signature, and may answer with a Promise.
 type Importer = (
     ...args: Parameters<typeof docxToPmJson>
 ) => ReturnType<typeof docxToPmJson> | Promise<ReturnType<typeof docxToPmJson>>;

@@ -5,7 +5,6 @@ import type { SetupLink } from '../lib/setup/setup-token';
 import { callControl } from './control-socket';
 import { createUi, glyphLine } from './ui';
 
-// The close of ./eigen setup: the one-time link and what follows it, or where to sign in once setup is done.
 export async function setupLink(): Promise<void> {
     const ui = await createUi(true);
     const res = await callControl('/setup-link', ui.fail, { method: 'POST' });

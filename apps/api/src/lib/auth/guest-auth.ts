@@ -14,7 +14,8 @@ import { ApiError } from '../core/errors';
 import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { getEntriesForTarget, reconcileSharesForNewUser } from '../share';
-import { getUserByEmail, isGuest } from '../user/user';
+import { isGuest } from '../user/guest';
+import { getUserByEmail } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
 import { checkOtpRateLimit, countOtpGuess, refundOtpRequests, resetOtpGuesses } from './otp-rate-limit';
 

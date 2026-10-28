@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2062 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2061 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1014,7 +1014,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1084)
+## Utilities & constants (1083)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1419,7 +1419,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FIGURE_FRAME_NODES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `figureLayoutStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FIRST_PAGE_BAND` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
-| `fitColumnWidths` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `flattenNestedFootnotes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
 | `FOOTNOTE_PARAGRAPH` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
 | `FOOTNOTE_SELECTOR` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |

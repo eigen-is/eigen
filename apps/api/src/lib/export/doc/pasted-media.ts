@@ -1,8 +1,7 @@
-// The images a doc holds as a pasted data: src rather than as a media file. Every doc export draws a raster re-encoded,
-// the docx and the HTML and PDF alike, and draws nothing for a data: src that is not base64 unless it is an SVG, so a
-// photo's EXIF, GPS included, never leaves in a download. An SVG is sanitized, not re-encoded: a raster it embeds as an
-// <image href="data:…"> keeps its EXIF. It runs in the transform process, as the main thread never reads the doc to
-// prepare them with the media files.
+// The images a doc holds as a pasted base64 data: src rather than as a media file. Every doc export, the docx as well
+// as the HTML and the PDF, draws such a raster re-encoded, so a photo's EXIF, with its GPS position, never leaves in a
+// download. An SVG is sanitized and not re-encoded, so a raster it embeds keeps its EXIF. This runs in the transform
+// process, because the main thread never reads the doc.
 
 import type { JSONContent } from '@tiptap/core';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
@@ -26,10 +25,9 @@ export async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMed
     const pasted = new Map<string, { mediaType: string | null; base64: string }>();
     const visit = (node: JSONContent) => {
         if (node.type === 'figure') {
-            const attrs = readFigureAttrs(node.attrs ?? {});
-            const key = figureMediaKey(attrs);
-            const split = key && key === attrs.src ? splitDataUri(key) : null;
-            if (key && split) pasted.set(key, split);
+            const { mediaName, src } = readFigureAttrs(node.attrs ?? {});
+            const split = !mediaName && src ? splitDataUri(src) : null;
+            if (src && split) pasted.set(src, split);
         }
         for (const child of node.content ?? []) visit(child);
     };
