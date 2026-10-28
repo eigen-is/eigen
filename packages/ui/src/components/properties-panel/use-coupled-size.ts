@@ -6,7 +6,8 @@ import { useRef } from 'react';
 import type { MergedValue } from './merged-value';
 import { isMixed } from './merged-value';
 
-type CoupledSize = { width?: number; height?: number };
+// What a size edit writes: a side it leaves out stays as stored.
+export type CoupledSize = { width?: number; height?: number };
 
 // Whether a side the host handed back is the one the latch wrote, as it shows it.
 const isNear = (written: number, side: MergedValue<number>) =>

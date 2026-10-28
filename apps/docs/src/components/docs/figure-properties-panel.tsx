@@ -9,8 +9,10 @@ import { cmText, isPositioned, mmToPx, pxToMm, readCm, readFigureAttrs } from '@
 import { useMediaResolver } from '@workspace/lib/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
+import type { CoupledSize } from '@workspace/ui/components/properties-panel';
 import {
     AlignmentPicker,
+    numberAtStep,
     PropertiesPanel,
     PropertyCheckbox,
     PropertyRow,
@@ -22,7 +24,6 @@ import type { LucideIcon } from 'lucide-react';
 import { BringToFront, ImagePlus, PanelLeft, PanelRight, Rows3, SendToBack } from 'lucide-react';
 import { useState } from 'react';
 import { pictureRatio } from './extensions/figure';
-import type { FigureSizeEdit } from './extensions/figure-frame';
 import {
     figureMaxWidth,
     fitFigureSize,
@@ -34,9 +35,9 @@ import { inBand, selectionDrawsInLine } from './extensions/positioned-figure';
 
 // Alt, Cap, Width or Height. A keystroke starts a draft. Enter or a blur writes it if it differs from the value it
 // started from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit
-// writes nothing back, and an untouched Width keeps the stored px its cm rounds. A number field shows as many decimals
-// as its step has, and a draft as typed. A draft stays through a transaction that moves the figure, such as a
-// collaborator typing above it.
+// writes nothing back, and an untouched Width keeps the stored px its cm rounds. A number field shows its value at its
+// step, as the panels' number fields do, and a draft as typed. A draft stays through a transaction that moves the
+// figure, such as a collaborator typing above it.
 export function FigureField({
     value,
     placeholder,
@@ -51,8 +52,7 @@ export function FigureField({
     onCommit: (value: string) => void;
 }) {
     const [draft, setDraft] = useState<{ text: string; base: string } | null>(null);
-    const decimals = step === undefined ? null : (String(step).split('.')[1]?.length ?? 0);
-    const shown = decimals === null || value === '' ? value : Number(value).toFixed(decimals);
+    const shown = step === undefined || value === '' ? value : numberAtStep(Number(value), step);
     const commit = (next: string) => {
         if (draft !== null && next !== draft.base) onCommit(next);
         setDraft(null);
@@ -109,7 +109,7 @@ export function FigureSizeSection({
     height: number | undefined;
     aspect?: { locked: boolean; onLockChange: (locked: boolean) => void };
     autoHeight?: { auto: boolean; onAutoChange: (auto: boolean) => void };
-    onChange: (size: FigureSizeEdit) => void;
+    onChange: (size: CoupledSize) => void;
 }) {
     const { changeWidth, changeHeight } = useCoupledSize(width, height, aspect?.locked ?? false, onChange);
     return (

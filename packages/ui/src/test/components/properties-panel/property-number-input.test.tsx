@@ -5,7 +5,9 @@ const window = installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { PropertyNumberInput } = await import('../../../components/properties-panel/property-number-input');
+const { numberAtStep, PropertyNumberInput } = await import(
+    '../../../components/properties-panel/property-number-input'
+);
 
 const nativeValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
@@ -59,6 +61,13 @@ test('a field rounds the decimal the value was written as, not its binary neighb
     expect(await shown(1.005, 1)).toBe('1.01');
     expect(await shown(0.1 + 0.2, 0.1)).toBe('0.3');
     expect(await shown(-2.675, 1)).toBe('-2.68');
+});
+
+test('numberAtStep is the text every number field shows, such as the Docs cm fields at a step of 0.01', () => {
+    expect(numberAtStep(8, 0.01)).toBe('8.00');
+    expect(numberAtStep(2.54, 0.01)).toBe('2.54');
+    expect(numberAtStep(1.005, 0.01)).toBe('1.01');
+    expect(numberAtStep(2.6666666666666665, 1)).toBe('2.67');
 });
 
 test('a field without a step shows its value as it is', async () => {

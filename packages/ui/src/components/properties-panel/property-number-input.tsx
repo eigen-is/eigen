@@ -1,7 +1,7 @@
 // The number field of the properties panels, such as a shape's size in Slides or a chart axis bound.
-// It writes on every change and folds one edit into one undo step. When it is not focused it shows at
-// least its step's decimals and up to two of the value's own: 16 at a step of 0.01 is 16.00, a 2.67 px
-// stroke at a step of 1 stays 2.67, and 3 stays 3. The browser shows it in its own number format.
+// It writes on every change and folds one edit into one undo step. When it is not focused it shows
+// numberAtStep, the text other number fields share. The browser draws that number with the decimal
+// separator of the reader's locale.
 
 import { Input } from '@workspace/ui/components/input';
 import { cn } from '@workspace/ui/lib/utils';
@@ -21,9 +21,8 @@ type PropertyNumberInputProps = {
     onClear?: () => void;
 };
 
-// The field writes on every change, such as a keystroke, a spinner click or an arrow-key step. So the
-// edit is one gesture from the first change until the field is left or committed: typing "250" is one
-// undo step, not three.
+// A change is a keystroke, a spinner click or an arrow-key step. The edit is one gesture from the first
+// change until the field is left or committed, so typing "250" is one undo step, not three.
 export function PropertyNumberInput({
     value,
     onChange,
@@ -38,7 +37,7 @@ export function PropertyNumberInput({
     // While focused the field shows its own draft, so a half-typed "-" or a clamped value never jumps under the caret.
     const [draft, setDraft] = useState<string | null>(null);
     const { hold, end: endGesture, undoKey } = useHeldGesture();
-    const shown = value === undefined ? '' : step === undefined ? String(value) : showNumber(value, step);
+    const shown = value === undefined ? '' : step === undefined ? String(value) : numberAtStep(value, step);
 
     return (
         <Input
@@ -54,9 +53,9 @@ export function PropertyNumberInput({
                     onClear();
                 } else if (raw !== '' && raw !== '-') {
                     const v = Number(raw);
-                    // Clamped BEFORE it is written: the input's own min/max only drive the spinner and
-                    // validity styling, so typing 0 into a width would otherwise reach the document. An
-                    // absent bound is no bound; a row wanting out-of-range entry (Angle) passes neither.
+                    // The value is clamped before it is written, as the input's own min and max only drive
+                    // the spinner and the validity styling. Without it, a 0 typed into a width would reach the
+                    // document. An absent bound is no bound, so a row such as Angle passes neither.
                     const lo = min ?? Number.NEGATIVE_INFINITY;
                     const hi = max ?? Number.POSITIVE_INFINITY;
                     if (!Number.isNaN(v)) {
@@ -65,8 +64,8 @@ export function PropertyNumberInput({
                     }
                 }
             }}
-            // Enter and Escape end the edit where the caret stays in the field, so the next one is a
-            // step of its own; ⌘Z ends it too and shows what the undo left. Every other way out is a blur.
+            // Enter and Escape end the edit while the caret stays in the field, so the next edit is a step
+            // of its own. ⌘Z ends it too and shows what the undo left. Every other way out is a blur.
             onKeyDown={(e) => {
                 if (undoKey(e)) setDraft(null);
                 else if (e.key === 'Enter' || e.key === 'Escape') endGesture();
@@ -87,7 +86,9 @@ export function PropertyNumberInput({
 // The value's own decimals count up to this many, so a 2.6666… px stroke shows 2.67.
 const MAX_OWN_DECIMALS = 2;
 
-function showNumber(value: number, step: number): string {
+// A number as a field at `step` shows it: at least the step's decimals and up to two of the value's own.
+// 16 at a step of 0.01 is 16.00, a 2.67 px stroke at a step of 1 stays 2.67, and 3 stays 3.
+export function numberAtStep(value: number, step: number): string {
     const decimals = Math.max(decimalsOf(step), decimalsOf(roundDecimal(value, MAX_OWN_DECIMALS)));
     return roundDecimal(value, decimals).toFixed(decimals);
 }
