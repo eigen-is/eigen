@@ -41,6 +41,8 @@ immer records the creation of a key as one `add` carrying the whole new value. S
 
 There is no `ctx.config` shortcut. Read a sheet's config with `getSheetConfig` (`state/context.ts`) and write through `ctx.sheets[i].config`. immer names a patch after the path its draft was reached through, so a second route to the config emits patches at a root `filterPatch` drops, and assigning it back replaces the whole config. `packages/sheet/src/test/state/events/concurrent-config.test.ts` pins it through the real op pipeline: one client merges cells, another drags a row taller, and the drag must not undo the merge.
 
+`state/modules` find a sheet through `getSheet` (`state/api/common.ts`): the current sheet, or the one an id or index names. A bad id throws `sheetNotFound` instead of handing back `undefined`, so a path that may name a sheet that is gone, such as a peer's row op, checks `getSheetIndex` first and returns.
+
 `filterPatch` and `sheetMetadataOps` (`state/utils/patch.ts`) decide what goes on the wire, and both read one list of per-client `Sheet` fields, `PER_CLIENT_SHEET_FIELDS`. With two lists, a row insert would broadcast state the op path drops.
 
 A write on a path that then rejects the operation still ships an op and costs the user an undo entry. `packages/sheet/src/test/state/rejected-writes.test.ts` is the table-driven gate; add a row to it when you add a writer.
