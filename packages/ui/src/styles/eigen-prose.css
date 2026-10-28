@@ -90,7 +90,7 @@
         padding-top: 0;
     }
 
-    /* Google Docs' grey, which no theme token matches. */
+    /* Google Docs' gray, which no theme token matches. */
     h5,
     h6,
     p[data-type="subtitle"] {
@@ -638,8 +638,8 @@
 
     /* A figure in front of or behind the text is placed from its paragraph's padding box. That box holds the indent
        and the space before. The paragraph makes no stacking context, so the two layers stack in the page's. The
-       renderers write the offsets and the width inline, through figureLayoutStyle; the editor's node view writes the
-       left and the width as custom properties instead, which the docs app's globals.css draws, out of the exports.
+       renderers write the offsets and the width inline, through figureLayoutStyle. The editor's node view writes the
+       left and the width as custom properties instead, which the Docs app's own stylesheet draws, outside the exports.
        Within a layer, document order breaks the tie. The two layouts are lib's POSITIONED_LAYOUTS, written out here
        as CSS can't import that list. */
     p,
@@ -674,7 +674,7 @@
 
     /* A text box is a column of its paragraphs inside its border and padding, at its width and at least its height
        (textBoxHTMLAttributes writes both). It sits inline in its anchor paragraph, so it would draw its text in that
-       paragraph's look, a heading's or a centred one's: it draws in the doc's Normal instead, and its paragraphs apply
+       paragraph's look, a heading's or a centered one's: it draws in the doc's Normal instead, and its paragraphs apply
        their own format. */
     .text-box {
         display: flex;
@@ -718,7 +718,7 @@
 /* ===== Task lists — TipTap output ===== */
 /* Top-level rather than nested under .eigen-prose/.tiptap so static HTML
    renderers (e.g. NoteCard description thumbnail) get the styling without
-   needing the prose font/colour override. */
+   needing the prose font/color override. */
 
 ul[data-type="taskList"] {
     list-style: none;
@@ -788,7 +788,7 @@ mtable[displaystyle="true"] > mtr > mtd {
 }
 
 /* The writer aligns an equations table as Word's & marks do: right of the first, left of the next, by turns, and a
-   cases table's columns left. Browsers leave columnalign to CSS and centre every cell. */
+   cases table's columns left. Browsers leave columnalign to CSS and center every cell. */
 mtable[displaystyle="true"] > mtr > mtd:nth-child(odd) {
     text-align: right;
 }
@@ -878,7 +878,7 @@ mtable[columnalign="left"] > mtr > mtd {
     position: relative;
 }
 
-/* A displayed equation takes its line, centred, in the editor and the HTML exports; as the figure, a full-width box on
+/* A displayed equation takes its line, centered, in the editor and the HTML exports; as the figure, a full-width box on
    the bottom of its line keeps ProseMirror's trailing break on that line. */
 .eigen-prose .equation[data-display] {
     display: inline-flex;
@@ -907,7 +907,7 @@ mtable[columnalign="left"] > mtr > mtd {
 /* ===== Dark mode — follows app theme (.dark class), not OS preference ===== */
 /* For shadow DOM usage: won't apply (correct — preview has its own white container) */
 .dark .eigen-prose:not(.eigen-paper *) {
-    /* Not on the light-pinned paper (.eigen-paper in globals.css): the docs editor's page stays light. */
+    /* Not on the light-pinned paper (.eigen-paper in the shared stylesheet): the docs editor's page stays light. */
     color: #e4e4e7;
 
     blockquote {
@@ -933,7 +933,7 @@ mtable[columnalign="left"] > mtr > mtd {
     }
 }
 
-/* The greys the shared block sets, which a bare editor (Drive's Markdown editor) draws too. */
+/* The grays the shared block sets, which a bare editor (Drive's Markdown editor) draws too. */
 .dark .eigen-prose:not(.eigen-paper *),
 .dark .tiptap:not(.eigen-paper *) {
     blockquote,
