@@ -74,7 +74,7 @@ export type DocSearchSession = {
 export type DocCommentMatch = {
     id: string;
     label: string; // FTS snippet of the matched message tail
-    context?: string; // who last spoke in the thread
+    context?: string; // the email of who last spoke in the thread, which the palette shows as a name
 };
 
 // The app pairs the document-bound { docKey, search } (useDocCommentSearchHalf) with its own

@@ -463,7 +463,7 @@ export class ChatRoom {
             .all();
         let text = '';
         for (const row of rows) {
-            const content = searchableMessageText(row);
+            const content = await searchableMessageText(row);
             text = text ? `${text}\n${content}` : content;
             if (text.length >= RECENT_TEXT_CAP) break;
         }
