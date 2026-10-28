@@ -18,7 +18,7 @@
 #   - what rollback runs or prints;
 #   - setup: what it downloads with and without pins and the build it records, and setup in a folder that holds the
 #     launcher alone, with the registry or the build .env.production names;
-#   - the group and mode every start gives .env.production first, except on Docker Desktop;
+#   - the group and mode every start gives .env.production first, except on Docker Desktop, and the mode of a step's log;
 #   - what status passes the CLI about backups/, the files of an unfinished update, the newest build of main, and its
 #     folder;
 #   - the installer script apps/index/public/install on this host, as a file and on stdin, for setup and restore.
@@ -416,7 +416,16 @@ for SHELL_NAME in dash busybox host; do
 
     launch local restart
     local_calls=$CALLS
+    # A log from before, readable by every user, as an older launcher left it.
+    mkdir -p "$FIX/release/.eigen"
+    printf 'secret\n' >"$FIX/release/.eigen/last-step.log"
+    chmod 644 "$FIX/release/.eigen/last-step.log"
     launch release restart
+    if [ "$(ls -l "$FIX/release/.eigen/last-step.log" | cut -c 1-10)" = '-rw-------' ]; then
+        ok "$SHELL_NAME: the log of a step is the operator's alone, one an older launcher left too"
+    else
+        fail "$SHELL_NAME: .eigen/last-step.log after a step: $(ls -l "$FIX/release/.eigen/last-step.log")"
+    fi
     if printf '%s\n' "$local_calls" | grep -q '^compose .* -f docker-compose.build.yml .*up -d --wait$' &&
         printf '%s\n' "$CALLS" | grep -q '^compose .*up -d --wait$' && ! printf '%s\n' "$CALLS" | grep -q build.yml; then
         ok "$SHELL_NAME: a folder with the build overlay runs Compose with it, a release folder without"

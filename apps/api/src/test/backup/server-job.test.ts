@@ -1,6 +1,15 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    truncateSync,
+    writeFileSync,
+} from 'node:fs';
 import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupLevel, BackupReason } from '@workspace/lib/types/backup';
@@ -116,6 +125,8 @@ describe('Server backup job', () => {
             const sidecar = await readServerSidecar(archivePath);
             expect(sidecar?.state).toBe('done');
             expect(sidecar?.verify?.status).toBe('verified');
+            // ./eigen reads it on the host as the operator, who need not be the API's user, to see a backup run.
+            expect(statSync(serverSidecarPath(archivePath)).mode & 0o777).toBe(0o666 & ~process.umask());
             expect(alertTitlesTo(relay, ctx.alice.user.id)).toEqual([]);
 
             // A member copied into the backups folder is an ordinary artifact of its home.

@@ -22,8 +22,9 @@ import { ApiError } from '../core/errors';
 import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, sidecarPath } from './paths';
 import { archiveEnd, BLOCK, collect, fileChunks, headerChunks, padding, tarEntries } from './tar';
 
-// A whole-server archive holds every secret of the server, so `tar -xf` hands its members to the user alone.
-const SERVER_MEMBER_MODE = 0o600;
+// An archive holds password hashes, keys and every file of a home, so only the API's own user may read it. A
+// whole-server archive gives its members this mode too, so `tar -xf` hands them to the user alone.
+export const ARCHIVE_MODE = 0o600;
 
 // Packs `dir` into a `.tar.zst` whose single root folder is `dir`'s basename. Memory stays flat:
 // the tar is generated entry by entry into the zstd stream, and the compressed bytes go straight to
@@ -34,7 +35,7 @@ export async function packFolder(dir: string, artifactPath: string, onProgress?:
     const tempPath = getBackupTempPath('.tar.zst');
     try {
         const chunks = Readable.from(tarChunks(dir, path.basename(dir), onProgress));
-        await pipeline(chunks, createZstdCompress(), fs.createWriteStream(tempPath));
+        await pipeline(chunks, createZstdCompress(), fs.createWriteStream(tempPath, { mode: ARCHIVE_MODE }));
     } catch (error) {
         fs.rmSync(tempPath, { force: true });
         throw error;
@@ -103,7 +104,7 @@ export type ServerArchiveWriter = {
 // written where the caller says; the caller writes to a temp name and renames it into place, and
 // calls abort() in a finally, which takes back an archive finish() never closed.
 export async function createServerArchiveWriter(archivePath: string): Promise<ServerArchiveWriter> {
-    const handle = await fsp.open(archivePath, 'w', SERVER_MEMBER_MODE);
+    const handle = await fsp.open(archivePath, 'w', ARCHIVE_MODE);
     const entries: BackupEntry[] = [];
     let written = 0;
     let closed = false;
@@ -115,7 +116,7 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
     return {
         async appendFile(name, sourcePath) {
             const { size, mtimeMs } = fs.statSync(sourcePath);
-            for (const chunk of headerChunks(name, size, Math.floor(mtimeMs / 1000), '0', SERVER_MEMBER_MODE)) {
+            for (const chunk of headerChunks(name, size, Math.floor(mtimeMs / 1000), '0', ARCHIVE_MODE)) {
                 await put(chunk);
             }
             const hasher = new Bun.CryptoHasher('sha256');
@@ -130,7 +131,7 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
             const manifest: ServerArchiveManifest = { ...fields, entries };
             const body = Buffer.from(JSON.stringify(manifest, null, 2));
             const mtime = Math.floor(Date.now() / 1000);
-            for (const chunk of headerChunks(ARCHIVE_MANIFEST_FILE, body.length, mtime, '0', SERVER_MEMBER_MODE)) {
+            for (const chunk of headerChunks(ARCHIVE_MANIFEST_FILE, body.length, mtime, '0', ARCHIVE_MODE)) {
                 await put(chunk);
             }
             await put(body);
@@ -324,10 +325,12 @@ export function readUnpackedHome(
 
 // A sidecar is written in the staging folder and renamed into place, so a reader never sees half of one.
 // The JSON is indented by two spaces: ./eigen finds a server sidecar's top-level "state" line by that indent.
-export async function writeRecord(target: string, value: unknown): Promise<void> {
+// A server sidecar keeps the umask's mode, because ./eigen reads it on the host as the operator. A caller that
+// passes a mode makes a private one.
+export async function writeRecord(target: string, value: unknown, mode?: number): Promise<void> {
     const tempPath = getBackupTempPath('.json');
     try {
-        await Bun.write(tempPath, JSON.stringify(value, null, 2));
+        await fsp.writeFile(tempPath, JSON.stringify(value, null, 2), { mode });
     } catch (error) {
         fs.rmSync(tempPath, { force: true });
         throw error;
@@ -340,7 +343,8 @@ export async function writeSidecar(
     manifest: BackupManifest,
     verify: BackupVerifyRecord,
 ): Promise<void> {
-    await writeRecord(sidecarPath(artifactPath), { manifest, verify });
+    // It names every file of the home, and ./eigen never reads it.
+    await writeRecord(sidecarPath(artifactPath), { manifest, verify }, ARCHIVE_MODE);
 }
 
 // Null when there is no sidecar or it does not read. An artifact copied in by hand has none, and the list shows

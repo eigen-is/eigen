@@ -114,6 +114,22 @@ describe('releaseNotes', () => {
         expect(notes).toEqual([]);
     });
 
+    test('a build of the main channel also reads [Unreleased], last, which it runs', () => {
+        expect(releaseNotes(CHANGELOG, '0.2.10', '0.3.0', { unreleased: true })).toEqual([
+            {
+                version: '0.3.0',
+                intro: 'Big release. It spans two lines.',
+                breaking: ['Sheets border storage (breaking) — borders are stored per cell'],
+                fullBackup: [],
+            },
+            { version: 'Unreleased', intro: '', breaking: ['Mail (breaking) — not released yet'], fullBackup: [] },
+        ]);
+        const marked =
+            '## [Unreleased]\n\n- **Comments (full backup)** — a new column\n\n## [0.2.1] - 2026-09-01\n\nOne.\n';
+        expect(backupLevel(releaseNotes(marked, '0.2.1', '0.2.1', { unreleased: true }))).toBe('full');
+        expect(backupLevel(releaseNotes(marked, '0.2.1', '0.2.1'))).toBe('light');
+    });
+
     test('orders prereleases before their release, and their numbers as numbers', () => {
         const changelog = '## [0.3.0-rc.10] - 2026-10-02\n\nTen.\n\n## [0.3.0-rc.9] - 2026-10-01\n\nNine.\n';
         expect(releaseNotes(changelog, '0.3.0-rc.9', '0.3.0').map((note) => note.version)).toEqual(['0.3.0-rc.10']);

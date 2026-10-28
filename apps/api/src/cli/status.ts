@@ -1,5 +1,5 @@
 // ./eigen status: one report on the install, from what the launcher gathers on the host (the services, the mail
-// queue, the newest release) and what the running API answers on its control socket (backups, disk, the
+// queue, the newest release) and what the running API answers on its control socket (such as backups, disk and the
 // certificate). With Eigen stopped it still reports, reading the backup names in backups/.
 
 import type { parseArgs } from 'node:util';
@@ -9,7 +9,7 @@ import { formatFileSize } from '@workspace/lib/format';
 import { parseServerArchiveNames } from '@workspace/lib/validation';
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
-import { VERSION, VERSION_PATTERN } from './install';
+import { buildChannel, VERSION, VERSION_PATTERN } from './install';
 import type { Glyph } from './ui';
 import { createUi, glyphLine } from './ui';
 
@@ -122,7 +122,7 @@ function listedBackupRow(listing: string): Row {
 function printReport(flags: StatusFlags, services: Service[], api: ControlStatus | null): void {
     const { install, latest, 'mail-queue': queue, files } = flags;
     // The CLI runs in an api image: the running one, or the one .env.production pins.
-    const channel = process.env['EIGEN_CHANNEL'];
+    const channel = buildChannel();
     const commit = process.env['EIGEN_COMMIT'];
     const build: Row[] = install ? [{ level: 'ok', label: 'Folder', value: install }] : [];
     if (api) {
@@ -174,6 +174,13 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
                 value: `${formatFileSize(api.diskFree, 1)} free of ${formatFileSize(api.diskTotal, 1)}`,
             },
             backupRow(api.backup),
+            ...api.setupCopies.map(
+                ({ name, createdAt }): Row => ({
+                    level: 'warn',
+                    label: 'Setup copy',
+                    value: `data/server/${name}, ${formatTimeAgo(createdAt)}: the accounts a setup cleared; sudo rm it once you need none of them`,
+                }),
+            ),
         );
         if (api.certExpiresAt) {
             const days = Math.floor((new Date(api.certExpiresAt).getTime() - Date.now()) / DAY_MS);

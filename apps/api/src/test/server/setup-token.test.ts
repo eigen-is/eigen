@@ -1,10 +1,21 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+    closeSync,
+    existsSync,
+    mkdirSync,
+    openSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { getServerDataPath } from '../../lib/config/paths';
 import { getDomain, getPublicOrigin, getServedOrigin } from '../../lib/config/server-config';
+import type { ControlStatus } from '../../lib/config/server-status';
 import type { SetupLink } from '../../lib/setup/setup-token';
 import { clearSetupToken, createSetupToken, verifySetupToken } from '../../lib/setup/setup-token';
 import { LocalStorage } from '../../lib/storage/local-storage';
@@ -418,6 +429,26 @@ describe('the /setup routes before setup', () => {
             expect(readFileSync(logPath, 'utf8')).toContain(
                 `The owner's address ada@legacy.example is not on the mail domain ${MAIL_DOMAIN}.`,
             );
+        },
+        LISTEN_TIMEOUT_MS + 5_000,
+    );
+
+    test(
+        'a setup that finds accounts keeps a copy of them for the server alone, which ./eigen status lists',
+        async () => {
+            proc.kill('SIGTERM');
+            await proc.exited;
+            const { setupCompleted: _, ...config } = storedConfig();
+            writeFileSync(join(dataRoot, 'server/config.json'), JSON.stringify(config));
+            await startApi();
+            expect((await post('complete', { ...admin, setupToken: await freshToken() })).status).toBe(200);
+
+            const copies = readdirSync(join(dataRoot, 'server')).filter((name) => name.startsWith('users3.backup-'));
+            const [copy = ''] = copies;
+            expect(copies).toHaveLength(1);
+            expect(statSync(join(dataRoot, 'server', copy)).mode & 0o777).toBe(0o600);
+            const status: ControlStatus = await (await fetch('http://eigen/status', { unix: SOCKET })).json();
+            expect(status.setupCopies.map(({ name }) => name)).toEqual([copy]);
         },
         LISTEN_TIMEOUT_MS + 5_000,
     );

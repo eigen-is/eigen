@@ -18,6 +18,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
+import { DECLINED } from '../../cli/install';
 import { STAGE_LOCK, SWAP_LOCK, SWAP_MARKER } from '../../cli/restore';
 import { copyArchiveMember, createServerArchiveWriter, extractArtifact, packFolder } from '../../lib/backup/archive';
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
@@ -90,8 +91,9 @@ function install(env = RELEASE_ENV): string {
     return dir;
 }
 
-// `preamble` runs before cli/restore.ts loads, to spy on what the run cannot show from outside.
-async function restoreCli(dir: string, args: string[], { preamble = [], env = {} }: CliSeams = {}) {
+// `preamble` runs before cli/restore.ts loads, to spy on what the run cannot show from outside. `input` answers the
+// questions, a line each.
+async function restoreCli(dir: string, args: string[], { preamble = [], env = {}, input }: CliSeams = {}) {
     const script = [
         `import { parseArgs } from 'node:util';`,
         ...preamble,
@@ -110,7 +112,7 @@ async function restoreCli(dir: string, args: string[], { preamble = [], env = {}
             EIGEN_BACKUPS_DIR: getBackupsDir(),
             ...env,
         },
-        stdin: 'ignore',
+        stdin: input === undefined ? 'ignore' : new Blob([input]),
         stdout: 'pipe',
         stderr: 'pipe',
     });
@@ -122,7 +124,7 @@ async function restoreCli(dir: string, args: string[], { preamble = [], env = {}
     return { stdout, stderr, code };
 }
 
-type CliSeams = { preamble?: string[]; env?: Record<string, string> };
+type CliSeams = { preamble?: string[]; env?: Record<string, string>; input?: string };
 
 // Every ownAs of the run into `log`, a line each, with whether the swap marker was there yet. Nothing is chowned.
 function spyOwnAs(log: string): string[] {
@@ -590,6 +592,8 @@ describe('restore --stage and --swap', () => {
             writeFileSync(join(live, 'mounts', aliceMountId, PATHS.DRIVE.STAGING_DIR, 'upload'), 'staged here');
             mkdirSync(join(dir, 'data/certs'));
             writeFileSync(join(dir, 'data/certs/key.pem'), 'the key here');
+            // A safety copy of the home no account in the archive owns: no home of its own, so it stays.
+            mkdirSync(join(dir, 'data/home/old.pre-restore-20260101-000000'));
 
             const output = await stageAndSwap(dir, basename(lightArchive));
             expect(output).toMatch(/light/i);
@@ -613,13 +617,79 @@ describe('restore --stage and --swap', () => {
             const upload = join(PATHS.DRIVE.STAGING_DIR, 'upload');
             expect(readFileSync(join(live, 'mounts', aliceMountId, upload), 'utf8')).toBe('staged here');
             expect(readFileSync(join(mountAside, upload), 'utf8')).toBe('staged here');
-            // The live server/ went aside whole, epoch and all; a home the archive does not hold stays put.
+            // The live server/ went aside whole, epoch and all, and so did a home no account in the archive owns,
+            // such as that of a user made since: nothing would sign in to it.
             expect(readFileSync(join(dir, aside, 'server', SERVER_RUNTIME_FILES.epoch), 'utf8')).toBe('epoch-before');
-            expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+            expect(output).toContain('Homes no account in the archive owns go aside: home/old');
+            expect(existsSync(join(dir, 'data/home/old'))).toBe(false);
+            expect(readFileSync(join(dir, aside, 'home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+            expect(existsSync(join(dir, 'data/home/old.pre-restore-20260101-000000'))).toBe(true);
             expect(existsSync(join(dir, 'data/server', SERVER_DATABASES.users))).toBe(true);
             // The archive's TLS certificate in, the one here aside.
             expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe(TLS_KEY);
             expect(readFileSync(join(dir, aside, 'certs/key.pem'), 'utf8')).toBe('the key here');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a Light stage that would set homes aside names them and asks again, and a no leaves nothing staged',
+        async () => {
+            const dir = install();
+            const declined = await restoreCli(dir, [basename(lightArchive), '--stage'], { input: 'y\nn\n' });
+            expect(declined.stderr).toBe('');
+            expect(declined.code).toBe(DECLINED);
+            expect(declined.stdout).toContain('Homes no account in the archive owns go aside: home/old');
+            expect(declined.stdout).toContain('Set these homes aside');
+            expectUntouched(dir);
+
+            const agreed = await restoreCli(dir, [basename(lightArchive), '--stage'], { input: 'y\ny\n' });
+            expect(agreed.code).toBe(0);
+            expect(existsSync(join(dir, 'data/.restoring/staged.json'))).toBe(true);
+
+            // With no home to set aside there is one question.
+            const bare = install();
+            rmSync(join(bare, 'data/home/old'), { recursive: true });
+            const once = await restoreCli(bare, [basename(lightArchive), '--stage'], { input: 'y\n' });
+            expect(once.stderr).toBe('');
+            expect(once.code).toBe(0);
+            expect(once.stdout).not.toContain('Set these homes aside');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a Light swap moves aside only a home folder here that the archive does not hold, whatever staged.json names',
+        async () => {
+            const dir = install();
+            const staged = await stage(dir, basename(lightArchive));
+            expect(staged.code).toBe(0);
+            // The API's user writes staged.json, so it may name anything: root must not move the server's data, the
+            // staged tree, a home the archive holds or a file inside a home.
+            const recordPath = join(dir, 'data/.restoring/staged.json');
+            const record = JSON.parse(readFileSync(recordPath, 'utf8'));
+            const forged = ['server', 'dkim', 'certs', '.restoring', '', 'home', 'home/', 'home/../server'];
+            forged.push('home/.restoring', 'home/old/notes.txt', 'home/gone', `home/${alice.id}`, `team/${teamOwner}`);
+            mkdirSync(join(dir, 'data/home/.hidden'));
+            forged.push('home/.hidden');
+            writeFileSync(recordPath, JSON.stringify({ ...record, orphans: [...forged, ...record.orphans] }));
+            // Alice's home is here too, so the archive merges into it, and her files stay where they are.
+            const liveFile = join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, 'data/live.txt');
+            mkdirSync(dirname(liveFile), { recursive: true });
+            writeFileSync(liveFile, 'live file');
+
+            const swapped = await swap(dir);
+            expect(swapped.stderr).toBe('');
+            expect(swapped.code).toBe(0);
+            const [aside] = asideDirs(dir);
+            expect(readFileSync(join(dir, aside, 'home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+            expect(readFileSync(liveFile, 'utf8')).toBe('live file');
+            expect(existsSync(join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, 'metadata.db'))).toBe(true);
+            expect(existsSync(join(dir, 'data/home/.hidden'))).toBe(true);
+            expect(existsSync(join(dir, 'data/server', SERVER_DATABASES.users))).toBe(true);
+            expect(existsSync(join(dir, 'data/dkim/eigen.private'))).toBe(true);
+            expect(existsSync(join(homeDirOf(dir, teamOwner), 'mounts'))).toBe(true);
+            expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
         },
         JOB_TIMEOUT_MS,
     );

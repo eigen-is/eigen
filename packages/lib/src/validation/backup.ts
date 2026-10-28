@@ -5,6 +5,7 @@ import type {
     BackupLevel,
     BackupManifest,
     BackupReason,
+    BackupShare,
     BackupVerifyRecord,
     ServerArchive,
     ServerArchiveManifest,
@@ -441,11 +442,11 @@ export function parseBackupAuthRows(text: string): Record<string, Record<string,
     return rows;
 }
 
-// `shares.json`: the restore keys these rows off the owner it is restoring, so only the target matters.
-export function parseBackupShares(text: string): { targetIdentifier: string }[] | null {
+// `shares.json`, or null when it is not a list of rows.
+export function parseBackupShares(text: string): BackupShare[] | null {
     const value = parseJson(text);
     if (!Array.isArray(value)) return null;
-    const shares: { targetIdentifier: string }[] = [];
+    const shares: BackupShare[] = [];
     for (const row of value) {
         if (typeof row !== 'object' || row === null) return null;
         if (!('targetIdentifier' in row) || typeof row.targetIdentifier !== 'string') return null;

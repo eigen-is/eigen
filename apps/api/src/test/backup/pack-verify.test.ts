@@ -244,6 +244,8 @@ describe('Backup pack and verify', () => {
         'packs into a .tar.zst and verifies a fresh extract',
         async () => {
             expect(Bun.file(artifact).size).toBeGreaterThan(0);
+            // It holds password hashes and keys, so only the API's own user reads it.
+            expect(fs.statSync(artifact).mode & 0o777).toBe(0o600);
             const dir = await extractFresh('extract-ok-');
             const record = await verifyFolder(join(dir, folderName));
             expect(record.failures).toEqual([]);
@@ -496,7 +498,8 @@ describe('Backup pack and verify', () => {
         // The record travels as a Date; the sidecar on disk is JSON, so it round-trips through ISO.
         const verify = { status: 'verified' as const, checkedAt: new Date(), failures: [] };
         await writeSidecar(artifact, manifest, verify);
-        expect(existsSync(`${artifact}.manifest.json`)).toBe(true);
+        // It names every file of the home, so it is as private as the archive.
+        expect(fs.statSync(`${artifact}.manifest.json`).mode & 0o777).toBe(0o600);
         const read = await readSidecar(artifact);
         expect(read?.verify).toEqual(verify);
         expect(read?.manifest).toEqual(JSON.parse(JSON.stringify(manifest)));

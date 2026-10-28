@@ -80,7 +80,7 @@ With Eigen stopped there is nothing to run the backup, so `./eigen backup` refus
 - `docker-compose.override.yml`, if you made one.
 - A way into the backup bucket. Its keys are inside the backups, which are in that bucket, so keep a copy of them yourself.
 - Guests' workspaces. After a restore of a Full backup, a guest keeps their account and starts with an empty workspace. A restore of a Light backup leaves guests' workspaces as they are.
-- A user or team folder that no account owns. The backup's record in `backups/`, the file with its name and `.json` at the end, lists it under `orphans`. After a restore of a Full backup it is only in `data.pre-restore-<date>-<time>`.
+- A user or team folder that no account owns. The backup's record in `backups/`, the file with its name and `.json` at the end, lists it under `orphans`. After a restore it is only in `data.pre-restore-<date>-<time>`.
 
 ## Drives in an S3 bucket
 
@@ -114,7 +114,7 @@ The question also says whether the backup holds `.env.production`, the key that 
 
 A user or team that failed during the backup is not in it, and the question names them. After a restore of a Full backup, their data is in `data.pre-restore-<date>-<time>` only. One with warnings is in it, without the files the warning named, and the question names it with its first warning.
 
-Everyone is signed in as they were when the backup was made. Every open browser tab reloads once. After a restore, everything in the Trash stays there for the full **Trash retention (days)** period, counted from the restore. `--yes` skips the question, for scripts.
+Everyone is signed in as they were when the backup was made. Every open browser tab reloads once. After a restore, everything in the Trash stays there for the full **Trash retention (days)** period, counted from the restore. `--yes` skips the questions, for scripts.
 
 Restore refuses a backup of a newer Eigen than the one you run: update first, then restore. `data/` must be a plain folder inside the install folder, on the same disk, with room to unpack the backup. Restore checks this before it stops Eigen. If a restore is cut off while it swaps the data in, Eigen stays stopped and `./eigen` says so. `./eigen restart` finishes the restore and starts Eigen. Any other `./eigen` command except `logs`, `reset-password`, and `help` finishes it too, before it does anything else.
 
@@ -129,6 +129,7 @@ A Light backup holds no files and no mail. Its restore puts back the accounts, t
 - A file deleted for good since comes back without its content.
 - Calendars and contacts go back to the time of the backup.
 - Mail stays as it is now.
+- The folder of a user or team made since the backup, which has no account any more, moves to `data.pre-restore-<date>-<time>`. Before it stops Eigen, the restore names these folders and asks again whether to go on. A no leaves everything as it was.
 
 Nothing is deleted from disk, and what the restore replaced is in `data.pre-restore-<date>-<time>`. A rollback after a usual update is a Light restore: see [Update Eigen](/support/self-hosting/update#go-back-with-a-rollback).
 

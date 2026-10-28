@@ -48,6 +48,10 @@ export type BackupManifest = {
     warnings?: string[];
 };
 
+// One row of a user's archived shares.json, a share-registry row of someone they shared with. A restore keys it off
+// the owner it restores, so only the target is kept.
+export type BackupShare = { targetIdentifier: string };
+
 // Why a whole-server archive was made. It is part of the archive's name, so retention and the
 // schedule never open an archive to find out.
 export const BACKUP_REASONS = ['scheduled', 'manual', 'pre-update'] as const;

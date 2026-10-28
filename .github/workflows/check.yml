@@ -138,6 +138,26 @@ jobs:
           echo "shards ran $ran of $total API test files"
           [ "$ran" -eq "$total" ]
 
+  # publish.yml runs the same check on a push to main, where a missing (full backup) mark fails the :main image only
+  # after develop moved on. Here it turns develop red first. It blocks nothing, since a push to develop publishes none.
+  container-db-marker:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Every tag, for the previous release's db-config.ts files.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun apps/api/src/scripts/check-container-db-marker.ts "$(jq -r .version package.json)" --main
+
   # The launcher under dash, BusyBox and the runner's sh, with a stub docker: no stack, no Bun.
   launcher:
     runs-on: ubuntu-latest

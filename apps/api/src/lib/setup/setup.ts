@@ -1,6 +1,6 @@
 // First-time setup of a server. It saves the organization name and the storage choice, creates the first admin,
 // and ends the setup state, once. Because a failed attempt can leave half a setup behind, it starts by clearing the
-// auth database. The setup route calls it after it has checked the setup link.
+// auth database, after a copy when it holds accounts. The setup route calls it after it has checked the setup link.
 
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -12,6 +12,7 @@ import { auth } from '../auth/auth';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
+import { buildSetupCopyName } from '../config/setup-copies';
 import { ApiError } from '../core/errors';
 import { storedSender } from '../mailer/mailer';
 import { findDefaultTeamId } from '../org';
@@ -209,8 +210,9 @@ async function resetAuthDatabase(): Promise<void> {
     // snapshot the database first. Clearing is then always recoverable, never destructive.
     const { n: existingUsers } = db.query<{ n: number }, []>('SELECT count(*) AS n FROM "user"').get()!;
     if (existingUsers > 0) {
-        const backupPath = getServerDataPath(`users3.backup-${Date.now()}.db`);
-        writeFileSync(backupPath, db.serialize());
+        const backupPath = getServerDataPath(buildSetupCopyName(new Date()));
+        // Its password hashes and sessions are for the API's user alone, as in users3.db.
+        writeFileSync(backupPath, db.serialize(), { mode: 0o600 });
         console.warn(
             `[setup] users3.db already held ${existingUsers} user(s); backed up to ${backupPath} before clearing`,
         );
