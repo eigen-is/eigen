@@ -2599,3 +2599,80 @@ describe('doc export — footnotes', () => {
             expect(other.some(([text]) => text.includes('line'))).toBe(false);
     }, 60_000);
 });
+
+describe('doc export — the table of contents', () => {
+    const heading = (level: number, text: string, ...more: JSONContent[]): JSONContent => ({
+        type: 'heading',
+        attrs: { level },
+        content: [{ type: 'text', text }, ...more],
+    });
+    const toc = (levels?: number): JSONContent => ({ type: 'tableOfContents', attrs: { levels: levels ?? null } });
+    const tocDoc = (...content: JSONContent[]) => seededDoc({ type: 'doc', content });
+
+    test.each(['html', 'pdf-html'] as const)(
+        "%s lists the body's headings to the node's level, each linking to its heading's id",
+        async (format) => {
+            const doc = tocDoc(
+                toc(2),
+                heading(1, 'Intro'),
+                heading(3, 'Deep'),
+                {
+                    type: 'table',
+                    content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [heading(2, 'Cell')] }] }],
+                },
+                heading(2, 'Method & more', note(paragraph('Aside'))),
+            );
+            const { body } = new JSDOM(await exported(format, doc)).window.document;
+            const nav = body.querySelector('nav[data-type="table-of-contents"]');
+            expect(nav?.getAttribute('data-levels')).toBe('2');
+            const entries = [...(nav?.querySelectorAll('a') ?? [])];
+            expect(entries.map((a) => [a.getAttribute('data-level'), a.textContent])).toEqual([
+                ['1', 'Intro'],
+                ['2', 'Cell'],
+                ['2', 'Method & more'],
+            ]);
+            // Numbered over every listed heading, the one below the node's level too, so two TOCs share the ids.
+            expect(entries.map((a) => a.getAttribute('href'))).toEqual(['#h-1', '#h-3', '#h-4']);
+            expect([...body.querySelectorAll('h1, h2, h3')].map((h) => h.id)).toEqual(['h-1', 'h-2', 'h-3', 'h-4']);
+        },
+    );
+
+    test("a band's heading gets no id, as the PDF places the bands before the body and an id would be taken twice", async () => {
+        const doc = tocDoc(toc(), heading(1, 'Body'));
+        seedBand(doc, 'header', heading(1, 'Running head'));
+        const { body } = new JSDOM(await exported('pdf-html', doc)).window.document;
+        const [band, own] = [...body.querySelectorAll('h1')];
+        expect(band?.textContent).toBe('Running head');
+        expect(band?.hasAttribute('id')).toBe(false);
+        expect(own?.id).toBe('h-1');
+    });
+
+    test('the PDF fills in the page numbers with a dotted leader, from the head the sanitizer never sees', async () => {
+        const doc = tocDoc(toc(), heading(1, 'Intro'));
+        expect(await exportStyle('pdf-html', doc)).toContain("content: leader('.') target-counter(attr(href), page);");
+        expect(await exportStyle('html', doc)).not.toContain('target-counter');
+    });
+
+    test('with no headings the node renders as an empty nav', async () => {
+        const { body } = new JSDOM(await exported('html', tocDoc(toc(), paragraph('Text')))).window.document;
+        expect(body.querySelector('nav[data-type="table-of-contents"]')?.children.length).toBe(0);
+    });
+
+    // The preview is live DOM in the drive's page, where a fragment link would move that page, not the preview.
+    test('the preview lists the entries without links or ids', () => {
+        const html = renderDocHtml({ type: 'doc', content: [toc(), heading(1, 'Intro')] }, () => null, { lazy: true });
+        const { body } = new JSDOM(html).window.document;
+        expect(body.querySelector('nav [data-level="1"]')?.textContent).toBe('Intro');
+        expect(body.querySelector('nav a')).toBeNull();
+        expect(body.querySelector('h1')?.hasAttribute('id')).toBe(false);
+    });
+
+    test("the sanitizer keeps an entry's fragment link and its heading's id", () => {
+        const html = renderDocHtml({ type: 'doc', content: [toc(), heading(1, 'Intro')] }, () => null, {
+            anchors: true,
+        });
+        const kept = sanitizeExportHtml(html);
+        expect(kept).toContain('href="#h-1"');
+        expect(kept).toContain('id="h-1"');
+    });
+});

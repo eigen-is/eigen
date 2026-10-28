@@ -41,10 +41,15 @@ export const STYLE_NAMES = {
     FootnoteReference: 'footnote reference',
 } as const;
 
-export type StyleId = keyof typeof STYLE_NAMES | `Heading${number}` | `CodeBlock-${string}`;
+export type StyleId = keyof typeof STYLE_NAMES | `Heading${number}` | `TOC${number}` | `CodeBlock-${string}`;
 
 export function headingStyleName(level: number): string {
     return `heading ${level}`;
+}
+
+// Word's built-in style of a table of contents entry for a heading at `level`.
+export function tocStyleName(level: number): string {
+    return `toc ${level}`;
 }
 
 const HEADING_LEVEL = /^heading ([1-9])$/i;
@@ -176,6 +181,23 @@ export const PAGE_SECTION_TYPES = new Set(['nextPage', 'oddPage', 'evenPage']);
 
 // The field each page number kind writes, as w:instr names it.
 export const PAGE_NUMBER_FIELDS: Record<PageNumberKind, string> = { page: 'PAGE', pages: 'NUMPAGES' };
+
+// A table of contents as Word writes its field: the headings to `levels` by outline level (\o), each entry a link (\h),
+// no page numbers in Web Layout (\z), and paragraphs given an outline level directly (\u). It stands in a content
+// control of Word's gallery, so Word's Update Table and its references pane find it.
+export function tocInstruction(levels: number): string {
+    return `TOC \\o "1-${levels}" \\h \\z \\u`;
+}
+
+export const TOC_GALLERY = 'Table of Contents';
+
+// The bookmark on the Nth heading of the outline, which its entry links to and its PAGEREF field reads the page of.
+export function tocBookmark(number: number): string {
+    return `_Toc${number}`;
+}
+
+// What Word's field shows for a doc with no headings.
+export const NO_TOC_ENTRIES = 'No table of contents entries found.';
 
 // Word's widest table. The reader and the writer cap a table's grid at it, so no row walks or fills a column past it.
 export const MAX_TABLE_COLUMNS = 63;

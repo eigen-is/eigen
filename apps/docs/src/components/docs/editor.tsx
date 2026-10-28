@@ -253,6 +253,7 @@ const TiptapEditor = ({
     );
     const editEquationRef = useRef(() => {});
     const openNoteRef = useRef((_pos: number) => {});
+    const jumpToHeadingRef = useRef((_pos: number) => {});
     const insertFootnoteRef = useRef((): boolean => false);
     const leaveNoteRef = useRef(() => {});
     const [undoManager] = useState(() => createDocUndoManager(yDoc));
@@ -331,6 +332,7 @@ const TiptapEditor = ({
             equation: { ...equation, onOpenComment: handleCommentClick },
             table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
             footnote: { onOpen: (pos) => openNoteRef.current(pos), onInsert: () => insertFootnoteRef.current() },
+            tableOfContents: { onJump: (pos) => jumpToHeadingRef.current(pos) },
             extensions: [
                 SearchHighlight,
                 CommentMark.configure({
@@ -408,10 +410,10 @@ const TiptapEditor = ({
     };
     insertFootnoteRef.current = insertFootnote;
     const activeEditor = editingBand ? bands[editingBand] : notes.anchor ? noteEditor : editor;
-    // A jump leaves a band or a note and puts the caret at the start of the heading, which scrolls to a small margin
-    // below the top of the view: the selection's own scroll stops as soon as the heading shows, at the bottom. The
-    // margin keeps a note number above the heading's line in view. A phone's pane closes first, and the scroll waits a
-    // frame for the editor the pane hid to be drawn again.
+    // A jump from the outline or a table of contents leaves a band or a note and puts the caret at the start of the
+    // heading, which scrolls to a small margin below the top of the view: the selection's own scroll stops as soon as
+    // the heading shows, at the bottom. The margin keeps a note number above the heading's line in view. A phone's pane
+    // closes first, and the scroll waits a frame for the editor the pane hid to be drawn again.
     const jumpToHeading = (pos: number) => {
         setEditingBand(null);
         notes.close();
@@ -425,6 +427,7 @@ const TiptapEditor = ({
             scroller.scrollBy({ top: top - JUMP_MARGIN });
         });
     };
+    jumpToHeadingRef.current = jumpToHeading;
     // A double-click puts the caret where it was, a menu at the band's end.
     const enterBand = (root: BandRoot, at?: { left: number; top: number }) => {
         notes.close();

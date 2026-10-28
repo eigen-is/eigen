@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
-import { getDocExtensions, readOutline } from '../../../docs/eigendoc';
+import { getDocExtensions, outlineEntry, readOutline } from '../../../docs/eigendoc';
 
 const schema = getSchema(getDocExtensions());
 
@@ -83,5 +83,31 @@ describe('readOutline', () => {
 
     test('an empty doc has no outline', () => {
         expect(readOutline(doc(paragraph()))).toEqual([]);
+    });
+});
+
+// The docx writer reads the stored JSON, never a node, so the rule has to give its JSON the node's answer.
+describe('outlineEntry', () => {
+    test("gives a heading's stored JSON the entry its node gives", () => {
+        const headings = [
+            heading(2, text('Results'), footnote(paragraph(text('Measured twice.'))), text(' so far')),
+            heading(1, { type: 'hardBreak' }, text('After a break')),
+            heading(3, footnote(paragraph(text('A note alone.')))),
+            heading(7, text('Too deep')),
+            heading(1),
+        ];
+        for (const json of headings) {
+            const node = doc(json).child(0);
+            expect(outlineEntry(json.attrs?.['level'], json.content ?? [])).toEqual(
+                outlineEntry(node.attrs['level'], node.content.content),
+            );
+        }
+        expect(headings.map((json) => outlineEntry(json.attrs?.['level'], json.content ?? []))).toEqual([
+            { level: 2, text: 'Results so far' },
+            { level: 1, text: 'After a break' },
+            null,
+            null,
+            null,
+        ]);
     });
 });

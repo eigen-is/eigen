@@ -57,6 +57,15 @@ describe('roles', () => {
         expect(types((await importDocxBody(body, { styles })).json)).toEqual(['heading2', 'paragraph']);
     });
 
+    // Word's TOC Heading is based on Heading 1 at outline level 9, which in Word is body text: its "Contents" lists
+    // in no outline. The writer sets 9 on a split heading's later pieces directly, and those stay headings.
+    test('a style whose chain sets outline level 9 is body text, a paragraph that sets it directly is not', async () => {
+        const styles = `${style('Heading1', 'heading 1', '<w:pPr><w:outlineLvl w:val="0"/></w:pPr>')}${style('TOCHeading', 'TOC Heading', '<w:basedOn w:val="Heading1"/><w:pPr><w:outlineLvl w:val="9"/></w:pPr>')}`;
+        const direct = `<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:outlineLvl w:val="9"/></w:pPr>${run('Piece')}</w:p>`;
+        const body = [styled('TOCHeading', 'Contents'), styled('Heading1', 'One'), direct].join('');
+        expect(types((await importDocxBody(body, { styles })).json)).toEqual(['paragraph', 'heading1', 'heading1']);
+    });
+
     test("a heading style's bold is the heading's, no mark; a Quote's italic is the quote's", async () => {
         const styles = `${style('Heading2', 'heading 2', '<w:rPr><w:b/></w:rPr>')}${style('Quote', 'Quote', '<w:rPr><w:i/></w:rPr>')}`;
         const { json } = await importDocxBody(`${styled('Heading2', 'Head')}${styled('Quote', 'Said')}`, { styles });

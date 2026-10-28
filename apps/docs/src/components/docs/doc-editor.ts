@@ -66,6 +66,8 @@ import { Footnote, NOTE_EDIT, NoteDecorations, NoteFormatting } from './extensio
 import { PageNumber } from './extensions/page-number';
 import { PositionedFigures } from './extensions/positioned-figure';
 import { cellPosAt, EditorTable } from './extensions/table';
+import type { TableOfContentsOptions } from './extensions/table-of-contents';
+import { TableOfContents } from './extensions/table-of-contents';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { cleanPastedHTML } from './paste';
 
@@ -277,6 +279,7 @@ type DocEditorOptions = {
     // A right-click in a cell, at `pos`: true when the host opened the table menu.
     table?: { onContextMenu: (editor: Editor, pos: number, event: MouseEvent) => boolean };
     footnote?: Partial<FootnoteOptions>;
+    tableOfContents?: Partial<TableOfContentsOptions>;
     // An extension named as a schema node or mark takes its place, as the body's comment mark does.
     extensions?: Extensions;
     media: () => DocMedia;
@@ -296,6 +299,7 @@ export function docEditorOptions({
     equation,
     table,
     footnote,
+    tableOfContents,
     extensions = [],
     media,
     editor,
@@ -351,6 +355,7 @@ export function docEditorOptions({
                     'equation',
                     'table',
                     'pageNumber',
+                    'tableOfContents',
                     ...extensions.map((extension) => extension.name),
                 ],
             }).map((extension) =>
@@ -362,6 +367,7 @@ export function docEditorOptions({
             ...(band ? [] : [Chart.configure(chart)]),
             Equation.configure(equation),
             PageNumber,
+            ...(band ? [] : [TableOfContents.configure(tableOfContents)]),
             ...(band || note ? [] : [Footnote.configure(footnote), NoteFormatting]),
             TableWidthClamp.configure({ textColumnWidth, paperWidth, band }),
             noPageBreaksWhenPageless(pageless),

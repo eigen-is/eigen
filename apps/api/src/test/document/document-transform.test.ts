@@ -860,9 +860,12 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
-// Both last moved with the print CSS that lets a table and its rows split across pages (no table page-break-inside rule); before that, with the always-underlined prose links and the plain footnote links. The preview body stayed.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'c6045cc2714fb1887a7ec0baa1362087bd896cdb228380f4697bafdcdb2aa875';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'd01a15f9f4b98da0df3431bf37401befded94a5f6a105aac7f0f7705533f8485';
+// Both last moved with the stylesheet's table of contents rules and the headings' `h-N` ids, the PDF's with its head's
+// page-number leader too, and with the print CSS that lets a table and its rows split across pages (no table
+// page-break-inside rule); before that, with the always-underlined prose links and the plain footnote links. The
+// preview body stayed.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '1098e2db78a97549c744e04065b252cb8ca57724a5bce9e371e711d725f4d799';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8f5899bcf7e67e94c2e207fdd4790be6eb817935549a312990edc569691054af';
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
 // libdeflate.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'bd883985e840cef1ce64fb32910275793ad0ec43b10d20f87e9849ee90f9a491';

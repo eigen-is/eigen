@@ -306,9 +306,9 @@ function drawingLine(paragraph: XmlElement): JSONContent[] {
     return line;
 }
 
-// A shape's text sits on its fill, which the schema drops.
+// A shape's text sits on its fill, which the schema drops, and holds no table of contents node.
 function onShapeFill(scope: Scope): Scope {
-    return { ...scope, onFill: true };
+    return { ...scope, onFill: true, inShape: true };
 }
 
 // Where Word places an anchor, as the doc holds it. Wrapped beside the text, it sits on the side its alignment or its

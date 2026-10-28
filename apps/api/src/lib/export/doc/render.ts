@@ -1,6 +1,6 @@
 // A doc's body or band as HTML, the DOM the editor holds, for the HTML and PDF exports and the doc preview alike. Each
-// node the static renderer draws otherwise is mapped here, such as a code block, a figure, a note or a small-caps run
-// on paper. The docx writer shares its link rule.
+// node the static renderer draws otherwise is mapped here, such as a code block, a figure, a note, a table of contents
+// or a small-caps run on paper. The docx writer shares its link rule.
 
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
@@ -11,7 +11,7 @@ import {
 } from '@tiptap/static-renderer/pm/html-string';
 import { readChartSpec } from '@workspace/lib/charts';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import type { ChartAttrs, FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
+import type { ChartAttrs, FigureAttrs, FigureFrameAttrs, OutlineHeading } from '@workspace/lib/docs/eigendoc';
 import {
     BLOCK_ONLY_FIGURE_PARENTS,
     chartSvg,
@@ -20,11 +20,14 @@ import {
     flattenNestedFootnotes,
     isFigureFrameNode,
     isPositioned,
+    outlineEntry,
     PROSE_TEXTBLOCKS,
     readChartAttrs,
     readFigureAttrs,
     readFigureFrameAttrs,
+    readOutline,
     readPageNumberKind,
+    readTocLevels,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
@@ -41,7 +44,9 @@ type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => st
 // The export's and the preview's one render of a doc's body or band, unsanitized: the DOM the editor holds. On paper
 // (`print`) a heading that holds a note labels its own bookmark and a page number is a field the stylesheet fills in.
 // `smallCapsFont` fakes small caps where the font has none, and the screen lists the notes after the body unless
-// `pageFootnotes` floats them to their pages. A `band` is a header or a footer, where no figure is positioned.
+// `pageFootnotes` floats them to their pages. A `band` is a header or a footer, where no figure is positioned. With
+// `anchors` each outline heading carries the id `h-N` that a table of contents links to: an export's body only, as the
+// PDF places the bands before it, where a band's id would be taken twice.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
@@ -51,6 +56,7 @@ export function renderDocHtml(
         print?: boolean;
         pageFootnotes?: boolean;
         band?: boolean;
+        anchors?: boolean;
         equations?: ({ node }: { node: Node }) => string;
     },
 ): string {
@@ -59,6 +65,10 @@ export function renderDocHtml(
     );
     const footnotes = options?.pageFootnotes ? undefined : footnoteList();
     const highlight = codeHighlighter();
+    const outline = readOutline(content);
+    // The static renderer walks the node it is given, so a heading finds its number by identity.
+    const numbers = new Map(outline.map(({ pos }, index) => [content.nodeAt(pos), index + 1]));
+    const anchors = options?.anchors ?? false;
     const html = renderToHTMLString({
         content,
         extensions: docExtensions(),
@@ -71,8 +81,14 @@ export function renderDocHtml(
                 equation: options?.equations ?? renderEquations(),
                 footnote:
                     footnotes?.reference ?? (({ node, renderElement }) => renderFootnoteSpans(node, renderElement)),
-                ...(options?.print && {
-                    heading: ({ node, children }) => renderBookmarkedHeading(node, children),
+                tableOfContents: ({ node }) =>
+                    renderTableOfContents(readTocLevels(node.attrs['levels']), outline, anchors),
+                ...((options?.print || anchors) && {
+                    heading: ({ node, children }) =>
+                        renderHeading(node, children, {
+                            id: anchors ? numbers.get(node) : undefined,
+                            bookmark: options?.print ?? false,
+                        }),
                 }),
                 ...(options?.smallCapsFont && {
                     text: renderTextSynthesizingSmallCaps(content, options.smallCapsFont),
@@ -215,19 +231,37 @@ function footnoteList() {
     };
 }
 
-// WeasyPrint's bookmark is a heading's text, its notes' numbers with it, so on paper a heading that holds a note labels
-// its bookmark with its own text (printExtras).
-function renderBookmarkedHeading(node: Node, children: string | string[] | undefined): string {
+// A heading's id, `h-N` for the Nth heading of the outline, which a table of contents links to. WeasyPrint's bookmark
+// is a heading's text, its notes' numbers with it, so on paper a heading that holds a note labels its bookmark with the
+// outline's text (printExtras).
+function renderHeading(
+    node: Node,
+    children: string | string[] | undefined,
+    { id, bookmark }: { id: number | undefined; bookmark: boolean },
+): string {
     const spec = node.type.spec.toDOM?.(node);
     const html = spec ? domOutputSpecToHTMLString(spec)(children) : '';
-    let label = '';
     let noted = false;
-    node.descendants((child) => {
-        if (child.type.name === 'footnote') noted = true;
-        else if (child.isText) label += child.text;
-        return child.type.name !== 'footnote';
+    node.forEach((child) => {
+        noted ||= child.type.name === 'footnote';
     });
-    return noted ? html.replace(/^<h[1-6]/, (open) => `${open} data-bookmark="${escapeHtml(label)}"`) : html;
+    const label = outlineEntry(node.attrs['level'], node.content.content)?.text ?? '';
+    const attrs = `${id === undefined ? '' : ` id="h-${id}"`}${bookmark && noted ? ` data-bookmark="${escapeHtml(label)}"` : ''}`;
+    return html.replace(/^<h[1-6]/, (open) => `${open}${attrs}`);
+}
+
+// The body's headings to the node's level, each a block indented by its level: a link to its heading's id with
+// `anchors`, and plain text in the preview, whose DOM is live in the drive's page. The PDF's head draws each page
+// number after its link (TOC_CSS).
+function renderTableOfContents(levels: number, outline: OutlineHeading[], anchors: boolean): string {
+    const entries = outline.map(({ level, text }, index) => {
+        if (level > levels) return '';
+        const content = escapeHtml(text);
+        return anchors
+            ? `<a href="#h-${index + 1}" data-level="${level}">${content}</a>`
+            : `<span data-level="${level}">${content}</span>`;
+    });
+    return `<nav data-type="table-of-contents" data-levels="${levels}">${entries.join('')}</nav>`;
 }
 
 // The size Chromium and WebKit draw the small caps they synthesize at, so the PDF's match the editor's.
