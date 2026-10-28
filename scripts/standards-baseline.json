@@ -125,7 +125,6 @@
     "apps/api/src/lib/mount/mount.ts": 3,
     "apps/api/src/lib/notification-center/notification-center.ts": 2,
     "apps/api/src/lib/setup/setup.ts": 1,
-    "apps/api/src/lib/shared/sharp-resize.ts": 2,
     "apps/api/src/lib/versioning/retention.ts": 1,
     "apps/api/src/lib/versioning/snapshot.ts": 1,
     "apps/api/src/routes/demo.ts": 1,
