@@ -161,11 +161,12 @@ The server's recalc, at import and at export, runs under a budget, `SERVER_RECAL
 
 `recalcSheets` (`engine/recalc.ts`) materializes each sheet's `data`, finds formula cells by scanning it rather than trusting `calcChain`, orders them through the dependency graph and evaluates them with the shared `FormulaEngine`. Its graph builder is a port of the state layer's `setFormulaCellInfo`, because the engine can't import `state/` ([SHEETS-TODO.md](SHEETS-TODO.md#code-debt) tracks removing the copy). The INDIRECT, OFFSET and INDEX walker inside it, `isFunctionRange`, is one function in `engine/formula-utils.ts` that both call.
 
-Three rules keep a passive export honest:
+Four rules keep a passive export honest:
 
 - Volatiles (`NOW`, `TODAY`, `RAND`, `RANDBETWEEN`) keep their cached value, the way Excel reads a closed file, so an export is deterministic.
 - An engine error never overwrites a cached value that is not an error. A function this build lacks would otherwise turn Excel's correct result into `#NAME?` at import. Downstream cells then read the cached value too.
 - A function Excel has and this build lacks is such an error even inside `IFERROR` or `ISERROR`, because the evaluator fails the whole formula rather than hand them a `#NAME?` to trap. So `=IFERROR(FILTER(…),"none")` keeps Excel's value instead of computing `none`.
+- A formula that uses a name the engine can't resolve keeps such a cached value even when its result is no error. The import writes each defined name into the formulas that use it, and one it can't stays as written ([EXPORT.md](EXPORT.md#an-xlsx-defined-name-is-inlined-into-the-formulas-that-use-it)). The engine has no names, so `IFERROR` traps that name's `#NAME?` and computes a fallback Excel didn't. The guard asks `FormulaEngine.isKnownName` about each name `inlineNames` finds, the walker the import inlines names with, so a name shaped like a cell past column XFD, such as `RhoCO2`, counts too.
 
 Every cell is guarded, so one poisoned formula never aborts the pass.
 

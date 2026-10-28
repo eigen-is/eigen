@@ -10,6 +10,7 @@ import { getCalculationOrder } from './dependency-graph';
 import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
+import { inlineNames } from './formula-shift';
 import { iscelldata, isFunctionRange, resolveCellRange } from './formula-utils';
 import type {
     CalcChainEntry,
@@ -174,11 +175,12 @@ export function recalcSheets(
             if (!rowArr) continue;
             const existing = rowArr[info.c];
             if (existing == null) continue;
-            // An error never overwrites a cached value that is no error, because that value is Excel's. A function
-            // Excel has and the engine lacks is such an error, even inside IFERROR. Skipping the execFunctionGlobalData
-            // seed too makes the formulas downstream read the cached value. A cell with no cached value still shows
-            // the error.
-            if (result.type === 'error' && hasNonErrorCachedValue(existing)) continue;
+            // Our result is unreliable when it is an error, or when the formula uses a name the engine can't resolve.
+            // It never overwrites a cached value that is no error, because that value is Excel's. A function Excel has
+            // and the engine lacks is such an error, even inside IFERROR. Skipping the execFunctionGlobalData seed too
+            // makes the formulas downstream read the cached value. A cell with no cached value still shows the error.
+            const unreliable = () => result.type === 'error' || usesUnknownName(engine, info.calc_funcStr);
+            if (hasNonErrorCachedValue(existing) && unreliable()) continue;
             engine.state.execFunctionGlobalData[`${info.r}_${info.c}_${info.id}`] = { v: result.value };
             // The matrix may hold the input snapshot's frozen cells, so write a copy.
             const cell: Cell = { ...existing };
@@ -325,6 +327,21 @@ const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
 
 function isVolatileFormula(formula: string): boolean {
     return VOLATILE_RE.test(formula);
+}
+
+// A name as Excel spells one: a letter, `_` or `\` first, then letters, digits, `_`, `.`, `\` or `?`.
+const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
+
+// True when the formula uses a name the engine can't resolve, such as a defined name the import couldn't inline. Its
+// #NAME? is one IFERROR traps, and the fallback is not what Excel computed. inlineNames hands over every leaf that is
+// no ref, such as a number or TRUE, and a name Excel reads past its last column (RhoCO2) where the engine reads a cell.
+function usesUnknownName(engine: FormulaEngine, formula: string): boolean {
+    let unknown = false;
+    inlineNames(formula, (name) => {
+        if (NAME_RE.test(name) && !engine.isKnownName(name)) unknown = true;
+        return undefined;
+    });
+    return unknown;
 }
 
 // True when a cell holds a value that is no error: not empty, not flagged `ct.t === 'e'`, and no `#` error string.

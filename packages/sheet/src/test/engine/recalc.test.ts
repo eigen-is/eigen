@@ -157,10 +157,37 @@ describe('engine/recalc — recalcSheets', () => {
     });
 
     test('a formula whose functions the engine knows recalculates under IFERROR, past a stale cached value', () => {
-        // Text that reads like a call is no call.
-        const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=IFERROR(SQRT(A1-2),"FILTER(")', num(5))]])];
+        // Text that reads like a call or a name is neither, and nor is a boolean, a number or another sheet's cell.
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=IFERROR(SQRT(A1-2),"FILTER( Rate")', num(5))],
+                [num(2), formula("=IF(true,Sheet2!A1+'Sheet 3'!A1*1.5E0,FALSE)", num(5))],
+            ]),
+            sheet('s2', 'Sheet2', [[num(10)]]),
+            sheet('s3', 'Sheet 3', [[num(2)]]),
+        ];
         const out = recalcSheets(sheets);
-        expect(out[0].data![0][1]?.v).toBe('FILTER(');
+        expect(out[0].data![0][1]?.v).toBe('FILTER( Rate');
+        expect(out[0].data![1][1]?.v).toBe(13);
+    });
+
+    // The importer writes each defined name into the formulas that use it. One it can't, such as a name into another
+    // workbook, stays as written, and the engine has no names, so IFERROR would hand back its fallback.
+    test("a formula using a defined name the import couldn't inline keeps its cached value, inside IFERROR too", () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=IFERROR(A1*TaxRate,0)', num(0.21))],
+                // Excel reads a name past its last column, XFD, as a name, where the engine reads a cell.
+                [num(2), formula('=IFERROR(A2*RhoCO2,0)', num(3.6))],
+                [num(3), formula('=IFERROR(Sheet1!Discount,7)', num(5)), formula('=B1*100')],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe(0.21);
+        expect(out[0].data![1][1]?.v).toBe(3.6);
+        expect(out[0].data![2][1]?.v).toBe(5);
+        // A cell that reads one sees the cached value.
+        expect(out[0].data![2][2]?.v).toBe(21);
     });
 
     test('imported VLOOKUP with a lower-case FALSE resolves against the looked-up sheet', () => {
