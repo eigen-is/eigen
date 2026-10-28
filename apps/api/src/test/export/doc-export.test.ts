@@ -64,12 +64,13 @@ async function docxDocumentXml(doc: Y.Doc): Promise<string> {
     return new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/document.xml'));
 }
 
-// The selectors of the flat rules whose declarations hold `declaration`.
-const rulesSetting = (css: string, declaration: string) =>
+// The selectors of the flat rules whose declarations hold `declaration`, a selector list split into its selectors.
+const selectorsSetting = (css: string, declaration: string) =>
     css
         .split('}')
         .filter((rule) => rule.includes(declaration))
-        .map((rule) => rule.slice(0, rule.indexOf('{')).trim());
+        .flatMap((rule) => rule.slice(0, rule.indexOf('{')).split(/,(?![^(]*\))/))
+        .map((selector) => selector.trim());
 
 async function exportStyle(format: 'html' | 'pdf-html', doc = seededDoc()): Promise<string> {
     const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
@@ -257,7 +258,7 @@ describe('doc export — the stylesheet', () => {
     test('h5 and h6 print at the body size, which only eigen-prose sets, and a text box resets to', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).toContain('h1, h2, h3, h4, h5, h6 { font-size: inherit; }');
-        expect(rulesSetting(css, 'font-size: var(--doc-font-size, 11pt)')).toEqual([
+        expect(selectorsSetting(css, 'font-size: var(--doc-font-size, 11pt)')).toEqual([
             '.eigen-prose',
             '.eigen-doc .text-box',
         ]);
@@ -277,7 +278,7 @@ describe('doc export — the stylesheet', () => {
     test('the body text font and color are set once, by eigen-prose, and a text box resets to them', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).not.toMatch(/(^|\n)\s*body \{/);
-        expect(rulesSetting(css, '#1a1a2e')).toEqual(['.eigen-prose', '.eigen-doc .text-box']);
+        expect(selectorsSetting(css, '#1a1a2e')).toEqual(['.eigen-prose', '.eigen-doc .text-box']);
     });
 
     test('the dark theme stays out, whole', async () => {
