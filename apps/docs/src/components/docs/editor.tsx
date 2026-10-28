@@ -116,9 +116,6 @@ type EquationMenuItem = NodeMenuItem & { display: boolean };
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
-// The outline is an absolute overlay too, and covers the scroll box's p-4 gutter as well, which a page-less column keeps
-// as room between the outline and the text.
-const OUTLINE_INTRUSION_PX = OUTLINE_WIDTH_PX;
 // Room an outline jump leaves above its heading, in screen pixels.
 const JUMP_MARGIN = 24;
 // A page-less doc's Full text width leaves this much beside the column, past the scroll box's own gutter, as Google's.
@@ -631,37 +628,40 @@ const TiptapEditor = ({
             (canWrite && selectionPanel !== 'document' && (selectionPanel !== 'chart' || activeEditor === editor)));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
-    const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
+    const centeredSlack = Math.max(0, (containerWidth - page.width) / 2);
     const panelLeft = containerWidth - PANEL_INTRUSION_PX;
-    const panelOverlap = showSidebar ? Math.max(0, centredSlack + textColumnRight - panelLeft) : 0;
-    const canShift = containerWidth > 0 && panelOverlap <= centredSlack;
+    const panelOverlap = showSidebar ? Math.max(0, centeredSlack + textColumnRight - panelLeft) : 0;
+    const canShift = containerWidth > 0 && panelOverlap <= centeredSlack;
     const canvasShift = canShift ? panelOverlap : 0;
     const canvasScale =
         containerWidth === 0 ? 1 : Math.min(1, containerWidth / page.width, canShift ? 1 : panelLeft / textColumnRight);
     // A page-less doc never scales: its column is laid out at the reader's width instead.
     const needsScale = !pageless && canvasScale < 1;
 
-    // A page-less column is the reader's text width, centred, or the screen on a phone. An open panel narrows it to
+    // A page-less column is the reader's text width, centered, or the screen on a phone. An open panel narrows it to
     // end at the panel's edge, and the outline to start at its edge, then the panel moves it left below the floor. The
     // room right of it, to the scroll box's edge or the panel's, is the breakout strip a wide table scrolls in and a
     // wide image grows into (--breakout).
     const room = scrollSize.width;
     const widest = isMobile ? room : (TEXT_WIDTHS[textWidth].px ?? room - 2 * FULL_WIDTH_GUTTER_PX);
-    const roomStart = outlineOverlayShown ? OUTLINE_INTRUSION_PX : 0;
+    // The outline is an absolute overlay too. It covers the scroll box's p-4 gutter as well, which a page-less column
+    // keeps as room between the outline and the text.
+    const roomStart = outlineOverlayShown ? OUTLINE_WIDTH_PX : 0;
     const roomEdge = showSidebar ? room - PANEL_INTRUSION_PX : room;
-    const centredWidth = Math.min(widest, room);
-    const centredLeft = (room - centredWidth) / 2;
-    const clearLeft = Math.max(centredLeft, roomStart);
-    const clearRight = Math.min(centredLeft + centredWidth, roomEdge);
-    const columnWidth = Math.max(Math.min(centredWidth, PAGELESS_MIN_COLUMN_PX), clearRight - clearLeft);
+    const centeredWidth = Math.min(widest, room);
+    const centeredLeft = (room - centeredWidth) / 2;
+    const clearLeft = Math.max(centeredLeft, roomStart);
+    const clearRight = Math.min(centeredLeft + centeredWidth, roomEdge);
+    const columnWidth = Math.max(Math.min(centeredWidth, PAGELESS_MIN_COLUMN_PX), clearRight - clearLeft);
     const columnLeft = Math.max(0, Math.min(clearLeft, roomEdge - columnWidth));
     const breakout = Math.max(0, roomEdge - columnLeft - columnWidth);
     const breakoutProperty: Record<string, string> = pageless ? { '--breakout': `${breakout}px` } : {};
     // On paper the @page rule draws the margins, as for pages, so the column is laid out for the screen only.
-    const pagelessStylesheet =
+    const pagelessColumn =
         room > 0
-            ? `@media screen { [data-document][data-pageless] { width: ${columnWidth}px; margin-left: ${columnLeft}px; padding: 48px 0 96px; } }`
-            : `@media screen { [data-document][data-pageless] { width: 100%; max-width: ${widest > 0 ? `${widest}px` : 'none'}; margin: 0 auto; padding: 48px 0 96px; } }`;
+            ? `width: ${columnWidth}px; margin-left: ${columnLeft}px`
+            : `width: 100%; max-width: ${widest > 0 ? `${widest}px` : 'none'}; margin: 0 auto`;
+    const pagelessStylesheet = `@media screen { [data-document][data-pageless] { ${pagelessColumn}; padding: 48px 0 96px; } }`;
 
     // The document observer stays quiet while unscaled, so seed the height on the way in.
     useLayoutEffect(() => {
