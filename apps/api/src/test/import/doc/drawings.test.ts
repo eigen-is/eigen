@@ -762,9 +762,16 @@ describe('text boxes as boxes', () => {
         expect(nodesOfType(json, 'text').map((t) => t.text)).toEqual(['Boxed', 'Anchor']);
     });
 
+    // Word's VML places from the column and the paragraph as `text`, both ways.
+    const vmlBox = (style: string, inner = '', textbox = '') =>
+        `<w:r><w:pict><v:rect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w10="urn:schemas-microsoft-com:office:word" style="${style}" fillcolor="#ffeeaa" strokecolor="#0000ff" strokeweight="1.5pt"><v:textbox inset="7.2pt,3.6pt,7.2pt,3.6pt"${textbox}><w:txbxContent>${text('Legacy')}</w:txbxContent></v:textbox>${inner}</v:rect></w:pict></w:r>`;
+    const PLACED =
+        'position:absolute;margin-left:30pt;margin-top:15pt;width:150pt;height:60pt;mso-position-horizontal-relative:text;mso-position-vertical-relative:text';
+    const vmlBoxesOf = async (...runs: string[]) =>
+        (await boxesOf(runs.map((run) => paragraph(`${run}<w:r><w:t>Anchor</w:t></w:r>`)).join(''))).boxes;
+
     test('a VML box outside a Fallback reads its place, size, fill, stroke and insets', async () => {
-        const vml = `<w:r><w:pict><v:rect xmlns:v="urn:schemas-microsoft-com:vml" style="position:absolute;margin-left:30pt;margin-top:15pt;width:150pt;height:60pt;z-index:-1;mso-position-horizontal-relative:column;mso-position-vertical-relative:paragraph" fillcolor="#ffeeaa" strokecolor="#0000ff" strokeweight="1.5pt"><v:textbox inset="7.2pt,3.6pt,7.2pt,3.6pt"><w:txbxContent>${text('Legacy')}</w:txbxContent></v:textbox></v:rect></w:pict></w:r>`;
-        const { boxes } = await boxesOf(paragraph(`${vml}<w:r><w:t>Anchor</w:t></w:r>`));
+        const boxes = await vmlBoxesOf(vmlBox(`${PLACED};z-index:-1`));
         expect(boxes[0]?.attrs).toMatchObject({
             layout: 'behind',
             offsetX: 40,
@@ -776,6 +783,37 @@ describe('text boxes as boxes', () => {
         });
         // Word's own insets, which a box draws when it stores none.
         expect(boxes[0]?.attrs).toMatchObject({ paddingX: null, paddingY: null });
+    });
+
+    // mso-wrap-style is how the text wraps inside the shape; w10:wrap is how the body's text wraps around it.
+    test('a VML box wraps by its w10:wrap, never by the wrap of its own text', async () => {
+        const boxes = await vmlBoxesOf(
+            vmlBox(`${PLACED};mso-wrap-style:square`),
+            vmlBox(`${PLACED};mso-wrap-style:none`, '<w10:wrap type="square"/>'),
+            vmlBox(`${PLACED};mso-position-horizontal:right`, '<w10:wrap type="tight"/>'),
+            vmlBox(`${PLACED}`, '<w10:wrap type="topAndBottom"/>'),
+            vmlBox('width:150pt;height:60pt;mso-wrap-style:square'),
+        );
+        expect(boxes.map((box) => box.attrs?.['layout'])).toEqual([
+            'front',
+            'wrap-left',
+            'wrap-right',
+            'block',
+            'block',
+        ]);
+    });
+
+    test("a VML box grows by its textbox's mso-fit-shape-to-text and aligns its text by v-text-anchor", async () => {
+        const boxes = await vmlBoxesOf(
+            vmlBox(`${PLACED};v-text-anchor:middle`, '', ' style="mso-fit-shape-to-text:t"'),
+            vmlBox(`${PLACED};v-text-anchor:bottom-center`),
+            vmlBox(`${PLACED};v-text-anchor:top`),
+        );
+        expect(boxes.map((box) => [box.attrs?.['height'], box.attrs?.['verticalAlign']])).toEqual([
+            [null, 'middle'],
+            [80, 'bottom'],
+            [80, null],
+        ]);
     });
 
     test('in a header a box keeps its paragraphs after the anchor’s', async () => {

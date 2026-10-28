@@ -21,7 +21,7 @@ import {
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { DEFAULT_LINE_WIDTH_EMU, drawingColor, lineWidthEmu, strokeStyleOf } from '../../ooxml/drawingml';
-import { A_NS, EMU_PER_PX, POINTS_PER_UNIT, V_NS, WPS_NS } from '../../ooxml/ooxml';
+import { A_NS, EMU_PER_PX, POINTS_PER_UNIT, V_NS, W10_NS, WPS_NS } from '../../ooxml/ooxml';
 import type { Item } from './assemble';
 import { buildBlocks } from './assemble';
 import { descendants, roundedInt } from './package';
@@ -44,6 +44,15 @@ const VERTICAL_ALIGNS = new Map<string, BoxLook['verticalAlign']>([
     ['ctr', 'middle'],
     ['b', 'bottom'],
 ]);
+
+// VML's v-text-anchor names the line first, as in middle-center: only that word is the box's vertical alignment.
+const VML_TEXT_ANCHORS = new Map<string, BoxLook['verticalAlign']>([
+    ['middle', 'middle'],
+    ['bottom', 'bottom'],
+]);
+
+// The w10:wrap types that wrap the body's text on a side of the box.
+const VML_FLOATING_WRAPS = new Set(['square', 'tight', 'through']);
 
 // A box's paragraphs own no spacing, as a cell's don't, its text sits on its fill, and it holds no table of contents.
 export const textBoxScope = (scope: Scope): Scope => ({ ...scope, box: true, onFill: true, inShape: true });
@@ -95,8 +104,9 @@ export function readTextBox(
     return textBoxNode(reader, items, look, layout);
 }
 
-// A VML shape holding a v:textbox outside a Fallback: its CSS style places and sizes it, its fill and stroke paint it.
-// One it can't place, absolute in the flow of no paragraph, keeps its paragraphs after its anchor's, as before: null.
+// A VML shape holding a v:textbox outside a Fallback: its CSS style places and sizes it, its w10:wrap says how the text
+// wraps around it, and its fill and stroke paint it. Word's VML places from the column and the paragraph as `text`. One
+// it can't place, absolute in the flow of no paragraph, keeps its paragraphs after its anchor's, as before: null.
 // `spaceBefore` is the space Word draws above the paragraph, which a top counted from the paragraph includes.
 export function readVmlTextBox(
     reader: Reader,
@@ -107,29 +117,28 @@ export function readVmlTextBox(
 ): JSONContent | null {
     const textbox = descendants(shape, V_NS, 'textbox')[0];
     if (!textbox) return null;
-    const css = new Map(
-        (xmlAttr(shape, '', 'style') ?? '')
-            .split(';')
-            .map((part) => part.split(':').map((side) => side.trim().toLowerCase()))
-            .filter((pair): pair is [string, string] => pair.length === 2 && !!pair[0] && !!pair[1]),
-    );
+    const css = cssOf(shape);
     const px = (name: string) => cssPx(css.get(name));
     const absolute = css.get('position') === 'absolute';
-    const relativeV = css.get('mso-position-vertical-relative') ?? 'paragraph';
-    const relativeH = css.get('mso-position-horizontal-relative') ?? 'column';
-    const placed = absolute && relativeH === 'column' && (relativeV === 'paragraph' || relativeV === 'line');
-    if (absolute && !placed) return null;
+    const relativeV = css.get('mso-position-vertical-relative') ?? 'text';
+    const relativeH = css.get('mso-position-horizontal-relative') ?? 'text';
+    const placed = relativeH === 'text' && (relativeV === 'text' || relativeV === 'line');
+    const wrap = xmlChild(shape, W10_NS, 'wrap');
+    const wrapType = wrap ? xmlAttr(wrap, '', 'type') : undefined;
+    // A box the text wraps above and below sits in its own line, as one in the flow.
+    const inLine = !absolute || wrapType === 'topAndBottom';
+    const wrapped = VML_FLOATING_WRAPS.has(wrapType ?? '');
+    if (!inLine && !wrapped && !placed) return null;
     const behind = Number(css.get('z-index') ?? 0) < 0;
-    const wrapped = css.get('mso-wrap-style') === 'square' && !absolute;
-    const layout: FigureFrameAttrs = placed
-        ? {
-              layout: behind ? 'behind' : 'front',
-              offsetX: px('margin-left') ?? 0,
-              offsetY: (px('margin-top') ?? 0) - (relativeV === 'paragraph' ? spaceBefore : 0),
-          }
+    const layout: FigureFrameAttrs = inLine
+        ? {}
         : wrapped
-          ? { layout: 'wrap-left' }
-          : {};
+          ? { layout: css.get('mso-position-horizontal') === 'right' ? 'wrap-right' : 'wrap-left' }
+          : {
+                layout: behind ? 'behind' : 'front',
+                offsetX: px('margin-left') ?? 0,
+                offsetY: (px('margin-top') ?? 0) - (relativeV === 'text' ? spaceBefore : 0),
+            };
     const width = px('width');
     const height = px('height');
     const filled = xmlAttr(shape, '', 'filled') !== 'f' && xmlAttr(shape, '', 'filled') !== 'false';
@@ -140,7 +149,7 @@ export function readVmlTextBox(
     const [left, top, right, bottom] = inset;
     const look: BoxLook = {
         width: width === null ? null : Math.min(room, width),
-        height: css.get('mso-fit-shape-to-text') === 't' ? null : height,
+        height: cssOf(textbox).get('mso-fit-shape-to-text') === 't' ? null : height,
         fill: filled ? readCellBackground(xmlAttr(shape, '', 'fillcolor') ?? '#ffffff') : null,
         outline:
             stroked && strokeColor
@@ -148,7 +157,7 @@ export function readVmlTextBox(
                 : null,
         paddingX: meanPadding(left ?? null, right ?? null, TEXT_BOX_INSET.x),
         paddingY: meanPadding(top ?? null, bottom ?? null, TEXT_BOX_INSET.y),
-        verticalAlign: null,
+        verticalAlign: VML_TEXT_ANCHORS.get((css.get('v-text-anchor') ?? '').split('-')[0] ?? '') ?? null,
         rounded: shape.local === 'roundrect',
     };
     return textBoxNode(reader, items, look, layout);
@@ -231,6 +240,16 @@ function meanPadding(a: number | null, b: number | null, word: number): number |
     if (a === null && b === null) return null;
     const mean = Math.min(MAX_TEXT_BOX_PADDING, Math.max(0, ((a ?? b ?? 0) + (b ?? a ?? 0)) / 2));
     return Math.abs(mean - word) < 0.01 ? null : mean;
+}
+
+// A VML element's CSS style, its names and values in lower case.
+function cssOf(element: XmlElement): Map<string, string> {
+    return new Map(
+        (xmlAttr(element, '', 'style') ?? '')
+            .split(';')
+            .map((part) => part.split(':').map((side) => side.trim().toLowerCase()))
+            .filter((pair): pair is [string, string] => pair.length === 2 && !!pair[0] && !!pair[1]),
+    );
 }
 
 // A VML length in px: a number with a CSS unit, or EMU with none, as an inset writes it.
