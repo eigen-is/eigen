@@ -21,6 +21,7 @@ import {
     canvasImageFaces,
     canvasImageScene,
     eigenMediaHref,
+    hasText,
     isTextual,
     layerInnerHtml,
     richTextCssText,
@@ -63,7 +64,7 @@ export async function downloadCanvasImage(
 // app's canvas-text.css, and read back as where every character landed.
 async function measureRichText(elements: VectorElement[]): Promise<Map<string, MeasuredRichText>> {
     const boxes = elements
-        .filter((el): el is VectorTextualElement => isTextual(el) && el.html !== '')
+        .filter((el): el is VectorTextualElement => isTextual(el) && (el.type === 'richtext' || hasText(el)))
         .map((el) => {
             const host = document.createElement('div');
             host.style.cssText = `position:fixed;left:0;top:0;width:${el.width}px;height:${el.height}px;visibility:hidden;pointer-events:none`;

@@ -16,6 +16,7 @@ import {
     capabilitiesOf,
     cornerRadius,
     diamondOutline,
+    hasText,
     isBordered,
     isTextual,
     isTransparentFill,
@@ -47,7 +48,7 @@ export function elementXml(el: VectorElement, slide: Slide): string {
     const opacity = el.opacity / 100;
     countPlainLook(el, slide);
     // A shape writes a text body only once it holds text. A text box writes one even empty, as PowerPoint does.
-    const text = isTextual(el) && (el.type === 'richtext' || el.html !== '') ? textXml(el, slide, opacity) : '';
+    const text = isTextual(el) && (el.type === 'richtext' || hasText(el)) ? textXml(el, slide, opacity) : '';
     switch (el.type) {
         case 'rectangle':
             return spXml(

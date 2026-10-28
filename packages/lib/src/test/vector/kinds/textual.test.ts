@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { richTextCssText, SLIDES_STYLE_DEFAULTS } from '../../../vector/kinds';
 import { MAX_HTML_BYTES } from '../../../vector/kinds/read-fields';
-import { plainText, readTextual, textRender, textualDefaults } from '../../../vector/kinds/textual';
+import { hasText, plainText, readTextual, textRender, textualDefaults } from '../../../vector/kinds/textual';
 import type { Textual } from '../../../vector/types';
 import { DEFAULT_RICHTEXT_PROPS, DEFAULT_SHAPE_TEXT_PROPS } from '../../../vector/types';
 import { shape } from '../element-factories';
@@ -125,6 +125,11 @@ describe('textRender', () => {
         const el = shape({ id: 'r', type: 'rectangle', html: '<p>hi</p>' });
         expect(textRender(el, '<path/>')).toEqual({ html: '<p>hi</p>', style: richTextCssText(el), svg: '<path/>' });
     });
+
+    test('a shape whose list the user emptied draws its svg alone, with no stray bullet', () => {
+        const el = shape({ id: 'r', type: 'rectangle', html: '<ul><li><p></p></li></ul>' });
+        expect(textRender(el, '<path/>')).toEqual({ svg: '<path/>' });
+    });
 });
 
 describe('plainText', () => {
@@ -133,5 +138,13 @@ describe('plainText', () => {
             'Total budget',
         );
         expect(plainText(shape({ id: 'r', type: 'rectangle', html: '<p></p>' }))).toBe('');
+    });
+});
+
+describe('hasText', () => {
+    test('is true only when some text is left once the markup is gone', () => {
+        expect(hasText(shape({ id: 'r', type: 'rectangle', html: '<p>hi</p>' }))).toBe(true);
+        expect(hasText(shape({ id: 'r', type: 'rectangle', html: '<ul><li><p> </p></li></ul>' }))).toBe(false);
+        expect(hasText(shape({ id: 'r', type: 'rectangle', html: '' }))).toBe(false);
     });
 });

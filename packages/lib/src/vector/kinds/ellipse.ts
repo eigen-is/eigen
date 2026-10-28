@@ -9,7 +9,7 @@ import { DEFAULT_SHAPE_TEXT_PROPS } from '../types';
 import { defineKind } from './kind';
 import { fillField } from './read-fields';
 import { renderRoughShape } from './render-utils';
-import { plainText, readTextual, textRender, textualDefaults } from './textual';
+import { hasText, plainText, readTextual, textRender, textualDefaults } from './textual';
 
 export const ellipseKind = defineKind<VectorEllipseElement>({
     type: 'ellipse',
@@ -39,7 +39,7 @@ export const ellipseKind = defineKind<VectorEllipseElement>({
     }),
     hitTest: (el, point) => hitTestEllipse(el, point),
     outline: (el, inflate) => ellipseOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, inflate),
-    paintsNothing: (el) => isUnpainted(el) && plainText(el) === '',
+    paintsNothing: (el) => isUnpainted(el) && !hasText(el),
     render: (el) => textRender(el, renderRoughShape(el)),
     searchText: plainText,
 });
