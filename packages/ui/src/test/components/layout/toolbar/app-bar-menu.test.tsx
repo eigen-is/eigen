@@ -1,6 +1,6 @@
 // The app bar's menus are one Radix Menubar: an open menu leaves the page live, so one press on another trigger opens
 // that menu, and the rows every DropdownMenu shows work in a bar menu too, a phone's drill-in pages included.
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../../happy-dom';
 import { checkRows, clickRow, menuRows, openSubmenu } from '../../../menu-rows';
 import { renderInDocument } from '../../../render-in-document';
@@ -10,8 +10,11 @@ const window = installHappyDom();
 // The person search reads display names for the session's user. One session object, as the real hook returns, so no
 // effect that reads it runs on every render.
 const session = { user: { id: 'me', email: 'me@example.com' } };
-const realAuth = await import('@workspace/lib/auth');
+const realAuth = { ...(await import('@workspace/lib/auth')) };
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
+afterAll(() => {
+    mock.module('@workspace/lib/auth', () => realAuth);
+});
 
 const { act, createElement } = await import('react');
 const { ChoiceMenuSub, DropdownMenuItem } = await import('../../../../components/dropdown-menu');
