@@ -29,8 +29,8 @@ const restoringHomes = new Set<string>();
 // The row and the members' sessions outlive the folder for that moment, and a request in it must not
 // build a new home over the deleted folder.
 // A deletion that fails after the folder is gone (the registry delete, authDeleteUserReferences or the better-auth
-// row delete throws) keeps the mark until a restart: the home answers 404 "Home is being deleted", and a retry of the
-// delete clears it (docs/ROADMAP.md).
+// row delete throws) keeps the mark until a restart: the home answers 404 "Home is being deleted", a restore of it is
+// refused, and a retry of the delete clears it (docs/ROADMAP.md).
 const deletingHomes = new Set<string>();
 
 export function atHome(ownerId: string): boolean {
@@ -57,9 +57,11 @@ export function requestedSince(home: Home, time: number): boolean {
 }
 
 // The mark is the lock: a second restore of one home would move a folder aside that the first one is
-// still writing, and whichever finished first would unlock the home for both.
+// still writing, and whichever finished first would unlock the home for both. A deletion holds no job slot, so its
+// mark is checked here too: a restore in its window would install a folder the deletion is removing.
 export function markHomeRestoring(ownerId: string): void {
     if (restoringHomes.has(ownerId)) throw new ApiError(409, 'Restore already in progress');
+    if (deletingHomes.has(ownerId)) throw new ApiError(409, 'A deletion of this home is running');
     restoringHomes.add(ownerId);
 }
 
