@@ -8,8 +8,8 @@ import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl, getSupportUrl 
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useEnabledApps } from '@workspace/lib/public';
-import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
-import { THEMES, themeOf } from '@workspace/lib/types/settings';
+import { useTheme } from '@workspace/lib/space';
+import { THEMES } from '@workspace/lib/types/settings';
 import { cn } from '@workspace/ui/lib/utils';
 import { Grip, LifeBuoy, LogOut, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -195,8 +195,7 @@ function GuestUserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] 
 function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     const auth = useAuth();
     const { logoutDialogOpen, setLogoutDialogOpen, handleLogout } = useLogout(rootRoute);
-    const { data: settings } = useSpaceSettings();
-    const updateSettings = useUpdateSpaceSettings();
+    const { theme, setTheme } = useTheme();
     const [aboutOpen, setAboutOpen] = useState(false);
 
     if (!auth.isAuthenticated) return null;
@@ -240,9 +239,9 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                                 Theme
                             </>
                         }
-                        value={themeOf(settings)}
+                        value={theme}
                         options={THEMES}
-                        onChange={(theme) => updateSettings.mutate({ theme })}
+                        onChange={setTheme}
                     />
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>

@@ -4,6 +4,7 @@ import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { docsTextWidth } from '@workspace/lib/types/settings';
+import { toMerged } from 'es-toolkit';
 import { spaceKeys } from '../../../../core/space/hooks/keys';
 import { installHappyDom } from '../../../happy-dom';
 import { renderHook } from '../../../render-hook';
@@ -18,9 +19,10 @@ mock.module('../../../../core/auth/auth-context', () => ({
 }));
 
 const realApiModule = await import('../../../../core/api');
-// The server's settings: a save merges into them, as the route does, and a read returns them.
+// The server's settings: a save deep-merges into them, as the route does, and a read returns them.
 const saved: UserSettings[] = [];
 let stored: UserSettings = {};
+let onPut = () => {};
 mock.module('../../../../core/api', () => ({
     ...realApiModule,
     spaceApi: () => ({
@@ -28,7 +30,8 @@ mock.module('../../../../core/api', () => ({
             get: async () => ({ data: stored, error: null, status: 200 }),
             put: async (body: UserSettings) => {
                 saved.push(body);
-                stored = { ...stored, ...body };
+                onPut();
+                stored = toMerged(stored, body);
                 return { data: stored, error: null, status: 200 };
             },
         },
@@ -97,6 +100,25 @@ describe('useDocsTextWidth', () => {
         const reopened = await renderHook(() => useDocsTextWidth(), client());
         expect(reopened.latest.textWidth).toBe('medium');
         await reopened.unmount();
+    });
+
+    // The server deep-merges a save, so the settings drawn while it is on its way must too.
+    test('a new width keeps the other view preferences while the save is on its way', async () => {
+        window.localStorage.clear();
+        // A docsView with a second preference, such as one a newer build added.
+        stored = JSON.parse('{"docsView":{"textWidth":"medium","outline":true}}');
+        const queryClient = client(stored);
+        let drawn: UserSettings | undefined;
+        onPut = () => {
+            drawn = queryClient.getQueryData(spaceKeys.settings(OWNER));
+        };
+        const { latest, unmount } = await renderHook(() => useDocsTextWidth(), queryClient);
+        await act(async () => {
+            latest.setTextWidth('wide');
+        });
+        onPut = () => {};
+        expect(drawn).toEqual(JSON.parse('{"docsView":{"textWidth":"wide","outline":true}}'));
+        await unmount();
     });
 
     test('is Narrow with nothing stored or cached', async () => {

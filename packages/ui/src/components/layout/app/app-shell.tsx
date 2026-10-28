@@ -5,7 +5,7 @@ import { useCommandPalette, useOptionalCommandPalette } from '@workspace/lib/com
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import { useIsMobile, useIsTablet } from '@workspace/lib/media';
 import { useMailEnabled } from '@workspace/lib/public';
-import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
+import { useTheme } from '@workspace/lib/space';
 import type { CommandContext } from '@workspace/lib/types/command-palette';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
@@ -131,8 +131,7 @@ function PaletteRunnerInner() {
     usePaletteShortcuts();
     const auth = useAuth();
     const { selection, selectionActions, docSearch, docSearchSession, docCommentSearch } = useCommandPalette();
-    const { data: settings } = useSpaceSettings();
-    const updateSettings = useUpdateSpaceSettings();
+    const { theme, setTheme } = useTheme();
     const { openPreview } = usePreview();
     const mailEnabled = useMailEnabled();
     const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
@@ -141,10 +140,7 @@ function PaletteRunnerInner() {
     // republishes on every identity change.
     const openPathPreview = useCallback((path: DrivePath) => openPreview(subjectFromPath(path)), [openPreview]);
 
-    const toggleTheme = useCallback(() => {
-        const next = settings?.theme === 'dark' ? 'light' : 'dark';
-        updateSettings.mutate({ theme: next });
-    }, [settings?.theme, updateSettings]);
+    const toggleTheme = useCallback(() => setTheme(theme === 'dark' ? 'light' : 'dark'), [theme, setTheme]);
 
     const ownerId = auth.user?.id ?? '';
 

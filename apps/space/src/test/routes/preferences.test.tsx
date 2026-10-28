@@ -2,7 +2,7 @@
 // celebrations on or off, each change saved through the personal settings at once. Personal info holds
 // the profile alone.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import type { UserSettings } from '@workspace/lib/types/settings';
+import type { UserSettings, UserTheme } from '@workspace/lib/types/settings';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -13,6 +13,7 @@ installHappyDom().happyDOM.setViewport({ width: 1440, height: 900 });
 const session = { user: { id: 'u1', email: 'me@test.eigen.is', name: 'Me' } };
 const settings: { data: UserSettings | undefined; isLoading: boolean } = { data: {}, isLoading: false };
 const update = { mutate: mock((_body: UserSettings) => {}) };
+const theme: { theme: UserTheme; setTheme: (theme: UserTheme) => void } = { theme: 'light', setTheme: mock() };
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realSpace = { ...(await import('@workspace/lib/space')) };
@@ -21,6 +22,7 @@ mock.module('@workspace/lib/space', () => ({
     ...realSpace,
     useSpaceSettings: () => settings,
     useUpdateSpaceSettings: () => update,
+    useTheme: () => theme,
 }));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
@@ -45,6 +47,8 @@ afterEach(() => unmount());
 beforeEach(() => {
     settings.data = {};
     update.mutate.mockClear();
+    theme.theme = 'light';
+    theme.setTheme = mock();
 });
 
 async function open(url: string) {
@@ -91,7 +95,7 @@ test('the theme shows Light until the user picks one, and the saved one after', 
     expect(control('Theme')?.textContent).toBe('Light');
     await unmount();
 
-    settings.data = { theme: 'system' };
+    theme.theme = 'system';
     await open('/preferences');
     expect(control('Theme')?.textContent).toBe('System');
 });
@@ -102,7 +106,8 @@ test('picking Dark saves the dark theme', async () => {
     const options = [...document.querySelectorAll('[role="option"]')];
     expect(options.map((o) => o.textContent)).toEqual(['Light', 'Dark', 'System']);
     await click(options.find((o) => o.textContent === 'Dark'));
-    expect(update.mutate).toHaveBeenCalledWith({ theme: 'dark' });
+    expect(theme.setTheme).toHaveBeenCalledWith('dark');
+    expect(update.mutate).not.toHaveBeenCalled();
 });
 
 test('the Celebrations switch shows the setting, on when unset, and a flip saves it', async () => {

@@ -1,9 +1,9 @@
 // The personal preferences that belong to no single app, such as the theme every app is drawn in and
 // whether finishing something now and then celebrates. Each control saves to the personal settings as
-// soon as it changes.
+// soon as it changes. The theme draws at once and saves in the background.
 
-import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
-import { celebrationsOn, isUserTheme, THEMES, themeOf } from '@workspace/lib/types/settings';
+import { useSpaceSettings, useTheme, useUpdateSpaceSettings } from '@workspace/lib/space';
+import { celebrationsOn, isUserTheme, THEMES } from '@workspace/lib/types/settings';
 import { LoadingState } from '@workspace/ui';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -12,6 +12,7 @@ import { Switch } from '@workspace/ui/components/switch';
 export function PreferencesSection() {
     const { data, isLoading } = useSpaceSettings();
     const update = useUpdateSpaceSettings();
+    const { theme, setTheme } = useTheme();
 
     if (isLoading) return <LoadingState />;
 
@@ -22,9 +23,9 @@ export function PreferencesSection() {
             <div className="space-y-1.5">
                 <Label htmlFor="theme">Theme</Label>
                 <Select
-                    value={themeOf(data)}
+                    value={theme}
                     onValueChange={(v) => {
-                        if (isUserTheme(v)) update.mutate({ theme: v });
+                        if (isUserTheme(v)) setTheme(v);
                     }}
                 >
                     <SelectTrigger id="theme" className="w-full sm:w-96">

@@ -56,6 +56,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Picking a theme** — the new theme shows the moment you pick it in the account menu or on **Preferences**, without a **Settings saved** message
 - **Color scales in Sheets** — a color scale whose colors are written short, such as `#f00`, shades its cells instead of leaving them blank
 - **Sharing a calendar** — when the owner stops sharing a calendar with you, the list of who has access refreshes at once, as it does when they share it
 - **Contents title in Word files** — the title Word puts above a table of contents, such as **Contents**, comes in as normal text instead of a Heading 1, so it no longer lists itself in the outline
