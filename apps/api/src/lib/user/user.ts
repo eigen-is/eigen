@@ -25,16 +25,8 @@ export async function getUserByEmail(email: string): Promise<User | null> {
 export async function getUsersByEmails(emails: string[]): Promise<User[]> {
     if (emails.length === 0) return [];
     const db = getAuthDrizzleDb();
-    return db
-        .select()
-        .from(user)
-        .where(
-            inArray(
-                user.email,
-                emails.map((email) => email.toLowerCase()),
-            ),
-        )
-        .all();
+    const lowered = emails.map((email) => email.toLowerCase());
+    return db.select().from(user).where(inArray(user.email, lowered)).all();
 }
 
 export async function getUserById(id: string): Promise<User | null> {
