@@ -39,101 +39,6 @@ const inFlight = new Map<
     { kind: BackupJob['kind']; ownerId: string; settled: Promise<void>; abort: AbortController }
 >();
 
-// A server backup and an archive's upload are the owner's alone: they name a server archive, which holds every
-// home's mail, password hashes and mount keys.
-export function isServerJob(kind: BackupJob['kind']): boolean {
-    return kind === 'server-backup' || kind === 'upload';
-}
-
-// An upload reads a finished archive and touches no home, so it holds no slot: an hour of it must not keep
-// ./eigen update's pre-update backup waiting. Uploads take turns among themselves (startUploadJob).
-function holdsSlot(kind: BackupJob['kind']): boolean {
-    return kind !== 'upload';
-}
-
-function dropExpiredJobs(): void {
-    const now = Date.now();
-    for (const [id, job] of jobs) {
-        if (job.finishedAt && now - job.finishedAt.getTime() > BACKUP_JOB_RETENTION_MS) jobs.delete(id);
-    }
-}
-
-// Every admin sees the same pane, so the poke goes to all of them and not only to the one who
-// pressed the button; a server job's goes to the owner alone, who alone sees it. sendToHome drops
-// the ones with no home loaded, which is every admin who has nothing open. The event carries no
-// state, so one that lands out of order costs nothing.
-function poke(job: BackupJob): void {
-    const event = buildBackupJobEvent(job.id, job.ownerId);
-    const recipients = isServerJob(job.kind) ? getOrgOwner().then((owner) => (owner ? [owner] : [])) : getOrgAdmins();
-    recipients
-        .then((users) => Promise.all(users.map((user) => sendToHome(user.id, { type: 'broadcast', event }))))
-        .catch(() => {});
-}
-
-// One piece of work per home at a time. A second backup while one runs would read a folder the first is
-// still walking, and a second restore would move aside a folder the first is writing. A safety-copy
-// delete overlapping a restore would judge the wrong home's keys as garbage, and an archive deleted
-// under a verify would get its sidecar back. A server job's archive is the owner's to know, so only
-// another server job hears its name.
-export function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
-    dropExpiredJobs();
-    const held = heldSlots.get(ownerId);
-    if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
-    for (const running of jobs.values()) {
-        if (running.ownerId === ownerId && running.state === 'running' && holdsSlot(running.kind)) {
-            const shown = !isServerJob(running.kind) || (starting && isServerJob(starting));
-            const named = running.artifact && shown ? `: ${running.artifact}` : '';
-            throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
-        }
-    }
-}
-
-// What the home's slot is busy with, as a promise that settles when it is free again; null when free.
-function slotBusy(ownerId: string): Promise<void> | null {
-    const held = heldSlots.get(ownerId);
-    if (held) return held.released;
-    for (const running of inFlight.values()) {
-        if (running.ownerId === ownerId && holdsSlot(running.kind)) return running.settled;
-    }
-    return null;
-}
-
-function holdSlot(ownerId: string, holder: string): () => void {
-    const { promise, resolve } = Promise.withResolvers<void>();
-    heldSlots.set(ownerId, { holder, released: promise });
-    return () => {
-        heldSlots.delete(ownerId);
-        resolve();
-    };
-}
-
-// Work that takes the same slot without being a job: the safety-copy delete reads the live home's
-// storage keys to decide what is garbage, and a restore swapping the folder underneath it would turn
-// that answer into "delete what the home now points at". It never sets the restoring mark, since a
-// delete is not a user-facing outage, and its route awaits it, so the slot lives exactly as long.
-export async function withBackupJobSlot(ownerId: string, run: () => Promise<void>): Promise<void> {
-    requireHomeSlotFree(ownerId);
-    const release = holdSlot(ownerId, 'safety-copy delete');
-    try {
-        await run();
-    } finally {
-        release();
-    }
-}
-
-// Waits out whatever holds the slot, then runs `take` in the same tick it found it free: two waiters
-// on one slot must not both see it free.
-export async function whenSlotFree<T>(ownerId: string, take: () => T): Promise<T> {
-    for (let busy = slotBusy(ownerId); busy; busy = slotBusy(ownerId)) await busy;
-    return take();
-}
-
-// The server backup's way into a home's slot: it waits rather than failing a night on an admin's
-// click. Routes keep the 409. The caller releases the slot with the function this resolves to.
-export function waitForHomeSlot(ownerId: string, holder: string): Promise<() => void> {
-    return whenSlotFree(ownerId, () => holdSlot(ownerId, holder));
-}
-
 // Runs `run` in the background and hands the caller the job to report back. Every run resolves to
 // the artifact it worked on, so a finished job names one whatever its kind. `signal` aborts at shutdown.
 export function startBackupJob(
@@ -181,20 +86,55 @@ export function startBackupJob(
     return job;
 }
 
-// Shutdown: a running snapshot reads databases the home teardown is about to close, and a restore
-// killed halfway leaves a home folder that only the boot-time recovery can put back. Restores are
-// waited out in full; a backup or verify gets a budget and is then left to die with the process
-// (its staging folder goes in the next boot's wipe). An upload may take hours, so it is aborted,
-// which aborts its multipart upload, and gets the same budget to record that it did not finish.
-export async function drainBackupJobs(): Promise<void> {
-    const running = [...inFlight.values()];
-    if (running.length === 0) return;
-    for (const entry of running) if (entry.kind === 'upload') entry.abort.abort();
-    const restores = running.filter((entry) => entry.kind === 'restore').map((entry) => entry.settled);
-    const rest = running.filter((entry) => entry.kind !== 'restore').map((entry) => entry.settled);
-    console.log(`[backup] waiting for ${running.length} running job(s) before shutdown`);
-    await Promise.all(restores);
-    if (rest.length > 0) await Promise.race([Promise.all(rest), Bun.sleep(SHUTDOWN_JOB_BUDGET_MS)]);
+// One piece of work per home at a time. A second backup while one runs would read a folder the first is
+// still walking. A second restore would move aside a folder the first is writing. A safety-copy delete
+// during a restore would judge the wrong home's keys as garbage. An archive deleted under a verify would
+// get its sidecar back. A server job's archive is the owner's to know, so only another server job is told
+// its name.
+export function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
+    dropExpiredJobs();
+    const held = heldSlots.get(ownerId);
+    if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
+    for (const running of jobs.values()) {
+        if (running.ownerId === ownerId && running.state === 'running' && holdsSlot(running.kind)) {
+            const shown = !isServerJob(running.kind) || (starting && isServerJob(starting));
+            const named = running.artifact && shown ? `: ${running.artifact}` : '';
+            throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
+        }
+    }
+}
+
+// Work that takes the same slot without being a job: the safety-copy delete reads the live home's
+// storage keys to decide what is garbage, and a restore swapping the folder underneath it would turn
+// that answer into "delete what the home now points at". It never sets the restoring mark, since a
+// delete is not a user-facing outage, and its route awaits it, so the slot lives exactly as long.
+export async function withHomeSlot(ownerId: string, run: () => Promise<void>): Promise<void> {
+    requireHomeSlotFree(ownerId);
+    const release = holdSlot(ownerId, 'safety-copy delete');
+    try {
+        await run();
+    } finally {
+        release();
+    }
+}
+
+// Waits out whatever holds the slot, then runs `take` in the same tick it found it free: two waiters
+// on one slot must not both see it free.
+export async function whenHomeSlotFree<T>(ownerId: string, take: () => T): Promise<T> {
+    for (let busy = slotBusy(ownerId); busy; busy = slotBusy(ownerId)) await busy;
+    return take();
+}
+
+// The server backup's way into a home's slot: it waits rather than failing a night on an admin's
+// click. Routes keep the 409. The caller releases the slot with the function this resolves to.
+export function waitForHomeSlot(ownerId: string, holder: string): Promise<() => void> {
+    return whenHomeSlotFree(ownerId, () => holdSlot(ownerId, holder));
+}
+
+// A server backup and an archive's upload are the owner's alone: they name a server archive, which holds every
+// home's mail, password hashes and mount keys.
+export function isServerJob(kind: BackupJob['kind']): boolean {
+    return kind === 'server-backup' || kind === 'upload';
 }
 
 export function listBackupJobs(ownerId?: string): BackupJob[] {
@@ -211,6 +151,22 @@ export function runningJobOn(artifact: string): BackupJob | undefined {
 export function getBackupJob(id: string): BackupJob | undefined {
     dropExpiredJobs();
     return jobs.get(id);
+}
+
+// Shutdown: a running snapshot reads databases the home teardown is about to close, and a restore
+// killed halfway leaves a home folder that only the boot-time recovery can put back. Restores are
+// waited out in full; a backup or verify gets a budget and is then left to die with the process
+// (its staging folder goes in the next boot's wipe). An upload may take hours, so it is aborted,
+// which aborts its multipart upload, and gets the same budget to record that it did not finish.
+export async function drainBackupJobs(): Promise<void> {
+    const running = [...inFlight.values()];
+    if (running.length === 0) return;
+    for (const entry of running) if (entry.kind === 'upload') entry.abort.abort();
+    const restores = running.filter((entry) => entry.kind === 'restore').map((entry) => entry.settled);
+    const rest = running.filter((entry) => entry.kind !== 'restore').map((entry) => entry.settled);
+    console.log(`[backup] waiting for ${running.length} running job(s) before shutdown`);
+    await Promise.all(restores);
+    if (rest.length > 0) await Promise.race([Promise.all(rest), Bun.sleep(SHUTDOWN_JOB_BUDGET_MS)]);
 }
 
 // The backup job: snapshot into staging, judge the folder before it is packed, pack it, write the
@@ -264,4 +220,48 @@ export async function runArtifactVerify(
     } finally {
         await wipeBackupStagingDir(job.id);
     }
+}
+
+// An upload reads a finished archive and touches no home, so it holds no slot: an hour of it must not keep
+// ./eigen update's pre-update backup waiting. Uploads take turns among themselves instead.
+function holdsSlot(kind: BackupJob['kind']): boolean {
+    return kind !== 'upload';
+}
+
+function dropExpiredJobs(): void {
+    const now = Date.now();
+    for (const [id, job] of jobs) {
+        if (job.finishedAt && now - job.finishedAt.getTime() > BACKUP_JOB_RETENTION_MS) jobs.delete(id);
+    }
+}
+
+// Every admin sees the same pane, so the poke goes to all of them, not only to the one who pressed
+// the button. A server job's poke goes to the owner alone, the only one who sees it. sendToHome drops
+// the ones with no home loaded, which is every admin who has nothing open. The event carries no
+// state, so one that lands out of order costs nothing.
+function poke(job: BackupJob): void {
+    const event = buildBackupJobEvent(job.id, job.ownerId);
+    const recipients = isServerJob(job.kind) ? getOrgOwner().then((owner) => (owner ? [owner] : [])) : getOrgAdmins();
+    recipients
+        .then((users) => Promise.all(users.map((user) => sendToHome(user.id, { type: 'broadcast', event }))))
+        .catch(() => {});
+}
+
+// What the home's slot is busy with, as a promise that settles when it is free again; null when free.
+function slotBusy(ownerId: string): Promise<void> | null {
+    const held = heldSlots.get(ownerId);
+    if (held) return held.released;
+    for (const running of inFlight.values()) {
+        if (running.ownerId === ownerId && holdsSlot(running.kind)) return running.settled;
+    }
+    return null;
+}
+
+function holdSlot(ownerId: string, holder: string): () => void {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    heldSlots.set(ownerId, { holder, released: promise });
+    return () => {
+        heldSlots.delete(ownerId);
+        resolve();
+    };
 }

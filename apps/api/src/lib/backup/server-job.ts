@@ -30,7 +30,7 @@ import { createServerArchiveWriter, packFolder } from './archive';
 import type { ServerHome } from './enumerate-homes';
 import { enumerateHomes } from './enumerate-homes';
 import { describeError } from './errors';
-import { startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
+import { startBackupJob, waitForHomeSlot, whenHomeSlotFree } from './jobs';
 import {
     archiveServerPath,
     backupsDirPath,
@@ -92,7 +92,7 @@ export async function startServerBackup({
         });
     };
     const job = wait
-        ? await whenSlotFree(ownerId, () => {
+        ? await whenHomeSlotFree(ownerId, () => {
               signal?.throwIfAborted();
               return start();
           })

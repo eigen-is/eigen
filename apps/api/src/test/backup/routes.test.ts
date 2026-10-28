@@ -11,7 +11,7 @@ import { eq } from 'drizzle-orm';
 import { user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
-import { withBackupJobSlot } from '../../lib/backup/jobs';
+import { withHomeSlot } from '../../lib/backup/jobs';
 import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { measureFolder } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
@@ -468,7 +468,7 @@ describe('Backup routes', () => {
         expect((await listArtifacts(target.id)).safetyCopies.map((entry) => entry.name)).toContain(copyName);
 
         // And the other way round: a delete holds the same one-per-home slot while it runs.
-        await withBackupJobSlot(target.id, async () => {
+        await withHomeSlot(target.id, async () => {
             expect((await adminRequest(`/admin/backup/home/${target.id}`, { method: 'POST' })).status).toBe(409);
             expect(
                 (await adminJson(`/admin/backup/artifacts/${artifactName}/restore`, { ownerId: target.id })).status,

@@ -9,7 +9,7 @@ import { auth } from '../../lib/auth/auth';
 import * as archive from '../../lib/backup/archive';
 import { enumerateHomes } from '../../lib/backup/enumerate-homes';
 import * as jobs from '../../lib/backup/jobs';
-import { getBackupJob, startBackupJob, withBackupJobSlot } from '../../lib/backup/jobs';
+import { getBackupJob, startBackupJob, withHomeSlot } from '../../lib/backup/jobs';
 import {
     buildHomeFolderName,
     buildServerArchiveName,
@@ -169,7 +169,7 @@ describe('Server backup job', () => {
                 spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
                     if (ownerId === target) perHomeStateAtCapture = getBackupJob(perHome.id)?.state;
                     if (ownerId === held) {
-                        refusedWhileHeld = await withBackupJobSlot(held, async () => {}).catch((error) => error);
+                        refusedWhileHeld = await withHomeSlot(held, async () => {}).catch((error) => error);
                     }
                     return pullHomeSnapshot(ownerId, dir, options);
                 }),
@@ -202,7 +202,7 @@ describe('Server backup job', () => {
             expect(refusedWhileHeld).toBeInstanceOf(ApiError);
             expect((refusedWhileHeld as ApiError).status).toBe(409);
             // Released once captured.
-            await withBackupJobSlot(held, async () => {});
+            await withHomeSlot(held, async () => {});
 
             const { manifest } = await readServerManifest(archivePath);
             expect(manifest.homes.find((home) => home.ownerId === target)?.member).toBeDefined();
@@ -243,7 +243,7 @@ describe('Server backup job', () => {
             await Bun.sleep(50);
             expect(alertTitlesTo(relay, ctx.alice.user.id)).toHaveLength(1);
             // The throw released the home's slot.
-            await withBackupJobSlot(broken, async () => {});
+            await withHomeSlot(broken, async () => {});
         },
         JOB_TIMEOUT_MS,
     );

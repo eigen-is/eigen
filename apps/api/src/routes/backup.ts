@@ -18,7 +18,7 @@ import {
     runArtifactVerify,
     runHomeBackup,
     startBackupJob,
-    withBackupJobSlot,
+    withHomeSlot,
 } from '../lib/backup/jobs';
 import type { BackableOwner } from '../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
@@ -222,7 +222,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
             await requireRestorableHome(params.ownerId);
             const { folder, homeDir } = await resolveSafetyCopy(params.ownerId, params.name);
             if (!fs.existsSync(folder)) throw new ApiError(404, 'Safety copy not found');
-            await withBackupJobSlot(params.ownerId, () => deleteSafetyCopy(folder, homeDir));
+            await withHomeSlot(params.ownerId, () => deleteSafetyCopy(folder, homeDir));
             return { success: true };
         },
         { auth: true },

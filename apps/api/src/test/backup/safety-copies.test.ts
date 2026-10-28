@@ -15,7 +15,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { auth } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
-import { withBackupJobSlot } from '../../lib/backup/jobs';
+import { withHomeSlot } from '../../lib/backup/jobs';
 import * as pathsModule from '../../lib/backup/paths';
 import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import * as recoveryModule from '../../lib/backup/recovery';
@@ -300,7 +300,7 @@ describe('Backup safety copies of an s3 home', () => {
             JSON.stringify({ mounts: { [MOUNT_ID]: { storageType: 's3', enabled: true, s3Config } } }),
         );
         setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
-        const deleting = withBackupJobSlot(userId, () => deleteSafetyCopy(copyDir, homeDir)).catch(() => {});
+        const deleting = withHomeSlot(userId, () => deleteSafetyCopy(copyDir, homeDir)).catch(() => {});
         try {
             expect(await settlesWithin([deleting], SETTLE_BOUND_MS)).toBe(true);
             expect(existsSync(copyDir)).toBe(true);
