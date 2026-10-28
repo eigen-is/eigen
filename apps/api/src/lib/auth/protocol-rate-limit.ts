@@ -1,7 +1,7 @@
 // The limit on failed sign-ins over the mail and DAV protocols. verifyProtocolAuth checks passwords itself, outside
-// better-auth's HTTP rate limit, so without this the protocol servers would take unlimited password guesses. Only failures
-// count, per email and per IP, over a 15-minute window, because protocol clients sign in again on every poll and a
-// limit on every attempt would lock out busy clients and offices behind one address.
+// better-auth's HTTP rate limit, so without this the protocol servers would take unlimited password guesses. Only
+// failures count, per email and per IP, over a 15-minute window, because protocol clients sign in again on every
+// poll and a limit on every attempt would lock out busy clients and offices behind one address.
 
 import { ApiError } from '../core/errors';
 import { WindowLimiter } from '../core/window-limiter';
