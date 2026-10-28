@@ -114,7 +114,7 @@ export function cleanPastedHTML(
 }
 
 // A pasted note or text box whose id the doc already holds is a copy, and takes a fresh id, as does a second one with
-// the same id in the paste. One the doc doesn't hold, a cut's, keeps its id, so a story open in another tab follows it.
+// the same id in the paste. One the doc doesn't hold, a cut's, keeps its id, as it is the same story moved.
 export function withFreshStoryIds(slice: Slice, doc: PMNode): Slice {
     const taken = new Set<unknown>();
     doc.descendants((node) => {

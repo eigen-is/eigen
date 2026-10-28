@@ -27,9 +27,9 @@ export const STORY_PULL = 'storyPull';
 // map the position, and a split here can give the story a new element, which the node at the mapped position names. A
 // peer's change or an undo, which y-prosemirror applies as a replace of the whole doc that no mapped position survives,
 // reads the position back from the element. A deleted element is the story gone, never the neighbour its place now
-// holds, unless a node of the same type carries its id: a re-anchor, a join or a cut and paste moved it there. Never a
-// node: y-tiptap builds every node anew on a peer's update, and a mark or attribute step maps no position yet makes a
-// new one.
+// holds, unless the same change put a node of its type with its id elsewhere: a drag, a re-anchor or a join moved it
+// there. A cut closes the story before its paste comes. Never a node: y-tiptap builds every node anew on a peer's
+// update, and a mark or attribute step maps no position yet makes a new one.
 export type StoryAnchor = { pos: number; element: Y.AbstractType<unknown>; type: StoryNode; id: string | null };
 
 // What a story's node view keeps for the open editor: the body's decorations inside it, such as the find bar's matches.
@@ -135,8 +135,8 @@ export type FoundStory = {
 };
 
 // Where an open story stands after `transactions`, or now with none, and its element then. Once its element is gone,
-// deleted, moved by a cut and a paste, or split into a new element in another tab, it is the node of its type that
-// carries its id; null when there is none. Its node view comes along for the decorations.
+// deleted and inserted again by one change, such as a drag, or split into a new element in another tab, it is the one
+// node of its type that carries its id; null when there is none, or two. Its node view comes along for the decorations.
 export function findStory(
     editor: Editor,
     anchor: StoryAnchor,
