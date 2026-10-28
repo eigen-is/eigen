@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { crc32, deflateSync } from 'node:zlib';
 import {
     CHART_MAX_SIDE,
     DEFAULT_CHART_SERIES_STYLE,
@@ -24,8 +25,11 @@ import {
 } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { serializeFill } from '@workspace/lib/vector';
+import sharp from 'sharp';
 import * as Y from 'yjs';
 import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
+import type { ExportMedia } from '../../lib/document/transform/protocol';
+import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
     MAX_EXPORT_CELLS,
@@ -1456,6 +1460,109 @@ describe('Sheets HTML export — floating images', () => {
         expect(html.length).toBeLessThan(MAX_EXPORT_CELLS * 50);
         expect(lost).toEqual(Array(80_000 - drawn).fill('images-dropped'));
     }, 60_000);
+});
+
+// WeasyPrint decodes every picture whole, so an export reads each picture's size from its header and charges the pixels
+// it decodes to, once per picture, on top of the bytes its tags write.
+describe('Sheets HTML export — decoded pixels', () => {
+    function pngChunk(type: string, data: Buffer): Buffer {
+        const chunk = Buffer.alloc(12 + data.length);
+        chunk.writeUInt32BE(data.length, 0);
+        chunk.write(type, 4, 'latin1');
+        data.copy(chunk, 8);
+        chunk.writeUInt32BE(crc32(chunk.subarray(4, 8 + data.length)), 8 + data.length);
+        return chunk;
+    }
+
+    // A black one-bit PNG deflated from blank rows: some 30 KB that decode to width times height pixels.
+    function blankPng(width: number, height: number): Buffer {
+        const header = Buffer.alloc(13);
+        header.writeUInt32BE(width, 0);
+        header.writeUInt32BE(height, 4);
+        header[8] = 1;
+        const rows = Buffer.alloc(height * (1 + Math.ceil(width / 8)));
+        return Buffer.concat([
+            Buffer.from('89504e470d0a1a0a', 'hex'),
+            pngChunk('IHDR', header),
+            pngChunk('IDAT', deflateSync(rows, { level: 9 })),
+            pngChunk('IEND', Buffer.alloc(0)),
+        ]);
+    }
+
+    function picture(name: string, contentType: string, bytes: Buffer): ExportMedia {
+        return { name, contentType, data: toTransferableBuffer(bytes) };
+    }
+
+    // A sheet with one tag for each media name in `tags`, exported to the HTML WeasyPrint prints.
+    async function exportPictures(media: ExportMedia[], tags: string[]) {
+        const sheet: Sheet = {
+            id: 'sheet-1',
+            name: 'Sheet1',
+            order: 0,
+            celldata: [{ r: 0, c: 0, v: { v: 'grid', m: 'grid' } }],
+            images: imagesOf(
+                ...tags.map((mediaName, i) => ({ id: `img_${i}`, mediaName, x: i * 20, y: 0, width: 10, height: 10 })),
+            ),
+        };
+        const doc = new Y.Doc();
+        doc.getMap('state').set('snapshot', encodeSheetsSnapshot([sheet], { computed: true }));
+        const exported = await renderEigensheetsExport(doc, 'pdf-html', 'Pictures', async () => media);
+        const html = new TextDecoder().decode(exported.data);
+        return { drawn: html.match(/<img /g)?.length ?? 0, warnings: exported.warnings };
+    }
+
+    // Eight 12,000 px PNGs of 420 KB cost the byte charge 90,000 cells and took WeasyPrint 19 s and 1.28 GB.
+    test('pictures of a few kilobytes and huge dimensions spend the cap with their pixels, and the one past it is left out', async () => {
+        // Past sharp's pixel limit, as its metadata reads only the header.
+        const media = Array.from({ length: 4 }, (_, i) =>
+            picture(`huge-${i}.png`, 'image/png', blankPng(17_000, 17_000 + i)),
+        );
+        const { drawn, warnings } = await exportPictures(
+            media,
+            media.map(({ name }) => name),
+        );
+        expect(drawn).toBe(3);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
+    }, 30_000);
+
+    test('a picture on many tags is decoded once, so its pixels are charged once', async () => {
+        const { drawn, warnings } = await exportPictures(
+            [picture('huge.png', 'image/png', blankPng(16_000, 16_000))],
+            Array(10).fill('huge.png'),
+        );
+        expect(drawn).toBe(10);
+        expect(warnings).toEqual([]);
+    }, 30_000);
+
+    test('a picture the size of the largest screen preview still exports', async () => {
+        const photo = await sharp({ create: { width: 2560, height: 1440, channels: 3, background: '#3a7' } })
+            .webp()
+            .toBuffer();
+        const { drawn, warnings } = await exportPictures([picture('photo.webp', 'image/webp', photo)], ['photo.webp']);
+        expect(drawn).toBe(1);
+        expect(warnings).toEqual([]);
+    });
+
+    test('a picture whose header does not read costs its bytes, as before', async () => {
+        const { drawn, warnings } = await exportPictures(
+            [picture('broken.png', 'image/png', Buffer.from('not a picture'))],
+            ['broken.png'],
+        );
+        expect(drawn).toBe(1);
+        expect(warnings).toEqual([]);
+    });
+
+    // WeasyPrint draws an SVG as vectors, whatever size it declares.
+    test('an SVG costs its bytes alone', async () => {
+        const svg =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="100000" height="100000"><rect width="10" height="10"/></svg>';
+        const { drawn, warnings } = await exportPictures(
+            [picture('drawing.svg', 'image/svg+xml', Buffer.from(svg))],
+            ['drawing.svg'],
+        );
+        expect(drawn).toBe(1);
+        expect(warnings).toEqual([]);
+    });
 });
 
 // A chart draws as the painter's inline SVG in the same overlay, its range read from the materialized sheets.

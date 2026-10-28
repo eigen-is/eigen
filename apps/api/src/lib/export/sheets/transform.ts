@@ -1,10 +1,16 @@
 // A spreadsheet's export inside the transform process: the HTML download, the document WeasyPrint prints, and the
-// xlsx. Each returns its bytes and the warnings that count what it left out.
+// xlsx. Each returns its bytes and the warnings that count what it left out. The HTML and the PDF also read the size of
+// each picture from its header, so the cap charges the pixels it decodes to.
 
 import type * as Y from 'yjs';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { readSheetsFromDoc } from '../../document/sheets';
-import type { ExportMediaLoader, SheetExportFormat, TransformWarning } from '../../document/transform/protocol';
+import type {
+    ExportMedia,
+    ExportMediaLoader,
+    SheetExportFormat,
+    TransformWarning,
+} from '../../document/transform/protocol';
 import {
     htmlExportMode,
     lossCounter,
@@ -36,6 +42,7 @@ export async function renderEigensheetsExport(
                 title,
                 sheets,
                 mediaUrls: toDataUriMap(media),
+                mediaPixels: await decodedPixels(media),
                 mode: htmlExportMode(format),
                 lost: losses.lost,
             });
@@ -49,4 +56,21 @@ export async function renderEigensheetsExport(
             return { data: toTransferableBuffer(xlsx), warnings: [...warnings, ...losses.warnings()] };
         }
     }
+}
+
+// The pixels each raster decodes to, read from its header. sharp's metadata decodes nothing, so its pixel limit, which
+// guards a decode, is off. An SVG draws as vectors, so it has none. A header sharp can't read leaves its picture to
+// cost its bytes alone. sharp loads only for an export with a raster in it.
+async function decodedPixels(media: ExportMedia[]): Promise<Map<string, number>> {
+    const pixels = new Map<string, number>();
+    const rasters = media.filter((item) => item.contentType !== 'image/svg+xml');
+    if (rasters.length === 0) return pixels;
+    const { default: sharp } = await import('sharp');
+    for (const { name, data } of rasters) {
+        try {
+            const { width, height } = await sharp(data, { limitInputPixels: false }).metadata();
+            pixels.set(name, width * height);
+        } catch {}
+    }
+    return pixels;
 }
