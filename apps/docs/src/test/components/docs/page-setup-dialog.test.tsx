@@ -70,6 +70,7 @@ async function render(setup: PageSetup = DEFAULT_PAGE_SETUP, canWrite = true, te
         createElement(PageSetupDialog, {
             open: true,
             onOpenChange,
+            onCloseAutoFocus: () => {},
             setup,
             canWrite,
             onSetupChange,
@@ -343,6 +344,7 @@ test('a phone gets no text width, as its column is the screen', async () => {
         createElement(PageSetupDialog, {
             open: true,
             onOpenChange,
+            onCloseAutoFocus: () => {},
             setup: { ...DEFAULT_PAGE_SETUP, pageless: true },
             canWrite: true,
             onSetupChange,
@@ -356,7 +358,13 @@ async function renderBandFormat(setup: PageSetup = DEFAULT_PAGE_SETUP) {
     onOpenChange.mockClear();
     onSetupChange.mockClear();
     ({ unmount } = await renderInDocument(
-        createElement(HeadersAndFootersDialog, { open: true, onOpenChange, setup, onSetupChange }),
+        createElement(HeadersAndFootersDialog, {
+            open: true,
+            onOpenChange,
+            onCloseAutoFocus: () => {},
+            setup,
+            onSetupChange,
+        }),
     ));
 }
 
