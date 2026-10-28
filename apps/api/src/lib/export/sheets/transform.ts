@@ -18,6 +18,7 @@ import {
     toTransferableText,
 } from '../../document/transform/protocol';
 import { withSvgFallbacks } from '../office-image';
+import type { MediaPixels } from './render';
 
 // The writers load lazily, so an HTML export never evaluates the xlsx writer. A failed recalc exports the replayed
 // values with a warning, as an export never fails for it. Images embed as data: URIs in the HTML, and go into an xlsx
@@ -58,17 +59,17 @@ export async function renderEigensheetsExport(
     }
 }
 
-// The pixels each raster decodes to, read from its header. sharp's metadata decodes nothing, so its pixel limit, which
-// guards a decode, is off. An SVG draws as vectors, so it has none. A header sharp can't read leaves its picture to
+// The pixels each raster decodes to, read from its header here, as the main thread knows no preview's size: a cached
+// preview is its bytes alone. An SVG draws as vectors, so it has none. A header sharp can't read leaves its picture to
 // cost its bytes alone. sharp loads only for an export with a raster in it.
-async function decodedPixels(media: ExportMedia[]): Promise<Map<string, number>> {
-    const pixels = new Map<string, number>();
+async function decodedPixels(media: ExportMedia[]): Promise<MediaPixels> {
+    const pixels: MediaPixels = new Map();
     const rasters = media.filter((item) => item.contentType !== 'image/svg+xml');
     if (rasters.length === 0) return pixels;
     const { default: sharp } = await import('sharp');
     for (const { name, data } of rasters) {
         try {
-            const { width, height } = await sharp(data, { limitInputPixels: false }).metadata();
+            const { width, height } = await sharp(data).metadata();
             pixels.set(name, width * height);
         } catch {}
     }

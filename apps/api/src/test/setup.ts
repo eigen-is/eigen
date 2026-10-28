@@ -15,6 +15,7 @@ import { app } from '../app';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getStorageType, updateServerSettings } from '../lib/config/server-settings';
 import { drainACLFanOuts } from '../lib/drive/acl-propagation';
+import type { MediaPixels } from '../lib/export/sheets/render';
 import { getHome } from '../lib/home';
 import { createSetupToken } from '../lib/setup/setup-token';
 import { TEST_DATA_DIR } from './test-env';
@@ -487,6 +488,9 @@ export const TEST_PNG_BYTES = new Uint8Array([
 
 // Nothing to resolve: a document with no media, a workbook with no floating images.
 export const NO_MEDIA = new Map<string, string>();
+
+// No raster whose decoded pixels the export charges.
+export const NO_PIXELS: MediaPixels = new Map();
 
 export { app, TEST_DATA_DIR };
 

@@ -21,7 +21,7 @@ import {
     HEAVY_FAR_CORNER,
     seedSheetsDoc,
 } from '../fixtures/heavy-sheets';
-import { authedRequest, driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
+import { authedRequest, driveGet, drivePost, getTestContext, NO_MEDIA, NO_PIXELS } from '../setup';
 
 // Golden output assertions for the eigensheets preview pipeline. The hash at
 // the bottom pins the exact sanitized body for the deterministic golden fixture —
@@ -204,7 +204,7 @@ describe('eigensheets preview (floating images)', () => {
         seedSheetsDoc(doc, [sheet], []);
         expect(renderEigensheetsPreviewBody(doc, media).body).toContain(`style="${geometry}"`);
         // The full export interns the very same declaration into its stylesheet.
-        expect(renderSheetsHtml([sheet], media, 'screen').css).toContain(`{${geometry}}`);
+        expect(renderSheetsHtml([sheet], media, 'screen', NO_PIXELS).css).toContain(`{${geometry}}`);
         doc.destroy();
     });
 
@@ -577,7 +577,7 @@ describe('eigensheets export and preview (hidden sheets)', () => {
             return { id, name: id, ...(hide && { hide }), celldata: [{ r: 0, c: 0, v: cell }], data: [[cell]] };
         };
         const sheets = [sheetOf('First', 'secret', 1), sheetOf('Second', 'shown'), sheetOf('Third', 'unseen', 1)];
-        const { html } = renderSheetsHtml(sheets, NO_MEDIA, 'screen');
+        const { html } = renderSheetsHtml(sheets, NO_MEDIA, 'screen', NO_PIXELS);
         expect(html).toContain('shown');
         expect(html).not.toContain('secret');
         expect(html).not.toContain('unseen');

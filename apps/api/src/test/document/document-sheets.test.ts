@@ -13,7 +13,7 @@ import type { Mount } from '../../lib/mount';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { readPersistedDoc } from '../fixtures/transform-results';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
-import { driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
+import { driveGet, drivePost, getTestContext, NO_MEDIA, NO_PIXELS } from '../setup';
 
 // Persisted workbook → Sheet[] plus whether recalc fell back, the way every reader
 // gets one now.
@@ -331,6 +331,7 @@ describe('document/sheets — patch op replay', () => {
                 title: 'first-formula',
                 sheets: result,
                 mediaUrls: NO_MEDIA,
+                mediaPixels: NO_PIXELS,
                 mode: 'screen',
                 lost: () => {},
             }),
