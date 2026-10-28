@@ -22,7 +22,7 @@ import { readMountTotalSize } from '../mount/helpers';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
 import { HOME_DATABASE_PATHS, HOME_DATABASES, isLightSkipped, MAILDIR_ROOT } from './archive-layout';
-import { readAuthRows } from './auth-tables';
+import { readAuthRows } from './auth-rows';
 import { captureFile, captureUnlessGone, captureWrittenFile, countEntries } from './capture';
 import { readHomeMounts } from './enumerate-homes';
 import { describeError } from './errors';

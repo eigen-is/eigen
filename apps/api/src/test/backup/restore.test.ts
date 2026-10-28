@@ -20,7 +20,6 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
-import { restoreShares } from '../../lib/backup/materialize';
 import * as pathsModule from '../../lib/backup/paths';
 import {
     ARCHIVE_AVATAR_DIR,
@@ -29,7 +28,7 @@ import {
     buildHomeFolderName,
     getBackupsDir,
 } from '../../lib/backup/paths';
-import { restoreHome } from '../../lib/backup/restore';
+import { restoreHome, restoreShares } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
