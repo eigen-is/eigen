@@ -785,6 +785,28 @@ describe('text boxes as boxes', () => {
         expect(boxes[0]?.attrs).toMatchObject({ paddingX: null, paddingY: null });
     });
 
+    // As VML reads a length with no unit: px in the CSS style, as a browser reads one, and EMU in an attribute.
+    test('a VML box reads a unitless style length as px, and a unitless inset or stroke weight as EMU', async () => {
+        const unitless = PLACED.replace('margin-left:30pt', 'margin-left:40')
+            .replace('margin-top:15pt', 'margin-top:20')
+            .replace('width:150pt', 'width:200')
+            .replace('height:60pt', 'height:80');
+        const run = vmlBox(unitless)
+            .replace('strokeweight="1.5pt"', `strokeweight="${2 * 9525}"`)
+            .replace('inset="7.2pt,3.6pt,7.2pt,3.6pt"', `inset="${16 * 9525},${8 * 9525},${16 * 9525},${8 * 9525}"`);
+        const boxes = await vmlBoxesOf(run);
+        expect(boxes[0]?.attrs).toMatchObject({
+            layout: 'front',
+            offsetX: 40,
+            offsetY: 20,
+            width: 200,
+            height: 80,
+            outline: '2px solid #0000ff',
+            paddingX: 16,
+            paddingY: 8,
+        });
+    });
+
     // mso-wrap-style is how the text wraps inside the shape; w10:wrap is how the body's text wraps around it.
     test('a VML box wraps by its w10:wrap, never by the wrap of its own text', async () => {
         const boxes = await vmlBoxesOf(
@@ -803,8 +825,8 @@ describe('text boxes as boxes', () => {
         ]);
     });
 
-    // As a DrawingML offset does: a box whose centre sits past the column's middle wraps on the right.
-    test("a VML box with no mso-position-horizontal wraps on the side its margin-left's centre is on", async () => {
+    // As a DrawingML offset does: a box whose center sits past the column's middle wraps on the right.
+    test("a VML box with no mso-position-horizontal wraps on the side its margin-left's center is on", async () => {
         const at = (left: string) =>
             vmlBox(PLACED.replace('margin-left:30pt', `margin-left:${left}`), '<w10:wrap type="square"/>');
         const boxes = await vmlBoxesOf(at('0pt'), at('300pt'));

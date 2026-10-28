@@ -28,7 +28,7 @@ import {
 import type { Item, ParagraphItem } from './assemble';
 import { buildBlocks, inlineText, isWhitespace } from './assemble';
 import { isFill, markColor } from './colors';
-import { onOff, roundedInt, twipsOf, w, wChild } from './package';
+import { floatSide, onOff, roundedInt, twipsOf, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks, WRAPPERS } from './paragraphs';
 import { mergeRun, shadingOf, tableBordersOf } from './styles';
@@ -298,16 +298,14 @@ function floatingFigure(reader: Reader, items: Item[], float: XmlElement, grid: 
     const [figure] = figures;
     if (!figure || figures.length !== 1 || rest.length > 0) return undefined;
     if (image?.inlines.some((node) => !isFigureFrameNode(node.type) && !isWhitespace(node))) return undefined;
-    const spec = w(float, 'tblpXSpec');
     const x = twipsOf(w(float, 'tblpX')) ?? 0;
     const width = grid.reduce((sum, col) => sum + col, 0);
-    const right =
-        spec === 'right' || spec === 'outside' || (spec === undefined && x + width / 2 > reader.columnTwips / 2);
+    const side = floatSide(w(float, 'tblpXSpec'), x + width / 2, reader.columnTwips);
     return {
         ...figure,
         attrs: {
             ...figure.attrs,
-            layout: right ? 'wrap-right' : 'wrap-left',
+            layout: `wrap-${side}`,
             caption: caption ? inlineText(caption.inlines) || null : null,
         },
     };

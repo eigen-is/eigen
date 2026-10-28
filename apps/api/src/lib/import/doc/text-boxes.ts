@@ -1,49 +1,41 @@
-// A Word text box as the doc holds it: a wps shape alone in its drawing, or a VML shape holding a v:textbox, becomes a
-// text box with the box's size, fill, outline, insets, vertical alignment and rounded corners, its paragraphs read as a
-// note's are. The drawing walk finds one in the body, reads its paragraphs in textBoxScope and calls readTextBox; a
-// band's, a note's and a group's boxes keep their paragraphs after their anchor's.
+// A Word text box as the doc holds it. A wps shape alone in its drawing, or a VML shape holding a v:textbox, becomes a
+// text box with the shape's size, fill, outline, insets, vertical alignment and rounded corners. Its paragraphs read as
+// a note's are. The drawing walk finds a box in the body, reads its paragraphs in textBoxScope and calls readTextBox.
+// A box elsewhere, such as in a band, a note or a group, keeps its paragraphs after its anchor's.
 
 import type { JSONContent } from '@tiptap/core';
-import type { CellBorderStyle, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
+import type { CellBorderStyle, FigureFrameAttrs, TextBoxEdit } from '@workspace/lib/docs/eigendoc';
 import {
     cellBorderValue,
     flattenNestedStories,
     isStoryNode,
-    MAX_CELL_BORDER_PX,
     MAX_TEXT_BOX_PADDING,
-    MIN_CELL_BORDER_PX,
     newStoryId,
-    ptToPx,
     readCellBackground,
     readTextBoxSide,
     TEXT_BOX_INSET,
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
-import { DEFAULT_LINE_WIDTH_EMU, drawingColor, lineWidthEmu, strokeStyleOf } from '../../ooxml/drawingml';
-import { A_NS, EMU_PER_PX, POINTS_PER_UNIT, V_NS, W10_NS, WPS_NS } from '../../ooxml/ooxml';
+import {
+    ALIGN_BY_ANCHOR,
+    DEFAULT_LINE_WIDTH_EMU,
+    drawingColor,
+    lineWidthEmu,
+    strokeStyleOf,
+} from '../../ooxml/drawingml';
+import { A_NS, EMU_PER_PX, V_NS, W10_NS, WPS_NS } from '../../ooxml/ooxml';
 import type { Item } from './assemble';
 import { buildBlocks } from './assemble';
-import { descendants, roundedInt } from './package';
+import { descendants, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { storyParagraphs } from './paragraphs';
+import { fitBorderPx } from './styles';
 
-// The look a box draws in, read off a wps shape or a VML one.
-type BoxLook = {
-    width: number | null;
-    height: number | null;
-    fill: string | null;
-    outline: string | null;
-    paddingX: number | null;
-    paddingY: number | null;
-    verticalAlign: 'middle' | 'bottom' | null;
-    rounded: boolean;
-};
-
-const VERTICAL_ALIGNS = new Map<string, BoxLook['verticalAlign']>([
-    ['ctr', 'middle'],
-    ['b', 'bottom'],
-]);
+// The look a box draws in, read off a wps shape or a VML one. A width is null where the shape gives none.
+type BoxLook = Required<
+    Pick<TextBoxEdit, 'height' | 'fill' | 'outline' | 'paddingX' | 'paddingY' | 'verticalAlign' | 'rounded'>
+> & { width: number | null };
 
 // VML's v-text-anchor names the line first, as in middle-center: only that word is the box's vertical alignment.
 const VML_TEXT_ANCHORS = new Map<string, BoxLook['verticalAlign']>([
@@ -106,7 +98,7 @@ export function readTextBox(
         fill: shapeFill(reader, spPr, style),
         outline: shapeOutline(reader, spPr, style),
         ...insets(bodyPr),
-        verticalAlign: VERTICAL_ALIGNS.get(bodyPr ? (xmlAttr(bodyPr, '', 'anchor') ?? 't') : 't') ?? null,
+        verticalAlign: boxAlign(bodyPr && xmlAttr(bodyPr, '', 'anchor')),
         rounded: preset === 'roundRect',
     };
     return textBoxNode(reader, items, look, layout, simplified);
@@ -125,8 +117,8 @@ export function readVmlTextBox(
 ): JSONContent | null {
     const textbox = descendants(shape, V_NS, 'textbox')[0];
     if (!textbox) return null;
-    const css = cssOf(shape);
-    const px = (name: string) => cssPx(css.get(name));
+    const css = vmlStyle(shape);
+    const px = (name: string) => vmlPx(css.get(name), 'px');
     const absolute = css.get('position') === 'absolute';
     const relativeV = css.get('mso-position-vertical-relative') ?? 'text';
     const relativeH = css.get('mso-position-horizontal-relative') ?? 'text';
@@ -140,43 +132,37 @@ export function readVmlTextBox(
     const behind = Number(css.get('z-index') ?? 0) < 0;
     const width = px('width');
     const height = px('height');
+    const left = px('margin-left') ?? 0;
+    const side = floatSide(css.get('mso-position-horizontal'), left + (width ?? 0) / 2, room);
     const layout: FigureFrameAttrs = inLine
         ? {}
         : wrapped
-          ? { layout: vmlWrapSide(css, width ?? 0, room) }
+          ? { layout: `wrap-${side}` }
           : {
                 layout: behind ? 'behind' : 'front',
-                offsetX: px('margin-left') ?? 0,
+                offsetX: left,
                 offsetY: (px('margin-top') ?? 0) - (relativeV === 'text' ? spaceBefore : 0),
             };
     const filled = xmlAttr(shape, '', 'filled') !== 'f' && xmlAttr(shape, '', 'filled') !== 'false';
     const stroked = xmlAttr(shape, '', 'stroked') !== 'f' && xmlAttr(shape, '', 'stroked') !== 'false';
-    const weight = cssPx(xmlAttr(shape, '', 'strokeweight') ?? '0.75pt') ?? 1;
+    const weight = vmlPx(xmlAttr(shape, '', 'strokeweight') ?? '0.75pt', 'emu') ?? 1;
     const strokeColor = readCellBackground(xmlAttr(shape, '', 'strokecolor') ?? '#000000');
-    const inset = (xmlAttr(textbox, '', 'inset') ?? '').split(',').map((side) => cssPx(side.trim()));
-    const [left, top, right, bottom] = inset;
+    const inset = (xmlAttr(textbox, '', 'inset') ?? '').split(',').map((length) => vmlPx(length, 'emu'));
+    const [insetLeft, insetTop, insetRight, insetBottom] = inset;
     const look: BoxLook = {
         width: width === null ? null : Math.min(room, width),
-        height: [css, cssOf(textbox)].some((style) => style.get('mso-fit-shape-to-text') === 't') ? null : height,
+        height: [css, vmlStyle(textbox)].some((style) => style.get('mso-fit-shape-to-text') === 't') ? null : height,
         fill: filled ? readCellBackground(xmlAttr(shape, '', 'fillcolor') ?? '#ffffff') : null,
         outline:
             stroked && strokeColor
-                ? cellBorderValue({ width: clampPen(weight), style: 'solid', color: strokeColor })
+                ? cellBorderValue({ width: fitBorderPx(weight), style: 'solid', color: strokeColor })
                 : null,
-        paddingX: meanPadding(left ?? null, right ?? null, TEXT_BOX_INSET.x),
-        paddingY: meanPadding(top ?? null, bottom ?? null, TEXT_BOX_INSET.y),
+        paddingX: meanPadding(insetLeft ?? null, insetRight ?? null, TEXT_BOX_INSET.x),
+        paddingY: meanPadding(insetTop ?? null, insetBottom ?? null, TEXT_BOX_INSET.y),
         verticalAlign: VML_TEXT_ANCHORS.get((css.get('v-text-anchor') ?? '').split('-')[0] ?? '') ?? null,
         rounded: shape.local === 'roundrect',
     };
     return textBoxNode(reader, items, look, layout, false);
-}
-
-// The side a wrapped VML box sits on: its mso-position-horizontal's, else the side of the column its centre is on, as
-// a DrawingML offset's.
-function vmlWrapSide(css: Map<string, string>, width: number, room: number): 'wrap-left' | 'wrap-right' {
-    const side = css.get('mso-position-horizontal');
-    if (side) return side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left';
-    return (cssPx(css.get('margin-left')) ?? 0) + width / 2 > room / 2 ? 'wrap-right' : 'wrap-left';
 }
 
 // The box's paragraphs, read as a note's: a list's, a heading's or a table's become paragraphs and a nested box or note
@@ -203,15 +189,10 @@ function textBoxNode(
         attrs: {
             id: newStoryId(),
             ...layout,
+            ...look,
             width: readTextBoxSide(look.width) ?? undefined,
             height: readTextBoxSide(look.height),
-            fill: look.fill,
-            outline: look.outline,
-            paddingX: look.paddingX,
-            paddingY: look.paddingY,
-            verticalAlign: look.verticalAlign,
-            rounded: look.rounded,
-        },
+        } satisfies TextBoxEdit & { id: string },
         content: paragraphs.length > 0 ? paragraphs : [{ type: 'paragraph' }],
     });
 }
@@ -244,10 +225,14 @@ function shapeOutline(reader: Reader, spPr: XmlElement | undefined, style: XmlEl
     const dash = line && xmlChild(line, A_NS, 'prstDash');
     const kind: CellBorderStyle =
         line && xmlAttr(line, '', 'cmpd') === 'dbl' ? 'double' : strokeStyleOf(dash && xmlAttr(dash, '', 'val'));
-    return cellBorderValue({ width: clampPen(width), style: kind, color });
+    return cellBorderValue({ width: fitBorderPx(width), style: kind, color });
 }
 
-const clampPen = (px: number) => Math.min(MAX_CELL_BORDER_PX, Math.max(MIN_CELL_BORDER_PX, px));
+// A bodyPr anchor as the box's vertical alignment: DrawingML's center is the box's middle, and the top is its default.
+function boxAlign(anchor: string | undefined): BoxLook['verticalAlign'] {
+    const align = ALIGN_BY_ANCHOR.get(anchor ?? 't');
+    return align === 'center' ? 'middle' : align === 'bottom' ? align : null;
+}
 
 // The insets, the mean of a rare asymmetric pair; none where bodyPr states none or Word's own, which a box draws when
 // it stores none.
@@ -267,27 +252,4 @@ function meanPadding(a: number | null, b: number | null, word: number): number |
     if (a === null && b === null) return null;
     const mean = Math.min(MAX_TEXT_BOX_PADDING, Math.max(0, ((a ?? b ?? 0) + (b ?? a ?? 0)) / 2));
     return Math.abs(mean - word) < 0.01 ? null : mean;
-}
-
-// A VML element's CSS style, its names and values in lower case.
-function cssOf(element: XmlElement): Map<string, string> {
-    return new Map(
-        (xmlAttr(element, '', 'style') ?? '')
-            .split(';')
-            .map((part) => part.split(':').map((side) => side.trim().toLowerCase()))
-            .filter((pair): pair is [string, string] => pair.length === 2 && !!pair[0] && !!pair[1]),
-    );
-}
-
-// A VML length in px: a number with a CSS unit, or EMU with none, as an inset writes it.
-function cssPx(value: string | undefined): number | null {
-    const match = value && /^(-?[\d.]+)([a-z]*)$/.exec(value.trim());
-    if (!match) return null;
-    const number = Number(match[1]);
-    const unit = match[2] ?? '';
-    if (!Number.isFinite(number)) return null;
-    if (unit === 'px') return number;
-    if (unit === '') return number / EMU_PER_PX;
-    const points = POINTS_PER_UNIT.get(unit);
-    return points === undefined ? null : ptToPx(number * points);
 }

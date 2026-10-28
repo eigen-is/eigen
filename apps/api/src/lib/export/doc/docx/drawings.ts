@@ -4,12 +4,13 @@
 
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
+import type { FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import { readChartAttrs, readFigureAttrs, readFigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { anchorIndentPx, anchorPaddingPx, BODY, boxSide, cssPt, FIGURE_MARGIN, twips } from '../../../document/looks';
 import { proseValue } from '../../../document/prose-css';
 import { blipXml } from '../../../ooxml/drawingml';
-import { EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
+import { EMU_PER_PX, PIC_NS, pxToEmu } from '../../../ooxml/ooxml';
 import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import { BORDER_SIDES, EMU_PER_TWIP, SINGLE_LINE, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import { addOfficeChart } from '../../office-chart';
@@ -35,9 +36,9 @@ type Drawn = { image: Image | WordChart; cx: number; cy: number; alt: string };
 // Where an anchored drawing sits: in front of or behind the text, in EMU from the text column and from the top of its
 // paragraph's first line, or wrapped by the text on one side of the column, at its paragraph's top, with the gap the
 // text keeps from it in EMU.
-export type Placement =
-    | { x: number; y: number; behind: boolean }
-    | { side: 'left' | 'right'; fromText: { top: number; right: number; bottom: number; left: number } };
+export type Placement = { x: number; y: number; behind: boolean } | { side: 'left' | 'right'; fromText: Gap };
+
+type Gap = { top: number; right: number; bottom: number; left: number };
 
 // Word stacks anchors by relativeHeight. Eigen draws each layer in document order, and the drawing ids follow it.
 const RELATIVE_HEIGHT = 251658240;
@@ -85,15 +86,14 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         return figure;
     }
     // A borderless floating one-cell table, the one wrap that keeps the caption under the image in every reader.
-    const float = proseValue(`.eigen-prose .figure[data-layout="wrap-${side}"]`, 'margin');
-    const fromText = (edge: 'top' | 'right' | 'bottom' | 'left') => twips(cssPt(boxSide(float, edge), BODY.sizePt));
+    const gap = wrapGap(side, twips);
     const tw = drawn.cx / EMU_PER_TWIP;
     const nil = TABLE_BORDER_SIDES.map((edge) => `<w:${edge} w:val="nil"/>`).join('');
     const unpadded = BORDER_SIDES.map((edge) => `<w:${edge} w:w="0" w:type="dxa"/>`).join('');
     // A list or quote indents only the left, so a right float keeps the margin's edge.
     const x = side === 'left' && context.indent > 0 ? `w:tblpX="${context.indent}"` : `w:tblpXSpec="${side}"`;
     const tblPr = [
-        `<w:tblpPr w:leftFromText="${fromText('left')}" w:rightFromText="${fromText('right')}" w:topFromText="${fromText('top')}" w:bottomFromText="${fromText('bottom')}" w:vertAnchor="text" w:horzAnchor="margin" ${x} w:tblpY="1"/>`,
+        `<w:tblpPr w:leftFromText="${gap.left}" w:rightFromText="${gap.right}" w:topFromText="${gap.top}" w:bottomFromText="${gap.bottom}" w:vertAnchor="text" w:horzAnchor="margin" ${x} w:tblpY="1"/>`,
         '<w:tblOverlap w:val="never"/>',
         `<w:tblW w:w="${tw}" w:type="dxa"/>`,
         `<w:tblBorders>${nil}</w:tblBorders>`,
@@ -122,25 +122,34 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
     ];
 }
 
-// A figure in front of or behind the text: an anchor run in the paragraph that holds it, placed from the text column
-// and from the paragraph's first line. Eigen places it from the paragraph's padding box, so its indents go into X and
-// the padding above its text into Y. The line, not the paragraph: LibreOffice counts a paragraph's offset from the end
-// of the space after the block above, so the place would move with how a reader spaces the two paragraphs. A picture it
-// can't write writes nothing.
+// A figure in front of or behind the text: an anchor run in the paragraph that holds it. A picture it can't write
+// writes nothing.
 export function anchoredFigure(node: JSONContent, textblock: JSONContent, context: Context): string {
     const { pkg } = context;
-    const { layout, offsetX, offsetY } = readFigureFrameAttrs(node.attrs ?? {});
     const paperPx = Math.floor(pkg.paper / TWIPS_PER_PX);
     const drawn = drawnFigure(node, pkg, paperPx, paperPx);
     if (!drawn) return '';
+    return drawingXml(drawn, pkg, positionedPlacement(readFigureFrameAttrs(node.attrs ?? {}), textblock, context));
+}
+
+// Where a frame in front of or behind the text sits, such as a figure or a text box: from the text column and from its
+// paragraph's first line. Eigen places it from the paragraph's padding box, so its indents go into X and the padding
+// above its text into Y. The line, not the paragraph: LibreOffice counts a paragraph's offset from the end of the space
+// after the block above, so the place would move with how a reader spaces the two paragraphs.
+export function positionedPlacement(frame: FigureFrameAttrs, textblock: JSONContent, context: Context): Placement {
     // A numbered paragraph's own indent isn't in the file, so it isn't in X either, as the reader reads it back.
-    const x = (offsetX ?? 0) + anchorIndentPx(context.indent, context.numbered ? undefined : textblock);
-    const y = (offsetY ?? 0) - anchorPaddingPx(textblock, context.depth > 0 || context.quotes > 0, pkg.normal);
-    return drawingXml(drawn, pkg, {
-        x: Math.round(x * EMU_PER_PX),
-        y: Math.round(y * EMU_PER_PX),
-        behind: layout === 'behind',
-    });
+    const x = (frame.offsetX ?? 0) + anchorIndentPx(context.indent, context.numbered ? undefined : textblock);
+    const nested = context.depth > 0 || context.quotes > 0;
+    const y = (frame.offsetY ?? 0) - anchorPaddingPx(textblock, nested, context.pkg.normal);
+    return { x: pxToEmu(x), y: pxToEmu(y), behind: frame.layout === 'behind' };
+}
+
+// The gap the text keeps from a frame wrapped on `side`, per edge, in the unit `fromPt` converts to. It is the
+// stylesheet's float margin, as the HTML draws it.
+export function wrapGap(side: 'left' | 'right', fromPt: (pt: number) => number): Gap {
+    const float = proseValue(`.eigen-prose .figure[data-layout="wrap-${side}"]`, 'margin');
+    const edge = (name: 'top' | 'right' | 'bottom' | 'left') => fromPt(cssPt(boxSide(float, name), BODY.sizePt));
+    return { top: edge('top'), right: edge('right'), bottom: edge('bottom'), left: edge('left') };
 }
 
 // The picture or chart a figure draws: as wide as its width up to `cap` px, else its natural width up to `room`, and as
@@ -235,8 +244,8 @@ function drawingXml({ image, cx, cy, alt }: Drawn, pkg: Package, placement?: Pla
 }
 
 // The frame a drawing opens with, up to its wrap, in the schema's order: an anchor placed as `placement` says, or in line
-// without one. The drawing's docPr, its frame properties and its graphic follow, then the frame closes. A figure and a
-// text box share it.
+// without one. The drawing's docPr, its frame properties and its graphic follow, then the frame closes. Every drawing
+// opens with it, such as a figure's or a text box's.
 export function drawingHead(
     n: number,
     cx: number,

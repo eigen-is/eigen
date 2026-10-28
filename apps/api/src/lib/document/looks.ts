@@ -1,5 +1,6 @@
 // The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognizes it where a
-// re-save drops the writer's styles and keeps it as direct formatting.
+// re-save drops the writer's styles and keeps it as direct formatting. It also holds the rough measures of that look
+// the exports estimate with, such as a character's width.
 
 import type { JSONContent } from '@tiptap/core';
 import {
@@ -54,6 +55,11 @@ export function boxSide(shorthand: string, side: 'top' | 'right' | 'bottom' | 'l
     const [top = '', right = top, bottom = top, left = right] = shorthand.trim().split(/\s+/);
     return { top, right, bottom, left }[side];
 }
+
+// A character's average width as a share of its font's size, for a rough count of a text's lines. Each is set wide, so
+// the count errs long. The Normal's face draws narrower than the widest bundled face, a monospace one. A text box's
+// height counts its text in the Normal's face, and whether the notes fit on a page counts in any face a run may use.
+export const CHARACTER_WIDTH_EM = { normal: 0.55, anyFace: 0.6 };
 
 // The prose body, the size every em in the body text is of.
 export const BODY = {
