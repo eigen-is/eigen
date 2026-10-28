@@ -1,8 +1,10 @@
 // The Members section of a team's detail in the Admin app: the team's members, each with a button that
-// takes them out, and an Add button that picks one of the organization's members to join. A user's
-// detail has the same section the other way round, the teams that user is in.
+// takes them out, and an Add button that picks one of the organization's members to join. The
+// organization's default team, which every user joins, has no remove buttons. A user's detail has the
+// same section the other way round, the teams that user is in.
 
 import { useAddTeamMembers, useMembers, useRemoveTeamMember } from '@workspace/lib/admin';
+import { usePublicConfig } from '@workspace/lib/public';
 import { useTeamMembers } from '@workspace/lib/team';
 import { EmptyState, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -23,6 +25,8 @@ export function TeamMembersSection({ teamId, organizationId }: TeamMembersSectio
     const { data: allMembers = [] } = useMembers(organizationId);
     const addMembers = useAddTeamMembers();
     const removeMember = useRemoveTeamMember();
+    const { data: config } = usePublicConfig();
+    const isDefaultTeam = teamId === config?.defaultTeamId;
 
     const teamMemberUserIds = new Set(teamMembers.map((m) => m.userId));
     const availableMembers = allMembers.filter((m) => !teamMemberUserIds.has(m.userId));
@@ -58,12 +62,14 @@ export function TeamMembersSection({ teamId, organizationId }: TeamMembersSectio
                                     userId={tm.userId}
                                     className="flex-1 min-w-0"
                                 />
-                                <TooltipButton
-                                    icon={X}
-                                    tooltipText="Remove from team"
-                                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                                    onClick={() => removeMember.mutate({ teamId, userId: tm.userId })}
-                                />
+                                {!isDefaultTeam && (
+                                    <TooltipButton
+                                        icon={X}
+                                        tooltipText="Remove from team"
+                                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                                        onClick={() => removeMember.mutate({ teamId, userId: tm.userId })}
+                                    />
+                                )}
                             </div>
                         ))}
                 </div>
