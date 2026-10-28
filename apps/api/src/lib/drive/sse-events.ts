@@ -22,8 +22,8 @@ export function buildDriveEvent(
     };
 }
 
-// Only homes that are open receive it, so a closed home costs nothing. Callers don't wait for it:
-// recording a change must never fail or slow down because of the broadcast.
+// Only homes that are open receive it, so a closed home costs nothing. Callers don't wait for it, so a
+// failed broadcast never fails or slows the change it reports.
 export async function broadcastFileHistoryUpdated(
     ownerId: string,
     path: SSEventDrive['path'],
