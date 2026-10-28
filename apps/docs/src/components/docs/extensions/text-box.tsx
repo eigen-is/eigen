@@ -1,7 +1,7 @@
 // The Docs editor's text box: the shared node with a view that draws it in the figure's frame, its paragraphs as static
 // HTML or, while it is the open story, the box's live editor in their place, so the box keeps its size and place while
-// it is typed in. A press on its text opens it; one on its edge band selects, moves or drags it, and its grips resize it
-// with its height as a minimum. The editor component provides the open story through TextBoxContext.
+// it is typed in. A press on its text opens it; one on its edge band selects, moves or drags it, and its grips resize
+// it with its height as a minimum. The editor component provides the open story through TextBoxContext.
 
 import { Editor } from '@tiptap/core';
 import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
@@ -18,10 +18,10 @@ import {
 import type { Box } from '@workspace/lib/vector';
 import type React from 'react';
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { StaticStory } from '../footnote-list';
 import type { FigureFrameOptions } from './figure-frame';
 import { FigureFrame, figureFramePlugins, figureMaxWidth, useFigureResize } from './figure-frame';
 import { behindFigureAt } from './positioned-figure';
+import { StaticStory } from './static-story';
 import type { StoryAnchor } from './story';
 import { drawsStory, registerStoryView } from './story';
 
@@ -36,9 +36,15 @@ export const TextBoxContext = createContext<{ anchor: StoryAnchor | null; editor
     editor: null,
 });
 
+// A box's side as a grip or the panel writes it: no less than the floor, and a width no wider than the cap. A hidden
+// surface reports a cap of 0 or less, which the floor wins over.
+export const fitTextBoxWidth = (width: number, maxWidth: number) =>
+    Math.max(TEXT_BOX_MIN_SIDE, Math.min(maxWidth, width));
+export const fitTextBoxHeight = (height: number) => Math.max(TEXT_BOX_MIN_SIDE, height);
+
 const fitTextBox = (next: Box, maxWidth: number) => ({
-    width: Math.round(Math.max(TEXT_BOX_MIN_SIDE, Math.min(maxWidth, next.width))),
-    height: Math.round(Math.max(TEXT_BOX_MIN_SIDE, next.height)),
+    width: Math.round(fitTextBoxWidth(next.width, maxWidth)),
+    height: Math.round(fitTextBoxHeight(next.height)),
 });
 
 function TextBoxView(props: NodeViewProps) {
@@ -159,8 +165,8 @@ function pressInto(story: EditorView, event: MouseEvent) {
     }
 }
 
-// No contentDOM: the box's paragraphs are its own editor's, never the body's DOM, as a note's are. Every event inside the
-// open editor stays there, a drag of its text too, which TipTap would hand to the body.
+// No contentDOM: the box's paragraphs are its own editor's, never the body's DOM, as a note's are. Every event inside
+// the open editor stays there, a drag of its text too, which TipTap would hand to the body.
 class TextBoxNodeView extends ReactNodeView {
     public override get contentDOM() {
         return null;
@@ -174,7 +180,7 @@ class TextBoxNodeView extends ReactNodeView {
 }
 
 export const TextBox = TextBoxNode.extend<TextBoxOptions>({
-    // Ahead of the positioned figures', so a press over a box behind the text opens it before their hit test selects it.
+    // Ahead of the positioned figures', so a press over a behind box opens it before their hit test selects it.
     priority: 1001,
 
     addOptions() {

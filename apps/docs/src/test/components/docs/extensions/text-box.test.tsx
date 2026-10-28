@@ -483,6 +483,38 @@ test('Insert › Text box puts an open, empty box in the flow after the caret', 
     expect(a.state.doc.nodeAt(7)?.attrs).toMatchObject({ layout: 'block', alignment: 'left' });
 });
 
+// An auto box is as tall as its text, which only its drawn box knows, and it changes after the render a write causes, or
+// with no write at all as an image in it loads.
+test("the Text box panel's height follows the box as drawn", async () => {
+    const observers: (() => void)[] = [];
+    const Observer = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+        public constructor(callback: ResizeObserverCallback) {
+            observers.push(() => callback([], this));
+        }
+        public observe() {}
+        public unobserve() {}
+        public disconnect() {}
+    };
+    cleanups.push(() => {
+        globalThis.ResizeObserver = Observer;
+    });
+    const { a } = await setup();
+    await act(async () => {
+        a.commands.setNodeSelection(BOX);
+    });
+    const { TextBoxPropertiesPanel } = await import('../../../../components/docs/text-box-properties-panel');
+    const { mmToPx } = await import('@workspace/lib/docs/eigendoc');
+    const panel = await renderInDocument(createElement(TextBoxPropertiesPanel, { editor: a }));
+    cleanups.push(panel.unmount);
+    Object.defineProperty(laidOutBox(a), 'offsetHeight', { configurable: true, value: mmToPx(40) });
+    await act(async () => {
+        for (const observe of observers) observe();
+    });
+    const [, height] = document.querySelectorAll<HTMLInputElement>('input[type="number"][step="0.01"]');
+    expect(height?.value).toBe('4.00');
+});
+
 // The positioned figures measure a box by its view's frame, as they measure an image, to keep it in place on a switch
 // to in front of the text and on a drag.
 test("the box's view holds the frame alone, its content box first inside it", async () => {

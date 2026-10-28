@@ -17,7 +17,6 @@ import {
     MIN_CELL_BORDER_PX,
     readCellBackground,
     readTextBoxAttrs,
-    TEXT_BOX_MIN_SIDE,
     textBoxPadding,
 } from '@workspace/lib/docs/eigendoc';
 import {
@@ -31,8 +30,10 @@ import {
 } from '@workspace/ui/components/properties-panel';
 import type { LucideIcon } from 'lucide-react';
 import { AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, AlignVerticalJustifyStart } from 'lucide-react';
+import { useLayoutEffect, useState } from 'react';
 import { figureMaxWidth, setFigureLayout } from './extensions/figure-frame';
 import { selectionDrawsInLine } from './extensions/positioned-figure';
+import { fitTextBoxHeight, fitTextBoxWidth } from './extensions/text-box';
 import { CmField, FigureLayoutSection, FigureSizeSection } from './figure-properties-panel';
 
 const VERTICAL_ALIGN_LOOK: { align: TextBoxVerticalAlign; label: string; icon: LucideIcon }[] = [
@@ -48,8 +49,8 @@ const OUTLINE_STYLE_LABELS: Record<CellBorderStyle, string> = {
     double: 'Double',
 };
 
-// A box's layout, as the Image panel writes a picture's: a wrap halves the width cap, and in front of or behind the text
-// keeps the box where it is drawn.
+// A box's layout, as the Image panel writes a picture's: a wrap halves the width cap, and in front of or behind the
+// text keeps the box where it is drawn.
 export const setTextBoxLayout = (editor: Editor, attributes: FigureFrameAttrs) =>
     setFigureLayout(editor, attributes, readTextBoxAttrs(editor.getAttributes('textBox')), (written) =>
         editor.commands.updateTextBox(written),
@@ -61,14 +62,10 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
         editor,
         selector: ({ editor: e }) => {
             const attrs = readTextBoxAttrs(e.getAttributes('textBox'));
-            // An auto box is as tall as its text, which only its drawn box knows.
-            const dom = e.view.nodeDOM(e.state.selection.from);
-            const drawn =
-                dom instanceof Element ? dom.querySelector<HTMLElement>('.text-box')?.offsetHeight : undefined;
             const padding = textBoxPadding(attrs);
             return {
                 width: attrs.width,
-                height: attrs.height ?? drawn,
+                height: attrs.height,
                 auto: attrs.height === null,
                 layout: attrs.layout || 'block',
                 alignment: attrs.alignment || 'center',
@@ -82,6 +79,25 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
             };
         },
     });
+    // An auto box is as tall as its text, which only its drawn box knows. That changes after the render a write causes,
+    // and with no write at all as an image in it loads, so the panel watches the box.
+    const drawnBox = useEditorState({
+        editor,
+        selector: ({ editor: e }) => {
+            const dom = e.view.nodeDOM(e.state.selection.from);
+            return dom instanceof Element ? dom.querySelector<HTMLElement>('.text-box') : null;
+        },
+        equalityFn: Object.is,
+    });
+    const [drawnHeight, setDrawnHeight] = useState<number>();
+    useLayoutEffect(() => {
+        if (!drawnBox) return;
+        setDrawnHeight(drawnBox.offsetHeight);
+        const observer = new ResizeObserver(() => setDrawnHeight(drawnBox.offsetHeight));
+        observer.observe(drawnBox);
+        return () => observer.disconnect();
+    }, [drawnBox]);
+    const height = look.height ?? drawnHeight;
     const write = (attributes: TextBoxEdit) => editor.commands.updateTextBox(attributes);
     const outline = (change: Partial<{ width: number; style: CellBorderStyle; color: string }>) =>
         write({
@@ -92,20 +108,19 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
                 ...change,
             }),
         });
-    const side = (px: number) => Math.max(TEXT_BOX_MIN_SIDE, px);
 
     return (
         <PropertiesPanel title="Text box">
             <FigureSizeSection
                 width={look.width}
-                height={look.height}
-                autoHeight={{ auto: look.auto, onAutoChange: (auto) => write({ height: auto ? null : look.height }) }}
-                onChange={({ width, height }) =>
+                height={height}
+                autoHeight={{ auto: look.auto, onAutoChange: (auto) => write({ height: auto ? null : height }) }}
+                onChange={(size) =>
                     write({
-                        ...(width !== undefined && {
-                            width: Math.min(figureMaxWidth(editor, look.layout), side(width)),
+                        ...(size.width !== undefined && {
+                            width: fitTextBoxWidth(size.width, figureMaxWidth(editor, look.layout)),
                         }),
-                        ...(height !== undefined && { height: side(height) }),
+                        ...(size.height !== undefined && { height: fitTextBoxHeight(size.height) }),
                     })
                 }
             />
