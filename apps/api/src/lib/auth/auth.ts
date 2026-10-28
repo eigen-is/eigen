@@ -5,6 +5,7 @@
 
 import { Database } from 'bun:sqlite';
 import { apiKey } from '@better-auth/api-key';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
@@ -195,6 +196,11 @@ export const auth = betterAuth({
                     const { teardownUserData } = await import('../user/delete-user');
                     await busyHomeAsConflict(() => teardownUserData(user));
                 },
+                // The row is gone, so its home may open again: a restore can bring the user back under the same id.
+                after: async (user) => {
+                    const { clearHomeDeleting } = await import('../home/get-home');
+                    clearHomeDeleting(user.id);
+                },
             },
         },
     },
@@ -280,7 +286,9 @@ export const auth = betterAuth({
                     await busyHomeAsConflict(() => teardownTeamData(team.id));
                 },
                 afterDeleteTeam: async ({ team }) => {
-                    // Lazy import to avoid the static cycle (home-relay → get-home → team → auth).
+                    // Lazy imports to avoid the static cycle (home-relay → get-home → team → auth).
+                    const { clearHomeDeleting } = await import('../home/get-home');
+                    clearHomeDeleting(teamOwnerId(team.id));
                     const { pushTeamAvatar } = await import('../home/home-relay');
                     await pushTeamAvatar(team.id, null);
                 },

@@ -15,6 +15,7 @@ import { addRegistryEntry, getEntriesForTarget } from '../../lib/share/registry'
 import { shareRegistry } from '../../lib/share/schema';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { getTeamExists } from '../../lib/team';
+import { teardownTeamData } from '../../lib/team/delete-team';
 import { FakeS3Server } from '../fake-s3-server';
 import {
     addMember,
@@ -152,5 +153,18 @@ describe('Delete team', () => {
         }
         expect((await removeTeam(teamId)).status).toBe(200);
         expect(existsSync(getTeamDataPath(teamId))).toBe(false);
+    });
+
+    test("a member's request after the teardown but before better-auth deletes the row doesn't rebuild the folder", async () => {
+        const { teamId } = await teamWithFiles('Reopened Team');
+        const ownerId = teamOwnerId(teamId);
+        // The hook's work without the row delete after it: the team row and alice's session still exist.
+        await teardownTeamData(teamId);
+        expect(await getTeamExists(teamId)).toBe(true);
+
+        expect((await authedRequest(ctx.alice.user.sessionToken, `/drive/${ownerId}/mounts`)).status).toBe(404);
+        await expect(getTeamHome(ownerId)).rejects.toThrow('Home is being deleted');
+        expect(existsSync(getTeamDataPath(teamId))).toBe(false);
+        expect((await removeTeam(teamId)).status).toBe(200);
     });
 });
