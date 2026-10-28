@@ -107,7 +107,7 @@ async function setup(content: JSONContent[] = DOC) {
     }
     const rendered = await renderInDocument(createElement(Host));
     cleanups.push(rendered.unmount);
-    return { a, b, note, boxEditor, undoManager, session };
+    return { a, b, yA, note, boxEditor, undoManager, session };
 }
 
 // The box's span in tab A, laid out as 200 by 100 at (100, 100), so a press can land inside it or on its edge band.
@@ -324,6 +324,28 @@ test("a peer's edit to the box pulls into the open editor, and a peer's delete h
     });
     expect(session.current?.anchor).toBeNull();
     expect(a.view.dom.querySelector('.text-box')).toBeNull();
+});
+
+// A peer offline moves the box to the first paragraph and types into it, and its reconnect brings both as one update.
+// This tab typed nothing, so the open box takes the peer's text and puts nothing of its own back.
+test("a peer's move and edit of the open box, as one update after a reconnect, reach the open editor", async () => {
+    const { a, b, yA, boxEditor, session } = await setup([paragraph(text('One')), ...DOC]);
+    await act(async () => session.current?.open(5 + BOX, { focus: true, at: null, selection: null }));
+    const offline = new Y.Doc();
+    Y.applyUpdate(offline, Y.encodeStateAsUpdate(yA));
+    const peer = mount(offline, { undoManager: createDocUndoManager(offline), cardIds: () => new Set() });
+    const node = peer.state.doc.nodeAt(5 + BOX);
+    if (!node) throw new Error('no box');
+    peer.view.dispatch(peer.state.tr.delete(5 + BOX, 5 + BOX + node.nodeSize).insert(1, node));
+    peer.view.dispatch(peer.state.tr.insertText('Peer ', 3));
+    await act(async () => {
+        Y.applyUpdate(yA, Y.encodeStateAsUpdate(offline, Y.encodeStateVector(yA)), 'reconnect');
+        await Promise.resolve();
+    });
+    expect(session.current?.anchor?.pos).toBe(1);
+    expect(boxEditor.state.doc.textContent).toBe('Peer Inside');
+    expect(boxText(a)).toBe('Peer Inside');
+    expect(boxText(b)).toBe('Peer Inside');
 });
 
 test("a press on the box's comment mark opens no box, as the mark is a button of its own", async () => {

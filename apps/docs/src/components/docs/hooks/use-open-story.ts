@@ -4,6 +4,7 @@
 // editor draws in the list under the page and the box's in the box itself.
 
 import type { Editor } from '@tiptap/core';
+import type { Node as PMNode } from '@tiptap/pm/model';
 import { Fragment } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
@@ -13,7 +14,7 @@ import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { StoryNode } from '@workspace/lib/docs/eigendoc';
 import { isStoryNode, newStoryId, readStoryId } from '@workspace/lib/docs/eigendoc';
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import type { FoundStory, StoryAnchor } from '../extensions/story';
+import type { StoryAnchor } from '../extensions/story';
 import { findStory, STORY_EDIT, STORY_PULL, storyAnchor, storyDecorationsKey } from '../extensions/story';
 
 // How a story opens: with the caret where a press landed or at its end, or with a find bar's match selected and the
@@ -44,9 +45,15 @@ function followStory(body: Editor, anchor: StoryAnchor, transactions: readonly T
     return found;
 }
 
+// The open story's own edit, forwarded into the body: the body pulls nothing back from it.
+const STORY_FORWARD = 'storyForward';
+
 // The story's edit into the body, by diff rather than by step: TipTap replays a captured transaction without its meta,
 // and a diff that finds nothing to change forwards nothing twice.
-function forwardTo(body: Editor, story: Editor, { pos, node }: FoundStory): void {
+function forwardStory(body: Editor, story: Editor, anchor: StoryAnchor): void {
+    const found = followStory(body, anchor);
+    if (!found) return;
+    const { pos, node } = found;
     const next = node.copy(Fragment.fromJSON(body.schema, story.state.doc.content.toJSON()));
     const diff = storyDiff(node.content, next.content);
     if (!diff) return;
@@ -54,20 +61,28 @@ function forwardTo(body: Editor, story: Editor, { pos, node }: FoundStory): void
         body.state.tr
             .replace(pos + 1 + diff.start, pos + 1 + diff.endA, next.slice(diff.start, diff.endB))
             .setMeta(STORY_EDIT, true)
+            .setMeta(STORY_FORWARD, true)
             // The story's editor made its own links. The body's autolink reads the anchor's paragraph as text, where
             // the story's runs on from the words before it: "gamma." and a note's "Se" link as gamma.Se.
             .setMeta('preventAutolink', true),
     );
 }
 
-function forwardStory(body: Editor, story: Editor, anchor: StoryAnchor): void {
-    const found = followStory(body, anchor);
-    if (found) forwardTo(body, story, found);
-}
+// Each story editor's doc as it opened, or as the last pull that brought the body's text into it left it. Once its doc
+// differs, it holds keystrokes the body may lack. A pull that brings nothing, as a peer's caret makes, leaves it.
+const pulled = new WeakMap<Editor, PMNode>();
 
-// The body's version of the story into its editor, with the body's decorations inside it. A story found by its id after
-// its element went holds less than its editor: the typist's keystrokes of that round trip landed in the deleted
-// element. Its editor stays as it is and forwards them into the new node once the change that moved it ends.
+// y-tiptap marks a peer's change and an undo alike. This is the peer's.
+const isPeerChange = (tr: Transaction): boolean => {
+    const sync = tr.getMeta(ySyncPluginKey);
+    return !!sync && !sync.isUndoRedoOperation;
+};
+
+// The body's version of the story into its editor, with the body's decorations inside it. When a peer's change gave the
+// story a new element, the new node may lack the typist's keystrokes of that round trip: they landed in the deleted
+// element. So an editor that changed since its last pull keeps its text, and forwards it into the new node once the
+// change ends. An editor that didn't change takes the new node, with the peer's edits. This tab's own move and its undo
+// always pull, as the body holds every keystroke forwarded.
 function pullStory(
     body: Editor,
     story: Editor,
@@ -76,7 +91,7 @@ function pullStory(
 ): number | null {
     const found = followStory(body, anchor, transactions);
     if (!found) return null;
-    if (found.renewed) {
+    if (found.renewed && transactions.some(isPeerChange) && pulled.get(story) !== story.state.doc) {
         queueMicrotask(() => {
             if (!body.isDestroyed && !story.isDestroyed) forwardStory(body, story, anchor);
         });
@@ -96,6 +111,7 @@ function pullStory(
             .setMeta('preventAutolink', true)
             .setMeta(storyDecorationsKey, DecorationSet.create(tr.doc, decorations)),
     );
+    if (diff) pulled.set(story, story.state.doc);
     return found.pos;
 }
 
@@ -119,7 +135,10 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
                     body.state.tr.setNodeAttribute(pos, 'id', newStoryId()).setMeta('addToHistory', false),
                 );
             const anchor = storyAnchor(body, pos);
-            if (!anchor || pullStory(body, editors[anchor.type], anchor) === null) return;
+            if (!anchor) return;
+            const story = editors[anchor.type];
+            if (pullStory(body, story, anchor) === null) return;
+            pulled.set(story, story.state.doc);
             setOpening({ anchor, ...how });
         },
         [body, editors],
@@ -159,7 +178,11 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
         }: {
             transaction: Transaction;
             appendedTransactions: Transaction[];
-        }) => pull([transaction, ...appendedTransactions]);
+        }) => {
+            // The story's own keystroke is in its editor already, unless a plugin appended a change to it.
+            if (transaction.getMeta(STORY_FORWARD) && !appendedTransactions.some((tr) => tr.docChanged)) return;
+            pull([transaction, ...appendedTransactions]);
+        };
         pull([]);
         body.on('transaction', onBody);
         story.on('transaction', forward);
