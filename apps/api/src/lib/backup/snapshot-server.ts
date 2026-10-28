@@ -16,6 +16,7 @@ import { stageEigenDbCopy } from '../share/db';
 import { stageWaitlistDbCopy } from '../waitlist/waitlist';
 import type { ServerArchiveWriter } from './archive';
 import { captureUnlessGone, captureWrittenFile, countEntries } from './capture';
+import { listFileTree } from './file-tree';
 import {
     ARCHIVE_MANIFEST_FILE,
     archiveServerPath,
@@ -23,7 +24,6 @@ import {
     INSTALL_FOLDERS,
     SERVER_ARCHIVE_ENV_MEMBER,
 } from './paths';
-import { listFileTree } from './snapshot-home';
 
 type ServerDatabase = (typeof SERVER_DATABASES)[keyof typeof SERVER_DATABASES];
 

@@ -30,6 +30,7 @@ import { createServerArchiveWriter, packFolder } from './archive';
 import type { ServerHome } from './enumerate-homes';
 import { enumerateHomes } from './enumerate-homes';
 import { describeError } from './errors';
+import { treeBytes } from './file-tree';
 import { startBackupJob, waitForHomeSlot, whenHomeSlotFree } from './jobs';
 import {
     archiveServerPath,
@@ -47,7 +48,6 @@ import {
     wipeBackupStagingDir,
 } from './paths';
 import { pruneLocalArchives, writeServerSidecar } from './server-archives';
-import { treeBytes } from './snapshot-home';
 import { appendInstallFiles, assertEnvFileMounted, snapshotServer } from './snapshot-server';
 import { backupKey } from './upload';
 import { startUploadJob } from './upload-job';

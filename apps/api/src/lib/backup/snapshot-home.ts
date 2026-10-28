@@ -1,7 +1,7 @@
-// Takes the snapshot of one home that goes into a backup: its files, its databases in a consistent state, its
-// share rows and the auth rows of its owner. A light backup skips what can be rebuilt. It reports progress as it
-// goes and counts the bytes first, so the caller can check the room on disk. Home backups and server backups
-// both use it.
+// Takes the snapshot of one home that goes into a backup: its files, each database in one committed state, the
+// share rows and the auth rows of its owner. The level decides what it takes, and a Light backup leaves out every
+// file body. captureBytes says beforehand how much a capture stages at most, for the room check. Every backup of a
+// home captures it through snapshotHome, such as a per-home backup or a home inside a server backup.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -26,6 +26,7 @@ import { readAuthRows } from './auth-tables';
 import { captureFile, captureUnlessGone, captureWrittenFile, countEntries } from './capture';
 import { readHomeMounts } from './enumerate-homes';
 import { describeError } from './errors';
+import { listFileTree, treeBytes } from './file-tree';
 import {
     ARCHIVE_AUTH_FILE,
     ARCHIVE_AVATAR_DIR,
@@ -45,98 +46,8 @@ import {
     snapshotMountThumbs,
 } from './snapshot-mount';
 
-// `mounts/` is walked from its paths tables instead (snapshotMountData), and each mailbox's `tmp/` delivery spool,
-// beside its `cur/` and `new/`, holds half-written deliveries only. Matched on the path from the home root, never on
-// the folder name: a folder deeper in the home that happens to be called `mounts` is somebody's own.
-function isSkippedHomeDir(rel: string, level: BackupLevel): boolean {
-    if (rel === PATHS.DRIVE.ROOT) return true;
-    // A whole-server restore of a Light archive keeps what it leaves out in place.
-    if (level === 'light' && isLightSkipped(rel)) return true;
-    return path.basename(rel) === PATHS.MAIL.TMP && rel.startsWith(`${MAILDIR_ROOT}/`);
-}
-
-// Databases are captured with VACUUM INTO through the live handle, never as a file copy, and their
-// journals belong to the running server.
-const DB_FILE = /\.db(-wal|-shm)?$/;
-const JOURNAL_FILE = /\.db-(wal|shm)$/;
-
-// A folder as plain files, the databases found and every directory: an empty Maildir `new/` carries no file to imply
-// it, and without it a restored mailbox has nothing for MaildirStore.watch to watch, so mail stops syncing.
-type FileTree = { files: string[]; dirs: string[]; databases: string[] };
-
-// Synchronous to narrow the window in which the mail watcher's move from `new/` to `cur/` hides a message from a capture.
-export function listFileTree(root: string, skipDir: (rel: string) => boolean = () => false): FileTree {
-    const tree: FileTree = { files: [], dirs: [], databases: [] };
-    const walk = (relDir: string): void => {
-        for (const entry of fs.readdirSync(path.join(root, relDir), { withFileTypes: true })) {
-            const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
-            if (entry.isDirectory()) {
-                if (skipDir(rel)) continue;
-                tree.dirs.push(rel);
-                walk(rel);
-            } else if (entry.isFile()) {
-                if (!DB_FILE.test(entry.name)) tree.files.push(rel);
-                else if (entry.name.endsWith('.db')) tree.databases.push(rel);
-            }
-        }
-    };
-    walk('');
-    return tree;
-}
-
-const MESSAGE_DIRS: readonly string[] = [PATHS.MAIL.CUR, PATHS.MAIL.NEW];
-
-// A mail client's first look moves a Maildir message from new/ to cur/ and a flag change renames it in cur/, so one
-// gone mid-copy is looked for in its mailbox by its unique name, the part before `:2,`.
-function renamedMessage(homeDir: string, rel: string): string | null {
-    const box = path.dirname(rel);
-    if (!rel.startsWith(`${MAILDIR_ROOT}/`) || !MESSAGE_DIRS.includes(path.basename(box))) return null;
-    const unique = path.basename(rel).split(':')[0];
-    for (const sub of MESSAGE_DIRS) {
-        const dir = path.join(path.dirname(box), sub);
-        let names: string[];
-        try {
-            names = fs.readdirSync(path.join(homeDir, dir));
-        } catch (error) {
-            // The mail program can remove the whole mailbox meanwhile.
-            if (isEnoent(error)) continue;
-            throw error;
-        }
-        const name = names.find((found) => found.split(':')[0] === unique);
-        if (name) return `${dir}/${name}`;
-    }
-    return null;
-}
-
-// What a capture of the tree stages, at most: its files and databases as they sit on disk. The room check before a
-// server backup sizes every home with it while the server runs, so a file or folder gone since its listing counts
-// nothing. A folder's files are statted together, its subfolders walked one at a time to keep few handles open.
-export async function treeBytes(root: string, skipDir: (rel: string) => boolean = () => false): Promise<number> {
-    const walk = async (relDir: string): Promise<number> => {
-        const entries = await fsp
-            .readdir(path.join(root, relDir), { withFileTypes: true })
-            .catch((error) => (isEnoent(error) ? [] : Promise.reject(error)));
-        const rel = (name: string) => (relDir ? `${relDir}/${name}` : name);
-        const files = entries.filter((entry) => entry.isFile() && !JOURNAL_FILE.test(entry.name));
-        const sizes = await Promise.all(
-            files.map((entry) =>
-                fsp.stat(path.join(root, rel(entry.name))).then(
-                    (stat) => stat.size,
-                    (error) => (isEnoent(error) ? 0 : Promise.reject(error)),
-                ),
-            ),
-        );
-        let bytes = sizes.reduce((sum, size) => sum + size, 0);
-        for (const entry of entries) {
-            if (entry.isDirectory() && !skipDir(rel(entry.name))) bytes += await walk(rel(entry.name));
-        }
-        return bytes;
-    };
-    return walk('');
-}
-
-// What a capture of the home at `level` stages at most, read off its folder like pullHomeSize: the
-// server backup's room check sizes every home before it starts. Full is every local byte. Light
+// What a capture of the home at `level` stages at most, read off its folder without opening the home. The
+// server backup's room check sizes every home with it before it starts. Full is every local byte. Light
 // walks no Maildir and of each mount only its metadata.db. Full + S3 adds each s3 mount's objects.
 export async function captureBytes(homeDir: string, level: BackupLevel): Promise<number> {
     if (level === 'light') return treeBytes(homeDir, isLightSkipped);
@@ -164,13 +75,15 @@ export async function snapshotHome(
     const entries: BackupEntry[] = [];
 
     const stagedPath = (relPath: string) => path.join(folder, ARCHIVE_HOME_DIR, relPath);
+    const metadataPathOf = (mountId: string) => `${PATHS.DRIVE.ROOT}/${mountId}/${PATHS.DRIVE.METADATA_DB}`;
     const stageDatabase = async (config: DatabaseConfig<SchemaType>, relPath: string): Promise<void> => {
         const managed = await home.getLocalDatabase(config, relPath);
         fs.mkdirSync(path.dirname(stagedPath(relPath)), { recursive: true });
         managed.stageCopy(stagedPath(relPath));
     };
-    // Counted as they are recorded: a user's upload called `notes.db` is a file, as verify sees it too. Hashed once
-    // nothing changes it: a mount's walk drops from its metadata.db the rows it found deleted for good.
+    // A database is counted when it is recorded, so a user's upload called `notes.db` counts as a file, as verify
+    // sees it too. It is hashed only once nothing changes it any more: a mount's walk deletes from its metadata.db
+    // the rows it found deleted for good.
     let databases = 0;
     const recordDatabase = async (relPath: string): Promise<void> => {
         entries.push(await captureWrittenFile(stagedPath(relPath), archiveHomePath(relPath)));
@@ -200,7 +113,7 @@ export async function snapshotHome(
         const stagedOnly = level === 'full' && mount?.isRemote === true;
         const metadataOnly = !mount || stagedOnly;
         if (stagedOnly) await flushOpenDocumentDbs(mount);
-        const relMetadata = `${PATHS.DRIVE.ROOT}/${config.id}/${PATHS.DRIVE.METADATA_DB}`;
+        const relMetadata = metadataPathOf(config.id);
         await stageDatabase(MOUNT_DB_CONFIG, relMetadata);
         // Before the walk, which reads its rows from the copy, so nothing below meets a row it cannot place. Kept
         // apart until the mount is whole: a disabled mount that fails later is skipped, warnings and all.
@@ -247,7 +160,7 @@ export async function snapshotHome(
     }
 
     for (const [index, [id, settings]] of unserved.entries()) {
-        const relMetadata = `${PATHS.DRIVE.ROOT}/${id}/${PATHS.DRIVE.METADATA_DB}`;
+        const relMetadata = metadataPathOf(id);
         // A mount with no folder has nothing to carry: one nobody ever mounted, or one being added, whose settings
         // are written before the drive creates its folder.
         if (!fs.existsSync(path.join(home.homeDir, relMetadata))) continue;
@@ -272,12 +185,12 @@ export async function snapshotHome(
             if (settings.enabled) throw new Error(`mount ${id} cannot be opened: ${describeError(error)}`);
             entries.length = entriesBefore;
             databases = databasesBefore;
-            await fsp.rm(path.join(folder, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT, id), { recursive: true, force: true });
+            await fsp.rm(stagedPath(`${PATHS.DRIVE.ROOT}/${id}`), { recursive: true, force: true });
             const skipped = describeError(error);
             console.warn(`[backup] ${ownerId}: disabled mount ${id} was skipped — ${skipped}`);
             mountSummaries.push({ id, storageType: config.storageType, files: 0, bytes: 0, skipped });
         } finally {
-            // Drive.removeMount's teardown; metadata.db stays open, as it is the Home's cached handle.
+            // Closes what the passive Mount opened. Its metadata.db stays open, because it is the Home's cached handle.
             await mount?.closeAllDatabases();
         }
         onProgress?.('mounts', mounts.length + index + 1, total);
@@ -288,14 +201,14 @@ export async function snapshotHome(
     // A home database missing from HOME_DATABASES would be dropped from every archive in silence.
     const unlisted = tree.databases.find((rel) => !HOME_DATABASE_PATHS.has(rel));
     if (unlisted) throw new Error(`snapshotHome: unlisted home database ${unlisted} — add it to HOME_DATABASES`);
-    for (const rel of tree.dirs) fs.mkdirSync(path.join(folder, ARCHIVE_HOME_DIR, rel), { recursive: true });
+    for (const rel of tree.dirs) fs.mkdirSync(stagedPath(rel), { recursive: true });
     const taken = new Set(tree.files);
     // The copy keeps its source's mtime, which the tar carries and the extract puts back: Dovecot dates a Maildir
     // message by it. Read before the copy, which a file gone by then fails anyway.
     const capture = async (rel: string) => {
         const source = Bun.file(path.join(home.homeDir, rel));
         const modified = new Date(source.lastModified);
-        const destPath = path.join(folder, ARCHIVE_HOME_DIR, rel);
+        const destPath = stagedPath(rel);
         const captured = await captureUnlessGone(source, destPath, archiveHomePath(rel));
         if (captured) await fsp.utimes(destPath, modified, modified);
         return captured;
@@ -313,25 +226,15 @@ export async function snapshotHome(
 
     if (owner.type === 'user') {
         const encoder = new TextEncoder();
-        entries.push(
-            await captureFile(
-                encoder.encode(JSON.stringify(readAuthRows(ownerId), null, 2)),
-                path.join(folder, ARCHIVE_AUTH_FILE),
-                ARCHIVE_AUTH_FILE,
-            ),
-        );
+        const captureJson = (value: unknown, rel: string) =>
+            captureFile(encoder.encode(JSON.stringify(value, null, 2)), path.join(folder, rel), rel);
+        entries.push(await captureJson(readAuthRows(ownerId), ARCHIVE_AUTH_FILE));
         const shares = (await getEigenDb())
             .select()
             .from(shareRegistry)
             .where(eq(shareRegistry.fromUserId, ownerId))
             .all();
-        entries.push(
-            await captureFile(
-                encoder.encode(JSON.stringify(shares, null, 2)),
-                path.join(folder, ARCHIVE_SHARES_FILE),
-                ARCHIVE_SHARES_FILE,
-            ),
-        );
+        entries.push(await captureJson(shares, ARCHIVE_SHARES_FILE));
 
         const avatarName = `${ownerId}.webp`;
         const avatar = Bun.file(path.join(getAvatarsDir(), avatarName));
@@ -365,4 +268,38 @@ export async function snapshotHome(
     await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest, null, 2));
     onProgress?.('done', 1, 1);
     return manifest;
+}
+
+// The folders the walk of the home leaves out. `mounts/` is walked from its paths tables instead, by
+// snapshotMountData. A mailbox's `tmp/` delivery spool holds only half-written deliveries. Both are matched on the
+// path from the home root, never on the folder name, because a deeper folder called `mounts` is somebody's own.
+function isSkippedHomeDir(rel: string, level: BackupLevel): boolean {
+    if (rel === PATHS.DRIVE.ROOT) return true;
+    // A whole-server restore of a Light archive keeps what it leaves out in place.
+    if (level === 'light' && isLightSkipped(rel)) return true;
+    return path.basename(rel) === PATHS.MAIL.TMP && rel.startsWith(`${MAILDIR_ROOT}/`);
+}
+
+const MESSAGE_DIRS: readonly string[] = [PATHS.MAIL.CUR, PATHS.MAIL.NEW];
+
+// A mail client's first look moves a Maildir message from new/ to cur/ and a flag change renames it in cur/, so one
+// gone mid-copy is looked for in its mailbox by its unique name, the part before `:2,`.
+function renamedMessage(homeDir: string, rel: string): string | null {
+    const box = path.dirname(rel);
+    if (!rel.startsWith(`${MAILDIR_ROOT}/`) || !MESSAGE_DIRS.includes(path.basename(box))) return null;
+    const unique = path.basename(rel).split(':')[0];
+    for (const sub of MESSAGE_DIRS) {
+        const dir = path.join(path.dirname(box), sub);
+        let names: string[];
+        try {
+            names = fs.readdirSync(path.join(homeDir, dir));
+        } catch (error) {
+            // The mail program can remove the whole mailbox meanwhile.
+            if (isEnoent(error)) continue;
+            throw error;
+        }
+        const name = names.find((found) => found.split(':')[0] === unique);
+        if (name) return `${dir}/${name}`;
+    }
+    return null;
 }
