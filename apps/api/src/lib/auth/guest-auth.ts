@@ -4,9 +4,8 @@
 // signInWithScopedPassword, which the demo entry shares.
 
 import { generateId } from '@better-auth/core/utils/id';
-import { hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
-import { account, user as userTable, verification } from '../../../auth-schema';
+import { user as userTable, verification } from '../../../auth-schema';
 import { getDomain, getOrgName, isInternalAddress } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
@@ -16,48 +15,10 @@ import { getEntriesForTarget, reconcileSharesForNewUser } from '../share';
 import { GUEST_ROLE, isGuest } from '../user/guest';
 import { getUserByEmail } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
+import { setCredentialPassword } from './credential-password';
 import { checkOtpRateLimit, countOtpGuess, refundOtpRequests, resetOtpGuesses } from './otp-rate-limit';
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
-
-function generateOtp(): string {
-    const num = new DataView(crypto.getRandomValues(new Uint8Array(4)).buffer).getUint32(0);
-    return String(num % 1_000_000).padStart(6, '0');
-}
-
-// Writes a password derived from the scope and the email onto the account, then signs in with it and returns
-// the response that carries the session cookie. The password is written on every call, so one that was changed
-// heals, and one visitor cannot lock out the next.
-export async function signInWithScopedPassword(
-    scope: 'guest' | 'demo',
-    userId: string,
-    email: string,
-): Promise<Response> {
-    const db = getAuthDrizzleDb();
-    // Nobody sees it: it only lets auth.api.signInEmail sign the cookie. Scoped so the two flows never collide.
-    const password = new Bun.CryptoHasher('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
-    const hashedPassword = await hashPassword(password);
-    const existingAccount = db.select().from(account).where(eq(account.userId, userId)).get();
-    if (existingAccount) {
-        db.update(account)
-            .set({ password: hashedPassword, updatedAt: new Date() })
-            .where(eq(account.id, existingAccount.id))
-            .run();
-    } else {
-        db.insert(account)
-            .values({
-                id: generateId(),
-                accountId: userId,
-                providerId: 'credential',
-                userId,
-                password: hashedPassword,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            })
-            .run();
-    }
-    return auth.api.signInEmail({ body: { email, password }, asResponse: true });
-}
 
 export async function requestOtp(email: string, ip: string): Promise<void> {
     checkOtpRateLimit(email, ip);
@@ -165,4 +126,24 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
     await reconcileSharesForNewUser(guestUser);
 
     return signInWithScopedPassword('guest', guestUser.id, email);
+}
+
+// Writes a password derived from the scope and the email onto the credential account, then signs in with it and
+// returns the response that carries the session cookie. The password is written on every call, so one that was
+// changed heals, and one visitor cannot lock out the next.
+export async function signInWithScopedPassword(
+    scope: 'guest' | 'demo',
+    userId: string,
+    email: string,
+): Promise<Response> {
+    // Nobody sees it: it only lets auth.api.signInEmail sign the cookie. Scoped so the two flows never collide.
+    const password = new Bun.CryptoHasher('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
+    await setCredentialPassword(userId, password);
+    return auth.api.signInEmail({ body: { email, password }, asResponse: true });
+}
+
+// Six digits, from 32 random bits.
+function generateOtp(): string {
+    const num = new DataView(crypto.getRandomValues(new Uint8Array(4)).buffer).getUint32(0);
+    return String(num % 1_000_000).padStart(6, '0');
 }

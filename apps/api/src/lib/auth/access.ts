@@ -7,39 +7,7 @@ import { isMailAppEnabled } from '../config/env';
 import { ApiError } from '../core/errors';
 import type { User } from '../user';
 import { getMemberships, getOrgRole, isGuest } from '../user';
-import type { Route, TrustedNetworks } from './trusted-networks';
-import { matchesCidr, normalizeIp, readRouteTable, scopeTrustedNetworks } from './trusted-networks';
-
-const DEFAULT_TRUSTED = '127.0.0.0/8,::1';
-
-// Read on first use rather than at import, so a module that only needs a guard reads no route table.
-let routes: Route[] | null = null;
-let trust: (TrustedNetworks & { source: string }) | null = null;
-
-function trustedNetworks(): TrustedNetworks {
-    const source = process.env['TRUSTED_NETWORKS'] || DEFAULT_TRUSTED;
-    if (trust?.source !== source) {
-        const entries = source.split(',').map((entry) => entry.trim());
-        routes ??= readRouteTable();
-        trust = { source, ...scopeTrustedNetworks(entries, routes) };
-        for (const network of trust.untrusted) {
-            console.warn(
-                `TRUSTED_NETWORKS: the default route does not leave through ${network}, so its gateway is unknown; not trusting it`,
-            );
-        }
-    }
-    return trust;
-}
-
-export function isIpTrusted(ip: string): boolean {
-    const { networks, gateways } = trustedNetworks();
-    return !gateways.includes(normalizeIp(ip)) && networks.some((entry) => matchesCidr(ip, entry));
-}
-
-export function _setRouteTableForTests(table: Route[]): void {
-    routes = table;
-    trust = null;
-}
+import { isIpTrusted } from './trusted-networks';
 
 type RequestServer = { requestIP(req: Request): { address: string } | null } | null;
 

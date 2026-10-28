@@ -17,7 +17,8 @@ import type {
 } from '@workspace/lib/types/settings';
 import { eq, inArray } from 'drizzle-orm';
 import { user } from '../../../auth-schema';
-import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../../lib/auth/auth';
+import { getAuthDrizzleDb } from '../../lib/auth/auth';
+import { ensureAuthSchemaColumns } from '../../lib/auth/auth-schema-columns';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';

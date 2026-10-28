@@ -20,7 +20,7 @@ The home is on disk rather than in memory so it reuses Drive and NotificationCen
 |-------------------|------------------------------------------------------------|
 | No personal drive | GuestHome's Drive has no mounts                            |
 | No mail, contacts or calendar | The services are absent, and `requireNonGuest()` guards every mail, contacts and calendar route |
-| No org or team membership | Guest creation skips the auth hooks, and `authEnsureDefaultOrgMembership` skips guests on sign-in |
+| No org or team membership | Guest creation skips the auth hooks, and `ensureDefaultOrgMembership` skips guests on sign-in |
 | No admin          | Admin checks read the org role, and a guest has none       |
 | No sharing, access requests or mail to collaborators | `requireNonGuest()` on the ACL route, the chat `/invite` route, the drive `access-check`, `request-access` and `email-collaborators`. The File menu and Drive's item menu hide **Email collaborators** from a guest |
 | Read/write per ACL| SharedDrive enforces the entries the owner set             |

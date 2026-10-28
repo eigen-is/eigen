@@ -1,10 +1,11 @@
-// Sets a user's password without the old one, such as for an admin's reset. The
-// reset signs the user out everywhere and revokes their app passwords, because those open mail and DAV without the
+// Sets a user's password without the old one. resetUserPassword is an admin's or the control socket's reset: it
+// signs the user out everywhere and revokes their app passwords, because those open mail and DAV without the
 // password. A guest has no password to reset.
 
 import { eq } from 'drizzle-orm';
 import { apikey } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
+import { setCredentialPassword } from '../auth/credential-password';
 import { ApiError } from '../core/errors';
 import { isGuest } from './guest';
 import type { User } from './user';
@@ -27,19 +28,8 @@ export async function resetUserPassword(email: string, password: string): Promis
     if (password.length > maxPasswordLength) {
         throw new ApiError(400, `The password can have at most ${maxPasswordLength} characters.`);
     }
-    const hash = await context.password.hash(password);
-    if (await context.internalAdapter.findCredentialAccount(user.id)) {
-        await context.internalAdapter.updatePassword(user.id, hash);
-    } else {
-        await context.internalAdapter.createAccount({
-            userId: user.id,
-            providerId: 'credential',
-            accountId: user.id,
-            password: hash,
-        });
-    }
+    await setCredentialPassword(user.id, password);
     await context.internalAdapter.deleteUserSessions(user.id);
-    // App passwords open IMAP, CalDAV and WebDAV without the password, so a reset revokes them too.
     getAuthDrizzleDb().delete(apikey).where(eq(apikey.referenceId, user.id)).run();
     return user;
 }

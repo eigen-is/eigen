@@ -1,5 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { app, getTestContext } from '../setup';
+import { APP_PASSWORD_LENGTH } from '../../lib/auth/auth';
+import type { TestUser } from '../setup';
+import { app, createTestGuest, createTestUser, getTestContext } from '../setup';
 
 describe('Protocol Auth', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -29,6 +31,141 @@ describe('Protocol Auth', () => {
         const user = await verifyProtocolAuth(ctx.alice.user.email, 'testpassword123');
         expect(user.id).toBe(ctx.alice.user.id);
         expect(user.email).toBe(ctx.alice.user.email);
+    });
+
+    describe('the account password', () => {
+        async function sessionCount(userId: string): Promise<number> {
+            const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
+            const { session } = await import('../../../auth-schema');
+            const { eq } = await import('drizzle-orm');
+            return getAuthDrizzleDb().select().from(session).where(eq(session.userId, userId)).all().length;
+        }
+
+        test('is checked without creating a session', async () => {
+            const before = await sessionCount(ctx.alice.user.id);
+            for (let i = 0; i < 5; i++) {
+                await verifyProtocolAuth(ctx.alice.user.email, 'testpassword123');
+            }
+            expect(await sessionCount(ctx.alice.user.id)).toBe(before);
+        });
+
+        test('leaves the last sign-in alone', async () => {
+            const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
+            const { user } = await import('../../../auth-schema');
+            const { eq } = await import('drizzle-orm');
+            const aliceRow = eq(user.id, ctx.alice.user.id);
+            const lastSignIn = new Date('2026-01-05T09:00:00Z');
+            getAuthDrizzleDb().update(user).set({ lastLoginAt: lastSignIn }).where(aliceRow).run();
+            await verifyProtocolAuth(ctx.alice.user.email, 'testpassword123');
+            const row = getAuthDrizzleDb().select({ lastLoginAt: user.lastLoginAt }).from(user).where(aliceRow).get();
+            expect(row?.lastLoginAt).toEqual(lastSignIn);
+        });
+
+        test('a wrong one is refused and counts toward the limit', async () => {
+            for (let i = 0; i < 10; i++) {
+                await expect(verifyProtocolAuth(ctx.alice.user.email, 'wrongpassword')).rejects.toThrow('Unauthorized');
+            }
+            await expect(verifyProtocolAuth(ctx.alice.user.email, 'testpassword123')).rejects.toThrow(
+                'Too many failed',
+            );
+        });
+    });
+
+    // An unknown address, a guest and a 2FA account's account password all answer as a wrong password does, at the
+    // cost of one password hash, so neither the answer nor its time tells them apart.
+    describe('every refusal looks the same', () => {
+        let guest: TestUser;
+        let twoFactorEmail: string;
+        let bannedEmail: string;
+
+        beforeAll(async () => {
+            guest = await createTestGuest('Protocol Guest');
+            const member = await createTestUser('protocol-2fa@test.eigen.is', 'testpassword123', 'Protocol 2FA');
+            twoFactorEmail = member.email;
+            const banned = await createTestUser('protocol-banned@test.eigen.is', 'testpassword123', 'Protocol Banned');
+            bannedEmail = banned.email;
+            const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
+            const { user } = await import('../../../auth-schema');
+            const { eq } = await import('drizzle-orm');
+            getAuthDrizzleDb().update(user).set({ twoFactorEnabled: true }).where(eq(user.id, member.id)).run();
+            getAuthDrizzleDb().update(user).set({ banned: true }).where(eq(user.id, banned.id)).run();
+        });
+
+        async function passwordWork(run: () => Promise<unknown>): Promise<number> {
+            const { password } = await auth.$context;
+            const hash = spyOn(password, 'hash');
+            const verify = spyOn(password, 'verify');
+            try {
+                await run().catch(() => {});
+                return hash.mock.calls.length + verify.mock.calls.length;
+            } finally {
+                hash.mockRestore();
+                verify.mockRestore();
+            }
+        }
+
+        const refusals: [string, () => [string, string]][] = [
+            ['an unknown address', () => ['nobody-protocol@test.eigen.is', 'testpassword123']],
+            ['a guest address', () => [guest.email, 'testpassword123']],
+            ['a 2FA account on its account password', () => [twoFactorEmail, 'testpassword123']],
+            ['a banned account on its account password', () => [bannedEmail, 'testpassword123']],
+            ['a wrong password', () => [ctx.alice.user.email, 'wrongpassword']],
+        ];
+
+        for (const [name, credentials] of refusals) {
+            test(`${name} answers 401 and spends one password hash`, async () => {
+                const [email, password] = credentials();
+                const res = await app.handle(
+                    new Request('http://localhost/dav/', {
+                        method: 'PROPFIND',
+                        headers: { Authorization: `Basic ${btoa(`${email}:${password}`)}`, Depth: '0' },
+                    }),
+                );
+                expect(res.status).toBe(401);
+                expect(await passwordWork(() => verifyProtocolAuth(email, password))).toBe(1);
+            });
+
+            test(`${name} counts toward the failure limit`, async () => {
+                const [email, password] = credentials();
+                for (let i = 0; i < 10; i++) {
+                    await expect(verifyProtocolAuth(email, password)).rejects.toThrow('Unauthorized');
+                }
+                await expect(verifyProtocolAuth(email, password)).rejects.toThrow('Too many failed');
+            });
+        }
+
+        test("a banned account's app password answers 401 and counts toward the failure limit", async () => {
+            const member = await createTestUser('protocol-banned-key@test.eigen.is', 'testpassword123', 'Banned Key');
+            const created = await auth.api.createApiKey({
+                body: { name: 'banned-app-password' },
+                headers: { cookie: `better-auth.session_token=${member.sessionToken}` },
+            });
+            expect((await verifyProtocolAuth(member.email, created.key)).id).toBe(member.id);
+            const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
+            const { user } = await import('../../../auth-schema');
+            const { eq } = await import('drizzle-orm');
+            getAuthDrizzleDb().update(user).set({ banned: true }).where(eq(user.id, member.id)).run();
+            const res = await app.handle(
+                new Request('http://localhost/dav/', {
+                    method: 'PROPFIND',
+                    headers: { Authorization: `Basic ${btoa(`${member.email}:${created.key}`)}`, Depth: '0' },
+                }),
+            );
+            expect(res.status).toBe(401);
+            for (let i = 0; i < 9; i++) {
+                await expect(verifyProtocolAuth(member.email, created.key)).rejects.toThrow('Unauthorized');
+            }
+            await expect(verifyProtocolAuth(member.email, created.key)).rejects.toThrow('Too many failed');
+        });
+
+        test("a guest's own app password is refused as well", async () => {
+            const created = await auth.api.createApiKey({
+                body: { name: 'guest-app-password' },
+                headers: { cookie: `better-auth.session_token=${guest.sessionToken}` },
+            });
+            expect(created.key).toHaveLength(APP_PASSWORD_LENGTH);
+            await expect(verifyProtocolAuth(guest.email, created.key)).rejects.toThrow('Unauthorized');
+        });
     });
 
     // Better Auth logs every missed key lookup at ERROR, so an account password must never reach it.
@@ -121,6 +258,49 @@ describe('Protocol Auth', () => {
             }),
         );
         expect(res.status).toBe(401);
+    });
+
+    // A Basic header carries the credentials as UTF-8 bytes, as clients send them, and a JSON body as UTF-8 text.
+    describe('a password with accents', () => {
+        const email = 'protocol-utf8@test.eigen.is';
+        const password = 'wachtwoord-é-ü';
+
+        beforeAll(async () => {
+            await createTestUser(email, password, 'Protocol UTF-8');
+        });
+
+        test('signs in over DAV', async () => {
+            const credentials = Buffer.from(`${email}:${password}`, 'utf8').toString('base64');
+            const res = await app.handle(
+                new Request('http://localhost/dav/', {
+                    method: 'PROPFIND',
+                    headers: { Authorization: `Basic ${credentials}`, Depth: '0' },
+                }),
+            );
+            expect(res.status).toBe(207);
+        });
+
+        test('signs in over DAV when the client sends Latin-1 bytes', async () => {
+            const credentials = Buffer.from(`${email}:${password}`, 'latin1').toString('base64');
+            const res = await app.handle(
+                new Request('http://localhost/dav/', {
+                    method: 'PROPFIND',
+                    headers: { Authorization: `Basic ${credentials}`, Depth: '0' },
+                }),
+            );
+            expect(res.status).toBe(207);
+        });
+
+        test('signs in through the mail server check', async () => {
+            const res = await app.handle(
+                new Request('http://localhost/internal/auth/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                }),
+            );
+            expect(res.status).toBe(200);
+        });
     });
 
     // -- 2FA hard-gate: primary password must never bypass 2FA over protocol auth --

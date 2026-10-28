@@ -1,3 +1,7 @@
+// The storage each user's home takes, for the admin's Users page. A home is sized from its folder and databases
+// through pullHomeSize, without booting it. That is still disk work, so a few homes are sized at once and the
+// result is cached for a few minutes.
+
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import { Semaphore } from '../../utils/semaphore';
 import { pullHomeSize } from '../home/home-relay';
@@ -8,11 +12,9 @@ const CONCURRENCY = 4;
 let cache: { at: number; ids: string; data: Record<string, HomeSizeResponse> } | null = null;
 let inFlight: { ids: string; promise: Promise<Record<string, HomeSizeResponse>> } | null = null;
 
-// Sizing a user reads their home's folder and databases, never booting the Home — cheap, but still
-// disk work, so it stays capped and cached; a single broken home is skipped, not a 500 for the
-// page. The cache is keyed by the exact id set it was computed for — a call for a different set
-// bypasses the TTL and recomputes, so a shrunk/grown user list never serves the wrong rows.
-// Concurrent calls for the same set still share one in-flight computation.
+// A home that fails to size is left out, so one broken home does not fail the page. The cache holds one exact set
+// of users: a call for another set computes again, so a list that grew or shrank never gets the wrong rows. Calls
+// for the same set at the same time share one computation.
 export async function getAllUsersUsage(userIds: string[]): Promise<Record<string, HomeSizeResponse>> {
     const ids = [...userIds].sort().join(',');
     if (cache && cache.ids === ids && Date.now() - cache.at < CACHE_TTL_MS) return cache.data;

@@ -5,27 +5,17 @@
 
 import { ApiError } from '../core/errors';
 
-// Not a WindowLimiter: a refund takes one email's hits out of a shared IP bucket, so each hit carries its email.
-
 const WINDOW_MS = 60 * 60 * 1000;
 export const MAX_OTP_REQUESTS_PER_EMAIL = 10;
 export const MAX_OTP_REQUESTS_PER_IP = 100;
 export const MAX_OTP_GUESSES = 10;
 
+// Not a WindowLimiter: a refund takes one email's hits out of a shared IP bucket, so each hit carries its email.
 type Hit = { at: number; email: string };
 
 const emailHits = new Map<string, Hit[]>();
 const ipHits = new Map<string, Hit[]>();
 const guesses = new Map<string, { count: number; expiresAt: number }>();
-
-function getPruned(buckets: Map<string, Hit[]>, key: string, now: number): Hit[] {
-    return (buckets.get(key) ?? []).filter((hit) => now - hit.at < WINDOW_MS);
-}
-
-function persist(buckets: Map<string, Hit[]>, key: string, fresh: Hit[]): void {
-    if (fresh.length === 0) buckets.delete(key);
-    else buckets.set(key, fresh);
-}
 
 export function checkOtpRateLimit(email: string, ip: string): void {
     const now = Date.now();
@@ -84,4 +74,13 @@ export function _resetOtpRateLimitForTests(): void {
     emailHits.clear();
     ipHits.clear();
     guesses.clear();
+}
+
+function getPruned(buckets: Map<string, Hit[]>, key: string, now: number): Hit[] {
+    return (buckets.get(key) ?? []).filter((hit) => now - hit.at < WINDOW_MS);
+}
+
+function persist(buckets: Map<string, Hit[]>, key: string, fresh: Hit[]): void {
+    if (fresh.length === 0) buckets.delete(key);
+    else buckets.set(key, fresh);
 }

@@ -1,7 +1,7 @@
 // The better-auth instance: password sign-in and sessions, two-factor codes, app passwords, admin actions and the
 // organization with its teams, on the server-wide users database. Its hooks keep Eigen in step, for example joining
 // a new account to the default org or tearing down a deleted user's data. The file also holds the helpers that reach
-// that database directly, such as adding its extra columns and copying it for a backup.
+// that database directly, such as Eigen's own Drizzle handle on it and the copy a backup takes.
 
 import { Database } from 'bun:sqlite';
 import { apiKey } from '@better-auth/api-key';
@@ -11,28 +11,17 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
+import { defaultAc, userAc } from 'better-auth/plugins/admin/access';
 import { and, eq, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
-import {
-    account as accountScheme,
-    apikey as apikeyScheme,
-    invitation as invitationScheme,
-    member as memberScheme,
-    organization as organizationScheme,
-    session as sessionScheme,
-    teamMember as teamMemberScheme,
-    team as teamScheme,
-    twoFactor as twoFactorScheme,
-    user as userScheme,
-    verification as verificationScheme,
-} from '../../../auth-schema';
-import { isTest } from '../config/env';
+import * as authSchema from '../../../auth-schema';
+import { isProduction, isTest } from '../config/env';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import {
     getAuthSecret,
     getDomain,
     getOrgName,
-    getPublicOrigin,
+    getServedOrigin,
     getServerConfig,
     isRoleAddress,
 } from '../config/server-config';
@@ -41,98 +30,33 @@ import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
 import { getTeamExists } from '../team';
-import type { User } from '../user';
-import { getOrgRole, isGuest } from '../user';
+import { getOrgRole, getUserById, isGuest } from '../user';
+import { ensureAuthSchemaColumns } from './auth-schema-columns';
 
-const publicOrigin = getPublicOrigin();
-// The dev apps each run on their own port, from 3000 to 3014.
-export const trustedOrigins = [
-    'http://localhost',
-    'https://localhost',
-    ...Array.from({ length: 15 }, (_, index) => `http://localhost:${3000 + index}`),
-    ...(publicOrigin ? [publicOrigin] : []),
-];
-
-const authSchema = {
-    user: userScheme,
-    session: sessionScheme,
-    account: accountScheme,
-    verification: verificationScheme,
-    twoFactor: twoFactorScheme,
-    organization: organizationScheme,
-    member: memberScheme,
-    invitation: invitationScheme,
-    team: teamScheme,
-    teamMember: teamMemberScheme,
-    apikey: apikeyScheme,
-};
-
-// users3.db has no versioned migrations: setup creates its tables once. So the columns added since are added
-// here at boot. A table that does not exist yet is skipped, because setup's CREATE TABLE has every column.
-export function ensureAuthSchemaColumns(db: Database): void {
-    const missing = (table: string, column: string): boolean => {
-        const cols = db.query<{ name: string }, []>(`PRAGMA table_info("${table}")`).all();
-        return cols.length > 0 && !cols.some((c) => c.name === column);
-    };
-    if (missing('user', 'last_login_at')) {
-        db.run(`ALTER TABLE "user" ADD COLUMN "last_login_at" integer`);
-    }
-    // better-auth 1.7 keeps a member count per team, so it is seeded from the rows that exist.
-    if (missing('team', 'member_count')) {
-        db.run(`ALTER TABLE "team" ADD COLUMN "member_count" integer NOT NULL DEFAULT 0`);
-        db.run(
-            `UPDATE "team" SET "member_count" = (SELECT count(*) FROM "team_member" WHERE "team_member"."team_id" = "team"."id")`,
-        );
-    }
-    // SQLite cannot add a UNIQUE column, so a unique index stands in. Old rows stay NULL, and better-auth then
-    // falls back to the team and user pair.
-    if (missing('team_member', 'membership_key')) {
-        db.run(`ALTER TABLE "team_member" ADD COLUMN "membership_key" text`);
-        db.run(
-            `CREATE UNIQUE INDEX IF NOT EXISTS "team_member_membership_key_unique" ON "team_member" ("membership_key")`,
-        );
-    }
-    // Both were in the 1.5 model but never in the DDL, and 1.7's startup schema check refuses the gap.
-    if (missing('invitation', 'team_id')) {
-        db.run(`ALTER TABLE "invitation" ADD COLUMN "team_id" text`);
-        db.run(`ALTER TABLE "invitation" ADD COLUMN "created_at" integer`);
-    }
-    if (missing('two_factor', 'verified')) {
-        db.run(`ALTER TABLE "two_factor" ADD COLUMN "verified" integer`);
-        db.run(`ALTER TABLE "two_factor" ADD COLUMN "failed_verification_count" integer`);
-        db.run(`ALTER TABLE "two_factor" ADD COLUMN "locked_until" integer`);
-    }
-}
-
+// The columns better-auth needs are added before it first reads the database.
 {
     const db = new Database(getServerDataPath(SERVER_DATABASES.users));
     ensureAuthSchemaColumns(db);
     db.close();
 }
 
-// Nobody may claim an RFC 2142 role address, such as postmaster, on this server's mail domain. Guests on
-// external addresses are not affected.
-function rejectRoleAddress(email: string | undefined): void {
-    if (email && isRoleAddress(email)) {
-        throw new APIError('BAD_REQUEST', { message: 'This address is reserved' });
-    }
-}
-
-// better-auth answers any error but its own APIError with a 500. A busy home's 409 is rethrown as its CONFLICT.
-async function busyHomeAsConflict(run: () => unknown): Promise<void> {
-    try {
-        await run();
-    } catch (error) {
-        if (error instanceof ApiError && error.status === 409) {
-            throw new APIError('CONFLICT', { message: error.message });
-        }
-        throw error;
-    }
-}
-
 // Every app password is this many ASCII letters, from the plugin's generator with no prefix. So protocol auth can
 // tell one from an account password without a key lookup.
 export const APP_PASSWORD_LENGTH = 64;
+
+// A dev checkout serves each app on its own port, from 3000 to 3014.
+const DEV_ORIGINS = [
+    'http://localhost',
+    'https://localhost',
+    ...Array.from({ length: 15 }, (_, index) => `http://localhost:${3000 + index}`),
+];
+
+// better-auth's admin role without the ban, which would leave a user's app passwords working, and without the
+// impersonation and password set that disabledPaths closes.
+const eigenAdminRole = defaultAc.newRole({
+    user: ['create', 'list', 'set-role', 'delete', 'set-email', 'get', 'update'],
+    session: ['list', 'revoke', 'delete'],
+});
 
 export const auth = betterAuth({
     database: drizzleAdapter(drizzle(getServerDataPath(SERVER_DATABASES.users)), {
@@ -146,12 +70,12 @@ export const auth = betterAuth({
                     // A session is created at sign-in and only updated when it refreshes, so this is the last
                     // sign-in, not the last activity.
                     await getAuthDrizzleDb()
-                        .update(userScheme)
+                        .update(authSchema.user)
                         .set({ lastLoginAt: new Date() })
-                        .where(eq(userScheme.id, session.userId));
+                        .where(eq(authSchema.user.id, session.userId));
                     // Sign-up's join only logs on failure, so sign-in is the repair path for it.
                     try {
-                        await authEnsureDefaultOrgMembership(session.userId);
+                        await ensureDefaultOrgMembership(session.userId);
                     } catch (error) {
                         console.warn(`Failed to auto-join user ${session.userId} to default org on sign-in:`, error);
                     }
@@ -163,14 +87,14 @@ export const auth = betterAuth({
                 before: async (user) => {
                     rejectRoleAddress(user.email);
                 },
-                after: async (hookUser) => {
-                    // better-auth's hook type leaves out the plugin fields, such as role, which the row has.
-                    const user = hookUser as User;
-                    if (isGuest(user)) return;
+                after: async (created) => {
+                    // better-auth's hook hands over the user without the plugin fields, such as the role.
+                    const user = await getUserById(created.id);
+                    if (!user || isGuest(user)) return;
                     // The row is committed, so a failure here must not turn a created account into a 500. Each
                     // step has its own guard, so a failed org join still reconciles.
                     try {
-                        await authEnsureDefaultOrgMembership(user.id);
+                        await ensureDefaultOrgMembership(user.id);
                     } catch (error) {
                         console.error(`Failed to auto-join new user ${user.id} to default org:`, error);
                     }
@@ -189,10 +113,11 @@ export const auth = betterAuth({
             },
             delete: {
                 // Every better-auth deletion passes here while the user row still exists, so Eigen's whole
-                // teardown runs here. A member row left behind would break listMembers for the whole org.
-                // The import is lazy because delete-user imports this file directly, so a static import would be a cycle.
-                before: async (hookUser) => {
-                    const user = hookUser as User;
+                // teardown runs here. A member row left behind would break listMembers for the whole org. The
+                // import is lazy because delete-user imports this file directly, so a static import would be a cycle.
+                before: async (deleted) => {
+                    const user = await getUserById(deleted.id);
+                    if (!user) return;
                     const { teardownUserData } = await import('../user/delete-user');
                     await busyHomeAsConflict(() => teardownUserData(user));
                 },
@@ -214,6 +139,13 @@ export const auth = betterAuth({
             if (!session) return;
             if ((await getOrgRole(targetId)) === 'owner' && session.user.id !== targetId) {
                 throw new APIError('FORBIDDEN', { message: "Only the owner can change the owner's account" });
+            }
+            // A guest's account belongs to the emailed-code sign-in, and nothing turns a guest into a user.
+            if (
+                (ctx.path === '/admin/set-role' || ctx.path === '/admin/update-user') &&
+                isGuest(await getUserById(targetId))
+            ) {
+                throw new APIError('FORBIDDEN', { message: "A guest's account can't be changed" });
             }
             // remove-user drops the sessions and the password before user.delete.before can refuse, with no rollback.
             // Admins only: anyone else gets the plugin's 403, not word of a running job.
@@ -256,7 +188,8 @@ export const auth = betterAuth({
                 },
             },
         }),
-        admin(),
+        // Only these two roles may be set. A guest's role is written by the guest sign-in alone.
+        admin({ roles: { admin: eigenAdminRole, user: userAc } }),
         // Eigen uses the organization plugin for its data model only, the members, teams and roles, and not for
         // its invitations, so no sendInvitationEmail is wired. People arrive through the waitlist or an admin. The
         // user-create hook joins them to the default org and team, and the admin UI adds them to other teams.
@@ -299,35 +232,95 @@ export const auth = betterAuth({
             rateLimit: { enabled: false },
         }),
     ],
-    trustedOrigins,
+    trustedOrigins: getTrustedOrigins(),
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
-    // set-user-password revokes no sessions or app passwords (admins reset through PUT
-    // /settings/user/:userId/password); impersonation would hand an admin any member's session.
-    disabledPaths: ['/admin/set-user-password', '/admin/impersonate-user'],
+    // set-user-password revokes no sessions or app passwords, so admins reset through PUT
+    // /settings/user/:userId/password instead. Impersonation would hand an admin any member's session. Eigen
+    // offers no bans: a ban ends the browser sessions, but the app passwords would keep working.
+    disabledPaths: ['/admin/set-user-password', '/admin/impersonate-user', '/admin/ban-user', '/admin/unban-user'],
     logger: { disabled: isTest() },
     secret: getAuthSecret(),
 });
 
+// The origins better-auth and CORS accept: the served origin, and the dev origins only outside production.
+export function getTrustedOrigins(): string[] {
+    const served = getServedOrigin();
+    return isProduction() ? [served] : [served, ...DEV_ORIGINS];
+}
+
+// A Drizzle handle of our own beside better-auth's. better-auth runs the lifecycle of the one it gets through
+// drizzleAdapter, so that one is not shared.
+let authDrizzleDb: ReturnType<typeof drizzle> | undefined;
+
+export function getAuthDrizzleDb(): ReturnType<typeof drizzle> {
+    if (!authDrizzleDb) {
+        authDrizzleDb = drizzle(getServerDataPath(SERVER_DATABASES.users), {
+            schema: authSchema,
+        });
+    }
+    return authDrizzleDb;
+}
+
+// Deletes the auth rows that point at a user and that better-auth leaves, such as memberships, 2FA and app
+// passwords. The memberships of users who are already gone go too, so a server that collected such rows from older
+// raw better-auth deletions heals at its next delete.
+export function authDeleteUserReferences(userId: string): void {
+    const db = getAuthDrizzleDb();
+    const userIds = db.select({ id: authSchema.user.id }).from(authSchema.user);
+    db.delete(authSchema.member)
+        .where(or(eq(authSchema.member.userId, userId), notInArray(authSchema.member.userId, userIds)))
+        .run();
+    db.delete(authSchema.teamMember)
+        .where(or(eq(authSchema.teamMember.userId, userId), notInArray(authSchema.teamMember.userId, userIds)))
+        .run();
+    db.delete(authSchema.twoFactor).where(eq(authSchema.twoFactor.userId, userId)).run();
+    db.delete(authSchema.apikey).where(eq(authSchema.apikey.referenceId, userId)).run();
+}
+
+// The server backup's copy, through the handle the server writes with.
+export function stageAuthDbCopy(destPath: string): void {
+    getAuthDrizzleDb().$client.run('VACUUM INTO ?', [destPath]);
+}
+
+// Nobody may claim an RFC 2142 role address, such as postmaster, on this server's mail domain. Guests on
+// external addresses are not affected.
+function rejectRoleAddress(email: string | undefined): void {
+    if (email && isRoleAddress(email)) {
+        throw new APIError('BAD_REQUEST', { message: 'This address is reserved' });
+    }
+}
+
+// better-auth answers any error but its own APIError with a 500. A busy home's 409 is rethrown as its CONFLICT.
+async function busyHomeAsConflict(run: () => unknown): Promise<void> {
+    try {
+        await run();
+    } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+            throw new APIError('CONFLICT', { message: error.message });
+        }
+        throw error;
+    }
+}
+
 // Joins the default org that setup pinned in the config, and its default team. The sign-up hook and every sign-in
 // call it, so an account whose join failed at sign-up gets in at its next sign-in instead of staying outside the org.
-async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
+async function ensureDefaultOrgMembership(userId: string): Promise<void> {
     const config = getServerConfig();
     if (!config) return;
     const { orgId, defaultTeamId } = config;
 
     const db = getAuthDrizzleDb();
     const membership = await db
-        .select({ id: memberScheme.id })
-        .from(memberScheme)
-        .where(and(eq(memberScheme.userId, userId), eq(memberScheme.organizationId, orgId)))
+        .select({ id: authSchema.member.id })
+        .from(authSchema.member)
+        .where(and(eq(authSchema.member.userId, userId), eq(authSchema.member.organizationId, orgId)))
         .get();
     if (membership) return;
 
     // Guests hold accounts and sign in, but never join the org.
-    const row = await db.select({ role: userScheme.role }).from(userScheme).where(eq(userScheme.id, userId)).get();
-    if (isGuest(row)) return;
+    if (isGuest(await getUserById(userId))) return;
 
     // addMember refuses a team that is gone, org join included, so a deleted default team must not reach it.
     const teamId = defaultTeamId && (await getTeamExists(defaultTeamId)) ? defaultTeamId : undefined;
@@ -346,37 +339,4 @@ async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
     } catch (error) {
         console.error(`Failed to reconcile default team shares for user ${userId}:`, error);
     }
-}
-
-// The memberships of users who are already gone go too, so a server that collected such rows from older raw
-// better-auth deletions heals at its next delete.
-export function authDeleteUserReferences(userId: string): void {
-    const db = getAuthDrizzleDb();
-    const userIds = db.select({ id: userScheme.id }).from(userScheme);
-    db.delete(memberScheme)
-        .where(or(eq(memberScheme.userId, userId), notInArray(memberScheme.userId, userIds)))
-        .run();
-    db.delete(teamMemberScheme)
-        .where(or(eq(teamMemberScheme.userId, userId), notInArray(teamMemberScheme.userId, userIds)))
-        .run();
-    db.delete(twoFactorScheme).where(eq(twoFactorScheme.userId, userId)).run();
-    db.delete(apikeyScheme).where(eq(apikeyScheme.referenceId, userId)).run();
-}
-
-// A Drizzle handle of our own beside better-auth's. better-auth runs the lifecycle of the one it gets through
-// drizzleAdapter, so that one is not shared.
-let authDrizzleDb: ReturnType<typeof drizzle> | undefined;
-
-export function getAuthDrizzleDb(): ReturnType<typeof drizzle> {
-    if (!authDrizzleDb) {
-        authDrizzleDb = drizzle(getServerDataPath(SERVER_DATABASES.users), {
-            schema: authSchema,
-        });
-    }
-    return authDrizzleDb;
-}
-
-// The server backup's copy, through the handle the server writes with.
-export function stageAuthDbCopy(destPath: string): void {
-    getAuthDrizzleDb().$client.run('VACUUM INTO ?', [destPath]);
 }

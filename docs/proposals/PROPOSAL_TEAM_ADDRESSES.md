@@ -25,8 +25,8 @@ The ROADMAP row for the missing CANCEL and REPLY (a team calendar has no organiz
 | Mailboxes | `docs/MAIL.md`, the opening | One per user. No team and no guest has one |
 | Team Home | `TeamHome` in `apps/api/src/lib/home/team-home.ts` | Builds drive and calendar only, no `Mail` |
 | Team Home's user | `getSyntheticTeamUser` in `team-home.ts`, called from `getHome` in `apps/api/src/lib/home/get-home.ts` | Synthetic, with the team name and an empty email |
-| Team row | the `team` table in `apps/api/auth-schema.ts` | Id, name, org, member count. No address. Additive columns are added at boot by `ensureAuthSchemaColumns` (in `apps/api/src/lib/auth/auth.ts`) |
-| Default team | `authEnsureDefaultOrgMembership` in `auth.ts` | Every new user joins it. Guests never do, and an admin can remove members |
+| Team row | the `team` table in `apps/api/auth-schema.ts` | Id, name, org, member count. No address. Additive columns are added at boot by `ensureAuthSchemaColumns` (in `apps/api/src/lib/auth/auth-schema-columns.ts`) |
+| Default team | `ensureDefaultOrgMembership` in `auth.ts` | Every new user joins it. Guests never do, and an admin can remove members |
 | Accepted recipients | `virtual_mailbox_domains` and `virtual_transport` in `docker/postfix/main.cf.template` | Every local part on the mail domain, with no recipient map. Each recipient is piped alone to `eigen-deliver` (the `eigen` service in `docker/postfix/master.cf.template`), whose `D` flag prepends `Delivered-To:` |
 | Unknown recipient | `docker/postfix/eigen-deliver` | The API's 404 becomes `EX_NOUSER`, a bounce |
 | Delivery fan-out | `mailboxDeliver`, `apps/api/src/lib/mail/mail.ts` | A user gets the bytes. A role address (`postmaster`, `abuse`, `noreply`) goes to every org admin, one `mailboxDeliver` per admin. A throw partway makes Postfix redeliver, which duplicates the message for the admins already done (the loop in `mailboxDeliver`). Nothing dedupes by Message-ID |
