@@ -2,13 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
 import { ApiError } from '../../../lib/core/errors';
-import {
-    MAX_GRID_SLOTS,
-    MAX_SHARED_FORMULA_TEXT,
-    MAX_TEXT,
-    readXlsx,
-    xlsxToSheets,
-} from '../../../lib/import/sheets/from-xlsx';
+import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
+import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from '../../../lib/import/sheets/limits';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
 import { OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
