@@ -11,7 +11,6 @@ import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { iscelldata, isFunctionRange, resolveCellRange } from './formula-utils';
-import { isKnownFunction } from './parser/evaluate-by-operator/evaluate-by-operator';
 import type {
     CalcChainEntry,
     EvaluationResult,
@@ -175,12 +174,11 @@ export function recalcSheets(
             if (!rowArr) continue;
             const existing = rowArr[info.c];
             if (existing == null) continue;
-            // Our result is unreliable when it is an error, or when the formula calls a function the engine lacks. It
-            // never overwrites a cached value that is no error, because that value is Excel's. Skipping the
-            // execFunctionGlobalData seed too makes the formulas downstream read the cached value. A cell with no
-            // cached value still shows the error.
-            const unreliable = result.type === 'error' || callsUnknownFunction(info.calc_funcStr);
-            if (unreliable && hasNonErrorCachedValue(existing)) continue;
+            // An error never overwrites a cached value that is no error, because that value is Excel's. A function
+            // Excel has and the engine lacks is such an error, even inside IFERROR. Skipping the execFunctionGlobalData
+            // seed too makes the formulas downstream read the cached value. A cell with no cached value still shows
+            // the error.
+            if (result.type === 'error' && hasNonErrorCachedValue(existing)) continue;
             engine.state.execFunctionGlobalData[`${info.r}_${info.c}_${info.id}`] = { v: result.value };
             // The matrix may hold the input snapshot's frozen cells, so write a copy.
             const cell: Cell = { ...existing };
@@ -327,20 +325,6 @@ const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
 
 function isVolatileFormula(formula: string): boolean {
     return VOLATILE_RE.test(formula);
-}
-
-// A string or a quoted sheet name, whose text may read like a call. A doubled quote stands for one inside it.
-const QUOTED_RE = /"(?:[^"]|"")*"|'(?:[^']|'')*'/g;
-// A name the grammar reads as a function, because a `(` follows it.
-const CALL_RE = /(?<![\w.])[A-Za-z_][\w.]*(?=\()/g;
-
-// True when the formula calls a function the engine lacks, such as FILTER or LET. IFERROR traps the #NAME? that
-// function gives, so the result is no error, yet it is not what Excel computed.
-function callsUnknownFunction(formula: string): boolean {
-    for (const [name] of formula.replace(QUOTED_RE, '""').matchAll(CALL_RE)) {
-        if (!isKnownFunction(name)) return true;
-    }
-    return false;
 }
 
 // True when a cell holds a value that is no error: not empty, not flagged `ct.t === 'e'`, and no `#` error string.

@@ -1,7 +1,8 @@
 // The registry of operators and functions the grammar calls while it evaluates a formula. Each call turns a thrown
-// error into a returned one, so an outer IF or IFERROR can inspect it. isKnownFunction answers whether the engine
-// has a function at all, for a caller such as the server's recalc, which keeps Excel's value where we can't compute.
+// error into a returned one, so an outer IF or IFERROR can inspect it, except the #NAME? of an Excel function the
+// engine lacks, which fails the whole formula.
 
+import { isExcelFunction } from '@workspace/lib/sheets';
 import type { FormulaArg, FormulaOutput } from '../../types';
 import { ERROR_NAME, toFormulaError } from '../error';
 import type { FunctionArg } from '../omitted';
@@ -43,15 +44,14 @@ export function evaluateByOperator(operator: string, params: FormulaArg[] = []):
     return inBand(() => callable(...params));
 }
 
-export function isKnownFunction(name: string): boolean {
-    return name.toUpperCase() in availableFunctions;
-}
-
-// An unknown function is #NAME? in-band, so IFERROR and ISERROR around it see it as they see any error.
+// A name Excel doesn't know either, such as a typo, is #NAME? in-band, so IFERROR and ISERROR around it see it as they
+// see any error, as in Excel. A real Excel function the engine lacks throws its #NAME?, past every IFERROR, IFNA and
+// ISERROR to the whole formula, because their fallback would read as the answer Excel computed.
 export function callFunction(name: string, params: FunctionArg[] = []): FormulaOutput {
     const callable = availableFunctions[name.toUpperCase()];
-    if (!callable) return toFormulaError(Error(ERROR_NAME));
-    return inBand(() => callable(...params));
+    if (callable) return inBand(() => callable(...params));
+    if (isExcelFunction(name)) throw Error(ERROR_NAME);
+    return toFormulaError(Error(ERROR_NAME));
 }
 
 // Arithmetic and comparison operators coerce their operands, which would swallow an upstream Error: `Error + 1`

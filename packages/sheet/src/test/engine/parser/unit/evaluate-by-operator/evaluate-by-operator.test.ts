@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
     callFunction,
     evaluateByOperator,
-    isKnownFunction,
 } from '../../../../../engine/parser/evaluate-by-operator/evaluate-by-operator';
 
 describe('evaluate-by-operator dispatch', () => {
@@ -51,11 +50,11 @@ describe('evaluate-by-operator dispatch', () => {
         expect(callFunction('IF', [err, 1, 2])).toBe(err);
     });
 
-    test('isKnownFunction answers for the names callFunction evaluates, in any case', () => {
-        expect(isKnownFunction('xlookup')).toBe(true);
-        expect(isKnownFunction('NORM.S.DIST')).toBe(true);
-        expect(isKnownFunction('FILTER')).toBe(false);
-        expect(isKnownFunction('_xlfn.LET')).toBe(false);
-        expect(callFunction('FILTER', [1])).toBeInstanceOf(Error);
+    test('callFunction evaluates a registered name in any case, and answers #NAME? for one it lacks', () => {
+        expect(callFunction('xlookup', [2, [1, 2], ['a', 'b']])).toBe('b');
+        expect(callFunction('NORM.S.DIST', [0, true])).toBe(0.5);
+        // A real Excel function the engine lacks throws its #NAME?; a typo returns it.
+        expect(() => callFunction('FILTER', [1])).toThrow('NAME');
+        expect(callFunction('FILTRE', [1])).toBeInstanceOf(Error);
     });
 });

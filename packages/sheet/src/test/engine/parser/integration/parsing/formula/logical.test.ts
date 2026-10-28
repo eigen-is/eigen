@@ -185,6 +185,15 @@ describe('.parse() logical formulas', () => {
         expect(parser!.parse('NOSUCH(1)')).toMatchObject({ error: '#NAME?', result: null });
     });
 
+    // A real Excel function the engine lacks is #NAME? that nothing traps: a fallback would read as Excel's answer.
+    it('IFERROR, IFNA and ISERROR leave the #NAME? of an Excel function the engine lacks', () => {
+        expect(parser!.parse('IFERROR(FILTER(1, TRUE), "fb")')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IFNA(INDIRECT("A1"), 0)')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('ISERROR(_xlfn.LET(x, 1, x))')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IF(ISERR(OFFSET(1, 0, 0)), 0, 1)')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IFERROR(FILTRE(1), "fb")')).toMatchObject({ error: null, result: 'fb' });
+    });
+
     it('IFNA', () => {
         expect(parser!.parse('IFNA(1, "fb")')).toMatchObject({ error: null, result: 1 });
         expect(parser!.parse('IFNA(NA(), "fb")')).toMatchObject({ error: null, result: 'fb' });

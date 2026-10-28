@@ -140,7 +140,7 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![0][2]?.v).toBe(8);
     });
 
-    // IFERROR traps our own #NAME?, so the result is no error, yet the fallback is not what Excel computed.
+    // An Excel function the engine lacks fails the whole formula, past IFERROR and ISERROR, so Excel's value stays.
     test('a formula naming a function the engine lacks keeps its cached value, inside IFERROR or ISERROR too', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [
