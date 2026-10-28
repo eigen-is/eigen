@@ -88,6 +88,7 @@ import {
 } from './extensions/comment-mark';
 import type { EquationOptions } from './extensions/equation';
 import { insertNote } from './extensions/footnote';
+import { TextBoxContext } from './extensions/text-box';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { FootnoteList } from './footnote-list';
 import { useActiveComments } from './hooks/use-active-comments';
@@ -253,6 +254,7 @@ const TiptapEditor = ({
     );
     const editEquationRef = useRef(() => {});
     const openNoteRef = useRef((_pos: number) => {});
+    const openBoxRef = useRef((_pos: number, _at: { left: number; top: number } | null) => {});
     const insertFootnoteRef = useRef((): boolean => false);
     const leaveNoteRef = useRef(() => {});
     const [undoManager] = useState(() => createDocUndoManager(yDoc));
@@ -331,6 +333,11 @@ const TiptapEditor = ({
             equation: { ...equation, onOpenComment: handleCommentClick },
             table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
             footnote: { onOpen: (pos) => openNoteRef.current(pos), onInsert: () => insertFootnoteRef.current() },
+            textBox: {
+                onOpenComment: handleCommentClick,
+                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
+                onOpen: (pos, at) => openBoxRef.current(pos, at),
+            },
             extensions: [
                 SearchHighlight,
                 CommentMark.configure({
@@ -402,12 +409,17 @@ const TiptapEditor = ({
     const storyEditors = useMemo(() => ({ footnote: noteEditor, textBox: boxEditor }), [noteEditor, boxEditor]);
     const notes = useOpenStory(editor, storyEditors, bandsAllowed);
     leaveNoteRef.current = notes.leave;
-    const openNote = (pos: number, at: { left: number; top: number } | null) => {
+    const openStory = (pos: number, at: { left: number; top: number } | null) => {
         setEditingBand(null);
         notes.open(pos, { focus: true, at, selection: null });
     };
     openNoteRef.current = (pos) => {
-        if (bandsAllowed) openNote(pos, null);
+        if (bandsAllowed) openStory(pos, null);
+    };
+    // A box opens where a note does. On a phone and for a viewer it is selected instead, as no story opens there.
+    openBoxRef.current = (pos, at) => {
+        if (bandsAllowed) openStory(pos, at);
+        else editor.commands.setNodeSelection(pos);
     };
     // Google's Insert › Footnote: the reference after the selection, and its note open with the caret in it. Where no
     // note opens, a viewer's and a phone's, none goes in: ⌘⌥F from a phone's keyboard would leave one nobody can edit.
@@ -418,6 +430,8 @@ const TiptapEditor = ({
     };
     insertFootnoteRef.current = insertFootnote;
     const storyEditor = notes.editor;
+    const openBoxId = notes.anchor?.type === 'textBox' ? notes.anchor.id : null;
+    const textBoxContext = useMemo(() => ({ openId: openBoxId, editor: boxEditor }), [openBoxId, boxEditor]);
     const activeEditor = editingBand ? bands[editingBand] : (storyEditor ?? editor);
     // A jump leaves a band or a note and puts the caret at the start of the heading, which scrolls to a small margin
     // below the top of the view: the selection's own scroll stops as soon as the heading shows, at the bottom. The
@@ -916,16 +930,18 @@ const TiptapEditor = ({
                                                 controls={bandControls}
                                             />
                                         )}
-                                        <EditorContent
-                                            editor={editor}
-                                            data-page-body
-                                            className="row-start-2 h-full min-w-0 tiptap-wrapper"
-                                        />
+                                        <TextBoxContext.Provider value={textBoxContext}>
+                                            <EditorContent
+                                                editor={editor}
+                                                data-page-body
+                                                className="row-start-2 h-full min-w-0 tiptap-wrapper"
+                                            />
+                                        </TextBoxContext.Provider>
                                         <FootnoteList
                                             body={editor}
                                             note={noteEditor}
                                             open={notes.anchor}
-                                            onOpen={bandsAllowed ? openNote : undefined}
+                                            onOpen={bandsAllowed ? openStory : undefined}
                                         />
                                         {!pageless && (
                                             <PageBands

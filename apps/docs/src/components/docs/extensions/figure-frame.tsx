@@ -301,7 +301,18 @@ type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'ex
     label: string;
     keyShortcuts?: string;
     className?: string;
+    // A text box's: the move, the drag and the selection start on a band along its edge alone, and a press inside it
+    // goes to `onInsidePress`, which opens it, or to its open editor when there is none.
+    dragSurface?: { onInsidePress: ((e: React.PointerEvent) => void) | null };
     children: ReactNode;
+};
+
+// How close to a box's edge, in screen px, a press moves or drags it instead of reaching its text.
+const EDGE_BAND = 6;
+
+const inEdgeBand = (element: Element, { clientX: x, clientY: y }: React.PointerEvent) => {
+    const { left, right, top, bottom } = element.getBoundingClientRect();
+    return x < left + EDGE_BAND || x > right - EDGE_BAND || y < top + EDGE_BAND || y > bottom - EDGE_BAND;
 };
 
 // The figure box the node view draws: the wrapper the page's .figure rules lay out, the selection ring and the
@@ -324,6 +335,7 @@ export function FigureFrame({
     label,
     keyShortcuts,
     className,
+    dragSurface,
     children,
 }: FigureFrameProps) {
     const { onContextMenu, onOpenComment }: FigureFrameOptions = extension.options;
@@ -387,6 +399,14 @@ export function FigureFrame({
         </button>
     );
 
+    // A press moves a positioned figure. On a text box only a press on its edge band does: one inside it goes to its
+    // text, and a box in the flow drags from its edge as ProseMirror drags a node.
+    const press = (move: ((e: React.PointerEvent) => void) | undefined) => (e: React.PointerEvent) => {
+        const edge = contentRef.current;
+        if (!dragSurface || !edge || inEdgeBand(edge, e)) move?.(e);
+        else if (e.button === 0) dragSurface.onInsidePress?.(e);
+    };
+
     return (
         <>
             <NodeViewWrapper
@@ -394,13 +414,17 @@ export function FigureFrame({
                 className={cn('figure', className)}
                 data-layout={frame.layout ?? 'block'}
                 data-alignment={frame.alignment ?? 'center'}
-                // A positioned figure moves by the pointer gesture above, never by the browser's drag and drop.
+                // A positioned figure moves by the pointer gesture above, never by the browser's drag and drop. A text
+                // box is draggable only from its edge, which ProseMirror's own press makes draggable, as WebKit starts
+                // the browser's drag from a draggable box even inside its open editor.
                 data-drag-handle={place ? undefined : ''}
-                draggable={!place && isEditable}
+                draggable={!place && isEditable && !dragSurface}
                 style={
-                    place ? placeStyle(place.top, place.left, place.width) : { cursor: isEditable ? 'grab' : undefined }
+                    place
+                        ? placeStyle(place.top, place.left, place.width)
+                        : { cursor: isEditable && !dragSurface ? 'grab' : undefined }
                 }
-                onPointerDown={place ? startMove : undefined}
+                onPointerDown={place || dragSurface ? press(place ? startMove : undefined) : undefined}
                 // ProseMirror never sees a node view's right-click (stopEvent), so the figure asks here.
                 onContextMenu={(e: React.MouseEvent) => {
                     const pos = getPos();
@@ -437,7 +461,7 @@ export function FigureFrame({
                         aspectRatio: `${box.width} / ${box.height}`,
                     }}
                     onPointerDownCapture={measureScale}
-                    onPointerDown={startMove}
+                    onPointerDown={press(startMove)}
                 >
                     {transform}
                     {comment}

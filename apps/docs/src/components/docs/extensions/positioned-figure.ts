@@ -328,7 +328,7 @@ function caretFromFigure(editor: Editor): boolean {
 // The behind figure a press at (x, y) selects: the topmost under the pointer, when no line of text is there or Alt is
 // held. The paragraph's box lies over the figure, so the hit test is geometry: every element under the point, and the
 // rects of the text lines of the textblock on top.
-function behindFigureAt(view: EditorView, x: number, y: number, alt: boolean): number | null {
+export function behindFigureAt(view: EditorView, x: number, y: number, alt: boolean): number | null {
     const hits = view.dom.ownerDocument.elementsFromPoint(x, y);
     const box = hits.map((hit) => hit.closest('.figure[data-layout="behind"]')).find((hit) => !!hit);
     if (!box || !view.dom.contains(box)) return null;

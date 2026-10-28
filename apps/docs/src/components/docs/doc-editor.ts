@@ -68,6 +68,8 @@ import { PositionedFigures } from './extensions/positioned-figure';
 import { STORY_EDIT, StoryDecorations, StoryFormatting } from './extensions/story';
 import { cellPosAt, EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
+import type { TextBoxOptions } from './extensions/text-box';
+import { TextBox } from './extensions/text-box';
 import { cleanPastedHTML } from './paste';
 
 const lowlight = createLowlight(common);
@@ -279,6 +281,7 @@ type DocEditorOptions = {
     // A right-click in a cell, at `pos`: true when the host opened the table menu.
     table?: { onContextMenu: (editor: Editor, pos: number, event: MouseEvent) => boolean };
     footnote?: Partial<FootnoteOptions>;
+    textBox?: Partial<TextBoxOptions>;
     // An extension named as a schema node or mark takes its place, as the body's comment mark does.
     extensions?: Extensions;
     media: () => DocMedia;
@@ -298,6 +301,7 @@ export function docEditorOptions({
     equation,
     table,
     footnote,
+    textBox,
     extensions = [],
     media,
     editor,
@@ -348,7 +352,7 @@ export function docEditorOptions({
                 remote: (tr) => !!tr.getMeta(ySyncPluginKey),
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
-                    ...(band || note ? [] : ['footnote']),
+                    ...(band || note ? [] : ['footnote', 'textBox']),
                     'figure',
                     'chart',
                     'equation',
@@ -365,7 +369,7 @@ export function docEditorOptions({
             ...(band ? [] : [Chart.configure(chart)]),
             Equation.configure(equation),
             PageNumber,
-            ...(band || note ? [] : [Footnote.configure(footnote), StoryFormatting]),
+            ...(band || note ? [] : [Footnote.configure(footnote), TextBox.configure(textBox), StoryFormatting]),
             TableWidthClamp.configure({ textColumnWidth, paperWidth, band }),
             noPageBreaksWhenPageless(pageless),
             PositionedFigures.configure({ page, band, note }),
