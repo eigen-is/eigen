@@ -43,12 +43,18 @@ function tickBoxContext(): Context {
 // empty style yields is NaN, the painter's middle default.
 const PAINTED_BOX = checkboxRect(cellTextBox(0, 20, 74, 40), checkboxAlign(null, TICK_BOX, 'FALSE'), Number.NaN);
 
-function mouseDownAt(ctx: Context, x: number, y: number, globalCache: Partial<GlobalCache> = {}) {
+// Returns whether the handler kept the browser from acting on the press, such as moving the focus out of the editor.
+function mouseDownAt(ctx: Context, x: number, y: number, globalCache: Partial<GlobalCache> = {}): boolean {
     const container = win.document.createElement('div') as unknown as HTMLDivElement;
     container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
     const cellInput = win.document.createElement('div') as unknown as HTMLDivElement;
-    const event = { button: 0, pageX: x, pageY: y, shiftKey: false, preventDefault() {} } as unknown as MouseEvent;
+    let prevented = false;
+    const preventDefault = () => {
+        prevented = true;
+    };
+    const event = { button: 0, pageX: x, pageY: y, shiftKey: false, preventDefault } as unknown as MouseEvent;
     handleCellAreaMouseDown(ctx, globalCache as GlobalCache, event, cellInput, container);
+    return prevented;
 }
 
 function mouseDownOnTickBox(ctx: Context) {
@@ -92,12 +98,13 @@ describe('handleCellAreaMouseDown — tick box', () => {
 
 // The menu bar's menus leave the page live, so the press that closes one reaches the grid too.
 describe('handleCellAreaMouseDown — a press that closes a menu', () => {
-    test('puts no reference into the formula being composed', () => {
+    // The browser would move the focus out of the editor, and its caret to the start, as a reference press never does.
+    test('puts no reference into the formula being composed, and leaves the caret where it was', () => {
         const ctx = tickBoxContext();
         ctx.editingCellPosition = [0, 0];
         ctx.formulaCache.rangestart = true;
         ctx.formulaRangeHighlight = [];
-        mouseDownAt(ctx, 30, 30, { pressClosedMenu: true });
+        expect(mouseDownAt(ctx, 30, 30, { pressClosedMenu: true })).toBe(true);
         expect(ctx.formulaCache.func_selectedrange).toBeUndefined();
 
         mouseDownAt(ctx, 30, 30, { pressClosedMenu: false });

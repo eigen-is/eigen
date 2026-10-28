@@ -87,8 +87,12 @@ export function handleCellAreaMouseDown(
     ctx.filterContextMenu = undefined;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
-    // The press that closes an open menu puts no reference into the formula being composed.
-    if (globalCache.pressClosedMenu && takesFormulaReference(ctx)) return;
+    // The press that closes an open menu puts no reference into the formula being composed. Like a reference press it
+    // keeps the browser from moving the focus out of the editor, which would put the caret back at the start.
+    if (globalCache.pressClosedMenu && takesFormulaReference(ctx)) {
+        e.preventDefault();
+        return;
+    }
 
     deselectFloatingObject(ctx);
     const rect = container.getBoundingClientRect();
