@@ -1,11 +1,11 @@
 // Sets a user's password without the old one. resetUserPassword is an admin's or the control socket's reset: it
 // signs the user out everywhere and revokes their app passwords, because those open mail and DAV without the
-// password. A guest has no password to reset. setCredentialPassword is the write under it, which the guest and demo
-// sign-in share.
+// password. A guest has no password to reset.
 
 import { eq } from 'drizzle-orm';
 import { apikey } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
+import { setCredentialPassword } from '../auth/credential-password';
 import { ApiError } from '../core/errors';
 import { isGuest } from './guest';
 import type { User } from './user';
@@ -32,21 +32,4 @@ export async function resetUserPassword(email: string, password: string): Promis
     await context.internalAdapter.deleteUserSessions(user.id);
     getAuthDrizzleDb().delete(apikey).where(eq(apikey.referenceId, user.id)).run();
     return user;
-}
-
-// Writes the password's hash onto the user's credential account, the one row better-auth's sign-in reads, and
-// creates that row when the user has none. Another provider's account row is left alone.
-export async function setCredentialPassword(userId: string, password: string): Promise<void> {
-    const context = await auth.$context;
-    const hash = await context.password.hash(password);
-    if (await context.internalAdapter.findCredentialAccount(userId)) {
-        await context.internalAdapter.updatePassword(userId, hash);
-    } else {
-        await context.internalAdapter.createAccount({
-            userId,
-            providerId: 'credential',
-            accountId: userId,
-            password: hash,
-        });
-    }
 }

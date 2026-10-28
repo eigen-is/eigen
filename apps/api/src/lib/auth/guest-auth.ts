@@ -14,9 +14,9 @@ import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { getEntriesForTarget, reconcileSharesForNewUser } from '../share';
 import { GUEST_ROLE, isGuest } from '../user/guest';
-import { setCredentialPassword } from '../user/reset-password';
 import { getUserByEmail } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
+import { setCredentialPassword } from './credential-password';
 import { checkOtpRateLimit, countOtpGuess, refundOtpRequests, resetOtpGuesses } from './otp-rate-limit';
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
