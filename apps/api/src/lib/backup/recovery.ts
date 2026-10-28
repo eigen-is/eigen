@@ -112,8 +112,10 @@ function closeHomeArchives(): void {
     for (const name of fs.readdirSync(dir)) {
         const archiveName = name.endsWith(SIDECAR_SUFFIX) ? name.slice(0, -SIDECAR_SUFFIX.length) : name;
         if (!parseBackupArtifactName(archiveName)) continue;
+        const file = path.join(dir, name);
         try {
-            fs.chmodSync(path.join(dir, name), ARCHIVE_MODE);
+            // A chmod follows a symlink to wherever it points, so only a regular file is closed.
+            if (fs.lstatSync(file).isFile()) fs.chmodSync(file, ARCHIVE_MODE);
         } catch (error) {
             console.error(`[backup] could not close ${name} to other users: ${describeError(error)}`);
         }

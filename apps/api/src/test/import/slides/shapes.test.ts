@@ -319,19 +319,65 @@ describe('kinds', () => {
     test('a straight rect with text is a text box by txBox or any placeholder, and otherwise a rectangle holding it', () => {
         const rect = (options: { txBox?: boolean; ph?: string }) =>
             sp({ xfrm: box(0, 0, 200, 100), geom: 'rect', spPr: FILLED, text: para('Label'), ...options });
+        const marked = (value: string) => rect({}).replace('<p:cNvSpPr/>', `<p:cNvSpPr txBox="${value}"/>`);
         const found = elementsOf(
             rect({ txBox: true }) +
+                marked('true') +
                 rect({ ph: '<p:ph type="title"/>' }) +
                 rect({ ph: '<p:ph type="ftr" sz="quarter" idx="11"/>' }) +
-                rect({}),
+                rect({ ph: '<p:ph type="dt" sz="half" idx="10"/>' }) +
+                rect({ ph: '<p:ph type="sldNum" sz="quarter" idx="12"/>' }) +
+                rect({}) +
+                marked('0'),
         );
         expect(found.map((element) => [element.type, element.html, element.corners])).toEqual([
-            ['richtext', '<p>Label</p>', 'straight'],
-            ['richtext', '<p>Label</p>', 'straight'],
-            ['richtext', '<p>Label</p>', 'straight'],
+            ...Array.from({ length: 6 }, () => ['richtext', '<p>Label</p>', 'straight']),
+            ['rectangle', '<p>Label</p>', 'straight'],
             ['rectangle', '<p>Label</p>', 'straight'],
         ]);
-        expect(JSON.parse(String(found[3].fill))).toMatchObject({ color: '#ff0000' });
+        expect(JSON.parse(String(found[6].fill))).toMatchObject({ color: '#ff0000' });
+    });
+
+    test('a shape marked txBox that is not a straight rect is drawn with its text in a box on top', () => {
+        const marked = (spPr: string, geom?: string) =>
+            sp({ xfrm: box(0, 0, 200, 100), geom, spPr, text: para('Label'), txBox: true });
+        const found = elementsOf(
+            marked(FILLED, 'roundRect') + marked(FILLED, 'ellipse') + marked(custGeom(TRIANGLE) + FILLED),
+        );
+        expect(found.map((element) => [element.type, element.html])).toEqual([
+            ['rectangle', undefined],
+            ['richtext', '<p>Label</p>'],
+            ['ellipse', undefined],
+            ['richtext', '<p>Label</p>'],
+            ['path', undefined],
+            ['richtext', '<p>Label</p>'],
+        ]);
+    });
+
+    test("a custGeom of one closed path holds its text, unpainted or past paths that draw nothing, inset by the path's own border", () => {
+        // An open line the shape gives no paint to.
+        const noise =
+            '<a:path w="2" h="2" fill="none"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="2" y="0"/></a:lnTo></a:path>';
+        const unstroked = TRIANGLE.replace('<a:path w="2" h="2">', '<a:path w="2" h="2" stroke="0">');
+        const bordered = `${FILLED}<a:ln w="${4 * PX}">${solid('00FF00')}</a:ln>`;
+        const shape = (paths: string, spPr: string) =>
+            sp({ xfrm: box(0, 0, 100, 100), spPr: `${custGeom(paths)}${spPr}`, text: para('T') }).replace(
+                '<a:bodyPr/>',
+                `<a:bodyPr lIns="${20 * PX}" rIns="${20 * PX}"/>`,
+            );
+        const found = elementsOf(
+            shape(TRIANGLE, '<a:noFill/>') + shape(TRIANGLE + noise, FILLED) + shape(unstroked, bordered),
+        );
+        expect(found.map((element) => [element.type, element.html, element.closed])).toEqual([
+            ['path', '<p>T</p>', true],
+            ['path', '<p>T</p>', true],
+            ['path', '<p>T</p>', true],
+        ]);
+        expect(found[0]).toMatchObject({ strokeColor: TRANSPARENT_COLOR });
+        expect(JSON.parse(String(found[0].fill))).toMatchObject({ color: TRANSPARENT_COLOR });
+        // The path draws no line, so the shape's border takes nothing from the inset.
+        expect(found[2]).toMatchObject({ strokeColor: TRANSPARENT_COLOR });
+        expect(found[2].padding).toBeCloseTo(20, 6);
     });
 
     test("a preset kind, a pie and a one-path preset hold their text, with the file's inset less the border", () => {

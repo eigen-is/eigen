@@ -98,7 +98,7 @@ Push-based sharing for Drive and Calendar. On share: resolve targets, write to r
 
 A saved ACL change also closes the live collab sockets of anyone who lost read below that path (`enforceReadAccessBelow`), so a revoke takes effect now, not at the next reconnect. How it walks the open documents: [COLLAB.md](COLLAB.md#read-is-checked-at-open-write-on-every-message).
 
-A change that keeps read but moves write, a writer made a viewer or the reverse, reaches an open document through its info query: every ACL event, `DRIVE_ACL_UPDATED` included, refreshes the `collabKeys` info of every open document in the path's mount (`invalidateAclUpdated`), as a folder's change reaches the documents below it. The editor then follows its new `canWrite` without a reload; Docs' editors in [DOCS.md](DOCS.md#one-factory-builds-the-bodys-editor-every-bands-and-the-open-notes). A tab that got in through the path's visibility is not an ACL recipient and hears no event, so it learns at its next refetch ([ROADMAP.md](ROADMAP.md)).
+A change that keeps read but moves write, a writer made a viewer or the reverse, reaches an open document through its info query: every ACL event, `DRIVE_ACL_UPDATED` included, refreshes the `collabKeys` info of every open document in the path's mount (`invalidateAclUpdated`), as a folder's change reaches the documents below it. The editor then follows its new `canWrite` without a reload; Docs' editors in [DOCS.md](DOCS.md#one-factory-builds-the-bodys-editor-every-bands-and-each-storys). A tab that got in through the path's visibility is not an ACL recipient and hears no event, so it learns at its next refetch ([ROADMAP.md](ROADMAP.md)).
 
 ### Model
 

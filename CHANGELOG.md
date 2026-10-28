@@ -16,7 +16,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Image and chart size in Docs** — set the width and height in centimeters, with **Keep aspect ratio**. A stretched image stays stretched in prints, downloads and Word files
 - **Table borders in Docs** — all borders, a box or none, in any color, from the **Table** panel or **Format › Table**. A new row or column copies its neighbor's borders and fill
 - **Table borders in Word files** — keep their colors, widths and dashes both ways, and a borderless Word table stays borderless
-- **Outline in Docs** — **Tools → Show outline** lists the headings on the left. Click one to jump there. On a desktop it stays open across documents, and on a phone it's in the **⋮** menu
+- **Outline in Docs** — **Tools → Show outline** lists the headings on the left. Click one to jump there. On a desktop it stays open across documents in that browser, and on a phone it's in the **⋮** menu
 - **Table of contents in Docs** — **Insert → Table of contents** lists the headings down to Heading 3 and stays up to date. Click a line to jump. PDFs show page numbers, and Word downloads hold Word's own
 - **Tables of contents in Word files** — come in as a live table of contents, and the import message says when its entries differed. A **Contents** title above it stays normal text, not a Heading 1
 - **Bra-ket notation in equations** — `\bra`, `\ket`, `\braket`, `\expval`, `\mel` and `\ketbra` in Docs equations, with brackets that grow to fit
@@ -28,7 +28,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **What a download left out** — after a download, or a print from Docs, a message counts what the file left out or drew simpler, and says when part of it couldn't be read
 - **Preferences in Space** — a new page for the theme (Light, Dark or System) and Celebrations
 - **Celebrations** — now and then, ticking the last box of a checklist on a Stickies card or a comment card bursts confetti
-- **Text in shapes** — in Vector and Slides, double-click a rectangle, diamond or ellipse, or select it and press Enter, to type in it. The text moves, rotates, copies and deletes with the shape, and wraps again when you resize it. A shape does not grow, so text that does not fit spills out past its edge
+- **Text in shapes** — in Vector and Slides, double-click a rectangle, diamond or ellipse, or select it and press Enter, to type in it. The text goes with the shape, and text that does not fit spills out past its edge
 
 ### Changed
 
@@ -40,7 +40,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Decimals** — Docs margins show two decimals, such as 2.00 cm. Number fields in Slides and Vector show at most two, and line height and letter spacing at least one, such as 1.0
 - **Shortcuts in the Sheets menus** — **Edit** shows the shortcut of Undo, Redo, Cut, Copy, Paste, Find and Find and replace, and **Format → Text** shows it for Bold, Italic and Underline
 - **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width. A web page download keeps more while all its rows fit
-- **Shapes in PowerPoint files** — a shape with text imports as one shape that holds its text, and exports as one shape. A text box or a title still imports as a text box, and text on a line, an arrow or turned text still comes as a box on top
+- **Shapes in PowerPoint files** — a shape with text imports as one shape that holds its text, and exports as one shape. A text box, a title, text on a line or arrow, and turned text still come in as text boxes
 - **Forwarding email** — a forward brings the original's attachments, inline pictures too. Remove one with the **X** on its chip
 - **Contacts** — the list fills the page until you open a contact. A link to a deleted contact opens to **Contact not found**
 - **Teams in Admin** — teams get a list page, like users. To add people, select them on the **Users** page, right-click and choose **Add to team…**, which replaces dragging them onto a team
@@ -96,7 +96,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Last active in Admin** — a mail, calendar or file client that signs in with an account's password no longer counts, so it shows when the person last used Eigen in a browser
 - **Picking a theme** — the theme changes the moment you pick it, without a **Settings saved** message
 - **Deleting a team in Admin** — removes its drives, files and calendar from the server. The default team has no delete button. A team being backed up or restored can't be deleted, and the dialog stays open with the reason
-- **Backups on a shared server** — every backup archive, a home backup's description file, the `data/` folder and the log `./eigen` keeps of its last step are readable by Eigen's own user alone. The `backups/` folder and a server backup's description file stay readable
+- **Backups on a shared server** — `data/`, backups, `./eigen`'s log and what a backup, check or restore unpacks are readable by Eigen's own user alone, 0.4.0's home backups too from the next start. A restore of a user or team being deleted is refused
 - **Updates on the main channel** — an update to a new build of `main` makes a Full backup when a change not released yet is marked as needing one
 - **Restore and rollback** — when one would set aside the folder of a user or team made since the backup, it lists them and asks again before it stops Eigen
 - **Setup copies of the accounts** — `./eigen status` lists each copy of the login database that setup kept, and how to delete it

@@ -30,7 +30,7 @@ const restoringHomes = new Set<string>();
 // build a new home over the deleted folder.
 // A deletion that fails after the folder is gone (the registry delete, authDeleteUserReferences or the better-auth
 // row delete throws) keeps the mark until a restart: the home answers 404 "Home is being deleted", a restore of it is
-// refused, and a retry of the delete clears it (docs/ROADMAP.md).
+// refused, and a retry of the delete clears it.
 const deletingHomes = new Set<string>();
 
 export function atHome(ownerId: string): boolean {

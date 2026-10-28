@@ -28,7 +28,7 @@ A missing `roughness` reads as 0, so an old element stays crisp. A missing `seed
 
 A frame's size is the deck's slide size, `meta.slideSize` read through `SLIDE_SIZES` (1920×1080 or 1920×1440), and is never stored on the frame ([SLIDES.md](SLIDES.md#a-deck-has-one-slide-size-and-a-change-moves-nothing)). An element with a `frameId` stores `x`/`y` relative to the frame origin, so frame mode needs no coordinate translation. Elements may overhang; the frame clips them. A deck also has a physical width, `meta.slideWidth`, which only converts its px to pt ([SLIDES.md](SLIDES.md#a-deck-has-a-physical-width-so-its-text-sizes-read-in-pt)); a drawing has none, and both store the same px.
 
-A rich-text box's `html` is one scalar, so two people typing in one box resolve last-writer-wins for the whole box ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
+The `html` of a text box or a shape is one scalar, so two people typing in one element resolve last-writer-wins for all of its text ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
 
 ## The reader is the trust boundary
 
@@ -42,7 +42,7 @@ A pasted clipboard record goes through the same `readElementFromFields`, so a fo
 
 ## A kind is one registry entry
 
-Each kind is one `defineKind` file in `packages/lib/src/vector/kinds/`. Besides defaults, `read`, bounds, hit test and `render`, it gives the outline and the `searchText` that feeds both ⌘F and the server search index. A bindable kind may give its own `anchorPoints`, the points a bound arrow snaps to; without them they are the box's four edge midpoints. `defineKind` derives the kind's stored `fields` from its `defaults`, so a kind names its keys once. It also re-narrows through the kind's own guard in every method, so no caller casts and a mis-dispatch degrades quietly instead of throwing mid-render. Presentation (icon, label, shortcut, edit dialog) is the matching `ELEMENT_KIND_UI` entry in `packages/ui/src/components/vector/kinds/`. A kind edited in a dialog rather than in place, the chart, declares an `EditDialog`, which a double-click opens. The canvas mounts it inside a wrapper that stops pointer, double-click, paste and drag-start events, because React bubbles a portaled dialog's events up the component tree, and the canvas' own handlers would select, marquee, paste or cancel a drag under it.
+Each kind is one `defineKind` file in `packages/lib/src/vector/kinds/`. Besides defaults, `read`, bounds, hit test and `render`, it gives the outline and the `searchText` that feeds both ⌘F and the server search index. A bindable kind may give its own `anchorPoints`, the points a bound arrow snaps to; without them they are the box's four edge midpoints. `defineKind` derives the kind's stored `fields` from its `defaults`, so a kind names its keys once. It also re-narrows through the kind's own guard in every method, so no caller casts and a mis-dispatch degrades quietly instead of throwing mid-render. Presentation (icon, label, shortcut, edit dialog, panel section) is the matching `ELEMENT_KIND_UI` entry in `packages/ui/src/components/vector/kinds/`. A kind with controls of its own in the properties panel, such as the arrow, the chart or the image, declares a `PanelSection`. A kind edited in a dialog rather than in place, the chart, declares an `EditDialog`, which a double-click opens. The canvas mounts it inside a wrapper that stops pointer, double-click, paste and drag-start events, because React bubbles a portaled dialog's events up the component tree, and the canvas' own handlers would select, marquee, paste or cancel a drag under it.
 
 `kinds/index.ts` derives the rest: `ELEMENT_FIELDS`, the type validator, the toolbar tools, `baseDefaultsFor` (so a panel reset restores exactly what create gave). A host's style table (`VECTOR_STYLE_DEFAULTS`, `SLIDES_STYLE_DEFAULTS`) decides how a new element looks, never which kinds exist. `geometry.ts` and the kind registry import each other. A kind calls geometry only inside its methods, so the registry can evaluate before geometry's body does. Any entry works except one that reaches geometry through a kind's own module or `kind.ts`, such as `kinds/rectangle.ts` imported first: the registry then evaluates while that module is in its TDZ and throws a `ReferenceError`.
 
@@ -58,9 +58,9 @@ The `chart` kind holds one chart's stored spec, a string per part, each kept as 
 
 The `Textual` block (`kinds/textual.ts`) is the twelve stored text fields: `html`, the font family, size, weight, style and decoration, the color, the horizontal and vertical alignment, the letter spacing, the line height and the `padding`. The text box (`richtext`), the rectangle, the ellipse, the diamond, the pie and a closed path compose it, so the editor, the renderer, search and the panel work on any of them with one implementation. The text box is the only kind whose text is its purpose. A shape's text starts in its middle, 10 px in from its edge (`DEFAULT_SHAPE_TEXT_PROPS`), and a text box's at the top left with no inset.
 
-The reader fills every missing or corrupt text field from the kind's defaults, so a shape stored before shapes held text reads with empty `html` and draws the bytes it drew before. `textRender` returns the shape's svg alone while `html` is empty, and the text over it once it is not.
+The reader fills every missing or corrupt text field from the kind's defaults, so a shape stored before shapes held text reads with empty `html` and draws the bytes it drew before. Its font is the reader's default too, Excalifont at 20 px, not the deck's. In Slides, typing into such a shape starts in that font, and the user changes it in the panel. A drawing's defaults are the same, so Vector shows no difference. `textRender` returns the shape's svg alone while `html` is empty, and the text over it once it is not.
 
-`textual.ts` imports only leaf modules, never geometry, the renderer helpers or a kind. The chart's shape builders call `textualDefaults`, and a deeper import would load the kind registry from them.
+`textual.ts` imports only leaf modules: no geometry, no `render-utils`, no kind module and not the kind registry. The chart's shape builders call `textualDefaults`, and a deeper import would load the kind registry from them.
 
 ## A text box grows and a shape spills
 
@@ -90,7 +90,7 @@ The outline is the outer contour, the subpath with the largest area, with every 
 
 `isTextual(el)` is the `text` capability as a type guard, for the element kinds that hold a `Textual` block. An open path is not one.
 
-`paintsNothing(el)` is the kind's answer to "is this invisible": an empty text box, a shape with no fill and no border, an image with no picture. The editor rings those with a dashed outline in its chrome layer while editing, so they stay findable. Thumbnails, present mode and exports show the page as it is.
+`paintsNothing(el)` is the kind's answer to "is this invisible": an empty text box or shape with no fill and no border, an image with no picture. The editor rings those with a dashed outline in its chrome layer while editing, so they stay findable. Thumbnails, present mode and exports show the page as it is.
 
 ## One layer per element, on the canvas and on the server
 
@@ -174,7 +174,7 @@ Fixups that must never be undone write under a non-null origin, which the UndoMa
 
 ## Rich text is edited inside its own layer
 
-Double-click, or Enter on the one selected element, opens the text of any element with the `text` capability in the editor, inside the element's own layer, over its painted fill and border (`RichTextInPlaceEditor`, `kinds/richtext.tsx`, mounted by `canvas-editor.tsx`). The editor is not a per-kind field of `ELEMENT_KIND_UI`: a shape and a text box share it. Each change writes `html` straight through, unsealed, so the session is one undo step and peers see it live. On exit an empty text box is deleted, sealed first, and only a text box: an empty, unpainted shape stays. `closeRichText` tests `el.type === 'richtext'` for that, or a shape drawn and left empty would vanish. Otherwise the delete would merge into the last keystroke, and whether it is its own step would depend on how fast the user clicked away.
+Double-click, or Enter on the one selected element, opens the text of any element with the `text` capability in the editor, inside the element's own layer, over its painted fill and border (`RichTextInPlaceEditor`, `kinds/richtext.tsx`, mounted by `canvas-editor.tsx`). The editor is not a per-kind field of `ELEMENT_KIND_UI`: a shape and a text box share it. Each change writes `html` straight through, unsealed, so the session is one undo step and peers see it live. On exit an empty text box that paints nothing is deleted, sealed first. An empty shape stays, painted or not. `closeRichText` tests `el.type === 'richtext'` for that, or a shape drawn and left empty would vanish. Otherwise the delete would merge into the last keystroke, and whether it is its own step would depend on how fast the user clicked away.
 
 Enter does what a double-click on the element does, so it also opens an arrow's label and a chart's data dialog. `useCanvasKeyboard` acts, and takes the key, only for a sole selection and only when focus is on the canvas or the page, so a focused button or rail thumbnail keeps its own Enter.
 

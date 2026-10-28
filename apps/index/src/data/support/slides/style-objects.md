@@ -28,7 +28,7 @@ Position, size, and rotation, in slide units.
 
 ## Text
 
-Shows for a text box and for a shape that holds text: a rectangle, diamond, ellipse, or closed freeform shape from an imported file. Controls the type itself; the box or shape behind it uses the **Fill** and **Stroke** sections below.
+Shows for a text box and for a shape that holds text: a rectangle, diamond, ellipse, pie slice, or closed freeform shape from an imported file. **Convert to shapes** on a pie chart makes the pie slices. Controls the type itself; the box or shape behind it uses the **Fill** and **Stroke** sections below.
 
 | Control | What it does |
 |---|---|
