@@ -575,13 +575,14 @@ export function CanvasEditor({
     // Layered Escape (bubble phase): ObjectTransform claims mid-resize/rotate Escapes in the capture
     // phase and stops them, so this never fires during a grip drag. It cancels an in-progress
     // canvas gesture, else deselects, else returns to the select tool.
-    const escRef = useRef({ hasSelection: false, tool, toolLocked, overlayOpen: false });
-    escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked, overlayOpen: dialogOpen || menuOpen };
+    const escRef = useRef({ hasSelection: false, tool, toolLocked, dialogOpen });
+    escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked, dialogOpen };
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             // A dialog, a menu or a palette input owns its own Escape (close, clear). No gesture can be
-            // active while one is up, so skipping the whole handler is safe.
-            if (e.key !== 'Escape' || isTypingTarget() || escRef.current.overlayOpen) return;
+            // active while one is up, so skipping the whole handler is safe. A menu closes in the capture
+            // phase and is gone before this runs, but Radix marks the Escape it handled as prevented.
+            if (e.key !== 'Escape' || e.defaultPrevented || isTypingTarget() || escRef.current.dialogOpen) return;
             const g = gestureRef.current;
             const s = escRef.current;
             if (g) {
