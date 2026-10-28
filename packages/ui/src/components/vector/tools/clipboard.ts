@@ -1,8 +1,7 @@
-// Vector clipboard PRODUCER — the selection→payload builder, moved out of canvas-editor.tsx (a self-
-// contained pure block) so the canvas stays a dispatcher. A selection rides as ONE typed `elements`
-// item (whole stored records, so a canvas→canvas paste restores exactly what was copied), plus the
-// per-image and per-rich-text items every other app reads, plus the self-contained SVG flavor. The
-// paste CONSUMER is tools/paste-elements.ts.
+// Vector clipboard PRODUCER — the selection→payload builder, a pure block kept out of the canvas so the
+// canvas stays a dispatcher. A selection rides as ONE typed `elements` item (whole stored records, so a
+// canvas→canvas paste restores exactly what was copied), plus the per-image and per-rich-text items every
+// other app reads, plus the self-contained SVG flavor. The paste consumer is the paste planner.
 
 import {
     buildChartClipboardItem,
@@ -90,8 +89,8 @@ function selectionSvg(
     if (selected.length === 0) return undefined;
     if (selected.every((el) => el.type === 'richtext') || selected.every((el) => el.type === 'chart')) return undefined;
     if (selected.length > CLIPBOARD_SVG_MAX_ELEMENTS) return undefined;
-    // The `html` of a text box or a shape is a stored scalar, so it arrives verbatim from any peer with write access —
-    // sanitized here as at every other seam that renders it (the layer mount, the paste planner).
+    // The `html` of a text box or a shape is a stored scalar, so it arrives verbatim from any peer with write
+    // access. It is sanitized here as at every other seam that renders it (the layer mount, the paste planner).
     const elements = selected.map((el) => ('html' in el ? { ...el, html: sanitizeToLightEditorHtml(el.html) } : el));
     const svg = embedClipboardSvgMetadata(
         sceneToSvg(

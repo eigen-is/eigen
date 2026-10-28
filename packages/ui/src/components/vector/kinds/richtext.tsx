@@ -1,6 +1,6 @@
 // Rich text's UI entry for every element that holds text, a text box or a closed shape: the in-place editor the
-// canvas mounts inside the element's own layer, and the typography rows ported from slides' TextProperties — one home for "how does text look", so the deck
-// shell and the drawing app cannot drift. The box background is the generic Fill row, its border the
+// canvas mounts inside the element's own layer, and the typography rows. It is one home for "how does text look",
+// so the deck shell and the drawing app cannot drift. The box background is the generic Fill row, its border the
 // generic Stroke row; this section is the text itself.
 
 import type { Editor } from '@tiptap/react';
@@ -112,7 +112,7 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
 }
 
 export function RichTextPanelSection({ elements, slideWidth, onChange, onChangeEach }: KindPanelSectionProps) {
-    // The panel mounts this section only when every selected element holds text, so this narrows rather than filters.
+    // The panel mounts this section only when every selected element holds text, so this only narrows.
     const boxes = elements.filter(isTextual);
     const fontFamily = getMergedValue(boxes, (el) => el.fontFamily);
     const fontWeight = getMergedValue(boxes, (el) => el.fontWeight);

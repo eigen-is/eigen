@@ -1,7 +1,7 @@
 // The kind contract. One entry per element type, and everything the engine needs to treat a kind
 // generically: what a new one looks like, how a stored one is validated, what it can do, where its edge
 // is, how it draws, what it contributes to search. Adding `graph` = add it to VectorElementType, write
-// kinds/graph.ts, add one line to kinds/index.ts. Nothing else in the engine changes.
+// the kind's module and add it to the registry. Nothing else in the engine changes.
 //
 // FRAMES: `outline(el, inflate)` works in the element's unrotated SCENE frame (it includes el.x/el.y;
 // callers rotate around the element center). `render(el, ctx)` draws in the element's LOCAL frame
@@ -54,8 +54,7 @@ export type Capabilities = {
     // image's body is pixels rather than a Fill.
     strokeOptional: boolean;
     bindable: boolean;
-    // Whether the element holds rich text that the editor, the panel and the renderer act on. Read it
-    // through capabilitiesOf(el): an open path is a line and holds none.
+    // Whether the element holds rich text that the editor, the panel and the renderer act on.
     text: boolean;
     // Which family the elbow router's heading heuristics follow — the silhouette, not the exact outline.
     // A new BINDABLE kind picks one of the three instead of adding a branch to elbow-heading; nothing

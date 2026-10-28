@@ -762,10 +762,9 @@ export function CanvasEditor({
         setRichTextEditId(id);
     };
 
-    // Close it: a text box that paints nothing at all is deleted (empty invisible chrome — the kind answers
-    // that, the same predicate the unpainted ring uses), a shape stays because the user drew it, otherwise the trailing seal closes the session's
-    // coalesced writes. Reads the LIVE element — the session wrote through updateElement, so React state
-    // may be one tick behind.
+    // Close it. An empty text box that paints nothing is deleted. A shape stays, because the user drew it.
+    // Otherwise the trailing seal closes the session's writes. Reads the LIVE element: the session wrote
+    // through updateElement, so React state may be one tick behind.
     const closeRichText = useCallback(() => {
         const id = richTextEditRef.current;
         richTextEditRef.current = null;
@@ -1236,7 +1235,8 @@ export function CanvasEditor({
         // A freehand stroke / eraser swipe / line draft (incl. its hover trailing point) is handled by
         // the tools hook, which consumes the move.
         if (drawing.onPointerMove(e)) return;
-        // Hover affordance (idle select): one hitTestTopmost on this same move path (no separate scanner) flips the `move` cursor; a gesture never pays for it.
+        // Hover affordance (idle select): one hitTestTopmost on this same move path flips the `move` cursor.
+        // A gesture never pays for it.
         if (!g && tool === 'select' && !textEditing) {
             const over = hitTestTopmost(ordered, scene, viewportRef.current.zoom, committedById, coarse) !== null;
             if (over !== hoveringSelectable) setHoveringSelectable(over);
@@ -1354,8 +1354,7 @@ export function CanvasEditor({
             // Trailing seal: nothing inside the 500ms capture window may merge into this gesture's
             // undo step (the leading seal fired at pointerdown).
             undoManager?.stopCapturing();
-            // A kind with an in-place editor opens it on creation — an empty box you cannot type into is
-            // not a text tool.
+            // A new text box opens its editor at once: an empty box you cannot type into is not a text tool.
             if (id && c.type === 'richtext') openRichText(id);
             return;
         }

@@ -81,7 +81,7 @@ export function isBindable(el: VectorElement): el is VectorBindableElement {
 }
 
 // The elements that hold rich text, such as a text box or a rectangle: the ones the in-place editor, the panel's
-// text rows and the renderer act on. Read through the capability accessor, so an open path, a line, holds none.
+// text rows and the renderer act on. Read through the capability accessor.
 export function isTextual(el: VectorElement): el is VectorTextualElement {
     return capabilitiesOf(el).text;
 }

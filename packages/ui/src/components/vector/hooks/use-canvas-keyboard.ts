@@ -1,7 +1,7 @@
 // Every canvas keyboard command except the layered Escape (that one lives in the canvas because it
 // reads live gesture state to cancel an in-progress create/marquee/move) and the z-order brackets
 // (shared `useZOrderHotkeys`, which owns the manual event.code listener). Bindings go through
-// @tanstack/react-hotkeys (available from packages/ui) mirroring the slides editor's useHotkey +
+// @tanstack/react-hotkeys mirroring the slides editor's useHotkey +
 // enabled-gating discipline, so shortcuts keep working while focus sits off-canvas and auto-ignore
 // text inputs.
 
@@ -20,7 +20,7 @@ import { VECTOR_TOOLS } from './use-tool';
 
 type CanvasKeyboardParams = {
     enabled: boolean;
-    // An open menu owns the arrows, Delete, letters and Escape, but the Edit menu lists ⌘Z and ⇧⌘Z, so undo stays on.
+    // An open menu owns the arrows, Delete, letters and Escape. The Edit menu lists ⌘Z and ⇧⌘Z, so undo stays on.
     menuOpen: boolean;
     elements: VectorElement[];
     selectedIds: string[];
@@ -195,7 +195,8 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
             p.selectedIds.length === 1 ? p.elements.find((candidate) => candidate.id === p.selectedIds[0]) : null;
         if (el && p.onEdit(el)) e.preventDefault();
     }, []);
-    // The library takes every key it matches, a focused button's Enter too; this handler decides, so it asks for neither.
+    // The library takes every key it matches, a focused button's Enter too. This handler decides, so it asks
+    // for neither.
     const onEnter = useMemo(
         () => ({ enabled: enabled && hasSelection, preventDefault: false, stopPropagation: false }),
         [enabled, hasSelection],

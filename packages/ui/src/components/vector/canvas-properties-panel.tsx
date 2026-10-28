@@ -7,10 +7,9 @@
 // edit, which `sealed` stands down inside, so ⌘Z takes that edit back in one go.
 //
 // Every row gates on a CAPABILITY, never on a type list: `fill` opens the Fill block, `strokeStyle` its
-// dash row, `corners` the Shape section. The Stroke and Sketch sections need no gate — every kind paints
-// a stroke, and every kind is drawn by roughjs. What a capability cannot express — rich text's
-// typography, the image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI, or for text from
-// RichTextPanelSection, which any selection of text-holding elements shares.
+// dash row, `corners` the Shape section, `text` the Text section. The Stroke and Sketch sections need no
+// gate — every kind paints a stroke, and every kind is drawn by roughjs. What a capability cannot
+// express, such as the image's fit, comes from the kind's own PanelSection in ELEMENT_KIND_UI.
 
 import { isInlineSketchCapped, readChartSpec } from '@workspace/lib/charts';
 import type { Fill } from '@workspace/lib/types/background';

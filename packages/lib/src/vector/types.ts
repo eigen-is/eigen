@@ -147,7 +147,7 @@ export type VectorImageElement = VectorElementBase & {
 // the same roughjs drawable a rectangle draws, behind the text, hatch style included.
 export type VectorRichTextElement = VectorElementBase & Fillable & Textual & { type: 'richtext'; corners: Corners };
 
-// The kinds that hold text. The runtime answer is the `text` capability (isTextual in kinds/index.ts); the
+// The kinds that hold text. The runtime answer is the `text` capability (isTextual); the
 // registry test pins the two against each other.
 export type VectorTextualElement = VectorShapeElement | VectorPieElement | VectorPathElement | VectorRichTextElement;
 
