@@ -2,8 +2,9 @@
 // the apps read and save. Only a full user reads or writes them, and only their own. A save sends just the
 // fields it changes, and they merge into the stored settings.
 
+import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
 import type { UserSettings } from '@workspace/lib/types/settings';
-import { DOCS_TEXT_WIDTHS } from '@workspace/lib/types/settings';
+import { DOCS_TEXT_WIDTHS, THEMES } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/auth/access';
 import { getUserHome } from '../lib/home';
@@ -33,7 +34,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
         },
         {
             body: t.Object({
-                theme: t.Optional(t.Union([t.Literal('light'), t.Literal('dark'), t.Literal('system')])),
+                theme: t.Optional(t.Union(THEMES.map(({ value }) => t.Literal(value)))),
                 email: t.Optional(
                     t.Object({
                         signatures: t.Optional(
@@ -52,7 +53,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
                 driveView: t.Optional(
                     t.Object({
                         mode: t.Optional(t.Union([t.Literal('list'), t.Literal('grid')])),
-                        sortKey: t.Optional(t.Union([t.Literal('name'), t.Literal('modified'), t.Literal('size')])),
+                        sortKey: t.Optional(t.UnionEnum(DRIVE_SORT_KEYS)),
                         sortDir: t.Optional(t.Union([t.Literal('asc'), t.Literal('desc')])),
                     }),
                 ),

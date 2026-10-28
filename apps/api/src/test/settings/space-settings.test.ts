@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
 import type { UserSettings } from '@workspace/lib/types/settings';
+import { THEMES } from '@workspace/lib/types/settings';
 import { assertJson, authedRequest, getTestContext } from '../setup';
 
 describe('Space settings', () => {
@@ -9,7 +11,8 @@ describe('Space settings', () => {
         ctx = await getTestContext();
     });
 
-    function putSettings(body: UserSettings): Promise<Response> {
+    // Takes any object, so a test can send a value the settings type refuses.
+    function putSettings(body: object): Promise<Response> {
         return authedRequest(ctx.charlie.user.sessionToken, `/space/${ctx.charlie.user.id}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -35,11 +38,13 @@ describe('Space settings', () => {
         );
         expect(settings.docsView).toEqual({ textWidth: 'wide' });
 
-        const forged = await authedRequest(ctx.charlie.user.sessionToken, `/space/${ctx.charlie.user.id}/settings`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ docsView: { textWidth: 'huge' } }),
-        });
-        expect(forged.status).toBe(422);
+        expect((await putSettings({ docsView: { textWidth: 'huge' } })).status).toBe(422);
+    });
+
+    test('every theme and drive sort key the pickers list is taken, and others are refused', async () => {
+        for (const { value } of THEMES) expect((await putSettings({ theme: value })).status).toBe(200);
+        for (const sortKey of DRIVE_SORT_KEYS) expect((await putSettings({ driveView: { sortKey } })).status).toBe(200);
+        expect((await putSettings({ theme: 'sepia' })).status).toBe(422);
+        expect((await putSettings({ driveView: { sortKey: 'color' } })).status).toBe(422);
     });
 });
