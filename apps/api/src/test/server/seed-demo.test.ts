@@ -8,6 +8,7 @@ import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { readChartSpec } from '@workspace/lib/charts';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
+import { textToParagraphHtml } from '@workspace/lib/html';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import {
@@ -623,10 +624,17 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             });
             expect(boundArrows.length).toBeGreaterThanOrEqual(6);
             expect(scene.elements.filter((el) => el.type === 'arrow' && el.elbow).length).toBeGreaterThanOrEqual(3);
-            // Every label is a measured rich-text box. The count floor keeps the size loop honest —
-            // a builder that stopped emitting text would otherwise iterate nothing and pass.
+            // A shape's label is the shape's own text, and every free text a measured rich-text box. The
+            // count floor keeps the size loop honest — a builder that stopped emitting text would otherwise
+            // iterate nothing and pass.
+            for (const shape of SITE_PLAN.shapes) {
+                const drawn = byId.get(`el-${shape.key}`);
+                expect(drawn && 'html' in drawn ? drawn.html : undefined).toBe(
+                    shape.label === '' ? '' : textToParagraphHtml(shape.label),
+                );
+            }
             const richText = scene.elements.filter((el) => el.type === 'richtext');
-            expect(richText.length).toBeGreaterThanOrEqual(40);
+            expect(richText.length).toBeGreaterThanOrEqual(20);
             for (const text of richText) {
                 expect(text.width).toBeGreaterThan(0);
                 expect(text.height).toBeGreaterThan(0);

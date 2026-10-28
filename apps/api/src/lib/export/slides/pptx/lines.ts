@@ -149,7 +149,7 @@ export function freedrawXml(el: VectorLinearElement, slide: Slide, opacity: numb
     return fill + spXml(slide, 'Ink', box, customXml(slide, box, path, true), ink, NO_LINE);
 }
 
-const NO_LINE = '<a:ln><a:noFill/></a:ln>';
+export const NO_LINE = '<a:ln><a:noFill/></a:ln>';
 
 // The box a path is drawn in, centered where the element turns so a turned path turns about the canvas's center, and
 // a point of the element's local frame as a point of that path.
@@ -220,5 +220,5 @@ export function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number):
               );
     const longest = lines.reduce((most, line) => Math.max(most, [...line].length), 0);
     const box = boxOf(Math.max(label.width, longest * el.fontSize));
-    return xml + mask + spXml(slide, 'Label', box, presetXml('rect'), '<a:noFill/>', NO_LINE, text);
+    return xml + mask + spXml(slide, 'Label', box, presetXml('rect'), '<a:noFill/>', NO_LINE, text, true);
 }

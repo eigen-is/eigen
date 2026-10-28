@@ -462,19 +462,22 @@ describe('the body', () => {
             UNCOUNTED,
         );
         expect(inherited?.fontSize).toBe(24);
-        const own = richTextOf(
-            {
-                body: body('<a:noAutofit/>'),
-                inherited: [inheritedOf(body(autofit))],
-                listStyle: undefined,
-                style: undefined,
-                rels: new Map(),
-            },
-            THEME,
-            WIDE_DECK,
-            UNCOUNTED,
-        );
-        expect(own?.fontSize).toBe(48);
+        // The slide's own autofit, whichever of the three, overrides the layout's.
+        for (const stated of ['<a:noAutofit/>', '<a:spAutoFit/>']) {
+            const own = richTextOf(
+                {
+                    body: body(stated),
+                    inherited: [inheritedOf(body(autofit))],
+                    listStyle: undefined,
+                    style: undefined,
+                    rels: new Map(),
+                },
+                THEME,
+                WIDE_DECK,
+                UNCOUNTED,
+            );
+            expect(own?.fontSize).toBe(48);
+        }
     });
 });
 

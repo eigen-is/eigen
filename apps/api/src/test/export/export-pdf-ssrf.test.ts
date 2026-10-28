@@ -9,7 +9,7 @@ import { toTransferableText } from '../../lib/document/transform/protocol';
 import { renderEigenslidesHtml } from '../../lib/export/canvas/transform';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
 import { fontFaceCssOf } from '../../lib/export/fonts';
-import { sanitizeExportHtml, sanitizeExportMedia } from '../../lib/export/sanitize';
+import { sanitizeExportHtml, sanitizeExportMedia, sanitizeSceneHtml } from '../../lib/export/sanitize';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { buildGoldenDeckScene, seedDeckDoc, seedEigendoc } from '../fixtures/golden-documents';
 
@@ -84,6 +84,31 @@ describe('export sanitize — SSRF surface', () => {
     test('legit http(s) hyperlinks are preserved (link targets are not fetched during render)', () => {
         const out = sanitizeExportHtml('<a href="https://example.com/report">r</a>', { ADD_ATTR: ['target'] });
         expect(out).toContain('href="https://example.com/report"');
+    });
+
+    test("a shape's text reaches the deck's PDF body without the remote <img> a peer wrote in it", async () => {
+        const scene = buildGoldenDeckScene();
+        const html = '<p>Shape</p><img src="http://169.254.169.254/latest/meta-data/">';
+        const doc = new Y.Doc();
+        seedDeckDoc(doc, {
+            ...scene,
+            elements: scene.elements.map((el) =>
+                el.type === 'richtext' && el.id === 'el-1' ? { ...el, type: 'rectangle' as const, html } : el,
+            ),
+        });
+        const out = Buffer.from((await renderEigenslidesHtml(doc, 'pdf-html', 'Deck', async () => [])).data).toString();
+        expect(out).toContain('Shape');
+        expect(out).not.toContain('169.254.169.254');
+    });
+
+    test("a shape's text is filtered to the text box's tags, and an element with no text skips the filter", () => {
+        const scene = buildGoldenDeckScene();
+        const [first, second] = scene.elements.filter((el) => el.type === 'richtext');
+        const shape = { ...first, type: 'rectangle' as const, html: '<p>Shape</p><table><tr><td>x</td></tr></table>' };
+        const empty = { ...second, html: '' };
+        const [kept, skipped] = sanitizeSceneHtml({ ...scene, elements: [shape, empty] }).elements;
+        expect(kept).toMatchObject({ type: 'rectangle', html: '<p>Shape</p>x' });
+        expect(skipped).toBe(empty);
     });
 });
 

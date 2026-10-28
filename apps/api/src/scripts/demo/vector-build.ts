@@ -95,16 +95,12 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const lines: VectorLinearElement[] = plan.lines.map(buildLine);
     const images: VectorImageElement[] = plan.images.map(buildImage);
     const arrows: VectorArrowElement[] = plan.arrows.map((a, i) => buildArrow(a, i, byKey, byId));
-    // Shape labels are rich text drawn after the fills/images/arrows so they sit on top; free texts follow.
-    const labels: VectorRichTextElement[] = plan.shapes.flatMap((s, i) =>
-        s.label === '' ? [] : [buildLabel(s, shapes[i])],
-    );
     const texts: VectorRichTextElement[] = plan.texts.map((t, i) => buildText(t, i));
 
     // Bottom-up z-order: ground outlines, lines, shapes, images, arrows, then every text on top.
     const ground = shapes.filter((_, i) => plan.shapes[i].ground);
     const rest = shapes.filter((_, i) => !plan.shapes[i].ground);
-    const ordered: VectorElement[] = [...ground, ...lines, ...rest, ...images, ...arrows, ...labels, ...texts];
+    const ordered: VectorElement[] = [...ground, ...lines, ...rest, ...images, ...arrows, ...texts];
     const keys = generateNKeysBetween(null, null, ordered.length);
     const seed = mulberry32(SEED_SALT);
     for (const [i, el] of ordered.entries()) {
@@ -143,8 +139,11 @@ function buildShape(s: SitePlanShape): VectorShapeElement {
         strokeWidth: s.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: s.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill(s.fill ?? 'transparent', s.fillStyle ?? DEFAULT_FILL_STYLE),
-        // The label is a text box on top (buildLabel), so the shape itself holds none.
+        // The label is the shape's own text, centered in it, so it moves and turns with the shape.
         ...textualDefaults(SITE_PLAN_STYLE, DEFAULT_SHAPE_TEXT_PROPS),
+        html: s.label === '' ? '' : textToParagraphHtml(s.label),
+        fontSize: s.fontSize ?? DEFAULT_LABEL_SIZE,
+        lineHeight: getFontMetrics(FONT).lineHeight,
     };
     // An ellipse has no corners to treat, so it carries no `corners` field.
     if (s.kind === 'ellipse') return { ...box, type: 'ellipse' };
@@ -265,25 +264,16 @@ function sidePoint(shape: VectorShapeElement, end: { side: CanvasSide; along?: n
     }
 }
 
-function buildLabel(s: SitePlanShape, shape: VectorShapeElement): VectorRichTextElement {
-    const fontSize = s.fontSize ?? DEFAULT_LABEL_SIZE;
-    const { width, height } = measureRichTextBox(s.label, fontSize);
-    return buildRichText(`el-${s.key}-label`, s.label, {
-        x: shape.x + shape.width / 2 - width / 2,
-        y: shape.y + shape.height / 2 - height / 2,
-        width,
-        height,
-        angle: shape.angle,
-        fontSize,
-        color: SITE_PLAN_STYLE.color,
-        textAlign: 'center',
-        verticalAlign: 'center',
-    });
-}
-
+// A free text, placed outside any shape: the kind's defaults under the drawing's style table, the box the seeder
+// measured and the typography the drawing is authored in. Typed rather than partial, because sceneBounds measures it
+// before the write.
 function buildText(t: SitePlanText, i: number): VectorRichTextElement {
     const { width, height } = measureRichTextBox(t.text, t.fontSize);
-    return buildRichText(`el-text-${i}`, t.text, {
+    return {
+        ...kindDefaults('richtext', SITE_PLAN_STYLE),
+        id: `el-text-${i}`,
+        index: '',
+        type: 'richtext',
         x: t.x,
         y: t.y,
         width,
@@ -291,29 +281,9 @@ function buildText(t: SitePlanText, i: number): VectorRichTextElement {
         angle: 0,
         fontSize: t.fontSize,
         color: t.color ?? SITE_PLAN_STYLE.color,
-        textAlign: 'left',
-        verticalAlign: 'top',
-    });
-}
-
-type RichTextSpec = Pick<
-    VectorRichTextElement,
-    'x' | 'y' | 'width' | 'height' | 'angle' | 'fontSize' | 'color' | 'textAlign' | 'verticalAlign'
->;
-
-// Both text builders go through one place: the kind's defaults under the drawing's style table, the box
-// the seeder measured and the typography the drawing is authored in. Typed rather than partial, because
-// sceneBounds measures it before the write.
-function buildRichText(id: string, text: string, box: RichTextSpec): VectorRichTextElement {
-    return {
-        ...kindDefaults('richtext', SITE_PLAN_STYLE),
-        id,
-        index: '',
-        type: 'richtext',
-        ...box,
-        html: textToParagraphHtml(text),
+        html: textToParagraphHtml(t.text),
         // The line height measureExcalifont sized the box with, so the text fills exactly that box.
-        lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,
+        lineHeight: getFontMetrics(FONT).lineHeight,
     };
 }
 

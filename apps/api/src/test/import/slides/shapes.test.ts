@@ -298,7 +298,7 @@ describe('kinds', () => {
         expect(elementsOf(cxn({ xfrm: box(0, 0, 100, 0), ln: '<a:ln><a:noFill/></a:ln>' }))).toEqual([]);
     });
 
-    test('a text box is one rich text box with its fill and border; any other shape carries its text on top', () => {
+    test('a text box is one rich text box with its fill and border', () => {
         const [textBox] = elementsOf(
             sp({
                 xfrm: box(0, 0, 100, 50),
@@ -314,12 +314,66 @@ describe('kinds', () => {
             corners: 'straight',
         });
         expect(JSON.parse(String(textBox.fill))).toMatchObject({ type: 'solid', color: '#ff0000' });
-        const [shape, onTop] = elementsOf(
-            sp({ xfrm: box(0, 0, 100, 50), geom: 'ellipse', spPr: FILLED, text: para('In it') }),
+    });
+
+    test('a straight rect with text is a text box by txBox or any placeholder, and otherwise a rectangle holding it', () => {
+        const rect = (options: { txBox?: boolean; ph?: string }) =>
+            sp({ xfrm: box(0, 0, 200, 100), geom: 'rect', spPr: FILLED, text: para('Label'), ...options });
+        const found = elementsOf(
+            rect({ txBox: true }) +
+                rect({ ph: '<p:ph type="title"/>' }) +
+                rect({ ph: '<p:ph type="ftr" sz="quarter" idx="11"/>' }) +
+                rect({}),
         );
-        expect(shape.type).toBe('ellipse');
-        expect(onTop).toMatchObject({ type: 'richtext', html: '<p>In it</p>', strokeColor: 'transparent' });
-        expect(JSON.parse(String(onTop.fill))).toMatchObject({ color: 'transparent' });
+        expect(found.map((element) => [element.type, element.html, element.corners])).toEqual([
+            ['richtext', '<p>Label</p>', 'straight'],
+            ['richtext', '<p>Label</p>', 'straight'],
+            ['richtext', '<p>Label</p>', 'straight'],
+            ['rectangle', '<p>Label</p>', 'straight'],
+        ]);
+        expect(JSON.parse(String(found[3].fill))).toMatchObject({ color: '#ff0000' });
+    });
+
+    test("a preset kind, a pie and a one-path preset hold their text, with the file's inset less the border", () => {
+        const bordered = `${FILLED}<a:ln w="${4 * PX}">${solid('00FF00')}</a:ln>`;
+        const shape = (geom: string, spPr = bordered) =>
+            sp({ xfrm: box(0, 0, 200, 100), geom, spPr, text: para('Inside') }).replace(
+                '<a:bodyPr/>',
+                `<a:bodyPr lIns="${20 * PX}" rIns="${20 * PX}" anchor="ctr"/>`,
+            );
+        const found = elementsOf(
+            ['ellipse', 'roundRect', 'diamond', 'pie', 'star5'].map((geom) => shape(geom)).join('') +
+                shape('ellipse', '<a:noFill/>'),
+        );
+        expect(found.map((element) => [element.type, element.html, element.verticalAlign])).toEqual([
+            ...['ellipse', 'rectangle', 'diamond', 'pie', 'path'].map((type) => [type, '<p>Inside</p>', 'center']),
+            ['ellipse', '<p>Inside</p>', 'center'],
+        ]);
+        for (const element of found.slice(0, 5)) expect(element.padding).toBeCloseTo(16, 6);
+        // Unpainted, it still holds the text, so it is still drawn, and no border takes from the inset.
+        expect(found[5].padding).toBeCloseTo(20, 6);
+        expect(found[4].closed).toBe(true);
+    });
+
+    test('text stays a box on top of a shape of several paths, an open one and a line', () => {
+        const open =
+            '<a:path w="2" h="2" fill="none"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="2" y="2"/></a:lnTo></a:path>';
+        const stroke = `<a:ln w="12700">${solid('00FF00')}</a:ln>`;
+        const kinds = (shapes: string) => elementsOf(shapes).map((element) => [element.type, element.html]);
+        const can = kinds(sp({ xfrm: box(0, 0, 100, 100), geom: 'can', spPr: FILLED, text: para('Can') }));
+        expect(can.length).toBeGreaterThan(2);
+        expect(can.slice(0, -1).every(([type, html]) => type === 'path' && html === undefined)).toBe(true);
+        expect(can.at(-1)).toEqual(['richtext', '<p>Can</p>']);
+        expect(
+            kinds(sp({ xfrm: box(0, 0, 100, 100), spPr: `${custGeom(open)}${stroke}`, text: para('Open') })),
+        ).toEqual([
+            ['path', undefined],
+            ['richtext', '<p>Open</p>'],
+        ]);
+        expect(kinds(sp({ xfrm: box(0, 0, 100, 0), geom: 'line', spPr: stroke, text: para('Line') }))).toEqual([
+            ['line', undefined],
+            ['richtext', '<p>Line</p>'],
+        ]);
     });
 
     test('vertical text turns its box a further quarter turn, or three, its sides swapped about the center', () => {
@@ -359,7 +413,7 @@ describe('kinds', () => {
         expect(stacked.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
     });
 
-    test('a preset with no kind of its own, or a custGeom, is a path at its box in its paint, its text on top', () => {
+    test('a preset with no kind of its own, or a custGeom, is a path at its box in its paint, holding its text', () => {
         const deck = deckOf({
             slides: [
                 {
@@ -373,19 +427,18 @@ describe('kinds', () => {
                 },
             ],
         });
-        const [arrow, text, triangle] = deck.slides[0].elements;
+        const [arrow, triangle] = deck.slides[0].elements;
         expect(arrow).toMatchObject({
             type: 'path',
             path: presetGeometry('rightArrow', undefined, 200 * PX, 100 * PX, false)?.[0].path,
             closed: true,
             strokeColor: '#00ff00',
+            html: '<p>Next</p>',
         });
         expectBox(arrow, 10, 20, 200, 100);
         expect(JSON.parse(String(arrow.fill))).toMatchObject({ type: 'solid', color: '#ff0000' });
-        expect(text).toMatchObject({ type: 'richtext', html: '<p>Next</p>', strokeColor: 'transparent' });
-        expectBox(text, 10, 20, 200, 100);
         expect(triangle).toMatchObject({ type: 'path', path: 'M 0.5 0 L 1 1 L 0 1 Z', closed: true });
-        expect(deck.slides[0].elements).toHaveLength(3);
+        expect(deck.slides[0].elements).toHaveLength(2);
         expect(deck.warnings).toEqual([]);
     });
 
@@ -395,7 +448,7 @@ describe('kinds', () => {
                 sp({ xfrm: box(0, 0, 10, 10), geom: 'flowChartConnector', spPr: FILLED }) +
                 sp({ xfrm: box(0, 0, 10, 10), geom: 'flowChartDecision', spPr: FILLED }),
         );
-        expect(process).toMatchObject({ type: 'richtext', html: '<p>Step</p>', corners: 'straight' });
+        expect(process).toMatchObject({ type: 'rectangle', html: '<p>Step</p>', corners: 'straight' });
         expect(JSON.parse(String(process.fill))).toMatchObject({ color: '#ff0000' });
         expect([connector.type, decision.type, decision.corners]).toEqual(['ellipse', 'diamond', 'straight']);
     });
@@ -767,8 +820,8 @@ describe('kinds', () => {
                 layouts: [{ shapes: placeholder(`${custGeom(TRIANGLE)}${FILLED}`) }],
                 slides: [{ shapes: placeholder('') }, { shapes: placeholder('') }, { shapes: placeholder('') }],
             });
-            expect(deck.slides.map((slide) => slide.elements.map((found) => found.type))).toEqual(
-                Array(3).fill(['path', 'richtext']),
+            expect(deck.slides.map((slide) => slide.elements.map((found) => [found.type, found.html]))).toEqual(
+                Array(3).fill([['path', '<p>x</p>']]),
             );
             expect(convert).toHaveBeenCalledTimes(1);
         } finally {
