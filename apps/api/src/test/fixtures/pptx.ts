@@ -90,9 +90,10 @@ export const styleRef = (kind: 'lnRef' | 'fillRef', idx: number, color = '<a:sch
 export const styleRefs = (fill: number, ln: number, color?: string) =>
     `${styleRef('lnRef', ln, color)}${styleRef('fillRef', fill, color)}<a:effectRef idx="0"><a:scrgbClr r="0" g="0" b="0"/></a:effectRef><a:fontRef idx="minor"/>`;
 
-export function cxn(options: { xfrm: string; geom?: string; ln?: string; style?: string }): string {
+// `av` is the preset's avLst content, its adjust values.
+export function cxn(options: { xfrm: string; geom?: string; av?: string; ln?: string; style?: string }): string {
     const id = ids++;
-    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Connector ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${options.xfrm}<a:prstGeom prst="${options.geom ?? 'straightConnector1'}"><a:avLst/></a:prstGeom>${options.ln ?? ''}</p:spPr>${styleOf(options.style)}</p:cxnSp>`;
+    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Connector ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${options.xfrm}<a:prstGeom prst="${options.geom ?? 'straightConnector1'}"><a:avLst>${options.av ?? ''}</a:avLst></a:prstGeom>${options.ln ?? ''}</p:spPr>${styleOf(options.style)}</p:cxnSp>`;
 }
 
 export function pic(options: {

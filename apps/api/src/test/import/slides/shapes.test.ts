@@ -1,6 +1,12 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import type { NewVectorElement, SlidePage } from '@workspace/lib/vector';
-import { MAX_PATH_BYTES, TRANSPARENT_COLOR } from '@workspace/lib/vector';
+import type { NewVectorElement, Point, SlidePage } from '@workspace/lib/vector';
+import {
+    arrowCurveBeziers,
+    MAX_PATH_BYTES,
+    parseFixedSegments,
+    parsePoints,
+    TRANSPARENT_COLOR,
+} from '@workspace/lib/vector';
 import * as customGeometryModule from '../../../lib/import/slides/custom-geometry';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
@@ -56,6 +62,29 @@ function expectBox(found: NewVectorElement | undefined, x: number, y: number, wi
     expect(found?.width).toBeCloseTo(width, 6);
     expect(found?.height).toBeCloseTo(height, 6);
 }
+
+// A linear element's points on the slide, to the hundredth.
+const scenePoints = (found: NewVectorElement): [number, number][] =>
+    parsePoints(String(found.points)).map((point) => [
+        Math.round(((found.x ?? 0) + point.x) * 100) / 100,
+        Math.round(((found.y ?? 0) + point.y) * 100) / 100,
+    ]);
+
+const pinned = (found: NewVectorElement) =>
+    parseFixedSegments(String(found.fixedSegments)).segments.map((segment) => segment.index);
+
+// A cubic Bézier sampled densely, to measure a curve against.
+function cubic(...[p0, p1, p2, p3]: [number, number][]): Point[] {
+    return Array.from({ length: 1001 }, (_, i) => {
+        const t = i / 1000;
+        const weights = [(1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t ** 2, t ** 3];
+        const along = (axis: 0 | 1) => [p0, p1, p2, p3].reduce((sum, p, j) => sum + p[axis] * weights[j], 0);
+        return { x: along(0), y: along(1) };
+    });
+}
+
+const nearest = (point: Point, curve: Point[]) =>
+    Math.min(...curve.map((on) => Math.hypot(on.x - point.x, on.y - point.y)));
 
 describe('geometry', () => {
     test('a 16:9 slide fills the frame: 6,350 EMU a px', () => {
@@ -475,14 +504,102 @@ describe('kinds', () => {
         ]);
     });
 
-    test('a bent or curved connector is its path, its arrowheads lost and counted', () => {
-        const ln = `<a:ln w="12700">${solid('0000FF')}<a:tailEnd type="triangle"/></a:ln>`;
+    test('a bent connector is an elbow arrow pinned along its bends, its heads and line kept', () => {
+        const ln = `<a:ln w="25400">${solid('0000FF')}<a:prstDash val="sysDash"/><a:headEnd type="oval"/><a:tailEnd type="triangle"/></a:ln>`;
+        const bent = (geom: string, attributes = '', av = '') =>
+            cxn({ xfrm: box(100, 100, 200, 100, attributes), geom, av, ln });
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes:
+                        bent('bentConnector3') +
+                        bent('bentConnector3', ' flipH="1"', '<a:gd name="adj1" fmla="val 25000"/>') +
+                        bent('bentConnector4', ' rot="5400000"') +
+                        bent('bentConnector5', '', '<a:gd name="adj3" fmla="val 75000"/>') +
+                        // Its middle bends coincide by default, and the arrow keeps only the corners it draws.
+                        bent('bentConnector5'),
+                },
+            ],
+        });
+        const elbows = deck.slides[0].elements;
+        for (const found of elbows) {
+            expect(found).toMatchObject({
+                type: 'arrow',
+                elbow: true,
+                roundness: 'sharp',
+                angle: 0,
+                startArrowhead: 'circle',
+                endArrowhead: 'triangle',
+                strokeColor: '#0000ff',
+                strokeStyle: 'dashed',
+            });
+            expect(found.strokeWidth).toBeCloseTo(4, 6);
+        }
+        expect(elbows.map(scenePoints)).toEqual([
+            [
+                [100, 100],
+                [200, 100],
+                [200, 200],
+                [300, 200],
+            ],
+            [
+                [300, 100],
+                [250, 100],
+                [250, 200],
+                [100, 200],
+            ],
+            [
+                [250, 50],
+                [250, 150],
+                [200, 150],
+                [200, 250],
+                [150, 250],
+            ],
+            [
+                [100, 100],
+                [200, 100],
+                [200, 150],
+                [250, 150],
+                [250, 200],
+                [300, 200],
+            ],
+            [
+                [100, 100],
+                [200, 100],
+                [200, 200],
+                [300, 200],
+            ],
+        ]);
+        // Every bend is pinned, so the router never routes it again.
+        expect(elbows.map(pinned)).toEqual([[2], [2], [2, 3], [2, 3, 4], [2]]);
+        expect(deck.warnings).toEqual([]);
+    });
+
+    test('a bent connector no elbow can hold is a sharp arrow through its corners', () => {
+        const ln = `<a:ln w="12700">${solid('0000FF')}<a:tailEnd type="arrow"/></a:ln>`;
+        const [corner, turned] = elementsOf(
+            // An elbow pins only a bend between two others, and a turn off the quarter breaks its right angles.
+            cxn({ xfrm: box(100, 100, 200, 100), geom: 'bentConnector2', ln }) +
+                cxn({ xfrm: box(100, 100, 200, 100, ' rot="1800000"'), geom: 'bentConnector3', ln }),
+        );
+        expect(corner).toMatchObject({ type: 'arrow', elbow: false, roundness: 'sharp', endArrowhead: 'arrow' });
+        expect(scenePoints(corner)).toEqual([
+            [100, 100],
+            [300, 100],
+            [300, 200],
+        ]);
+        expect(turned).toMatchObject({ type: 'arrow', elbow: false, roundness: 'sharp', angle: 0 });
+        expect(scenePoints(turned)).toHaveLength(4);
+    });
+
+    test('a bent or curved connector without a head is its path, nothing lost', () => {
+        const ln = `<a:ln w="12700">${solid('0000FF')}<a:tailEnd type="none"/></a:ln>`;
         const deck = deckOf({
             slides: [
                 {
                     shapes:
                         cxn({ xfrm: box(0, 0, 100, 50), geom: 'bentConnector3', ln }) +
-                        cxn({ xfrm: box(0, 0, 100, 50), geom: 'curvedConnector3', ln: ln.replace('triangle', 'none') }),
+                        cxn({ xfrm: box(0, 0, 100, 50), geom: 'curvedConnector3', ln }),
                 },
             ],
         });
@@ -490,7 +607,52 @@ describe('kinds', () => {
             ['path', false, '#0000ff'],
             ['path', false, '#0000ff'],
         ]);
-        expect(deck.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
+        expect(deck.warnings).toEqual([]);
+    });
+
+    test('a curved connector is a curved arrow through points on its curve, its heads and line kept', () => {
+        const ln = `<a:ln w="12700">${solid('0000FF')}<a:headEnd type="arrow"/><a:tailEnd type="stealth"/></a:ln>`;
+        const curved = (geom: string) => cxn({ xfrm: box(100, 100, 400, 200), geom, ln });
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes:
+                        curved('curvedConnector3') +
+                        curved('curvedConnector2') +
+                        curved('curvedConnector4') +
+                        curved('curvedConnector5'),
+                },
+            ],
+        });
+        const arrows = deck.slides[0].elements;
+        for (const found of arrows) {
+            expect(found).toMatchObject({
+                type: 'arrow',
+                elbow: false,
+                roundness: 'round',
+                angle: 0,
+                startArrowhead: 'arrow',
+                endArrowhead: 'triangle',
+                strokeColor: '#0000ff',
+            });
+            const points = scenePoints(found);
+            expect(points[0]).toEqual([100, 100]);
+            expect(points.at(-1)).toEqual([500, 300]);
+        }
+        expect(deck.warnings).toEqual([]);
+        // curvedConnector3 is two cubics through the box's center. Its points lie on them, and the canvas's curve
+        // through those points stays within a few px of them.
+        const truth = [
+            cubic([100, 100], [200, 100], [300, 150], [300, 200]),
+            cubic([300, 200], [300, 250], [400, 300], [500, 300]),
+        ].flat();
+        const points = scenePoints(arrows[0]).map(([x, y]) => ({ x, y }));
+        expect(points.length).toBeGreaterThan(5);
+        expect(Math.max(...points.map((point) => nearest(point, truth)))).toBeLessThan(0.5);
+        const drawn = arrowCurveBeziers(points).flatMap(([a, b, c, d]) =>
+            cubic([a.x, a.y], [b.x, b.y], [c.x, c.y], [d.x, d.y]),
+        );
+        expect(Math.max(...drawn.map((point) => nearest(point, truth)))).toBeLessThan(1.5);
     });
 
     test('a closed path loses no arrowheads, as PowerPoint draws a line end only on an open one', () => {
