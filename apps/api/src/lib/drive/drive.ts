@@ -589,12 +589,10 @@ export class Drive {
         const oldMembers = await this.getEffectiveMembers(mountId, pathId);
 
         const movedPath = await mount.updatePath(pathId, { parentId: targetParentId });
-        this.emit(
-            SSEventType.DRIVE_PATH_MOVED,
-            movedPath,
-            oldParentId ?? undefined,
-            this.getEffectiveMembers(mountId, pathId).then((members) => [...oldMembers, ...members]),
-        );
+        this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {
+            oldParentId,
+            members: this.getEffectiveMembers(mountId, pathId).then((members) => [...oldMembers, ...members]),
+        });
         if (user && oldParentId) {
             // The move walks two parent chains, so it records and fans out here instead of in recordFileEvent.
             mount.history.record({
@@ -1275,13 +1273,12 @@ export class Drive {
     public emit(
         type: SSEventDrive['type'],
         path: DrivePath,
-        oldParentId?: string,
-        members?: EffectiveMember[] | Promise<EffectiveMember[]>,
+        options: { oldParentId?: string | null; members?: EffectiveMember[] | Promise<EffectiveMember[]> } = {},
     ): void {
         broadcastToOwnerAndMembers(
             this.owner.id,
-            members ?? this.getEffectiveMembers(path.mountId, path.id),
-            buildDriveEvent(type, path, oldParentId),
+            options.members ?? this.getEffectiveMembers(path.mountId, path.id),
+            buildDriveEvent(type, path, options.oldParentId ?? undefined),
         ).catch(() => {});
     }
 

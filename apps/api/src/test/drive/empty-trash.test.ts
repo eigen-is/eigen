@@ -33,7 +33,14 @@ describe('emptyTrash', () => {
         await mount.updatePath(child, { trashedAt: earlier });
         await mount.updatePath(other, { trashedAt: earlier });
 
-        await home.drive.emptyTrash(mount.id);
+        // The child is gone by its turn, which is no failure, so nothing is logged.
+        const errors = spyOn(console, 'error');
+        try {
+            await home.drive.emptyTrash(mount.id);
+            expect(errors).not.toHaveBeenCalled();
+        } finally {
+            errors.mockRestore();
+        }
 
         expect(await mount.listTrash()).toEqual([]);
         expect(await mount.getPath(other)).toBeNull();
@@ -76,5 +83,23 @@ describe('emptyTrash', () => {
 
         expect((await mount.getPath(restored))?.trashedAt).toBeNull();
         expect(await mount.getPath(deleted)).toBeNull();
+    });
+
+    // An item a folder delete took has no members to read, and that is expected. Any other failed read
+    // costs only the event, so the delete still goes, but it is logged.
+    test('a failed members read other than a gone item is logged, and the delete still goes', async () => {
+        const file = await createFile(rootId, 'logged.txt');
+        await home.drive.deletePath(mount.id, file);
+        const members = spyOn(home.drive, 'getEffectiveMembers').mockRejectedValue(new Error('auth db unavailable'));
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await home.drive.permanentlyDelete(mount.id, file);
+            expect(errors.mock.calls.flat().some((arg) => String(arg).includes('auth db unavailable'))).toBe(true);
+        } finally {
+            members.mockRestore();
+            errors.mockRestore();
+        }
+
+        expect(await mount.getPath(file)).toBeNull();
     });
 });

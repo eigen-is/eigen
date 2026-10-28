@@ -5,6 +5,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { ApiError } from '../core';
 import type { Mount } from '../mount';
 import type { User } from '../user';
 import { propagateSharedPathChange } from './acl-propagation';
@@ -36,7 +37,7 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
             .closeCollabDocument(mount.id, id, { skipFinalSnapshot: true })
             .catch((error) => console.error(`Failed to close collab document ${id}:`, error));
     }
-    drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined, members);
+    drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, { oldParentId: item.parentId, members });
     if (user) {
         mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
         // The item as it was before the trash. fanOut skips paths in the trash, and this one isn't yet.
@@ -78,8 +79,14 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
     const notices = user ? await Promise.all(roots.map((root) => readDeleteNotice(mount, root, user))) : [];
     // The delete takes the path that the members are read from. Everything here is in the trash, which
     // only the owner, or a team's members, can see, so one read serves every root. The item can be gone
-    // already, taken by the delete of a folder around it, and then there is nobody to tell.
-    const members = await drive.getEffectiveMembers(mount.id, item.id).catch(() => []);
+    // already, taken by the delete of a folder around it, and then there is nobody to tell. Any other
+    // failed read costs only the members' events, so it is logged and the delete goes on.
+    const members = await drive.getEffectiveMembers(mount.id, item.id).catch((error: unknown) => {
+        if (!(error instanceof ApiError && error.status === 404)) {
+            console.error(`Failed to read the members of ${item.id} before its delete:`, error);
+        }
+        return [];
+    });
 
     if (!(await mount.permanentlyDeleteFromTrash(item.id))) return false;
 
@@ -89,8 +96,7 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
         drive.emit(
             isContainerType(root.type) ? SSEventType.DRIVE_FOLDER_DELETED : SSEventType.DRIVE_FILE_DELETED,
             root,
-            undefined,
-            members,
+            { members },
         );
         const notice = notices[index];
         if (user && notice.watcherIds.length > 0) {
