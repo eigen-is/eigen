@@ -33,6 +33,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
+- **Labels in sentence case** — buttons, menus, dialog titles and fields in Admin, Calendar, Chat, Contacts, Drive, Mail, Sheets, Space and Stickies capitalize only the first word and names, such as **New event**, **Reply all** and **Web page (.html)**, as the rest of Eigen already does
 - **Forwarding email** — a forward brings the original's attachments along, pictures in the message included. Take one off with the **X** on its chip before you send
 - **Space home** — an admin gets an Admin tile next to the apps. The **Help and support** tile takes the help center's teal
 - **Help center colors** — the Admin section wears the Admin app's color, and a section page shows its title in its section's color, such as amber for Mail

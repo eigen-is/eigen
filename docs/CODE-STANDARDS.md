@@ -78,6 +78,8 @@ Workspace imports resolve through each package's `exports` map, with no tsconfig
 
 **User-visible dates are day-month-year**: "5 January 2026", "5 Jan", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Format through `formatDayMonth` / `formatDate` in `@workspace/lib/date` (they assemble the order from the `'en'` locale's parts; `'en-GB'` spells a short September "Sept" in browsers), and write hand-built shapes as `d MMM yyyy`. Every `toLocale*String` on a date passes `'en'`, never `[]` or no locale, or a Dutch browser writes "januari" into the English UI; a sibling that passes `[]` is a bug to fix on touch. A plain number's `.toLocaleString()` stays as it is. Spelling everywhere else stays en-US: fix British spelling on touch.
 
+**UI labels are sentence case**: only the first word and proper nouns start with a capital, so "Keep aspect ratio", "Page setup", "Delete event", never "Keep Aspect Ratio". That covers button text, menu items, dialog titles, tabs, field labels, tooltips, placeholders, toasts, empty states and section headings. Proper nouns keep their case: Eigen and its apps used as names (Drive, Docs, Sheets, Slides, Mail, Calendar, Contacts, Chat, Stickies, Vector, Space), other products (Word, Excel, PowerPoint, Google Docs, Thunderbird), protocols and formats (WebDAV, CalDAV, IMAP, S3, PDF, CSV, URL, ID, 2FA) and key names (Enter, Tab, Shift). A help-center article quotes a label character for character, so a renamed label changes the articles that bold it in the same commit.
+
 ## Key Patterns
 
 Worked examples: [CODE-EXAMPLES.md § Key Patterns](CODE-EXAMPLES.md#key-patterns).
