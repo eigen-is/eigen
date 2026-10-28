@@ -38,7 +38,7 @@ export const paths = sqliteTable('paths', {
 // it survives a data-dir relocation); epochs are plain ms numbers.
 // `isDatabase` says what the staged copy holds: true for the managed databases the queue was
 // written for (a VACUUM INTO copy, refused before the PUT if it lost its SQLite header), false for
-// the plain files a restore stages (lib/backup/materialize.ts), which have no header to check.
+// the plain files a restore stages (materializeMount), which have no header to check.
 export const pendingUploads = sqliteTable('pending_uploads', {
     storageKey: text('storageKey').primaryKey(),
     stagingPath: text('stagingPath').notNull(),
