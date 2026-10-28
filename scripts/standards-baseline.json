@@ -113,7 +113,7 @@
     "apps/api/src/lib/calendar/events.ts": 10,
     "apps/api/src/lib/calendar/invitations.ts": 2,
     "apps/api/src/lib/calendar/shares.ts": 3,
-    "apps/api/src/lib/chat/chat.ts": 2,
+    "apps/api/src/lib/chat/chat.ts": 1,
     "apps/api/src/lib/collab/collab-document.ts": 2,
     "apps/api/src/lib/contacts/contacts.ts": 5,
     "apps/api/src/lib/contacts/dav-store.ts": 1,
