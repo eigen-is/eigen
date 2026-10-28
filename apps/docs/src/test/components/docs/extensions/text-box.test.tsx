@@ -107,7 +107,7 @@ async function setup(content: JSONContent[] = DOC) {
     }
     const rendered = await renderInDocument(createElement(Host));
     cleanups.push(rendered.unmount);
-    return { a, b, note, boxEditor, undoManager, session };
+    return { a, b, yA, note, boxEditor, undoManager, session };
 }
 
 // The box's span in tab A, laid out as 200 by 100 at (100, 100), so a press can land inside it or on its edge band.
@@ -312,6 +312,19 @@ test('typing in the open box forwards as one undo step, and ⌘Z in the box take
     expect(boxEditor.state.doc.textContent).toBe('Inside');
 });
 
+// A keystroke changes the box's node, never its look: the box redraws nothing and measures nothing for it.
+test('typing in the open box leaves the look of its span as it was', async () => {
+    const { a, boxEditor } = await opened();
+    const span = laidOutBox(a);
+    const written = spyOn(span, 'setAttribute');
+    await act(async () => {
+        boxEditor.commands.setTextSelection(7);
+        typeInto(boxEditor, ' text');
+    });
+    expect(boxText(a)).toBe('Inside text');
+    expect(written).not.toHaveBeenCalled();
+});
+
 test("a peer's edit to the box pulls into the open editor, and a peer's delete hands the caret to the body", async () => {
     const { a, b, boxEditor, session } = await opened();
     await act(async () => {
@@ -324,6 +337,28 @@ test("a peer's edit to the box pulls into the open editor, and a peer's delete h
     });
     expect(session.current?.anchor).toBeNull();
     expect(a.view.dom.querySelector('.text-box')).toBeNull();
+});
+
+// A peer offline moves the box to the first paragraph and types into it, and its reconnect brings both as one update.
+// This tab typed nothing, so the open box takes the peer's text and puts nothing of its own back.
+test("a peer's move and edit of the open box, as one update after a reconnect, reach the open editor", async () => {
+    const { a, b, yA, boxEditor, session } = await setup([paragraph(text('One')), ...DOC]);
+    await act(async () => session.current?.open(5 + BOX, { focus: true, at: null, selection: null }));
+    const offline = new Y.Doc();
+    Y.applyUpdate(offline, Y.encodeStateAsUpdate(yA));
+    const peer = mount(offline, { undoManager: createDocUndoManager(offline), cardIds: () => new Set() });
+    const node = peer.state.doc.nodeAt(5 + BOX);
+    if (!node) throw new Error('no box');
+    peer.view.dispatch(peer.state.tr.delete(5 + BOX, 5 + BOX + node.nodeSize).insert(1, node));
+    peer.view.dispatch(peer.state.tr.insertText('Peer ', 3));
+    await act(async () => {
+        Y.applyUpdate(yA, Y.encodeStateAsUpdate(offline, Y.encodeStateVector(yA)), 'reconnect');
+        await Promise.resolve();
+    });
+    expect(session.current?.anchor?.pos).toBe(1);
+    expect(boxEditor.state.doc.textContent).toBe('Peer Inside');
+    expect(boxText(a)).toBe('Peer Inside');
+    expect(boxText(b)).toBe('Peer Inside');
 });
 
 test("a press on the box's comment mark opens no box, as the mark is a button of its own", async () => {
@@ -548,9 +583,8 @@ test('Insert › Text box puts an open, empty box in the flow after the caret', 
     expect(a.state.doc.nodeAt(7)?.attrs).toMatchObject({ layout: 'block', alignment: 'left' });
 });
 
-// An auto box is as tall as its text, which only its drawn box knows, and it changes after the render a write causes, or
-// with no write at all as an image in it loads.
-test("the Text box panel's height follows the box as drawn", async () => {
+// Every ResizeObserver built from here on, told that what it watches resized as `resized()` is called.
+function observeResizes(): () => Promise<void> {
     const observers: (() => void)[] = [];
     const Observer = globalThis.ResizeObserver;
     globalThis.ResizeObserver = class {
@@ -564,6 +598,67 @@ test("the Text box panel's height follows the box as drawn", async () => {
     cleanups.push(() => {
         globalThis.ResizeObserver = Observer;
     });
+    return () =>
+        act(async () => {
+            for (const observe of observers) observe();
+        });
+}
+
+// The box's span drawn as tall as its min-height, or as its text, which wraps to 140 px once it is narrower than 200 px
+// and is 100 px otherwise.
+function drawnAsLaidOut(editor: TestEditor) {
+    const span = editor.view.dom.querySelector<HTMLElement>('.text-box');
+    if (!span) throw new Error('no box drawn');
+    Object.defineProperty(span, 'offsetHeight', {
+        configurable: true,
+        get: () =>
+            Math.max(
+                Number.parseFloat(span.style.minHeight) || 0,
+                Number.parseFloat(span.style.width) < 200 ? 140 : 100,
+            ),
+    });
+}
+
+// ObjectTransform's grips listen on the document once pressed; happy-dom has no pointer capture.
+async function dragGrip(editor: TestEditor, position: string, dx: number, dy: number) {
+    const grip = [...editor.view.dom.querySelectorAll<HTMLElement>('.eigen-selection-handle')].find((element) =>
+        position.split(' ').every((name) => element.classList.contains(name)),
+    );
+    if (!grip) throw new Error(`no ${position} grip`);
+    grip.setPointerCapture = () => {};
+    const at = (type: string, x: number, y: number, target: EventTarget) =>
+        target.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
+    await act(async () => {
+        at('pointerdown', 0, 0, grip);
+    });
+    await act(async () => {
+        at('pointermove', dx, dy, document);
+    });
+    await act(async () => {
+        at('pointerup', dx, dy, document);
+    });
+}
+
+test("the bottom grip writes the box's height, and a narrower width keeps an auto box auto", async () => {
+    const resized = observeResizes();
+    const { a } = await setup();
+    await act(async () => {
+        a.commands.setNodeSelection(BOX);
+        a.commands.updateTextBox({ width: 220 });
+    });
+    drawnAsLaidOut(a);
+    await resized();
+    await dragGrip(a, 'top-1/2 -right-2.5', -40, 0);
+    expect(a.state.doc.nodeAt(BOX)?.attrs).toMatchObject({ width: 180, height: null });
+    await resized();
+    await dragGrip(a, '-bottom-2.5 left-1/2', 0, 50);
+    expect(a.state.doc.nodeAt(BOX)?.attrs).toMatchObject({ width: 180, height: 190 });
+});
+
+// An auto box is as tall as its text, which only its drawn box knows, and it changes after the render a write causes, or
+// with no write at all as an image in it loads.
+test("the Text box panel's height follows the box as drawn", async () => {
+    const resized = observeResizes();
     const { a } = await setup();
     await act(async () => {
         a.commands.setNodeSelection(BOX);
@@ -573,9 +668,7 @@ test("the Text box panel's height follows the box as drawn", async () => {
     const panel = await renderInDocument(createElement(TextBoxPropertiesPanel, { editor: a }));
     cleanups.push(panel.unmount);
     Object.defineProperty(laidOutBox(a), 'offsetHeight', { configurable: true, value: mmToPx(40) });
-    await act(async () => {
-        for (const observe of observers) observe();
-    });
+    await resized();
     const [, height] = document.querySelectorAll<HTMLInputElement>('input[type="number"][step="0.01"]');
     expect(height?.value).toBe('4.00');
 });

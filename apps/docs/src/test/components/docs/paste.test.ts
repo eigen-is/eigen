@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createDocument, Editor, getSchema } from '@tiptap/core';
+import { DOMSerializer } from '@tiptap/pm/model';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -301,6 +302,33 @@ test('a pasted image from the HTML download keeps on the paper by its width', ()
     const found: object[] = [];
     createDocument(cleanPastedHTML(html, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
         if (node.type.name === 'figure') found.push(node.attrs);
+    });
+    expect(found).toMatchObject([{ layout: 'front', width: 300, offsetX: 400 }]);
+});
+
+// A text box keeps its width on its own span inside the frame, beside its paragraphs, so the paste reads the box's.
+test('a pasted text box in front of the text keeps on the paper by its own width', () => {
+    const doc = schema.nodeFromJSON({
+        type: 'doc',
+        content: [
+            {
+                type: 'paragraph',
+                content: [
+                    {
+                        type: 'textBox',
+                        attrs: { layout: 'front', offsetX: 550, offsetY: 0, width: 300 },
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inside' }] }],
+                    },
+                    { type: 'text', text: 'x' },
+                ],
+            },
+        ],
+    });
+    const holder = document.createElement('div');
+    holder.append(DOMSerializer.fromSchema(schema).serializeFragment(doc.content));
+    const found: object[] = [];
+    createDocument(cleanPastedHTML(holder.innerHTML, PAGE, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+        if (node.type.name === 'textBox') found.push(node.attrs);
     });
     expect(found).toMatchObject([{ layout: 'front', width: 300, offsetX: 400 }]);
 });

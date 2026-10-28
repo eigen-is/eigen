@@ -167,6 +167,7 @@ export function BandControls({
     const [formatOpen, setFormatOpen] = useState(false);
     const differentFirstPageId = useId();
     const edge = bandEdge(band);
+    const keepBandFocus = keepEditorFocus(editor);
     return (
         <div className="ml-auto flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -186,7 +187,7 @@ export function BandControls({
                         <ChevronDown className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" onCloseAutoFocus={keepEditorFocus(editor)}>
+                <DropdownMenuContent align="end" onCloseAutoFocus={keepBandFocus}>
                     <MenuSections
                         organize={
                             <>
@@ -225,12 +226,14 @@ export function BandControls({
             <HeadersAndFootersDialog
                 open={formatOpen}
                 onOpenChange={setFormatOpen}
+                onCloseAutoFocus={keepBandFocus}
                 setup={setup}
                 onSetupChange={onSetupChange}
             />
             <PageSetupDialog
                 open={pageSetupOpen}
                 onOpenChange={setPageSetupOpen}
+                onCloseAutoFocus={keepBandFocus}
                 setup={setup}
                 canWrite
                 onSetupChange={onSetupChange}

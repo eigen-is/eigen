@@ -1,14 +1,13 @@
 // Google's and Word's footnote: a reference in the body's text that holds its note's paragraphs. Notes number in
-// document order and are never stored numbered. A note is one of the doc's stories, with a stable id; the note's own
-// editor, the exports and the docx reader and writer all read it through this node.
+// document order and are never stored numbered. A note is one of the doc's stories, with a stable id. Its readers, such
+// as the note's own editor and the exports, read it through this node.
 
 import type { JSONContent } from '@tiptap/core';
 import { Node } from '@tiptap/core';
-import type { Node as PMNode, ResolvedPos, Schema } from '@tiptap/pm/model';
+import type { Node as PMNode, Schema } from '@tiptap/pm/model';
 import { DOMSerializer, Fragment, DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
-import { TextSelection } from '@tiptap/pm/state';
-import { flattenNestedStories, isStoryNode, newStoryId, readStoryId, storyIdAttribute } from './stories';
+import { flattenNestedStories, insertStory, newStoryId, readStoryId, STORY_ID_ATTRIBUTE } from './stories';
 
 const NAME = 'footnote';
 
@@ -35,21 +34,9 @@ export function footnotesInOrder(node: JSONContent): JSONContent[] {
     return (node.content ?? []).flatMap(footnotesInOrder);
 }
 
-const inStory = ($pos: ResolvedPos): boolean => {
-    for (let depth = $pos.depth; depth > 0; depth--) if (isStoryNode($pos.node(depth).type.name)) return true;
-    return false;
-};
-
-// A reference after the selection, which stays, as Word's and Google's insert keep a selected text, and the caret
-// after it. Its note is one empty paragraph. Returns where the reference is, or null where no note goes: inside a story,
-// where the textblock takes no inline node (a code block), and in a schema without one (a band's).
+// A reference after the selection, with its note one empty paragraph, where insertStory puts a story.
 export function insertFootnote(tr: Transaction): number | null {
-    const { $to } = tr.selection;
-    const note = tr.doc.type.schema.nodes[NAME]?.createAndFill({ id: newStoryId() });
-    if (!note || inStory($to) || !$to.parent.canReplaceWith($to.index(), $to.index(), note.type)) return null;
-    tr.insert($to.pos, note);
-    tr.setSelection(TextSelection.create(tr.doc, $to.pos + note.nodeSize));
-    return $to.pos;
+    return insertStory(tr, tr.doc.type.schema.nodes[NAME]?.createAndFill({ id: newStoryId() }));
 }
 
 // One paragraph per paragraph span: Eigen writes nothing else in a note.
@@ -84,8 +71,14 @@ export const FootnoteNode = Node.create({
     // Selecting the reference selects the whole note.
     selectable: true,
 
+    // Null until an insert, an import or a paste sets one.
     addAttributes() {
-        return storyIdAttribute();
+        return {
+            id: {
+                default: null,
+                parseHTML: (element: HTMLElement) => readStoryId(element.getAttribute(STORY_ID_ATTRIBUTE)),
+            },
+        };
     },
 
     parseHTML() {
@@ -99,7 +92,7 @@ export const FootnoteNode = Node.create({
         dom.className = NAME;
         dom.setAttribute('data-type', NAME);
         const id = readStoryId(node.attrs['id']);
-        if (id) dom.setAttribute('data-story-id', id);
+        if (id) dom.setAttribute(STORY_ID_ATTRIBUTE, id);
         node.forEach((paragraph) => {
             const span = document.createElement('span');
             span.setAttribute('data-type', FOOTNOTE_PARAGRAPH);

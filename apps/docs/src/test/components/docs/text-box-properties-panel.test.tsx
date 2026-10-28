@@ -128,6 +128,16 @@ test('the outline style and weight write one outline value; vertical alignment a
     stillSelected(editor);
 });
 
+// The weight field keeps a typed weight to what a line draws, as a table cell's border keeps it.
+test('a weight past the thickest writes the thickest line', async () => {
+    const editor = await mount();
+    const weight = document.querySelector<HTMLInputElement>('input[type="number"][step="0.5"]');
+    if (!weight) throw new Error('no weight field');
+    await typeInField(weight, '20');
+    expect(box(editor)?.['outline']).toBe('8px solid #000000');
+    stillSelected(editor);
+});
+
 test('the padding fields write the insets in cm', async () => {
     const editor = await mount();
     const [, , sides, ends] = cmFields();

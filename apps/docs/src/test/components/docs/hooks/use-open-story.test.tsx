@@ -605,6 +605,53 @@ describe("a peer's cut and paste of the open note's reference", () => {
         expect(noteOf(b)).toBe('Note!?');
     });
 
+    // A body transaction that changes no text, as a peer's caret moving makes, pulls nothing into the note: what was
+    // typed stays the typist's.
+    test('keeps what was typed meanwhile when a peer caret moved before the paste arrived', async () => {
+        const { a, b, note, open, hold, release } = await setup(moved('n1'));
+        await open(9);
+        hold();
+        await act(async () => {
+            cutAndPaste(b);
+            note.commands.setTextSelection(5);
+            typeInto(note, '!');
+            a.view.dispatch(a.state.tr.setMeta('peerCaret', true));
+        });
+        await release();
+        expect(noteOf(a)).toBe('Note!');
+        expect(noteOf(b)).toBe('Note!');
+    });
+
+    // The note's editor already holds the second note's text, typed into the first: opening the second brings nothing
+    // into it, yet nothing was typed there.
+    test("takes a peer's text into a note opened on an editor that held its text already", async () => {
+        const { a, yA, note, session, open } = await setup([
+            paragraph(text('One')),
+            paragraph(text('Two'), { ...footnote(paragraph(text('Note'))), attrs: { id: 'n1' } }, text('.')),
+            paragraph(text('Three'), { ...footnote(paragraph(text('Note!'))), attrs: { id: 'n2' } }),
+        ]);
+        await open(9);
+        note.commands.setTextSelection(5);
+        typeInto(note, '!');
+        await act(async () => session.current?.close());
+        const second = 26;
+        expect(a.state.doc.nodeAt(second)?.attrs['id']).toBe('n2');
+        await open(second);
+        const offline = new Y.Doc();
+        Y.applyUpdate(offline, Y.encodeStateAsUpdate(yA));
+        const peer = bodyOn(offline);
+        const node = peer.state.doc.nodeAt(second);
+        if (!node) throw new Error('no note');
+        peer.view.dispatch(peer.state.tr.delete(second, second + node.nodeSize).insert(4, node));
+        peer.view.dispatch(peer.state.tr.insertText('Peer ', 6));
+        await act(async () => {
+            Y.applyUpdate(yA, Y.encodeStateAsUpdate(offline, Y.encodeStateVector(yA)), 'reconnect');
+            await Promise.resolve();
+        });
+        expect(note.state.doc.textContent).toBe('Peer Note!');
+        expect(noteOf(a)).toBe('Peer Note!');
+    });
+
     test('keeps a note open that had no id, as it takes one when it opens', async () => {
         const { a, b, note, session, open, hold, release } = await setup(moved(null));
         await open(9);
@@ -620,4 +667,81 @@ describe("a peer's cut and paste of the open note's reference", () => {
         expect(session.current?.anchor?.pos).toBe(4);
         expect(noteOf(a)).toBe('Note!');
     });
+
+    // A peer offline makes the move and types into the note, and its reconnect brings both as one update. This tab typed
+    // nothing, so the open note takes the peer's text and puts nothing of its own back.
+    test("takes a peer's text that came with the move, when this tab typed nothing", async () => {
+        const { a, b, yA, note, session, open } = await setup(moved('n1'));
+        await open(9);
+        const offline = new Y.Doc();
+        Y.applyUpdate(offline, Y.encodeStateAsUpdate(yA));
+        const peer = bodyOn(offline);
+        cutAndPaste(peer);
+        peer.view.dispatch(peer.state.tr.insertText('Peer ', 6));
+        await act(async () => {
+            Y.applyUpdate(yA, Y.encodeStateAsUpdate(offline, Y.encodeStateVector(yA)), 'reconnect');
+            await Promise.resolve();
+        });
+        expect(session.current?.anchor?.pos).toBe(4);
+        expect(note.state.doc.textContent).toBe('Peer Note');
+        expect(noteOf(a)).toBe('Peer Note');
+        expect(noteOf(b)).toBe('Peer Note');
+    });
+});
+
+// One undo step that typed into the open note and moved its reference, in either order: ⌘Z takes back both, and ⇧⌘Z
+// brings back both.
+describe('⌘Z of one step that edited the open note and moved its reference', () => {
+    const steps = [
+        ['typed, then moved', (type: () => void, move: () => void) => [type, move]],
+        ['moved, then typed', (type: () => void, move: () => void) => [move, type]],
+    ] as const;
+    test.each(steps)('%s, puts the note back as it was', async (_, order) => {
+        const { a, note, undoManager, open } = await setup([
+            paragraph(text('One')),
+            paragraph(text('Two'), { ...footnote(paragraph(text('Note'))), attrs: { id: 'n1' } }, text('.')),
+        ]);
+        await open(9);
+        const type = () => {
+            note.commands.setTextSelection(5);
+            typeInto(note, '!');
+        };
+        const move = () => {
+            const node = a.state.doc.nodeAt(9);
+            if (!node) throw new Error('no note');
+            a.view.dispatch(a.state.tr.delete(9, 9 + node.nodeSize).insert(4, node));
+        };
+        for (const step of order(type, move))
+            await act(async () => {
+                step();
+                await Promise.resolve();
+            });
+        expect(noteOf(a)).toBe('Note!');
+        expect(undoManager.undoStack.length).toBe(1);
+        await act(async () => {
+            press(note, 'z');
+            await Promise.resolve();
+        });
+        expect(a.state.doc.nodeAt(9)?.type.name).toBe('footnote');
+        expect(noteOf(a)).toBe('Note');
+        expect(note.state.doc.textContent).toBe('Note');
+        await act(async () => {
+            press(note, 'z', true);
+            await Promise.resolve();
+        });
+        expect(a.state.doc.nodeAt(4)?.type.name).toBe('footnote');
+        expect(noteOf(a)).toBe('Note!');
+    });
+});
+
+// The note's keystroke is in its editor already: the body's change it makes pulls nothing back.
+test('a keystroke in the open note makes one transaction in its editor', async () => {
+    const { a, note, open } = await setup();
+    await open(6);
+    note.commands.setTextSelection(12);
+    let transactions = 0;
+    note.on('transaction', () => transactions++);
+    typeInto(note, '!');
+    expect(noteOf(a)).toBe('Hello world!');
+    expect(transactions).toBe(1);
 });

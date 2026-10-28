@@ -33,6 +33,8 @@ type TextWidthProps = { textWidth?: DocsTextWidth; onTextWidthChange?: (width: D
 type PageSetupDialogProps = TextWidthProps & {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    // Hands the focus back to the editor the caret was in, as Radix would give it to the menu's trigger.
+    onCloseAutoFocus: (event: Event) => void;
     setup: PageSetup;
     canWrite: boolean;
     onSetupChange: (from: PageSetup, to: PageSetup) => void;
@@ -85,6 +87,7 @@ const paperLabel = (name: string, width: number, height: number) =>
 export function PageSetupDialog({
     open,
     onOpenChange,
+    onCloseAutoFocus,
     setup,
     canWrite,
     onSetupChange,
@@ -93,7 +96,12 @@ export function PageSetupDialog({
 }: PageSetupDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="md" showCloseButton={false} aria-describedby={undefined}>
+            <DialogContent
+                size="md"
+                showCloseButton={false}
+                aria-describedby={undefined}
+                onCloseAutoFocus={onCloseAutoFocus}
+            >
                 <DialogHeader>
                     <DialogTitle>Page setup</DialogTitle>
                 </DialogHeader>
@@ -302,6 +310,8 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone, textWidth, onTextWid
 type HeadersAndFootersDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    // Hands the focus back to the band's editor, as Radix would give it to the menu's trigger.
+    onCloseAutoFocus: (event: Event) => void;
     setup: PageSetup;
     onSetupChange: (from: PageSetup, to: PageSetup) => void;
 };
@@ -315,10 +325,21 @@ type DistanceKey = (typeof DISTANCE_FIELDS)[number]['key'];
 
 // Google Docs' Headers and footers, from a band's Options: the bands' distances from the paper's edge and Different
 // first page, without odd and even pages, which a doc has no bands for. Only a writer enters a band.
-export function HeadersAndFootersDialog({ open, onOpenChange, setup, onSetupChange }: HeadersAndFootersDialogProps) {
+export function HeadersAndFootersDialog({
+    open,
+    onOpenChange,
+    onCloseAutoFocus,
+    setup,
+    onSetupChange,
+}: HeadersAndFootersDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="xs" showCloseButton={false} aria-describedby={undefined}>
+            <DialogContent
+                size="xs"
+                showCloseButton={false}
+                aria-describedby={undefined}
+                onCloseAutoFocus={onCloseAutoFocus}
+            >
                 <DialogHeader>
                     <DialogTitle>Headers and footers</DialogTitle>
                 </DialogHeader>

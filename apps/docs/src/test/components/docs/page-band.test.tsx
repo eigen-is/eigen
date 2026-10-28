@@ -2,7 +2,7 @@
 // and the footer ending its distance above the bottom one, 1.27 cm unless set, a band taller than the room pushing the
 // body. A margin reaches the
 // paper's edges, so a double-click anywhere in it enters, the band under the pointer or the margin's own.
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -11,12 +11,15 @@ installHappyDom();
 
 const Y = await import('yjs');
 const { act, createElement } = await import('react');
+const { Editor } = await import('@tiptap/core');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { BAND_ROOTS, DEFAULT_PAGE_SETUP, PAGE_BAND_CLASS, readPageSetup } = await import('@workspace/lib/docs/eigendoc');
+const { BAND_ROOTS, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_BAND_CLASS, readPageSetup } = await import(
+    '@workspace/lib/docs/eigendoc'
+);
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { useBandEditors, useDocMedia } = await import('../../../components/docs/doc-editor');
-const { PageBands } = await import('../../../components/docs/page-band');
+const { BandControls, PageBands } = await import('../../../components/docs/page-band');
 
 type Props = Parameters<typeof PageBands>[0];
 
@@ -212,4 +215,55 @@ test('a double-click enters the band under the pointer, or none in particular be
         ['headerFirst', { left: 30, top: 40 }],
         [undefined, { left: 0, top: 0 }],
     ]);
+});
+
+// Radix would hand focus back to the Options trigger, where the next keystrokes reach nothing.
+test.each([
+    ['Page setup…', 'Cancel'],
+    ['Page setup…', 'OK'],
+    ['Header format…', 'Cancel'],
+])("%s from a band's Options, closed with %s, gives focus back to the band's editor", async (item, close) => {
+    const editor = new Editor({
+        element: document.body.appendChild(document.createElement('div')),
+        extensions: getDocExtensions(),
+    });
+    ({ unmount } = await renderInDocument(
+        createElement(BandControls, {
+            band: 'header',
+            editor,
+            setup: DEFAULT_PAGE_SETUP,
+            onSetupChange: () => {},
+            onDifferentFirstPage: () => {},
+            onPageNumbers: () => {},
+            onRemove: () => {},
+        }),
+    ));
+    // A browser runs the frame that refocuses after a pick once the menu has closed, as a timer does here.
+    const frame = spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+        setTimeout(() => callback(performance.now()));
+        return 0;
+    });
+    const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    try {
+        const trigger = document.querySelector('button[aria-haspopup="menu"]');
+        await act(async () => {
+            trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        });
+        const entry = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+            (candidate) => candidate.textContent?.trim() === item,
+        );
+        await act(async () => entry?.click());
+        await settle();
+        const button = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+            (candidate) => candidate.textContent === close,
+        );
+        if (!button) throw new Error(`no ${close} button`);
+        await act(async () => button.click());
+        await settle();
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+        expect(document.activeElement === editor.view.dom).toBe(true);
+    } finally {
+        frame.mockRestore();
+        editor.destroy();
+    }
 });

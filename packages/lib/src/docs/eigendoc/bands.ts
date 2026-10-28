@@ -1,10 +1,11 @@
 // A doc's bands, its headers and footers: their Yjs roots, the nodes their schema leaves out, and whether one has
-// anything to print. The editor that edits a band, the PDF and the docx read them from here, so a band means the same
-// everywhere.
+// anything to print. Every reader of a band, such as the band's editor or the PDF, reads them from here, so a band
+// means the same everywhere.
 
 import type { Node } from '@tiptap/pm/model';
 import { readEquation } from './nodes/equation';
 import type { Equation } from './nodes/equation-paste';
+import { STORY_NODES } from './nodes/stories';
 
 // The doc's header and footer, each a root XmlFragment beside `default`, edited by an editor of its own. The first
 // two print on every page, the last two on page 1 when the page map's differentFirstPage is set.
@@ -28,9 +29,8 @@ export const BAND_EXCLUDED_NODES: ReadonlySet<string> = new Set([
     'subtitle',
     'codeBlock',
     'chart',
-    'footnote',
     'tableOfContents',
-    'textBox',
+    ...STORY_NODES,
 ]);
 
 // A band's content in the editor and the export: eigen-prose.css drops its last block's space after, as Word's Header and

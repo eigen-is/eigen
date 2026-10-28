@@ -1064,6 +1064,24 @@ test('a dialog a menu opens keeps focus', async () => {
     expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
 });
 
+// Radix would hand focus back to the Format menu's trigger, which the menu's close left behind.
+test.each(['OK', 'Cancel'])('Page setup closed with %s gives focus back to the editor', async (label) => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openMenu('Format');
+    await pickInBrowserFrames(() => clickItem('Page orientation'));
+    const button = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+        (candidate) => candidate.textContent === label,
+    );
+    if (!button) throw new Error(`no ${label} button`);
+    await pickInBrowserFrames(async () => {
+        await act(async () => button.click());
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
 const NUMBERED_PRESETS = ['1. 2. 3.', 'a. b. c.', 'A. B. C.', 'i. ii. iii.', 'I. II. III.'];
 
 const listItem = (text: string) => ({

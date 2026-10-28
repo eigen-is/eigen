@@ -7,6 +7,7 @@ import type { CommandProps } from '@tiptap/core';
 import type { DOMOutputSpec } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 import { MAX_PAPER_PX } from '../page';
+import { STORY_NODES } from './stories';
 
 // The nodes drawn in the figure's frame: an image, a chart and a text box.
 export const FIGURE_FRAME_NODES = ['figure', 'chart', 'textBox'] as const;
@@ -31,7 +32,7 @@ export const isPositioned = (layout: FigureLayout | null | undefined): layout is
     POSITIONED_LAYOUTS.some((positioned) => positioned === layout);
 
 // A positioned figure anchors on a body paragraph. Inside these nodes it draws in line, as a block.
-export const BLOCK_ONLY_FIGURE_PARENTS = ['tableCell', 'tableHeader', 'footnote', 'textBox'];
+export const BLOCK_ONLY_FIGURE_PARENTS = ['tableCell', 'tableHeader', ...STORY_NODES];
 
 // The box a figure sits in: its place on the page, its caption and its comment card. Every attr defaults to null.
 // The offsets are page px from the anchor paragraph's padding box, kept while the figure is in the flow, so a switch
@@ -76,6 +77,12 @@ export function readFigureFrameAttrs(attrs: Record<string, unknown>): FigureFram
         commentCardId: typeof commentCardId === 'string' ? commentCardId : null,
     };
 }
+
+// A frame's layout and alignment as it draws them: in the flow and centered, unless it stores another.
+export const figurePlacement = ({ layout, alignment }: FigureFrameAttrs) => ({
+    layout: layout ?? 'block',
+    alignment: alignment ?? 'center',
+});
 
 // A positioned box's place and width, which the stylesheet's rules can't know; nothing for a figure in the flow. The
 // width goes on the box, because an image's max-width of 100% inside a shrink-to-fit box is cyclic.

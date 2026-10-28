@@ -631,6 +631,7 @@ export const EditorToolbar = ({
             <PageSetupDialog
                 open={pageSetupOpen}
                 onOpenChange={setPageSetupOpen}
+                onCloseAutoFocus={keepActiveEditorFocus}
                 setup={pageSetup}
                 canWrite={canWrite}
                 onSetupChange={onPageSetupChange}

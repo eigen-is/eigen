@@ -24,12 +24,12 @@ export const STORY_EDIT = 'storyEdit';
 export const STORY_PULL = 'storyPull';
 
 // The open story is its node's Yjs element, with the node's position, its type and its id. This editor's own changes
-// map the position, and a split here can give the story a new element, which the node at the mapped position names. A
-// peer's change or an undo, which y-prosemirror applies as a replace of the whole doc that no mapped position survives,
-// reads the position back from the element. A deleted element is the story gone, never the neighbour its place now
-// holds, unless the same change put a node of its type with its id elsewhere: a drag, a re-anchor or a join moved it
-// there. A cut closes the story before its paste comes. Never a node: y-tiptap builds every node anew on a peer's
-// update, and a mark or attribute step maps no position yet makes a new one.
+// map the position. A split here can give the story a new element, which the node at the mapped position names. A
+// peer's change or an undo reads the position back from the element, as y-prosemirror applies it as a replace of the
+// whole doc that no mapped position survives. A deleted element is the story gone, never the neighbor its place now
+// holds. The exception is a node of its type with its id that the same change put elsewhere, as a drag, a re-anchor or
+// a join moves it. A cut closes the story before its paste comes. The anchor is never a node: y-tiptap builds every
+// node anew on a peer's update, and a mark or attribute step maps no position yet makes a new node.
 export type StoryAnchor = { pos: number; element: Y.AbstractType<unknown>; type: StoryNode; id: string | null };
 
 // What a story's node view keeps for the open editor: the body's decorations inside it, such as the find bar's matches.
@@ -162,15 +162,12 @@ export function findStory(
             pos = result && !result.deleted ? result.pos : null;
         }
     let node = pos === null ? null : doc.nodeAt(pos);
-    // A peer's change keeps the element; only a split here gives the story a new one.
-    let element =
-        node?.type.name !== anchor.type
-            ? null
-            : binding.mapping.get(anchor.element) === node
-              ? anchor.element
-              : remote
-                ? null
-                : elementOf(binding, doc, node);
+    // A peer's change keeps the element. Only a split here gives the story a new one.
+    let element: Y.AbstractType<unknown> | null = null;
+    if (node?.type.name === anchor.type) {
+        if (binding.mapping.get(anchor.element) === node) element = anchor.element;
+        else if (!remote) element = elementOf(binding, doc, node);
+    }
     let renewed = false;
     if (!element && anchor.id) {
         pos = storyWithId(doc, anchor.type, anchor.id);

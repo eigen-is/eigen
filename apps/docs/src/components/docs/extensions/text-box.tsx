@@ -8,6 +8,7 @@ import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/stat
 import type { EditorView } from '@tiptap/pm/view';
 import type { NodeViewProps, NodeViewRendererProps } from '@tiptap/react';
 import { EditorContent, ReactNodeView, ReactNodeViewRenderer } from '@tiptap/react';
+import type { FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import {
     isPositioned,
     readTextBoxAttrs,
@@ -19,7 +20,7 @@ import type { Box } from '@workspace/lib/vector';
 import type React from 'react';
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FigureFrameOptions, FigureSize } from './figure-frame';
-import { FigureFrame, figureFramePlugins, figureMaxWidth, useFigureResize } from './figure-frame';
+import { FigureFrame, figureFramePlugins, figureMaxWidth, setFigureLayout, useFigureResize } from './figure-frame';
 import { behindFigureAt } from './positioned-figure';
 import { StaticStory } from './static-story';
 import type { StoryAnchor } from './story';
@@ -41,6 +42,13 @@ export const TextBoxContext = createContext<{ anchor: StoryAnchor | null; editor
 export const fitTextBoxWidth = (width: number, maxWidth: number) =>
     Math.max(TEXT_BOX_MIN_SIDE, Math.min(maxWidth, width));
 export const fitTextBoxHeight = (height: number) => Math.max(TEXT_BOX_MIN_SIDE, height);
+
+// A box's layout, from its panel or Format › Text box, as the Image panel writes a picture's: a wrap halves the width
+// cap, and in front of or behind the text keeps the box where it is drawn.
+export const setTextBoxLayout = (editor: Editor, attributes: FigureFrameAttrs) =>
+    setFigureLayout(editor, attributes, readTextBoxAttrs(editor.getAttributes('textBox')), (written) =>
+        editor.commands.updateTextBox(written),
+    );
 
 const fitTextBox = (next: Box, maxWidth: number) => ({
     width: Math.round(fitTextBoxWidth(next.width, maxWidth)),
@@ -68,16 +76,28 @@ function TextBoxView(props: NodeViewProps) {
     );
     const resize = useFigureResize({ editor, getPos, node, getMaxWidth, fit: fitTextBox, stored });
     const preview = resize.preview?.size;
+    const dragging = preview !== undefined;
 
-    // The look as every surface draws it, a grip's preview size in its place.
+    // The look as every surface draws it, a grip's preview size in its place. The node changes with every keystroke in
+    // the open box, and its attributes only with an edit of the look.
     useLayoutEffect(() => {
         const element = boxRef.current;
         if (!element) return;
         for (const name of element.getAttributeNames()) element.removeAttribute(name);
         const look = preview ? { ...attrs, ...preview } : attrs;
         for (const [name, value] of Object.entries(textBoxHTMLAttributes(look))) element.setAttribute(name, value);
+    }, [attrs, preview]);
+
+    // The height as drawn, which its text and its look change. A grip's drag keeps the one it pressed at: its preview
+    // draws the box at the size it asks, and that height read back would be the gesture's own.
+    useLayoutEffect(() => {
+        const element = boxRef.current;
+        if (!element || dragging) return;
         setDrawnHeight(element.offsetHeight);
-    }, [attrs, preview, node, open]);
+        const observer = new ResizeObserver(() => setDrawnHeight(element.offsetHeight));
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [dragging]);
 
     // A delete and an insert of the node, such as a re-anchor, mounts the open editor in a new view, and the browser
     // drops the focus of the one it took away. Nothing else has taken it, so it goes back.
