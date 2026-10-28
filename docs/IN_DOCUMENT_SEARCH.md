@@ -54,7 +54,7 @@ A `?q=` term on an editor route opens the bar pre-filled, paints all matches and
 
 ## The palette reads the same controller
 
-`DocSearchProvider` publishes its controller through `usePaletteDocSearch` as `ctx.docSearch`, present only while an editor is open. The provider in `packages/lib/src/core/command-palette/providers/doc-search.ts` lists up to 6 hits under **In Document**. A hit never becomes the Top Hit, because its title is the matched text and would take `Enter` from a typed file name. The palette searches with every option off, the bar's defaults, so its count matches the bar's.
+`DocSearchProvider` publishes its controller through `usePaletteDocSearch` as `ctx.docSearch`, present only while an editor is open. The provider in `packages/lib/src/core/command-palette/providers/doc-search.ts` lists up to 6 hits under **In document**. A hit never becomes the Top hit, because its title is the matched text and would take `Enter` from a typed file name. The palette searches with every option off, the bar's defaults, so its count matches the bar's.
 
 Choosing a hit calls `revealFromPalette` on the published `DocSearchSession`. It adopts the palette's query into the bar, paints all matches and reveals the chosen one at its index, with focus left in the document.
 
@@ -62,7 +62,7 @@ Choosing a hit calls `revealFromPalette` on the published `DocSearchSession`. It
 
 A comment thread is an embedded chat the client never loads in bulk. So docs and stickies publish a second capability, `DocCommentSearch` (`ctx.docCommentSearch`), backed by `CommentIndex.searchComments` (`apps/api/src/lib/chat/comment-index.ts`) at `GET /collab/:ownerId/:mountId/:pathId/comments/search`. It ranks over `comments_fts`, which holds the newest part of each thread ([COMMENTS.md](COMMENTS.md#search-reads-a-recomputed-tail-of-each-thread)). A match id is the thread's `chatName`.
 
-The palette caches the call in TanStack Query keyed by `docKey`, the open document's `ownerId:mountId:pathId`, because on a shared document that owner differs from `ctx.ownerId`. Hits show under **In Comments** in the `doc:` scope only, never in the unscoped palette. Each app pairs the shared `useDocCommentSearchHalf` with its own `reveal`: stickies maps the chat name to its card and opens it, docs opens the comments panel and scrolls to the thread.
+The palette caches the call in TanStack Query keyed by `docKey`, the open document's `ownerId:mountId:pathId`, because on a shared document that owner differs from `ctx.ownerId`. Hits show under **In comments** in the `doc:` scope only, never in the unscoped palette. Each app pairs the shared `useDocCommentSearchHalf` with its own `reveal`: stickies maps the chat name to its card and opens it, docs opens the comments panel and scrolls to the thread.
 
 ## See also
 

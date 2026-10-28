@@ -38,7 +38,7 @@ You can also start editing from the context menu: right-click the card and choos
 
 A card's **Description** can hold a checklist, which is handy for tracking the small steps in a piece of work.
 
-1. Open the **Add sticky** or **Edit card** dialog and click in the **Description** field.
+1. Open the **Add sticky** dialog, or open a card and start editing it, then click in the **Description** field.
 2. Type `[]` at the start of a line to start a checklist, or select a few lines and click the **Checklist** button in the editor's toolbar. Each line becomes an item with its own checkbox.
 3. Add as many items as you need, then save the card.
 

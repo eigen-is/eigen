@@ -32,7 +32,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Image and chart size in Docs** — the **Image** and **Chart** panels set the width and the height in centimeters, with **Keep aspect ratio** as in Slides. Uncheck it to stretch an image, which keeps that size when you print, download it as PDF, a web page or Word, or open the Word file again
 - **Text boxes in Docs** — **Insert › Text box** adds a box with paragraphs of its own, which you type in right where it stands. Put it on its own line, beside the text, or behind or in front of it, and drag it anywhere on the page
 - **A text box's look** — the **Text box** panel sets a box's size, fill, outline and rounded corners, the space around its text, and whether its text sits at the top, middle or bottom. The box grows when its text needs more room
-- **Text boxes in Word files** — a Word text box comes into Docs as a text box, at its place and with its look, and a document downloads as Word with Word's own text boxes. A text box in a header, footer or footnote still comes in as its text
+- **Text boxes in Word files** — a Word text box comes into Docs as a text box, at its place and with its look, and a document downloads as Word with Word's own text boxes. A text box in a header, footer or footnote, or in a group or a drawing canvas, still comes in as its text
 
 ### Changed
 

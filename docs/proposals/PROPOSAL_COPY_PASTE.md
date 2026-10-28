@@ -34,17 +34,7 @@ The four arguments the v2 shape rests on:
 
 ## Known constraints
 
-- **The sheet engine has its own internal clipboard.** `ctx.copyState` handles
-  internal copy/paste separately from the system clipboard. It holds **coordinates only** — a sheet id and the copied rectangles; formulas, formatting and
-  merge info survive because the paste re-reads the live cells at those coordinates, which is
-  exactly why it cannot cross a tab or a login boundary. The eigen clipboard integration sits
-  **on top of** it, not inside it. Consequences: the
-  `cells` content type carries display values, formatting, merge info and dimensions -- not the
-  internal `Cell` state (calculation results, dependency graphs), which is neither serializable nor
-  meaningful in another sheet. Formulas travel as strings, with references that will be wrong in a
-  different sheet context. Undo behavior after a paste into Sheets depends on whether the engine's
-  paste handler wraps the operation in a single `setContextWithProduce` update -- verify during
-  implementation, not design.
+- **The sheet engine has its own internal clipboard.** `ctx.copyState` handles internal copy/paste separately from the system clipboard. It holds **coordinates only** — a sheet id and the copied rectangles; formulas, formatting and merge info survive because the paste re-reads the live cells at those coordinates, which is exactly why it cannot cross a tab or a login boundary. The eigen clipboard integration sits **on top of** it, not inside it. Consequences: the `cells` content type carries display values, formatting, merge info and dimensions -- not the internal `Cell` state (calculation results, dependency graphs), which is neither serializable nor meaningful in another sheet. Formulas travel as strings, with references that will be wrong in a different sheet context. Undo behavior after a paste into Sheets depends on whether the engine's paste handler wraps the operation in a single `setContextWithProduce` update -- verify during implementation, not design.
 - **Sheets-to-Docs table paste is lossy.** Tiptap has `@tiptap/extension-table` configured with
   `resizable: true`, so a pasted sheet table does become a Tiptap table node. But the engine emits
   `<table data-type="sheet-copy-action-table">` with pixel-valued inline styles, which Tiptap's
