@@ -30,7 +30,7 @@ When you open a presentation, the editor has three areas:
 
 The toolbar across the top holds, from left to right, a cluster of drawing tools, an **Add image** button, and **Present**:
 
-- The tool cluster in the middle has **Select** for picking objects up, **Text** for a text box, and the shape and line tools **Rectangle**, **Diamond**, **Ellipse**, **Arrow**, **Line**, and **Draw**. Pick **Text**, then click the canvas to place a box and start typing.
+- The tool cluster in the middle has **Select** for picking objects up, **Text** for a text box, and the shape and line tools **Rectangle**, **Diamond**, **Ellipse**, **Arrow**, **Line**, and **Draw**. **Eraser** deletes objects you drag across. Pick **Text**, then click the canvas to place a box and start typing.
 - **Add image** opens a picker where you can upload an image from your computer or pick one from Drive.
 
 You can also drag an image file from your computer and drop it directly onto the canvas. To learn more about the shapes and arrows, see [Draw shapes and arrows](/support/slides/draw-shapes-and-arrows).

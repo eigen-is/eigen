@@ -42,7 +42,7 @@ You need write access to the board to add or change columns.
 
 ## Delete a column
 
-Deleting a column also deletes all the cards in it. This cannot be undone.
+Deleting a column also deletes all the cards in it. Press **Ctrl+Z** (Mac: **⌘Z**) straight after to bring them back.
 
 1. Click the pencil icon in the column header to open **Column settings**.
 2. Click **Delete column**. A confirmation dialog appears.
@@ -50,7 +50,7 @@ Deleting a column also deletes all the cards in it. This cannot be undone.
 
 <div class="eigen-callout">
 
-Deleting a column permanently removes it and every card inside it. If you want to keep the cards, move them to another column first. See [Move and reorder cards](/support/stickies/move-cards).
+Once you close the board, you can't bring a deleted column back. If you want to keep the cards, move them to another column first. See [Move and reorder cards](/support/stickies/move-cards).
 
 </div>
 

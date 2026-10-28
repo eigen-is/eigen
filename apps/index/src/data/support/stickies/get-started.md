@@ -52,7 +52,7 @@ The toolbar shows a row of color swatches. Click one to show only the cards with
 
 ## Undo and redo
 
-**Mod+Z** undoes the last change. **Mod+Y** or **Mod+Shift+Z** redoes it. The **Edit** menu in the toolbar also has **Undo** and **Redo**.
+**Ctrl+Z** (Mac: **⌘Z**) undoes the last change. **Ctrl+Y** or **Ctrl+Shift+Z** (Mac: **⇧⌘Z**) redoes it. The **Edit** menu in the toolbar also has **Undo** and **Redo**.
 
 ## Sharing
 

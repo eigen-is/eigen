@@ -466,7 +466,7 @@ export function StickiesBoard({
                                             open={!!deleteCardId}
                                             onOpenChange={(open) => !open && setDeleteCardId(null)}
                                             title="Delete card"
-                                            description="This will permanently delete the card. This action cannot be undone."
+                                            description="This will permanently delete the card. You can undo this straight after, until you close the board."
                                             onDelete={() => {
                                                 if (deleteCardId) {
                                                     const removed = cards[deleteCardId];

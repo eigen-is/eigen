@@ -16,7 +16,7 @@ Eigen has one box that searches your files and email, jumps to any app, and runs
 You can open the palette in two ways:
 
 - Press **⌘K** on a Mac, or **Ctrl+K** on Windows.
-- Click the **Search and jump anywhere** box at the top of the window.
+- Click the search box at the top of the window. It reads **Search and jump anywhere**, or shows the document's name when you have one open.
 
 The box appears in every Eigen app. The keyboard shortcut works from anywhere, even while you're typing in a message or a document. Press the same keys again, or **Esc**, to close it.
 

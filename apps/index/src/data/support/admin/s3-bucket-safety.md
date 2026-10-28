@@ -56,7 +56,7 @@ More days means a longer window to recover from, and more storage to pay for. Th
 
 <div class="eigen-callout">
 
-**Enable safe defaults** only appears when Eigen can actually change something. If the access key cannot read the bucket's settings, or the bucket already has a lifecycle rule from somewhere else, there is no button and the panel gives you the commands instead.
+**Enable safe defaults** only appears when Eigen can actually change something. If the access key cannot read the bucket's versioning, there is no button. The same goes for a bucket that already has versioning on and a lifecycle rule from somewhere else. The panel gives you the commands instead.
 
 </div>
 

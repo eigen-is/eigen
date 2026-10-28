@@ -49,6 +49,8 @@ A recurring event is one that repeats on a schedule. You set it up once and Cale
 
 That occurrence is now separate from the rest of the series. All other occurrences are unchanged.
 
+When you edit an occurrence you have already changed, Calendar offers only **This event** and **All events in series**.
+
 If you remove every guest from that one occurrence, it keeps the series' guests. To leave the guests out of one occurrence, remove that occurrence instead.
 
 ## Remove an occurrence or cancel the whole series

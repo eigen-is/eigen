@@ -121,8 +121,8 @@ export function ColumnSettingsDialog({
                 title="Delete column"
                 description={
                     cardCount > 0
-                        ? `This will permanently delete the column and ${cardCount} ${cardCount === 1 ? 'card' : 'cards'} within it. This action cannot be undone.`
-                        : 'This will permanently delete the column. This action cannot be undone.'
+                        ? `This will permanently delete the column and ${cardCount} ${cardCount === 1 ? 'card' : 'cards'} within it. You can undo this straight after, until you close the board.`
+                        : 'This will permanently delete the column. You can undo this straight after, until you close the board.'
                 }
                 onDelete={handleDelete}
             />
