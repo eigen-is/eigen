@@ -5,7 +5,7 @@ import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getUserById } from '../../lib/user';
 import type { TestUser } from '../setup';
-import { authedRequest, createTestGuest, createTestUser, getTestContext } from '../setup';
+import { authedRequest, createTestGuest, createTestUser, getTestContext, hasSession } from '../setup';
 
 // better-auth's admin routes know the roles admin and user only, and leave a guest's account alone.
 describe("better-auth's admin routes and roles", () => {
@@ -78,6 +78,13 @@ describe("better-auth's admin routes and roles", () => {
         const row = await getUserById(guest.id);
         expect(row?.role).toBe('guest');
         expect(row?.name).toBe('Gina Roles');
+    });
+
+    test('update-user cannot ban, as ban-user cannot', async () => {
+        const res = await adminCall('update-user', { userId: member.id, data: { banned: true } });
+        expect(res.status).toBe(403);
+        expect((await getUserById(member.id))?.banned).not.toBe(true);
+        expect(await hasSession(member.sessionToken)).toBe(true);
     });
 
     test('an admin still makes a member an admin and back', async () => {

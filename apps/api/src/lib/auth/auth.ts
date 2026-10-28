@@ -11,7 +11,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
-import { adminAc, userAc } from 'better-auth/plugins/admin/access';
+import { defaultAc, userAc } from 'better-auth/plugins/admin/access';
 import { and, eq, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import {
@@ -130,6 +130,13 @@ async function busyHomeAsConflict(run: () => unknown): Promise<void> {
         throw error;
     }
 }
+
+// better-auth's admin role without the ban, which would leave a user's app passwords working, and without the
+// impersonation and password set that disabledPaths closes.
+const eigenAdminRole = defaultAc.newRole({
+    user: ['create', 'list', 'set-role', 'delete', 'set-email', 'get', 'update'],
+    session: ['list', 'revoke', 'delete'],
+});
 
 // Every app password is this many ASCII letters, from the plugin's generator with no prefix. So protocol auth can
 // tell one from an account password without a key lookup.
@@ -265,7 +272,7 @@ export const auth = betterAuth({
             },
         }),
         // Only these two roles may be set. A guest's role is written by the guest sign-in alone.
-        admin({ roles: { admin: adminAc, user: userAc } }),
+        admin({ roles: { admin: eigenAdminRole, user: userAc } }),
         // Eigen uses the organization plugin for its data model only, the members, teams and roles, and not for
         // its invitations, so no sendInvitationEmail is wired. People arrive through the waitlist or an admin. The
         // user-create hook joins them to the default org and team, and the admin UI adds them to other teams.
