@@ -325,10 +325,12 @@ export function readUnpackedHome(
 
 // A sidecar is written in the staging folder and renamed into place, so a reader never sees half of one.
 // The JSON is indented by two spaces: ./eigen finds a server sidecar's top-level "state" line by that indent.
-export async function writeRecord(target: string, value: unknown): Promise<void> {
+// A server sidecar keeps the umask's mode, because ./eigen reads it on the host as the operator. A caller that
+// passes a mode makes a private one.
+export async function writeRecord(target: string, value: unknown, mode?: number): Promise<void> {
     const tempPath = getBackupTempPath('.json');
     try {
-        await Bun.write(tempPath, JSON.stringify(value, null, 2));
+        await fsp.writeFile(tempPath, JSON.stringify(value, null, 2), { mode });
     } catch (error) {
         fs.rmSync(tempPath, { force: true });
         throw error;
@@ -341,7 +343,8 @@ export async function writeSidecar(
     manifest: BackupManifest,
     verify: BackupVerifyRecord,
 ): Promise<void> {
-    await writeRecord(sidecarPath(artifactPath), { manifest, verify });
+    // It names every file of the home, and ./eigen never reads it.
+    await writeRecord(sidecarPath(artifactPath), { manifest, verify }, ARCHIVE_MODE);
 }
 
 // Null when there is no sidecar or it does not read. An artifact copied in by hand has none, and the list shows
