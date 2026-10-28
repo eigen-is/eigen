@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2099 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2105 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -546,7 +546,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (472)
+## Types (473)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1024,7 +1024,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1112)
+## Utilities & constants (1117)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1447,6 +1447,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isFigureFrameNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `isPositioned` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `isStoryNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/stories.ts |
+| `isWidth` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `ITALIC_HEADING_LEVELS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `ITALIC_HEADING_SELECTOR` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `keepOnPaper` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
@@ -1801,6 +1802,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BASE_62_DIGITS` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `BASE_ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `baseDefaultsFor` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `bezierAt` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `bindingAnchor` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `bindingDistance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `bindingGap` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -2089,7 +2091,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `eigenDocEditorValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocSharedTitle` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `FilePresentation` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
 | `getFileIcon` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
+| `getFileIconComponent` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
+| `getFilePresentation` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
 | `nextDriveSort` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `SHEETS_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `SLIDES_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
