@@ -8,7 +8,7 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupProgress } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { incompleteReason, parseBackupArtifactName, parseBackupShares } from '@workspace/lib/validation';
+import { incompleteReason, parseBackupShares } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
 import { getAvatarsDir, PATHS } from '../config/paths';
 import { ApiError } from '../core';
@@ -18,6 +18,7 @@ import { addRegistryEntry } from '../share/registry';
 import { getTeam } from '../team/team';
 import { getUserById } from '../user/user';
 import { extractArtifact, readUnpackedHome } from './archive';
+import { requireArtifact } from './artifacts';
 import { restoreAuthRows } from './auth-rows';
 import { resolveHomeDir } from './home-dir';
 import type { VersionedDatabase } from './materialize-mount';
@@ -29,7 +30,6 @@ import {
     buildSafetyCopyName,
     freeSafetyCopyStamp,
     getBackupStagingDir,
-    getBackupsDir,
     wipeBackupStagingDir,
 } from './paths';
 import { markRestoreComplete, writeRestoringMarker } from './recovery';
@@ -45,13 +45,7 @@ export async function restoreHome(
     jobId: string,
     onProgress?: BackupProgress,
 ): Promise<void> {
-    if (!parseBackupArtifactName(artifactName)) {
-        throw new ApiError(400, `${artifactName} is not a backup artifact name`);
-    }
-    const artifactPath = path.join(getBackupsDir(), artifactName);
-    if (!fs.existsSync(artifactPath)) {
-        throw new ApiError(404, `${artifactName} is not in the backups folder`);
-    }
+    const { artifactPath } = requireArtifact(artifactName);
     const homeDir = await resolveHomeDir(ownerId);
 
     await replaceHomeFolder(

@@ -649,6 +649,24 @@ describe('Backup restoreHome', () => {
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
 
+    test('a name that is no archive, or an archive that is not there, is refused before anything is touched', async () => {
+        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
+        const copies = safetyCopies(target.id, PRE_RESTORE_SUFFIX).length;
+        await expect(
+            restoreHome('not-an-archive.tar.zst', target.id, `restore-badname-${Date.now()}`),
+        ).rejects.toMatchObject({
+            status: 400,
+            message: 'Not a backup artifact name',
+        });
+        const missing = buildArtifactName(target.id, new Date(Date.UTC(2001, 0, 1)));
+        await expect(restoreHome(missing, target.id, `restore-missing-${Date.now()}`)).rejects.toMatchObject({
+            status: 404,
+            message: 'Artifact not found',
+        });
+        expect(safetyCopies(target.id, PRE_RESTORE_SUFFIX).length).toBe(copies);
+        expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
+    });
+
     // The note the next boot reads to tell a restore that finished from one that died halfway. It
     // lives in the job's staging folder, which every restore wipes on its way out, so the wipe is
     // held off here to look at what was written.
