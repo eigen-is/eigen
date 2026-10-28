@@ -22,13 +22,10 @@ import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
 import { fixPositionOnFrozenCells } from './mouse-resize';
 
-// Shift-click / drag selection extension along a single axis (row or column).
-// The classic luckysheet motif, previously pasted across the mouse layer
-// (mouse-cell / mouse-drag / mouse-header): given the anchor selection's start
-// (`pos`) and span, plus the newly hit cell's near edge (`pre`), far edge (`end`)
-// and index, it returns the extended axis start/span and the new [start, end]
-// index pair. It clamps the anchor's index `range` toward its `focus` in place —
-// the same side effect the inlined copies had on `last.row` / `last.column`.
+// Shift-click and drag extend a selection along one axis (row or column), for the mouse handlers of the cells and
+// the headers alike. Given the anchor selection's start (`pos`) and span, and the newly hit cell's near edge (`pre`),
+// far edge (`end`) and index, it returns the extended start and span and the new [start, end] index pair. It also
+// clamps the anchor's index `range` toward its `focus`, in place.
 export function extendSelectionGeometry(
     pos: number,
     span: number,

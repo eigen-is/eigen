@@ -4,9 +4,8 @@
 
 import { sortedIndex } from 'es-toolkit/compat';
 
-// 1px canvas strokes land crisp only when centered on a half-pixel; every
-// grid/border line shifts by this amount (inherited fortune-sheet convention,
-// formerly the `bodrder05` parameter threaded through every render call).
+// 1px canvas strokes land crisp only when centered on a half-pixel, so every
+// grid and border line shifts by this amount.
 export const HALF_PIXEL = 0.5;
 
 // Cell fill rect adjustment relative to the raw cell edges

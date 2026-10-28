@@ -2,7 +2,7 @@
 // it left out. It runs in the transform process, which an xlsx import or convert hands the file to.
 
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
-import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
+import type { Cell, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import {
     cellDisplay,
@@ -205,7 +205,7 @@ const CELL_PADDING = 6;
 const GLYPH_WIDTH = 0.6;
 
 function estimateCellHeight(
-    cell: FortuneCell,
+    cell: Cell,
     r: number,
     c: number,
     merge: NonNullable<SheetConfig['merge']>,

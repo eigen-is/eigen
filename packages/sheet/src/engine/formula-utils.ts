@@ -182,8 +182,7 @@ export function resolveCellRange(
     return item;
 }
 
-// Evaluates a reversed-postfix expression stack, wrapping each operator
-// application in a luckysheet_compareWith(...) call.
+// Folds a reversed-postfix expression stack into nested compareWith(left, 'op', right) calls, one per operator.
 export function calPostfixExpression(cal: string[]): string {
     if (cal.length === 0) {
         return '';
@@ -194,7 +193,7 @@ export function calPostfixExpression(cal: string[]): string {
         if (c in operatorjson) {
             const s2 = stack.pop();
             const s1 = stack.pop();
-            const str = `luckysheet_compareWith(${s1},'${c}', ${s2})`;
+            const str = `compareWith(${s1},'${c}', ${s2})`;
             stack.push(str);
         } else {
             stack.push(c);
@@ -221,9 +220,9 @@ export function checkBracketNum(fp: string): boolean {
     return left === right;
 }
 
-// Rewrites a formula into the old luckysheet_* call form and, on the way, hands each range argument of an INDIRECT,
-// OFFSET or INDEX call to cellRangeFunction. The dependency graph needs those ranges, in the editor and on the
-// server. The rewritten string only feeds the recursion.
+// Rewrites a formula into an internal call form, such as functions.SUM.f(getCellData('A1:B2')), and on the way
+// hands each range argument of an INDIRECT, OFFSET or INDEX call to cellRangeFunction. The dependency graph needs
+// those ranges, in the editor and on the server. Nothing evaluates the rewritten string: it only feeds the recursion.
 export function isFunctionRange(txt: string, cellRangeFunction: (str: string) => void): string {
     if (txt.substring(0, 1) === '=') {
         txt = txt.substring(1);
@@ -254,12 +253,14 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
             if (str.length > 0 && bracket.length === 0) {
                 str = str.toUpperCase();
                 if (str.indexOf(':') > -1) {
+                    // A range that ends on a function call, such as A1:INDEX(...). The marker asks the level above
+                    // for the extra `)` that closes getSpecialReference.
                     const funcArray = str.split(':');
-                    function_str += `luckysheet_getSpecialReference(true,'${funcArray[0]
+                    function_str += `getSpecialReference(true,'${funcArray[0]
                         .trim()
-                        .replace(/'/g, "\\'")}', luckysheet_function.${funcArray[1]}.f(#lucky#`;
+                        .replace(/'/g, "\\'")}', functions.${funcArray[1]}.f(#closeReference#`;
                 } else {
-                    function_str += `luckysheet_function.${str}.f(`;
+                    function_str += `functions.${str}.f(`;
                 }
                 bracket.push(1);
                 str = '';
@@ -276,8 +277,8 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
 
             if (bracket.length === 0) {
                 let functionS = isFunctionRange(str, cellRangeFunction);
-                if (functionS.indexOf('#lucky#') > -1) {
-                    functionS = `${functionS.replace(/#lucky#/g, '')})`;
+                if (functionS.indexOf('#closeReference#') > -1) {
+                    functionS = `${functionS.replace(/#closeReference#/g, '')})`;
                 }
                 function_str += `${functionS})`;
                 str = '';
@@ -322,8 +323,8 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
         } else if (s === ',' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             if (bracket.length <= 1) {
                 let functionS = isFunctionRange(str, cellRangeFunction);
-                if (functionS.indexOf('#lucky#') > -1) {
-                    functionS = `${functionS.replace(/#lucky#/g, '')})`;
+                if (functionS.indexOf('#closeReference#') > -1) {
+                    functionS = `${functionS.replace(/#closeReference#/g, '')})`;
                 }
                 function_str += `${functionS},`;
                 str = '';
@@ -412,11 +413,11 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
             let endstr = '';
             let str_nb = str.trim().replace(/'/g, "\\'");
             if (iscelldata(str_nb) && str_nb.substring(0, 1) !== ':') {
-                endstr = `luckysheet_getcelldata('${str_nb}')`;
+                endstr = `getCellData('${str_nb}')`;
             } else if (str_nb.substring(0, 1) === ':') {
                 str_nb = str_nb.substring(1);
                 if (iscelldata(str_nb)) {
-                    endstr = `luckysheet_getSpecialReference(false,${function_str},'${str_nb}')`;
+                    endstr = `getSpecialReference(false,${function_str},'${str_nb}')`;
                 }
             } else {
                 str = str.trim();
@@ -430,7 +431,7 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
                         endstr += str.substring(0, arraystart);
                     }
 
-                    endstr += `luckysheet_getarraydata('${arraytxt}')`;
+                    endstr += `getArrayData('${arraytxt}')`;
 
                     if (arraystart + arraytxt.length < str.length) {
                         endstr += str.substring(arraystart + arraytxt.length, str.length);
@@ -469,29 +470,21 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
 }
 
 // Hands the quoted range argument of an INDIRECT, OFFSET or INDEX call to cellRangeFunction, once isFunctionRange
-// has rewritten the call into its luckysheet_* form.
+// has rewritten the call into its internal form.
 function checkSpecialFunctionRange(function_str: string, cellRangeFunction: (str: string) => void): void {
-    if (
-        function_str.substring(0, 30) === 'luckysheet_getSpecialReference' ||
-        function_str.substring(0, 20) === 'luckysheet_function.'
-    ) {
-        if (function_str.substring(0, 20) === 'luckysheet_function.') {
-            let funcName = function_str.split('.')[1];
-            if (funcName != null) {
-                funcName = funcName.toUpperCase();
-                if (funcName !== 'INDIRECT' && funcName !== 'OFFSET' && funcName !== 'INDEX') {
-                    return;
-                }
-            }
-        }
+    if (function_str.startsWith('functions.')) {
+        const funcName = function_str.split('.')[1].toUpperCase();
+        if (funcName !== 'INDIRECT' && funcName !== 'OFFSET' && funcName !== 'INDEX') return;
+    } else if (!function_str.startsWith('getSpecialReference')) {
+        return;
+    }
 
-        const commaParts = function_str.split(',');
-        const quoted = commaParts[commaParts.length - 1].split("'");
-        if (quoted.length < 2) return;
+    const commaParts = function_str.split(',');
+    const quoted = commaParts[commaParts.length - 1].split("'");
+    if (quoted.length < 2) return;
 
-        const str_nb = quoted[1].trim();
-        if (iscelldata(str_nb)) {
-            cellRangeFunction(str_nb);
-        }
+    const str_nb = quoted[1].trim();
+    if (iscelldata(str_nb)) {
+        cellRangeFunction(str_nb);
     }
 }

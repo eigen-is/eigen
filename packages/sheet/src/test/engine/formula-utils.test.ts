@@ -3,6 +3,7 @@ import {
     calPostfixExpression,
     checkBracketNum,
     iscelldata,
+    isFunctionRange,
     operatorjson,
     operatorPriority,
 } from '../../engine/formula-utils';
@@ -171,10 +172,10 @@ describe('engine/formula-utils — calPostfixExpression', () => {
         expect(calPostfixExpression(['A1'])).toBe('A1');
     });
 
-    test('wraps comparison operator into luckysheet_compareWith', () => {
+    test('wraps an operator in a compareWith call', () => {
         // Postfix ["+", "A1", "B1"] means A1 + B1 in RPN (reversed)
         const result = calPostfixExpression(['+', 'A1', 'B1']);
-        expect(result).toContain('luckysheet_compareWith');
+        expect(result).toContain('compareWith');
         expect(result).toContain('A1');
         expect(result).toContain('B1');
         expect(result).toContain("'+'");
@@ -183,8 +184,31 @@ describe('engine/formula-utils — calPostfixExpression', () => {
     test('handles nested operators', () => {
         // Represents (A1 + B1) * C1 in postfix (reversed)
         const result = calPostfixExpression(['*', '+', 'A1', 'B1', 'C1']);
-        expect(result).toContain('luckysheet_compareWith');
+        expect(result).toContain('compareWith');
         expect(result).toContain("'*'");
         expect(result).toContain("'+'");
+    });
+});
+
+// ─── isFunctionRange ────────────────────────────────────────────────────────
+
+describe('engine/formula-utils — isFunctionRange', () => {
+    const rangesOf = (formula: string) => {
+        const ranges: string[] = [];
+        isFunctionRange(formula, (range) => ranges.push(range));
+        return ranges;
+    };
+
+    test('hands the range an INDEX, OFFSET or INDIRECT call reads to the callback', () => {
+        expect(rangesOf('=INDEX(A1:B2)')).toEqual(['A1:B2']);
+        expect(rangesOf('=OFFSET(C3)')).toEqual(['C3']);
+    });
+
+    test('hands over the range a reference-to-function range ends on', () => {
+        expect(rangesOf('=SUM(A1:INDEX(B1:B5))')).toEqual(['B1:B5']);
+    });
+
+    test('ignores the range of any other function', () => {
+        expect(rangesOf('=SUM(A1:B2)')).toEqual([]);
     });
 });

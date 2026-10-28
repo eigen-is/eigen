@@ -3,7 +3,7 @@
 // numbers. The xlsx reader calls it for each worksheet, after the merges and links that place cells of their own.
 
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
-import type { CellBorderSides, CellStyle, Cell as FortuneCell, InlineStringSegment } from '@workspace/lib/sheets';
+import type { Cell, CellBorderSides, CellStyle, InlineStringSegment } from '@workspace/lib/sheets';
 import { columnLabelToIndex, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
@@ -25,7 +25,7 @@ import type { Look, ThemePalette } from './styles';
 import { NO_LOOK } from './styles';
 
 // A cell a merge or a link places before the grid is read.
-export type PlacedCell = { r: number; c: number; v: FortuneCell };
+export type PlacedCell = { r: number; c: number; v: Cell };
 
 export type GridContext = {
     looks: Look[];
@@ -45,7 +45,7 @@ export type GridContext = {
 };
 
 export type Grid = {
-    celldata: { r: number; c: number; v: FortuneCell }[];
+    celldata: { r: number; c: number; v: Cell }[];
     borderInfo: Record<string, CellBorderSides>;
     // In points, as written.
     heights: Map<number, number>;
@@ -150,7 +150,7 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
     return grid;
 }
 
-function readCell(element: XmlElement, look: Look, context: GridContext, formula: string | undefined): FortuneCell {
+function readCell(element: XmlElement, look: Look, context: GridContext, formula: string | undefined): Cell {
     const type = xmlAttr(element, '', 't');
     const v = xmlChild(element, SML_NS, 'v');
     const raw = v ? xmlText(v) : '';
@@ -180,7 +180,7 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         date = true;
         if (context.date1904) value += DAYS_1904;
     }
-    const cell: FortuneCell = { ...look.cell };
+    const cell: Cell = { ...look.cell };
     // A rich string's text is its runs', as the editor keeps one: neither `v` nor `m` holds it. A formula's is its
     // cached result, plain.
     const runs = !formula && typeof string === 'object' && value ? runsOf(string.runs, look.font, context) : undefined;

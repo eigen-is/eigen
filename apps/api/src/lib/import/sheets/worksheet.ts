@@ -159,7 +159,7 @@ function readMerges(rest: XmlElement, context: WorksheetContext, worksheet: Work
         };
         if (covered()) continue;
         merge[`${r}_${c}`] = { r, c, rs, cs };
-        // The anchor's mc carries the span; fortune-sheet tells it by `rs`.
+        // Only the anchor's mc carries the span. The grid tells the anchor from the cells it covers by its `rs`.
         for (let row = r; row <= bottom; row++)
             for (let column = c; column <= right; column++)
                 worksheet.placed.set(cellKey(row, column), {

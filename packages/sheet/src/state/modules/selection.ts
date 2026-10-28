@@ -809,9 +809,9 @@ export function moveHighlightCell(
 
 // shift + arrow key: adjust the selection range
 //
-// NOTE (C4): the two targets below look like clones but are NOT — do not
+// NOTE: the two targets below look like clones but are NOT — do not
 // "de-duplicate" them. The formula arm diverges from the selection arm inside
-// several merge branches, preserved verbatim from luckysheet:
+// several merge branches, preserved verbatim from upstream:
 //   - down / merged, `rf_end < endR` branch: the selection arm reads
 //     getRowMerge(ctx, curR, …) and applies `endR += index` outside the guard;
 //     the formula arm reads getRowMerge(ctx, endR, …) and applies it inside.
@@ -1390,7 +1390,7 @@ export function copy(ctx: Context) {
         copyRange.push({ row: range.row, column: range.column });
     }
 
-    // Save copy data within luckysheet
+    // The engine's own clipboard: the copied ranges, which a paste in this tab reads back from the live cells.
     ctx.copyState = {
         dataSheetId: ctx.currentSheetId,
         copyRange,

@@ -96,8 +96,7 @@ export type Presence = {
 };
 
 // Sheet-protection settings. Read-only in this fork: no UI or xlsx-import
-// path writes the field (the upstream luckysheet protect-sheet dialog was
-// never ported).
+// path writes the field (the upstream protect-sheet dialog was never ported).
 // protection.ts reads only these five fields: `sheet !== 0` toggles
 // protection on; the `selectLockedCells` / `selectunLockedCells` flags allow
 // selection when set to `1` (any other value, including undefined, blocks);
@@ -153,7 +152,7 @@ export type FilterCondition = {
 // Per-column filter rule state. Producers in state/modules/filter.ts /
 // rowcol.ts set every field. `byCondition` is set when the column filters by
 // condition instead of by values/color. Legacy snapshot fields (e.g. the
-// retired luckysheet `caljs`) flow through the `[key]: unknown` overflow.
+// retired `caljs`) flow through the `[key]: unknown` overflow.
 export type FilterEntry = {
     byCondition?: FilterCondition;
     rowhidden: Record<string, number>;

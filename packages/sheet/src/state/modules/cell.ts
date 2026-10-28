@@ -627,7 +627,7 @@ export function updateCell(
                 curv = cloneDeep(d?.[r]?.[c] || {});
                 [, curv.v, curv.f] = v;
             }
-            // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
+            // A cell object, such as setCellValue(0, 0, { f: '=SUM(D1)', bg: '#0188fb' }), carries its formula in `f`.
             else if (isPlainObject(value)) {
                 const valueFunction = value.f;
 
@@ -638,7 +638,7 @@ export function updateCell(
                     curv = cloneDeep(d?.[r]?.[c] || {});
                     [, curv.v, curv.f] = v;
                 }
-                // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
+                // A cell object without a formula: its fields are copied onto the cell.
                 else {
                     for (const attr of Object.keys(value)) {
                         curv[attr as keyof Cell] = value[attr];
@@ -676,7 +676,7 @@ export function updateCell(
                 f: v[2],
             };
         }
-        // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
+        // A cell object, such as setCellValue(0, 0, { f: '=SUM(D1)', bg: '#0188fb' }), carries its formula in `f`.
         else if (isPlainObject(value)) {
             const valueFunction = value.f;
 
