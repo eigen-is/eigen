@@ -37,7 +37,7 @@ export async function readServerSidecar(archivePath: string): Promise<ServerArch
 }
 
 // Every server archive and refused attempt in the backups folder by its name, once each, newest first.
-function listServerArchiveNames() {
+function listServerArchiveRecords() {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) return [];
     const names = new Set(
@@ -53,7 +53,7 @@ function listServerArchiveNames() {
 // The owner's list, newest first, from names and sidecars alone.
 export async function listServerArchives(): Promise<ServerArchive[]> {
     const archives: ServerArchive[] = [];
-    for (const { name, level, reason, at, archivePath } of listServerArchiveNames()) {
+    for (const { name, level, reason, at, archivePath } of listServerArchiveRecords()) {
         archives.push({
             name,
             level,
@@ -127,7 +127,7 @@ function archiveLine({ name, createdAt }: ServerArchive, error: string | undefin
 // The schedule's one question. A failed or refused attempt left its record, so it counts: a night
 // that fails is one alert, not a retry every tick.
 export function hasScheduledAttemptOn(day: string): boolean {
-    return listServerArchiveNames().some(
+    return listServerArchiveRecords().some(
         ({ reason, at }) => reason === 'scheduled' && at.toISOString().startsWith(day),
     );
 }
@@ -147,7 +147,7 @@ export async function deleteServerArchive(name: string): Promise<void> {
 export async function pruneLocalArchives(): Promise<void> {
     const archives: RetentionCandidate[] = [];
     const unread: string[] = [];
-    for (const record of listServerArchiveNames()) {
+    for (const record of listServerArchiveRecords()) {
         const sidecar = await readServerSidecar(record.archivePath);
         if (sidecar) {
             archives.push({
@@ -179,7 +179,7 @@ function removeServerArchive(archivePath: string): void {
 export async function recoverInterruptedServerBackups(): Promise<void> {
     const interrupted: string[] = [];
     const notUploaded: string[] = [];
-    for (const { name, archivePath } of listServerArchiveNames()) {
+    for (const { name, archivePath } of listServerArchiveRecords()) {
         const sidecar = await readServerSidecar(archivePath);
         if (sidecar?.state === 'running') {
             await writeServerSidecar(archivePath, {

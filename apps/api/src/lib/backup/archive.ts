@@ -295,7 +295,7 @@ export async function readArtifactManifest(artifactPath: string): Promise<Backup
     let text: string | null = null;
     for await (const entry of tarEntries(artifactBytes(artifactPath))) {
         if (!filter.match(entry.path)) continue;
-        text = Buffer.from(await collect(entry.body)).toString();
+        text = new TextDecoder().decode(await collect(entry.body));
         break;
     }
     const manifest = text === null ? null : parseBackupManifest(text);

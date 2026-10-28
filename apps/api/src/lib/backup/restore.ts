@@ -152,6 +152,33 @@ export async function restoreSafetyCopy(
     onProgress?.('done', 1, 1);
 }
 
+// Inserts only the missing rows: a registry row that is already there describes a live share.
+export async function restoreShares(ownerId: string, folder: string): Promise<void> {
+    const sharesPath = path.join(folder, ARCHIVE_SHARES_FILE);
+    if (!fs.existsSync(sharesPath)) return;
+    const rows = parseBackupShares(fs.readFileSync(sharesPath, 'utf8'));
+    if (!rows) throw new ApiError(400, `${ARCHIVE_SHARES_FILE} is not a set of share-registry rows`);
+    for (const row of rows) await addRegistryEntry(ownerId, row.targetIdentifier);
+}
+
+// The avatar is server data, not home data. It goes back only where the server has none, so a picture
+// the user changed after the backup is not quietly reverted. The name comes from the archive and lands
+// in the server-wide avatars folder, so it must be this user's, `{ownerId}.{ext}`: otherwise a hostile
+// archive could plant a picture for somebody who has none.
+async function restoreAvatar(ownerId: string, folder: string): Promise<void> {
+    const avatarDir = path.join(folder, ARCHIVE_AVATAR_DIR);
+    if (!fs.existsSync(avatarDir)) return;
+    for (const name of fs.readdirSync(avatarDir)) {
+        if (path.parse(name).name !== ownerId) {
+            console.warn(`[backup] ${ownerId}: ${name} in the archive is not this user's avatar, not restored`);
+            continue;
+        }
+        const target = path.join(getAvatarsDir(), name);
+        if (fs.existsSync(target)) continue;
+        await Bun.write(target, Bun.file(path.join(avatarDir, name)));
+    }
+}
+
 // What a restore does once the home is out of everyone's hands and its folder is aside: put the new
 // folder at `homeDir`. The step that prepared it returns it, so it closes over whatever that step judged.
 type InstallHome = (stamp: string) => Promise<void>;
@@ -225,31 +252,4 @@ async function requireOwnerExists(ownerId: string): Promise<void> {
     const owner = parseOwnerId(ownerId);
     const found = owner.type === 'team' ? await getTeam(owner.id) : await getUserById(owner.id);
     if (!found) throw new ApiError(404, `${ownerId} no longer exists`);
-}
-
-// Inserts only the missing rows: a registry row that is already there describes a live share.
-export async function restoreShares(ownerId: string, folder: string): Promise<void> {
-    const sharesPath = path.join(folder, ARCHIVE_SHARES_FILE);
-    if (!fs.existsSync(sharesPath)) return;
-    const rows = parseBackupShares(fs.readFileSync(sharesPath, 'utf8'));
-    if (!rows) throw new ApiError(400, `${ARCHIVE_SHARES_FILE} is not a set of share-registry rows`);
-    for (const row of rows) await addRegistryEntry(ownerId, row.targetIdentifier);
-}
-
-// The avatar is server data, not home data. It goes back only where the server has none, so a picture
-// the user changed after the backup is not quietly reverted. The name comes from the archive and lands
-// in the server-wide avatars folder, so it must be this user's, `{ownerId}.{ext}`: otherwise a hostile
-// archive could plant a picture for somebody who has none.
-export async function restoreAvatar(ownerId: string, folder: string): Promise<void> {
-    const avatarDir = path.join(folder, ARCHIVE_AVATAR_DIR);
-    if (!fs.existsSync(avatarDir)) return;
-    for (const name of fs.readdirSync(avatarDir)) {
-        if (path.parse(name).name !== ownerId) {
-            console.warn(`[backup] ${ownerId}: ${name} in the archive is not this user's avatar, not restored`);
-            continue;
-        }
-        const target = path.join(getAvatarsDir(), name);
-        if (fs.existsSync(target)) continue;
-        await Bun.write(target, Bun.file(path.join(avatarDir, name)));
-    }
 }
