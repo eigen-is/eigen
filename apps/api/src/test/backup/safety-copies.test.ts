@@ -409,7 +409,7 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
         const [copy] = safetyCopies(userId);
         const jobId = `safety-killed-${Date.now()}`;
         const spies = [
-            spyOn(recoveryModule, 'markRestoreComplete').mockImplementation(() => {}),
+            spyOn(recoveryModule, 'writeRestoreCompleteMarker').mockImplementation(() => {}),
             spyOn(pathsModule, 'wipeBackupStagingDir').mockImplementation(async () => {}),
         ];
         try {

@@ -32,7 +32,7 @@ import {
     getBackupStagingDir,
     wipeBackupStagingDir,
 } from './paths';
-import { markRestoreComplete, writeRestoringMarker } from './recovery';
+import { writeRestoreCompleteMarker, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import { requireVerified, verifyFolder } from './verify';
 
@@ -195,7 +195,7 @@ async function replaceHomeFolder(
             // Every tab of the home reloads, once the folder is whole and before the completion note: a crash
             // between the two costs an extra reload, never a stale tab over the new home.
             await rotateHomeDataEpoch(ownerId);
-            markRestoreComplete(jobId);
+            writeRestoreCompleteMarker(jobId);
         } catch (error) {
             // A failure while putting the home back must not hide the one that brought us here.
             try {
