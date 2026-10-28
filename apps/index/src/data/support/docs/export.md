@@ -35,6 +35,8 @@ The exported file contains the document text and all formatting: headings, lists
 
 The PDF and the Word file put the header and footer on every page, with the page numbers and page count filled in, and give the first page its own when you set one. The web page shows the header at the top and the footer at the end, with **#** for a page number. See [Add headers, footers, and page numbers](/support/docs/headers-and-footers).
 
+A text box looks in the PDF and the web page as it does in the editor, and is a Word text box in the Word file. A box whose text runs past the height you set grows to fit it in Word too. See [Add text boxes](/support/docs/text-boxes).
+
 Footnotes print at the bottom of their page in the PDF and are Word footnotes in the Word file. When a document has more than 1,500 footnotes, or one footnote longer than a page, the PDF lists them all at the end instead, as the web page does. The web page numbers them in the text and lists them at the end, each linking back to its place.
 
 A table of contents shows each heading's page number in the PDF. In the Word file it is Word's own table of contents, and its page numbers fill in when Word updates it. The web page lists the headings as links, without page numbers. See [Add a table of contents](/support/docs/table-of-contents).

@@ -28,6 +28,7 @@ import { EigenParagraphFormat } from './nodes/paragraph-format';
 import { SmallMark } from './nodes/small-mark';
 import { EigenTableCell, EigenTableHeader } from './nodes/table-cell';
 import { TableOfContentsNode } from './nodes/table-of-contents';
+import { TextBoxNode } from './nodes/text-box';
 import { SubtitleNode, TitleNode } from './nodes/title';
 import type { NormalStyle } from './normal-style';
 import { PROSE_TEXTBLOCKS } from './paragraph-format';
@@ -83,6 +84,7 @@ export function getDocExtensions(options?: {
         PageNumberNode,
         TableOfContentsNode,
         FootnoteNode,
+        TextBoxNode,
         // ⇧⌘H is Find and replace, as in Google Docs, which binds no key to highlighting.
         Highlight.extend({ addKeyboardShortcuts: () => ({}) }).configure({ multicolor: true }),
         ...(options?.lowlight ? [CodeBlockLowlight.configure({ lowlight: options.lowlight })] : []),

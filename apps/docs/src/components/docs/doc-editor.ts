@@ -1,7 +1,7 @@
-// Builds every editor of a doc: the body's, each header and footer band's and the open footnote's. One factory gives
-// them the schema, the node views, the collaboration and its caret, and the copy, paste and drop paths, so a band and a
-// note edit as the body does. useDocEditor and useBandEditors add what a mounted editor runs, such as the sweep of
-// images a closed tab left mid-upload, and useDocMedia holds the image uploads they share.
+// Builds every editor of a doc: the body's, each header and footer band's and each story's, a note's and a text box's.
+// One factory gives them the schema, the node views, the collaboration and its caret, and the copy, paste and drop
+// paths, so a band and a story edit as the body does. useDocEditor and useBandEditors add what a mounted editor runs,
+// such as the sweep of images a closed tab left mid-upload, and useDocMedia holds the image uploads they share.
 
 import type { Extensions } from '@tiptap/core';
 import { Extension, Node } from '@tiptap/core';
@@ -24,11 +24,11 @@ import {
 } from '@workspace/lib/clipboard';
 import { userColor } from '@workspace/lib/constants/colors';
 import { FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
-import type { BandRoot } from '@workspace/lib/docs/eigendoc';
+import type { BandRoot, StoryNode } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
     DOC_PROSE_CLASS,
-    flattenNestedFootnotes,
+    flattenNestedStories,
     getDocExtensions,
     PAGE_BAND_CLASS,
     PAGE_ROOT,
@@ -62,14 +62,17 @@ import { Equation } from './extensions/equation';
 import { Figure } from './extensions/figure';
 import type { FigureFrameOptions } from './extensions/figure-frame';
 import type { FootnoteOptions } from './extensions/footnote';
-import { Footnote, NOTE_EDIT, NoteDecorations, NoteFormatting } from './extensions/footnote';
+import { Footnote } from './extensions/footnote';
 import { PageNumber } from './extensions/page-number';
 import { PositionedFigures } from './extensions/positioned-figure';
+import { STORY_EDIT, StoryDecorations, StoryFormatting } from './extensions/story';
 import { cellPosAt, EditorTable } from './extensions/table';
 import type { TableOfContentsOptions } from './extensions/table-of-contents';
 import { TableOfContents } from './extensions/table-of-contents';
 import { TableWidthClamp } from './extensions/table-width-clamp';
-import { cleanPastedHTML } from './paste';
+import type { TextBoxOptions } from './extensions/text-box';
+import { TextBox } from './extensions/text-box';
+import { cleanPastedHTML, withFreshStoryIds } from './paste';
 
 const lowlight = createLowlight(common);
 
@@ -96,8 +99,8 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
                 tr.setNodeAttribute(pos, 'mediaName', newName);
             }
         }
-        // A note's image takes its name too, a change to a note the body otherwise never makes.
-        if (dispatch) dispatch(tr.setMeta(NOTE_EDIT, true));
+        // A story's image takes its name too, a change to a story the body otherwise never makes.
+        if (dispatch) dispatch(tr.setMeta(STORY_EDIT, true));
         return true;
     });
 }
@@ -124,8 +127,8 @@ function normalizeFontFamilyMarks(editor: Editor) {
         for (const { from, to, attrs } of targets) {
             tr.addMark(from, to, markType.create(attrs));
         }
-        // A note's text takes its name too, a change to a note the body otherwise never makes.
-        tr.setMeta('addToHistory', false).setMeta(NOTE_EDIT, true);
+        // A story's text takes its name too, a change to a story the body otherwise never makes.
+        tr.setMeta('addToHistory', false).setMeta(STORY_EDIT, true);
         if (dispatch) dispatch(tr);
         return true;
     });
@@ -187,7 +190,7 @@ export function useDocMedia(path: DrivePath) {
             const replaced = target.getAttributes('figure').mediaName;
             const result = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId }).catch(() => null);
             const settled = editor();
-            // The selection may have left the figure during the copy; the copied file then stays unreferenced in media/.
+            // The selection may have left the figure during the copy. The copied file then stays in media/, unused.
             if (result?.[0] && settled && !settled.isDestroyed && settled.isActive('figure', { mediaName: replaced })) {
                 settled.chain().focus().updateFigure({ mediaName: result[0].name, width: null, height: null }).run();
             }
@@ -211,8 +214,8 @@ export function useDocMedia(path: DrivePath) {
 
 type DocMedia = ReturnType<typeof useDocMedia>;
 
-// A note holds paragraphs, so a pasted heading, list or table lands as paragraphs.
-const NoteDocument = Node.create({ name: 'doc', topNode: true, content: 'paragraph+' });
+// A story holds paragraphs, so a pasted heading, list or table lands as paragraphs.
+const StoryDocument = Node.create({ name: 'doc', topNode: true, content: 'paragraph+' });
 
 // A page-less doc has no pages to break, so Mod-Enter inserts no page break and no line break either, as in Google. In
 // a code block it still leaves the block. Above the page break's own shortcut, which would insert one.
@@ -225,12 +228,12 @@ const noPageBreaksWhenPageless = (pageless: () => boolean) =>
         },
     });
 
-// A note has no history of its own: its edits forward into the body, whose undo takes them back and pulls the note
-// back with them, so ⌘Z in a note and in the body walk one history.
-const noteHistory = (body: () => Editor | null) =>
+// A story has no history of its own: its edits forward into the body, whose undo takes them back and pulls the story
+// back with them, so ⌘Z in a story and in the body walk one history.
+const storyHistory = (body: () => Editor | null) =>
     Extension.create({
-        name: 'noteHistory',
-        // The body's undo pulls the note back while the command runs, so the note's own transaction would land on a
+        name: 'storyHistory',
+        // The body's undo pulls the story back while the command runs, so the story's own transaction would land on a
         // state it was not made from; Collaboration's undo prevents its dispatch the same way.
         addCommands: () => ({
             undo:
@@ -261,9 +264,10 @@ type DocEditorTarget =
     // A band: its root, y-tiptap's own undo over it, no comments, and Esc to leave it. Esc is the band's own key, so
     // the find bar and a dialog, which hold focus, keep theirs.
     | { field: BandRoot; onLeave: () => void }
-    // The open footnote's note: no root of its own, as the body's editor holds the note and the note's edits forward
-    // into it. Its undo is the body's, comments don't reach it, and Esc leaves it.
-    | { body: () => Editor | null; onLeave: () => void };
+    // The open story, a footnote's note or a text box: no root of its own, as the body's editor holds the story and
+    // the story's edits forward into it. Its undo is the body's, comments don't reach it, and Esc leaves it. A note
+    // draws at the footnote size, a box in the doc's Normal.
+    | { body: () => Editor | null; onLeave: () => void; story: StoryNode };
 
 type DocEditorOptions = {
     yDoc: Y.Doc;
@@ -279,6 +283,7 @@ type DocEditorOptions = {
     // A right-click in a cell, at `pos`: true when the host opened the table menu.
     table?: { onContextMenu: (editor: Editor, pos: number, event: MouseEvent) => boolean };
     footnote?: Partial<FootnoteOptions>;
+    textBox?: Partial<TextBoxOptions>;
     tableOfContents?: Partial<TableOfContentsOptions>;
     // An extension named as a schema node or mark takes its place, as the body's comment mark does.
     extensions?: Extensions;
@@ -299,13 +304,15 @@ export function docEditorOptions({
     equation,
     table,
     footnote,
+    textBox,
     tableOfContents,
     extensions = [],
     media,
     editor,
 }: DocEditorOptions): UseEditorOptions {
     const band = 'field' in target;
-    const note = 'body' in target;
+    const note = 'story' in target;
+    const story = note ? target.story : null;
     const cardIds = band || note ? () => NO_CARDS : target.cardIds;
     // The page map, not the page on screen: an update that changes the content and the page together reaches the
     // editor before React draws the new page. A band prints in the body's column. Tables and indents keep within it,
@@ -321,7 +328,7 @@ export function docEditorOptions({
     // paragraphs draw at the footnote size, which its size box shows and a step steps from.
     const normalStyle = () => {
         const style = readNormalStyle(yDoc.getMap(STYLE_ROOT).toJSON());
-        return note ? { ...style, size: FOOTNOTE_FONT_SIZE } : style;
+        return story === 'footnote' ? { ...style, size: FOOTNOTE_FONT_SIZE } : style;
     };
     const settle = note ? target.body : editor;
     const leave = (onLeave: () => void) =>
@@ -336,12 +343,12 @@ export function docEditorOptions({
         });
     return {
         editable,
-        // y-tiptap writes nothing while the doc reads as one empty paragraph, unless an earlier update saw other content.
-        // It draws the root as it builds its plugin view, before its update can see that. One update as the view mounts
-        // shows it what the root holds, so an edit that empties a root that held something is saved.
+        // y-tiptap writes nothing while the doc reads as one empty paragraph, unless an earlier update saw other
+        // content. It draws the root as it builds its plugin view, before its update can see that. One update as the
+        // view mounts shows it what the root holds, so an edit that empties a root that held something is saved.
         onMount: ({ editor }) => editor.view.updateState(editor.state),
         extensions: [
-            // A note's own doc holds its paragraphs; its nested note stays in the schema, as a peer may write one.
+            // A story's own doc holds its paragraphs. A nested note or box stays in the schema, as a peer may send one.
             ...getDocExtensions({
                 lowlight,
                 textColumnWidth,
@@ -349,7 +356,7 @@ export function docEditorOptions({
                 remote: (tr) => !!tr.getMeta(ySyncPluginKey),
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
-                    ...(band || note ? [] : ['footnote']),
+                    ...(band || note ? [] : ['footnote', 'textBox']),
                     'figure',
                     'chart',
                     'equation',
@@ -361,21 +368,21 @@ export function docEditorOptions({
             }).map((extension) =>
                 note && extension.name === 'starterKit' ? extension.configure({ document: false }) : extension,
             ),
-            ...(note ? [NoteDocument] : []),
+            ...(note ? [StoryDocument] : []),
             EditorTable.configure({ resizable: !coarsePointer, pageless, paperWidth }),
             Figure.configure(figure),
             ...(band ? [] : [Chart.configure(chart)]),
             Equation.configure(equation),
             PageNumber,
             ...(band ? [] : [TableOfContents.configure(tableOfContents)]),
-            ...(band || note ? [] : [Footnote.configure(footnote), NoteFormatting]),
+            ...(band || note ? [] : [Footnote.configure(footnote), TextBox.configure(textBox), StoryFormatting]),
             TableWidthClamp.configure({ textColumnWidth, paperWidth, band }),
             noPageBreaksWhenPageless(pageless),
             PositionedFigures.configure({ page, band, note }),
             AtomMarks,
             ...extensions,
             ...(band ? [leave(target.onLeave)] : []),
-            ...(note ? [leave(target.onLeave), NoteDecorations, noteHistory(target.body)] : []),
+            ...(note ? [leave(target.onLeave), StoryDecorations, storyHistory(target.body)] : []),
             ...(note
                 ? []
                 : [
@@ -415,15 +422,17 @@ export function docEditorOptions({
                 },
             },
             transformPastedHTML: (html: string) => cleanPastedHTML(html, page(), cardIds(), normalStyle().font, !band),
-            // A note pasted into a note is nested in it: its text stays, in its place.
+            // A note or a box pasted into a story is nested in it: its text stays, in its place. One pasted or dropped
+            // into the body that copies a story the doc holds takes an id of its own; a drag that moves one keeps it.
             transformPasted: note
                 ? (slice, view) =>
                       Slice.fromJSON(view.state.schema, {
                           ...slice.toJSON(),
-                          content: flattenNestedFootnotes({ type: 'footnote', content: slice.content.toJSON() })
-                              .content,
+                          content: flattenNestedStories({ type: 'footnote', content: slice.content.toJSON() }).content,
                       })
-                : undefined,
+                : band
+                  ? undefined
+                  : (slice, view) => (view.dragging?.move ? slice : withFreshStoryIds(slice, view.state.doc)),
             handleDrop: (view, event) => {
                 if (!event.dataTransfer) return false;
                 const files = Array.from(event.dataTransfer.files);
@@ -493,8 +502,8 @@ type UseDocEditorOptions = Omit<DocEditorOptions, 'caret' | 'coarsePointer' | 'm
     editing?: boolean;
 };
 
-// The body's editor, each band's and the open note's: docEditorOptions with this tab's user and its pointer, plus the sweep of pending
-// images a closed tab left and the font-name pass, both in an editable editor only.
+// The body's editor, each band's and each story's: docEditorOptions with this tab's user and its pointer, plus the
+// sweep of pending images a closed tab left and the font-name pass, both in an editable editor only.
 export function useDocEditor(
     { media, provider, editing = true, ...options }: UseDocEditorOptions,
     deps: DependencyList = [],
@@ -521,8 +530,9 @@ export function useDocEditor(
         deps,
     );
     editorRef.current = editor;
-    // TipTap keeps an editor's editable flag across renders, so write access lost or gained while the doc is open, and a
-    // band entered or left, reach it here. Before paint, so an editor never shows a frame editable after it lost that.
+    // TipTap keeps an editor's editable flag across renders, so write access lost or gained while the doc is open, and
+    // a band entered or left, reach it here. It runs before paint, so an editor never draws a frame as editable once
+    // it lost write access.
     useLayoutEffect(() => {
         editor.setEditable(editable, false);
         // A node view reads the flag as it renders and nothing re-renders it, so a selected image would keep its grips.
@@ -531,8 +541,8 @@ export function useDocEditor(
             editor.view.dispatch(editor.state.tr.setSelection(Selection.near(selection.$from)));
         }
     }, [editor, editable]);
-    // A note's images and fonts are the body's, which sweeps and collapses them.
-    const sweeps = options.editable && !('body' in options.target);
+    // A story's images and fonts are the body's, which sweeps and collapses them.
+    const sweeps = options.editable && !('story' in options.target);
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
     // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.

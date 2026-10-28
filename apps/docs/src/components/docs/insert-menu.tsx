@@ -1,7 +1,7 @@
-// Docs' Insert menu: links, images, charts, tables, page elements, equations, footnotes, a table of contents and
-// comments. It asks the editor it acts on what its schema holds, so a band's or a note's editor greys out what it
-// can't take, and a page-less doc offers no page break, header, footer or page number. An equation or a footnote goes
-// in once the menu has closed, so the focus lands in the new field rather than on the menu.
+// Docs' Insert menu: links, images, charts, text boxes, tables, page elements, equations, footnotes, a table of
+// contents and comments. It asks the editor it acts on what its schema holds, so a band's or a note's editor greys out
+// what it can't take, and a page-less doc offers no page break, header, footer or page number. An equation, a footnote
+// or a text box goes in once the menu has closed, so the focus lands in the new field rather than on the menu.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
@@ -29,6 +29,7 @@ import {
     PanelTop,
     SeparatorHorizontal,
     Sigma,
+    SquareDashed,
     Superscript,
     Table,
     TableOfContents,
@@ -50,16 +51,17 @@ type InsertMenuProps = {
     onPageNumbers?: (preset: PageNumberPreset) => void;
     onInsertEquation?: () => void;
     onInsertFootnote?: () => void;
-    // A note holds paragraphs only, and no chart, whose panel follows the body.
-    inNote: boolean;
+    onInsertTextBox?: () => void;
+    // A note or a text box holds paragraphs only, and no chart, whose panel follows the body.
+    inStory: boolean;
     // A band or a note is the active editor, not the body.
     held: boolean;
     pageless: boolean;
 };
 
-// What a band can't hold is missing from its editor's schema, and a command for a node the schema lacks throws. A note's
-// schema is the body's, so what a note can't hold is disabled by hand. Those items stay in the menu greyed out, as in
-// Google.
+// What a band can't hold is missing from its editor's schema, and a command for a node the schema lacks throws. A
+// story's schema is the body's, so what a note or a text box can't hold is disabled by hand. Those items stay in the
+// menu greyed out, as in Google.
 export function InsertMenu({
     editor,
     active,
@@ -69,14 +71,15 @@ export function InsertMenu({
     onAddComment,
     onInsertEquation,
     onInsertFootnote,
-    inNote,
+    onInsertTextBox,
+    inStory,
     held,
     pageless,
     onEnterBand,
     onPageNumbers,
 }: InsertMenuProps) {
-    // An equation and a footnote go in once the menu has closed, or Radix would hand the focus back to the trigger,
-    // away from the new equation's field or note.
+    // An equation, a footnote and a text box go in once the menu has closed, or Radix would hand the focus back to the
+    // trigger, away from the new equation's field or note.
     const afterCloseRef = useRef<(() => void) | null>(null);
     return (
         <AppBarMenu
@@ -100,7 +103,7 @@ export function InsertMenu({
                 </DropdownMenuItem>
             )}
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger disabled={inNote || !('chart' in editor.schema.nodes)}>
+                <DropdownMenuSubTrigger disabled={inStory || !('chart' in editor.schema.nodes)}>
                     <ChartColumn className="h-4 w-4" /> Chart
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
@@ -116,6 +119,17 @@ export function InsertMenu({
                     ))}
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
+            {/* Word's Insert › Text box, a box in the flow open for typing: none in a band, a code block or a story. */}
+            {onInsertTextBox && (
+                <DropdownMenuItem
+                    disabled={inStory || !active.canInsertTextBox}
+                    onClick={() => {
+                        afterCloseRef.current = onInsertTextBox;
+                    }}
+                >
+                    <SquareDashed className="h-4 w-4" /> Text box
+                </DropdownMenuItem>
+            )}
             {/* Where Google's Insert › Symbols › Equation sits: after the chart, before the horizontal line. */}
             {onInsertEquation && (
                 <DropdownMenuItem
@@ -127,12 +141,12 @@ export function InsertMenu({
                     <Sigma className="h-4 w-4" /> Equation
                 </DropdownMenuItem>
             )}
-            <DropdownMenuItem disabled={inNote} onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+            <DropdownMenuItem disabled={inStory} onClick={() => editor.chain().focus().setHorizontalRule().run()}>
                 <Minus className="h-4 w-4" /> Horizontal rule
             </DropdownMenuItem>
             {!pageless && (
                 <DropdownMenuItem
-                    disabled={inNote || !('pageBreak' in editor.schema.nodes)}
+                    disabled={inStory || !('pageBreak' in editor.schema.nodes)}
                     onClick={() => editor.chain().focus().setPageBreak().run()}
                 >
                     <SeparatorHorizontal className="h-4 w-4" /> Page break
@@ -140,7 +154,7 @@ export function InsertMenu({
                 </DropdownMenuItem>
             )}
             <DropdownMenuItem
-                disabled={inNote}
+                disabled={inStory}
                 onClick={() =>
                     editor
                         .chain()
@@ -156,7 +170,7 @@ export function InsertMenu({
                 <Table className="h-4 w-4" /> Table
             </DropdownMenuItem>
             <DropdownMenuItem
-                disabled={inNote || !('codeBlock' in editor.schema.nodes)}
+                disabled={inStory || !('codeBlock' in editor.schema.nodes)}
                 onClick={() => editor.chain().focus().toggleCodeBlock().run()}
             >
                 <CodeXml className="h-4 w-4" /> Code block
@@ -188,7 +202,7 @@ export function InsertMenu({
                         {/* Google's Insert › Page elements › Footnote: none in a band, a code block or a note. */}
                         {onInsertFootnote && (
                             <DropdownMenuItem
-                                disabled={inNote || !active.canInsertFootnote}
+                                disabled={inStory || !active.canInsertFootnote}
                                 onClick={() => {
                                     afterCloseRef.current = onInsertFootnote;
                                 }}
@@ -202,7 +216,7 @@ export function InsertMenu({
             )}
             {/* Last before the comment, as Google's Insert lists its table of contents. Only between the body's blocks. */}
             <DropdownMenuItem
-                disabled={inNote || !active.canInsertTableOfContents}
+                disabled={inStory || !active.canInsertTableOfContents}
                 onClick={() => editor.chain().focus().insertTableOfContents().run()}
             >
                 <TableOfContents className="h-4 w-4" /> Table of contents

@@ -43,7 +43,6 @@ export {
     FOOTNOTE_PARAGRAPH,
     FOOTNOTE_SELECTOR,
     FootnoteNode,
-    flattenNestedFootnotes,
     footnoteNumbers,
     footnotesInOrder,
     insertFootnote,
@@ -52,6 +51,8 @@ export { listTypeOfStyle } from './nodes/ordered-list';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';
 export { PAGE_NUMBER_KINDS, PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';
+export type { StoryNode } from './nodes/stories';
+export { flattenNestedStories, isStoryNode, newStoryId, readStoryId, STORY_NODES } from './nodes/stories';
 export type { CellBorder, CellBorderAttribute, CellBorderStyle, CellSide } from './nodes/table-cell';
 export {
     CELL_BORDER_SIDES,
@@ -63,6 +64,22 @@ export {
     readCellBorder,
 } from './nodes/table-cell';
 export { canInsertTableOfContents, readTocLevels, TableOfContentsNode } from './nodes/table-of-contents';
+export type { TextBoxAttrs, TextBoxEdit, TextBoxVerticalAlign } from './nodes/text-box';
+export {
+    insertTextBox,
+    MAX_TEXT_BOX_PADDING,
+    readTextBoxAttrs,
+    readTextBoxSide,
+    TEXT_BOX_DEFAULT_WIDTH,
+    TEXT_BOX_INSET,
+    TEXT_BOX_MIN_SIDE,
+    TEXT_BOX_PARAGRAPH,
+    TEXT_BOX_RADIUS,
+    TEXT_BOX_SELECTOR,
+    TextBoxNode,
+    textBoxHTMLAttributes,
+    textBoxPadding,
+} from './nodes/text-box';
 export type { TitleType } from './nodes/title';
 export type { NormalStyle } from './normal-style';
 export { DEFAULT_NORMAL_STYLE, normalStyleProperties, readNormalStyle, STYLE_ROOT } from './normal-style';

@@ -75,8 +75,20 @@ describe('docx fixtures', () => {
         ]);
     });
 
-    test("mammoth's text box: its text follows the paragraph that anchors it", async () => {
-        expect(texts((await imported('mammoth-text-box.docx')).json)).toEqual(['Datum plane']);
+    const boxesOf = (json: JSONContent) =>
+        nodesOfType(json, 'textBox').map((node) => [
+            node.attrs?.['layout'],
+            node.attrs?.['fill'],
+            node.attrs?.['outline'],
+            nodesOfType(node, 'text')
+                .map((text) => text.text)
+                .join(''),
+        ]);
+
+    test("mammoth's text box: a box in front of the text, Word's white with a black line, holding its text", async () => {
+        const { json } = await imported('mammoth-text-box.docx');
+        expect(texts(json)).toEqual(['Datum plane']);
+        expect(boxesOf(json)).toEqual([['front', '#ffffff', '1px solid #000000', 'Datum plane']]);
     });
 
     // Pictures over or under the text (J1 § 9): each a figure in front of or behind it at Word's place, one in a table
@@ -96,9 +108,10 @@ describe('docx fixtures', () => {
         expect(holder?.content?.[0]?.type).toBe('figure');
     });
 
-    test("GOV.UK surveillance form: its logo in front of the text, its shape's text kept as text", async () => {
+    test('GOV.UK surveillance form: its logo in front of the text, and its banner a filled box in front', async () => {
         const { json } = await imported('govuk-AcuteHepB_EnhancedSurveillanceForm.docx');
         expect(placesOf(json)).toEqual([['front', 0, -19, 180]]);
+        expect(boxesOf(json).map(([layout, fill]) => [layout, fill])).toEqual([['front', '#00ae9e']]);
     });
 
     test('LibreOffice table: a picture over the text in a table cell is a block in the cell', async () => {

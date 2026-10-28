@@ -77,7 +77,7 @@ export function FigureField({
 
 // A side in cm to 0.01, written in px with the fraction the cm gives, so a typed 8 cm reads back as 8.00. A side is at
 // least a pixel, and the host floors a width further.
-function CmField({ px, onCommit }: { px: number | undefined; onCommit: (px: number) => void }) {
+export function CmField({ px, onCommit }: { px: number | undefined; onCommit: (px: number) => void }) {
     return (
         <div className="flex items-center gap-1.5">
             <FigureField
@@ -96,21 +96,22 @@ function CmField({ px, onCommit }: { px: number | undefined; onCommit: (px: numb
 
 // A figure's width and height as it draws, with Keep aspect ratio. Each side has a row of its own, as a cm field and
 // its unit don't fit half the panel. While the box is checked an edit of one side writes the other at the figure's
-// ratio. The host fits the size to the page and decides what it stores.
+// ratio. The host fits the size to the page and decides what it stores. A text box has no ratio to keep, and an auto
+// height instead, which grows with its text.
 export function FigureSizeSection({
     width,
     height,
-    aspectLocked,
-    onAspectLockChange,
+    aspect,
+    autoHeight,
     onChange,
 }: {
     width: number | undefined;
     height: number | undefined;
-    aspectLocked: boolean;
-    onAspectLockChange: (locked: boolean) => void;
+    aspect?: { locked: boolean; onLockChange: (locked: boolean) => void };
+    autoHeight?: { auto: boolean; onAutoChange: (auto: boolean) => void };
     onChange: (size: FigureSizeEdit) => void;
 }) {
-    const { changeWidth, changeHeight } = useCoupledSize(width, height, aspectLocked, onChange);
+    const { changeWidth, changeHeight } = useCoupledSize(width, height, aspect?.locked ?? false, onChange);
     return (
         <PropertySection title="Size">
             <PropertyRow label="Width">
@@ -119,7 +120,20 @@ export function FigureSizeSection({
             <PropertyRow label="Height">
                 <CmField px={height} onCommit={changeHeight} />
             </PropertyRow>
-            <PropertyCheckbox label="Keep aspect ratio" checked={aspectLocked} onCheckedChange={onAspectLockChange} />
+            {aspect && (
+                <PropertyCheckbox
+                    label="Keep aspect ratio"
+                    checked={aspect.locked}
+                    onCheckedChange={aspect.onLockChange}
+                />
+            )}
+            {autoHeight && (
+                <PropertyCheckbox
+                    label="Grow with text"
+                    checked={autoHeight.auto}
+                    onCheckedChange={autoHeight.onAutoChange}
+                />
+            )}
         </PropertySection>
     );
 }
@@ -138,9 +152,9 @@ export const figureLayoutLooks = (inFlowOnly: boolean) =>
     FIGURE_LAYOUT_LOOK.filter(({ layout }) => !inFlowOnly || !isPositioned(layout));
 
 // Where a figure sits: in its own line, aligned, wrapped by the text on one side, or behind or in front of the text.
-// The section also holds its caption, which a figure behind or in front of the text doesn't draw. A figure in a band
-// offers the alignment alone, so a pasted wrap goes back to its own line. A figure in a note or a table cell draws in
-// line, so there the section offers no place behind or in front of the text.
+// The section also holds its caption, which a figure behind or in front of the text doesn't draw and a text box has
+// none of. A figure in a band offers the alignment alone, so a pasted wrap goes back to its own line. A figure in a
+// note or a table cell draws in line, so there the section offers no place behind or in front of the text.
 export function FigureLayoutSection({
     layout,
     alignment,
@@ -151,7 +165,7 @@ export function FigureLayoutSection({
 }: {
     layout: FigureLayout;
     alignment: FigureAlignment;
-    caption: string;
+    caption?: string;
     alignOnly?: boolean;
     inFlowOnly: boolean;
     onChange: (attributes: FigureFrameAttrs) => void;
@@ -185,7 +199,7 @@ export function FigureLayoutSection({
                     />
                 </PropertyRow>
             )}
-            {!isPositioned(layout) && (
+            {caption !== undefined && !isPositioned(layout) && (
                 <PropertyRow label="Cap">
                     <FigureField
                         value={caption}
@@ -243,8 +257,7 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
             <FigureSizeSection
                 width={width}
                 height={height}
-                aspectLocked={locked}
-                onAspectLockChange={(next) => setAspectLocked(editor, 'figure', next)}
+                aspect={{ locked, onLockChange: (next) => setAspectLocked(editor, 'figure', next) }}
                 onChange={(size) => {
                     // A picture at its own ratio stores its width alone, so it keeps that ratio wherever it draws. An
                     // edit that stretches it, or one of a picture already stretched, stores both sides.

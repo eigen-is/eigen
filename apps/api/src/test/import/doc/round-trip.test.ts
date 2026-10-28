@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { FLAT_CHART_LOOK, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, isStoryNode } from '@workspace/lib/docs/eigendoc';
 import type { ChartStacking } from '@workspace/lib/types/chart';
 import { solidFill } from '@workspace/lib/vector';
 import { readOmml, writeMathml } from '@workspace/math';
@@ -54,6 +54,7 @@ function sourceNames(media: ImportedMedia[]): Map<string, string> {
 // one holding none, only quotes, code, headings, rules or done tasks, comes back a body cell in the header's grey.
 // (13) A paragraph's format is what it sets apart from the Normal, so a value equal to the Normal's comes back as none.
 // (14) The chart part holds the look it draws, so a chart's unset background, label colour and stroke come back flat.
+// (15) The import gives every note and text box a fresh story id.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -63,6 +64,7 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         for (const name of ['colwidth', 'width', ...(source.type === 'figure' ? ['height'] : [])])
             if (name in attrs && attrs[name] === null) attrs[name] = imported?.attrs?.[name] ?? null;
         if ('commentCardId' in attrs) attrs['commentCardId'] = null;
+        if (source.type === 'footnote' || source.type === 'textBox') attrs['id'] = imported?.attrs?.['id'] ?? null;
         if (attrs['textAlign'] === 'left') attrs['textAlign'] = null;
         if (source.type === 'equation') attrs['mathml'] = writeMathml(readStoredEquation(attrs).row);
         if (source.type === 'chart')
@@ -1225,15 +1227,23 @@ function isValid(content: JSONContent[]): boolean {
 }
 
 // A Word file imported, written and imported again comes back as the first import read it: what the first import holds
-// is what the docx carries.
+// is what the docx carries. Each import gives a story a fresh id, which is no content.
 describe('a Word file, imported, written and imported again', () => {
+    const withoutIds = (node: JSONContent): JSONContent => ({
+        ...node,
+        ...(isStoryNode(node.type) && { attrs: { ...node.attrs, id: null } }),
+        ...(node.content && { content: node.content.map(withoutIds) }),
+    });
     const run = (text: string, rPr = '') =>
         `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t xml:space="preserve">${text}</w:t></w:r>`;
     const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
     const twice = async (body: string, parts: DocxParts = {}) => {
         const first = await importDocxBody(body, parts);
         const second = docxToPmJson(Buffer.from(writeDocx(first, { title: 'Word', media: [], lost: () => {} })));
-        return { first, second };
+        return {
+            first: { ...first, json: withoutIds(first.json) },
+            second: { ...second, json: withoutIds(second.json) },
+        };
     };
 
     // A size, a heading's style or a note's FootnoteText unlike Eigen's, the runs at the size the node draws in Eigen.
@@ -1624,4 +1634,57 @@ test("a block figure at a heading's start keeps the heading's space above it", (
         ),
     });
     expect(figureBefore(again)).toBe(figureBefore(first));
+});
+
+// The writer gives a block box a paragraph of its own, aligned as the box, with a figure's margin as its space.
+describe('a text box in the flow', () => {
+    test.each(['left', 'right'])('aligned %s keeps its alignment and its space over three round trips', (alignment) => {
+        const box = {
+            type: 'textBox',
+            attrs: { layout: 'block', alignment, width: 200 },
+            content: [p('Boxed')],
+        };
+        const source = docSchema()
+            .nodeFromJSON({ type: 'doc', content: [p('Before'), { type: 'paragraph', content: [box] }, p('After')] })
+            .toJSON();
+        let json = source;
+        for (let trip = 0; trip < 3; trip++) {
+            json = docxToPmJson(
+                Buffer.from(
+                    writeDocx(
+                        { json, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+                        { title: 'Box', media: [], lost: () => {} },
+                    ),
+                ),
+            ).json;
+        }
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
+describe('a positioned text box', () => {
+    // Word shrinks a box written to grow to its text, so a callout whose title is above the body's size came back
+    // with no height.
+    test('a callout with a larger title keeps the height that holds it', () => {
+        const title = { type: 'text', text: 'Note', marks: [{ type: 'textStyle', attrs: { fontSize: 14 } }] };
+        const box = {
+            type: 'textBox',
+            attrs: { layout: 'front', width: 240, height: 140 },
+            content: [{ type: 'paragraph', content: [title] }, p('A short line under it.')],
+        };
+        const json = docxToPmJson(
+            Buffer.from(
+                writeDocx(
+                    {
+                        json: { type: 'doc', content: [{ type: 'paragraph', content: [box] }, p('After')] },
+                        bands: {},
+                        page: DEFAULT_PAGE_SETUP,
+                        style: DEFAULT_NORMAL_STYLE,
+                    },
+                    { title: 'Callout', media: [], lost: () => {} },
+                ),
+            ),
+        ).json;
+        expect(nodesOfType(json, 'textBox').map((node) => node.attrs?.['height'])).toEqual([140]);
+    });
 });

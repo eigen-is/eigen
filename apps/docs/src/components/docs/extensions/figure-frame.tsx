@@ -29,7 +29,7 @@ import { ObjectTransform } from '@workspace/ui';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PaperRoom } from './positioned-figure';
 import { roomOnPaper } from './positioned-figure';
@@ -225,24 +225,27 @@ export function useFigureResize<T extends FigureSize>({
     return { preview, onTransform, onCommit, onGestureEnd };
 }
 
+// How far, in screen px, a press travels before it is a drag rather than a click.
+const CLICK_SLOP = 3;
+
 // A drag of a figure in front of or behind the text previews its travel in page px and writes once, at the release,
 // moving the figure by that travel from where it draws then. A press on an unselected figure selects it and drags it in
-// the same gesture; a finger on one scrolls the page instead.
+// the same gesture; a finger on one scrolls the page instead. With `onClick`, a press that travels no further than a
+// click's slop moves nothing and is a click.
 function useFigureMove({ editor, getPos, selected }: Pick<NodeViewProps, 'editor' | 'getPos' | 'selected'>): {
     travel: FigureShift | null;
-    startMove: (e: React.PointerEvent) => void;
+    startMove: (e: React.PointerEvent, onClick?: (e: React.PointerEvent) => void) => void;
 } {
     const [travel, setTravel] = useState<FigureShift | null>(null);
     // The gesture's document listeners end with it, or with the view.
     const gesture = useRef<AbortController | null>(null);
     useEffect(() => () => gesture.current?.abort(), []);
 
-    const startMove = (e: React.PointerEvent) => {
+    const startMove = (e: React.PointerEvent, onClick?: (e: React.PointerEvent) => void) => {
         const pos = getPos();
         if (e.button !== 0 || !editor.isEditable || pos === undefined) return;
-        // A finger on an image that isn't selected scrolls the page, and the comment mark is a button of its own.
-        if ((e.pointerType === 'touch' && !selected) || (e.target instanceof Element && e.target.closest('button')))
-            return;
+        // A finger on an image that isn't selected scrolls the page.
+        if (e.pointerType === 'touch' && !selected) return;
         // ProseMirror then sees no mousedown, so it neither selects text nor starts the browser's drag.
         e.preventDefault();
         if (!selected) {
@@ -260,12 +263,15 @@ function useFigureMove({ editor, getPos, selected }: Pick<NodeViewProps, 'editor
             setTravel(null);
             const at = getPos();
             if (commit && moved && at !== undefined) editor.commands.moveFigure(at, moved);
+            else if (commit && onClick) onClick(e);
         };
         const { signal } = controller;
         document.addEventListener(
             'pointermove',
             (me) => {
                 if (me.pointerId !== pointerId) return;
+                const still = Math.hypot(me.clientX - clientX, me.clientY - clientY) <= CLICK_SLOP;
+                if (onClick && !moved && still) return;
                 moved = { dx: (me.clientX - clientX) / scale, dy: (me.clientY - clientY) / scale };
                 setTravel(moved);
             },
@@ -301,8 +307,30 @@ type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'ex
     label: string;
     keyShortcuts?: string;
     className?: string;
+    // A text box's: the move, the drag and the selection start on a band along its edge alone, and a press inside it
+    // goes to `onInsidePress`, which opens it, or to its open editor when there is none. `text` is the element whose
+    // border and padding hold the band.
+    dragSurface?: { onInsidePress: ((e: React.PointerEvent) => void) | null; text: RefObject<HTMLElement | null> };
     children: ReactNode;
 };
+
+// How close to a box's edge, in screen px, a press moves or drags it instead of reaching its text.
+const EDGE_BAND = 6;
+
+// The band never reaches the text: on a side with less border and padding than the band, it is that border and padding.
+function inEdgeBand(edge: Element, text: HTMLElement | null, { clientX: x, clientY: y }: React.PointerEvent) {
+    const { left, right, top, bottom, width } = edge.getBoundingClientRect();
+    const style = text && getComputedStyle(text);
+    // The padding is in the page's px, which a page drawn scaled draws smaller.
+    const scale = text && text.offsetWidth > 0 ? width / text.offsetWidth : 1;
+    const band = (side: 'left' | 'right' | 'top' | 'bottom') => {
+        if (!style) return EDGE_BAND;
+        const inset = parseFloat(style.getPropertyValue(`padding-${side}`)) || 0;
+        const border = parseFloat(style.getPropertyValue(`border-${side}-width`)) || 0;
+        return Math.min(EDGE_BAND, (inset + border) * scale);
+    };
+    return x < left + band('left') || x > right - band('right') || y < top + band('top') || y > bottom - band('bottom');
+}
 
 // The figure box the node view draws: the wrapper the page's .figure rules lay out, the selection ring and the
 // transform chrome over the content, the comment mark and the caption. A positioned figure's wrapper is its absolute
@@ -324,6 +352,7 @@ export function FigureFrame({
     label,
     keyShortcuts,
     className,
+    dragSurface,
     children,
 }: FigureFrameProps) {
     const { onContextMenu, onOpenComment }: FigureFrameOptions = extension.options;
@@ -387,6 +416,23 @@ export function FigureFrame({
         </button>
     );
 
+    // A press moves a positioned figure. On a text box a press on its edge band does, and one inside it goes to its
+    // text. A box with no padding and no outline has no band, so a drag inside a selected one in front of or behind
+    // the text moves it too, as in Google Docs, and only a click goes to its text. A box in the flow drags from its edge
+    // as ProseMirror drags a node. The comment mark is a button of its own, which neither moves nor opens the box.
+    const press =
+        (move: ((e: React.PointerEvent, onClick?: (e: React.PointerEvent) => void) => void) | undefined) =>
+        (e: React.PointerEvent) => {
+            if (e.target instanceof Element && e.target.closest('button')) return;
+            const edge = contentRef.current;
+            const inside = dragSurface?.onInsidePress;
+            if (!dragSurface || !edge || inEdgeBand(edge, dragSurface.text.current, e)) move?.(e);
+            else if (e.button === 0 && inside) {
+                if (move && selected) move(e, inside);
+                else inside(e);
+            }
+        };
+
     return (
         <>
             <NodeViewWrapper
@@ -394,13 +440,17 @@ export function FigureFrame({
                 className={cn('figure', className)}
                 data-layout={frame.layout ?? 'block'}
                 data-alignment={frame.alignment ?? 'center'}
-                // A positioned figure moves by the pointer gesture above, never by the browser's drag and drop.
+                // A positioned figure moves by the pointer gesture above, never by the browser's drag and drop. A text
+                // box is draggable only from its edge, which ProseMirror's own press makes draggable, as WebKit starts
+                // the browser's drag from a draggable box even inside its open editor.
                 data-drag-handle={place ? undefined : ''}
-                draggable={!place && isEditable}
+                draggable={!place && isEditable && !dragSurface}
                 style={
-                    place ? placeStyle(place.top, place.left, place.width) : { cursor: isEditable ? 'grab' : undefined }
+                    place
+                        ? placeStyle(place.top, place.left, place.width)
+                        : { cursor: isEditable && !dragSurface ? 'grab' : undefined }
                 }
-                onPointerDown={place ? startMove : undefined}
+                onPointerDown={place || dragSurface ? press(place ? startMove : undefined) : undefined}
                 // ProseMirror never sees a node view's right-click (stopEvent), so the figure asks here.
                 onContextMenu={(e: React.MouseEvent) => {
                     const pos = getPos();
@@ -437,7 +487,7 @@ export function FigureFrame({
                         aspectRatio: `${box.width} / ${box.height}`,
                     }}
                     onPointerDownCapture={measureScale}
-                    onPointerDown={startMove}
+                    onPointerDown={press(startMove)}
                 >
                     {transform}
                     {comment}
@@ -447,13 +497,15 @@ export function FigureFrame({
     );
 }
 
-// Keep aspect ratio, which the panel's box and the grips share: on for a picture and off for a chart, as on a slide.
+// Keep aspect ratio, which the panel's box and the grips share: on for a picture and off for a chart and a text box, as
+// on a slide.
 // A choice lasts while its figure stays selected, as a node has no id to remember it by.
-const ASPECT_LOCKED_BY_DEFAULT: Record<FigureFrameNode, boolean> = { figure: true, chart: false };
+const ASPECT_LOCKED_BY_DEFAULT: Record<FigureFrameNode, boolean> = { figure: true, chart: false, textBox: false };
 type AspectChoice = { pos: number; locked: boolean };
 const ASPECT_LOCK_KEYS: Record<FigureFrameNode, PluginKey<AspectChoice | null>> = {
     figure: new PluginKey('figureAspectLock'),
     chart: new PluginKey('chartAspectLock'),
+    textBox: new PluginKey('textBoxAspectLock'),
 };
 
 const selectedFigureAt = (state: EditorState, name: FigureFrameNode) =>

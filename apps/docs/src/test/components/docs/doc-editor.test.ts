@@ -310,7 +310,7 @@ test('a size step in a note steps from the footnote size', () => {
         });
         return found;
     };
-    const note = mount(doc, { body: () => null, onLeave: () => {} });
+    const note = mount(doc, { body: () => null, onLeave: () => {}, story: 'footnote' });
     note.commands.setContent({
         type: 'doc',
         content: [{ type: 'paragraph', content: [{ type: 'text', text: 'See' }] }],
@@ -434,7 +434,7 @@ test('an indent stops at the text column of the page the doc holds, in the body 
 
 // The uploads below land through the real media resolver; the upload answers when the test lets it.
 const { renderInDocument } = await import('@workspace/ui/test/render-in-document');
-const { act, createElement, useState } = await import('react');
+const { act, createElement, useMemo, useState } = await import('react');
 const { AuthProvider } = await import('@workspace/lib/auth');
 const { MediaResolverProvider } = await import('@workspace/lib/drive');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
@@ -556,7 +556,7 @@ test.each([
     expect(doc.getXmlFragment('header').toString()).toBe(left);
 });
 
-const { useOpenNote } = await import('../../../components/docs/hooks/use-open-note');
+const { useOpenStory } = await import('../../../components/docs/hooks/use-open-story');
 
 // An image pasted into the open note lands there, and once its upload settles the note shows it under its name.
 test('an image pasted into the open note settles in the note', async () => {
@@ -565,7 +565,7 @@ test('an image pasted into the open note settles in the note', async () => {
     const shown: {
         body: InstanceType<typeof Editor> | null;
         note: InstanceType<typeof Editor> | null;
-        session: ReturnType<typeof useOpenNote> | null;
+        session: ReturnType<typeof useOpenStory> | null;
     } = { body: null, note: null, session: null };
     function Host() {
         const media = useDocMedia(path);
@@ -581,11 +581,19 @@ test('an image pasted into the open note settles in the note', async () => {
             yDoc: doc,
             provider: null,
             editable: true,
-            target: { body: () => shown.body, onLeave: () => {} },
+            target: { body: () => shown.body, onLeave: () => {}, story: 'footnote' },
+        });
+        const box = useDocEditor({
+            media,
+            yDoc: doc,
+            provider: null,
+            editable: true,
+            target: { body: () => shown.body, onLeave: () => {}, story: 'textBox' },
         });
         shown.body = body;
         shown.note = note;
-        shown.session = useOpenNote(body, note, true);
+        const editors = useMemo(() => ({ footnote: note, textBox: box }), [note, box]);
+        shown.session = useOpenStory(body, editors, true);
         return null;
     }
     ({ unmount } = await render(createElement(Host)));
@@ -688,7 +696,7 @@ test.each([
         const media = useDocMedia(path);
         const options = { media, yDoc: doc, provider: null, editable: canWrite };
         const body = useDocEditor({ ...options, target: { undoManager, cardIds: () => new Set() } });
-        const note = useDocEditor({ ...options, target: { body: () => body, onLeave: () => {} } });
+        const note = useDocEditor({ ...options, target: { body: () => body, onLeave: () => {}, story: 'footnote' } });
         const bands = useBandEditors({ ...options, editing: canWrite ? 'header' : null, onLeave: () => {} });
         shown.editors = [body, note, bands.header];
         return null;

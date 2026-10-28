@@ -1,9 +1,13 @@
+// Which properties panel the Docs editor shows beside the page for the selection in whichever editor holds it, such as
+// the Image panel for a selected picture, the Text box panel for a box, or the Document panel for text. The editor
+// component mounts the panel it names, and an equation's panel takes its field's focus from here.
+
 import type { Transaction } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import type { RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-export type SelectionPanel = 'document' | 'figure' | 'chart' | 'equation' | 'table';
+export type SelectionPanel = 'document' | 'figure' | 'chart' | 'textBox' | 'equation' | 'table';
 
 type SelectionPanelState = {
     selectionPanel: SelectionPanel;
@@ -16,7 +20,7 @@ type SelectionPanelState = {
 
 // The properties panel the selection opens. An equation sits in prose, where an arrow passing it would open and close
 // its panel, sliding the page each time, so a click on it, Insert › Equation or Enter on it opens its panel, which
-// stays while the equation is selected. `editor` is the one that has the selection, a band's or an open note's, and
+// stays while the equation is selected. `editor` is the one that has the selection, a band's or an open story's, and
 // is read again when it changes, so a panel another editor's selection opened closes.
 export function useSelectionPanel(editor: Editor, isMobile: boolean, closePanels: () => void): SelectionPanelState {
     const [selectionPanel, setSelectionPanel] = useState<SelectionPanel>('document');
@@ -28,6 +32,7 @@ export function useSelectionPanel(editor: Editor, isMobile: boolean, closePanels
         const read = (equation: boolean): SelectionPanel => {
             if (editor.isActive('figure')) return 'figure';
             if (editor.isActive('chart')) return 'chart';
+            if (editor.isActive('textBox')) return 'textBox';
             if (editor.isActive('equation') && equation) return 'equation';
             if (editor.isActive('table')) return 'table';
             return 'document';

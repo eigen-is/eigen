@@ -115,8 +115,8 @@ describe('media', () => {
         expect(warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
     });
 
-    test("the line a picture left out leaves keeps its paragraph's alignment, a text box's paragraph its own", async () => {
-        const box = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Box"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+    test("the line a picture left out leaves keeps its paragraph's alignment, a grouped text box's paragraph its own", async () => {
+        const box = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Box"/><a:graphic><a:graphicData><wpg:wgp xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></wpg:wgp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
         const { json } = await importDocxBody(
             `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${picture('rId9')}${box}</w:p>`,
             { rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/gone.png"/>` },
@@ -550,7 +550,7 @@ describe('text boxes', () => {
         ]);
     });
 
-    // The writer's convention for code and quotes: a text box's blocks sit at its anchor's text.
+    // A box in a list item or a quote is a box of the item's or the quote's paragraph, its blocks its paragraphs.
     describe('anchored in a list item or a quote', () => {
         const NUMBERING =
             '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num><w:num w:numId="6"><w:abstractNumId w:val="5"/></w:num>';
@@ -566,20 +566,341 @@ describe('text boxes', () => {
         const read = async (body: string) =>
             ((await importDocxBody(body, { numbering: NUMBERING, styles: STYLES })).json.content ?? []).map(outline);
 
-        test('its text stays in the item, and in the quote', async () => {
+        test('it stays in the item, and in the quote', async () => {
             const quoted = `<w:p><w:pPr><w:pStyle w:val="Quote"/></w:pPr>${text('Said')}${vml(box('Inside', '000000'))}</w:p>`;
             expect(
                 await read(`${item(`${text('One')}${shape(box('Boxed', '000000'))}`)}${item(text('Two'))}${quoted}`),
-            ).toEqual(['bulletList[listItem[One | Boxed] | listItem[Two]]', 'blockquote[Said | Inside]']);
+            ).toEqual(['bulletList[listItem[OnetextBox[Boxed]] | listItem[Two]]', 'blockquote[SaidtextBox[Inside]]']);
         });
 
-        test('a table and a list in it stay in the item', async () => {
+        test('a table and a list in it are its paragraphs', async () => {
             const table = `<w:tbl><w:tr><w:tc><w:p>${text('Cell')}</w:p></w:tc></w:tr></w:tbl>`;
             const inner = `<w:txbxContent>${table}${item(text('Boxed'), 6)}</w:txbxContent>`;
             expect(await read(`${item(`${text('One')}${shape(inner)}`)}${item(text('Two'))}`)).toEqual([
-                'bulletList[listItem[One | table[tableRow[tableCell[Cell]]] | bulletList[listItem[Boxed]]] | listItem[Two]]',
+                'bulletList[listItem[OnetextBox[Cell | Boxed]] | listItem[Two]]',
             ]);
         });
+    });
+});
+
+// A Word text box alone in its drawing is a text box, at Word's place, size and look; its paragraphs read as a note's.
+describe('text boxes as boxes', () => {
+    const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+    const text = (value: string) => `<w:p><w:r><w:t>${value}</w:t></w:r></w:p>`;
+    type Box = {
+        frame?: 'anchor' | 'inline';
+        wrap?: string;
+        behind?: boolean;
+        x?: number;
+        y?: number;
+        cx?: number;
+        cy?: number;
+        spPr?: string;
+        style?: string;
+        bodyPr?: string;
+        fit?: string;
+        content?: string;
+        txbx?: string;
+        position?: string;
+    };
+    const boxRun = ({
+        frame = 'anchor',
+        wrap = '<wp:wrapNone/>',
+        behind = false,
+        x = 952500,
+        y = 95250,
+        cx = 1905000,
+        cy = 952500,
+        spPr = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>',
+        style = '',
+        bodyPr = 'lIns="91440" tIns="45720" rIns="91440" bIns="45720" anchor="t"',
+        fit = '<a:noAutofit/>',
+        content = text('Boxed'),
+        txbx,
+        position,
+    }: Box = {}) => {
+        const head =
+            frame === 'anchor'
+                ? `<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="${behind ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/>${position ?? `<wp:positionH relativeFrom="column"><wp:posOffset>${x}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>${y}</wp:posOffset></wp:positionV>`}<wp:extent cx="${cx}" cy="${cy}"/>${wrap}`
+                : `<wp:inline><wp:extent cx="${cx}" cy="${cy}"/>`;
+        const body = txbx ?? `<wps:txbx><w:txbxContent>${content}</w:txbxContent></wps:txbx>`;
+        return `<w:r><w:drawing>${head}<wp:docPr id="7" name="Text Box 7"/><a:graphic><a:graphicData uri="${WPS}"><wps:wsp xmlns:wps="${WPS}"><wps:cNvSpPr txBox="1"/><wps:spPr>${spPr}</wps:spPr>${style}${body}<wps:bodyPr ${bodyPr}>${fit}</wps:bodyPr></wps:wsp></a:graphicData></a:graphic></wp:${frame}></w:drawing></w:r>`;
+    };
+    const boxesOf = async (body: string, parts = {}) => {
+        const result = await importDocxBody(body, parts);
+        return { ...result, boxes: nodesOfType(result.json, 'textBox') };
+    };
+    const anchored = (box: Box, after = 'Anchor') => paragraph(`${boxRun(box)}<w:r><w:t>${after}</w:t></w:r>`);
+
+    test('wrapNone in the body is in front of or behind the text, at its offsets from the paragraph’s box', async () => {
+        const { boxes } = await boxesOf(`${anchored({})}${anchored({ behind: true })}`);
+        expect(boxes.map((box) => [box.attrs?.['layout'], box.attrs?.['offsetX'], box.attrs?.['offsetY']])).toEqual([
+            ['front', 100, 10],
+            ['behind', 100, 10],
+        ]);
+        expect(boxes.map((box) => box.attrs?.['width'])).toEqual([200, 200]);
+    });
+
+    test('a square, tight or through wrap is wrapped on its side; top and bottom, or in line, is in the flow', async () => {
+        const right =
+            '<wp:positionH relativeFrom="column"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>';
+        const { boxes } = await boxesOf(
+            [
+                anchored({ wrap: '<wp:wrapSquare wrapText="bothSides"/>', position: right }),
+                anchored({ wrap: '<wp:wrapTight wrapText="bothSides"><wp:wrapPolygon/></wp:wrapTight>' }),
+                anchored({ wrap: '<wp:wrapTopAndBottom/>' }),
+                paragraph(boxRun({ frame: 'inline' })),
+            ].join(''),
+        );
+        expect(boxes.map((box) => box.attrs?.['layout'] ?? 'block')).toEqual([
+            'wrap-right',
+            'wrap-left',
+            'block',
+            'block',
+        ]);
+    });
+
+    test('wrapNone in a table cell is in the flow', async () => {
+        const { boxes } = await boxesOf(`<w:tbl><w:tr><w:tc>${anchored({})}</w:tc></w:tr></w:tbl>`);
+        expect(boxes.map((box) => box.attrs?.['layout'] ?? 'block')).toEqual(['block']);
+    });
+
+    test('its size is its extent, and a box Word grows with its text has no height', async () => {
+        const { boxes } = await boxesOf(
+            `${anchored({ cx: 2857500, cy: 1428750 })}${anchored({ fit: '<a:spAutoFit/>' })}`,
+        );
+        expect(boxes.map((box) => [box.attrs?.['width'], box.attrs?.['height']])).toEqual([
+            [300, 150],
+            [200, null],
+        ]);
+    });
+
+    test('its fill, outline, insets, vertical alignment and rounded corners are its look', async () => {
+        const spPr =
+            '<a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="FFF2CC"/></a:solidFill><a:ln w="19050"><a:solidFill><a:srgbClr val="C00000"/></a:solidFill><a:prstDash val="dash"/></a:ln>';
+        const { boxes } = await boxesOf(
+            anchored({ spPr, bodyPr: 'lIns="114300" tIns="57150" rIns="114300" bIns="57150" anchor="ctr"' }),
+        );
+        expect(boxes[0]?.attrs).toMatchObject({
+            fill: '#fff2cc',
+            outline: '2px dashed #c00000',
+            paddingX: 12,
+            paddingY: 6,
+            verticalAlign: 'middle',
+            rounded: true,
+        });
+    });
+
+    test('a double line, a dotted one, no line and no fill read as the cell border forms', async () => {
+        const ln = (inner: string, attrs = '') => `<a:noFill/><a:ln w="9525"${attrs}>${inner}</a:ln>`;
+        const solid = '<a:solidFill><a:srgbClr val="000000"/></a:solidFill>';
+        const { boxes } = await boxesOf(
+            [
+                anchored({ spPr: ln(solid, ' cmpd="dbl"') }),
+                anchored({ spPr: ln(`${solid}<a:prstDash val="sysDot"/>`) }),
+                anchored({ spPr: ln('<a:noFill/>') }),
+            ].join(''),
+        );
+        expect(boxes.map((box) => [box.attrs?.['fill'], box.attrs?.['outline']])).toEqual([
+            [null, '1px double #000000'],
+            [null, '1px dotted #000000'],
+            [null, null],
+        ]);
+    });
+
+    test('its paragraphs keep their own alignment and store no spacing; a list and a table flatten, counted', async () => {
+        const centred =
+            '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="240"/></w:pPr><w:r><w:t>Middle</w:t></w:r></w:p>';
+        const table = `<w:tbl><w:tr><w:tc>${text('Cell')}</w:tc></w:tr></w:tbl>`;
+        const { boxes, warnings } = await boxesOf(
+            `<w:p><w:pPr><w:jc w:val="right"/></w:pPr>${boxRun({ content: `${centred}${table}` })}<w:r><w:t>A</w:t></w:r></w:p>`,
+        );
+        const paragraphs = boxes[0]?.content ?? [];
+        expect(paragraphs.map((p) => [p.content?.[0]?.text, p.attrs?.['textAlign'], p.attrs?.['spaceAfter']])).toEqual([
+            ['Middle', 'center', null],
+            ['Cell', null, null],
+        ]);
+        expect(warnings).toContainEqual({ code: 'text-simplified', count: 1 });
+    });
+
+    test('every box gets an id of its own, and a box in a box is its text', async () => {
+        const inner = boxRun({ content: text('Inner') });
+        const { boxes } = await boxesOf(
+            `${anchored({})}${anchored({ content: `<w:p><w:r><w:t>Outer</w:t></w:r>${inner}</w:p>` })}`,
+        );
+        expect(boxes).toHaveLength(2);
+        const [first, second] = boxes.map((box) => box.attrs?.['id']);
+        expect(typeof first).toBe('string');
+        expect(first).not.toBe(second);
+        expect(nodesOfType({ type: 'doc', content: boxes.slice(1) }, 'text').map((t) => t.text)).toEqual([
+            'Outer',
+            'Inner',
+        ]);
+    });
+
+    test('an empty box with no fill or line is dropped uncounted; a painted one stays', async () => {
+        const empty = { content: '<w:p/>', spPr: '<a:noFill/><a:ln><a:noFill/></a:ln>' };
+        const painted = { content: '<w:p/>', spPr: '<a:solidFill><a:srgbClr val="DDEEFF"/></a:solidFill>' };
+        const { boxes, warnings } = await boxesOf(`${anchored(empty)}${anchored(painted)}`);
+        expect(boxes.map((box) => box.attrs?.['fill'])).toEqual(['#ddeeff']);
+        expect(warnings).toEqual([]);
+    });
+
+    test('a linked box is an empty box of its look, counted; a rotated or odd-shaped one is counted', async () => {
+        const linked = '<wps:linkedTxbx id="1" seq="1"/>';
+        const { boxes, warnings } = await boxesOf(
+            `${anchored({ txbx: linked, spPr: '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>' })}${anchored({ spPr: '<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>' })}`,
+        );
+        expect(boxes).toHaveLength(2);
+        expect(warnings).toEqual([{ code: 'text-simplified', count: 2 }]);
+    });
+
+    test('a box in mc:AlternateContent is read once, from its Choice', async () => {
+        const choice = `<w:r><mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="wps">${boxRun({}).slice('<w:r>'.length, -'</w:r>'.length)}</mc:Choice><mc:Fallback><w:pict><v:rect xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox><w:txbxContent>${text('Boxed')}</w:txbxContent></v:textbox></v:rect></w:pict></mc:Fallback></mc:AlternateContent></w:r>`;
+        const { json, boxes } = await boxesOf(paragraph(`${choice}<w:r><w:t>Anchor</w:t></w:r>`));
+        expect(boxes).toHaveLength(1);
+        expect(nodesOfType(json, 'text').map((t) => t.text)).toEqual(['Boxed', 'Anchor']);
+    });
+
+    // Word's VML places from the column and the paragraph as `text`, both ways.
+    const vmlBox = (style: string, inner = '', textbox = '') =>
+        `<w:r><w:pict><v:rect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w10="urn:schemas-microsoft-com:office:word" style="${style}" fillcolor="#ffeeaa" strokecolor="#0000ff" strokeweight="1.5pt"><v:textbox inset="7.2pt,3.6pt,7.2pt,3.6pt"${textbox}><w:txbxContent>${text('Legacy')}</w:txbxContent></v:textbox>${inner}</v:rect></w:pict></w:r>`;
+    const PLACED =
+        'position:absolute;margin-left:30pt;margin-top:15pt;width:150pt;height:60pt;mso-position-horizontal-relative:text;mso-position-vertical-relative:text';
+    const vmlBoxesOf = async (...runs: string[]) =>
+        (await boxesOf(runs.map((run) => paragraph(`${run}<w:r><w:t>Anchor</w:t></w:r>`)).join(''))).boxes;
+
+    test('a VML box outside a Fallback reads its place, size, fill, stroke and insets', async () => {
+        const boxes = await vmlBoxesOf(vmlBox(`${PLACED};z-index:-1`));
+        expect(boxes[0]?.attrs).toMatchObject({
+            layout: 'behind',
+            offsetX: 40,
+            offsetY: 20,
+            width: 200,
+            height: 80,
+            fill: '#ffeeaa',
+            outline: '2px solid #0000ff',
+        });
+        // Word's own insets, which a box draws when it stores none.
+        expect(boxes[0]?.attrs).toMatchObject({ paddingX: null, paddingY: null });
+    });
+
+    // mso-wrap-style is how the text wraps inside the shape; w10:wrap is how the body's text wraps around it.
+    test('a VML box wraps by its w10:wrap, never by the wrap of its own text', async () => {
+        const boxes = await vmlBoxesOf(
+            vmlBox(`${PLACED};mso-wrap-style:square`),
+            vmlBox(`${PLACED};mso-wrap-style:none`, '<w10:wrap type="square"/>'),
+            vmlBox(`${PLACED};mso-position-horizontal:right`, '<w10:wrap type="tight"/>'),
+            vmlBox(`${PLACED}`, '<w10:wrap type="topAndBottom"/>'),
+            vmlBox('width:150pt;height:60pt;mso-wrap-style:square'),
+        );
+        expect(boxes.map((box) => box.attrs?.['layout'])).toEqual([
+            'front',
+            'wrap-left',
+            'wrap-right',
+            'block',
+            'block',
+        ]);
+    });
+
+    // As a DrawingML offset does: a box whose centre sits past the column's middle wraps on the right.
+    test("a VML box with no mso-position-horizontal wraps on the side its margin-left's centre is on", async () => {
+        const at = (left: string) =>
+            vmlBox(PLACED.replace('margin-left:30pt', `margin-left:${left}`), '<w10:wrap type="square"/>');
+        const boxes = await vmlBoxesOf(at('0pt'), at('300pt'));
+        expect(boxes.map((box) => box.attrs?.['layout'])).toEqual(['wrap-left', 'wrap-right']);
+    });
+
+    test("a VML box grows by its textbox's mso-fit-shape-to-text and aligns its text by v-text-anchor", async () => {
+        const boxes = await vmlBoxesOf(
+            vmlBox(`${PLACED};v-text-anchor:middle`, '', ' style="mso-fit-shape-to-text:t"'),
+            vmlBox(`${PLACED};v-text-anchor:bottom-center`),
+            vmlBox(`${PLACED};v-text-anchor:top`),
+        );
+        expect(boxes.map((box) => [box.attrs?.['height'], box.attrs?.['verticalAlign']])).toEqual([
+            [null, 'middle'],
+            [80, 'bottom'],
+            [80, null],
+        ]);
+    });
+
+    test("a VML box grows by the shape's own mso-fit-shape-to-text too", async () => {
+        const boxes = await vmlBoxesOf(vmlBox(`${PLACED};mso-fit-shape-to-text:t`));
+        expect(boxes.map((box) => box.attrs?.['height'])).toEqual([null]);
+    });
+
+    // A box holds no note and no box: each is its text, and the import says it drew the text simpler.
+    test('a note or a box inside a box is its text, counted', async () => {
+        const noted = paragraph('<w:r><w:t>Boxed</w:t></w:r><w:r><w:footnoteReference w:id="1"/></w:r>');
+        const footnotes = `<w:footnote w:id="1">${text('Noted')}</w:footnote>`;
+        const note = await boxesOf(anchored({ content: noted }), { footnotes });
+        expect(note.boxes.map(lines)).toEqual([['Boxed Noted']]);
+        expect(note.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+
+        const nested = await boxesOf(anchored({ content: paragraph(boxRun({ frame: 'inline' })) }));
+        expect(nested.boxes.map(lines)).toEqual([['Boxed']]);
+        expect(nested.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+
+        const vml = `<w:r><w:pict><v:rect xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox><w:txbxContent>${text('Legacy')}</w:txbxContent></v:textbox></v:rect></w:pict></w:r>`;
+        const legacy = await boxesOf(anchored({ content: paragraph(vml) }));
+        expect(legacy.boxes.map(lines)).toEqual([['Legacy']]);
+        expect(legacy.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+    });
+
+    test('a box drawn simpler for three reasons is counted once', async () => {
+        const noted = paragraph('<w:r><w:t>Boxed</w:t></w:r><w:r><w:footnoteReference w:id="1"/></w:r>');
+        const table = `<w:tbl><w:tr><w:tc>${text('Cell')}</w:tc></w:tr></w:tbl>`;
+        const footnotes = `<w:footnote w:id="1">${text('Noted')}</w:footnote>`;
+        const ellipse = '<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>';
+        const { boxes, warnings } = await boxesOf(anchored({ content: `${noted}${table}`, spPr: ellipse }), {
+            footnotes,
+        });
+        expect(boxes).toHaveLength(1);
+        expect(warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+    });
+
+    // A box Word draws, by its fill or its line, stays a box around its picture; an unpainted one is the picture.
+    test('a box holding only a picture is a box when it is painted, else the picture, counted', async () => {
+        const parts = {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.png"/>`,
+            media: { 'word/media/image1.png': BYTES },
+        };
+        const content = paragraph(picture('rId9'));
+        const painted = await boxesOf(
+            anchored({ content, spPr: '<a:solidFill><a:srgbClr val="FFEEAA"/></a:solidFill>' }),
+            parts,
+        );
+        expect(painted.boxes.map((box) => nodesOfType(box, 'figure').length)).toEqual([1]);
+        expect(painted.warnings).toEqual([]);
+        const bare = await boxesOf(anchored({ content, spPr: '<a:noFill/><a:ln><a:noFill/></a:ln>' }), parts);
+        expect([bare.boxes, nodesOfType(bare.json, 'figure').length]).toEqual([[], 1]);
+        expect(bare.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+    });
+
+    test('in a header a box keeps its paragraphs after the anchor’s', async () => {
+        const { json, bands } = docxToPmJson(
+            Buffer.from(
+                await buildDocxWithBands([{ id: 'h1', kind: 'header', xml: anchored({}, 'Head') }], {
+                    body: paragraph('<w:r><w:t>Body</w:t></w:r>'),
+                }),
+            ),
+        );
+        expect(nodesOfType(json, 'textBox')).toEqual([]);
+        expect(bands.header && nodesOfType(bands.header, 'textBox')).toEqual([]);
+        expect(bands.header && lines(bands.header)).toEqual(['Head', 'Boxed']);
+    });
+
+    // A block box is no figure: the Caption line after it stays a paragraph.
+    test('a box in the flow takes no caption, and its paragraph keeps its heading', async () => {
+        const STYLES =
+            '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/></w:style>';
+        const { json, boxes } = await boxesOf(
+            `${paragraph(boxRun({ frame: 'inline' }))}<w:p><w:pPr><w:pStyle w:val="Caption"/></w:pPr><w:r><w:t>Figure 1</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>${boxRun({})}<w:r><w:t>Title</w:t></w:r></w:p>`,
+            { styles: STYLES },
+        );
+        expect(boxes).toHaveLength(2);
+        expect(lines(json)).toContain('Figure 1');
+        expect(nodesOfType(json, 'heading')).toHaveLength(1);
     });
 });
 

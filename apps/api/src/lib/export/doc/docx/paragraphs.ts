@@ -49,6 +49,7 @@ import type { Styles } from './styles';
 import { HAIRLINE_TWIPS } from './styles';
 import { tableOfContentsBlocks, withBookmark } from './table-of-contents';
 import { TABLE_LOOK, tableOf } from './tables';
+import { anchoredTextBox, inlineTextBox } from './text-boxes';
 
 type Spacing = { before?: number; after?: number; line?: number; exact?: true };
 
@@ -296,6 +297,19 @@ export function blocksOf(
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
+        // A text box in front of or behind the text, or wrapped, opens its paragraph as an anchor, as Word anchors one;
+        // one in the flow, or positioned where nothing is, such as in a cell, is a paragraph of its own.
+        if (node.type === 'textBox') {
+            const { layout } = readFigureFrameAttrs(node.attrs ?? {});
+            const wrapped = layout === 'wrap-left' || layout === 'wrap-right';
+            if (textblock && ((context.positions && isPositioned(layout)) || wrapped)) {
+                anchors += anchoredTextBox(node, textblock, context);
+                continue;
+            }
+            if (inline.length > 0) flush();
+            pieces.push(blocks.push(inlineTextBox(node, context)) - 1);
+            continue;
+        }
         if (isFigureFrameNode(node.type)) {
             if (textblock && context.positions && isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout)) {
                 anchors += anchoredFigure(node, textblock, context);

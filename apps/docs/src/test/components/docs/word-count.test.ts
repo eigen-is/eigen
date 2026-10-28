@@ -114,3 +114,12 @@ test("a footnote's note counts nothing, in the doc and a selection across its re
     const all = doc.apply(doc.tr.setSelection(TextSelection.create(doc.doc, 1, doc.doc.content.size - 1)));
     expect(countWords(all).selection?.words).toBe(3);
 });
+
+// Word counts a text box's words; they never run on from the words of the paragraph that anchors it.
+test("a text box's words count on their own, and a note in the same paragraph still counts nothing", () => {
+    const box = { type: 'textBox', content: [paragraph('Boxed words'), paragraph('here')] };
+    const note = { type: 'footnote', content: [paragraph('not counted')] };
+    const content = [{ type: 'paragraph', content: [text('Before'), box, text('after'), note] }];
+    expect(counts(content).words).toBe(5);
+    expect(counts(content).characters).toBe('Beforeafter'.length + 'Boxed words'.length + 'here'.length);
+});

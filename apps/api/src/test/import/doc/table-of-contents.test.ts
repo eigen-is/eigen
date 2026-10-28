@@ -147,7 +147,7 @@ describe('a docx table of contents', () => {
         expect(blocks(json)).toEqual(['paragraph: Before ', 'toc 3', 'pageBreak: ', 'heading: Intro']);
     });
 
-    // A text box is no entry: its paragraphs are its own, read where the entry anchors it.
+    // A text box is no entry: it stays a text box, in a paragraph of its own after the table of contents.
     test("a text box an entry anchors stays, and its paragraphs aren't the result's", async () => {
         const box = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Box"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent>${paragraph(run('Boxed'))}</w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
         const body = [
@@ -159,6 +159,7 @@ describe('a docx table of contents', () => {
         ].join('');
         const { json } = await read(body);
         expect(blocks(json)).toEqual(['toc 3', 'paragraph: Boxed', 'heading: Intro', 'heading: Method']);
+        expect(json.content?.[1]?.content?.map((node) => node.type)).toEqual(['textBox']);
     });
 });
 

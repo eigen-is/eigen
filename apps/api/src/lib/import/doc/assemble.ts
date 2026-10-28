@@ -104,7 +104,10 @@ export function buildBlocks(raw: Item[]): JSONContent[] {
 export function placeAnchors(blocks: JSONContent[], normal: NormalStyle): JSONContent[] {
     const walk = (node: JSONContent, indent: number, depth: number, quotes: number) => {
         if (PROSE_TEXTBLOCKS.includes(node.type ?? '')) {
-            const anchored = node.content?.filter((child) => isFigureFrameNode(child.type) && !isInFlowFigure(child));
+            const anchored = node.content?.filter(
+                (child) =>
+                    isFigureFrameNode(child.type) && isPositioned(readFigureFrameAttrs(child.attrs ?? {}).layout),
+            );
             if (!anchored || anchored.length === 0) return;
             const contained = depth > 0 || quotes > 0;
             for (const { attrs } of anchored) {
@@ -158,15 +161,24 @@ export function isCaptionLike(para: ParagraphItem): boolean {
 // A figure in front of or behind the text is out of the flow, so it counts as whitespace: a heading that anchors one
 // stays a heading, and it takes no caption.
 export function isFigureOnly(para: ParagraphItem): boolean {
-    return (
-        para.inlines.some(isInFlowFigure) &&
-        para.inlines.every((node) => isFigureFrameNode(node.type) || isWhitespace(node))
-    );
+    return para.inlines.some(isInFlowFigure) && holdsOnlyFrames(para);
 }
 
-function isInFlowFigure(node: JSONContent): boolean {
-    return isFigureFrameNode(node.type) && !isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout);
+// A paragraph that holds only figures or text boxes, with one of them in the flow, is aligned and spaced as a figure's:
+// its alignment is the frame's, and its space past the figure's margin its own.
+function isFrameOnly(para: ParagraphItem): boolean {
+    return para.inlines.some(isInFlowFrame) && holdsOnlyFrames(para);
 }
+
+const holdsOnlyFrames = (para: ParagraphItem): boolean =>
+    para.inlines.every((node) => isFigureFrameNode(node.type) || isWhitespace(node));
+
+// A picture or a chart in the flow. A text box in the flow is no figure: it takes no caption, and a paragraph that holds
+// one beside text keeps its role.
+const isInFlowFigure = (node: JSONContent): boolean => node.type !== 'textBox' && isInFlowFrame(node);
+
+const isInFlowFrame = (node: JSONContent): boolean =>
+    isFigureFrameNode(node.type) && !isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout);
 
 // A blank line before a page ends there and would draw as a blank page in Eigen, whose empty lines are taller than Word's.
 function isBlank(item: Item | undefined): boolean {
@@ -737,7 +749,7 @@ function figureSpaceBefore(para: ParagraphItem, below: number): number | undefin
 
 function textblockOf(para: ParagraphItem, edge: number | undefined, above?: number, below = 0): JSONContent {
     const { textAlign, inlines: content } = para;
-    if (isFigureOnly(para)) {
+    if (isFrameOnly(para)) {
         for (const figure of content) {
             if (isFigureFrameNode(figure.type) && figure.attrs && !figure.attrs['layout'] && !figure.attrs['alignment'])
                 figure.attrs['alignment'] = textAlign === 'center' || textAlign === 'right' ? textAlign : 'left';

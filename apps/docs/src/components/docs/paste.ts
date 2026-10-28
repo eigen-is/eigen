@@ -1,12 +1,18 @@
 // Pasted HTML is fitted to the doc it lands in before the schema parses it. Every docs editor's paste and its docs
-// copies run through cleanPastedHTML, with the page map of the doc they land in.
+// copies run through cleanPastedHTML, with the page map of the doc they land in. The body's parsed paste then runs
+// through withFreshStoryIds, so a copy of a note or a text box never shares its source's id.
 
+import type { JSONContent } from '@tiptap/core';
+import type { Node as PMNode } from '@tiptap/pm/model';
+import { Slice } from '@tiptap/pm/model';
 import { bundledFontOfStack, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspace/lib/constants/fonts';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     FOOTNOTE_SELECTOR,
     ITALIC_HEADING_SELECTOR,
+    isStoryNode,
     keepOnPaper,
+    newStoryId,
     POSITIONED_SELECTOR,
     unwrapRenderedMath,
 } from '@workspace/lib/docs/eigendoc';
@@ -105,4 +111,26 @@ export function cleanPastedHTML(
     }
 
     return doc.body.innerHTML;
+}
+
+// A pasted note or text box whose id the doc already holds is a copy, and takes a fresh id, as does a second one with
+// the same id in the paste. One the doc doesn't hold, a cut's, keeps its id, as it is the same story moved.
+export function withFreshStoryIds(slice: Slice, doc: PMNode): Slice {
+    const taken = new Set<unknown>();
+    doc.descendants((node) => {
+        if (isStoryNode(node.type.name)) taken.add(node.attrs['id']);
+    });
+    let renamed = false;
+    const fresh = (node: JSONContent): JSONContent => {
+        const content = node.content?.map(fresh);
+        if (!isStoryNode(node.type)) return content ? { ...node, content } : node;
+        const id = node.attrs?.['id'];
+        const copy = typeof id === 'string' && taken.has(id);
+        taken.add(id);
+        renamed ||= copy;
+        return { ...node, attrs: { ...node.attrs, ...(copy && { id: newStoryId() }) }, content };
+    };
+    const json = slice.toJSON();
+    const content: JSONContent[] = json?.content?.map(fresh) ?? [];
+    return renamed ? Slice.fromJSON(doc.type.schema, { ...json, content }) : slice;
 }

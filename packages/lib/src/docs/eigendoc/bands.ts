@@ -19,9 +19,9 @@ export const bandEdge = (root: BandRoot): BandEdge =>
     root === 'footer' || root === FIRST_PAGE_BAND.footer ? 'footer' : 'header';
 
 // Nodes a band's schema leaves out, so the Yjs binding deletes one a peer writes. None of them means anything in a
-// header that prints on every page. A note belongs to the body's text, and a table of contents lists the body's
-// headings. The chart panel edits the body's charts only. Marks stay, because a mark the schema lacks deletes the text
-// that carries it.
+// header that prints on every page. A note and a text box belong to the body's text, and a table of contents lists the
+// body's headings. The chart panel edits the body's charts only. Marks stay, because a mark the schema lacks deletes
+// the text that carries it.
 export const BAND_EXCLUDED_NODES: ReadonlySet<string> = new Set([
     'pageBreak',
     'title',
@@ -30,6 +30,7 @@ export const BAND_EXCLUDED_NODES: ReadonlySet<string> = new Set([
     'chart',
     'footnote',
     'tableOfContents',
+    'textBox',
 ]);
 
 // A band's content in the editor and the export: eigen-prose.css drops its last block's space after, as Word's Header and

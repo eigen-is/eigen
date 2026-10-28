@@ -860,15 +860,14 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
-// Both last moved with the stylesheet's table of contents rules and the headings' `h-N` ids, the PDF's with its head's
-// page-number leader too, and with the print CSS that lets a table and its rows split across pages (no table
-// page-break-inside rule); before that, with the always-underlined prose links and the plain footnote links. The
-// preview body stayed.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '1098e2db78a97549c744e04065b252cb8ca57724a5bce9e371e711d725f4d799';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8f5899bcf7e67e94c2e207fdd4790be6eb817935549a312990edc569691054af';
+// Both last moved with the text box's prose rules, and before that with the stylesheet's table of contents rules and
+// the headings' `h-N` ids, the PDF's with its head's page-number leader too, and with the print CSS that lets a table
+// and its rows split across pages (no table page-break-inside rule). The preview body stayed.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '095a58092f5df5ccb25bda3369249610125937d2de8373ef40c71b2862112ce6';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'cf46aeb9de2d4a654d5da2eeeaae96ee94e2f14cb2f02e4d53017c2d3c7c1452';
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
-// libdeflate.
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'bd883985e840cef1ce64fb32910275793ad0ec43b10d20f87e9849ee90f9a491';
+// libdeflate. It last moved with the wps namespace a text box needs, which every document part declares.
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'c3a15846b8e2b9d1a095a816aa9d8bfe25ba59d8a148770401e309767fe7c1fd';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
 // The two exports embed canvas-text.css whole, its comments too, so they last moved with its header comment.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';

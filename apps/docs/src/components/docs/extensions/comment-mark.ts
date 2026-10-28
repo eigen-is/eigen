@@ -1,3 +1,8 @@
+// The Docs comment anchor: the mark a card holds on a run of text, and the attribute it holds on a node the Yjs binding
+// keeps no mark on, such as an image or a text box. It adds, finds, selects and removes a card's anchors, quotes the
+// anchored text for the card, and paints each card's colour from the comment panel's state as decorations, which the
+// editor component updates and a figure's node view draws as its corner mark.
+
 import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
@@ -5,8 +10,14 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
 import type { FigureFrameNode } from '@workspace/lib/docs/eigendoc';
-import { CommentMarkSchema, isFigureFrameNode, PAGE_NUMBER_TEXT, readEquation } from '@workspace/lib/docs/eigendoc';
-import { textOutsideNotes } from './footnote';
+import {
+    CommentMarkSchema,
+    isFigureFrameNode,
+    isStoryNode,
+    PAGE_NUMBER_TEXT,
+    readEquation,
+} from '@workspace/lib/docs/eigendoc';
+import { textOutsideStories } from './story';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -24,8 +35,8 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// A node whose schema gives it a commentCardId, an image, a chart or an equation, holds its card there: the Yjs binding
-// persists a mark only on text.
+// A node whose schema gives it a commentCardId, such as an image, a text box or an equation, holds its card there: the
+// Yjs binding persists a mark only on text.
 const anchorsByAttribute = (node: Node): boolean => node.type.spec.attrs?.['commentCardId'] !== undefined;
 
 // The card a node anchors: by attribute, or on text as the comment mark.
@@ -48,7 +59,7 @@ export function commentCardIdAt(target: EventTarget | null): string | null {
     return target.closest('.comment-highlight')?.getAttribute('data-comment-id') || null;
 }
 
-// A new card anchors by attribute on an image, a chart or an equation selected alone, else as the mark on the range's text.
+// A new card anchors by attribute on a node that holds one, selected alone, else as the mark on the range's text.
 export function addCommentAnchor(editor: Editor, { from, to }: { from: number; to: number }, cardId: string): void {
     const node = editor.state.doc.nodeAt(from);
     if (node && anchorsByAttribute(node) && to === from + node.nodeSize) {
@@ -59,8 +70,8 @@ export function addCommentAnchor(editor: Editor, { from, to }: { from: number; t
 }
 
 // Whether addCommentAnchor would anchor a card on the selection: a node holding a card attribute selected alone, or
-// text. AtomMarks strips the mark from any other atom, so a page number alone takes no comment, and a footnote's note
-// keeps the body's marks off its text, so a reference alone takes none either.
+// text. AtomMarks strips the mark from any other atom, so a page number alone takes no comment, and a story keeps the
+// body's marks off its text, so a note's reference alone takes none either; a text box takes its card as a figure does.
 export function canAnchorComment({ doc, selection: { from, to, empty } }: EditorState): boolean {
     if (empty) return false;
     const node = doc.nodeAt(from);
@@ -68,7 +79,7 @@ export function canAnchorComment({ doc, selection: { from, to, empty } }: Editor
     let text = false;
     doc.nodesBetween(from, to, (child) => {
         text ||= child.isText;
-        return !text && child.type.name !== 'footnote';
+        return !text && !isStoryNode(child.type.name);
     });
     return text;
 }
@@ -94,17 +105,24 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
     selected.scrollIntoView().run();
 }
 
-const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart' };
+const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart', textBox: 'Text box' };
 
 // A comment on an image or a chart alone has no text to quote, so it reads as "Image" or "Chart", and an equation with
-// no text as "Equation", and a page number as its #. A footnote's note is no part of the quote, as its reference takes no
+// no text as "Equation", and a page number as its #. A story's text is no part of the quote, as its node takes no
 // comment.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
-    return textOutsideNotes(doc, from, to, ' ', '', (leaf) => {
-        if (isFigureFrameNode(leaf.type.name)) return QUOTE_WORDS[leaf.type.name];
-        if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text || 'Equation';
-        return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
-    }).slice(0, 100);
+    return textOutsideStories(
+        doc,
+        from,
+        to,
+        ' ',
+        () => '',
+        (leaf) => {
+            if (isFigureFrameNode(leaf.type.name)) return QUOTE_WORDS[leaf.type.name];
+            if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text || 'Equation';
+            return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
+        },
+    ).slice(0, 100);
 }
 
 function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet {
@@ -114,8 +132,8 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
         if (cardId) {
             const end = pos + node.nodeSize;
             const color = meta.colorMap.get(cardId);
-            // An image's, a chart's or an equation's node view paints the corner mark from this spec, resolved or not,
-            // like a commented canvas element.
+            // The node view of a node that holds its card, such as an image's or a text box's, paints the corner mark
+            // from this spec, resolved or not, like a commented canvas element.
             if (anchorsByAttribute(node)) decorations.push(Decoration.node(pos, end, {}, { commentColor: color }));
             // Text, and an equation among it, is highlighted until resolved; the sidebar shows a resolved one.
             if (!isFigureFrameNode(node.type.name) && !meta.resolvedIds.has(cardId) && color) {

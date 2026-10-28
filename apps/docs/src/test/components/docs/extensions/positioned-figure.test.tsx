@@ -637,3 +637,94 @@ test("Backspace at the visual start of a list item's second paragraph joins it t
     expect(editor.state.doc.textContent).toBe('ab');
     expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 5, head: 5 });
 });
+
+// A text box is a positioned figure longer than one position: it holds its paragraphs. A paragraph led by a box and an
+// image, in either order, keeps every rule above. "xy" is at 1 to 3, the second paragraph's run of eight positions
+// from 5, its "abc" from 13.
+const box = (attrs: object = {}) => ({
+    type: 'textBox',
+    attrs: { id: 'box', layout: 'front', offsetX: 10, offsetY: 20, ...attrs },
+    content: [paragraph(text('Box'))],
+});
+const RUNS = [
+    ['a box, then an image', () => [box(), front()], ['textBox:front', 'figure:front']],
+    ['an image, then a box', () => [front(), box()], ['figure:front', 'textBox:front']],
+] as const;
+const boxText = (editor: TestEditor) => {
+    let found = '';
+    editor.state.doc.descendants((node) => {
+        if (node.type.name === 'textBox') found = node.textContent;
+        return node.type.name !== 'textBox';
+    });
+    return found;
+};
+
+test.each(RUNS)('led by %s, a caret placed before the run rests after it, and ArrowLeft goes above', async (_, run) => {
+    const editor = await mount([paragraph(text('xy')), paragraph(...run(), text('abc'))]);
+    await act(async () => {
+        editor.commands.setTextSelection(5);
+    });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 13, head: 13 });
+    await press(editor, 'ArrowLeft');
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 3, head: 3 });
+});
+
+test.each(
+    RUNS.flatMap(([name, run, layouts]) => [
+        [`Backspace at the visual start, led by ${name}`, run, layouts, 13, 'Backspace'],
+        [`Delete at the end of the paragraph above, led by ${name}`, run, layouts, 3, 'Delete'],
+    ]),
+)('%s joins the paragraphs and keeps the run with the box’s text', async (_, run, layouts, caret, key) => {
+    const editor = await mount([paragraph(text('xy')), paragraph(...run(), text('abc'))]);
+    await act(async () => {
+        editor.commands.setTextSelection(caret);
+    });
+    await press(editor, key);
+    expect(blocks(editor)).toEqual([[...layouts, 'xyabc']]);
+    expect(boxText(editor)).toBe('Box');
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 11, head: 11 });
+});
+
+test.each(RUNS)(
+    'led by %s, Enter at the visual start opens a paragraph above, the run going down',
+    async (_, run, layouts) => {
+        const editor = await mount([paragraph(text('xy')), paragraph(...run(), text('abc'))]);
+        await act(async () => {
+            editor.commands.setTextSelection(13);
+        });
+        await press(editor, 'Enter');
+        expect(blocks(editor)).toEqual([['xy'], [], [...layouts, 'abc']]);
+        expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 15, head: 15 });
+    },
+);
+
+test('a positioned box inserted mid-paragraph moves to the start, after the leading run, with its text', async () => {
+    const editor = await mount(twoParagraphs());
+    await act(async () => {
+        editor.commands.insertContentAt(8, box({ layout: 'behind' }));
+    });
+    expect(blocks(editor)).toEqual([['xy'], ['figure:front', 'textBox:behind', 'abc']]);
+    expect(boxText(editor)).toBe('Box');
+});
+
+test('a re-anchored box keeps its text, its card and the node selection', async () => {
+    const editor = await mount(
+        [paragraph(text('xy')), paragraph(box({ commentCardId: 'card' }), text('abc')), paragraph(text('z'))],
+        {},
+    );
+    place(editor.view.dom, 100, 100, 600, 300);
+    place(blockDom(editor, 0), 100, 100, 600, 20);
+    place(blockDom(editor, 4), 100, 120, 600, 20);
+    place(blockDom(editor, 16), 100, 140, 600, 20);
+    place(figureBox(editor, 5), 110, 140);
+    await act(async () => {
+        editor.commands.setNodeSelection(5);
+    });
+    await act(async () => {
+        editor.commands.moveFigure(5, { dx: 40, dy: 10 });
+    });
+    expect(blocks(editor)).toEqual([['xy'], ['abc'], ['textBox:front', 'z']]);
+    expect(boxText(editor)).toBe('Box');
+    expect(editor.state.doc.nodeAt(10)?.attrs).toMatchObject({ commentCardId: 'card', id: 'box' });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 10 });
+});

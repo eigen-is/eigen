@@ -1,6 +1,6 @@
 // A docx's drawings as the doc holds them: pictures as figures, placed and sized as Word places them, charts as chart
-// nodes through the shared chart reader or the words for one left out, and the text of SmartArt and text boxes. The
-// paragraph walk calls it for each w:drawing and VML shape it meets.
+// nodes through the shared chart reader or the words for one left out, text boxes as text boxes, and the text of
+// SmartArt and of a group's boxes. The paragraph walk calls it for each w:drawing and VML shape it meets.
 
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
@@ -41,6 +41,7 @@ import { descendants, roundedInt } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks } from './paragraphs';
 import type { RunContext } from './runs';
+import { loneTextBox, paintsBox, readTextBox, readVmlTextBox, textBoxScope } from './text-boxes';
 
 // A chart part as the doc holds it: the parts of the spec the node stores, with the part its look is read from at each
 // drawing's size, or the lines a chart left out leaves in its place; and its title, which a band or a note keeps.
@@ -66,6 +67,9 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const layout = anchored ? anchorPlacement(frame, reader, context) : {};
         // A picture in front of or behind the text may span the paper.
         const room = layout.offsetX === undefined ? reader.columnPx : Math.floor(mmToPx(reader.page.width));
+        // Only the body holds a chart or a text box: a band's schema has neither and a note's Insert leaves both out, so
+        // there a chart keeps its title and a box its paragraphs.
+        const inBody = context.scope.story === 'body';
         const docPr = xmlChild(frame, WP_NS, 'docPr');
         const alt = (docPr && (xmlAttr(docPr, '', 'descr') || xmlAttr(docPr, '', 'title'))) || null;
         const figures: JSONContent[] = [];
@@ -92,9 +96,6 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, ...size, ...layout } });
             if (anchored && inBand) reader.lost('band-images-unanchored');
         }
-        // Only the body holds a chart: a band's schema has none and a note's Insert leaves it out, so there it keeps its
-        // title.
-        const inBody = context.scope.story === 'body';
         for (const [reference, ext] of charts) {
             const chart = readDocxChart(reader, reference, context.scope);
             if (inBody && 'parts' in chart) {
@@ -106,9 +107,12 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             reader.lost('charts-dropped');
             leaveLines(context, inBody && 'dropped' in chart ? chart.dropped : [chart.title].filter(Boolean));
         }
-        // A shape's text boxes: the caption of a grouped picture, a picture with its caption, or text that follows.
+        // A shape's text boxes: the caption of a grouped picture, a picture with its caption, a text box of the body's
+        // own, or text that follows.
+        const shape = inBody && !context.scope.box ? loneTextBox(frame) : undefined;
+        const boxScope = shape ? textBoxScope(context.scope) : onShapeFill(context.scope);
         const boxed = descendants(frame, W_NS, 'txbxContent').flatMap((box) =>
-            readBlocks(reader, xmlElements(box), onShapeFill(context.scope)),
+            readBlocks(reader, xmlElements(box), boxScope),
         );
         const content = boxed.filter((item) => item.kind !== 'para' || !item.empty);
         const paras = content.filter((item): item is ParagraphItem => item.kind === 'para');
@@ -124,12 +128,22 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             figures.length === 0 &&
             boxedFigure &&
             inner.length === 1 &&
-            tail.every(isCaptionLike)
+            tail.every(isCaptionLike) &&
+            !(shape && paintsBox(reader, shape))
         ) {
+            // An unpainted box around a picture is the picture: its place and size are the box's.
+            if (shape) reader.lost('text-simplified');
             const caption =
                 tail.map((para) => inlineText(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
             figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, caption } });
-        } else for (const item of boxed) context.pending.push(item);
+        } else if (shape) {
+            const box = readTextBox(reader, shape, extent, layout, room, boxed);
+            if (box) figures.push(box);
+        } else {
+            // A box holds no box, so one inside another is its paragraphs.
+            if (inBody && context.scope.box && loneTextBox(frame)) reader.lost('text-simplified');
+            for (const item of boxed) context.pending.push(item);
+        }
         for (const figure of figures) context.pieces.push({ kind: 'node', node: figure });
         for (const item of graphicText(reader, frame, context.scope)) context.pending.push(item);
     }
@@ -168,9 +182,17 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             const size = width ? pictureSize(width, vmlPx(style, VML_HEIGHT), reader.columnPx) : NO_SIZE;
             context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, ...size } } });
         }
-        for (const box of descendants(shape, W_NS, 'txbxContent'))
-            for (const item of readBlocks(reader, xmlElements(box), onShapeFill(context.scope)))
-                context.pending.push(item);
+        // A shape that holds text in the body is a text box where its style places it; elsewhere its text follows.
+        const boxes = descendants(shape, W_NS, 'txbxContent');
+        const single = ['shape', 'rect', 'roundrect'].includes(shape.local);
+        const inBody = single && context.scope.story === 'body' && !context.scope.box && boxes.length > 0;
+        const scope = inBody ? textBoxScope(context.scope) : onShapeFill(context.scope);
+        const items = boxes.flatMap((box) => readBlocks(reader, xmlElements(box), scope));
+        if (single && context.scope.story === 'body' && context.scope.box && boxes.length > 0)
+            reader.lost('text-simplified');
+        const box = inBody ? readVmlTextBox(reader, shape, reader.columnPx, context.spaceBefore, items) : null;
+        if (box) context.pieces.push({ kind: 'node', node: box });
+        else for (const item of items) context.pending.push(item);
     }
 }
 
@@ -333,8 +355,11 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     const graphic = xmlChild(anchor, A_NS, 'graphic');
     const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
     const [only, ...others] = data ? xmlElements(data) : [];
-    const lone = !!only && others.length === 0 && (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart'));
-    if (xmlChild(anchor, WP_NS, 'wrapNone') && lone && story === 'body' && tables === 0) {
+    const lone =
+        !!only &&
+        others.length === 0 &&
+        (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart') || loneTextBox(anchor) !== undefined);
+    if (xmlChild(anchor, WP_NS, 'wrapNone') && lone && story === 'body' && tables === 0 && !context.scope.box) {
         const layout = isOn(xmlAttr(anchor, '', 'behindDoc')) ? 'behind' : 'front';
         return { layout, offsetX: x / EMU_PER_PX, offsetY: lineOffset(anchor, context) };
     }

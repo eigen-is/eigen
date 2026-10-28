@@ -1,12 +1,13 @@
 // The Docs Format menu: text, paragraph styles, alignment and spacing, lists, headers and page numbers, the switch
-// between pages and page-less, and the table and image submenus that a phone, which has no properties panel, reaches
-// those options through. Every item acts on the editor the toolbar follows: the body's, a band's being edited or the
-// open note's.
+// between pages and page-less, and the table, image and text box submenus that a phone, which has no properties panel,
+// reaches those options through. Every item acts on the editor the toolbar follows: the body's, a band's being edited
+// or the open story's.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BandEdge, FigureLayout } from '@workspace/lib/docs/eigendoc';
+import { readCellBackground } from '@workspace/lib/docs/eigendoc';
 import type { TextAlign } from '@workspace/lib/vector';
 import { TEXT_ALIGNS } from '@workspace/lib/vector';
 import { AppBarMenu } from '@workspace/ui';
@@ -50,6 +51,7 @@ import {
     ListIndentIncrease,
     ListOrdered,
     ListRestart,
+    PaintBucket,
     PanelTop,
     Pilcrow,
     Quote,
@@ -58,6 +60,7 @@ import {
     Ruler,
     ScrollText,
     Settings2,
+    SquareDashed,
     Strikethrough,
     Subscript,
     Superscript,
@@ -76,6 +79,7 @@ import type { PageNumberPreset } from './page-numbers';
 import { PageNumberItems } from './page-numbers';
 import { paragraphStylesIn } from './paragraph-styles';
 import { tableMenuSections } from './table-menu-sections';
+import { setTextBoxLayout } from './text-box-properties-panel';
 
 // Format › Align and indent and the icon row's Align dropdown name each alignment alike.
 export const ALIGNMENT_LOOK: Record<TextAlign, { label: string; icon: LucideIcon }> = {
@@ -432,6 +436,34 @@ export const FormatMenu = ({
                         />
                     </>
                 )}
+            </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={!active.textBox}>
+                <SquareDashed className="h-4 w-4" /> Text box
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+                {/* The Text box panel's layouts and fill, which a phone has no panel for. */}
+                <ChoiceMenuItems<FigureLayout>
+                    value={active.textBox?.layout}
+                    options={figureLayoutLooks(selectionDrawsInLine(editor)).map(({ layout, label, icon: Icon }) => ({
+                        value: layout,
+                        label: (
+                            <>
+                                <Icon className="h-4 w-4" /> {label}
+                            </>
+                        ),
+                    }))}
+                    onChange={(layout) => setTextBoxLayout(editor, { layout })}
+                />
+                <DropdownMenuSeparator />
+                <ColorPickerMenuItem
+                    icon={PaintBucket}
+                    label="Fill"
+                    value={active.textBox?.fill ?? ''}
+                    resetLabel="None"
+                    onChange={(color) => editor.commands.updateTextBox({ fill: readCellBackground(color) })}
+                />
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />

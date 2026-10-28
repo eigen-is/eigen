@@ -13,6 +13,8 @@ export const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relat
 export const WP_NS = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
 export const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 export const PIC_NS = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+// Word 2010's shapes, a text box among them.
+export const WPS_NS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
 export const C_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 export const DGM_NS = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
 export const TBL_NS = 'http://schemas.openxmlformats.org/drawingml/2006/table';

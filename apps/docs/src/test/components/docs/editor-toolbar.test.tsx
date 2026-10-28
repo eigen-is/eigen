@@ -54,7 +54,8 @@ async function render(
         active = editor,
         onInsertEquation,
         onInsertFootnote,
-        inNote = false,
+        onInsertTextBox,
+        inStory = false,
         sync = { offline: false, unsyncedEdits: false },
         outlineShown = false,
         pageSetup = DEFAULT_PAGE_SETUP,
@@ -63,7 +64,8 @@ async function render(
         active?: typeof editor;
         onInsertEquation?: () => void;
         onInsertFootnote?: () => void;
-        inNote?: boolean;
+        onInsertTextBox?: () => void;
+        inStory?: boolean;
         sync?: { offline: boolean; unsyncedEdits: boolean };
         outlineShown?: boolean;
         pageSetup?: PageSetup;
@@ -78,7 +80,8 @@ async function render(
         canWrite,
         onInsertEquation,
         onInsertFootnote,
-        inNote,
+        onInsertTextBox,
+        inStory,
         ...sync,
         storageUnavailable: false,
         canUndo: false,
@@ -218,6 +221,7 @@ test("Format's submenus follow Google Docs' names and order", async () => {
         '—',
         'Table',
         'Image',
+        'Text box',
         '—',
         CLEAR_FORMATTING,
     ]);
@@ -788,7 +792,7 @@ test('in a band, Format › Image offers no layout, as a band holds no float', a
 test('in a note, Format › Image offers no place in front of or behind the text', async () => {
     const note = new Editor({ extensions: rootExtensions({ note: true }), content: TABLE_AND_FIGURE });
     note.commands.setNodeSelection(2);
-    await render(1920, true, { active: note, inNote: true });
+    await render(1920, true, { active: note, inStory: true });
     await openMenu('Format');
     await openSubmenu('Image');
     expect(openMenuEntries()).toEqual(['Replace image', '—', 'In line', 'Wrap left', 'Wrap right']);
@@ -1430,6 +1434,31 @@ test('Insert › Equation follows Chart and inserts once the menu has closed', a
     expect(menuOpenAtInsert).toEqual([false]);
 });
 
+// Word's Insert › Text box, after Chart; the box goes in once the menu has closed, so its editor keeps the focus.
+test('Insert › Text box follows Chart, inserts once the menu has closed, and is greyed in a story', async () => {
+    const menuOpenAtInsert: boolean[] = [];
+    const onInsertTextBox = mock(() => {
+        menuOpenAtInsert.push(document.querySelector('[role="menu"]') !== null);
+    });
+    await render(1920, true, { onInsertTextBox });
+    await openMenu('Insert');
+    expect(openMenuEntries().slice(0, 4)).toEqual(['Link', 'Image', 'Chart', 'Text box']);
+    await clickItem('Text box');
+    for (let tick = 0; tick < 50 && onInsertTextBox.mock.calls.length === 0; tick++) {
+        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
+    expect(menuOpenAtInsert).toEqual([false]);
+});
+
+test('Insert greys out Text box in a story', async () => {
+    await render(1920, true, { onInsertTextBox: () => {}, inStory: true, active: editor });
+    await openMenu('Insert');
+    const greyed = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
+        .filter((item) => item.getAttribute('aria-disabled') === 'true')
+        .map((item) => item.textContent?.trim());
+    expect(greyed).toContain('Text box');
+});
+
 // A phone has no panel to edit one in, and a band being edited none that follows it.
 test('Insert has no Equation without a way to edit it', async () => {
     await render(1920, true);
@@ -1439,7 +1468,7 @@ test('Insert has no Equation without a way to edit it', async () => {
 
 // Google greys out what a header can't hold; the open note's rule shows the same.
 test('Insert greys out, rather than hides, what a note or a band can’t hold', async () => {
-    await render(1920, true, { onInsertEquation: () => {}, inNote: true, active: editor });
+    await render(1920, true, { onInsertEquation: () => {}, inStory: true, active: editor });
     await openMenu('Insert');
     const greyed = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
         .filter((item) => item.getAttribute('aria-disabled') === 'true')
@@ -1572,11 +1601,11 @@ test('Insert › Page elements › Footnote ends the submenu and inserts once th
 test.each([
     ['in a band', true, false],
     ['in a note', false, true],
-])('Insert › Page elements › Footnote is off %s', async (_, inBand, inNote) => {
+])('Insert › Page elements › Footnote is off %s', async (_, inBand, inStory) => {
     const band = new Editor({ extensions: rootExtensions({ band: true }) });
     editor.commands.setContent(ONE_PARAGRAPH);
     editor.commands.setTextSelection(2);
-    await render(1920, true, { onInsertFootnote: () => {}, inNote, active: inBand ? band : editor });
+    await render(1920, true, { onInsertFootnote: () => {}, inStory, active: inBand ? band : editor });
     await openMenu('Insert');
     await openSubmenu('Page elements');
     expect(footnoteItem()?.getAttribute('aria-disabled')).toBe('true');

@@ -1341,6 +1341,12 @@ export function auditImported(json: JSONContent, normalFont = DOCUMENT_FONT): Ta
                 for (const paragraph of inline.content ?? []) textblock(paragraph, undefined);
                 continue;
             }
+            // So are a text box's, aligned as each is.
+            if (inline.type === 'textBox') {
+                space();
+                for (const paragraph of inline.content ?? []) textblock(paragraph, paragraph.attrs?.['textAlign']);
+                continue;
+            }
             if (inline.type === 'figure') {
                 const attrs = inline.attrs ?? {};
                 space();

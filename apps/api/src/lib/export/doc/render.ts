@@ -1,6 +1,6 @@
 // A doc's body or band as HTML, the DOM the editor holds, for the HTML and PDF exports and the doc preview alike. Each
-// node the static renderer draws otherwise is mapped here, such as a code block, a figure, a note, a table of contents
-// or a small-caps run on paper. The docx writer shares its link rule.
+// node the static renderer draws otherwise is mapped here, such as a code block, a figure, a text box, a note, a table
+// of contents or a small-caps run on paper. The docx writer shares its link rule.
 
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
@@ -11,15 +11,22 @@ import {
 } from '@tiptap/static-renderer/pm/html-string';
 import { readChartSpec } from '@workspace/lib/charts';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import type { ChartAttrs, FigureAttrs, FigureFrameAttrs, OutlineHeading } from '@workspace/lib/docs/eigendoc';
+import type {
+    ChartAttrs,
+    FigureAttrs,
+    FigureFrameAttrs,
+    OutlineHeading,
+    TextBoxAttrs,
+} from '@workspace/lib/docs/eigendoc';
 import {
     BLOCK_ONLY_FIGURE_PARENTS,
     chartSvg,
     FOOTNOTE_PARAGRAPH,
     figureLayoutStyle,
-    flattenNestedFootnotes,
+    flattenNestedStories,
     isFigureFrameNode,
     isPositioned,
+    isStoryNode,
     outlineEntry,
     PROSE_TEXTBLOCKS,
     readChartAttrs,
@@ -27,7 +34,10 @@ import {
     readFigureFrameAttrs,
     readOutline,
     readPageNumberKind,
+    readTextBoxAttrs,
     readTocLevels,
+    TEXT_BOX_PARAGRAPH,
+    textBoxHTMLAttributes,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
@@ -61,7 +71,7 @@ export function renderDocHtml(
     },
 ): string {
     const content = inEditorMarkOrder(
-        withTrailingBreaks(withBodyOnlyPositions(flattenNestedFootnotes(json), options?.band ?? false)),
+        withTrailingBreaks(withBodyOnlyPositions(flattenNestedStories(json), options?.band ?? false)),
     );
     const footnotes = options?.pageFootnotes ? undefined : footnoteList();
     const highlight = codeHighlighter();
@@ -78,6 +88,7 @@ export function renderDocHtml(
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
                 chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
+                textBox: ({ node, renderElement }) => renderTextBox(readTextBoxAttrs(node.attrs), node, renderElement),
                 equation: options?.equations ?? renderEquations(),
                 footnote:
                     footnotes?.reference ?? (({ node, renderElement }) => renderFootnoteSpans(node, renderElement)),
@@ -195,6 +206,21 @@ function renderChartNode(attrs: ChartAttrs): string {
 
 type RenderElement = (props: { content: Node; parent?: Node }) => string | string[];
 
+// The frame's span holding the box's, as the editor's renderHTML writes it: each paragraph rendered as elsewhere, its
+// marks, links and inline figures with it, then written as a span carrying the <p>'s own attributes, as a <p> inside
+// the body's <p> would close it.
+function renderTextBox(attrs: TextBoxAttrs, node: Node, renderElement: RenderElement): string {
+    const box = Object.entries(textBoxHTMLAttributes(attrs))
+        .map(([name, value]) => ` ${name}="${escapeHtml(value)}"`)
+        .join('');
+    let paragraphs = '';
+    node.forEach((paragraph) => {
+        const html = [renderElement({ content: paragraph, parent: node })].flat().join('');
+        paragraphs += html.replace(/^<p\b/, `<span data-type="${TEXT_BOX_PARAGRAPH}"`).replace(/<\/p>$/, '</span>');
+    });
+    return renderFigureFrame(attrs, `<span${box}>${paragraphs}</span>`);
+}
+
 // On paper: the note in place, its paragraphs as spans, as the editor's renderHTML writes it, which the PDF floats to
 // its page's foot.
 function renderFootnoteSpans(node: Node, renderElement: RenderElement): string {
@@ -232,8 +258,8 @@ function footnoteList() {
 }
 
 // A heading's id, `h-N` for the Nth heading of the outline, which a table of contents links to. WeasyPrint's bookmark
-// is a heading's text, its notes' numbers with it, so on paper a heading that holds a note labels its bookmark with the
-// outline's text (printExtras).
+// is a heading's text, its notes' numbers and its text boxes' text with it, so on paper a heading that holds a story
+// labels its bookmark with the outline's text (printExtras).
 function renderHeading(
     node: Node,
     children: string | string[] | undefined,
@@ -243,7 +269,7 @@ function renderHeading(
     const html = spec ? domOutputSpecToHTMLString(spec)(children) : '';
     let noted = false;
     node.forEach((child) => {
-        noted ||= child.type.name === 'footnote';
+        noted ||= isStoryNode(child.type.name);
     });
     const label = outlineEntry(node.attrs['level'], node.content.content)?.text ?? '';
     const attrs = `${id === undefined ? '' : ` id="h-${id}"`}${bookmark && noted ? ` data-bookmark="${escapeHtml(label)}"` : ''}`;

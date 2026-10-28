@@ -7,7 +7,7 @@ import type { JSONContent } from '@tiptap/core';
 import { DOCUMENT_FONT, readFontSize } from '@workspace/lib/constants/fonts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
-    flattenNestedFootnotes,
+    flattenNestedStories,
     PROSE_TEXTBLOCKS,
     pagePx,
     pageTwips,
@@ -53,7 +53,7 @@ import {
 import type { MediaFiles } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import type { Item, ParagraphItem } from './assemble';
-import { buildBlocks, isFigureOnly, isWhitespace, placeAnchors } from './assemble';
+import { buildBlocks, isFigureOnly, isWhitespace, paraOf, placeAnchors } from './assemble';
 import { isFill, isLightNeutral, markColor } from './colors';
 import type { FontTable, Theme } from './docx-fonts';
 import { byFace, fontMark, isMonospaceFont, readFontTable, readTheme } from './docx-fonts';
@@ -116,7 +116,7 @@ export type Reader = {
 
 // Per part: its relationships, the story it tells (only the body's breaks page, and only the body's pictures float), the
 // tables around it, the table style, the cell's width in px, whether the text sits on a fill the schema drops, the
-// cell fill drawn behind it, and whether it is a shape's text.
+// cell fill drawn behind it, whether it is a shape's text, and whether a text box's.
 export type Scope = {
     part: Part;
     story: 'body' | 'note' | 'band';
@@ -126,6 +126,8 @@ export type Scope = {
     onFill?: boolean;
     fill?: string;
     inShape?: boolean;
+    // Inside a text box, whose paragraphs own no spacing and whose pictures draw in line.
+    box?: boolean;
 };
 
 export function createReader(
@@ -285,10 +287,10 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     reader.fields = fields;
     reader.openToc = openToc;
     reader.numbering = numbering;
-    const paragraphs = blocks.flatMap(noteParagraphs);
+    const paragraphs = blocks.flatMap(storyParagraphs);
     trimStart(paragraphs[0]?.content ?? []);
     const content =
-        flattenNestedFootnotes({
+        flattenNestedStories({
             type: 'footnote',
             content: paragraphs.length > 0 ? paragraphs : [{ type: 'paragraph' }],
         }).content ?? [];
@@ -296,13 +298,13 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     return content;
 }
 
-// A note holds paragraphs: a heading's or a code block's text is one, and a list's, a quote's or a table's paragraphs
-// are its own. A rule or a break holds none.
-function noteParagraphs(block: JSONContent): JSONContent[] {
+// A note or a text box holds paragraphs: a heading's or a code block's text is one, and a list's, a quote's or a table's
+// paragraphs are its own. A rule or a break holds none.
+export function storyParagraphs(block: JSONContent): JSONContent[] {
     if (block.type === 'paragraph') return [block];
     if (PROSE_TEXTBLOCKS.includes(block.type ?? '') || block.type === 'codeBlock')
         return [{ type: 'paragraph', ...(block.content && { content: block.content }) }];
-    return (block.content ?? []).flatMap(noteParagraphs);
+    return (block.content ?? []).flatMap(storyParagraphs);
 }
 
 function weightOf(nodes: JSONContent[]): number {
@@ -409,8 +411,15 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         const saved = text.includes('\t') ? text.slice(0, text.lastIndexOf('\t')) : text;
         if (saved.trim() && saved.trim() !== NO_TOC_ENTRIES) toc.saved.push(saved);
     }
-    // What the paragraph gives besides its own lines, such as its section break, which follows the result.
+    // What the paragraph gives besides its own lines, such as its section break, which follows the result. A text box
+    // an entry anchors is no entry: it keeps a paragraph of its own.
     const extras: Item[] = [...context.pending];
+    const boxes = cuts.flatMap(({ from, to }) =>
+        pieces
+            .slice(from, to)
+            .flatMap((piece) => (piece.kind === 'node' && piece.node.type === 'textBox' ? [piece.node] : [])),
+    );
+    if (boxes.length > 0) extras.push(paraOf(boxes));
     if (direct.sectionBreak && scope.story === 'body') extras.push({ kind: 'break' });
     // A paragraph that holds only the result waits until the field ends.
     const [first] = cuts;
@@ -605,8 +614,8 @@ function paragraphItems(
     // A cell's paragraphs take their spacing from the cell.
     const format = {
         lineSpacing,
-        spaceBefore: scope.tables > 0 || before === (base.before ?? 0) ? undefined : twipsToPt(before),
-        spaceAfter: scope.tables > 0 || after === (base.after ?? 0) ? undefined : twipsToPt(after),
+        spaceBefore: scope.tables > 0 || scope.box || before === (base.before ?? 0) ? undefined : twipsToPt(before),
+        spaceAfter: scope.tables > 0 || scope.box || after === (base.after ?? 0) ? undefined : twipsToPt(after),
     };
     // An item's indent holds its number or checkbox.
     const indent =

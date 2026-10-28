@@ -11,7 +11,8 @@ const { Editor } = await import('@tiptap/react');
 const { docEditorOptions } = await import('../../../../components/docs/doc-editor');
 const { createDocUndoManager } = await import('../../../../components/docs/page-setup');
 const { canAnchorComment, commentAnchorText } = await import('../../../../components/docs/extensions/comment-mark');
-const { footnotesInDoc, insertNote, NOTE_EDIT } = await import('../../../../components/docs/extensions/footnote');
+const { footnotesInDoc, insertNote } = await import('../../../../components/docs/extensions/footnote');
+const { STORY_EDIT } = await import('../../../../components/docs/extensions/story');
 
 const media = {
     mediaFolderId: 'media',
@@ -107,7 +108,7 @@ test('the notes list keeps its array while no note moves or changes, and follows
     // The open note's edit, forwarded.
     const [first] = footnotesInDoc(editor);
     if (!first) throw new Error('no note');
-    editor.view.dispatch(editor.state.tr.insertText('Oh, ', first.pos + 2).setMeta(NOTE_EDIT, true));
+    editor.view.dispatch(editor.state.tr.insertText('Oh, ', first.pos + 2).setMeta(STORY_EDIT, true));
     expect(footnotesInDoc(editor)[0]?.node.textContent).toBe('Oh, Hello world');
     expect(atNodes()).toEqual([true, true]);
 

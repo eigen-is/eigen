@@ -32,8 +32,12 @@ type WordChart = { kind: 'chart'; width: number; height: number; rId: string; al
 // What a drawing shows, at its extent in EMU.
 type Drawn = { image: Image | WordChart; cx: number; cy: number; alt: string };
 
-// Where an anchored drawing sits, in EMU from the text column and from the top of its paragraph's first line.
-type Placement = { x: number; y: number; behind: boolean };
+// Where an anchored drawing sits: in front of or behind the text, in EMU from the text column and from the top of its
+// paragraph's first line, or wrapped by the text on one side of the column, at its paragraph's top, with the gap the
+// text keeps from it in EMU.
+export type Placement =
+    | { x: number; y: number; behind: boolean }
+    | { side: 'left' | 'right'; fromText: { top: number; right: number; bottom: number; left: number } };
 
 // Word stacks anchors by relativeHeight. Eigen draws each layer in document order, and the drawing ids follow it.
 const RELATIVE_HEIGHT = 251658240;
@@ -214,17 +218,7 @@ function isPositive(value: number | undefined): value is number {
 function drawingXml({ image, cx, cy, alt }: Drawn, pkg: Package, placement?: Placement): string {
     const n = ++pkg.lastDrawingId;
     const descr = escapeXml(alt);
-    const frame = placement ? 'wp:anchor' : 'wp:inline';
-    const distances = 'distT="0" distB="0" distL="0" distR="0"';
-    const opening = placement
-        ? [
-              `<wp:anchor ${distances} simplePos="0" relativeHeight="${RELATIVE_HEIGHT + n}" behindDoc="${placement.behind ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1">`,
-              '<wp:simplePos x="0" y="0"/>',
-              `<wp:positionH relativeFrom="column"><wp:posOffset>${placement.x}</wp:posOffset></wp:positionH>`,
-              `<wp:positionV relativeFrom="line"><wp:posOffset>${placement.y}</wp:posOffset></wp:positionV>`,
-          ].join('')
-        : `<wp:inline ${distances}>`;
-    const head = `${opening}<wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>${placement ? '<wp:wrapNone/>' : ''}`;
+    const { head, frame } = drawingHead(n, cx, cy, placement);
     if (image.kind === 'chart') {
         return [
             `<w:r><w:drawing>${head}<wp:docPr id="${n}" name="Chart ${n}" descr="${descr}"/>`,
@@ -238,4 +232,37 @@ function drawingXml({ image, cx, cy, alt }: Drawn, pkg: Package, placement?: Pla
         `<a:graphic><a:graphicData uri="${PIC_NS}"><pic:pic><pic:nvPicPr><pic:cNvPr id="${n}" name="${image.part}" descr="${descr}"/><pic:cNvPicPr/></pic:nvPicPr>`,
         `<pic:blipFill>${blip}<a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></${frame}></w:drawing></w:r>`,
     ].join('');
+}
+
+// The frame a drawing opens with, up to its wrap, in the schema's order: an anchor placed as `placement` says, or in line
+// without one. The drawing's docPr, its frame properties and its graphic follow, then the frame closes. A figure and a
+// text box share it.
+export function drawingHead(
+    n: number,
+    cx: number,
+    cy: number,
+    placement?: Placement,
+): { head: string; frame: 'wp:anchor' | 'wp:inline' } {
+    const extent = `<wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>`;
+    if (!placement) return { head: `<wp:inline distT="0" distB="0" distL="0" distR="0">${extent}`, frame: 'wp:inline' };
+    const wrapped = 'side' in placement;
+    const gap = wrapped ? placement.fromText : { top: 0, right: 0, bottom: 0, left: 0 };
+    const distances = `distT="${gap.top}" distB="${gap.bottom}" distL="${gap.left}" distR="${gap.right}"`;
+    const position = wrapped
+        ? [
+              `<wp:positionH relativeFrom="column"><wp:align>${placement.side}</wp:align></wp:positionH>`,
+              '<wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>',
+          ]
+        : [
+              `<wp:positionH relativeFrom="column"><wp:posOffset>${placement.x}</wp:posOffset></wp:positionH>`,
+              `<wp:positionV relativeFrom="line"><wp:posOffset>${placement.y}</wp:posOffset></wp:positionV>`,
+          ];
+    const head = [
+        `<wp:anchor ${distances} simplePos="0" relativeHeight="${RELATIVE_HEIGHT + n}" behindDoc="${!wrapped && placement.behind ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1">`,
+        '<wp:simplePos x="0" y="0"/>',
+        ...position,
+        extent,
+        wrapped ? '<wp:wrapSquare wrapText="bothSides"/>' : '<wp:wrapNone/>',
+    ].join('');
+    return { head, frame: 'wp:anchor' };
 }

@@ -1,7 +1,7 @@
-// A figure in front of or behind the text draws at an offset from its paragraph and takes no room on its line. This
-// extension keeps the caret and the keys off such a figure, which always leads its paragraph. Its commands place the
-// figure on the paper when it is switched, dragged or resized, and the body grows under the lowest one. A band's or a
-// note's editor draws every figure in line. Every docs editor registers it.
+// A figure in front of or behind the text, such as an image or a text box, draws at an offset from its paragraph and
+// takes no room on its line. This extension keeps the caret and the keys off such a figure, which always leads its
+// paragraph. Its commands place the figure on the paper when it is switched, dragged or resized, and the body grows
+// under the lowest one. A band's or a story's editor draws every figure in line. Every docs editor registers it.
 
 import type { Editor } from '@tiptap/core';
 import { Extension } from '@tiptap/core';
@@ -88,19 +88,37 @@ export const selectionDrawsInLine = (editor: Editor): boolean =>
 // band's editor offers its alignment alone, in its panel and in Format › Image.
 export const inBand = (editor: Editor): boolean => editor.storage.positionedFigures.band;
 
-// How many positioned figures a textblock starts with. Each is one position long.
-function leadingRun(textblock: PMNode): number {
-    let run = 0;
-    while (run < textblock.childCount && isPositionedFigure(textblock.child(run))) run++;
-    return run;
+// The positioned figures a textblock starts with: how many, and how many positions they take, as a text box holds its
+// paragraphs and is longer than one.
+function leadingRun(textblock: PMNode): { count: number; size: number } {
+    let count = 0;
+    let size = 0;
+    for (; count < textblock.childCount; count++) {
+        const child = textblock.child(count);
+        if (!isPositionedFigure(child)) break;
+        size += child.nodeSize;
+    }
+    return { count, size };
+}
+
+// Where each figure of the leading run of the textblock whose content starts at `start` is.
+function runPositions(textblock: PMNode, start: number): number[] {
+    const positions: number[] = [];
+    const { count } = leadingRun(textblock);
+    let pos = start;
+    for (let index = 0; index < count; index++) {
+        positions.push(pos);
+        pos += textblock.child(index).nodeSize;
+    }
+    return positions;
 }
 
 // The empty caret at the visual start of a textblock that leads with positioned figures: right after them.
 function caretAfterRun(state: EditorState): ResolvedPos | null {
     const { selection } = state;
     if (!(selection instanceof TextSelection) || !selection.$cursor) return null;
-    const run = leadingRun(selection.$cursor.parent);
-    return run > 0 && selection.$cursor.parentOffset === run ? selection.$cursor : null;
+    const { count, size } = leadingRun(selection.$cursor.parent);
+    return count > 0 && selection.$cursor.parentOffset === size ? selection.$cursor : null;
 }
 
 // Shift+Home, Shift+Up or a pointer can make a text selection that holds part of a leading run. This returns the same
@@ -111,11 +129,11 @@ function caretAfterRun(state: EditorState): ResolvedPos | null {
 function selectionOutsideRuns(selection: Selection): TextSelection | null {
     if (!(selection instanceof TextSelection)) return null;
     const { $from, $to } = selection;
-    const past = $from.start() + leadingRun($from.parent);
+    const past = $from.start() + leadingRun($from.parent).size;
     const from = Math.max($from.pos, past);
     const to = $from.sameParent($to)
         ? Math.max($to.pos, past)
-        : $to.parentOffset <= leadingRun($to.parent)
+        : $to.parentOffset <= leadingRun($to.parent).size
           ? $to.start()
           : $to.pos;
     if (from === $from.pos && to === $to.pos) return null;
@@ -207,12 +225,12 @@ function leadFigures(tr: Transaction, pos: number) {
     const run = leadingRun(textblock);
     const strays: { node: PMNode; at: number }[] = [];
     textblock.forEach((child, offset, index) => {
-        if (index > run && isPositionedFigure(child)) strays.push({ node: child, at: pos + 1 + offset });
+        if (index > run.count && isPositionedFigure(child)) strays.push({ node: child, at: pos + 1 + offset });
     });
     if (strays.length === 0) return;
-    for (const { at } of strays.toReversed()) tr.delete(at, at + 1);
+    for (const { node, at } of strays.toReversed()) tr.delete(at, at + node.nodeSize);
     tr.insert(
-        pos + 1 + run,
+        pos + 1 + run.size,
         strays.map(({ node }) => node),
     );
 }
@@ -286,9 +304,9 @@ function joinKeepingPlace(
 function deleteKeepingPlace(view: EditorView): boolean {
     const { selection } = view.state;
     const { $from, $to } = selection;
-    const run = leadingRun($to.parent);
-    if (!(selection instanceof TextSelection) || selection.empty || $to.parentOffset !== 0 || run === 0) return false;
-    const figures = Array.from({ length: run }, (_, i) => $to.start() + i);
+    const figures = runPositions($to.parent, $to.start());
+    if (!(selection instanceof TextSelection) || selection.empty || $to.parentOffset !== 0 || figures.length === 0)
+        return false;
     return joinKeepingPlace(view, selection, figures, $from.before(), deleteSelection);
 }
 
@@ -304,13 +322,13 @@ function caretFromFigure(editor: Editor): boolean {
     const { selection } = editor.state;
     if (!(selection instanceof NodeSelection) || !isPositionedFigure(selection.node)) return false;
     const { $from } = selection;
-    return editor.commands.setTextSelection($from.start() + leadingRun($from.parent));
+    return editor.commands.setTextSelection($from.start() + leadingRun($from.parent).size);
 }
 
 // The behind figure a press at (x, y) selects: the topmost under the pointer, when no line of text is there or Alt is
 // held. The paragraph's box lies over the figure, so the hit test is geometry: every element under the point, and the
 // rects of the text lines of the textblock on top.
-function behindFigureAt(view: EditorView, x: number, y: number, alt: boolean): number | null {
+export function behindFigureAt(view: EditorView, x: number, y: number, alt: boolean): number | null {
     const hits = view.dom.ownerDocument.elementsFromPoint(x, y);
     const box = hits.map((hit) => hit.closest('.figure[data-layout="behind"]')).find((hit) => !!hit);
     if (!box || !view.dom.contains(box)) return null;
@@ -321,7 +339,10 @@ function behindFigureAt(view: EditorView, x: number, y: number, alt: boolean): n
         const textblock = $top.parent.isTextblock ? view.nodeDOM($top.before()) : null;
         if (textblock instanceof Element && overText(textblock, x, y)) return null;
     }
-    const pos = view.posAtDOM(box, 0);
+    // Before an image, as it is an atom, and at the start of a text box's own paragraphs, which it holds.
+    const at = view.posAtDOM(box, 0);
+    const $at = view.state.doc.resolve(at);
+    const pos = isPositionedFigure(view.state.doc.nodeAt(at)) || $at.depth === 0 ? at : $at.before();
     return isPositionedFigure(view.state.doc.nodeAt(pos)) ? pos : null;
 }
 
@@ -397,9 +418,9 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                         ...(capped && height && { height: Math.round((height * paper.width) / stored) }),
                     });
                     const run = leadingRun($from.parent);
-                    if ($from.index() > run) {
+                    if ($from.index() > run.count) {
                         leadFigures(tr, $from.before());
-                        tr.setSelection(NodeSelection.create(tr.doc, $from.start() + run));
+                        tr.setSelection(NodeSelection.create(tr.doc, $from.start() + run.size));
                     }
                     return true;
                 },
@@ -431,10 +452,11 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                         return true;
                     }
                     // A delete and an insert, so the figure is in one place; the selection follows it, or the panel closes.
-                    tr.delete(pos, pos + 1);
+                    // A text box goes with its paragraphs.
+                    tr.delete(pos, pos + node.nodeSize);
                     const $anchor = tr.doc.resolve(tr.mapping.map(anchor) + 1);
-                    const to = $anchor.start() + leadingRun($anchor.parent);
-                    tr.insert(to, node.type.create({ ...node.attrs, ...offsets }, null, node.marks));
+                    const to = $anchor.start() + leadingRun($anchor.parent).size;
+                    tr.insert(to, node.type.create({ ...node.attrs, ...offsets }, node.content, node.marks));
                     tr.setSelection(NodeSelection.create(tr.doc, to));
                     return true;
                 },
@@ -482,7 +504,8 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                 const { selection, doc } = editor.state;
                 const { $head } = selection;
                 const run = leadingRun($head.parent);
-                if (!(selection instanceof TextSelection) || run === 0 || $head.parentOffset !== run) return false;
+                if (!(selection instanceof TextSelection) || run.count === 0 || $head.parentOffset !== run.size)
+                    return false;
                 const before = Selection.findFrom(doc.resolve($head.before()), -1, true);
                 const anchor = selection.empty ? $head.start() : selection.anchor;
                 if (before)
@@ -494,10 +517,10 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                 const { selection, doc } = editor.state;
                 const { $head } = selection;
                 const run = leadingRun($head.parent);
-                if (!(selection instanceof TextSelection) || run === 0 || $head.parentOffset !== 0) return false;
-                const next = $head.parent.maybeChild(run);
+                if (!(selection instanceof TextSelection) || run.count === 0 || $head.parentOffset !== 0) return false;
+                const next = $head.parent.maybeChild(run.count);
                 const head = next
-                    ? $head.start() + run + (next.isText ? 1 : next.nodeSize)
+                    ? $head.start() + run.size + (next.isText ? 1 : next.nodeSize)
                     : Selection.findFrom(doc.resolve($head.after()), 1, true)?.head;
                 if (head !== undefined)
                     editor.view.dispatch(
@@ -516,7 +539,7 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     return false;
                 }
                 const before = Selection.findFrom(editor.state.doc.resolve($caret.before()), -1, true);
-                const figures = Array.from({ length: $caret.parentOffset }, (_, i) => $caret.start() + i);
+                const figures = runPositions($caret.parent, $caret.start());
                 const into = before ? before.$from.before() : $caret.before();
                 return joinKeepingPlace(
                     editor.view,
@@ -532,9 +555,8 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                 const $cursor = selection instanceof TextSelection ? selection.$cursor : null;
                 if (!$cursor || $cursor.parentOffset < $cursor.parent.content.size) return false;
                 const after = Selection.findFrom(editor.state.doc.resolve($cursor.after()), 1, true);
-                const run = after ? leadingRun(after.$from.parent) : 0;
-                if (!after || run === 0) return false;
-                const figures = Array.from({ length: run }, (_, i) => after.$from.start() + i);
+                const figures = after ? runPositions(after.$from.parent, after.$from.start()) : [];
+                if (!after || figures.length === 0) return false;
                 return joinKeepingPlace(
                     editor.view,
                     selection,

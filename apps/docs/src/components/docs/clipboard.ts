@@ -21,6 +21,7 @@ import type { FigureAttrs, TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     ITALIC_HEADING_LEVELS,
     ITALIC_HEADING_SELECTOR,
+    isStoryNode,
     PAGE_NUMBER_TEXT,
     readChartAttrs,
     readEquation,
@@ -35,7 +36,7 @@ import type {
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_IMAGE_BOX, oneOf, TEXT_ALIGNS } from '@workspace/lib/vector';
 import { pictureRatio } from './extensions/figure';
-import { textOutsideNotes } from './extensions/footnote';
+import { textOutsideStories } from './extensions/story';
 
 // The clipboard box for a figure at `pos`, which the wire carries as both sides. A stretched picture keeps its stored
 // ratio, and any other the picture's own, read off its rendered <img> so a mid-load layout can't skew it. The width is
@@ -78,7 +79,7 @@ export function chartClipboardItem(node: ProseMirrorNode): EigenClipboardChartIt
 
 // The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file
 // resolves, a chart item per chart with inline data, and the text between them as a text item, a line per
-// paragraph, an equation as its text, a page number as its # and a footnote as nothing. None → no items, and the
+// paragraph, an equation as its text, a page number as its # and a note or a text box as nothing. None → no items, and the
 // copy is ProseMirror's own.
 function copiedClipboardItems(
     view: EditorView,
@@ -89,20 +90,27 @@ function copiedClipboardItems(
     const items: EigenClipboardItem[] = [];
     let runFrom = from;
     const pushText = (runTo: number) => {
-        const text = textOutsideNotes(view.state.doc, runFrom, runTo, '\n', '', (leaf) => {
-            if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text;
-            return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
-        }).trim();
+        const text = textOutsideStories(
+            view.state.doc,
+            runFrom,
+            runTo,
+            '\n',
+            () => '',
+            (leaf) => {
+                if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text;
+                return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
+            },
+        ).trim();
         if (text) items.push(buildTextClipboardItem({ text, box: textRunBox(view, runFrom, runTo) }));
     };
-    // A note's text and images are no part of the sentence around its reference: a paste elsewhere places them as one.
+    // A story's text and images are no part of the sentence around its node: a paste elsewhere places them as one.
     const push = (pos: number, size: number, item: EigenClipboardItem) => {
         pushText(pos);
         runFrom = pos + size;
         items.push(item);
     };
     view.state.doc.nodesBetween(from, to, (node, pos) => {
-        if (node.type.name === 'footnote') return false;
+        if (isStoryNode(node.type.name)) return false;
         if (node.type.name === 'chart') {
             const item = chartClipboardItem(node);
             if (item) push(pos, node.nodeSize, item);

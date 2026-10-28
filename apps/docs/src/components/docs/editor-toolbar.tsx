@@ -1,7 +1,7 @@
 // The docs editor's toolbar: the menus on the left, the formatting icon row in the middle and the share cluster on the
-// right. It acts on the editor the caret is in, the body's, a band's or the open note's, and owns the dialogs its menus
-// open, such as Page setup and Word count. The editor hands it what it shares with the page, such as the panels' and
-// the outline's toggles.
+// right. It acts on the editor the caret is in, the body's, a band's or the open story's, and owns the dialogs its
+// menus open, such as Page setup and Word count. The editor hands it what it shares with the page, such as the panels'
+// and the outline's toggles.
 
 import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
@@ -88,7 +88,7 @@ export const keepEditorFocus = (editor: Editor) => (e: Event) => {
 };
 
 type EditorToolbarProps = {
-    // The editor the caret is in: the body's, a band's while the band is edited, or the open note's.
+    // The editor the caret is in: the body's, a band's while the band is edited, or the open story's.
     editor: Editor;
     // Word count counts the body, from a band too.
     body: Editor;
@@ -121,8 +121,9 @@ type EditorToolbarProps = {
     onInsertEquation?: () => void;
     // Inserts a footnote and opens its note; a writer's on a desktop or a tablet only.
     onInsertFootnote?: () => void;
-    // The caret is in the open footnote's note, which holds paragraphs only.
-    inNote: boolean;
+    onInsertTextBox?: () => void;
+    // The caret is in the open story, a note or a text box, which holds paragraphs only.
+    inStory: boolean;
     // Puts the caret in a band, and writes a page-number preset there; a writer's on a desktop or a tablet only.
     onEnterBand?: (edge: BandEdge) => void;
     onPageNumbers?: (preset: PageNumberPreset) => void;
@@ -157,7 +158,8 @@ export const EditorToolbar = ({
     onAddComment,
     onInsertEquation,
     onInsertFootnote,
-    inNote,
+    onInsertTextBox,
+    inStory,
     onEnterBand,
     onPageNumbers,
     outlineShown,
@@ -352,7 +354,8 @@ export const EditorToolbar = ({
                                     onAddComment={onAddComment}
                                     onInsertEquation={onInsertEquation}
                                     onInsertFootnote={onInsertFootnote}
-                                    inNote={inNote}
+                                    onInsertTextBox={onInsertTextBox}
+                                    inStory={inStory}
                                     held={editor !== body}
                                     pageless={pageSetup.pageless}
                                     onEnterBand={onEnterBand}

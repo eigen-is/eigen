@@ -30,10 +30,14 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Chart data labels** — in Docs, Sheets, Slides and Vector, the **Data labels** box in a chart's **Series** section writes each value on a column, bar or line chart, in the values' number format. Labels that would overlap hide, and the bigger bar keeps its own
 - **Data labels in Office files** — a chart's data labels come in from Excel, Word and PowerPoint files and go out when you download one
 - **Image and chart size in Docs** — the **Image** and **Chart** panels set the width and the height in centimeters, with **Keep aspect ratio** as in Slides. Uncheck it to stretch an image, which keeps that size when you print, download it as PDF, a web page or Word, or open the Word file again
+- **Text boxes in Docs** — **Insert › Text box** adds a box with paragraphs of its own, which you type in right where it stands. Put it on its own line, beside the text, or behind or in front of it, and drag it anywhere on the page
+- **A text box's look** — the **Text box** panel sets a box's size, fill, outline and rounded corners, the space around its text, and whether its text sits at the top, middle or bottom. The box grows when its text needs more room
+- **Text boxes in Word files** — a Word text box comes into Docs as a text box, at its place and with its look, and a document downloads as Word with Word's own text boxes. A text box in a header, footer or footnote still comes in as its text
 
 ### Changed
 
 - **Labels in sentence case** — buttons, menus, dialog titles and fields in Admin, Calendar, Chat, Contacts, Drive, Mail, Sheets, Space and Stickies capitalize only the first word and names, such as **New event**, **Reply all** and **Web page (.html)**, as the rest of Eigen already does
+- **Open documents after the update** — reload any Docs document you have open: a tab still on the previous version deletes the text boxes it receives
 - **Forwarding email** — a forward brings the original's attachments along, pictures in the message included. Take one off with the **X** on its chip before you send
 - **Space home** — an admin gets an Admin tile next to the apps. The **Help and support** tile takes the help center's teal
 - **Help center colors** — the Admin section wears the Admin app's color, and a section page shows its title in its section's color, such as amber for Mail
