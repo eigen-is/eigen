@@ -1,3 +1,7 @@
+// The Drive query keys, each scoped to an owner but for a few that mean everything the user sees, and the
+// invalidators that write hooks and the drive SSE handler call after a change. An invalidator names what a change
+// stales, such as a folder listing, a path's own detail or the home's size.
+
 import type { QueryClient } from '@tanstack/react-query';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { invalidateCollabDocument, invalidateCollabMount } from '../../collab/hooks/keys';
@@ -61,6 +65,11 @@ export const driveKeys = {
 // Invalidators, called from the write hooks' onSuccess and from the drive SSE handlers.
 export function invalidateAclSharedOrUnshared(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'with-me') });
+}
+
+// A path's own detail, such as its size, its etag or its members, after a change that keeps the path where it is.
+export function invalidatePath(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string): void {
+    queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
 }
 
 export function invalidateItemCreated(
