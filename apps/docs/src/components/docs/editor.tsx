@@ -23,6 +23,7 @@ import {
     BAND_ROOTS,
     bandEdge,
     FIRST_PAGE_BAND,
+    insertTextBox,
     normalStyleProperties,
     PAGE_ROOT,
     pagePx,
@@ -106,6 +107,7 @@ import { applyPageNumberPreset } from './page-numbers';
 import { createDocUndoManager, TEXT_WIDTHS, writePageSetup } from './page-setup';
 import { tableMenuSections } from './table-menu-sections';
 import { TablePropertiesPanel } from './table-properties-panel';
+import { TextBoxPropertiesPanel } from './text-box-properties-panel';
 
 // What a cell's or an equation's right-click menu is about: the editor it is in and the comment card under the pointer.
 type NodeMenuItem = { editor: Editor; comment: CommentContextMenuItem | null };
@@ -429,6 +431,15 @@ const TiptapEditor = ({
         return pos !== null;
     };
     insertFootnoteRef.current = insertFootnote;
+    // Word's Insert › Text box: a box in the flow after the selection, open with the caret in it. Where no story opens,
+    // a viewer's and a phone's, none goes in.
+    const insertBox = () => {
+        const { tr } = editor.state;
+        const pos = bandsAllowed ? insertTextBox(tr) : null;
+        if (pos === null) return;
+        editor.view.dispatch(tr.scrollIntoView());
+        openStory(pos, null);
+    };
     const storyEditor = notes.editor;
     const openBoxId = notes.anchor?.type === 'textBox' ? notes.anchor.id : null;
     const textBoxContext = useMemo(() => ({ openId: openBoxId, editor: boxEditor }), [openBoxId, boxEditor]);
@@ -812,6 +823,7 @@ const TiptapEditor = ({
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
                                     onInsertEquation={insertEquation}
                                     onInsertFootnote={bandsAllowed ? insertFootnote : undefined}
+                                    onInsertTextBox={bandsAllowed ? insertBox : undefined}
                                     inNote={!!notes.anchor}
                                     onEnterBand={
                                         bandsAllowed && !pageless ? (edge) => enterBand(entryBand(edge)) : undefined
@@ -988,6 +1000,8 @@ const TiptapEditor = ({
                                                         undoManager={undoManager}
                                                         onEditData={() => setChartDataOpen(true)}
                                                     />
+                                                ) : lastPanelRef.current === 'textBox' ? (
+                                                    <TextBoxPropertiesPanel editor={activeEditor} />
                                                 ) : lastPanelRef.current === 'equation' ? (
                                                     <EquationPropertiesPanel
                                                         editor={activeEditor}

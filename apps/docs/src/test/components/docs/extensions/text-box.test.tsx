@@ -302,3 +302,47 @@ test('a text drag inside the open box starts no drag of the box', async () => {
     });
     expect(a.view.dragging).toBeNull();
 });
+
+test('a pasted copy of a box takes a fresh id, and a cut and paste keeps its own', async () => {
+    const { a } = await setup();
+    const html = a.getHTML();
+    await act(async () => {
+        a.commands.setTextSelection(a.state.doc.content.size - 1);
+        a.view.pasteHTML(html);
+    });
+    const ids: unknown[] = [];
+    a.state.doc.descendants((node) => {
+        if (node.type.name === 'textBox') ids.push(node.attrs['id']);
+    });
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).toBe('box-1');
+    expect(ids[1]).not.toBe('box-1');
+    expect(typeof ids[1]).toBe('string');
+
+    await act(async () => {
+        a.commands.setContent({ type: 'doc', content: [paragraph(text('Empty'))] });
+        a.view.pasteHTML(html);
+    });
+    const kept: unknown[] = [];
+    a.state.doc.descendants((node) => {
+        if (node.type.name === 'textBox') kept.push(node.attrs['id']);
+    });
+    expect(kept).toEqual(['box-1']);
+});
+
+test('Insert › Text box puts an open, empty box in the flow after the caret', async () => {
+    const { a, session } = await setup([paragraph(text('Anchor'))]);
+    const { insertTextBox } = await import('@workspace/lib/docs/eigendoc');
+    const inserted: (number | null)[] = [];
+    await act(async () => {
+        a.commands.setTextSelection(7);
+        const { tr } = a.state;
+        const pos = insertTextBox(tr);
+        inserted.push(pos);
+        a.view.dispatch(tr);
+        if (pos !== null) session.current?.open(pos, { focus: true, at: null, selection: null });
+    });
+    expect(inserted).toEqual([7]);
+    expect(session.current?.anchor).toMatchObject({ type: 'textBox', pos: 7 });
+    expect(a.state.doc.nodeAt(7)?.attrs).toMatchObject({ layout: 'block', alignment: 'left' });
+});

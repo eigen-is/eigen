@@ -49,6 +49,7 @@ async function render(
         active = editor,
         onInsertEquation,
         onInsertFootnote,
+        onInsertTextBox,
         inNote = false,
         sync = { offline: false, unsyncedEdits: false },
         outlineShown = false,
@@ -58,6 +59,7 @@ async function render(
         active?: typeof editor;
         onInsertEquation?: () => void;
         onInsertFootnote?: () => void;
+        onInsertTextBox?: () => void;
         inNote?: boolean;
         sync?: { offline: boolean; unsyncedEdits: boolean };
         outlineShown?: boolean;
@@ -73,6 +75,7 @@ async function render(
         canWrite,
         onInsertEquation,
         onInsertFootnote,
+        onInsertTextBox,
         inNote,
         ...sync,
         storageUnavailable: false,
@@ -208,6 +211,7 @@ test("Format's submenus follow Google Docs' names and order", async () => {
         '—',
         'Table',
         'Image',
+        'Text box',
         '—',
         CLEAR_FORMATTING,
     ]);
@@ -1367,6 +1371,31 @@ test('Insert › Equation follows Chart and inserts once the menu has closed', a
         await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
     }
     expect(menuOpenAtInsert).toEqual([false]);
+});
+
+// Word's Insert › Text box, after Chart; the box goes in once the menu has closed, so its editor keeps the focus.
+test('Insert › Text box follows Chart, inserts once the menu has closed, and is greyed in a story', async () => {
+    const menuOpenAtInsert: boolean[] = [];
+    const onInsertTextBox = mock(() => {
+        menuOpenAtInsert.push(document.querySelector('[role="menu"]') !== null);
+    });
+    await render(1920, true, { onInsertTextBox });
+    await openMenu('Insert');
+    expect(openMenuEntries().slice(0, 4)).toEqual(['Link', 'Image', 'Chart', 'Text box']);
+    await clickItem('Text box');
+    for (let tick = 0; tick < 50 && onInsertTextBox.mock.calls.length === 0; tick++) {
+        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
+    expect(menuOpenAtInsert).toEqual([false]);
+});
+
+test('Insert greys out Text box in a story', async () => {
+    await render(1920, true, { onInsertTextBox: () => {}, inNote: true, active: editor });
+    await openMenu('Insert');
+    const greyed = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
+        .filter((item) => item.getAttribute('aria-disabled') === 'true')
+        .map((item) => item.textContent?.trim());
+    expect(greyed).toContain('Text box');
 });
 
 // A phone has no panel to edit one in, and a band being edited none that follows it.

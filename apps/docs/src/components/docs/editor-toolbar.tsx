@@ -119,6 +119,7 @@ type EditorToolbarProps = {
     onInsertEquation?: () => void;
     // Inserts a footnote and opens its note; a writer's on a desktop or a tablet only.
     onInsertFootnote?: () => void;
+    onInsertTextBox?: () => void;
     // The caret is in the open footnote's note, which holds paragraphs only.
     inNote: boolean;
     // Puts the caret in a band, and writes a page-number preset there; a writer's on a desktop or a tablet only.
@@ -155,6 +156,7 @@ export const EditorToolbar = ({
     onAddComment,
     onInsertEquation,
     onInsertFootnote,
+    onInsertTextBox,
     inNote,
     onEnterBand,
     onPageNumbers,
@@ -350,6 +352,7 @@ export const EditorToolbar = ({
                                     onAddComment={onAddComment}
                                     onInsertEquation={onInsertEquation}
                                     onInsertFootnote={onInsertFootnote}
+                                    onInsertTextBox={onInsertTextBox}
                                     inNote={inNote}
                                     held={editor !== body}
                                     pageless={pageSetup.pageless}

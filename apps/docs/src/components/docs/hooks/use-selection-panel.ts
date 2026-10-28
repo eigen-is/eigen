@@ -3,7 +3,7 @@ import type { Editor } from '@tiptap/react';
 import type { RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-export type SelectionPanel = 'document' | 'figure' | 'chart' | 'equation' | 'table';
+export type SelectionPanel = 'document' | 'figure' | 'chart' | 'textBox' | 'equation' | 'table';
 
 type SelectionPanelState = {
     selectionPanel: SelectionPanel;
@@ -28,6 +28,7 @@ export function useSelectionPanel(editor: Editor, isMobile: boolean, closePanels
         const read = (equation: boolean): SelectionPanel => {
             if (editor.isActive('figure')) return 'figure';
             if (editor.isActive('chart')) return 'chart';
+            if (editor.isActive('textBox')) return 'textBox';
             if (editor.isActive('equation') && equation) return 'equation';
             if (editor.isActive('table')) return 'table';
             return 'document';

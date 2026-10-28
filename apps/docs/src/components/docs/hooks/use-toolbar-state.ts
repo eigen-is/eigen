@@ -10,8 +10,10 @@ import { getFontName } from '@workspace/lib/constants/fonts';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import {
     insertFootnote,
+    insertTextBox,
     readCellBackground,
     readFigureAttrs,
+    readTextBoxAttrs,
     selectionFontSizes,
     selectionParagraphFormat,
 } from '@workspace/lib/docs/eigendoc';
@@ -54,9 +56,13 @@ export type ToolbarState = {
     canComment: boolean;
     // Whether a note goes at the caret: not in a code block, nor in a band's schema or a note's.
     canInsertFootnote: boolean;
+    // Whether a text box goes at the caret, which the same places refuse.
+    canInsertTextBox: boolean;
     table: boolean;
     // The selected image's layout, none while no image is selected.
     figureLayout: FigureLayout | undefined;
+    // The selected text box's layout and fill, none while no box is selected.
+    textBox: { layout: FigureLayout; fill: string } | undefined;
     canMergeCells: boolean;
     canSplitCell: boolean;
     // The fill of the cell the selection starts in, '' for none.
@@ -123,6 +129,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 });
             }
             const table = active('table');
+            const box = active('textBox') ? readTextBoxAttrs(getAttributes(state, 'textBox')) : null;
             // A heading's own size and spacing are read off the page, which an editor not yet mounted has none of.
             const view = editor.isDestroyed ? undefined : editor.view;
             const fontSizes = selectionFontSizes(state, view, normal);
@@ -162,10 +169,12 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 selectionEmpty: selection.empty,
                 canComment: canAnchorComment(editor.state),
                 canInsertFootnote: insertFootnote(editor.state.tr) !== null,
+                canInsertTextBox: insertTextBox(editor.state.tr) !== null,
                 table,
                 figureLayout: active('figure')
                     ? (readFigureAttrs(getAttributes(state, 'figure')).layout ?? 'block')
                     : undefined,
+                textBox: box ? { layout: box.layout ?? 'block', fill: box.fill ?? '' } : undefined,
                 ...selectCellCommands(editor, table),
                 cellBackground: table ? cellBackground(state) : '',
             };

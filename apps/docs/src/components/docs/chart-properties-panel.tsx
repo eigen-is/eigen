@@ -87,8 +87,7 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                     <FigureSizeSection
                         width={width}
                         height={height}
-                        aspectLocked={locked}
-                        onAspectLockChange={(next) => setAspectLocked(editor, 'chart', next)}
+                        aspect={{ locked, onLockChange: (next) => setAspectLocked(editor, 'chart', next) }}
                         onChange={(size) =>
                             write(fitFigureSize(size, figureMaxWidth(editor, layout), CHART_MIN_HEIGHT))
                         }

@@ -70,7 +70,7 @@ import { cellPosAt, EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import type { TextBoxOptions } from './extensions/text-box';
 import { TextBox } from './extensions/text-box';
-import { cleanPastedHTML } from './paste';
+import { cleanPastedHTML, withFreshStoryIds } from './paste';
 
 const lowlight = createLowlight(common);
 
@@ -416,14 +416,17 @@ export function docEditorOptions({
                 },
             },
             transformPastedHTML: (html: string) => cleanPastedHTML(html, page(), cardIds(), normalStyle().font, !band),
-            // A note or a box pasted into a story is nested in it: its text stays, in its place.
+            // A note or a box pasted into a story is nested in it: its text stays, in its place. One pasted or dropped
+            // into the body that copies a story the doc holds takes an id of its own; a drag that moves one keeps it.
             transformPasted: note
                 ? (slice, view) =>
                       Slice.fromJSON(view.state.schema, {
                           ...slice.toJSON(),
                           content: flattenNestedStories({ type: 'footnote', content: slice.content.toJSON() }).content,
                       })
-                : undefined,
+                : band
+                  ? undefined
+                  : (slice, view) => (view.dragging?.move ? slice : withFreshStoryIds(slice, view.state.doc)),
             handleDrop: (view, event) => {
                 if (!event.dataTransfer) return false;
                 const files = Array.from(event.dataTransfer.files);

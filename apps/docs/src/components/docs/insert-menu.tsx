@@ -1,4 +1,4 @@
-// The Docs Insert menu: links, images, charts, equations, rules, page breaks, tables, code blocks, the page elements
+// The Docs Insert menu: links, images, charts, text boxes, equations, rules, page breaks, tables, code blocks, the page elements
 // (a header, a footer, page numbers and a footnote) and a comment. It inserts into the editor the toolbar follows, and
 // greys out what that editor can't hold. A page-less doc offers no page break, header, footer or page number.
 
@@ -28,6 +28,7 @@ import {
     PanelTop,
     SeparatorHorizontal,
     Sigma,
+    SquareDashed,
     Superscript,
     Table,
 } from 'lucide-react';
@@ -48,7 +49,8 @@ type InsertMenuProps = {
     onPageNumbers?: (preset: PageNumberPreset) => void;
     onInsertEquation?: () => void;
     onInsertFootnote?: () => void;
-    // A note holds paragraphs only, and no chart, whose panel follows the body.
+    onInsertTextBox?: () => void;
+    // A note or a text box holds paragraphs only, and no chart, whose panel follows the body.
     inNote: boolean;
     // A band or a note is the active editor, not the body.
     held: boolean;
@@ -67,13 +69,14 @@ export function InsertMenu({
     onAddComment,
     onInsertEquation,
     onInsertFootnote,
+    onInsertTextBox,
     inNote,
     held,
     pageless,
     onEnterBand,
     onPageNumbers,
 }: InsertMenuProps) {
-    // An equation and a footnote go in once the menu has closed, or Radix would hand the focus back to the trigger,
+    // An equation, a footnote and a text box go in once the menu has closed, or Radix would hand the focus back to the trigger,
     // away from the new equation's field or note.
     const afterCloseRef = useRef<(() => void) | null>(null);
     return (
@@ -114,6 +117,17 @@ export function InsertMenu({
                     ))}
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
+            {/* Word's Insert › Text box, a box in the flow open for typing: none in a band, a code block or a story. */}
+            {onInsertTextBox && (
+                <DropdownMenuItem
+                    disabled={inNote || !active.canInsertTextBox}
+                    onClick={() => {
+                        afterCloseRef.current = onInsertTextBox;
+                    }}
+                >
+                    <SquareDashed className="h-4 w-4" /> Text box
+                </DropdownMenuItem>
+            )}
             {/* Where Google's Insert › Symbols › Equation sits: after the chart, before the horizontal line. */}
             {onInsertEquation && (
                 <DropdownMenuItem
