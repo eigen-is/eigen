@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2057 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2059 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -237,7 +237,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (300)
+## Hooks (301)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -479,6 +479,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateOrgName` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-organization.ts |
 | `useUpdateServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useUpdateServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
+| `useSettingWithCopy` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-setting-with-copy.ts |
 | `useSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
 | `useUpdateSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
 | `useSSE` | `@workspace/lib/sse` | packages/lib/src/core/sse/hooks/use-sse.ts |
@@ -542,7 +543,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (464)
+## Types (465)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -629,6 +630,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SheetImage` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetWithCalcChain` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SingleRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `SettingWithCopy` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-setting-with-copy.ts |
 | `ActivityLines` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `Address` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `AddressObject` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
