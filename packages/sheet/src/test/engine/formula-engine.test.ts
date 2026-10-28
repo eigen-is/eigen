@@ -286,10 +286,11 @@ describe('engine/formula-engine — an error held in a cell', () => {
             data: [
                 // Row 1: an error per column, Excel's ERROR.TYPE order but #NAME?, which the test below pins apart.
                 errors.map(failed),
-                // Rows 2–4: a column of numbers with an error inside, and a lookup table whose match holds an error.
-                [number(1), text('a'), number(1)],
-                [failed('#DIV/0!'), text('b'), failed('#N/A')],
-                [number(3), text('c'), number(3)],
+                // Rows 2–4: a column of numbers with an error inside, a lookup table whose match holds an error, and
+                // one bit per row.
+                [number(1), text('a'), number(1), number(2)],
+                [failed('#DIV/0!'), text('b'), failed('#N/A'), number(4)],
+                [number(3), text('c'), number(3), number(8)],
                 // Row 5: a cell holding the text #DIV/0!, typed with a leading apostrophe, and a #NAME?.
                 [{ v: '#DIV/0!', m: '#DIV/0!', ct: { fa: '@', t: 's' }, qp: 1 }, failed('#NAME?')],
                 // Row 6: the errors formulajs has no object for, and a rich-text cell whose runs read #N/A.
@@ -299,6 +300,8 @@ describe('engine/formula-engine — an error held in a cell', () => {
                     failed('#CALC!'),
                     { ct: { fa: 'General', t: 'inlineStr', s: [{ v: '#N/' }, { v: 'A', bl: 1 }] } },
                 ],
+                // Row 7: one bit per column under row 1's errors, so a sum names the columns it matched.
+                [1, 2, 4, 8, 16, 32].map(number),
             ],
             calculationChain: [],
             dynamicArrayCompute: [],
@@ -373,6 +376,11 @@ describe('engine/formula-engine — an error held in a cell', () => {
         expect(evaluate('=IFERROR(SUM(A5:B5),0)')).toBe('#NAME?');
     });
 
+    test('an operator hands on the first error in a range operand', () => {
+        expect(evaluate('=C3:C4&"a"')).toBe('#N/A');
+        expect(evaluate('=A2:A4+1')).toBe('#DIV/0!');
+    });
+
     test('a function hands on the first error in its arguments, ranges included, as Excel does', () => {
         expect(evaluate('=CONCAT(A2:A4)')).toBe('#DIV/0!');
         expect(evaluate('=CONCATENATE("a",F1)')).toBe('#N/A');
@@ -410,6 +418,37 @@ describe('engine/formula-engine — an error held in a cell', () => {
         expect(evaluate('=MAXIFS(A2:C2,A3:C3,"#N/A")')).toBe(1);
     });
 
+    test('an error criterion matches the error cells it names, as Excel does', () => {
+        expect(evaluate('=COUNTIF(A1:F1,F1)')).toBe(1);
+        expect(evaluate('=COUNTIF(A1:F1,NA())')).toBe(1);
+        expect(evaluate('=COUNTIFS(A1:F1,B1,A7:F7,">0")')).toBe(1);
+        expect(evaluate('=SUMIF(A1:F1,F1,A7:F7)')).toBe(32);
+        expect(evaluate('=SUMIFS(A7:F7,A1:F1,B1)')).toBe(2);
+        expect(evaluate('=AVERAGEIF(A1:F1,NA(),A7:F7)')).toBe(32);
+        // formulajs's AVERAGEIFS reads a criteria range down a column only.
+        expect(evaluate('=AVERAGEIFS(D2:D4,C2:C4,C3)')).toBe(4);
+        expect(evaluate('=MAXIFS(A7:F7,A1:F1,F1)')).toBe(32);
+        expect(evaluate('=MINIFS(A7:F7,A1:F1,B1)')).toBe(2);
+    });
+
+    test('UNIQUE, FLATTEN and COUNTUNIQUE read past an error in their range', () => {
+        expect(evaluate('=UNIQUE(A2:A4)')).toBe(1);
+        expect(evaluate('=FLATTEN(A2:A4)')).toBe(1);
+        expect(evaluate('=COUNTUNIQUE(A2:A4)')).toBe(3);
+    });
+
+    test('a lookup hands on an error in its options, where it reads past one in its table', () => {
+        expect(evaluate('=VLOOKUP("a",B2:C4,2,F1)')).toBe('#N/A');
+        expect(evaluate('=HLOOKUP("a",A2:C4,2,B1)')).toBe('#DIV/0!');
+        expect(evaluate('=INDEX(A7:F7,F1)')).toBe('#N/A');
+        expect(evaluate('=MATCH(3,A2:A4,B1)')).toBe('#DIV/0!');
+        expect(evaluate('=XMATCH(3,A2:A4,B1)')).toBe('#DIV/0!');
+        expect(evaluate('=XLOOKUP(3,A2:A4,C2:C4,"none",B1)')).toBe('#DIV/0!');
+        expect(evaluate('=XLOOKUP(3,A2:A4,C2:C4,F1)')).toBe(3);
+        expect(evaluate('=XLOOKUP(9,A2:A4,C2:C4,F1)')).toBe('#N/A');
+        expect(evaluate('=LOOKUP(3,A2:A4,C2:C4)')).toBe(3);
+    });
+
     test('IFS and SWITCH hand on an error they reach, and not one past the value they return', () => {
         expect(evaluate('=IFS(F1>0,1,TRUE,2)')).toBe('#N/A');
         expect(evaluate('=IFERROR(IFS(F1>0,1,TRUE,2),"none")')).toBe('none');
@@ -427,6 +466,14 @@ describe('engine/formula-engine — an error held in a cell', () => {
         expect(evaluate('=AGGREGATE(14,6,A2:A4,2)')).toBe(1);
         expect(evaluate('=AGGREGATE(9,4,A2:A4)')).toBe('#DIV/0!');
         expect(evaluate('=AGGREGATE(9,6,F1)')).toBe(0);
+    });
+
+    test('AGGREGATE reads every reference it is given, an error in any of them included', () => {
+        expect(evaluate('=AGGREGATE(4,6,A7:F7,A2:A4)')).toBe(32);
+        expect(evaluate('=AGGREGATE(9,6,A2:A4,A7:F7)')).toBe(67);
+        expect(evaluate('=AGGREGATE(2,6,A2:A4,A7:F7,C2:C4)')).toBe(10);
+        expect(evaluate('=AGGREGATE(9,4,A7:F7,A2:A4)')).toBe('#DIV/0!');
+        expect(evaluate('=AGGREGATE(14,6,A2:A4,F1)')).toBe('#N/A');
     });
 
     test('#SPILL!, #ERROR! and #CALC! a cell holds are errors that IFERROR and ISERROR see', () => {

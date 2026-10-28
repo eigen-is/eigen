@@ -59,8 +59,10 @@ const BRANCHES: Record<string, (position: number, count: number) => boolean> = {
 };
 
 // The arguments each function reads an error in itself, where any other hands the error on, as in Excel. ISERROR
-// and IFERROR inspect it, COUNT skips it, and a lookup or an *IF function reads past the cells it doesn't land on.
-// IFS and SWITCH stop at the condition that holds, so they hand on only an error they reach.
+// and IFERROR inspect it, COUNT skips it, a lookup reads past the cells it doesn't land on, and an *IF function
+// matches an error cell, an error criterion too, by the text it shows. A lookup's options are not exempt:
+// VLOOKUP's range_lookup or MATCH's match_type as an error is that error. IFS and SWITCH stop at the condition that
+// holds, so they hand on only an error they reach.
 const all = () => true;
 const READS_ERRORS: Record<string, (position: number) => boolean> = {
     ISBLANK: all,
@@ -77,32 +79,35 @@ const READS_ERRORS: Record<string, (position: number) => boolean> = {
     IFNA: (i) => i === 0,
     IFS: all,
     SWITCH: all,
-    // The range, which its options may tell it to read errors in.
-    AGGREGATE: (i) => i === 2,
+    // The references, which its options may tell it to read errors in.
+    AGGREGATE: (i) => i >= 2,
     COUNT: all,
     COUNTA: all,
     COUNTBLANK: all,
-    // The ranges, not the criteria.
-    COUNTIF: (i) => i === 0,
-    COUNTIFS: (i) => i % 2 === 0,
-    SUMIF: (i) => i !== 1,
-    AVERAGEIF: (i) => i !== 1,
-    SUMIFS: (i) => i % 2 === 1 || i === 0,
-    AVERAGEIFS: (i) => i % 2 === 1 || i === 0,
-    MAXIFS: (i) => i % 2 === 1 || i === 0,
-    MINIFS: (i) => i % 2 === 1 || i === 0,
-    // The ranges, not the value looked up.
-    HLOOKUP: (i) => i > 0,
+    COUNTIF: all,
+    COUNTIFS: all,
+    SUMIF: all,
+    AVERAGEIF: all,
+    SUMIFS: all,
+    AVERAGEIFS: all,
+    MAXIFS: all,
+    MINIFS: all,
+    // The table or arrays, not the value looked up nor the options. XLOOKUP's if_not_found is returned as it is.
+    HLOOKUP: (i) => i === 1,
     LOOKUP: (i) => i > 0,
-    MATCH: (i) => i > 0,
-    VLOOKUP: (i) => i > 0,
-    XLOOKUP: (i) => i > 0,
-    XMATCH: (i) => i > 0,
+    MATCH: (i) => i === 1,
+    VLOOKUP: (i) => i === 1,
+    XLOOKUP: (i) => i >= 1 && i <= 3,
+    XMATCH: (i) => i === 1,
     INDEX: (i) => i === 0,
     COLUMNS: all,
     ROWS: all,
     // The engine keeps an array result's top-left value, which an error elsewhere in the array doesn't change.
+    FLATTEN: all,
     TRANSPOSE: all,
+    UNIQUE: all,
+    // Google Sheets' count of distinct values, an error among them, as COUNTA counts one.
+    COUNTUNIQUE: all,
 };
 
 // A name Excel doesn't know either, such as a typo, is #NAME? in-band, so IFERROR and ISERROR around it see it as they
@@ -128,8 +133,8 @@ export function callFunction(name: string, params: FunctionArg[] = []): FormulaO
 }
 
 // Arithmetic and comparison operators coerce their operands, which would swallow an upstream Error: `Error + 1`
-// would be 1 and `Error > 0` FALSE. So they hand the first Error on unchanged, as Excel does. Functions don't, because
-// some of them, such as IF and IFERROR, inspect an Error operand.
+// would be 1, `Error > 0` FALSE and a range's `&` its text. So they hand the first Error on unchanged, a range's
+// included, as Excel does. A function does the same in `callFunction`, but for the arguments it reads errors in.
 const symbolOperators: (OperatorCallable & { SYMBOL: string })[] = [
     add,
     ampersand,
@@ -145,7 +150,7 @@ const symbolOperators: (OperatorCallable & { SYMBOL: string })[] = [
     minus,
 ];
 for (const operator of symbolOperators) {
-    availableOperators[operator.SYMBOL] = (...params) => params.find((p) => p instanceof Error) ?? operator(...params);
+    availableOperators[operator.SYMBOL] = (...params) => firstError(params) ?? operator(...params);
 }
 
 // Each formulajs name, and each function the engine adds, gets the callable that closes over it.
