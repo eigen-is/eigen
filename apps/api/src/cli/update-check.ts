@@ -17,6 +17,8 @@ export const CHANGELOG_PATH = join(ROOT, 'CHANGELOG.md');
 export const FULL_BACKUP_MARKER = '(full backup)';
 // A release whose update asks first, and refuses without a terminal.
 const BREAKING_MARKER = '(breaking)';
+// The section of what is merged and not released yet, which a build of the main channel runs.
+const UNRELEASED = 'Unreleased';
 const HEADING = /^\[([^\]]+)\]/;
 // A terminal shows a link as its text and its URL, a word wrap() keeps whole.
 const plainLinks = (text: string) => text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1 ($2)');
@@ -33,7 +35,8 @@ A breaking change is asked about on a terminal and refused elsewhere (run by ./e
 
   --accept-breaking   Go ahead despite breaking changes
   --level             Print only the level of the backup the update makes first: level=full when a release
-                      since <version> has breaking changes or is marked ${FULL_BACKUP_MARKER}, else level=light`;
+                      since <version> has breaking changes or is marked ${FULL_BACKUP_MARKER}, else level=light.
+                      A build of the main channel reads [Unreleased] too`;
 
 export async function updateCheck(
     flags: ReturnType<typeof parseArgs<{ options: typeof UPDATE_CHECK_OPTIONS }>>['values'],
@@ -49,11 +52,15 @@ export async function updateCheck(
     }
 
     // What changed since `from` up to this image.
-    const notes = releaseNotes(readFileSync(CHANGELOG_PATH, 'utf8'), from, VERSION);
+    const changelog = readFileSync(CHANGELOG_PATH, 'utf8');
     if (flags.level) {
-        console.log(`level=${backupLevel(notes)}`);
+        // A build of the main channel runs what is still under [Unreleased], and shares its version with the build
+        // before it, so a migration it carries is marked there.
+        const channel = Boolean(process.env['EIGEN_CHANNEL']);
+        console.log(`level=${backupLevel(releaseNotes(changelog, from, VERSION, channel))}`);
         return;
     }
+    const notes = releaseNotes(changelog, from, VERSION);
     for (const { version, intro, breaking } of notes) {
         console.log(glyphLine('active', `Eigen ${version}`));
         for (const line of wrap(intro, 76)) if (line) console.log(glyphLine('bar', line));
@@ -89,34 +96,34 @@ function markedLines(lines: string[], marker: string): string[] {
 }
 
 // The CHANGELOG sections after `from` up to `to`, oldest first, with their intro and their (breaking) and (full backup)
-// lines; no [Unreleased].
-export function releaseNotes(changelog: string, from: string, to: string): ReleaseNote[] {
-    return changelog
-        .split(/^## /m)
-        .flatMap((section) => {
-            const [heading = '', ...lines] = section.split('\n');
-            const version = HEADING.exec(heading)?.[1];
-            if (
-                !version ||
-                !VERSION_PATTERN.test(version) ||
-                Bun.semver.order(version, from) <= 0 ||
-                Bun.semver.order(version, to) > 0
-            )
-                return [];
-            const start = lines.findIndex((line) => line.trim());
-            const end = lines.findIndex((line, index) => index > start && !line.trim());
-            const paragraph = lines.slice(start, end === -1 ? undefined : end).map((line) => line.trim());
-            return [
-                {
-                    version,
-                    // A section that opens with a heading or a list has no intro.
-                    intro: /^[#*-]/.test(paragraph[0] ?? '') ? '' : plainLinks(paragraph.join(' ')),
-                    breaking: markedLines(lines, BREAKING_MARKER),
-                    fullBackup: markedLines(lines, FULL_BACKUP_MARKER),
-                },
-            ];
-        })
+// lines. [Unreleased] comes last when `unreleased` is set, and is left out otherwise.
+export function releaseNotes(changelog: string, from: string, to: string, unreleased = false): ReleaseNote[] {
+    const sections = changelog.split(/^## /m).flatMap((section) => {
+        const [heading = '', ...lines] = section.split('\n');
+        const version = HEADING.exec(heading)?.[1];
+        return version ? [{ version, lines }] : [];
+    });
+    const released = sections
+        .filter(
+            ({ version }) =>
+                VERSION_PATTERN.test(version) &&
+                Bun.semver.order(version, from) > 0 &&
+                Bun.semver.order(version, to) <= 0,
+        )
         .sort((a, b) => Bun.semver.order(a.version, b.version));
+    const pending = unreleased ? sections.filter(({ version }) => version === UNRELEASED) : [];
+    return [...released, ...pending].map(({ version, lines }) => {
+        const start = lines.findIndex((line) => line.trim());
+        const end = lines.findIndex((line, index) => index > start && !line.trim());
+        const paragraph = lines.slice(start, end === -1 ? undefined : end).map((line) => line.trim());
+        return {
+            version,
+            // A section that opens with a heading or a list has no intro.
+            intro: /^[#*-]/.test(paragraph[0] ?? '') ? '' : plainLinks(paragraph.join(' ')),
+            breaking: markedLines(lines, BREAKING_MARKER),
+            fullBackup: markedLines(lines, FULL_BACKUP_MARKER),
+        };
+    });
 }
 
 function hasBreaking(notes: ReleaseNote[]): boolean {
