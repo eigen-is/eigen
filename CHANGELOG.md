@@ -4,23 +4,28 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-28
+
+Docs gets page-less documents, text boxes, a table of contents and an outline, and an image can sit behind or in front of the text. In Sheets you can style part of a cell's text, and undo keeps up with other people's edits. In Slides and Vector you can type in shapes, and charts can show their values. After you update, reload any Docs document you have open, or a tab still on 0.4.0 deletes the text boxes and tables of contents it receives and can shrink wide tables for everyone.
+
 ### Added
 
 - **Page-less documents in Docs** — **File → Page setup…** or **Format** turns a document into one continuous column with no page breaks, headers or footers, as in Google Docs. It still prints on its paper
 - **Text width** — pick **Narrow**, **Medium**, **Wide** or **Full** for page-less documents. Your width follows you to every device, and the people you share with keep theirs
-- **Wide tables and images** — in a page-less document, a table can grow past the text and scroll sideways, and an image or chart can be as wide as the paper. A Word file in Web Layout opens page-less, and a page-less document downloads in Web Layout
+- **Wide tables and images** — in a page-less document, a table can grow past the text and scroll sideways, and an image or chart can be as wide as the paper
+- **Page-less Word files** — a Word file in Web Layout opens page-less, and a page-less document downloads in Web Layout
 - **Text boxes in Docs** — **Insert › Text box** adds a box you type in where it stands. Place it in line, beside, behind or in front of the text, and drag it anywhere
 - **A text box's look** — the **Text box** panel sets its size, fill, outline, corners, padding and where its text sits. The box grows with its text
 - **Text boxes in Word files** — come in and go out as text boxes, in place and with their look. One inside a header, footer, footnote, group or drawing canvas comes in as text
-- **Images behind or in front of the text** — in Docs, an image or chart can sit behind or in front of the text, anywhere on the page, and moves with its paragraph. Word files keep it there. On a phone, **Format → Image** has the same layouts
+- **Images behind or in front of text** — in Docs, drag an image or chart anywhere, behind or in front of the text. It moves with its paragraph, and Word files keep it. On a phone, use **Format → Image**
 - **Image and chart size in Docs** — set the width and height in centimeters, with **Keep aspect ratio**. A stretched image stays stretched in prints, downloads and Word files
 - **Table borders in Docs** — all borders, a box or none, in any color, from the **Table** panel or **Format › Table**. A new row or column copies its neighbor's borders and fill
 - **Table borders in Word files** — keep their colors, widths and dashes both ways, and a borderless Word table stays borderless
-- **Outline in Docs** — **Tools → Show outline** lists the headings on the left. Click one to jump there. On a desktop it stays open across documents in that browser, and on a phone it's in the **⋮** menu
+- **Outline in Docs** — **Tools → Show outline** lists the headings on the left. Click one to jump there. On a desktop it stays open across documents in that browser, on a phone it's in the **⋮** menu
 - **Table of contents in Docs** — **Insert → Table of contents** lists the headings down to Heading 3 and stays up to date. Click a line to jump. PDFs show page numbers, and Word downloads hold Word's own
 - **Tables of contents in Word files** — come in as a live table of contents, and the import message says when its entries differed. A **Contents** title above it stays normal text, not a Heading 1
 - **Bra-ket notation in equations** — `\bra`, `\ket`, `\braket`, `\expval`, `\mel` and `\ketbra` in Docs equations, with brackets that grow to fit
-- **Styling part of a cell in Sheets** — while you edit a cell, make selected words bold, italic, underlined, struck through, or another color, font or size. Pasted text comes in plain, as in Google Sheets. Excel downloads keep the styles
+- **Styling part of a cell in Sheets** — while you edit a cell, make selected words bold, italic, underlined, struck through, or another color, font or size. Pasted text comes in plain, and Excel downloads keep the styles
 - **Italic and underline shortcuts in Sheets** — **Ctrl+I** and **Ctrl+U** (Mac: **⌘I**, **⌘U**) work on selected cells, and with **Ctrl+B** on selected words in a cell
 - **Slides on a phone** — a row of slide thumbnails sits under the slide. Tap one to jump to it
 - **SmartArt in PowerPoint files** — comes in as shapes and text you can edit. One saved without its shapes, as LibreOffice does, leaves a **SmartArt not imported** box with its text
@@ -28,77 +33,80 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **What a download left out** — after a download, or a print from Docs, a message counts what the file left out or drew simpler, and says when part of it couldn't be read
 - **Preferences in Space** — a new page for the theme (Light, Dark or System) and Celebrations
 - **Celebrations** — now and then, ticking the last box of a checklist on a Stickies card or a comment card bursts confetti
-- **Text in shapes** — in Vector and Slides, double-click a rectangle, diamond or ellipse, or select it and press Enter, to type in it. The text goes with the shape, and text that does not fit spills out past its edge
+- **Text in shapes** — in Vector and Slides, double-click a rectangle, diamond or ellipse, or select it and press Enter, to type in it. Text that does not fit spills past its edge
 
 ### Changed
 
-- **Open documents after the update** — reload any Docs document you have open. A tab still on the previous version deletes the text boxes and tables of contents it receives, and can shrink wide tables for everyone
 - **Labels in sentence case** — buttons, menus, dialogs and fields in Admin, Calendar, Chat, Contacts, Docs, Drive, Mail, Sheets, Space and Stickies capitalize only the first word and names, such as **Reply all**
 - **Menus in Docs, Sheets, Slides, Vector and Stickies** — with a menu open, point at another or use the arrow keys to open it. One click switches menus
 - **Links** — underlined, as in Word and Google Docs, in Docs and its downloads, Stickies, the email you write in Mail, the help center and the blog
 - **Tables in Docs** — a table keeps its column widths when the page gets narrower, and scrolls sideways. A table in a list or a cell still shrinks
 - **Decimals** — Docs margins show two decimals, such as 2.00 cm. Number fields in Slides and Vector show at most two, and line height and letter spacing at least one, such as 1.0
 - **Shortcuts in the Sheets menus** — **Edit** shows the shortcut of Undo, Redo, Cut, Copy, Paste, Find and Find and replace, and **Format → Text** shows it for Bold, Italic and Underline
-- **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width. A web page download keeps more while all its rows fit
-- **Shapes in PowerPoint files** — a shape with text imports as one shape that holds its text, and exports as one shape. A text box, a title, text on a line or arrow, and turned text still come in as text boxes
+- **How far undo goes in Sheets** — back 200 steps, and no further back than the tenth latest insert or delete of rows, columns or sheets
+- **Large sheets in PDFs** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width. A web page download keeps more while all its rows fit
+- **Shapes in PowerPoint files** — a shape with text imports and exports as one shape holding its text. Text boxes, titles, text on a line or arrow, and turned text stay text boxes
 - **Forwarding email** — a forward brings the original's attachments, inline pictures too. Remove one with the **X** on its chip
 - **Contacts** — the list fills the page until you open a contact. A link to a deleted contact opens to **Contact not found**
 - **Teams in Admin** — teams get a list page, like users. To add people, select them on the **Users** page, right-click and choose **Add to team…**, which replaces dragging them onto a team
 - **Users in Admin** — a user's details list their teams, with **Add to team** and a **×** to take them out of one
+- **Restore commands in Admin** — the server backup settings show each restore command with a copy button
 - **Space home** — admins get an Admin tile, and **Help and support** takes the help center's teal
 - **Help center colors** — each app's section shows its title in the app's color, such as amber for Mail
 
 ### Fixed
 
-- **Undo in Sheets while others edit** — undo finds your cell after others insert or delete rows, columns or sheets, and skips a cell someone changed after you. Undoing a row, column or sheet change keeps their edits, and undoing a row delete restores the formulas it broke
-- **Formulas after an undo** — every formula an undo or redo touches shows what its cells give now, also when someone else changed one
+- **Undo in Sheets while others edit** — undo finds your cell after others insert or delete rows, columns or sheets, skips a cell someone else changed since, and keeps their edits
+- **Formulas after an undo** — every formula an undo or redo touches shows what its cells give now, and undoing a row delete repairs the formulas it broke
 - **Others' edits in Sheets** — show up on a sheet you never opened, and while the spreadsheet is still opening. Closing a spreadsheet leaves everyone else's view and undo history alone
 - **Typing in a cell while others edit** — your cell moves with its row or column as others insert or delete them, so Enter writes where you meant. If they delete it, the edit closes
 - **Formulas across sheets** — a formula that points at another sheet follows the rows and columns inserted or deleted there, in downloads and previews too, and for whoever opens it next
 - **Undo while you type in a cell** — **Ctrl+Z** (Mac: **⌘Z**) undoes only your typing
 - **Delete in Sheets** — Delete and Backspace clear cells, links too, and keep their formatting, as in Excel and Google Sheets
-- **Errors in Sheets formulas** — a formula sees an error in a cell it reads, as in Excel. With 1/0 in B1, `=IFERROR(B1,"none")` gives none and `=B1+1` gives #DIV/0!. CONCAT, TEXTJOIN, `&`, IFS and SWITCH hand an error on, `COUNTIF(…,NA())` counts error cells, and the ignore-errors options of AGGREGATE work
+- **Errors in Sheets formulas** — a formula sees an error in a cell it reads: with 1/0 in B1, `=IFERROR(B1,"none")` gives none and `=B1+1` gives #DIV/0!. COUNTIF counts the error cells you name, and AGGREGATE can skip them
 - **Errors in Excel files** — error cells such as #N/A import and export as errors, and `#N/A` typed into a text-formatted cell stays text
-- **IFERROR in Sheets** — it gives its fallback for a name Sheets doesn't know, such as a typo. An Excel function Sheets can't calculate yet, such as FILTER, shows #NAME?, unless a branch of IF, CHOOSE, IFS or SWITCH skips it, and an imported file keeps the value Excel saved
+- **IFERROR in Sheets** — gives its fallback for a mistyped name. An Excel function Sheets can't calculate yet, such as FILTER, shows #NAME? unless IF, CHOOSE, IFS or SWITCH skips it. An imported file keeps Excel's value
 - **Sheets shortcuts on other keyboard layouts** — copy and cut work on Dvorak, and bold, italic and underline work in a cell on Russian and Greek layouts. On a Mac they take **⌘**, as in Docs
-- **Row height in Sheets** — **Wrap** or a bigger font size makes the row tall enough for the text
-- **Wrapped text in Sheets** — a cell that mixes styles breaks its lines between words
+- **Wrapped text in Sheets** — **Wrap** or a bigger font size makes the row tall enough for the text, and a cell that mixes styles breaks its lines between words
 - **Color scales in Sheets** — short colors such as `#f00` shade cells instead of leaving them blank
+- **Conditional colors in Sheets** — a cell a rule colors keeps that color while you type in it, and when you copy it into another app
+- **Link cards in Sheets** — a menu or dialog open over a link cell no longer shows that cell's link card
 - **Resizing a chart in Sheets** — a large sketched chart keeps up with the pointer
 - **Sheets menus on a phone** — all six menus fit a 390 pixel wide screen, and a narrower one scrolls
-- **Names in search** — comment matches in the command palette show who wrote last by name, not email address. Search finds a chat message or emote by the name of the person in it as well as their email address
-- **Searching for spreadsheets** — search finds a spreadsheet by its charts' titles, axis titles and series names
-- **Inserting an Excel file in Sheets** — an insert that would make the spreadsheet larger than an import allows is refused with **This spreadsheet is too large to import**, and nothing changes. Before, repeated inserts could grow a spreadsheet without limit
-- **Excel named ranges** — a formula like `=SUM(Sales)` keeps working as its cells change, though the name itself isn't kept, and a dropdown from a named range comes in as a list. Names Eigen can't follow are counted in the import message
+- **Names and charts in search** — search finds a chat message or emote by a person's name, and a spreadsheet by its charts' titles and series names. Comment results in the command palette name who wrote last
+- **Inserting an Excel file in Sheets** — an insert that would make the spreadsheet larger than an import allows is refused with **This spreadsheet is too large to import**, and nothing changes
+- **Excel named ranges** — a formula like `=SUM(Sales)` keeps working as its cells change, though the name isn't kept. A dropdown from a named range comes in as a list, and the import message counts names Eigen can't follow
 - **Excel row heights** — a normal-height row with wrapped text stays normal, and Excel downloads keep the heights Eigen shows
 - **Copied charts** — a chart copied from Sheets into Docs, Slides or Vector keeps its axis number format, so 25% doesn't turn into 0.25
 - **100% stacked charts in Office downloads** — the axis runs from 0% to 100%
 - **Spreadsheet PDF** — thousands of small sheets print the first 2,000 instead of failing, and a cell of thousands of lines prints on one page
-- **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads with the ones that fit instead of failing, and its preview shows them. A picture too large to process is left out too. In a PDF, many large PNG pictures count against that limit, photos don't
+- **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads with the ones that fit instead of failing, and so does its preview. A picture too large to process is left out
 - **Spreadsheet previews** — a merged cell cut off at the edge shows no border there. An image or chart on a sheet with hidden columns shows within the first 50 visible columns
 - **Wide tables in Docs PDFs** — a table wider than the page fits it in the PDF and web page download, with no columns cut off. A word too long for its column breaks inside its cell
 - **Long tables in Docs PDFs** — a table continues on the next page instead of jumping there whole, and a tall row splits, as in Word
-- **Pictures in downloads** — a document, spreadsheet or deck with photos downloads as a PDF much faster and at a fraction of the size. PDF, Word, PowerPoint and Excel files hold photos and screenshots as JPEG, and only see-through pictures as PNG. A web page download keeps its pictures as before
-- **Pasted photos in Docs downloads** — web page and PDF downloads strip a pasted photo's camera details and location, as Word downloads did. An animated GIF shows its first frame, and an image that can't be cleaned is left out
+- **Pictures in downloads** — a document, spreadsheet or deck with photos downloads as a PDF much faster and at a fraction of the size. Office files and PDFs hold photos and screenshots as JPEG, and only see-through pictures as PNG
+- **Pasted photos in Docs downloads** — web page and PDF downloads strip a pasted photo's camera details and location, as Word downloads do. An animated GIF shows its first frame, and an image that can't be cleaned is left out
+- **Pictures in footnotes** — a picture in a Docs footnote sits on a line of its own, not beside the note's text
 - **Comments in downloads** — web page downloads and Drive previews show commented text without the yellow highlight
 - **Long code blocks** — many long code blocks with no language set no longer stall a download or preview. Past about 65,000 characters in all, the rest has no syntax colors
 - **PowerPoint arrows** — bent and curved connectors keep their arrowheads. A bent one with three or more right-angle legs comes in as an elbow arrow, other bent ones as a sharp arrow, a curved one as a curved arrow
 - **Saving a text file in Drive** — a save over someone else's newer change shows **File conflict** instead of overwriting it. Recent activity lists your save as an edit, not an upload
-- **Paths in Drive** — a file or folder shared with you shows its path from **Shared with me**, a public one from the first folder you can open, and one on a team drive from the drive's name. Each folder in it is a link
+- **Paths in Drive** — a file or folder shared with you shows its path from **Shared with me**, a public one from the first folder you can open, a team drive's from the drive's name, each folder a link
 - **Closing a text file shared on its own** — takes you back to **Shared with me**, not to an access request for its folder
-- **Team drives** — a file someone adds, renames, moves or trashes in a team drive or shared folder shows in the open view of everyone who can open it at once. A big upload fills the list as it goes
+- **Team drives** — a file someone adds, renames, moves or trashes in a team drive or shared folder shows at once in the open view of everyone who can open it. A big upload fills the list as it goes
 - **Trash in Drive** — a file or folder deleted for good leaves the Trash in your other tabs too
 - **Unread counts in Mail** — reading a message in another mail app clears its count at once
 - **Sharing a calendar** — the list of who has access refreshes at once in every open tab when a calendar is shared or stops being shared
 - **New events late in the evening** — in Calendar, a new event made after 23:15 ends on the next day instead of before it starts. So does one with **All day** turned off that late
+- **Job titles in Contacts** — a contact with a job title and no company shows the title under the name
 - **Finding a person in a filter** — **Home** and **End** in a person search, such as Stickies' **Filter › Assigned to**, move the cursor on Windows and Linux
 - **Passwords with accents** — a password with accents or other non-English letters works for calendar, contacts and file sync
 - **Last active in Admin** — a mail, calendar or file client that signs in with an account's password no longer counts, so it shows when the person last used Eigen in a browser
 - **Picking a theme** — the theme changes the moment you pick it, without a **Settings saved** message
-- **Deleting a team in Admin** — removes its drives, files and calendar from the server. The default team has no delete button. A team being backed up or restored can't be deleted, and the dialog stays open with the reason
-- **Backups on a shared server** — `data/`, backups, `./eigen`'s log and what a backup, check or restore unpacks are readable by Eigen's own user alone, 0.4.0's home backups too from the next start. `backups/` stays readable. A user or team being deleted can't be restored
+- **Deleting a team in Admin** — removes its drives, files and calendar from the server. A team being backed up or restored can't be deleted, and the dialog says why. The default team has no delete or remove buttons
+- **Backups on a shared server** — `data/`, backups, `./eigen`'s log and what a backup, check or restore unpacks are readable by Eigen's own user alone. 0.4.0's home backups close at the next start, and `backups/` itself stays readable
 - **Updates on the main channel** — an update to a new build of `main` makes a Full backup when a change not released yet is marked as needing one
-- **Restore and rollback** — when one would set aside the folder of a user or team made since the backup, it lists them and asks again before it stops Eigen
+- **Restore and rollback** — when one would set aside the folder of a user or team made since the backup, it lists them and asks again before it stops Eigen. A user or team being deleted can't be restored
 - **Setup copies of the accounts** — `./eigen status` lists each copy of the login database that setup kept, and how to delete it
 
 ## [0.4.0] - 2026-10-26
