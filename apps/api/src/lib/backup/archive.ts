@@ -91,7 +91,7 @@ async function* fileEntryChunks(
     yield padding(size);
 }
 
-export type ArchiveWriter = {
+export type ServerArchiveWriter = {
     appendFile(name: string, sourcePath: string): Promise<void>;
     finish(manifest: Omit<ServerArchiveManifest, 'entries'>): Promise<ServerArchiveManifest>;
     abort(): Promise<void>;
@@ -102,7 +102,7 @@ export type ArchiveWriter = {
 // with manifest.json listing them all, so the manifest is always the last member. The file is
 // written where the caller says; the caller writes to a temp name and renames it into place, and
 // calls abort() in a finally, which takes back an archive finish() never closed.
-export async function createArchiveWriter(archivePath: string): Promise<ArchiveWriter> {
+export async function createServerArchiveWriter(archivePath: string): Promise<ServerArchiveWriter> {
     const handle = await fsp.open(archivePath, 'w', SERVER_MEMBER_MODE);
     const entries: BackupEntry[] = [];
     let written = 0;
@@ -155,7 +155,7 @@ export type ArchiveMember = ArchiveMemberAt & { sha256: string };
 
 // Where an artifact's compressed bytes are read from: a file of its own, or a member of a
 // whole-server archive, read in place.
-type ArtifactSource = string | ArchiveMember;
+type ArtifactSource = string | ArchiveMemberAt;
 
 // The artifact's bytes, decompressed. The two streams are wired by hand rather than through
 // `pipeline`, because a read that stops at the entry it wanted ends as an AbortError there.
@@ -176,7 +176,7 @@ async function* artifactBytes(source: ArtifactSource): AsyncGenerator<Uint8Array
 
 // Every file member of a whole-server archive in order, each hashed as it streams past: one read
 // says what the archive holds, where each member sits, and whether its bytes are the ones named.
-export async function readArchiveMembers(archivePath: string): Promise<ArchiveMember[]> {
+export async function hashArchiveMembers(archivePath: string): Promise<ArchiveMember[]> {
     const members: ArchiveMember[] = [];
     for await (const entry of tarEntries(fs.createReadStream(archivePath))) {
         if (entry.typeflag === '5') continue;
@@ -237,7 +237,7 @@ export async function readArchiveMember(member: ArchiveMemberAt): Promise<Uint8A
 }
 
 // Not Bun.write(dest, a sliced BunFile): Bun 1.4.2 ignores the slice there and writes the whole archive.
-export async function copyArchiveMember(member: ArchiveMember, destPath: string): Promise<void> {
+export async function copyArchiveMember(member: ArchiveMemberAt, destPath: string): Promise<void> {
     // A read stream refuses an `end` before its `start`, which is what an empty member's range is.
     if (member.bytes === 0) {
         fs.writeFileSync(destPath, '');
@@ -322,8 +322,8 @@ export function readUnpackedHome(
     return { folder, manifest };
 }
 
-// A sidecar in one rename from the staging folder, on the disk of the archives: a reader never sees half of one.
-// Indented by two, which ./eigen reads a server sidecar's top-level "state" line by.
+// A sidecar is written in the staging folder and renamed into place, so a reader never sees half of one.
+// The JSON is indented by two spaces: ./eigen finds a server sidecar's top-level "state" line by that indent.
 export async function writeRecord(target: string, value: unknown): Promise<void> {
     const tempPath = getBackupTempPath('.json');
     try {
@@ -343,8 +343,8 @@ export async function writeSidecar(
     await writeRecord(sidecarPath(artifactPath), { manifest, verify });
 }
 
-// Null when there is none, or none that reads, as for a server archive's record: an artifact copied in by hand has
-// none, and the list shows it as unverified until a verify job writes one.
+// Null when there is no sidecar or it does not read. An artifact copied in by hand has none, and the list shows
+// it as unverified until a verify job writes one.
 export async function readSidecar(
     artifactPath: string,
 ): Promise<{ manifest: BackupManifest; verify: BackupVerifyRecord } | null> {

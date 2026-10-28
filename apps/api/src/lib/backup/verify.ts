@@ -20,7 +20,7 @@ import { PATHS, SERVER_DATABASES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { hashFile } from '../storage/deadline';
 import type { ArchiveMember, ArchiveMemberAt } from './archive';
-import { listArchiveMembers, readArchiveMember, readArchiveMembers } from './archive';
+import { hashArchiveMembers, listArchiveMembers, readArchiveMember } from './archive';
 import {
     archivePath,
     checkArchivedPathRows,
@@ -344,7 +344,7 @@ export async function readServerArchive(archivePath: string): Promise<ReadServer
     });
     let members: ArchiveMember[];
     try {
-        members = await readArchiveMembers(archivePath);
+        members = await hashArchiveMembers(archivePath);
     } catch (error) {
         // A cut-off or foreign tar is a verdict on the archive, not an error of the check.
         return failed([describeError(error)]);

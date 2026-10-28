@@ -21,11 +21,11 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import {
     copyArchiveMember,
-    createArchiveWriter,
+    createServerArchiveWriter,
     extractArtifact,
+    hashArchiveMembers,
     packFolder,
     readArchiveMember,
-    readArchiveMembers,
     readArtifactManifest,
     readSidecar,
     readUnpackedHome,
@@ -655,7 +655,7 @@ describe('Whole-server archive', () => {
         const teamId = await createTeam(ctx, getServerConfig()!.orgId, `Archive Team ${Date.now()}`);
         dir = mkdtempSync(join(TEST_DATA_DIR, 'server-archive-'));
         archivePath = join(dir, buildServerArchiveName('manual', 'full-s3', at));
-        const writer = await createArchiveWriter(archivePath);
+        const writer = await createServerArchiveWriter(archivePath);
         try {
             const serverStaging = mkdtempSync(join(TEST_DATA_DIR, 'server-member-'));
             await snapshotServer(serverStaging, at);
@@ -723,13 +723,13 @@ describe('Whole-server archive', () => {
     }
 
     test('lists every member in order, the manifest last', async () => {
-        const members = await readArchiveMembers(archivePath);
+        const members = await hashArchiveMembers(archivePath);
         expect(members.map((member) => member.name)).toEqual(memberNames());
         expect(parseServerArchiveName(basename(archivePath))).toEqual({ reason: 'manual', level: 'full-s3', at });
     });
 
     test('the manifest lists every other member with its bytes and sha256', async () => {
-        const members = await readArchiveMembers(archivePath);
+        const members = await hashArchiveMembers(archivePath);
         const read = parseServerArchiveManifest(new TextDecoder().decode(await readArchiveMember(members.at(-1)!)));
         expect(read).toEqual(manifest);
         expect(read!.entries).toEqual(
@@ -748,7 +748,7 @@ describe('Whole-server archive', () => {
     test(
         'each home member is its standalone per-home artifact, byte for byte, and verifies as one',
         async () => {
-            const members = await readArchiveMembers(archivePath);
+            const members = await hashArchiveMembers(archivePath);
             for (const home of homes) {
                 const member = members.find((m) => m.name === home.member)!;
                 const copy = join(mkdtempSync(join(TEST_DATA_DIR, 'member-copy-')), basename(member.name));
@@ -771,7 +771,7 @@ describe('Whole-server archive', () => {
     test(
         'the server member extracts and verifies with its databases',
         async () => {
-            const members = await readArchiveMembers(archivePath);
+            const members = await hashArchiveMembers(archivePath);
             const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'server-extract-'));
             await extractArtifact(members.find((m) => m.name === SERVER_ARCHIVE_SERVER_MEMBER)!, unpackDir);
             const folder = join(unpackDir, buildServerFolderName(at));
@@ -784,7 +784,7 @@ describe('Whole-server archive', () => {
     );
 
     test('a corrupted member fails the transport check, naming it', async () => {
-        const members = await readArchiveMembers(archivePath);
+        const members = await hashArchiveMembers(archivePath);
         const target = members.find((m) => m.name === homes[1].member)!;
         const bytes = await Bun.file(archivePath).bytes();
         const offset = target.offset + Math.floor(target.bytes / 2);
@@ -801,7 +801,7 @@ describe('Whole-server archive', () => {
         'a home member copied into the backups folder lists and restores as a per-home artifact',
         async () => {
             const { ownerId, member: memberName } = homes[1];
-            const member = (await readArchiveMembers(archivePath)).find((m) => m.name === memberName)!;
+            const member = (await hashArchiveMembers(archivePath)).find((m) => m.name === memberName)!;
             const name = basename(memberName);
             await copyArchiveMember(member, join(getBackupsDir(), name));
             try {
@@ -824,7 +824,7 @@ describe('Whole-server archive', () => {
         mkdirSync(certsDir, { recursive: true });
         for (const name of CERT_FILES) writeFileSync(join(certsDir, name), `${name} bytes`);
         chmodSync(join(certsDir, 'key.pem'), 0o000);
-        const writer = await createArchiveWriter(small);
+        const writer = await createServerArchiveWriter(small);
         try {
             const install = await appendInstallFiles(writer);
             expect(install).toEqual({ envFile: false, dkim: false, certs: false });
@@ -834,7 +834,7 @@ describe('Whole-server archive', () => {
             delete process.env['EIGEN_ENV_FILE'];
             rmSync(certsDir, { recursive: true, force: true });
         }
-        expect((await readArchiveMembers(small)).map((member) => member.name)).toEqual(['manifest.json']);
+        expect((await hashArchiveMembers(small)).map((member) => member.name)).toEqual(['manifest.json']);
     });
 
     test.skipIf(!HAS_TAR)('system tar lists the members in order', () => {
@@ -874,7 +874,7 @@ describe('Archive writer and reader', () => {
 
     async function writeArchive(name: string, members: [string, string][]): Promise<string> {
         const archivePath = join(dir, name);
-        const writer = await createArchiveWriter(archivePath);
+        const writer = await createServerArchiveWriter(archivePath);
         try {
             for (const [member, source] of members) await writer.appendFile(member, source);
             await writer.finish(fields);
@@ -892,7 +892,7 @@ describe('Archive writer and reader', () => {
             header.write(typeflag, 156);
             const archivePath = join(dir, `long-header-${typeflag}.tar`);
             writeFileSync(archivePath, Buffer.concat([header, Buffer.alloc(Math.ceil(size / 512) * 512 + 1024)]));
-            await expect(readArchiveMembers(archivePath)).rejects.toThrow('header');
+            await expect(hashArchiveMembers(archivePath)).rejects.toThrow('header');
         }
     });
 
@@ -905,7 +905,7 @@ describe('Archive writer and reader', () => {
             ['lead.txt', lead],
             ['big.bin', big],
         ]);
-        const member = (await readArchiveMembers(archivePath)).find((m) => m.name === 'big.bin')!;
+        const member = (await hashArchiveMembers(archivePath)).find((m) => m.name === 'big.bin')!;
         await expect(readArchiveMember(member)).rejects.toThrow('big.bin');
 
         const dest = join(dir, 'big-copy.bin');
@@ -930,7 +930,7 @@ describe('Archive writer and reader', () => {
             ['lead.txt', lead],
             ['empty.txt', empty],
         ]);
-        const member = (await readArchiveMembers(archivePath)).find((m) => m.name === 'empty.txt')!;
+        const member = (await hashArchiveMembers(archivePath)).find((m) => m.name === 'empty.txt')!;
         const dest = join(dir, 'empty-copy.txt');
         await copyArchiveMember(member, dest);
         expect(fs.statSync(dest).size).toBe(0);
@@ -938,7 +938,7 @@ describe('Archive writer and reader', () => {
 
     test('a member whose range runs past the end of the archive fails its copy and leaves no file', async () => {
         const archivePath = await writeArchive('cut.tar', [['lead.txt', lead]]);
-        const member = (await readArchiveMembers(archivePath)).find((m) => m.name === 'lead.txt')!;
+        const member = (await hashArchiveMembers(archivePath)).find((m) => m.name === 'lead.txt')!;
         fs.truncateSync(archivePath, member.offset + 4);
         const dest = join(dir, 'cut-copy.txt');
         await expect(copyArchiveMember(member, dest)).rejects.toThrow('lead.txt');
@@ -947,7 +947,7 @@ describe('Archive writer and reader', () => {
 
     test('a read error mid-copy fails the copy and leaves no file', async () => {
         const archivePath = await writeArchive('broken.tar', [['lead.txt', lead]]);
-        const member = (await readArchiveMembers(archivePath)).find((m) => m.name === 'lead.txt')!;
+        const member = (await hashArchiveMembers(archivePath)).find((m) => m.name === 'lead.txt')!;
         const dest = join(dir, 'broken-copy.txt');
         const realCreateReadStream = fs.createReadStream;
         const readStream = spyOn(fs, 'createReadStream').mockImplementation((path, options) => {
@@ -965,13 +965,13 @@ describe('Archive writer and reader', () => {
 
     test('abort removes a half-written archive and leaves a finished one alone', async () => {
         const partial = join(dir, 'partial.tar');
-        const writer = await createArchiveWriter(partial);
+        const writer = await createServerArchiveWriter(partial);
         await writer.appendFile('lead.txt', lead);
         await writer.abort();
         expect(existsSync(partial)).toBe(false);
 
         const finished = await writeArchive('finished.tar', [['lead.txt', lead]]);
-        expect((await readArchiveMembers(finished)).map((m) => m.name)).toEqual(['lead.txt', 'manifest.json']);
+        expect((await hashArchiveMembers(finished)).map((m) => m.name)).toEqual(['lead.txt', 'manifest.json']);
     });
 
     test('two members of one name fail the transport check', async () => {
@@ -990,7 +990,7 @@ describe('Archive writer and reader', () => {
         // finish() would put the real manifest after it, so the archive is taken before it closes.
         const building = join(dir, 'big-manifest-building.tar');
         const archivePath = join(dir, 'big-manifest.tar');
-        const writer = await createArchiveWriter(building);
+        const writer = await createServerArchiveWriter(building);
         try {
             await writer.appendFile('lead.txt', lead);
             await writer.appendFile('manifest.json', big);

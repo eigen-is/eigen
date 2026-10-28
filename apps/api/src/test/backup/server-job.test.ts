@@ -54,7 +54,7 @@ const pullHomeSnapshot = homeRelay.pullHomeSnapshot;
 const snapshotHome = snapshotModule.snapshotHome;
 const waitForHomeSlot = jobs.waitForHomeSlot;
 const packFolder = archive.packFolder;
-const createArchiveWriter = archive.createArchiveWriter;
+const createServerArchiveWriter = archive.createServerArchiveWriter;
 
 async function runJob(
     options: { level?: BackupLevel; reason?: BackupReason } = {},
@@ -482,8 +482,8 @@ describe('Server backup job', () => {
                     for (let i = 0; i < 3000; i++) writeFileSync(join(dir, 'clutter', `${i}.txt`), 'x');
                     packedAt.set(packed, turns.read());
                 }),
-                spyOn(archive, 'createArchiveWriter').mockImplementation(async (archivePath) => {
-                    const writer = await createArchiveWriter(archivePath);
+                spyOn(archive, 'createServerArchiveWriter').mockImplementation(async (archivePath) => {
+                    const writer = await createServerArchiveWriter(archivePath);
                     const appendFile = writer.appendFile;
                     writer.appendFile = (name, sourcePath) => {
                         const before = packedAt.get(sourcePath);

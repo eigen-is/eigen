@@ -32,8 +32,8 @@ import { pullHomeBackupBytes, pullHomeSnapshot } from '../home/home-relay';
 import { getTeamExists } from '../team/team';
 import { getUserById } from '../user';
 import { alertOwner } from '../user/alert-owner';
-import type { ArchiveWriter } from './archive';
-import { createArchiveWriter, packFolder } from './archive';
+import type { ServerArchiveWriter } from './archive';
+import { createServerArchiveWriter, packFolder } from './archive';
 import type { ServerHome } from './enumerate-homes';
 import { enumerateHomes } from './enumerate-homes';
 import { describeError } from './errors';
@@ -102,7 +102,7 @@ async function requireRoom(level: BackupLevel, homes: ServerHome[]): Promise<voi
     if (shortfall) throw new ApiError(507, shortfall);
 }
 
-async function appendPacked(writer: ArchiveWriter, member: string, packed: string): Promise<void> {
+async function appendPacked(writer: ServerArchiveWriter, member: string, packed: string): Promise<void> {
     try {
         await writer.appendFile(member, packed);
     } finally {
@@ -113,7 +113,7 @@ async function appendPacked(writer: ArchiveWriter, member: string, packed: strin
 // One home into the archive. A home that fails is named and the archive goes on: one broken bucket must not leave
 // every other home without a backup. A failed append is the archive's failure and ends the job.
 async function appendHome(
-    writer: ArchiveWriter,
+    writer: ServerArchiveWriter,
     home: ServerHome,
     { at, level, staging, onProgress }: { at: Date; level: BackupLevel; staging: string; onProgress: BackupProgress },
 ): Promise<ServerArchiveManifest['homes'][number]> {
@@ -157,7 +157,7 @@ async function writeServerArchive(
 ): Promise<ServerArchiveManifest> {
     const staging = getBackupStagingDir(job.id);
     const tempPath = getBackupTempPath(SERVER_ARCHIVE_EXTENSION);
-    const writer = await createArchiveWriter(tempPath);
+    const writer = await createServerArchiveWriter(tempPath);
     try {
         assertEnvFileMounted();
         await snapshotServer(staging, at, (_step, done, total) => onProgress('server', done, total));

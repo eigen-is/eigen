@@ -14,7 +14,7 @@ import { getOrgName, getPublicConfig } from '../config/server-config';
 import { isEnoent } from '../core';
 import { stageEigenDbCopy } from '../share/db';
 import { stageWaitlistDbCopy } from '../waitlist/waitlist';
-import type { ArchiveWriter } from './archive';
+import type { ServerArchiveWriter } from './archive';
 import { captureUnlessGone, captureWrittenFile, countEntries } from './capture';
 import {
     ARCHIVE_MANIFEST_FILE,
@@ -150,7 +150,7 @@ function listFiles(dir: string): string[] {
 // install's own env file, key and certificate, and a move to another machine needs new DKIM DNS and a new
 // certificate. There is no env file in `bun run dev`.
 export async function appendInstallFiles(
-    writer: ArchiveWriter,
+    writer: ServerArchiveWriter,
 ): Promise<{ envFile: boolean; dkim: boolean; certs: boolean }> {
     assertEnvFileMounted();
     const envFile = getEnvFile();
