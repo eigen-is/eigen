@@ -160,5 +160,6 @@
   "interface-decls": 3,
   "biome-ignore": 66,
   "jsdoc-blocks": 0,
-  "raw-colors": 0
+  "raw-colors": 0,
+  "unused-primitive-types": 0
 }

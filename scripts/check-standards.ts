@@ -5,6 +5,8 @@
 
 import { sentenceCaseHits } from './sentence-case';
 import { stripNoise } from './strip-noise';
+import type { ExportsMaps, Primitive, SourceFile } from './unused-primitives';
+import { readPrimitivesIndex, unusedPrimitives } from './unused-primitives';
 
 const BASELINE_PATH = 'scripts/standards-baseline.json';
 
@@ -46,6 +48,16 @@ const CANONICAL_MIMES = new Set(
 if (CANONICAL_MIMES.size === 0) {
     console.error(`ERROR: no DRIVE_MIME_* constants found in ${MIME_SOURCE} — the mime gate has nothing to check`);
     process.exit(1);
+}
+
+// CODE-STANDARDS § Standards Gates: a primitive the shared-primitives index lists needs a user outside its file. The
+// unused ones are found once, from every source file, before the per-file counts, and each counts against the file
+// that defines it.
+const PRIMITIVES_INDEX = 'docs/SHARED-PRIMITIVES.md';
+const unusedByFile = new Map<string, Primitive[]>();
+
+function unusedIn(path: string, types: boolean): number {
+    return (unusedByFile.get(path) ?? []).filter((primitive) => primitive.type === types).length;
 }
 
 const ROUTE_FILE = /^apps\/api\/src\/routes\/[^/]+\.ts$/;
@@ -143,14 +155,6 @@ function handDrawnMenuChecks({ path, code }: SourceFile): number {
     }
     return hits;
 }
-
-type SourceFile = {
-    path: string;
-    // Raw file text — use it for anything that lives in a comment, a string, or a class name.
-    text: string;
-    // Comments and literal contents blanked out — use it for anything identifier-shaped.
-    code: string;
-};
 
 type Metric = {
     id: string;
@@ -298,6 +302,18 @@ const METRICS: Metric[] = [
         count: ({ path, text }) => sentenceCaseHits(path, text).length,
     },
     {
+        id: 'unused-primitives',
+        label: 'Shared primitives nothing imports',
+        hardZero: true,
+        count: ({ path }) => unusedIn(path, false),
+    },
+    {
+        id: 'unused-primitive-types',
+        label: 'Shared types nothing imports',
+        hardZero: false,
+        count: ({ path }) => unusedIn(path, true),
+    },
+    {
         id: 'hover-without-touch',
         label: 'Hover-revealed affordances without touch',
         hardZero: true,
@@ -314,14 +330,30 @@ const METRICS: Metric[] = [
     },
 ];
 
-const paths = (await Bun.$`git ls-files apps packages`.text()).split('\n').filter(inScope);
+// Every source file, tests and scripts included, since any of them may use a primitive. The metrics count in the
+// non-test sources of apps and packages.
+const sources: SourceFile[] = [];
+for (const path of (await Bun.$`git ls-files apps packages scripts docker`.text()).split('\n')) {
+    if (!/\.(?:ts|tsx|js|jsx|mjs)$/.test(path) || GENERATED.some((tail) => path.endsWith(tail))) continue;
+    const text = await Bun.file(path).text();
+    sources.push({ path, text, code: stripNoise(text, path.endsWith('x')) });
+}
+
+const exportsMaps: ExportsMaps = {};
+for (const manifest of (await Bun.$`git ls-files 'packages/*/package.json'`.text()).split('\n').filter(Boolean)) {
+    exportsMaps[manifest.split('/')[1]] = (await Bun.file(manifest).json()).exports ?? {};
+}
+const primitives = unusedPrimitives(readPrimitivesIndex(await Bun.file(PRIMITIVES_INDEX).text()), sources, exportsMaps);
+for (const primitive of primitives.unused) {
+    unusedByFile.set(primitive.file, [...(unusedByFile.get(primitive.file) ?? []), primitive]);
+}
 
 const counts = new Map<string, number>(METRICS.map((metric) => [metric.id, 0]));
 const breakdown = new Map<string, Map<string, number>>(METRICS.map((metric) => [metric.id, new Map()]));
 
-for (const path of paths) {
-    const text = await Bun.file(path).text();
-    const file: SourceFile = { path, text, code: stripNoise(text, path.endsWith('.tsx')) };
+for (const file of sources) {
+    const { path } = file;
+    if (!/^(?:apps|packages)\//.test(path) || !inScope(path)) continue;
     for (const metric of METRICS) {
         const hits = metric.count(file);
         if (hits === 0) continue;
@@ -411,6 +443,14 @@ for (const metric of METRICS) {
         console.log(`    ${String(hits).padStart(4)}  ${path}`);
     }
 }
+
+// The primitives behind the two counts by name. Those only tests import are reported, not gated: many are pure helpers
+// that production reaches through a wrapper, tested on their own.
+for (const primitive of primitives.unused) console.log(`  unused: ${primitive.name} (${primitive.file})`);
+console.log(
+    `\n${primitives.testOnly.length} shared primitives only tests import${verbose ? ':' : ', --verbose lists them'}`,
+);
+if (verbose) for (const primitive of primitives.testOnly) console.log(`    ${primitive.name} (${primitive.file})`);
 
 if (failed.length === 0) process.exit(0);
 
