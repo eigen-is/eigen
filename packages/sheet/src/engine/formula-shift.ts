@@ -55,7 +55,7 @@ function shiftRef(txt: string, rowOffset: number, colOffset: number): string {
 // `functionCopy` (relative shift) and `functionStrChange` (insert/delete shift) are the
 // main consumers; they differ only in the per-ref transform they hand to `onRef`. The
 // dependency walker `isFunctionRange` looks similar but is a genuinely
-// different machine — a shunting-yard compiler that emits `luckysheet_*` postfix and
+// different machine — a shunting-yard compiler that emits nested `functions.*` calls and
 // carries single-quote / `{}` array / `""`-escape state this walker has no notion of —
 // so it is deliberately NOT built on this helper.
 //
