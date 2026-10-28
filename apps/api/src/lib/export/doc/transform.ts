@@ -10,6 +10,7 @@ import {
     DOC_PROSE_CLASS,
     FOOTNOTE_PARAGRAPH,
     footnotesInOrder,
+    isWidth,
     mmToPt,
     normalStyleProperties,
     PAGE_BAND_CLASS,
@@ -26,7 +27,7 @@ import type { EigendocBands } from '../../document/doc';
 import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
 import { docSchema } from '../../document/doc-schema';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
-import { BODY, CHARACTER_WIDTH_EM, FOOTNOTE_LOOK } from '../../document/looks';
+import { BODY, CHARACTER_WIDTH_EM, FOOTNOTE_LOOK, TABLE_CELL_PADDING } from '../../document/looks';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
 import type { EigendocExportFormat, ExportMediaLoader, TransformWarning } from '../../document/transform/protocol';
@@ -36,6 +37,7 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
+import { TWIPS_PER_PX } from '../../ooxml/wordml';
 import { dataUriMediaType, isDataUri } from '../../shared/data-uri';
 import { exportHtmlDocument } from '../html-document';
 import { withSvgFallbacks } from '../office-image';
@@ -100,6 +102,7 @@ export async function renderEigendocExport(
                 {
                     ...(pdf && { smallCapsFont: style.font }),
                     print: pdf,
+                    fittedTables: true,
                     pageFootnotes: pageNotes,
                     band: part !== 'body',
                     anchors: part === 'body',
@@ -122,25 +125,33 @@ export async function renderEigendocExport(
 }
 
 // A table drawn past the text column, as a page-less doc's may be, would run off the paper, so each one is fitted to the
-// column by its first row's widths, one factor for every cell. A column without a width keeps none.
+// column by its first row's widths, one factor for every cell, as Word's autofit shrinks one. Paper needs no column wide
+// enough to drag, so the floor is 1 px: 63 columns at the editor's 25 px floor are wider than A4's column. A column
+// without a width keeps none. A table in a cell fits that cell, its fitted columns less the cell's padding, as the
+// docx reader sizes one: a fixed column doesn't widen to hold it, so it would draw over the cells beside it.
 function withTablesFitted(node: JSONContent, columnPx: number): JSONContent {
-    const content = node.content?.map((child) => withTablesFitted(child, columnPx));
-    if (node.type !== 'table') return content ? { ...node, content } : node;
+    if (node.type !== 'table') {
+        const content = node.content?.map((child) => withTablesFitted(child, columnPx));
+        return content ? { ...node, content } : node;
+    }
     const total = (node.content?.[0]?.content ?? [])
         .flatMap((cell): unknown[] => (Array.isArray(cell.attrs?.['colwidth']) ? cell.attrs['colwidth'] : []))
         .filter(isWidth)
         .reduce((sum, width) => sum + width, 0);
-    const fit = columnFit(columnPx, total);
+    const fit = columnFit(columnPx, total, 1);
     const fitted = (cell: JSONContent): JSONContent => {
         const colwidth: unknown = cell.attrs?.['colwidth'];
-        if (!Array.isArray(colwidth)) return cell;
+        if (!Array.isArray(colwidth)) return withTablesFitted(cell, columnPx);
         const scaled = colwidth.map((width) => (isWidth(width) ? fit(width) : width));
-        return { ...cell, attrs: { ...cell.attrs, colwidth: scaled } };
+        const room =
+            scaled.length > 0 && scaled.every(isWidth)
+                ? scaled.reduce((sum, width) => sum + width, 0) - (2 * TABLE_CELL_PADDING.horizontal) / TWIPS_PER_PX
+                : columnPx;
+        const inner = withTablesFitted(cell, room);
+        return { ...inner, attrs: { ...inner.attrs, colwidth: scaled } };
     };
-    return { ...node, content: content?.map((row) => ({ ...row, content: row.content?.map(fitted) })) };
+    return { ...node, content: node.content?.map((row) => ({ ...row, content: row.content?.map(fitted) })) };
 }
-
-const isWidth = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0;
 
 // WeasyPrint lays a running element out again on every page, so a 4,000-paragraph header ran a PDF past its 60 s. Half
 // an A4 page, 421 pt, holds about 60 lines of 6 pt text, 200 characters a line, and a band taller than half the page

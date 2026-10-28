@@ -1,8 +1,9 @@
 // A doc's body or band as HTML, the DOM the editor holds, for the HTML and PDF exports and the doc preview alike. Each
-// node the static renderer draws otherwise is mapped here, such as a code block, a figure, a text box, a note, a table
-// of contents or a small-caps run on paper. The docx writer shares its link rule.
+// node the static renderer draws otherwise is mapped here, such as a code block, a table, a figure, a text box, a note,
+// a table of contents or a small-caps run on paper. The docx writer shares its link rule.
 
 import type { JSONContent } from '@tiptap/core';
+import { createColGroup } from '@tiptap/extension-table';
 import type { Node } from '@tiptap/pm/model';
 import {
     domOutputSpecToHTMLString,
@@ -27,6 +28,8 @@ import {
     isFigureFrameNode,
     isPositioned,
     isStoryNode,
+    isWidth,
+    MIN_TABLE_COLUMN_PX,
     outlineEntry,
     PROSE_TEXTBLOCKS,
     readChartAttrs,
@@ -53,10 +56,11 @@ type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => st
 
 // The export's and the preview's one render of a doc's body or band, unsanitized: the DOM the editor holds. On paper
 // (`print`) a heading that holds a note labels its own bookmark and a page number is a field the stylesheet fills in.
-// `smallCapsFont` fakes small caps where the font has none, and the screen lists the notes after the body unless
-// `pageFootnotes` floats them to their pages. A `band` is a header or a footer, where no figure is positioned. With
-// `anchors` each outline heading carries the id `h-N` that a table of contents links to: an export's body only, as the
-// PDF places the bands before it, where a band's id would be taken twice.
+// With `fittedTables` a table the export fitted to its column draws at its widths (renderFittedTable), where the
+// preview draws one as the editor does. `smallCapsFont` fakes small caps where the font has none, and the screen lists
+// the notes after the body unless `pageFootnotes` floats them to their pages. A `band` is a header or a footer, where
+// no figure is positioned. With `anchors` each outline heading carries the id `h-N` that a table of contents links to:
+// an export's body only, as the PDF places the bands before it, where a band's id would be taken twice.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
@@ -64,6 +68,7 @@ export function renderDocHtml(
         lazy?: boolean;
         smallCapsFont?: string;
         print?: boolean;
+        fittedTables?: boolean;
         pageFootnotes?: boolean;
         band?: boolean;
         anchors?: boolean;
@@ -100,6 +105,9 @@ export function renderDocHtml(
                             id: anchors ? numbers.get(node) : undefined,
                             bookmark: options?.print ?? false,
                         }),
+                }),
+                ...(options?.fittedTables && {
+                    table: ({ node, children }) => renderFittedTable(node, children),
                 }),
                 ...(options?.smallCapsFont && {
                     text: renderTextSynthesizingSmallCaps(content, options.smallCapsFont),
@@ -149,6 +157,23 @@ function renderCodeBlockNode(node: Node, highlight: CodeHighlighter): string {
     // withTrailingBreaks' rule: a code block holds only text, so it ends open when empty or in a newline.
     const trailingBreak = code === '' || code.endsWith('\n') ? '<br>' : '';
     return `<pre><code class="hljs${langClass}">${highlighted}${trailingBreak}</code></pre>`;
+}
+
+// TipTap's table as the export draws it once withTablesFitted has fitted it, which may take a table of many columns
+// below TipTap's 25 px minimum: so the minimum is the narrowest stored width, as columns widened back to 25 px would run
+// the table off the paper again. A table whose columns all store widths draws at them with the fixed layout, as the
+// docx writes one: the auto layout widens a column to its longest word and its padding, which ran an imported 604 px
+// table to 1,284 px in WeasyPrint. A table with a column of no width keeps its min-width and the auto layout, as the
+// editor draws a new table never dragged.
+function renderFittedTable(node: Node, children: string | string[] | undefined): string {
+    const widths: number[] = [];
+    node.firstChild?.forEach((cell) => {
+        const colwidth: unknown = cell.attrs['colwidth'];
+        if (Array.isArray(colwidth)) widths.push(...colwidth.filter(isWidth));
+    });
+    const { colgroup, tableWidth, tableMinWidth } = createColGroup(node, Math.min(MIN_TABLE_COLUMN_PX, ...widths));
+    const style = tableWidth ? `width: ${tableWidth}; table-layout: fixed` : `min-width: ${tableMinWidth}`;
+    return domOutputSpecToHTMLString(['table', { style }, colgroup, ['tbody', 0]])(children);
 }
 
 // The tiptap static renderer drops the `checked` attribute, so the checkbox is rendered here.

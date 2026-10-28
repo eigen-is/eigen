@@ -862,10 +862,7 @@ const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efa
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
 // Both last moved when the text box's font, size, line height and color joined the prose base rule's selector list
-// (`.eigen-prose, .eigen-doc .text-box`) instead of repeating it, the only bytes that changed. Before that they moved
-// with the text box's prose rules, the stylesheet's table of contents rules and the headings' `h-N` ids, the PDF's
-// with its head's page-number leader too, and with the print CSS that lets a table and its rows split across pages
-// (no table page-break-inside rule). The preview body stayed.
+// (`.eigen-prose, .eigen-doc .text-box`) instead of repeating it, the only bytes that changed.
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '377cbeee6c018cf9a051e682ee0c6ddf208a66441052e3a9087ae3003d890a7b';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'f9adf729d36d4688ae5e567b96e0fbcf5f3b73ea895423841f1f340c046fc9c8';
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by

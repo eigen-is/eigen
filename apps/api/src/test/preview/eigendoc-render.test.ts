@@ -187,6 +187,20 @@ describe('renderEigendocPreviewBody', () => {
     test('an empty paragraph keeps the line the editor shows', () => {
         expect(previewOf({ type: 'doc', content: [{ type: 'paragraph' }] })).toBe('<p><br></p>');
     });
+
+    // Only the export fits a table below the editor's 25 px floor, so the preview draws a narrower column at 25 px, and
+    // on the auto layout, as the editor does.
+    test("a column stored under 25 px previews at the editor's 25 px", () => {
+        const cell = (width: number) => ({
+            type: 'tableCell',
+            attrs: { colwidth: [width] },
+            content: [{ type: 'paragraph' }],
+        });
+        const table = { type: 'table', content: [{ type: 'tableRow', content: [cell(10), cell(300)] }] };
+        expect(previewOf({ type: 'doc', content: [table] })).toContain(
+            '<table style="width: 310px"><colgroup><col style="width: 25px"><col style="width: 300px"></colgroup>',
+        );
+    });
 });
 
 describe('renderEigendocPreviewBody — footnotes', () => {

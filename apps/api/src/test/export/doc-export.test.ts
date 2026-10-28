@@ -3,7 +3,15 @@ import type { JSONContent } from '@tiptap/core';
 import { chartFontSize, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
-import { DEFAULT_PAGE_SETUP, PAGE_NUMBER_TEXT, PAGE_ROOT, pageRecord, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    PAGE_NUMBER_TEXT,
+    PAGE_ROOT,
+    pageColumnWidth,
+    pagePx,
+    pageRecord,
+    STYLE_ROOT,
+} from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import type { MathNode, MathRow } from '@workspace/math';
 import { MATHML_NAMESPACE, writeMathml, writeText } from '@workspace/math';
@@ -167,16 +175,23 @@ describe('doc export — a table wider than the column', () => {
         async (format) => {
             const html = await exported(format, wideDoc(true, 667, 667));
             expect(html).toContain(
-                '<table style="width: 642px"><colgroup><col style="width: 321px"><col style="width: 321px">',
+                '<table style="width: 642px; table-layout: fixed"><colgroup><col style="width: 321px"><col style="width: 321px">',
             );
         },
     );
 
+    // 63 columns at the editor's 25 px floor are wider than A4's column, so the PDF scales them below the floor.
+    test.each(['html', 'pdf-html'] as const)('%s draws 63 columns of 25 px within the column', async (format) => {
+        const html = await exported(format, wideDoc(false, ...Array.from({ length: 63 }, () => 25)));
+        expect(html).toContain('<table style="width: 630px; table-layout: fixed"><colgroup><col style="width: 10px">');
+    });
+
+    // A table with a column of no width keeps the auto layout, as the editor draws a new table never dragged.
     test('a table that fits, or one with a column of no width, keeps its widths', async () => {
         const html = await exported('pdf-html', wideDoc(true, 300, 300));
         expect(html).toContain('<col style="width: 300px"><col style="width: 300px">');
         expect(await exported('pdf-html', wideDoc(true, 300, null))).toContain(
-            '<col style="width: 300px"><col style="min-width: 25px">',
+            '<table style="min-width: 325px"><colgroup><col style="width: 300px"><col style="min-width: 25px">',
         );
     });
 
@@ -1845,6 +1860,82 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         expect(onFirstPage).toContain('Intro 1');
         expect(onFirstPage).toContain('Line 1');
         expect(onFirstPage).not.toContain('Line 60');
+    }, 60_000);
+});
+
+// WeasyPrint's auto layout widens a column to its longest word and its padding, as a browser does, so a table whose
+// columns all store widths prints at them, fixed, as the docx writes it, and a long word breaks inside its cell.
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — wide tables (WeasyPrint)', () => {
+    const word = 'Antidisestablishmentarianism';
+    const table = (widths: (number | null)[]) => ({
+        type: 'table',
+        content: [
+            {
+                type: 'tableRow',
+                content: widths.map((width) => ({
+                    type: 'tableCell',
+                    attrs: { colwidth: width === null ? null : [width] },
+                    content: [paragraph(word)],
+                })),
+            },
+        ],
+    });
+    // Each table's laid-out width and its columns' widths, in px.
+    const tables = async (content: JSONContent) => {
+        const lines = await laidOut(
+            await pdfHtml(content),
+            "if type(box).__name__ == 'TableBox': print(box.width, *box.column_widths)",
+        );
+        return lines.map((line) => line.split(' ').map(Number));
+    };
+    const columnPx = pageColumnWidth(pagePx(DEFAULT_PAGE_SETUP));
+
+    test('a table whose words outgrow its columns prints at its widths', async () => {
+        const [[width, ...columns] = []] = await tables(table([100, 200, 200, 40, 40, 40]));
+        expect(width).toBeCloseTo(620, 3);
+        expect(columns.map(Math.round)).toEqual([100, 200, 200, 40, 40, 40]);
+    }, 60_000);
+
+    test('a table of 63 columns at the floor prints within the column', async () => {
+        const [[width = Infinity] = []] = await tables(table(Array.from({ length: 63 }, () => 25)));
+        expect(width).toBeLessThanOrEqual(columnPx);
+    }, 60_000);
+
+    test('a table with a column of no width keeps the auto layout', async () => {
+        const [[, ...columns] = []] = await tables(table([100, null]));
+        expect(columns[0]).toBeGreaterThan(100);
+    }, 60_000);
+
+    // A fixed column doesn't widen to hold the table in its cell, so that table fits the cell, not the page's column.
+    test('a table in a narrow cell prints inside that cell', async () => {
+        const cell = (width: number, content: JSONContent) => ({
+            type: 'tableCell',
+            attrs: { colwidth: [width] },
+            content: [content],
+        });
+        const outer = {
+            type: 'table',
+            content: [
+                {
+                    type: 'tableRow',
+                    content: [
+                        cell(100, table([100, 100, 100, 100, 100])),
+                        cell(300, paragraph(word)),
+                        cell(200, paragraph(word)),
+                    ],
+                },
+            ],
+        };
+        // Each table's left edge, its column starts and its right edge, in document order: the outer table first.
+        const lines = await laidOut(
+            await pdfHtml(outer),
+            "if type(box).__name__ == 'TableBox': print(box.position_x, *box.column_positions, box.position_x + box.margin_width())",
+        );
+        const [[, firstColumn = 0, secondColumn = 0] = [], [left = 0, , , , , , right = Infinity] = []] = lines.map(
+            (line) => line.split(' ').map(Number),
+        );
+        expect(left).toBeGreaterThanOrEqual(firstColumn);
+        expect(right).toBeLessThanOrEqual(secondColumn);
     }, 60_000);
 });
 
