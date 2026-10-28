@@ -167,8 +167,8 @@ function renderColResize(
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollEl.scrollLeft - window.scrollX;
     if (x < rect.width + ctx.scrollLeft - 100) {
-        const changeSizeLine = container.querySelector<HTMLDivElement>('.sheet-change-size-line');
-        if (changeSizeLine) {
+        const changeSizeLine = container.querySelector('.sheet-change-size-line');
+        if (changeSizeLine instanceof HTMLElement) {
             changeSizeLine.style.left = `${x}px`;
         }
         // The header handle lives in the pane region of the resized column:
@@ -177,8 +177,8 @@ function renderColResize(
         const vData = globalCache.freezen?.[ctx.currentSheetId]?.vertical?.freezenverticaldata;
         const inFreeze = vData != null && ctx.colsResizeStart[1] < vData.boundary;
         const handleX = inFreeze ? x - scrollEl.scrollLeft + vData.scroll : x;
-        const changeSizeCol = container.querySelector<HTMLDivElement>('.sheet-cols-change-size');
-        if (changeSizeCol) {
+        const changeSizeCol = container.querySelector('.sheet-cols-change-size');
+        if (changeSizeCol instanceof HTMLElement) {
             changeSizeCol.style.left = `${handleX - 2}px`;
         }
     }
@@ -194,8 +194,8 @@ function renderRowResize(
     const rect = container.getBoundingClientRect();
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollEl.scrollTop - window.scrollY;
     if (y < rect.height + ctx.scrollTop - 20) {
-        const changeSizeLine = container.querySelector<HTMLDivElement>('.sheet-change-size-line');
-        if (changeSizeLine) {
+        const changeSizeLine = container.querySelector('.sheet-change-size-line');
+        if (changeSizeLine instanceof HTMLElement) {
             changeSizeLine.style.top = `${y}px`;
         }
         // Same pane-region mapping as renderColResize, on the row axis. The -2
@@ -204,8 +204,8 @@ function renderRowResize(
         const hData = globalCache.freezen?.[ctx.currentSheetId]?.horizontal?.freezenhorizontaldata;
         const inFreeze = hData != null && ctx.rowsResizeStart[1] < hData.boundary;
         const handleY = inFreeze ? y - scrollEl.scrollTop + hData.scroll : y;
-        const changeSizeRow = container.querySelector<HTMLDivElement>('.sheet-rows-change-size');
-        if (changeSizeRow) {
+        const changeSizeRow = container.querySelector('.sheet-rows-change-size');
+        if (changeSizeRow instanceof HTMLElement) {
             changeSizeRow.style.top = `${handleY - 2}px`;
         }
     }
@@ -219,17 +219,17 @@ function renderColFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElem
     const col = x > (col_pre + col_curr) / 2 ? col_curr : col_pre;
 
     if (x < rect.width + ctx.scrollLeft - 100) {
-        const freezeLine = container.querySelector<HTMLDivElement>('.sheet-freeze-drag-line');
-        if (freezeLine) {
+        const freezeLine = container.querySelector('.sheet-freeze-drag-line');
+        if (freezeLine instanceof HTMLElement) {
             freezeLine.style.left = `${Math.max(0, col - 2)}px`;
         }
-        const freezeHandle = container.querySelector<HTMLDivElement>('.sheet-cols-freeze-handle');
-        if (freezeHandle) {
+        const freezeHandle = container.querySelector('.sheet-cols-freeze-handle');
+        if (freezeHandle instanceof HTMLElement) {
             freezeHandle.style.left = `${x}px`;
         }
         // reuse change-size-line
-        const changeSizeLine = container.querySelector<HTMLDivElement>('.sheet-change-size-line');
-        if (changeSizeLine) {
+        const changeSizeLine = container.querySelector('.sheet-change-size-line');
+        if (changeSizeLine instanceof HTMLElement) {
             changeSizeLine.style.left = `${x}px`;
         }
     }
@@ -243,17 +243,17 @@ function renderRowFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElem
     const row = y > (row_curr + row_pre) / 2 ? row_curr : row_pre;
 
     if (y < rect.height + ctx.scrollTop - 20) {
-        const freezeLine = container.querySelector<HTMLDivElement>('.sheet-freeze-drag-line');
-        if (freezeLine) {
+        const freezeLine = container.querySelector('.sheet-freeze-drag-line');
+        if (freezeLine instanceof HTMLElement) {
             freezeLine.style.top = `${Math.max(0, row - 2)}px`;
         }
-        const freezeHandle = container.querySelector<HTMLDivElement>('.sheet-rows-freeze-handle');
-        if (freezeHandle) {
+        const freezeHandle = container.querySelector('.sheet-rows-freeze-handle');
+        if (freezeHandle instanceof HTMLElement) {
             freezeHandle.style.top = `${y}px`;
         }
         // reuse change-size-line
-        const changeSizeLine = container.querySelector<HTMLDivElement>('.sheet-change-size-line');
-        if (changeSizeLine) {
+        const changeSizeLine = container.querySelector('.sheet-change-size-line');
+        if (changeSizeLine instanceof HTMLElement) {
             changeSizeLine.style.top = `${y}px`;
         }
     }
@@ -552,8 +552,8 @@ export function handleOverlayMouseUp(
                     delete sheet.frozen;
                 }
             }
-            const freezeHandle = container.querySelector<HTMLDivElement>('.sheet-cols-freeze-handle');
-            if (freezeHandle) {
+            const freezeHandle = container.querySelector('.sheet-cols-freeze-handle');
+            if (freezeHandle instanceof HTMLElement) {
                 freezeHandle.style.left = `${ctx.scrollLeft}px`;
             }
         } else if (!frozen) {
@@ -571,8 +571,8 @@ export function handleOverlayMouseUp(
                 frozen.type = 'rangeBoth';
             }
         }
-        const freezeHandle = container.querySelector<HTMLDivElement>('.sheet-cols-freeze-handle');
-        if (freezeHandle) {
+        const freezeHandle = container.querySelector('.sheet-cols-freeze-handle');
+        if (freezeHandle instanceof HTMLElement) {
             freezeHandle.style.left = `${getFrozenHandleLeft(ctx)}px`;
         }
     }
@@ -612,8 +612,8 @@ export function handleOverlayMouseUp(
                 frozen.type = 'rangeBoth';
             }
         }
-        const freezeHandle = container.querySelector<HTMLDivElement>('.sheet-rows-freeze-handle');
-        if (freezeHandle) {
+        const freezeHandle = container.querySelector('.sheet-rows-freeze-handle');
+        if (freezeHandle instanceof HTMLElement) {
             freezeHandle.style.top = `${getFrozenHandleTop(ctx)}px`;
         }
     }
