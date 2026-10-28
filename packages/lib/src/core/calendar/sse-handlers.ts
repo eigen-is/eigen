@@ -14,8 +14,9 @@ import {
     invalidateSharedCalendars,
 } from './hooks/keys';
 
-// Debounced for the burst a whole-file import sends. The writing tab's own onSuccess still refetches at once.
-const invalidateEventsSoon = debouncePerOwner(invalidateEventList, 250);
+// Debounced for the burst a whole-file import sends, refetching every 1.5 s while a long one goes on. The
+// writing tab's own onSuccess still refetches at once.
+const invalidateEventsSoon = debouncePerOwner(invalidateEventList, 250, 1500);
 
 export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): void {
     switch (event.type) {

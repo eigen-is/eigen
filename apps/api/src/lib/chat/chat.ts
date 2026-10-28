@@ -8,7 +8,7 @@ import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
-import type { SSEvent, SSEventChat } from '@workspace/lib/types/sse';
+import type { SSEventChat } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
@@ -16,7 +16,7 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import type { Home } from '../home';
-import { relayEventToMembers, sendToUserHomes } from '../home/home-relay';
+import { broadcastToOwnerAndMembers, sendToUserHomes } from '../home/home-relay';
 import type { User } from '../user';
 import { getUserByEmail } from '../user';
 import { formatEmoteForViewer, parseCommand, searchableMessageText } from './commands';
@@ -25,7 +25,7 @@ import { openCommentIndex, RECENT_TEXT_CAP } from './comment-index';
 import { CHAT_ROOM_DB_CONFIG } from './db-config';
 import { extractMentionedEmails } from './mentions';
 import * as schema from './schema';
-import { buildChatEvent, buildCommentIndexUpdatedEvent } from './sse-events';
+import { broadcastCommentIndexUpdated, buildChatEvent } from './sse-events';
 
 export class ChatRoom {
     private containerPath: DrivePath | null = null;
@@ -140,11 +140,13 @@ export class ChatRoom {
             createdAt: now,
         };
 
-        const event = this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_POSTED);
-
         // Each getEffectiveMembers walks the whole chain of ACLs and teams. So the members are read once
-        // here, and the comment index and the notifications below both use them.
+        // here, and the event, the comment index and the notifications below all use them.
         const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
+
+        // A system message notifies nobody, and its event reaches only the owner's tabs. No route can post
+        // one, so no tab misses an event today.
+        this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_POSTED, type === 'system' ? [] : members);
 
         // A comment thread inside a document keeps the document's comment index up to date.
         if (this.containerPath && type !== 'whisper') {
@@ -157,12 +159,7 @@ export class ChatRoom {
             }, members);
         }
 
-        // A system message notifies nobody, and it also skips the event to other homes below. No route can
-        // post one, so no tab misses an event today.
         if (type !== 'system') {
-            // Nobody waits for it.
-            this.notifySharedUsers(event, members);
-
             const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
             const targetPath = this.containerPath ?? this.path;
             // An embedded chat notifies about the container, naming the comment thread inside it.
@@ -364,9 +361,8 @@ export class ChatRoom {
 
         const updated = this.toMessage({ ...existing, content, editedAt: now });
 
-        const event = this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_EDITED);
         const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
-        this.notifySharedUsers(event, members);
+        this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_EDITED, members);
 
         if (this.containerPath && existing.type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
@@ -405,9 +401,8 @@ export class ChatRoom {
             }
         }
 
-        const event = this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_DELETED);
         const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
-        this.notifySharedUsers(event, members);
+        this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_DELETED, members);
 
         if (this.containerPath && existing.type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
@@ -416,20 +411,22 @@ export class ChatRoom {
         }
     }
 
-    // Reaches the owner's own tabs at once. The members' tabs get the event through notifySharedUsers.
-    private broadcastMessageEvent(type: SSEventChat['type']): SSEventChat {
+    // Sends the event to the tabs of the owner and of everyone with access, through the folders above, a
+    // team or the document's ACL. Nobody waits for it, so a failure is logged and never breaks the change.
+    private broadcastMessageEvent(type: SSEventChat['type'], members: EffectiveMember[]): void {
         const event = buildChatEvent(type, {
             chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
         });
-        this.home.broadcast(event);
-        return event;
+        broadcastToOwnerAndMembers(this.path.ownerId, members, event).catch((error: unknown) => {
+            console.error('Failed to broadcast a chat event:', error);
+        });
     }
 
     private async updateCommentIndex(
         fn: (index: CommentIndex) => Promise<void>,
-        members?: EffectiveMember[],
+        members: EffectiveMember[],
     ): Promise<void> {
         if (!this.containerPath) return;
         try {
@@ -437,9 +434,14 @@ export class ChatRoom {
             await fn(index);
             await index.setRecentText(this.path.name, await this.buildRecentText());
 
-            const event = buildCommentIndexUpdatedEvent(this.path.ownerId, this.path.mountId, this.containerPath.id);
-            this.home.broadcast(event);
-            this.notifySharedUsers(event, members);
+            // Nobody waits for it, the same as for the message event.
+            broadcastCommentIndexUpdated(
+                this.drive,
+                this.path.ownerId,
+                this.path.mountId,
+                this.containerPath.id,
+                members,
+            ).catch((error: unknown) => console.error('Failed to broadcast the comment index:', error));
         } catch (error) {
             console.error('Failed to update comment index:', error);
         }
@@ -468,19 +470,6 @@ export class ChatRoom {
             if (text.length >= RECENT_TEXT_CAP) break;
         }
         return text.slice(0, RECENT_TEXT_CAP);
-    }
-
-    // Sends the event to the tabs of everyone with access, through the folders above, a team or the
-    // document's ACL. A caller that read the members already passes them, so they aren't read twice.
-    private async notifySharedUsers(event: SSEvent, members?: EffectiveMember[]): Promise<void> {
-        // Every caller starts this without waiting for it. So a failure is logged here, and it never breaks
-        // the change that sent the event.
-        try {
-            const resolved = members ?? (await this.drive.getEffectiveMembers(this.path.mountId, this.path.id));
-            await relayEventToMembers(resolved, event);
-        } catch (error) {
-            console.error('Failed to relay event to members:', error);
-        }
     }
 
     private toMessage(row: typeof schema.messages.$inferSelect): ChatMessage {

@@ -7,6 +7,7 @@ import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import type { SSEvent, SSEventTypeName } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateChatMatches } from '../chat/hooks/keys';
+import { debouncePerOwner } from '../debounce-per-owner';
 import { invalidateSearchOwner } from '../search';
 import {
     invalidateAclSharedOrUnshared,
@@ -14,6 +15,7 @@ import {
     invalidateEffectiveMembers,
     invalidateItemCreated,
     invalidateItemDeleted,
+    invalidateListings,
     invalidatePath,
     invalidatePathMoved,
     invalidatePathRenamed,
@@ -33,6 +35,20 @@ const CHAT_MATCH_EVENTS = new Set<SSEventTypeName>([
     SSEventType.DRIVE_PATH_RESTORED,
     SSEventType.DRIVE_FOLDER_DELETED,
 ]);
+
+// A burst, such as 500 files dropped into a team folder, sends every open tab of every member one event
+// per file. Each invalidation restarts the open listing's fetch, and 500 fetches per tab trip the server's
+// per-IP rate limit, which the tabs of one office share. So the listings refetch once, after the burst,
+// and every 1.5 s while a long upload goes on.
+const invalidateNewPathsSoon = debouncePerOwner(
+    (queryClient, ownerId) => {
+        invalidateListings(queryClient, ownerId);
+        invalidateSearchOwner(queryClient, ownerId);
+        invalidateFileHistory(queryClient, ownerId);
+    },
+    250,
+    1500,
+);
 
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): void {
     if (!('path' in event)) return;
@@ -54,18 +70,14 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
 
         case SSEventType.DRIVE_FOLDER_CREATED:
         case SSEventType.DRIVE_FILE_CREATED:
-            invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
-            invalidateSearchOwner(queryClient, path.ownerId);
-            invalidateFileHistory(queryClient, path.ownerId);
+            invalidateNewPathsSoon(queryClient, path.ownerId);
             break;
 
         case SSEventType.DRIVE_FILE_UPLOADED:
-            invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
             // An overwrite keeps the path, so its own detail refetches too. The size, the thumbnail's
-            // cache-bust and the text preview's key all come from it.
+            // cache-bust and the text preview's key all come from it. It refetches only while it is open.
             invalidatePath(queryClient, path.ownerId, path.mountId, path.id);
-            invalidateSearchOwner(queryClient, path.ownerId);
-            invalidateFileHistory(queryClient, path.ownerId);
+            invalidateNewPathsSoon(queryClient, path.ownerId);
             break;
 
         case SSEventType.DRIVE_FOLDER_DELETED:

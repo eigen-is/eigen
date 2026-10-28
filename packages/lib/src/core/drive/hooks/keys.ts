@@ -89,6 +89,14 @@ export function invalidateItemCreated(
     invalidateHomeSize(queryClient, ownerId);
 }
 
+// Every folder and mime listing of the owner, for a caller that collapsed changes in several folders into one.
+export function invalidateListings(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: driveKeys.folders(ownerId) });
+    queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(ownerId) });
+    queryClient.invalidateQueries({ queryKey: driveKeys.mimeAllTypes() });
+    invalidateHomeSize(queryClient, ownerId);
+}
+
 export function invalidateItemDeleted(
     queryClient: QueryClient,
     ownerId: string,

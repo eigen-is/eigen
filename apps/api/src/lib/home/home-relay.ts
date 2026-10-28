@@ -39,7 +39,7 @@ import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
-import { getMemberships, getUserByEmail, getUserById, isGuest, updateUser } from '../user';
+import { getMemberships, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
 import { getHome, getTeamHome, loadedHome, openHome, requestedSince } from './get-home';
 import { homeSize } from './home';
 import { TeamHome } from './team-home';
@@ -211,17 +211,27 @@ export function countHomeDeliveries(): number {
     return deliveries.size;
 }
 
-// Tells the open tabs of each member, such as everyone a file is shared with, about one event. A
-// member without an account is skipped, and so is one whose lookup fails: a broadcast is best effort.
-export async function relayEventToMembers(members: EffectiveMember[], event: SSEvent): Promise<void> {
+// Tells the open tabs of the owner and of each member who can read the path about one event. A member
+// whose ACL entry grants only write, or nothing, cannot list the path, so the event would name a path
+// they may not see. The owner hears it at once, and only once: in a user's home the owner is one of the
+// members. The members may still be read, and a failed read costs only their copies. They are looked up
+// in one query, because a team can have many, and a member without an account is skipped. Only homes
+// that are open receive it, so a closed home costs nothing.
+export async function broadcastToOwnerAndMembers(
+    ownerId: string,
+    members: EffectiveMember[] | Promise<EffectiveMember[]>,
+    event: SSEvent,
+): Promise<void> {
+    await sendToHome(ownerId, { type: 'broadcast', event });
+    let readers: User[];
+    try {
+        const emails = (await members).filter((member) => member.read).map((member) => member.email);
+        readers = await getUsersByEmails([...new Set(emails)]);
+    } catch {
+        return;
+    }
     await Promise.all(
-        members.map(async (member) => {
-            try {
-                const user = await getUserByEmail(member.email);
-                if (!user) return;
-                await sendToHome(user.id, { type: 'broadcast', event });
-            } catch {}
-        }),
+        readers.filter((user) => user.id !== ownerId).map((user) => sendToHome(user.id, { type: 'broadcast', event })),
     );
 }
 

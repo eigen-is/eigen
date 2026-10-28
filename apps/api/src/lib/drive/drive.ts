@@ -48,6 +48,7 @@ import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError, computeEtag } from '../core';
 import type { Home } from '../home';
+import { broadcastToOwnerAndMembers } from '../home/home-relay';
 import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
@@ -584,9 +585,14 @@ export class Drive {
 
         // Read before the move: a watcher who could see the path through its old folders hears about it too.
         const oldChain = user ? await mount.getBreadcrumb(pathId) : [];
+        // Read before the move for the same reason: whoever saw the path in its old folder hears it left.
+        const oldMembers = await this.getEffectiveMembers(mountId, pathId);
 
         const movedPath = await mount.updatePath(pathId, { parentId: targetParentId });
-        this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, oldParentId ?? undefined);
+        this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {
+            oldParentId,
+            members: this.getEffectiveMembers(mountId, pathId).then((members) => [...oldMembers, ...members]),
+        });
         if (user && oldParentId) {
             // The move walks two parent chains, so it records and fans out here instead of in recordFileEvent.
             mount.history.record({
@@ -859,6 +865,17 @@ export class Drive {
         const path = await mount.getPath(pathId);
         if (!path) throw new ApiError(404, 'Path not found');
         return this.membersFromCrumbs(await mount.getBreadcrumb(pathId));
+    }
+
+    // Who to tell about a change to the path, such as its open tabs. An unshared path in a user's home has
+    // nobody but its owner, who hears the event first anyway, so it costs one breadcrumb read and no account
+    // lookup. Most paths are unshared, and that halves what such an event costs.
+    private async membersToTell(mountId: string, pathId: string): Promise<EffectiveMember[]> {
+        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
+        const shared =
+            parseOwnerId(this.owner.id).type === 'team' ||
+            (!isTrashedChain(crumbs) && crumbs.some((crumb) => crumb.acl?.length));
+        return shared ? this.membersFromCrumbs(crumbs) : [];
     }
 
     // Takes the breadcrumb of the path, so checkAccessForEmails can use the one it already has. A path
@@ -1184,9 +1201,7 @@ export class Drive {
     // Refreshes the open Activity panels of the owner and of everyone the path is shared with. Nobody
     // waits for it, so a failed broadcast never fails or slows the change itself.
     private broadcastHistoryUpdated(mountId: string, path: DrivePath): void {
-        this.getEffectiveMembers(mountId, path.id)
-            .then((members) => broadcastFileHistoryUpdated(this.owner.id, path, members))
-            .catch(() => {});
+        broadcastFileHistoryUpdated(this.owner.id, path, this.membersToTell(mountId, path.id)).catch(() => {});
     }
 
     public async watchPath(mountId: string, pathId: string, user: User): Promise<void> {
@@ -1262,9 +1277,20 @@ export class Drive {
 
     // ---- Open tabs ----
 
-    // Tells the open tabs of this owner that a path changed.
-    public emit(type: SSEventDrive['type'], path: DrivePath, oldParentId?: string): void {
-        this.home.broadcast(buildDriveEvent(type, path, oldParentId));
+    // Tells the open tabs of everyone who can read the path that it changed: the owner, a team's members
+    // and the people it is shared with. A change that takes the path away from some of them, such as a
+    // move or a trash, passes the members it read before, so they still hear that it left. Nobody waits
+    // for the members.
+    public emit(
+        type: SSEventDrive['type'],
+        path: DrivePath,
+        options: { oldParentId?: string | null; members?: EffectiveMember[] | Promise<EffectiveMember[]> } = {},
+    ): void {
+        broadcastToOwnerAndMembers(
+            this.owner.id,
+            options.members ?? this.membersToTell(path.mountId, path.id),
+            buildDriveEvent(type, path, options.oldParentId ?? undefined),
+        ).catch(() => {});
     }
 
     // ---- One change at a time ----

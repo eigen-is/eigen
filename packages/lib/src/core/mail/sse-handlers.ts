@@ -18,9 +18,9 @@ import {
 } from './hooks/keys';
 import { consumeRecentMailMutation } from './hooks/use-emails';
 
-// A sync sends one mail:received per message, so the unread counts refetch once per burst. The message
-// lists still refetch at once.
-const invalidateMailboxesSoon = debouncePerOwner(invalidateMailboxes, 250);
+// A sync sends one mail:received per message, so the unread counts refetch once per burst, and every
+// 1.5 s while a long sync goes on. The message lists still refetch at once.
+const invalidateMailboxesSoon = debouncePerOwner(invalidateMailboxes, 250, 1500);
 
 export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): void {
     if (!('mail' in event)) return;

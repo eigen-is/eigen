@@ -20,6 +20,15 @@ export async function getUserByEmail(email: string): Promise<User | null> {
     return (await db.select().from(user).where(eq(user.email, email.toLowerCase())).get()) ?? null;
 }
 
+// One query for many addresses, such as everyone a change is relayed to. An address without an account
+// has no row.
+export async function getUsersByEmails(emails: string[]): Promise<User[]> {
+    if (emails.length === 0) return [];
+    const db = getAuthDrizzleDb();
+    const lowered = emails.map((email) => email.toLowerCase());
+    return db.select().from(user).where(inArray(user.email, lowered)).all();
+}
+
 export async function getUserById(id: string): Promise<User | null> {
     const db = getAuthDrizzleDb();
     return (await db.select().from(user).where(eq(user.id, id)).get()) ?? null;
