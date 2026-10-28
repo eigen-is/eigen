@@ -6,7 +6,7 @@ Every app mounts the stream once, in `EigenApp`'s provider stack ([LAYOUT.md](LA
 
 ## A stream belongs to one user's own Home
 
-A user subscribes to their own Home's stream, never to another's. An action that touches another home reaches its users through the relay: `sendToHome` with a `broadcast` message, or `relayEventToMembers` for every member of a team (`apps/api/src/lib/home/home-relay.ts`). The target Home then broadcasts to its own listeners. That keeps every stream on the server that owns its home, which is what sharding needs ([SCALABILITY.md](SCALABILITY.md)).
+A user subscribes to their own Home's stream, never to another's. An action that touches another home reaches its users through the relay: `sendToHome` with a `broadcast` message, or `broadcastToOwnerAndMembers` for the owner and every member of a path, such as the people a folder is shared with or a team's members (`apps/api/src/lib/home/home-relay.ts`). The target Home then broadcasts to its own listeners. That keeps every stream on the server that owns its home, which is what sharding needs ([SCALABILITY.md](SCALABILITY.md)).
 
 A home's first stream also starts its mail folder watchers, so a change another mail app makes reaches the open tab at once ([IMAP.md § Only the six standard folders have a watcher](IMAP.md#only-the-six-standard-folders-have-a-watcher)).
 
@@ -24,9 +24,21 @@ An event holds ids, never display text or a domain object: a drive event its pat
 
 The backend builds each event in `apps/api/src/lib/[domain]/sse-events.ts` and emits it with `home.broadcast()`. A drive event's callers pass a whole `DrivePath`, so `buildDriveEvent` picks its five ids: the path's name and its ACL, which lists the email of everyone it is shared with, never travel on the stream. The frontend handler is `packages/lib/src/core/[domain]/sse-handlers.ts`, and `handleSSEvent` (`packages/lib/src/core/sse/sse-handlers.ts`) hands every event to all of them. A test keyed by every `SSEventType` (`packages/lib/src/test/core/sse/sse-handlers.test.ts`) holds each type to a handler, so a type with no handler fails it.
 
-## A drive event reaches the owner's tabs, and a team home has no stream
+## A drive event reaches everyone who can read the path
 
-`Drive.emit` broadcasts on the Home that owns the path, and only a user's own Home has listeners. Nobody signs in as a team, so a team Home's broadcast reaches no tab: a file created, renamed or trashed on a team drive refreshes no member's open folder. A change to or inside a shared path other than its sharing refreshes none of the sharee's views either, an overwrite of a file shared on its own included; only a rename, move, trash or ACL change of the shared item itself reaches the sharee, through the share mirror. Those tabs catch up on the query's next refetch. Three kinds of event do reach the members, because they are relayed to every effective member: a file-history change (`broadcastFileHistoryUpdated`), a chat message (`ChatRoom`) and an ACL change, through the share mirror in each recipient's Home ([ACL.md](ACL.md#share-propagation)). A team calendar's event changes reach the users it is shared with by name, not the team's members. Relaying every drive event to the members is open work ([ROADMAP.md](ROADMAP.md)).
+`Drive.emit` sends a drive event to the path's owner and relays it to every effective member of the path through `broadcastToOwnerAndMembers`. The effective members are the people the path's own ACL or a folder above it is shared with, and on a team drive every member of the team (`Drive.getEffectiveMembers`). Nobody signs in as a team, so a team Home has no listeners of its own, and the relay is how a team drive change reaches a tab. File-history, chat and comment-index events go the same way.
+
+The members are read when the event goes out, from the same ACLs and team rows that grant access. So a sharee of a subfolder hears that subfolder's changes and nothing beside it, and a member who left the team or lost the share hears nothing more. A change that takes the path away from some of them reads the members first: a move tells the members of the old and the new place, and a trash tells those who could see the path before. Each tab then drops the path from the folder it still shows. The event is the same five ids, so a member learns nothing about the path that their view does not already name. In a user's home the owner is one of the members, and still hears each event once.
+
+A relayed event only refetches: `handleDriveSSEvent` raises no toast and adds nothing to the bell, the same as for the owner ([§ Toasts come only from the notification center](#toasts-come-only-from-the-notification-center)). A team calendar's event changes reach only the users it is shared with by name, not the team's members ([ROADMAP.md](ROADMAP.md)).
+
+## A relayed drive event costs half a millisecond for a team of 50
+
+The relay reads the members from the path's ACL chain and their accounts in one query, then pushes the event into each open home. On a dev machine that is about 0.5 ms per change for a team of 50, and 500 uploads into a team folder take about as long as 500 into a personal folder (`apps/api/src/test/drive-sse-fanout-benchmark.ts`). A closed home costs nothing, because a broadcast never opens one.
+
+## A burst of new files refetches an open listing once
+
+Every member's tab hears every file of a burst, such as 500 files dropped into a team folder. Each invalidation restarts the open listing's fetch, so that was 500 fetches per tab, and the tabs of one office share the server's per-IP rate limit (`rateLimit` in `apps/api/src/app.ts`). So `handleDriveSSEvent` collapses the listing, search and history refetches of `drive:file-created`, `drive:folder-created` and `drive:file-uploaded` per owner into one, 250 ms after the burst (`debouncePerOwner`). An uploaded file's own detail still refetches at once, because an open preview of an overwritten file must show the new bytes. The tab that made the change refreshes from its own mutation, without waiting.
 
 ## Toasts come only from the notification center
 
