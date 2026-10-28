@@ -146,11 +146,14 @@ function cellBorderOf(border: XmlElement): CellBorder {
     if (!val || val === 'nil' || val === 'none') return 'none';
     const px = (roundedInt(w(border, 'sz')) ?? 0) / BORDER_EIGHTHS_PER_PX;
     return {
-        width: Number(Math.min(Math.max(px, MIN_CELL_BORDER_PX), MAX_CELL_BORDER_PX).toFixed(2)),
+        width: Number(fitBorderPx(px).toFixed(2)),
         style: CELL_BORDER_STYLES.find((style) => WORD_BORDER_STYLES[style].includes(val)) ?? 'solid',
         color: markColor(hexColor(w(border, 'color')) || '000000'),
     };
 }
+
+// A line's width in px within the widths a cell border draws at, such as a cell's side or a text box's outline.
+export const fitBorderPx = (px: number) => Math.min(Math.max(px, MIN_CELL_BORDER_PX), MAX_CELL_BORDER_PX);
 
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): DocxRunProps {
     const props: DocxRunProps = {};

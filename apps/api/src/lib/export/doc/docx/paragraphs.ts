@@ -1,6 +1,6 @@
 // The docx writer's blocks: each eigendoc block as Word paragraphs and tables, with the spacing between them that
 // Eigen draws. A paragraph's properties are written in the ECMA-376 sequence, since Word reports a child out of order
-// as unreadable content. The document, a table cell and a note all write their blocks through blocksOf.
+// as unreadable content. Whatever holds blocks writes them through blocksOf, such as the document, a table cell or a note.
 
 import type { JSONContent } from '@tiptap/core';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
@@ -301,8 +301,8 @@ export function blocksOf(
         // one in the flow, or positioned where nothing is, such as in a cell, is a paragraph of its own.
         if (node.type === 'textBox') {
             const { layout } = readFigureFrameAttrs(node.attrs ?? {});
-            const wrapped = layout === 'wrap-left' || layout === 'wrap-right';
-            if (textblock && ((context.positions && isPositioned(layout)) || wrapped)) {
+            const outOfFlow = layout !== null && layout !== 'block';
+            if (textblock && outOfFlow && (context.positions || !isPositioned(layout))) {
                 anchors += anchoredTextBox(node, textblock, context);
                 continue;
             }

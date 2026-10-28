@@ -157,8 +157,9 @@ async function cacheCardPhoto(contacts: Contacts, contactId: string, photo: Pars
     return avatarUrl(contacts.home.user.id, name);
 }
 
-// Runs under the write lock: every other avatarsBytes mutation holds it too, so the closing recount can't clobber an interleaved delta.
-// The signal aborts when the contacts close: a sweep waiting for the lock leaves the queue, and a running one stops at its next await.
+// It runs under the write lock, which every other change to avatarsBytes holds too, so the recount at its end can't
+// overwrite a change made in between. A sweep still waiting for the lock leaves the queue when the contacts close. A
+// running one checks the signal after each read, so it stops before it reads the closed index.
 export function cleanupAvatarImages(contacts: Contacts, signal: AbortSignal): Promise<void> {
     return contacts.writeLock.run(async () => {
         await contacts.storage.mkdir(PATHS.CONTACTS.AVATARS);

@@ -5,7 +5,7 @@
 import * as fs from 'node:fs';
 import { requireHomeSlotFree } from '../backup/jobs';
 import { collectHomeObjects, forgetSafetyCopySize } from '../backup/safety-copy';
-import { evictHome } from './get-home';
+import { clearHomeDeleting, evictHome, markHomeDeleting } from './get-home';
 
 // Enough of the keys a refusing bucket kept for an operator to clean up, without one log line per object.
 const FAILED_KEYS_LOGGED = 50;
@@ -14,9 +14,16 @@ export async function deleteHomeData(ownerId: string, homeDir: string): Promise<
     // A restore, safety-copy delete or capture of this home must finish first: it may hold the only good copy,
     // and a capture reads through the live Home the evict would close.
     requireHomeSlotFree(ownerId);
-    await evictHome(ownerId);
-    // Again past the await: nothing awaits between this check and the deletes, so no job can take the slot in between.
-    requireHomeSlotFree(ownerId);
+    // Marked before the evict, so a request from a member's session can't open the home again.
+    markHomeDeleting(ownerId);
+    try {
+        await evictHome(ownerId);
+        // Again past the await: nothing awaits between this check and the deletes, so no job can take the slot in between.
+        requireHomeSlotFree(ownerId);
+    } catch (error) {
+        clearHomeDeleting(ownerId);
+        throw error;
+    }
 
     // The bucket objects go in the background: a bucket that refuses must not keep the owner.
     const { folders, objectCount, deleteObjects } = collectHomeObjects(homeDir);

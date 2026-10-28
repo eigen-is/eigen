@@ -3,7 +3,7 @@ import { randomFillSync, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { deriveCardPhotoCache } from '../../lib/contacts/avatars';
+import { cleanupAvatarImages, deriveCardPhotoCache } from '../../lib/contacts/avatars';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { computeResourceEtag } from '../../lib/core';
@@ -205,7 +205,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         const stalePath = join(avatarsDirOf(dir), firstCache);
         const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
         utimesSync(stalePath, old, old);
-        await (contacts as unknown as { cleanupAvatarImages(): Promise<void> }).cleanupAvatarImages();
+        await cleanupAvatarImages(contacts, new AbortController().signal);
         expect(existsSync(stalePath)).toBe(false);
         expect(existsSync(join(avatarsDirOf(dir), secondCache))).toBe(true);
     });
@@ -425,9 +425,8 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     test('a second derive of the same photo keeps one cache file instead of double-counting it', async () => {
         const { instance: contacts, dir } = await makeContacts();
         const db = contacts.db;
-        const priv = contacts as unknown as { cleanupAvatarImages(): Promise<void> };
         // Settle init's detached sweep so the running total starts out equal to what is on disk.
-        await priv.cleanupAvatarImages();
+        await cleanupAvatarImages(contacts, new AbortController().signal);
         const sharp = (await import('sharp')).default;
         const jpeg = await sharp({ create: { width: 16, height: 16, channels: 3, background: { r: 9, g: 9, b: 9 } } })
             .jpeg()
@@ -448,11 +447,8 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         const { instance: contacts, dir } = await makeContacts();
         const db = contacts.db;
         const id = await contacts.addContact(validContact({ firstName: 'Swept', avatar: await stageAvatar(contacts) }));
-        const priv = contacts as unknown as {
-            cleanupAvatarImages(): Promise<void>;
-            storage: { dirSize(dirPath: string): Promise<number> };
-        };
-        await priv.cleanupAvatarImages();
+        const { storage } = contacts;
+        await cleanupAvatarImages(contacts, new AbortController().signal);
 
         // Park the sweep on its closing recount; while it waits there it must still own the write lock.
         // `parked` is the positive signal that it got there, so nothing here waits on a clock.
@@ -464,20 +460,20 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         const reachedRecount = new Promise<void>((resolve) => {
             parked = resolve;
         });
-        const originalDirSize = priv.storage.dirSize;
+        const originalDirSize = storage.dirSize;
         let gated = true;
-        priv.storage.dirSize = async (dirPath: string) => {
+        storage.dirSize = async (dirPath: string) => {
             if (gated) {
                 gated = false;
                 parked();
                 await gate;
             }
-            return originalDirSize.call(priv.storage, dirPath);
+            return originalDirSize.call(storage, dirPath);
         };
 
         try {
             const order: string[] = [];
-            const sweep = priv.cleanupAvatarImages().then(() => order.push('sweep'));
+            const sweep = cleanupAvatarImages(contacts, new AbortController().signal).then(() => order.push('sweep'));
             const deletion = contacts.deleteContact(id).then(() => order.push('delete'));
             await reachedRecount;
 
@@ -489,7 +485,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
             expect(order).toEqual(['sweep', 'delete']);
         } finally {
             release();
-            priv.storage.dirSize = originalDirSize;
+            storage.dirSize = originalDirSize;
         }
 
         expect(await contacts.size()).toBe(cardBytesOf(db) + avatarBytesOf(dir));

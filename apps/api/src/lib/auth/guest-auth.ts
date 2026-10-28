@@ -14,7 +14,7 @@ import { ApiError } from '../core/errors';
 import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { getEntriesForTarget, reconcileSharesForNewUser } from '../share';
-import { isGuest } from '../user/guest';
+import { GUEST_ROLE, isGuest } from '../user/guest';
 import { getUserByEmail } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
 import { checkOtpRateLimit, countOtpGuess, refundOtpRequests, resetOtpGuesses } from './otp-rate-limit';
@@ -153,7 +153,7 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
                 email,
                 name: email.split('@')[0] ?? email,
                 emailVerified: true,
-                role: 'guest',
+                role: GUEST_ROLE,
                 createdAt: now,
                 updatedAt: now,
             })

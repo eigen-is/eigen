@@ -177,7 +177,7 @@ Signatures are as the code declares them. Types the signatures name but the modu
 - `percent(value)`, `DEGREE`, `HUNDRED_PERCENT`, `drawingAngle(degrees)`, `drawingShare(value)`.
 - `colorXml(color, opacity = 1)`, `solidFillXml(color, opacity = 1)`, `themeXml(font)`, `THEME_TYPE`.
 - `blipXml(rId, svgRId, effects = '')`, `blipEmbeds(blip)`, `IMAGE_EXTENSION_BY_MIME`, `MIME_ALIASES`.
-- `ALGN_BY_ALIGN`, `ALIGN_BY_ALGN`, `ANCHOR_BY_ALIGN`, `ALIGN_BY_ANCHOR`, `LINE_END_BY_ARROWHEAD`, `ARROWHEAD_BY_LINE_END`, `PRESET_DASH_BY_STYLE`, `strokeStyleOf(dash)`.
+- `ALGN_BY_ALIGN`, `ALIGN_BY_ALGN`, `ANCHOR_BY_ALIGN`, `ALIGN_BY_ANCHOR`, `LINE_END_BY_ARROWHEAD`, `ARROWHEAD_BY_LINE_END`, `PRESET_DASH_BY_STYLE` for a canvas stroke and `BORDER_DASH_BY_STYLE` for a CSS border, `strokeStyleOf(dash)`.
 - `drawingLines(body: XmlElement): string[]`: a text body's plain text, a line per paragraph and break.
 - `clampTextSize(hundredths)`: a run's `sz`, held to the 1 to 4000 pt `ST_TextFontSize` allows.
 - `isSideways(degrees)`, `anchoredBox(box: Box, degrees: number): Box`.

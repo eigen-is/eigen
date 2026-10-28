@@ -4,7 +4,7 @@
 
 import type { JSONContent } from '@tiptap/core';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { FIRST_PAGE_BAND, flattenNestedStories, pageTwips } from '@workspace/lib/docs/eigendoc';
+import { FIRST_PAGE_BAND, flattenNestedStories, pageColumnWidth, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { EigendocBands } from '../../../document/doc';
 import { codeHighlighter } from '../../../document/lowlight';
@@ -67,7 +67,7 @@ export function writeDocx(
         pageless: setup.pageless,
         lost,
     };
-    const column = page.width - page.margin.left - page.margin.right;
+    const column = pageColumnWidth(page);
     const flow: Context = { pkg, firstInFlow: false, column, indent: 0, depth: 0, orderedListsAround: 0, quotes: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, { ...flow, positions: true }), pkg.styles);
 

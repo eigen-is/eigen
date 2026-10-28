@@ -5,26 +5,12 @@
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
 import type { FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
-import { isFigureFrameNode, mmToPx, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
+import { isFigureFrameNode, mmToPx, pageTwips } from '@workspace/lib/docs/eigendoc';
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { blipEmbeds, diagramDrawingId, diagramTextBodies, IMAGE_MIME_BY_EXTENSION } from '../../ooxml/drawingml';
-import {
-    A_NS,
-    C_NS,
-    DGM_NS,
-    DSP_NS,
-    EMU_PER_PX,
-    isOn,
-    O_NS,
-    PIC_NS,
-    POINTS_PER_UNIT,
-    R_NS,
-    V_NS,
-    W_NS,
-    WP_NS,
-} from '../../ooxml/ooxml';
+import { A_NS, C_NS, DGM_NS, DSP_NS, EMU_PER_PX, isOn, O_NS, PIC_NS, R_NS, V_NS, W_NS, WP_NS } from '../../ooxml/ooxml';
 import {
     CHART_NOT_IMPORTED,
     chartCost,
@@ -37,7 +23,7 @@ import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
 import { declaredImageType, IMAGE_TYPES, mediaPart, PICTURE_NOT_IMPORTED } from '../image-types';
 import type { Item, ParagraphItem } from './assemble';
 import { inlineText, isCaptionLike, isFigureOnly, paraOf } from './assemble';
-import { descendants, roundedInt } from './package';
+import { descendants, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks } from './paragraphs';
 import type { RunContext } from './runs';
@@ -177,9 +163,14 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
                 if (id) pictureLeftOut(reader, context, context.scope.part.rels.get(id)?.external ? alt : null);
                 continue;
             }
-            const style = xmlAttr(shape, '', 'style') ?? '';
-            const width = vmlPx(style, VML_WIDTH);
-            const size = width ? pictureSize(width, vmlPx(style, VML_HEIGHT), reader.columnPx) : NO_SIZE;
+            const css = vmlStyle(shape);
+            // A side the style leaves out, or gives as no length, is unknown.
+            const side = (name: string) => {
+                const px = vmlPx(css.get(name), 'px');
+                return px !== null && px > 0 ? px : null;
+            };
+            const width = side('width');
+            const size = width ? pictureSize(width, side('height'), reader.columnPx) : NO_SIZE;
             context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, ...size } } });
         }
         // A shape that holds text in the body is a text box where its style places it; elsewhere its text follows.
@@ -363,14 +354,12 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
         const layout = isOn(xmlAttr(anchor, '', 'behindDoc')) ? 'behind' : 'front';
         return { layout, offsetX: x / EMU_PER_PX, offsetY: lineOffset(anchor, context) };
     }
-    const side = align
-        ? xmlText(align).trim()
-        : offset && x + cx / 2 > reader.columnTwips * EMU_PER_TWIP * 0.5
-          ? 'right'
-          : 'left';
-    if (wrapped && story !== 'band')
-        return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
-    return side === 'left' || side === 'right' || side === 'center' ? { alignment: side } : {};
+    const named = align ? xmlText(align).trim() : undefined;
+    const side = floatSide(named, offset ? x + cx / 2 : 0, reader.columnTwips * EMU_PER_TWIP);
+    if (wrapped && story !== 'band') return { layout: `wrap-${side}` };
+    // A block takes the side or the center its alignment names. Inside and outside align it to neither.
+    if (named === 'center') return { alignment: named };
+    return named === undefined || named === side ? { alignment: side } : {};
 }
 
 // The area relativeFrom names, in EMU from the text column's left edge: the page and the left or inside margin start at
@@ -409,21 +398,3 @@ function lineOffset(anchor: XmlElement, context: RunContext): number | null {
 
 const AREA_AT_PAPER_EDGE = new Set(['page', 'leftMargin', 'insideMargin']);
 const AREA_AT_COLUMN_END = new Set(['rightMargin', 'outsideMargin']);
-
-const PX_PER_UNIT = new Map([
-    ['px', 1],
-    ...[...POINTS_PER_UNIT].map(([unit, points]): [string, number] => [unit, ptToPx(points)]),
-]);
-
-const vmlSide = (side: string) =>
-    new RegExp(`(?:^|;)\\s*${side}\\s*:\\s*([\\d.]+)(${[...PX_PER_UNIT.keys()].join('|')})?`, 'i');
-const VML_WIDTH = vmlSide('width');
-const VML_HEIGHT = vmlSide('height');
-
-// A side a VML shape's style gives, in px; none for one it leaves out or can't be read.
-function vmlPx(style: string, side: RegExp): number | null {
-    const match = style.match(side);
-    if (!match) return null;
-    const px = Number(match[1]) * (PX_PER_UNIT.get((match[2] ?? 'px').toLowerCase()) ?? 1);
-    return Number.isFinite(px) && px > 0 ? px : null;
-}

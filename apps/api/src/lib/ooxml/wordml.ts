@@ -4,7 +4,7 @@
 
 import type { EigenFont } from '@workspace/lib/constants/fonts';
 import type { CellBorderStyle, PageNumberKind } from '@workspace/lib/docs/eigendoc';
-import { ptToTwips, pxToPt, readTocLevels } from '@workspace/lib/docs/eigendoc';
+import { MAX_HEADING_LEVEL, ptToTwips, pxToPt, readTocLevels } from '@workspace/lib/docs/eigendoc';
 
 // The prefix of WordprocessingML's content types.
 export const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
@@ -53,9 +53,6 @@ export function headingLevel(styleName: string): number | undefined {
     const level = HEADING_LEVEL.exec(styleName)?.[1];
     return level === undefined ? undefined : Number(level);
 }
-
-// Eigen's headings go to level 6, where Word's go to 9.
-export const DEEPEST_HEADING_LEVEL = 6;
 
 // Word's outline level of body text. A paragraph at any lower level is listed in Word's navigation pane.
 export const BODY_TEXT_OUTLINE_LEVEL = 9;
@@ -216,7 +213,7 @@ export function tocFieldLevels(code: string): number | undefined {
     if (!isTocField(code) || /\\[ac]\b/i.test(code)) return undefined;
     const outline = /\\o\b(?:\s*"\s*\d+\s*-\s*(\d+)\s*")?/i.exec(code);
     if (!outline) return readTocLevels(undefined);
-    return outline[1] === undefined ? DEEPEST_HEADING_LEVEL : readTocLevels(Number(outline[1]));
+    return outline[1] === undefined ? MAX_HEADING_LEVEL : readTocLevels(Number(outline[1]));
 }
 
 export const TOC_GALLERY = 'Table of Contents';

@@ -651,6 +651,25 @@ describe('doc export — text boxes', () => {
         expect(body).not.toContain('data-layout="front"');
     });
 
+    test('a positioned figure in a box in a table cell draws in line too', async () => {
+        const figure = { type: 'figure', attrs: { mediaName: 'chart.png', width: 120, layout: 'front', offsetX: 300 } };
+        const inner = box('front');
+        const cell = {
+            type: 'tableCell',
+            content: [
+                { type: 'paragraph', content: [{ ...inner, content: [{ type: 'paragraph', content: [figure] }] }] },
+            ],
+        };
+        const body = (
+            await exportHtml({
+                type: 'doc',
+                content: [{ type: 'table', content: [{ type: 'tableRow', content: [cell] }] }],
+            })
+        ).split('<body')[1];
+        expect(body?.match(/data-layout="block"/g)).toHaveLength(2);
+        expect(body).not.toMatch(/data-layout="front"|data-offset-x="300"/);
+    });
+
     // WeasyPrint's bookmark reads a heading's text, which would run the box's on into it.
     test("on paper a heading that holds a box bookmarks its own text, the box's left out", async () => {
         const heading = {

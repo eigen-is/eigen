@@ -181,10 +181,10 @@ export class Contacts {
 
     // --- Seams used by contacts/*.ts ---
 
-    // Init and every avatar upload start one without waiting for it. A sweep the close stopped rejects with
-    // the abort's own reason, and only that one logs nothing.
+    // Init and every avatar upload start a sweep without waiting for it. A sweep that the close stopped is no
+    // failure, so it logs nothing.
     public sweepAvatars(): void {
-        this.cleanupAvatarImages().catch((e) => {
+        avatars.cleanupAvatarImages(this, this.teardown.signal).catch((e) => {
             if (e !== this.teardown.signal.reason) console.warn(`contacts: avatar sweep failed: ${e}`);
         });
     }
@@ -577,10 +577,6 @@ export class Contacts {
 
     private async promoteAvatarCache(contactId: string, staged: StagedAvatarPair): Promise<string> {
         return avatars.promoteAvatarCache(this, contactId, staged);
-    }
-
-    private cleanupAvatarImages(): Promise<void> {
-        return avatars.cleanupAvatarImages(this, this.teardown.signal);
     }
 
     private selfRow() {

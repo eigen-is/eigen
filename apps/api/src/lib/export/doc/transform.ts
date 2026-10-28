@@ -14,6 +14,7 @@ import {
     normalStyleProperties,
     PAGE_BAND_CLASS,
     PAGE_BREAK_CLASS,
+    pageColumnWidth,
     pagePx,
     pageStylesheet,
     pxToPt,
@@ -25,7 +26,7 @@ import type { EigendocBands } from '../../document/doc';
 import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
 import { docSchema } from '../../document/doc-schema';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
-import { BODY, FOOTNOTE_LOOK } from '../../document/looks';
+import { BODY, CHARACTER_WIDTH_EM, FOOTNOTE_LOOK } from '../../document/looks';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
 import type { EigendocExportFormat, ExportMediaLoader, TransformWarning } from '../../document/transform/protocol';
@@ -84,8 +85,7 @@ export async function renderEigendocExport(
     const notes = footnotesInOrder(json);
     const pageNotes = pdf && notesFitPages(notes, page);
     const equations = renderEquations(pdf ? await svgEquations(roots.map(({ content }) => content)) : undefined);
-    const px = pagePx(page);
-    const columnPx = px.width - px.margin.left - px.margin.right;
+    const columnPx = pageColumnWidth(pagePx(page));
     const body = roots
         .map(({ part, content }) => {
             const html = renderDocHtml(
@@ -198,16 +198,16 @@ function printedBands(bands: EigendocBands): { printed: EigendocBands; cut: numb
 // 60 s timeout. Past either, the PDF lists the notes after the body, as the download does.
 export const MAX_PAGE_NOTES = 1500;
 
-// Whether every note fits on one page, by a rough count of its lines. Text counts at 10 pt in the tallest bundled face,
-// because a run may draw in any, with characters 0.6 em wide on average. A picture counts at its stored height, else
-// as tall as it is wide, and as tall as the column when it stores no width. A chart counts at its height. The room is
-// the page's text less three lines, for the reference's line and the rule above the notes.
+// Whether every note fits on one page, by a rough count of its lines. Text counts at 10 pt in the tallest bundled face
+// and with the widest face's characters, because a run may draw in any. A picture counts at its stored height, else as
+// tall as it is wide, and as tall as the column when it stores no width. A chart counts at its height. The room is the
+// page's text less three lines, for the reference's line and the rule above the notes.
 function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
     if (notes.length > MAX_PAGE_NOTES) return false;
     const { sizePt } = FOOTNOTE_LOOK;
-    const columnPt = mmToPt(page.width - page.margin.left - page.margin.right);
+    const columnPt = mmToPt(pageColumnWidth(page));
     const linePt = sizePt * Math.max(...EIGEN_FONTS.map((font) => font.lineHeight));
-    const lineChars = columnPt / (0.6 * sizePt);
+    const lineChars = columnPt / (CHARACTER_WIDTH_EM.anyFace * sizePt);
     const pageLines = mmToPt(page.height - page.margin.top - page.margin.bottom) / linePt - 3;
     const pictureLines = (node: JSONContent): number => {
         const attrs = node.attrs ?? {};

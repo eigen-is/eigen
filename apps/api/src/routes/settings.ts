@@ -29,7 +29,7 @@ import { ApiError } from '../lib/core';
 import { sendMailOrThrow, storedSender } from '../lib/mailer/mailer';
 import { renameOrganization } from '../lib/org';
 import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
-import { getOrgRole, getUserById } from '../lib/user';
+import { GUEST_ROLE, getOrgRole, getUserById } from '../lib/user';
 import { getAllUsersUsage } from '../lib/user/admin-usage';
 import { deleteUserCompletely } from '../lib/user/delete-user';
 import { resetUserPassword } from '../lib/user/reset-password';
@@ -44,8 +44,8 @@ import {
 } from './shared-schemas';
 
 // Who appears on the admin Users page: everyone except guests, orphans included.
-// `ne(user.role, 'guest')` alone excludes NULL-role orphans in SQLite, so OR in isNull.
-const nonGuestUsers = () => or(isNull(user.role), ne(user.role, 'guest'));
+// `ne(user.role, GUEST_ROLE)` alone excludes NULL-role orphans in SQLite, so OR in isNull.
+const nonGuestUsers = () => or(isNull(user.role), ne(user.role, GUEST_ROLE));
 
 // One row shape for the Users and Guests pages. A guest has no member row and no team, so it comes back with
 // no role and no teams.
@@ -348,7 +348,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         '/settings/users/guests',
         async ({ user: authUser }): Promise<AdminUserRow[]> => {
             await requireAdmin(authUser.id);
-            return adminUserRows(eq(user.role, 'guest'));
+            return adminUserRows(eq(user.role, GUEST_ROLE));
         },
         { auth: true },
     )

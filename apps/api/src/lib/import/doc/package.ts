@@ -1,6 +1,6 @@
 // The docx package as the reader reads it: the document part and the parts it names, such as the styles, the
 // numbering and the final section's headers and footers. It also holds the caps a crafted file is held to, and the
-// WordprocessingML attribute helpers every reader file shares.
+// helpers the reader's files share, such as WordprocessingML's attribute readers and VML's length reader.
 
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspace/lib/docs/eigendoc';
@@ -10,7 +10,16 @@ import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import type { Lost } from '../../document/transform/protocol';
 import type { Budget } from '../../ooxml/budget';
 import { budget, CHARS_PER_UNIT } from '../../ooxml/budget';
-import { alternativeFor, isAlternateContent, isOnElement, measure, R_NS, W_NS } from '../../ooxml/ooxml';
+import {
+    alternativeFor,
+    EMU_PER_PX,
+    emu,
+    isAlternateContent,
+    isOnElement,
+    measure,
+    R_NS,
+    W_NS,
+} from '../../ooxml/ooxml';
 import type { OoxmlPackage, Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType } from '../../ooxml/opc';
 import { WEB_VIEW } from '../../ooxml/wordml';
@@ -197,4 +206,35 @@ export function descendants(root: XmlElement, ns: string, local: string): XmlEle
         }
     }
     return found;
+}
+
+// ── Floats ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// The side a floating drawing or table wraps on: the one its alignment names, where it names one, else the half of the
+// column its center is in. Outside counts as the right, as on an odd page.
+export function floatSide(named: string | undefined, center: number, column: number): 'left' | 'right' {
+    if (named) return named === 'right' || named === 'outside' ? 'right' : 'left';
+    return center > column / 2 ? 'right' : 'left';
+}
+
+// ── VML ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// A VML element's CSS style, its names and values in lower case.
+export function vmlStyle(element: XmlElement): Map<string, string> {
+    return new Map(
+        (xmlAttr(element, '', 'style') ?? '')
+            .split(';')
+            .map((part) => part.split(':').map((side) => side.trim().toLowerCase()))
+            .filter((pair): pair is [string, string] => pair.length === 2 && !!pair[0] && !!pair[1]),
+    );
+}
+
+// A VML length in px. A number with no unit is px in the CSS style, as a browser reads it, and EMU in an attribute such
+// as an inset or a stroke weight, as LibreOffice reads them.
+export function vmlPx(value: string | undefined, unitless: 'px' | 'emu'): number | null {
+    const text = value?.trim().toLowerCase() ?? '';
+    const [, number, px] = /^(-?\d+(?:\.\d+)?)(px)?$/.exec(text) ?? [];
+    if (number !== undefined && (px || unitless === 'px')) return Number(number);
+    const length = emu(text);
+    return length === undefined ? null : length / EMU_PER_PX;
 }

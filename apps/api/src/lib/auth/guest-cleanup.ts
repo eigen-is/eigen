@@ -8,6 +8,7 @@ import { isSetupRequired } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { atHome } from '../home/get-home';
 import { deleteUserCompletely } from '../user/delete-user';
+import { GUEST_ROLE } from '../user/guest';
 import { getAuthDrizzleDb } from './auth';
 
 export type GuestCleanupResult = {
@@ -28,7 +29,7 @@ export async function cleanupInactiveGuests(): Promise<GuestCleanupResult> {
     const guests = db
         .select({ id: userTable.id, updatedAt: userTable.updatedAt })
         .from(userTable)
-        .where(eq(userTable.role, 'guest'))
+        .where(eq(userTable.role, GUEST_ROLE))
         .all();
 
     const deleted: string[] = [];
