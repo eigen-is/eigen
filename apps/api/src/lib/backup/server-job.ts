@@ -57,7 +57,8 @@ import { pruneLocalArchives, readServerSidecar, writeServerSidecar } from './ser
 import { treeBytes } from './snapshot-home';
 import { appendInstallFiles, assertEnvFileMounted, snapshotServer } from './snapshot-server';
 import { backupKey, uploadServerArchive } from './upload';
-import { readServerArchive, requireVerified, verifyFolder } from './verify';
+import { requireVerified, verifyFolder } from './verify';
+import { readServerArchive } from './verify-server-archive';
 
 const HOME_DELETED = 'deleted during the backup';
 const UPLOAD_STOPPED = 'Eigen stopped before the upload finished';

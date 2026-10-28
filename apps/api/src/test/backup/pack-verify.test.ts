@@ -46,7 +46,8 @@ import {
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { appendInstallFiles, snapshotServer } from '../../lib/backup/snapshot-server';
-import { readServerArchive, verifyFolder } from '../../lib/backup/verify';
+import { verifyFolder } from '../../lib/backup/verify';
+import { readServerArchive } from '../../lib/backup/verify-server-archive';
 import { SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';

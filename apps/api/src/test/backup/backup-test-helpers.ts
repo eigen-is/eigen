@@ -9,7 +9,7 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { getBackupJob } from '../../lib/backup/jobs';
 import { buildHomeFolderName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
-import { readServerArchive } from '../../lib/backup/verify';
+import { readServerArchive } from '../../lib/backup/verify-server-archive';
 import { PATHS } from '../../lib/config/paths';
 import { getDomain } from '../../lib/config/server-config';
 import type { DatabaseConfig } from '../../lib/core';

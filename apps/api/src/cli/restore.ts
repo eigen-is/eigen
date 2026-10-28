@@ -41,7 +41,8 @@ import {
 } from '../lib/backup/paths';
 import type { ServerArchiveFile } from '../lib/backup/restore-server';
 import { RESTORING_DATA_DIR, RESTORING_DIR, stageBytesNeeded, stageServerArchive } from '../lib/backup/restore-server';
-import { describeFailures, readServerArchive, readServerArchiveMember } from '../lib/backup/verify';
+import { describeFailures } from '../lib/backup/verify';
+import { readServerArchive, readServerArchiveMember } from '../lib/backup/verify-server-archive';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile, isMailEnabled } from '../lib/config/env';
 import {

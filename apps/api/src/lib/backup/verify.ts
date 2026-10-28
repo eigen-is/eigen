@@ -1,26 +1,20 @@
-// Checks that a backup can be restored before anyone relies on it. It reads a home folder or a server archive,
-// compares sizes and hashes with the manifest, and decodes a sample of the documents. The result is a record of
-// failures that restores refuse on and the backup pane shows.
+// Checks that an unpacked backup can be restored before anyone relies on it. It compares the folder's sizes and
+// hashes with its manifest, asks SQLite about every database, and decodes a sample of the documents. The result is
+// a record of failures, which a restore refuses on and the backup pane shows. A backup job runs it on its staging
+// folder, and a restore on the archive it just unpacked.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import type {
-    BackupEntry,
-    BackupProgress,
-    BackupVerifyRecord,
-    ServerArchiveManifest,
-} from '@workspace/lib/types/backup';
+import type { BackupEntry, BackupProgress, BackupVerifyRecord } from '@workspace/lib/types/backup';
 import { isCollabType } from '@workspace/lib/types/drive';
-import { parseBackupManifest, parseServerArchiveManifest } from '@workspace/lib/validation';
+import { parseBackupManifest } from '@workspace/lib/validation';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { PATHS, SERVER_DATABASES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { hashFile } from '../storage/deadline';
-import type { ArchiveMember, ArchiveMemberAt } from './archive';
-import { hashArchiveMembers, listArchiveMembers, readArchiveMember } from './archive';
 import {
     archivePath,
     checkArchivedPathRows,
@@ -42,10 +36,10 @@ import {
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
 const SAMPLE_LARGEST = 10;
 const SAMPLE_REST = 10;
-// A wrecked archive can fail on every entry, an old one warn on every row; the record is a sidecar and an SSE
-// payload, not a log.
+// A wrecked archive can fail on every entry, and an old one can warn on every row. The record is a sidecar and an
+// SSE payload, not a log, so it keeps this many lines.
 const MAX_LINES = 100;
-// And how many of them a one-line message quotes: the record carries the whole list.
+// How many failures a one-line message quotes. The record carries the whole list.
 const FAILURES_IN_MESSAGE = 3;
 
 export function describeFailures(verify: Pick<BackupVerifyRecord, 'failures'>): string {
@@ -72,8 +66,8 @@ export function requireVerified(verified: BackupVerifyRecord, name: string): voi
 }
 
 // An Eigen-owned database inside the archive: the path the manifest speaks of, and the resolved
-// one that survived the containment check. `isYjsDocument` marks the data.db of a collab container
-// — the only kind stage 3 can decode (chat's data.db is plain SQLite).
+// one that survived the containment check. `isYjsDocument` marks the data.db of a collab container,
+// the only kind stage 3 can decode. A chat's data.db is plain SQLite.
 type ArchiveDatabase = { path: string; abs: string; isYjsDocument: boolean };
 
 // The folder's own files, walked with readdir's lstat-level types so a symlink is seen rather than
@@ -185,7 +179,7 @@ function countYjsBlobs(dbPath: string): number {
 // Decides whether an unpacked backup folder counts as good: every file is the one the manifest
 // describes (transport), every Eigen database is structurally sound (structure), and a sample of
 // the collab documents still decodes into a document with content (content). Works on any folder
-// with a manifest — a staging folder straight after a backup, or a fresh extract before a restore.
+// with a manifest, such as a staging folder straight after a backup or a fresh extract before a restore.
 // Every database is opened read-only: a verify never changes a byte of what it is checking.
 export async function verifyFolder(dir: string, onProgress?: BackupProgress): Promise<BackupVerifyRecord> {
     const checkedAt = new Date();
@@ -208,7 +202,7 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
     const warnings = cappedLines('warnings');
     const fail = failures.add;
 
-    // Stage 1 — transport: the manifest and the folder describe the same set of bytes.
+    // Stage 1, transport: the manifest and the folder describe the same set of bytes.
     const present = new Set<string>();
     await listFolderFiles(root, '', present, fail);
     present.delete(ARCHIVE_MANIFEST_FILE);
@@ -220,14 +214,14 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
             fail(`${entry.path}: missing from the folder`);
         } else {
             const { size, hash } = await hashFile(abs);
-            if (size !== entry.bytes) fail(`${entry.path}: ${size} bytes, the manifest says ${entry.bytes}`);
-            else if (hash !== entry.sha256) fail(`${entry.path}: sha256 does not match the manifest`);
+            const mismatch = entryMismatch(entry, size, hash);
+            if (mismatch) fail(mismatch);
         }
         onProgress?.('verify files', index + 1, manifest.entries.length);
     }
     for (const extra of present) fail(`${extra}: not in the manifest`);
 
-    // Stage 2 — structure: SQLite's own verdict on every database the archive owns. A file already
+    // Stage 2, structure: SQLite's own verdict on every database the archive owns. A file already
     // reported missing by stage 1 is skipped rather than reported twice.
     const databases = listArchiveDatabases(
         root,
@@ -260,8 +254,8 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
         onProgress?.('verify databases', index + 1, databases.length);
     }
 
-    // Stage 3 — content: the bytes are a document, not just a well-formed database. The sample is
-    // deterministic — largest first, then by hashed path — so two verifies of a folder agree.
+    // Stage 3, content: the bytes are a document, not just a well-formed database. The sample is
+    // deterministic, largest first and then by hashed path, so two verifies of a folder agree.
     const collab = databases.flatMap((database) => {
         if (!database.isYjsDocument || !fs.existsSync(database.abs)) return [];
         const order = new Bun.CryptoHasher('sha256').update(database.path).digest('hex');
@@ -298,120 +292,10 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
     };
 }
 
-// The manifest a whole-server archive closes with, or why it has none.
-async function readClosingManifest(members: ArchiveMemberAt[]): Promise<ServerArchiveManifest | string> {
-    const last = members.at(-1);
-    if (last?.name !== ARCHIVE_MANIFEST_FILE) return `${ARCHIVE_MANIFEST_FILE} is not the last member`;
-    let text: string;
-    try {
-        text = new TextDecoder().decode(await readArchiveMember(last));
-    } catch (error) {
-        return describeError(error);
-    }
-    return parseServerArchiveManifest(text) ?? `${ARCHIVE_MANIFEST_FILE} is not a version 1 server archive manifest`;
-}
-
-// A whole-server archive as one read finds it: every member hashed, the manifest it closes with,
-// and the transport verdict. The manifest is null unless it parses; the members are what the read
-// got through before it failed.
-type ReadServerArchive = {
-    verify: BackupVerifyRecord;
-    members: ArchiveMember[];
-    manifest: ServerArchiveManifest | null;
-};
-
-// How a member differs from its manifest entry, or null. A null sha256 checks the size alone, for a reader that has
+// How a file differs from its manifest entry, or null. A null sha256 checks the size alone, for a reader that has
 // not read the bytes yet.
-function memberMismatch(entry: ServerArchiveManifest['entries'][number], bytes: number, sha256: string | null) {
+export function entryMismatch(entry: BackupEntry, bytes: number, sha256: string | null): string | null {
     if (bytes !== entry.bytes) return `${entry.path}: ${bytes} bytes, the manifest says ${entry.bytes}`;
     if (sha256 !== null && sha256 !== entry.sha256) return `${entry.path}: sha256 does not match the manifest`;
     return null;
-}
-
-// The transport check of a whole-server archive: its last member is the manifest, and every other
-// member is there with the bytes and sha256 the manifest names. No member is unpacked; each one
-// verifies on its own when it is extracted.
-export async function readServerArchive(archivePath: string): Promise<ReadServerArchive> {
-    const checkedAt = new Date();
-    const failed = (
-        failures: string[],
-        members: ArchiveMember[] = [],
-        manifest: ServerArchiveManifest | null = null,
-    ) => ({
-        verify: { status: 'failed' as const, checkedAt, failures },
-        members,
-        manifest,
-    });
-    let members: ArchiveMember[];
-    try {
-        members = await hashArchiveMembers(archivePath);
-    } catch (error) {
-        // A cut-off or foreign tar is a verdict on the archive, not an error of the check.
-        return failed([describeError(error)]);
-    }
-    const manifest = await readClosingManifest(members);
-    if (typeof manifest === 'string') return failed([manifest], members);
-
-    // A reader takes one of two same-named members and the manifest cannot say which, so their bytes do not matter.
-    const present = new Map<string, ArchiveMember>();
-    const duplicates = new Set<string>();
-    for (const member of members.slice(0, -1)) {
-        if (present.has(member.name)) duplicates.add(member.name);
-        present.set(member.name, member);
-    }
-    if (duplicates.size > 0) {
-        const failures = [...duplicates].map((name) => `${name}: appears more than once in the archive`);
-        return failed(failures, members, manifest);
-    }
-
-    const failures: string[] = [];
-    for (const entry of manifest.entries) {
-        const member = present.get(entry.path);
-        present.delete(entry.path);
-        if (!member) {
-            failures.push(`${entry.path}: missing from the archive`);
-        } else {
-            const mismatch = memberMismatch(entry, member.bytes, member.sha256);
-            if (mismatch) failures.push(mismatch);
-        }
-    }
-    for (const extra of present.keys()) failures.push(`${extra}: not in the manifest`);
-    const status = failures.length === 0 ? 'verified' : 'failed';
-    return { verify: { status, checkedAt, failures }, members, manifest };
-}
-
-// One member of a whole-server archive, its bytes checked against the manifest, and no other member read: what
-// `restore --env` takes on a new machine, before the stage reads and checks them all. Bytes null: no such member.
-export async function readServerArchiveMember(
-    archivePath: string,
-    name: string,
-): Promise<{ bytes: Uint8Array | null } | { failure: string }> {
-    let members: ArchiveMemberAt[];
-    try {
-        members = await listArchiveMembers(archivePath);
-    } catch (error) {
-        return { failure: describeError(error) };
-    }
-    const manifest = await readClosingManifest(members);
-    if (typeof manifest === 'string') return { failure: manifest };
-    const named = members.filter((member) => member.name === name);
-    const entry = manifest.entries.find((candidate) => candidate.path === name);
-    const [member] = named;
-    if (named.length > 1) return { failure: `${name}: appears more than once in the archive` };
-    if (!member && !entry) return { bytes: null };
-    if (!member) return { failure: `${name}: missing from the archive` };
-    if (!entry) return { failure: `${name}: not in the manifest` };
-    const sizeMismatch = memberMismatch(entry, member.bytes, null);
-    if (sizeMismatch) return { failure: sizeMismatch };
-    try {
-        const bytes = await readArchiveMember(member);
-        const mismatch = memberMismatch(
-            entry,
-            bytes.length,
-            new Bun.CryptoHasher('sha256').update(bytes).digest('hex'),
-        );
-        return mismatch ? { failure: mismatch } : { bytes };
-    } catch (error) {
-        return { failure: describeError(error) };
-    }
 }

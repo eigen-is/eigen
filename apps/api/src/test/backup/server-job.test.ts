@@ -26,7 +26,7 @@ import {
 } from '../../lib/backup/server-archives';
 import { startServerBackup } from '../../lib/backup/server-job';
 import * as snapshotModule from '../../lib/backup/snapshot-home';
-import { readServerArchive } from '../../lib/backup/verify';
+import { readServerArchive } from '../../lib/backup/verify-server-archive';
 import { getServerDataPath, PATHS, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
