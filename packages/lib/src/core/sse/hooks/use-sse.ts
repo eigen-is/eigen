@@ -4,10 +4,13 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@workspace/lib/auth';
-import type { SSEvent } from '@workspace/lib/types/sse';
+import type { SSEStreamItem } from '@workspace/lib/types/sse';
 import { useEffect } from 'react';
 import { getSSEEventsUrl } from '../../api';
 import { handleSSEvent } from '../sse-handlers';
+
+const FIRST_RETRY_DELAY_MS = 1000;
+const MAX_RETRY_DELAY_MS = 30_000;
 
 export function useSSE(): void {
     const { isAuthenticated, user } = useAuth();
@@ -19,36 +22,37 @@ export function useSSE(): void {
 
         const url = getSSEEventsUrl(userId);
         let eventSource: EventSource | null = null;
-        let retryTimer: ReturnType<typeof setTimeout>;
-        let retryDelay = 1000;
+        let retryTimer: ReturnType<typeof setTimeout> | undefined;
+        let retryDelay = FIRST_RETRY_DELAY_MS;
         let stopped = false;
 
         const connect = () => {
             if (stopped) return;
 
-            const es = new EventSource(url, { withCredentials: true });
-            eventSource = es;
+            const source = new EventSource(url, { withCredentials: true });
+            eventSource = source;
 
-            es.onopen = () => {
-                retryDelay = 1000;
+            source.onopen = () => {
+                retryDelay = FIRST_RETRY_DELAY_MS;
             };
 
-            es.onmessage = (message) => {
+            source.onmessage = (message) => {
                 try {
-                    handleSSEvent(JSON.parse(message.data) as SSEvent, queryClient, userId);
+                    const item = JSON.parse(message.data) as SSEStreamItem;
+                    if (!('event' in item)) handleSSEvent(item, queryClient, userId);
                 } catch (e) {
                     console.error('SSE event failed', e);
                 }
             };
 
-            es.onerror = () => {
+            source.onerror = () => {
                 if (stopped) return;
                 // EventSource reconnects by itself after a network error, but not after an HTTP error such as a 502.
-                if (es.readyState === EventSource.CLOSED) {
-                    es.close();
+                if (source.readyState === EventSource.CLOSED) {
+                    source.close();
                     const jitter = retryDelay * 0.2 * Math.random();
                     retryTimer = setTimeout(connect, retryDelay + jitter);
-                    retryDelay = Math.min(retryDelay * 2, 30000);
+                    retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY_MS);
                 }
             };
         };

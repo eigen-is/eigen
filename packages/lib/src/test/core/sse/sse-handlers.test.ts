@@ -7,6 +7,7 @@ import type {
     SSEventDrive,
     SSEventLabel,
     SSEventMail,
+    SSEventTypeName,
 } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { handleSSEvent } from '../../../core/sse/sse-handlers';
@@ -15,8 +16,6 @@ import { invalidatedBy } from '../../invalidation';
 
 // The epochs handler keeps what it heard in sessionStorage, which only a window has.
 const window = installHappyDom();
-
-type SSEventTypeName = (typeof SSEventType)[keyof typeof SSEventType];
 
 const OWNER = 'owner-1';
 

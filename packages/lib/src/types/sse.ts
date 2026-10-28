@@ -57,45 +57,50 @@ export const SSEventType = {
     HOME_DATA_EPOCHS: 'home:data-epochs',
 } as const;
 
-type SSEventDrive = {
-    type: (typeof SSEventType)[keyof typeof SSEventType] & `drive:${string}`;
+export type SSEventTypeName = (typeof SSEventType)[keyof typeof SSEventType];
+
+export type SSEvent =
+    | SSEventMail
+    | SSEventDrive
+    | SSEventChat
+    | SSEventCalendar
+    | SSEventNotificationCreated
+    | SSEventNotificationChanged
+    | SSEventContact
+    | SSEventContactsChanged
+    | SSEventLabel
+    | SSEventBackup
+    | SSEventHomeDataEpochs;
+
+// The stream also carries a keepalive. It reaches the browser as an ordinary message, so the tab
+// drops it before it hands the events to the handlers.
+export type SSEKeepalive = { event: 'keepalive' };
+
+export type SSEStreamItem = SSEvent | SSEKeepalive;
+
+export type SSEventMail = {
+    type: SSEventTypeName & `mail:${string}`;
+    mail: { messageId: string; mailbox: string; toMailbox?: string };
+};
+
+export type SSEventDrive = {
+    type: SSEventTypeName & `drive:${string}`;
     path: { ownerId: string; mountId: string; id: string; parentId: string | null; mimeType: string | null };
     oldParentId?: string;
 };
 
-type SSEventMail = {
-    type: (typeof SSEventType)[keyof typeof SSEventType] & `mail:${string}`;
-    mail: { messageId: string; mailbox: string; toMailbox?: string };
-};
-
-type SSEventCalendar = {
-    type: (typeof SSEventType)[keyof typeof SSEventType] & `calendar:${string}`;
-    ownerId: string;
-};
-
-type SSEventChat = {
-    type: (typeof SSEventType)[keyof typeof SSEventType] & `chat:${string}`;
+export type SSEventChat = {
+    type: SSEventTypeName & `chat:${string}`;
     chat: { chatId: string; ownerId: string; mountId: string };
 };
 
-type SSEventContact = {
-    type: typeof SSEventType.CONTACT_CREATED | typeof SSEventType.CONTACT_UPDATED | typeof SSEventType.CONTACT_DELETED;
-    contactId: string;
-};
-
-// A whole-file import sends this once instead of one event per card. It carries no ids, because a card
-// change refetches the owner's whole list anyway.
-type SSEventContactsChanged = {
-    type: typeof SSEventType.CONTACTS_CHANGED;
-};
-
-type SSEventLabel = {
-    type: typeof SSEventType.LABEL_CREATED | typeof SSEventType.LABEL_UPDATED | typeof SSEventType.LABEL_DELETED;
-    labelId: string;
+export type SSEventCalendar = {
+    type: SSEventTypeName & `calendar:${string}`;
+    ownerId: string;
 };
 
 // The one event that carries display text: it raises the toast, which has nothing to refetch.
-type SSEventNotificationCreated = {
+export type SSEventNotificationCreated = {
     type: typeof SSEventType.NOTIFICATION_CREATED;
     title: string;
     body?: string;
@@ -103,13 +108,29 @@ type SSEventNotificationCreated = {
     tag?: string;
 };
 
-type SSEventNotificationChanged = {
+export type SSEventNotificationChanged = {
     type: typeof SSEventType.NOTIFICATION_CHANGED;
+};
+
+export type SSEventContact = {
+    type: typeof SSEventType.CONTACT_CREATED | typeof SSEventType.CONTACT_UPDATED | typeof SSEventType.CONTACT_DELETED;
+    contactId: string;
+};
+
+// A whole-file import sends this once instead of one event per card. It carries no ids, because a card
+// change refetches the owner's whole list anyway.
+export type SSEventContactsChanged = {
+    type: typeof SSEventType.CONTACTS_CHANGED;
+};
+
+export type SSEventLabel = {
+    type: typeof SSEventType.LABEL_CREATED | typeof SSEventType.LABEL_UPDATED | typeof SSEventType.LABEL_DELETED;
+    labelId: string;
 };
 
 // Sent when a backup job starts and when it ends. The admin pane refetches the job and artifact lists,
 // which the server answers from its job map.
-type SSEventBackup = {
+export type SSEventBackup = {
     type: typeof SSEventType.BACKUP_JOB_UPDATED;
     jobId: string;
     ownerId: string;
@@ -117,34 +138,7 @@ type SSEventBackup = {
 
 // Sent when a stream opens and with every keepalive: the data epoch of the user's own home and of each of
 // their teams, keyed by owner id. Only a restore changes one, so a tab reloads when an epoch it holds changes.
-type SSEventHomeDataEpochs = {
+export type SSEventHomeDataEpochs = {
     type: typeof SSEventType.HOME_DATA_EPOCHS;
     epochs: Record<string, string>;
-};
-
-export type SSEvent =
-    | SSEventBackup
-    | SSEventDrive
-    | SSEventMail
-    | SSEventCalendar
-    | SSEventChat
-    | SSEventContact
-    | SSEventContactsChanged
-    | SSEventHomeDataEpochs
-    | SSEventLabel
-    | SSEventNotificationCreated
-    | SSEventNotificationChanged;
-
-export type {
-    SSEventBackup,
-    SSEventCalendar,
-    SSEventChat,
-    SSEventContact,
-    SSEventContactsChanged,
-    SSEventDrive,
-    SSEventHomeDataEpochs,
-    SSEventLabel,
-    SSEventMail,
-    SSEventNotificationChanged,
-    SSEventNotificationCreated,
 };

@@ -38,6 +38,17 @@ describe('SSE', () => {
             }
         });
 
+        // Elysia writes the keepalive as an ordinary data message, so useSSE recognizes it by this shape and
+        // drops it before the handlers.
+        test('opens with the keepalive as a data message', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/sse/${ctx.alice.user.id}/events`);
+            const reader = res.body?.getReader();
+            // Bun hands the chunk over as the string Elysia wrote, though the body's type says bytes.
+            const first: unknown = (await reader?.read())?.value;
+            await reader?.cancel();
+            expect(first).toBe('data: {"event":"keepalive"}\n\n');
+        });
+
         test('ownerId spoofing is rejected with 403', async () => {
             const res = await authedRequest(ctx.bob.user.sessionToken, `/sse/${ctx.alice.user.id}/events`);
             expect(res.status).toBe(403);
