@@ -28,6 +28,7 @@ type Props = {
 // Below FormatToolbar's seam nothing needs centering, so the side columns give way:
 // the menu row scrolls in the leftover space and the right icons keep their width on-screen.
 // The seam is a container query on the bar's own width, so a sidebar beside the workbook counts.
+// A bar as narrow as a phone gives each menu less padding, so all six fit a 390px screen; a narrower one scrolls.
 export function MenuBar({ leftItems, rightItems }: Props) {
     const { context } = useContext(WorkbookContext);
     const { focusFindBarRef, onCloseAutoFocus: refocusFindBar } = useFindBarRefocus();
@@ -37,7 +38,7 @@ export function MenuBar({ leftItems, rightItems }: Props) {
     return (
         <div className="@container border-b border-border bg-background">
             <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] @[1360px]:grid-cols-[1fr_auto_1fr] items-center gap-1 app-gutter-x h-12">
-                <Menubar className="min-w-0 overflow-x-auto">
+                <Menubar className="min-w-0 overflow-x-auto @max-md:**:data-[slot=menubar-trigger]:px-2">
                     {leftItems}
                     <AppBarMenu
                         label="Edit"
