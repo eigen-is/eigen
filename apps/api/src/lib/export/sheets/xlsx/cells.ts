@@ -192,6 +192,7 @@ function valueXml(cell: Cell, context: GridContext): { t?: string; xml: string }
     }
     const runs = cell.ct?.s && context.strings.runs(cell.ct.s);
     if (runs !== undefined) return { t: 's', xml: `<v>${runs}</v>` };
+    if (typeof v === 'string' && cell.ct?.t === 'e' && valueIsError(v)) return { t: 'e', xml: `<v>${v}</v>` };
     if (typeof v === 'string') return { t: 's', xml: `<v>${context.strings.text(v)}</v>` };
     return v === undefined ? undefined : scalarXml(v);
 }

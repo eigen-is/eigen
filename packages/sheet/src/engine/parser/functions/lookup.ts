@@ -1,3 +1,7 @@
+// The engine's lookups: XLOOKUP and XMATCH, which formulajs 2.9.3 lacks, and INDEX, where formulajs's differs from
+// Excel's. The function registry calls them. It has already handed on an error in any argument but the arrays, such
+// as an error match_mode, so these functions only see errors inside the arrays they search or return from.
+
 import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_REF, ERROR_VALUE } from '../error';
 import { toGrid } from '../helper/array';
@@ -51,13 +55,11 @@ function vector(arg: FunctionArg): [FormulaValue[], 'column' | 'row'] {
 function lookupValue(arg: FunctionArg): FormulaValue {
     if (arg === OMITTED) return 0;
     if (arg instanceof Date) return dateToSerial(arg);
-    if (arg instanceof Error) throw arg;
     if (Array.isArray(arg)) throw Error(ERROR_VALUE);
     return arg;
 }
 
 function mode(arg: FunctionArg, fallback: number, allowed: Set<number>): number {
-    if (arg instanceof Error) throw arg;
     const value = arg == null || arg === OMITTED ? fallback : toNumber(arg);
     if (value === undefined || !allowed.has(value)) throw Error(ERROR_VALUE);
     return value;
@@ -152,7 +154,6 @@ export function index(params: FormulaArg[]): FormulaOutput | undefined {
     // A blank cell is 0 too.
     const whole = (arg: FormulaArg) => arg === 0 || arg == null;
     const position = (arg: FormulaArg, size: number) => {
-        if (arg instanceof Error) throw arg;
         const value = Math.trunc(toNumber(arg ?? 0) ?? Number.NaN);
         if (!(value >= 0)) throw Error(ERROR_VALUE);
         if (value > size) throw Error(ERROR_REF);

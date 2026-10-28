@@ -62,9 +62,9 @@ describe('MAXIFS and MINIFS', () => {
         expect(value('=MINIFS(A1:A4,B1:C4,1)')).toBe('#VALUE!');
     });
 
-    test('a criteria range without its criterion is #N/A, an error criterion propagates', () => {
+    test('a criteria range without its criterion is #N/A, an error criterion matches only error cells', () => {
         expect(value('=MAXIFS(A1:A6,B1:B6)')).toBe('#N/A');
-        expect(value('=MAXIFS(A1:A6,B1:B6,1/0)')).toBe('#DIV/0!');
+        expect(value('=MAXIFS(A1:A6,B1:B6,1/0)')).toBe(0);
     });
 
     test('an empty criterion matches the cells it matches for SUMIFS, an empty range is #VALUE!', () => {

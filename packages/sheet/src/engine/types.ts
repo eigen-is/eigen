@@ -119,25 +119,25 @@ export type FormulaEngineState = {
     cellTextToIndexList: Record<string, FormulaDependency>;
 };
 
-// Scalar value that can appear in a formula expression or as a cell value.
+// Scalar value that can appear in a formula expression or as a cell value, an error a cell holds included.
 // Range/array shapes are expressed via `FormulaArg`.
-export type FormulaValue = string | number | boolean | null | undefined;
+export type FormulaValue = string | number | boolean | null | undefined | Error;
 
 // Arguments accepted by formula operators and functions. Scalars for single cells,
-// 1D arrays for row/column ranges, 2D arrays for rectangular ranges. Includes
-// `Error` because an operator's output (which may be an in-band Error from a
+// 1D arrays for row/column ranges, 2D arrays for rectangular ranges. A scalar may
+// be an Error because an operator's output (which may be an in-band Error from a
 // short-circuit branch or a formulajs error sentinel) becomes the input of its
 // parent in the grammar — short-circuit functions like IF/IFERROR/AND/OR
 // inspect Error operands directly to decide what to return.
-export type FormulaArg = FormulaValue | FormulaValue[] | FormulaValue[][] | Error;
+export type FormulaArg = FormulaValue | FormulaValue[] | FormulaValue[][];
 
 // Return shape produced by operators and formula functions — same shape space
-// as `FormulaArg`, plus `Error` for in-band error propagation. formulajs returns
+// as `FormulaArg`, an Error included for in-band error propagation. formulajs returns
 // Error sentinels (e.g. `error.value`) and our short-circuit logic relies on
 // arithmetic operators returning Error rather than throwing so the grammar can
 // keep reducing (an untaken IF branch may discard the Error). The top-level
 // `parse()` unwraps any Error result into a `{error}` field for callers.
-export type FormulaOutput = FormulaValue | FormulaValue[] | FormulaValue[][] | Error;
+export type FormulaOutput = FormulaArg;
 
 // Acknowledgment callback the parser passes to `callCellValue` / `callRangeValue` /
 // `callFunction` / `callVariable` listeners so they can supply the resolved value.

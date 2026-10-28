@@ -211,6 +211,48 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![2][2]?.v).toBe(21);
     });
 
+    // An imported formula holds the error Excel computed, which recalc computes again before the cells that read it.
+    test('an error a formula computes is one to the formulas that read it, as Excel computed them', () => {
+        const error = (v: string): Partial<Cell> => ({ v, m: v, ct: { fa: 'General', t: 's' } });
+        const flag = (v: boolean): Partial<Cell> => ({ v, m: v ? 'TRUE' : 'FALSE', ct: { fa: 'General', t: 'b' } });
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [formula('=1/0', error('#DIV/0!')), formula('=ISERROR(A1)', flag(true)), formula('=ISNA(A1)')],
+                [formula('=IFERROR(A1,"none")'), formula('=ERROR.TYPE(A1)'), formula('=A1+1')],
+                [str('#DIV/0!'), formula('=ISERROR(A3)', flag(false)), formula('=SUM(A1,1)')],
+            ]),
+            sheet('s2', 'Sheet2', [[formula('=IFERROR(Sheet1!A1,0)', num(0))]]),
+        ];
+        const out = recalcSheets(sheets);
+        const values = out[0].data!.map((row) => row.map((cell) => cell?.v));
+        expect(values).toEqual([
+            ['#DIV/0!', true, false],
+            ['none', 2, '#DIV/0!'],
+            ['#DIV/0!', false, '#DIV/0!'],
+        ]);
+        expect(out[1].data![0][0]?.v).toBe(0);
+    });
+
+    // A #NAME? stands in for the value of a function the engine lacks, so the guard keeps the reader's cached value.
+    test("a formula reading a function the engine lacks keeps its cached value, or shows #NAME?, never IFERROR's fallback", () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=FILTER(A1:A2,A1:A2>0)'), formula('=IFERROR(B1,"none")', num(1))],
+                [num(2), formula('=IFERROR(B1,"none")'), formula('=ISERROR(B1)')],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][2]?.v).toBe(1);
+        expect(out[0].data![1][1]?.v).toBe('#NAME?');
+        expect(out[0].data![1][2]?.v).toBe('#NAME?');
+    });
+
+    // Only an error string is an error: a cached text that starts with # is a value the guard keeps.
+    test('a cached text that starts with # is kept over a function the engine lacks', () => {
+        const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=FILTER(A1:A2,A1:A2>0)', str('#tag'))]])];
+        expect(recalcSheets(sheets)[0].data![0][1]?.v).toBe('#tag');
+    });
+
     test('imported VLOOKUP with a lower-case FALSE resolves against the looked-up sheet', () => {
         // The real shape of a converted-xlsx formula: Excel writes bare booleans lower-cased,
         // and `false` used to resolve as an unknown variable → #NAME?. Neither cell carries a

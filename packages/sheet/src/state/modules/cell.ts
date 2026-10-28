@@ -233,7 +233,8 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         cell.ct = { fa: '0%', t: 'n' };
         cell.v = vupdateStr.substring(0, vupdateStr.length - 1) / 100;
         cell.m = vupdate;
-    } else if (valueIsError(vupdate)) {
+    } else if (valueIsError(vupdate) && (!isNil(cell.f) || cell.ct?.fa !== '@')) {
+        // Typed into a text-formatted cell, an error is text, as in Excel. A formula's error is an error in any format.
         cell.m = vupdateStr;
         if (!isNil(cell.ct)) {
             cell.ct.t = 'e';

@@ -109,7 +109,7 @@ describe('a value', () => {
         );
         expect(cell('A1')).toEqual({ v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } });
         expect(cell('B1')).toEqual({ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } });
-        expect(cell('C1')).toEqual({ v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 's' } });
+        expect(cell('C1')).toEqual({ v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } });
     });
 
     test('a number in a date format is a date serial; an ISO date cell too', () => {

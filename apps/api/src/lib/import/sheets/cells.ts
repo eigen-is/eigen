@@ -197,7 +197,8 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         } else cell.m = typeof value === 'boolean' ? booleanDisplay(value) : value;
     }
     if (formula) cell.f = `=${formula}`;
-    const t = date ? 'd' : value === undefined ? undefined : VALUE_TYPE[typeof value];
+    // An error keeps its type, so a formula reading the cell sees an error, not text that reads as one.
+    const t = date ? 'd' : value === undefined ? undefined : type === 'e' ? 'e' : VALUE_TYPE[typeof value];
     // The editor always pairs `t` with `fa`, General when the cell has no format.
     if (t || look.fa) cell.ct = { fa: look.fa ?? 'General', ...(t && { t }) };
     return cell;
