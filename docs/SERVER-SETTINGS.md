@@ -38,6 +38,7 @@ At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded v
 - `set()` writes a temp file and renames it over the old one, and rolls the in-memory state back when the write fails.
 - The file appears at the first `set()`, not at `load()`.
 - A settings PUT takes a partial update, so its typebox schema is `t.Optional` all the way down, matching the `DeepPartial` the store merges.
+- An optional enum at the top of a body is `t.Union` of `t.Literal`s, never `t.UnionEnum`. Elysia gives a `UnionEnum` its first value as the default and fills it into a body that leaves the field out, so every save without a `theme` set it to `light`, and a team mount added without a storage type got `local` instead of the server default.
 
 ## What settings.json holds
 

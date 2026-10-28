@@ -96,7 +96,7 @@ export const teamRouter = new Elysia({ name: 'team' })
         {
             body: t.Object({
                 name: t.String({ minLength: 1 }),
-                storageType: t.Optional(t.UnionEnum(MOUNT_STORAGE_TYPES)),
+                storageType: t.Optional(t.Union(MOUNT_STORAGE_TYPES.map((type) => t.Literal(type)))),
                 maxSizeMB: t.Optional(t.Number({ minimum: 10 })),
                 s3Config: t.Optional(s3ConfigBody),
             }),

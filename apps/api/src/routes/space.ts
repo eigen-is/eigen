@@ -34,7 +34,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
         },
         {
             body: t.Object({
-                theme: t.Optional(t.UnionEnum(USER_THEMES)),
+                theme: t.Optional(t.Union(USER_THEMES.map((theme) => t.Literal(theme)))),
                 email: t.Optional(
                     t.Object({
                         signatures: t.Optional(
