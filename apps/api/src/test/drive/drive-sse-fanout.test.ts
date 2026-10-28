@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { SSEvent, SSEventDrive } from '@workspace/lib/types/sse';
+import type { SSEvent, SSEventChat, SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getServerConfig } from '../../lib/config/server-config';
 import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
@@ -10,6 +10,7 @@ import {
     addMember,
     addTeamMount,
     authedRequest,
+    chatPost,
     collectSSE,
     createTeam,
     createTestUser,
@@ -222,5 +223,47 @@ describe('a drive change inside a shared folder', () => {
         const types = namedEvents(aliceSSE, sharedFolder.id).map((event) => event.type);
         expect(types.filter((type) => type === SSEventType.DRIVE_PATH_RENAMED)).toHaveLength(1);
         expect(types.filter((type) => type === SSEventType.DRIVE_FILE_HISTORY_UPDATED)).toHaveLength(1);
+    });
+});
+
+describe('a chat message in a shared chat', () => {
+    function chatEvents(collector: SSECollector, chatId: string): SSEvent[] {
+        return collector.events.filter(
+            (event): event is SSEventChat => 'chat' in event && event.chat.chatId === chatId,
+        );
+    }
+
+    // The owner is one of the chat's members and hears the message once. A sharee who may only write cannot
+    // read the chat, so they hear nothing.
+    test('reaches the owner and a reading sharee once, and a write-only sharee not at all', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const aliceMountId = await firstMountId(token, ctx.alice.user.id);
+        const aliceRoot = await driveGet(token, ctx.alice.user.id, aliceMountId, 'root');
+        const chat = await drivePost(token, ctx.alice.user.id, aliceMountId, `folder/${aliceRoot.id}/create/chat`, {
+            fileName: 'sse-fanout-chat',
+        });
+        await drivePut(token, ctx.alice.user.id, aliceMountId, `path/${chat.id}/acl`, {
+            add: [
+                { id: ctx.bob.user.email, read: true, write: false },
+                { id: ctx.charlie.user.email, read: false, write: true },
+            ],
+        });
+        await drainACLFanOuts();
+        const aliceSSE = await collectSSE(ctx.alice.user.id);
+        const bobSSE = await collectSSE(ctx.bob.user.id);
+        const charlieSSE = await collectSSE(ctx.charlie.user.id);
+        await chatPost(token, ctx.alice.user.id, aliceMountId, `${chat.id}/messages`, { content: 'hello sharees' });
+        const posted = (event: SSEvent) => event.type === SSEventType.CHAT_MESSAGE_POSTED;
+        await bobSSE.next(posted);
+        await aliceSSE.next(posted);
+        await settle();
+        aliceSSE.stop();
+        bobSSE.stop();
+        charlieSSE.stop();
+
+        const postedCount = (collector: SSECollector) => chatEvents(collector, chat.id).filter(posted).length;
+        expect(postedCount(aliceSSE)).toBe(1);
+        expect(postedCount(bobSSE)).toBe(1);
+        expect(postedCount(charlieSSE)).toBe(0);
     });
 });

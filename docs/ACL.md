@@ -88,7 +88,7 @@ GET /drive/:ownerId/:mountId/path/:pathId/effective-members
 Used by:
 
 - `useChatRoom`: resolves room members for embedded chats (where the chat has no direct ACL)
-- `ChatRoom.notifySharedUsers()`: determines which users to send SSE events to
+- `broadcastToOwnerAndMembers` (`home-relay.ts`): a `ChatRoom` hands it the effective members to send its SSE events to
 
 ## Share Propagation
 

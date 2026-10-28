@@ -36,7 +36,7 @@ A relayed event only refetches: `handleDriveSSEvent` raises no toast and adds no
 
 The relay reads the members from the path's ACL chain, looks their accounts up in one query, then pushes the event into each open home. A closed home costs nothing, because a broadcast never opens one. An unshared path in a user's home has its owner alone, so its event reads the path's folder chain and looks no account up (`Drive.membersToTell`).
 
-Measured on an M1 Pro dev Mac that other test runs shared, so the numbers are noisy. For a team of 50 with a listener each, one event cost 0.5 to 1.0 ms, of which reading the members was about 0.5 ms. 500 uploads, eight at a time, took 2.0 to 3.0 s into a team folder and 2.1 s into a personal one. One member lookup per member had cost 3.4 ms per event. On an unshared personal folder an event costs about 0.09 ms more than a broadcast to the owner alone, the folder chain read; it was 0.18 ms before the account lookup was skipped.
+Measured on an M1 Pro dev Mac that other test runs shared, so the numbers are noisy. For a team of 50 with a listener each, one event cost 0.5 to 1.0 ms, of which reading the members was about 0.5 ms. 500 uploads, eight at a time, took 2.0 to 3.0 s into a team folder and 2.1 s into a personal one. One member lookup per member had cost 3.4 ms per event. On an unshared personal folder an event costs about 0.09 ms more than a broadcast to the owner alone, the folder chain read.
 
 ## A burst of new files refetches an open listing once
 

@@ -43,8 +43,7 @@ describe('debouncePerOwner', () => {
             5000,
         );
 
-        expect(refetches).toBeGreaterThanOrEqual(3);
-        expect(refetches).toBeLessThanOrEqual(4);
+        expect(refetches).toBe(4);
     });
 
     test('without a max wait, a long trickle refetches once, after it', () => {
