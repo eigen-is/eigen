@@ -1,11 +1,16 @@
 // The confirm lifecycle of a dialog whose action awaits a mutation, such as ConfirmDialog's: the buttons and every
 // close path wait while it runs, and it closes once the action succeeds. A failure keeps it open beside the error toast
-// for another try, unless the server refused, such as a team it won't delete: another try gets the same no.
+// for another try. `closeOnRefusal` is for a yes/no with nothing to edit, such as a team the server won't delete: there
+// another try gets the same no, so a refusal closes it. A picker leaves it off, since its typed name or chosen folder
+// is how the user gets past a 403 or 422.
 
 import { isRefusal } from '@workspace/lib/api-error';
 import { useState } from 'react';
 
-export function useDialogPending(onOpenChange: (open: boolean) => void): {
+export function useDialogPending(
+    onOpenChange: (open: boolean) => void,
+    { closeOnRefusal = false }: { closeOnRefusal?: boolean } = {},
+): {
     pending: boolean;
     run: (action: () => void | Promise<void>) => Promise<void>;
     handleOpenChange: (open: boolean) => void;
@@ -20,7 +25,7 @@ export function useDialogPending(onOpenChange: (open: boolean) => void): {
             onOpenChange(false);
         } catch (error) {
             // The mutation's onMutationError already surfaced the toast.
-            if (isRefusal(error)) onOpenChange(false);
+            if (closeOnRefusal && isRefusal(error)) onOpenChange(false);
         } finally {
             setPending(false);
         }

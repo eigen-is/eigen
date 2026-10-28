@@ -16,7 +16,7 @@ An app must not wrap a mutation in `try/catch` + `toast.error()`: the hook alrea
 
 A caller that awaits `mutateAsync` and must still see other rejections asks `wasToasted(error)`: `onMutationError` records every error it toasts, so the caller swallows exactly those (`CardForm` does this).
 
-A confirm dialog whose action fails stays open beside the toast, so the user can try again (`useDialogPending`, which `ConfirmDialog` and `DeleteDialog` use). A refusal closes it: an `AppError` with a 400, 403, 404 or 422 (`isRefusal`), such as the organization's default team that can't be deleted, gets the same answer on every try. A hook whose dialog should close on a refusal throws an `AppError` carrying the server's status, as `useRemoveTeam` does with better-auth's error.
+A dialog whose action fails stays open beside the toast, so the user can try again (`useDialogPending`, which `ConfirmDialog`, `DeleteDialog` and the pickers use). Only a yes/no confirm closes on a refusal (`ConfirmDialog` passes `closeOnRefusal`): an `AppError` with a 400, 403, 404 or 422 (`isRefusal`), such as the organization's default team that can't be deleted, gets the same answer on every try. A picker with input, such as `DriveLocationPicker` or `ShareAndSendDialog`, stays open on a refusal, because a 403 on a read-only folder or a 422 on a name is fixed by changing what the user typed or picked. A hook whose dialog should close on a refusal throws an `AppError` carrying the server's status, as `useRemoveTeam` does with better-auth's error.
 
 A hook that recovers an expected error shows its own message instead and skips `onMutationError`. A contact write that meets a 412 reloads the list and says the contact changed elsewhere (`handleStaleWrite` in `use-contacts.ts`).
 
