@@ -1,12 +1,22 @@
 // What a restart does about the backup work the last process left behind, in the order it must happen, before the
 // API listens. A per-home restore that died halfway is finished or undone from the notes in its staging folder,
-// then the staging folders are wiped, then a server backup left running is marked failed. The restore writes those
-// notes through here. This module loads the API's jobs and settings, so the stage of ./eigen restore must not
-// import it.
+// then the staging folders are wiped, the home archives are closed to other users, and a server backup left running
+// is marked failed. The restore writes those notes through here. This module loads the API's jobs and settings, so
+// the stage of ./eigen restore must not import it.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getBackupStagingDir, getStagingRoot, parseSafetyCopyName, wipeBackupStaging } from './paths';
+import { parseBackupArtifactName } from '@workspace/lib/validation';
+import { ARCHIVE_MODE } from './archive';
+import { describeError } from './errors';
+import {
+    backupsDirPath,
+    getBackupStagingDir,
+    getStagingRoot,
+    parseSafetyCopyName,
+    SIDECAR_SUFFIX,
+    wipeBackupStaging,
+} from './paths';
 import { recoverInterruptedServerBackups } from './server-archives';
 
 // The note a restore leaves in its staging folder while the home folder is not where it belongs.
@@ -25,11 +35,12 @@ type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: strin
 // open a half-written folder as if it were the home. A restore that died between moving the home aside and
 // installing the archive left a note in its staging folder, so that is read first, before the wipe takes the
 // staging folders with it. Then they are cleared, because a backup, verify or restore cut off by a restart leaves a
-// half-written folder that nothing resumes. Last, a server backup killed mid-run left its record running, and it
-// becomes a failed attempt.
+// half-written folder that nothing resumes. An older build left its home archives readable, and they are closed. Last,
+// a server backup killed mid-run left its record running, and it becomes a failed attempt.
 export async function recoverBackupsAfterRestart(): Promise<void> {
     recoverInterruptedRestores();
     wipeBackupStaging();
+    closeHomeArchives();
     await recoverInterruptedServerBackups().catch((error) =>
         console.error('[backup] recovering server records:', error),
     );
@@ -88,6 +99,24 @@ export function recoverInterruptedRestores(): void {
         console.error(
             `[backup] a restore of ${marker.ownerId} was interrupted: ${marker.preRestoreName} is back in place as the home folder`,
         );
+    }
+}
+
+// A build before 0.4.1 wrote a home archive and its sidecar with the umask's mode, so other users of the host read
+// password hashes and keys out of them. Both get the mode every archive is written with now. A server archive's
+// sidecar keeps its mode, because ./eigen reads it as the operator. A file the API's user does not own, such as one an
+// operator copied in as root, is named and left as it is, since the server must still start.
+function closeHomeArchives(): void {
+    const dir = backupsDirPath();
+    if (!fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+        const archiveName = name.endsWith(SIDECAR_SUFFIX) ? name.slice(0, -SIDECAR_SUFFIX.length) : name;
+        if (!parseBackupArtifactName(archiveName)) continue;
+        try {
+            fs.chmodSync(path.join(dir, name), ARCHIVE_MODE);
+        } catch (error) {
+            console.error(`[backup] could not close ${name} to other users: ${describeError(error)}`);
+        }
     }
 }
 
