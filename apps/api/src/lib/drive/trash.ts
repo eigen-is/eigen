@@ -77,8 +77,9 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
     const roots = isContainerType(item.type) ? [item, ...(await mount.listTrashRootsInside(item.id))] : [item];
     const notices = user ? await Promise.all(roots.map((root) => readDeleteNotice(mount, root, user))) : [];
     // The delete takes the path that the members are read from. Everything here is in the trash, which
-    // only the owner, or a team's members, can see, so one read serves every root.
-    const members = await drive.getEffectiveMembers(mount.id, item.id);
+    // only the owner, or a team's members, can see, so one read serves every root. The item can be gone
+    // already, taken by the delete of a folder around it, and then there is nobody to tell.
+    const members = await drive.getEffectiveMembers(mount.id, item.id).catch(() => []);
 
     if (!(await mount.permanentlyDeleteFromTrash(item.id))) return false;
 
