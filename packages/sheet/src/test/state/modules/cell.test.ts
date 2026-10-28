@@ -211,6 +211,16 @@ describe('state/modules/cell — setCellValue typed numbers', () => {
         expect(data[0][0]?.v).toBe('28254');
     });
 
+    // Excel keeps #N/A typed into a text-formatted cell as text, so a formula reading it sees no error.
+    test('an error typed into a text-formatted cell stays text', () => {
+        const ctx = contextFactory({}) as Context;
+        const data: CellMatrix = [[{ ct: { fa: '@', t: 's' } }, { ct: { fa: '@', t: 's' }, f: '=1/0' }]];
+        setCellValue(ctx, 0, 0, data, '#N/A');
+        expect(data[0][0]).toMatchObject({ v: '#N/A', m: '#N/A', ct: { fa: '@', t: 's' } });
+        setCellValue(ctx, 0, 1, data, '#DIV/0!');
+        expect(data[0][1]?.ct?.t).toBe('e');
+    });
+
     test('a typed number matches a greater-than conditional format', () => {
         const data: CellMatrix = [[typed('50') ?? null]];
         const styles = evaluateConditionalFormat(
