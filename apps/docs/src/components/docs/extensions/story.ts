@@ -115,14 +115,23 @@ function storyWithId(doc: PMNode, type: StoryNode, id: string): number | null {
     return second === undefined ? (first ?? null) : null;
 }
 
+// Whether two story nodes of `type` carry `id`, read once per doc: the open box asks on every render.
+const sharedIds = new WeakMap<PMNode, Map<string, boolean>>();
+function isIdShared(doc: PMNode, type: StoryNode, id: string): boolean {
+    const known = sharedIds.get(doc) ?? new Map<string, boolean>();
+    sharedIds.set(doc, known);
+    const key = `${type} ${id}`;
+    const shared = known.get(key) ?? storiesWithId(doc, type, id).length === 2;
+    known.set(key, shared);
+    return shared;
+}
+
 // Whether `node` draws the open story's live editor. Its id names it. Where two nodes hold the id, only the one the
 // anchor's element maps to draws it, as one editor mounts in one place.
 export function drawsStory(editor: Editor, anchor: StoryAnchor, node: PMNode): boolean {
     const { id, type } = anchor;
     if (id === null || node.type.name !== type || readStoryId(node.attrs['id']) !== id) return false;
-    return (
-        storiesWithId(editor.state.doc, type, id).length < 2 || bindingOf(editor)?.mapping.get(anchor.element) === node
-    );
+    return !isIdShared(editor.state.doc, type, id) || bindingOf(editor)?.mapping.get(anchor.element) === node;
 }
 
 export type FoundStory = {

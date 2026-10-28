@@ -17,6 +17,7 @@ const { docEditorOptions } = await import('../../../../components/docs/doc-edito
 const { createDocUndoManager } = await import('../../../../components/docs/page-setup');
 const { TextBoxContext } = await import('../../../../components/docs/extensions/text-box');
 const { useOpenStory } = await import('../../../../components/docs/hooks/use-open-story');
+const { drawsStory } = await import('../../../../components/docs/extensions/story');
 
 type TestEditor = InstanceType<typeof Editor>;
 type Target = Parameters<typeof docEditorOptions>[0]['target'];
@@ -206,6 +207,40 @@ test('a box with less padding than the edge band keeps the band off its text', a
     expect(a.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
 });
 
+// A box with no padding and no outline has no edge band, so a drag from inside a selected one moves it, as in Google
+// Docs; a click there still opens it.
+test('a drag inside a selected box moves it, and a click inside it opens it', async () => {
+    const bare = {
+        ...box('front'),
+        attrs: { id: 'box-1', layout: 'front', offsetX: 10, offsetY: 10, paddingX: 0, paddingY: 0 },
+    };
+    const { a, session } = await setup([paragraph(bare, text('Anchor'))]);
+    await act(async () => {
+        a.commands.setNodeSelection(1);
+    });
+    laidOutBox(a);
+    const chrome = a.view.dom.querySelector('[data-figure-chrome]');
+    if (!chrome) throw new Error('no chrome');
+    const pointer = (type: string, x: number, y: number) =>
+        act(async () => {
+            const event = new PointerEvent(type, { pointerId: 1, clientX: x, clientY: y, button: 0, bubbles: true });
+            (type === 'pointerdown' ? chrome : document).dispatchEvent(event);
+        });
+    await pointer('pointerdown', 150, 150);
+    await pointer('pointermove', 180, 170);
+    await pointer('pointerup', 180, 170);
+    expect(session.current?.anchor).toBeNull();
+    expect(a.state.doc.nodeAt(1)?.attrs).toMatchObject({ offsetX: 40, offsetY: 30 });
+
+    await pointer('pointerdown', 150, 150);
+    expect(session.current?.anchor).toBeNull();
+    // A hand's jitter is no drag.
+    await pointer('pointermove', 151, 151);
+    await pointer('pointerup', 151, 151);
+    expect(session.current?.anchor).toMatchObject({ type: 'textBox', pos: 1 });
+    expect(a.state.doc.nodeAt(1)?.attrs).toMatchObject({ offsetX: 40, offsetY: 30 });
+});
+
 // The paragraph's box lies over a behind box, so a press there lands on the text's layer, never in the box's editor.
 test('a drag and a double-click in an open behind box select its text', async () => {
     const { a, boxEditor, session } = await setup([paragraph(box('behind'), text('Anchor'))]);
@@ -229,10 +264,18 @@ test('a drag and a double-click in an open behind box select its text', async ()
         [Symbol.iterator]: () => [line][Symbol.iterator](),
     });
     spyOn(boxEditor.view, 'posAtCoords').mockImplementation(({ left }) => ({ pos: left / 50, inside: -1 }));
-    const mouse = (type: string, target: EventTarget, clientX: number, detail = 1) =>
+    const mouse = (type: string, target: EventTarget, clientX: number, { detail = 1, buttons = 1 } = {}) =>
         act(async () => {
             target.dispatchEvent(
-                new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY: 150, detail }),
+                new MouseEvent(type, {
+                    bubbles: true,
+                    cancelable: true,
+                    button: 0,
+                    buttons,
+                    clientX,
+                    clientY: 150,
+                    detail,
+                }),
             );
         });
     await mouse('mousedown', paragraphDom, 100);
@@ -240,8 +283,19 @@ test('a drag and a double-click in an open behind box select its text', async ()
     await mouse('mouseup', document, 250);
     expect(session.current?.anchor).toBe(anchor);
     expect(boxEditor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 2, head: 5 });
-    await mouse('mousedown', paragraphDom, 150, 2);
+    await mouse('mousedown', paragraphDom, 150, { detail: 2 });
     expect(boxEditor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 1, head: 7 });
+
+    // A button let go outside the window sends this page no mouseup: the next move, with no button down, ends the drag.
+    await mouse('mousedown', paragraphDom, 100);
+    await mouse('mousemove', document, 250, { buttons: 0 });
+    await mouse('mousemove', document, 300);
+    expect(boxEditor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 2, head: 2 });
+    // One let go over the window's edge reaches the window alone.
+    await mouse('mousedown', paragraphDom, 100);
+    await mouse('mouseup', window, 100);
+    await mouse('mousemove', document, 300);
+    expect(boxEditor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 2, head: 2 });
 });
 
 test('typing in the open box forwards as one undo step, and ⌘Z in the box takes it back', async () => {
@@ -355,6 +409,17 @@ test("only the open box's own node draws its editor when a peer's copy holds its
     expect(session.current?.anchor).toMatchObject({ type: 'textBox', pos: BOX + 6 });
     expect(editorsIn()).toHaveLength(1);
     expect(a.view.nodeDOM(BOX + 6)?.contains(boxEditor.view.dom)).toBe(true);
+});
+
+// The open box asks on every render whether it draws the editor, and the doc is walked for its id once per change.
+test('the open box looks for copies of its id once per doc', async () => {
+    const { a, session } = await opened();
+    const anchor = session.current?.anchor;
+    const node = a.state.doc.nodeAt(BOX);
+    if (!anchor || !node) throw new Error('not open');
+    const walk = spyOn(a.state.doc, 'descendants');
+    for (let render = 0; render < 3; render++) expect(drawsStory(a, anchor, node)).toBe(true);
+    expect(walk.mock.calls.length).toBeLessThanOrEqual(1);
 });
 
 test('Esc leaves the box selected, and a second Esc puts the caret after it', async () => {

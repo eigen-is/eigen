@@ -225,19 +225,23 @@ export function useFigureResize<T extends FigureSize>({
     return { preview, onTransform, onCommit, onGestureEnd };
 }
 
+// How far, in screen px, a press travels before it is a drag rather than a click.
+const CLICK_SLOP = 3;
+
 // A drag of a figure in front of or behind the text previews its travel in page px and writes once, at the release,
 // moving the figure by that travel from where it draws then. A press on an unselected figure selects it and drags it in
-// the same gesture; a finger on one scrolls the page instead.
+// the same gesture; a finger on one scrolls the page instead. With `onClick`, a press that travels no further than a
+// click's slop moves nothing and is a click.
 function useFigureMove({ editor, getPos, selected }: Pick<NodeViewProps, 'editor' | 'getPos' | 'selected'>): {
     travel: FigureShift | null;
-    startMove: (e: React.PointerEvent) => void;
+    startMove: (e: React.PointerEvent, onClick?: (e: React.PointerEvent) => void) => void;
 } {
     const [travel, setTravel] = useState<FigureShift | null>(null);
     // The gesture's document listeners end with it, or with the view.
     const gesture = useRef<AbortController | null>(null);
     useEffect(() => () => gesture.current?.abort(), []);
 
-    const startMove = (e: React.PointerEvent) => {
+    const startMove = (e: React.PointerEvent, onClick?: (e: React.PointerEvent) => void) => {
         const pos = getPos();
         if (e.button !== 0 || !editor.isEditable || pos === undefined) return;
         // A finger on an image that isn't selected scrolls the page.
@@ -259,12 +263,15 @@ function useFigureMove({ editor, getPos, selected }: Pick<NodeViewProps, 'editor
             setTravel(null);
             const at = getPos();
             if (commit && moved && at !== undefined) editor.commands.moveFigure(at, moved);
+            else if (commit && onClick) onClick(e);
         };
         const { signal } = controller;
         document.addEventListener(
             'pointermove',
             (me) => {
                 if (me.pointerId !== pointerId) return;
+                const still = Math.hypot(me.clientX - clientX, me.clientY - clientY) <= CLICK_SLOP;
+                if (onClick && !moved && still) return;
                 moved = { dx: (me.clientX - clientX) / scale, dy: (me.clientY - clientY) / scale };
                 setTravel(moved);
             },
@@ -409,15 +416,22 @@ export function FigureFrame({
         </button>
     );
 
-    // A press moves a positioned figure. On a text box only a press on its edge band does: one inside it goes to its
-    // text, and a box in the flow drags from its edge as ProseMirror drags a node. The comment mark is a button of its
-    // own, which neither moves nor opens the box.
-    const press = (move: ((e: React.PointerEvent) => void) | undefined) => (e: React.PointerEvent) => {
-        if (e.target instanceof Element && e.target.closest('button')) return;
-        const edge = contentRef.current;
-        if (!dragSurface || !edge || inEdgeBand(edge, dragSurface.text.current, e)) move?.(e);
-        else if (e.button === 0) dragSurface.onInsidePress?.(e);
-    };
+    // A press moves a positioned figure. On a text box a press on its edge band does, and one inside it goes to its
+    // text. A box with no padding and no outline has no band, so a drag inside a selected one in front of or behind
+    // the text moves it too, as in Google Docs, and only a click goes to its text. A box in the flow drags from its edge
+    // as ProseMirror drags a node. The comment mark is a button of its own, which neither moves nor opens the box.
+    const press =
+        (move: ((e: React.PointerEvent, onClick?: (e: React.PointerEvent) => void) => void) | undefined) =>
+        (e: React.PointerEvent) => {
+            if (e.target instanceof Element && e.target.closest('button')) return;
+            const edge = contentRef.current;
+            const inside = dragSurface?.onInsidePress;
+            if (!dragSurface || !edge || inEdgeBand(edge, dragSurface.text.current, e)) move?.(e);
+            else if (e.button === 0 && inside) {
+                if (move && selected) move(e, inside);
+                else inside(e);
+            }
+        };
 
     return (
         <>

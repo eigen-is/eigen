@@ -153,15 +153,17 @@ function pressInto(story: EditorView, event: MouseEvent) {
         select(anchor, anchor);
         const gesture = new AbortController();
         const { signal } = gesture;
+        // A button let go outside the window sends the page no mouseup, so a move with no button down ends it too.
         document.addEventListener(
             'mousemove',
             (move) => {
+                if ((move.buttons & 1) === 0) return gesture.abort();
                 const head = at(move);
                 if (head !== undefined) select(anchor, head);
             },
             { signal },
         );
-        document.addEventListener('mouseup', () => gesture.abort(), { signal });
+        window.addEventListener('mouseup', () => gesture.abort(), { signal });
     }
 }
 

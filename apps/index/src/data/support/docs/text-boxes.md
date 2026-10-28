@@ -30,7 +30,7 @@ Formatting your document's text, such as making a whole paragraph bold, leaves t
 
 ## Move and resize a box
 
-Click the edge of a box to select it. The edge is where you move it: drag it to another place. A box with no outline and no space around its text has no edge to click: click its text, then press **Esc** to select it. A box on its own line moves between lines of text, and a box in front of or behind the text moves anywhere on the page.
+Click the edge of a box to select it. The edge is where you move it: drag it to another place. A box with no outline and no space around its text has no edge to click: click its text, then press **Esc** to select it. Once a box in front of or behind the text is selected, you can also drag it from anywhere inside it, and a click inside it puts you back in its text. A box on its own line moves between lines of text, and a box in front of or behind the text moves anywhere on the page.
 
 Drag a handle on a corner or a side to change the box's size. The box never gets shorter than its text: the height you set is the least it takes, and the box grows when you type more.
 
