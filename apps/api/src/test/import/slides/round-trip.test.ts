@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { FLAT_CHART_LOOK, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { ChartStacking } from '@workspace/lib/types/chart';
-import type { NewVectorElement, VectorElement } from '@workspace/lib/vector';
+import type { NewVectorElement, VectorElement, VectorElementPatch } from '@workspace/lib/vector';
 import {
     generateNKeysBetween,
     normalizeAngle,
@@ -246,6 +246,54 @@ describe('a deck exported and read back', () => {
         expectPx(found.padding, 12);
     });
 
+    test('keeps the text of each shape that holds it, in the same kind, with its typography and padding', () => {
+        const text: VectorElementPatch = {
+            html: '<p>In <strong>the</strong> shape</p>',
+            fontFamily: 'Source Serif 4',
+            fontSize: 32,
+            fontStyle: 'italic',
+            color: '#336699',
+            textAlign: 'right',
+            verticalAlign: 'bottom',
+            padding: 14,
+            strokeColor: '#222222',
+            strokeWidth: 4,
+            angle: 0,
+        };
+        const shapes: NewVectorElement[] = [
+            { type: 'rectangle', x: 40, y: 40, width: 400, height: 200, corners: 'straight', ...text },
+            { type: 'ellipse', x: 500, y: 40, width: 400, height: 200, ...text },
+            { type: 'diamond', x: 1000, y: 40, width: 400, height: 200, corners: 'straight', ...text },
+            { type: 'pie', x: 40, y: 400, width: 400, height: 200, startAngle: 0, sweepAngle: 270, ...text },
+            {
+                type: 'path',
+                x: 500,
+                y: 400,
+                width: 400,
+                height: 200,
+                path: 'M 0 0 L 1 0 L 0.5 1 Z',
+                closed: true,
+                ...text,
+            },
+        ];
+        const { sent, deck } = roundTrip(shapes);
+        const back = deck.slides[0].elements;
+        expect(back.map((found) => found.type)).toEqual(sent.map((element) => element.type));
+        for (const [i, element] of sent.entries()) {
+            if (!('html' in element)) throw new Error('no text');
+            expect(back[i]).toMatchObject({
+                html: element.html,
+                fontFamily: element.fontFamily,
+                fontStyle: element.fontStyle,
+                color: element.color,
+                textAlign: element.textAlign,
+                verticalAlign: element.verticalAlign,
+            });
+            expectPx(back[i].fontSize, element.fontSize);
+            expectPx(back[i].padding, element.padding);
+        }
+    });
+
     test("keeps the slide's name, which no title gives it", () => {
         expect(roundTrip([], 'Agenda').deck.slides[0].name).toBe('Agenda');
     });
@@ -404,16 +452,15 @@ describe('paths exported and read back', () => {
     });
 
     test('a rounded diamond and a painted rounded text box, which the writer draws as custGeom, come back as paths', () => {
-        const [diamond, box, text] = slide.elements.slice(PATHS.length);
-        expect(slide.elements).toHaveLength(PATHS.length + 3);
+        const [diamond, box] = slide.elements.slice(PATHS.length);
+        expect(slide.elements).toHaveLength(PATHS.length + 2);
         expect(diamond).toMatchObject({ type: 'path', closed: true, fill: solid });
         expect(String(diamond.path)).toMatch(/^M [^MZ]* C [^MZ]* Z$/);
-        expect(box).toMatchObject({ type: 'path', closed: true, fill: solid });
-        expect(text).toMatchObject({ type: 'richtext', html: '<p>Rounded</p>' });
+        // The text box's text comes back inside its path, as any closed path holds it.
+        expect(box).toMatchObject({ type: 'path', closed: true, fill: solid, html: '<p>Rounded</p>' });
         for (const [found, element] of [
             [diamond, ROUNDED[0]],
             [box, ROUNDED[1]],
-            [text, ROUNDED[1]],
         ] as const) {
             expectPx(found.x, Number(element.x));
             expectPx(found.width, Number(element.width));

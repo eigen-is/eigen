@@ -1,10 +1,10 @@
-// A text body becomes one rich-text box: its HTML and the box's typography. It leaves out per-run size, color, font
-// and letter spacing, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript,
-// subscript and highlight.
+// A text body becomes the text of one element, such as a text box or the shape it sits in: its HTML and its
+// typography. It leaves out per-run size, color, font and letter spacing, per-paragraph size and indents, stacked and
+// East Asian vertical text, columns, superscript, subscript and highlight.
 
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { escapeHtml, LIGHT_EDITOR_HREF } from '@workspace/lib/html';
-import type { VectorRichTextElement } from '@workspace/lib/vector';
+import type { Textual } from '@workspace/lib/vector';
 import {
     DEFAULT_RICHTEXT_PROPS,
     MAX_HTML_BYTES,
@@ -38,22 +38,6 @@ export type TextSource = {
     rels: ReadonlyMap<string, Relationship>;
 };
 
-export type RichTextFields = Pick<
-    VectorRichTextElement,
-    | 'html'
-    | 'fontFamily'
-    | 'fontSize'
-    | 'fontWeight'
-    | 'fontStyle'
-    | 'textDecoration'
-    | 'textAlign'
-    | 'verticalAlign'
-    | 'color'
-    | 'letterSpacing'
-    | 'lineHeight'
-    | 'padding'
->;
-
 // ECMA-376's default run size, 18 pt, in hundredths of a point.
 const DEFAULT_SIZE = 1800;
 // a:bodyPr's left and right inset where no body states one: 0.1 inch.
@@ -67,7 +51,7 @@ const BULLETS = new Map<string, 'ul' | 'ol' | undefined>([
     ['buBlip', 'ul'],
     ['buAutoNum', 'ol'],
 ]);
-const AUTOFITS = new Set(['normAutofit', 'noAutofit', 'spAutofit']);
+const AUTOFITS = new Set(['normAutofit', 'noAutofit', 'spAutoFit']);
 
 function isBullet(child: XmlElement): boolean {
     return child.ns === A_NS && BULLETS.has(child.local);
@@ -90,7 +74,7 @@ export function richTextOf(
     theme: SlideTheme,
     deck: Pick<DeckWalk, 'scale' | 'slideWidth'>,
     lost: Lost,
-): RichTextFields | undefined {
+): Textual | undefined {
     const pxPerEmu = deck.scale;
     const bodies = bodiesOf(source);
     const shapeLists = bodies.flatMap((body) => body.listStyle ?? []);

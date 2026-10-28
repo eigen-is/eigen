@@ -178,6 +178,22 @@ describe('extractCollabText', () => {
         expect(text.startsWith('Deck title\n')).toBe(true);
     });
 
+    test("eigenslides: a shape's text is indexed where the shape stands", async () => {
+        const scene = buildGoldenDeckScene();
+        const doc = new Y.Doc();
+        seedDeckDoc(doc, {
+            ...scene,
+            elements: scene.elements.map((el) =>
+                el.type === 'richtext' && el.id === 'el-3' ? { ...el, type: 'rectangle' as const } : el,
+            ),
+        });
+
+        const { text } = await extractCollabText('eigenslides', doc);
+        expect(text.indexOf('Deck title')).toBeLessThan(text.indexOf('Background image'));
+        expect(text.indexOf('Background image')).toBeLessThan(text.indexOf('Slide 5'));
+        doc.destroy();
+    });
+
     test('eigensheets: replayed ops and stored values are indexed — formulas stay uncomputed', async () => {
         const doc = new Y.Doc();
         const sheets = buildGoldenSheets();

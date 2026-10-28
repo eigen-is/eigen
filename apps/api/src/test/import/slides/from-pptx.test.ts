@@ -144,10 +144,10 @@ describe('limits', () => {
     });
 
     test(`more than ${MAX_ELEMENTS} elements after the master's are copied is too large`, () => {
-        // The master's 20 ellipses, each with its text on top, on each of 500 slides: 20,000.
-        const master = sp({ xfrm: box(0, 0, 1, 1), geom: 'ellipse', spPr: solid('FF0000'), text: para('x') }).repeat(
-            20,
-        );
+        // The master's 20 ellipses, each with its turned text on top, on each of 500 slides: 20,000.
+        const master = sp({ xfrm: box(0, 0, 1, 1), geom: 'ellipse', spPr: solid('FF0000'), text: para('x') })
+            .replace('<a:bodyPr/>', '<a:bodyPr vert="vert"/>')
+            .repeat(20);
         const slides = Array.from({ length: 500 }, () => ({}));
         expect(refusal(buildPptx({ masters: [{ shapes: master }], slides }))).toBe('read');
         const more = Array.from({ length: 500 }, () => ({ shapes: filled }));

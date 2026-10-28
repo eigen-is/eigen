@@ -1,15 +1,23 @@
-// Each element as the DrawingML shape that draws it, its box, geometry and fill, each length in the deck's EMU; a chart
-// as a graphic frame showing its own chart part.
+// Each element as the DrawingML shape that draws it, its box, geometry, fill and text, each length in the deck's EMU; a
+// chart as a graphic frame showing its own chart part.
 
 import { gradientStops } from '@workspace/lib/background';
 import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import type { FillPaint } from '@workspace/lib/types/background';
-import type { Box, Corners, Point, VectorChartElement, VectorElement } from '@workspace/lib/vector';
+import type {
+    Box,
+    Corners,
+    Point,
+    VectorChartElement,
+    VectorElement,
+    VectorTextualElement,
+} from '@workspace/lib/vector';
 import {
     capabilitiesOf,
     cornerRadius,
     diamondOutline,
     isBordered,
+    isTextual,
     isTransparentFill,
     parseFill,
     parsePoints,
@@ -19,7 +27,7 @@ import { colorXml, DEGREE, drawingAngle, drawingShare, solidFillXml } from '../.
 import { pxToEmu } from '../../../ooxml/ooxml';
 import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import { addOfficeChart } from '../../office-chart';
-import { arrowXml, freedrawXml, linearXml, lineXml, pathXml } from './lines';
+import { arrowXml, freedrawXml, linearXml, lineXml, NO_LINE, pathXml } from './lines';
 import type { Slide } from './package';
 import { pictureXml } from './pictures';
 import { paragraphsOf, textBodyXml } from './text';
@@ -38,6 +46,8 @@ function degrees(radians: number): number {
 export function elementXml(el: VectorElement, slide: Slide): string {
     const opacity = el.opacity / 100;
     countPlainLook(el, slide);
+    // A shape writes a text body only once it holds text. A text box writes one even empty, as PowerPoint does.
+    const text = isTextual(el) && (el.type === 'richtext' || el.html !== '') ? textXml(el, slide, opacity) : '';
     switch (el.type) {
         case 'rectangle':
             return spXml(
@@ -47,6 +57,7 @@ export function elementXml(el: VectorElement, slide: Slide): string {
                 boxGeometry(el),
                 fillXml(parseFill(el.fill), opacity, el),
                 lineXml(slide, el, opacity),
+                text,
             );
         case 'ellipse':
             return spXml(
@@ -56,6 +67,7 @@ export function elementXml(el: VectorElement, slide: Slide): string {
                 presetXml('ellipse'),
                 fillXml(parseFill(el.fill), opacity, el),
                 lineXml(slide, el, opacity),
+                text,
             );
         case 'diamond': {
             const outline = diamondOutline(
@@ -74,6 +86,7 @@ export function elementXml(el: VectorElement, slide: Slide): string {
                 geometry,
                 fillXml(parseFill(el.fill), opacity, el),
                 lineXml(slide, el, opacity),
+                text,
             );
         }
         case 'pie': {
@@ -83,8 +96,10 @@ export function elementXml(el: VectorElement, slide: Slide): string {
                 return drawingAngle(degrees(Math.atan2(el.height * Math.sin(theta), el.width * Math.cos(theta))));
             };
             const [adj1, adj2] = [visual(el.startAngle), visual(el.startAngle + el.sweepAngle)];
-            // A pie whose angles meet draws the whole disc: a slice that thin draws nothing, one that full the disc.
-            if (adj1 === adj2 && el.sweepAngle < 180) return '';
+            // A pie whose angles meet draws the whole disc: a slice that thin draws nothing, one that full the disc. The
+            // thin one keeps its text, in its geometry unpainted.
+            if (adj1 === adj2 && el.sweepAngle < 180)
+                return text && spXml(slide, 'Pie', el, presetXml('pie', { adj1, adj2 }), '<a:noFill/>', NO_LINE, text);
             const geometry =
                 el.sweepAngle >= 360 || adj1 === adj2 ? presetXml('ellipse') : presetXml('pie', { adj1, adj2 });
             // A gradient spans the whole ellipse's box here, at its angle; the canvas paints it across the slice's own.
@@ -95,25 +110,12 @@ export function elementXml(el: VectorElement, slide: Slide): string {
                 geometry,
                 fillXml(parseFill(el.fill), opacity, el),
                 lineXml(slide, el, opacity),
+                text,
             );
         }
         case 'image':
             return pictureXml(el, slide, opacity);
         case 'richtext': {
-            const inset = el.padding + (isBordered(el) ? el.strokeWidth : 0);
-            const paragraphs = paragraphsOf(el.html);
-            // A text body has no paragraph border, so a quote keeps its indent and fade but loses its bar.
-            if (paragraphs.some((paragraph) => paragraph.quotes > 0)) slide.deck.lost('text-simplified', el);
-            const text = textBodyXml(slide, paragraphs, {
-                ...el,
-                bold: el.fontWeight === 'bold',
-                italic: el.fontStyle === 'italic',
-                underline: el.textDecoration === 'underline',
-                strike: el.textDecoration === 'line-through',
-                inset,
-                wrap: true,
-                opacity,
-            });
             // A rounded preset insets its text by its corners, where Eigen's keeps the box: a painted rounded box is its
             // outline, and an unpainted one shows no corners.
             const outline = rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, cornerRadius(el), 0);
@@ -130,6 +132,7 @@ export function elementXml(el: VectorElement, slide: Slide): string {
                 fillXml(parseFill(el.fill), opacity, el),
                 lineXml(slide, el, opacity),
                 text,
+                true,
             );
         }
         case 'line':
@@ -142,11 +145,29 @@ export function elementXml(el: VectorElement, slide: Slide): string {
             // An open path only strokes, as on the canvas.
             const fill = el.closed ? fillXml(parseFill(el.fill), opacity, el) : '<a:noFill/>';
             const geometry = customXml(slide, el, pathXml(el, slide), el.closed);
-            return spXml(slide, 'Freeform', el, geometry, fill, lineXml(slide, el, opacity));
+            return spXml(slide, 'Freeform', el, geometry, fill, lineXml(slide, el, opacity), text);
         }
         case 'chart':
             return chartXml(el, slide);
     }
+}
+
+// An element's text as a text body, inset by its padding and its border, as the canvas insets it.
+function textXml(el: VectorTextualElement, slide: Slide, opacity: number): string {
+    const inset = el.padding + (isBordered(el) ? el.strokeWidth : 0);
+    const paragraphs = paragraphsOf(el.html);
+    // A text body has no paragraph border, so a quote keeps its indent and fade but loses its bar.
+    if (paragraphs.some((paragraph) => paragraph.quotes > 0)) slide.deck.lost('text-simplified', el);
+    return textBodyXml(slide, paragraphs, {
+        ...el,
+        bold: el.fontWeight === 'bold',
+        italic: el.fontStyle === 'italic',
+        underline: el.textDecoration === 'underline',
+        strike: el.textDecoration === 'line-through',
+        inset,
+        wrap: true,
+        opacity,
+    });
 }
 
 // DrawingML has no sketch and no hatch. So a rough element draws plain, counted as a shape simplified, and a hatched
@@ -190,9 +211,10 @@ export function spXml(
     fill: string,
     line: string,
     text = '',
+    txBox = false,
 ): string {
     const id = ++slide.shapes;
-    const textBox = text ? ' txBox="1"' : '';
+    const textBox = txBox ? ' txBox="1"' : '';
     return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name} ${id}"/><p:cNvSpPr${textBox}/><p:nvPr/></p:nvSpPr><p:spPr>${xfrmXml(slide, box)}${geometry}${fill}${line}</p:spPr>${text}</p:sp>`;
 }
 

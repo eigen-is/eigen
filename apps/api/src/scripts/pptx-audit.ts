@@ -11,7 +11,14 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { gradientStops } from '@workspace/lib/background';
 import type { VectorElement, VectorFrame, VectorScene } from '@workspace/lib/vector';
-import { elementsInFrame, normalizeAngle, parsePoints, pointsBounds, slidePxToPt } from '@workspace/lib/vector';
+import {
+    elementsInFrame,
+    isTextual,
+    normalizeAngle,
+    parsePoints,
+    pointsBounds,
+    slidePxToPt,
+} from '@workspace/lib/vector';
 import type { TransformWarning } from '../lib/document/transform/protocol';
 import { lossCounter } from '../lib/document/transform/protocol';
 import type { writePptx } from '../lib/export/slides/pptx/to-pptx';
@@ -238,16 +245,16 @@ export const PPTX_LISTED: Listed<RoundtripDifference, PptxRoundtripContext>[] = 
     },
     {
         kind: 'text as the canvas lays it out',
-        why: "The writer writes a text box as canvas-text.css lays it out: white space collapses, the space and the last line break CSS drops at a block's ends go, and a link is underlined, as the canvas draws it",
+        why: "The writer writes a text box's or a shape's text as canvas-text.css lays it out: white space collapses, the space and the last line break CSS drops at a block's ends go, and a link is underlined, as the canvas draws it",
         matches: ({ feature, at, a, b }, context) => {
-            if (feature === 'richtext html')
-                return typeof a === 'string' && typeof b === 'string' && laidOut(a) === laidOut(b);
             const element = elementAt(context.a, at);
+            if (!element || !isTextual(element)) return false;
+            if (feature === `${element.type} html`)
+                return typeof a === 'string' && typeof b === 'string' && laidOut(a) === laidOut(b);
             return (
-                feature === 'richtext textDecoration' &&
+                feature === `${element.type} textDecoration` &&
                 a === 'none' &&
                 b === 'underline' &&
-                element?.type === 'richtext' &&
                 !element.html
                     .replace(/<a\s[^>]*>.*?<\/a>/g, '')
                     .replace(/<[^>]*>/g, '')

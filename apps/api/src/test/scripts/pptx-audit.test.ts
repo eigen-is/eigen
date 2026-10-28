@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { NewVectorElement } from '@workspace/lib/vector';
+import type { NewVectorElement, Textual } from '@workspace/lib/vector';
 import {
     generateNKeysBetween,
     readVectorFromDoc,
@@ -152,27 +152,43 @@ describe('round trip', () => {
         ]);
     }, 60_000);
 
-    test("a box that comes back within its EMU is the same box; a text box's text as the canvas lays it out is the same text", () => {
-        const scene = (x: number, html: string) => {
+    test("a box that comes back within its EMU is the same box; a text box's or a shape's text as the canvas lays it out is the same text", () => {
+        const scene = (
+            x: number,
+            html: string,
+            type: 'richtext' | 'ellipse' = 'richtext',
+            textDecoration: Textual['textDecoration'] = 'none',
+        ) => {
             const doc = new Y.Doc();
             writeFrameInDoc(doc, { id: 'f1', index: 'a0', name: '', width: 1920, height: 1080, background: '' });
             writeElementInDoc(
                 doc,
-                { type: 'richtext', x, y: 0, width: 100, height: 100, angle: 0, html, frameId: 'f1' },
+                { type, x, y: 0, width: 100, height: 100, angle: 0, html, textDecoration, frameId: 'f1' },
                 'a0',
                 SLIDES_STYLE_DEFAULTS,
                 'el-0',
             );
             return { scene: readVectorFromDoc(doc), media: [], pictures: new Map() };
         };
-        const groups = (x: number, html: string) =>
-            classifyPptx({ a: scene(10, '<p>Text</p>'), b: scene(x, html), prepared: new Map() }).map(
+        const groups = (x: number, html: string, type?: 'richtext' | 'ellipse') =>
+            classifyPptx({ a: scene(10, '<p>Text</p>', type), b: scene(x, html, type), prepared: new Map() }).map(
                 ({ kind, listed }) => [kind, listed],
             );
         expect(groups(10.00001, '<p>Text </p>')).toEqual([['text as the canvas lays it out', true]]);
+        expect(groups(10, '<p>Text </p>', 'ellipse')).toEqual([['text as the canvas lays it out', true]]);
         expect(groups(11, '<p>Other</p>')).toEqual([
             ['richtext x', false],
             ['richtext html', false],
+        ]);
+        // A shape whose only text is a link comes back underlined, as the canvas draws the link.
+        const link = '<p><a href="https://eigen.is">Link</a></p>';
+        const underlined = classifyPptx({
+            a: scene(10, link, 'ellipse'),
+            b: scene(10, link, 'ellipse', 'underline'),
+            prepared: new Map(),
+        });
+        expect(underlined.map(({ kind, listed }) => [kind, listed])).toEqual([
+            ['text as the canvas lays it out', true],
         ]);
     });
 

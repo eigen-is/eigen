@@ -886,6 +886,55 @@ describe('pptx text', () => {
         expect(attr(first(rPr, A, 'latin'), 'typeface')).toBe('Source Serif 4');
     });
 
+    test('a shape with text is one p:sp holding its body, no text box; one without writes none; a text box always one', () => {
+        const text = { html: '<p>Inside</p>', padding: 8, strokeColor: '#000000', strokeWidth: 2 };
+        const closed = { path: 'M 0 0 L 1 0 L 1 1 Z', closed: true };
+        const all = shapes(
+            pptx(
+                sceneOf([
+                    element('rectangle', { index: 'a0', ...text }),
+                    element('ellipse', { index: 'a1', ...text }),
+                    element('diamond', { index: 'a2', ...text }),
+                    element('pie', { index: 'a3', ...text, startAngle: 0, sweepAngle: 90 }),
+                    element('path', { index: 'a4', ...text, ...closed }),
+                    element('rectangle', { index: 'a5' }),
+                    element('path', { index: 'a6', ...text, path: 'M 0 0 L 1 1', closed: false }),
+                    element('richtext', { index: 'a7', html: '<p>Box</p>' }),
+                    element('richtext', { index: 'a8', html: '' }),
+                ]),
+            ),
+        );
+        expect(all.map((shape) => [shape.local, attr(first(shape, P, 'cNvSpPr'), 'txBox')])).toEqual([
+            ...Array(7).fill(['sp', undefined]),
+            ['sp', '1'],
+            ['sp', '1'],
+        ]);
+        for (const shape of all.slice(0, 5)) {
+            expect(paragraphs(shape)).toEqual(['Inside']);
+            // The padding and the border, as the canvas insets the text.
+            expect(attr(first(shape, A, 'bodyPr'), 'lIns')).toBe(String(10 * EMU));
+        }
+        // An open path's text is never drawn, so it is not written either.
+        for (const shape of all.slice(5, 7)) expect(descendants(shape, P, 'txBody')).toEqual([]);
+        expect(paragraphs(all[7])).toEqual(['Box']);
+        expect(descendants(all[8], P, 'txBody')).toHaveLength(1);
+    });
+
+    test('a slice too thin to draw still writes its text, unpainted', () => {
+        const shape = only(
+            pptx(
+                sceneOf([
+                    element('pie', { html: '<p>Thin</p>', startAngle: 30, sweepAngle: 1e-7, strokeColor: '#000000' }),
+                ]),
+            ),
+        );
+        expect(geometry(shape)).toBe('pie');
+        expect(paragraphs(shape)).toEqual(['Thin']);
+        const spPr = first(shape, P, 'spPr');
+        expect(xmlChild(spPr, A, 'noFill')).toBeDefined();
+        expect(xmlChild(first(spPr, A, 'ln'), A, 'noFill')).toBeDefined();
+    });
+
     test('a painted rounded box is its outline, so the text keeps the whole box; an unpainted one is a rect', () => {
         const [painted, bare] = shapes(
             pptx(

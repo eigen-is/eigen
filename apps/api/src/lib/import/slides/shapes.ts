@@ -82,9 +82,10 @@ import { richTextOf, verticalTurnOf } from './text';
 export const MAX_ELEMENTS = 20_000;
 export const MAX_GROUP_DEPTH = 32;
 
-// An element is a Y.Map of about twenty fields, and a string costs per character besides: the weight caps both before
-// the update is built, and so the update the main thread reads back. The corpus's heaviest weighs 3,307 (a 2.4 MB
-// update); at the cap a text-heavy update is about 25 MB and commits in 135 ms.
+// An element is a Y.Map of about thirty fields, and a string costs per character besides: the weight caps both before
+// the update is built, and so the update the main thread reads back. The corpus's heaviest weighs 4,022 (a 2.9 MB
+// update); at the cap a text-heavy update is about 27 MB and applies in 70 ms. MAX_ELEMENTS shapes, under the cap,
+// make 17 MB that apply in 250 ms.
 export const MAX_PPTX_WEIGHT = 50_000;
 
 // How an imported element looks where the file says nothing: crisp, unframed, unfilled, never the editor's rounding.
@@ -267,7 +268,8 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const text = source && richTextOf(source, theme, walk.deck, lost);
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
     const { box } = placed;
-    const textBox = text && source ? turned(textAt ?? box, verticalTurnOf(source, lost)) : box;
+    const turn = text && source ? verticalTurnOf(source, lost) : 0;
+    const textBox = turned(textAt ?? box, turn);
     // What the canvas never draws loses nothing: a line's fill, a dropped outline's paint, a path's unpainted part.
     const lostIf = (drawn: boolean) => (drawn ? lost : UNDRAWN);
     const paint = {
@@ -275,7 +277,13 @@ function readShape(walk: Walk, leaf: Leaf): void {
         ...strokeOf(lines, walk, lostIf(native || linear || !!outline?.some((g) => g.stroked))),
     };
     const painted = paint.fill !== TRANSPARENT_FILL_JSON || paint.strokeColor !== TRANSPARENT_COLOR;
-    // A text box is the rectangle itself; any other shape carries its text in an unpainted box on top.
+    // The canvas insets a bordered element's text past its border too, where PowerPoint's inset runs from the edge.
+    const framed = text && {
+        ...text,
+        padding: isBordered(paint) ? Math.max(0, text.padding - paint.strokeWidth) : text.padding,
+    };
+    // Text in the shape's own box and level goes into the shape. Text with a box of its own, or turned, sits on top.
+    const inside = !textAt && turn === 0 ? framed : undefined;
     const textOnTop = () =>
         text &&
         push(walk, {
@@ -286,17 +294,21 @@ function readShape(walk: Walk, leaf: Leaf): void {
             fill: TRANSPARENT_FILL_JSON,
             corners: 'straight',
         });
+    // A shape holding its text is drawn even unpainted.
     const shapeAndText = (drawn: NewVectorElement) => {
-        if (painted) push(walk, { ...box, ...paint, ...drawn });
-        textOnTop();
+        if (inside) push(walk, { ...box, ...paint, ...drawn, ...inside });
+        else {
+            if (painted) push(walk, { ...box, ...paint, ...drawn });
+            textOnTop();
+        }
     };
-    if (kind?.type === 'rectangle' && kind.corners === 'straight' && !textAt) {
-        if (text) {
-            // The canvas insets a bordered box's text past its border too, where PowerPoint's inset runs from the edge.
-            const padding = isBordered(paint) ? Math.max(0, text.padding - paint.strokeWidth) : text.padding;
-            push(walk, { type: 'richtext', ...textBox, ...text, padding, ...paint, corners: 'straight' });
-        } else if (painted) push(walk, { type: 'rectangle', ...box, ...paint, corners: 'straight' });
-    } else if (kind) shapeAndText(kind);
+    // The file says which straight rectangle is a text box: one marked txBox, or a placeholder such as a title or a
+    // footer. A text box grows with its text, where a rectangle lets it spill.
+    const cNvSpPr = childOf(nonVisualOf(shape) ?? shape, shape.ns, 'cNvSpPr');
+    const textBoxed = own !== undefined || isOn(cNvSpPr && xmlAttr(cNvSpPr, '', 'txBox'));
+    if (framed && textBoxed && !textAt && kind?.type === 'rectangle' && kind.corners === 'straight')
+        push(walk, { type: 'richtext', ...textBox, ...framed, ...paint, corners: 'straight' });
+    else if (kind) shapeAndText(kind);
     else if (geometry === 'pie') shapeAndText({ type: 'pie', ...pieAngles(shaped?.geom, placed) });
     else if (linear) {
         if (paint.strokeColor !== TRANSPARENT_COLOR) push(walk, lineOf(placed, paint, lines.lns));
@@ -322,9 +334,15 @@ function readShape(walk: Walk, leaf: Leaf): void {
                 : undefined;
         if (arrow) push(walk, arrow);
         else {
-            for (const element of pathsOf(outline, box, paint)) push(walk, element);
+            const paths = pathsOf(outline, box, paint);
             // A path has no arrowheads, and PowerPoint draws a line's ends only on an open one, such as an arc's.
             if (headed && outline.some((g) => g.stroked && !g.closed)) lost('shapes-simplified');
+            // A shape drawn as one closed path holds its text, as a kind does.
+            if (inside && paths.length === 1 && paths[0].closed) {
+                push(walk, { ...paths[0], ...inside });
+                return;
+            }
+            for (const element of paths) push(walk, element);
         }
         textOnTop();
     } else {

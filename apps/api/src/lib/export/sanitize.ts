@@ -1,7 +1,7 @@
 // The one sanitizer every export and preview body passes, DOMPurify plus a rule of our own: nothing in the result may
 // fetch, as a browser opening a download and the drive hero fetch whatever a body references. Resources are data: URIs,
-// or the exact preview URLs the caller allows. Beside it are the passes for SVG media and for a canvas scene's text
-// boxes.
+// or the exact preview URLs the caller allows. Beside it are the passes for SVG media and for the text a canvas scene's
+// elements hold, such as a text box's or a shape's.
 
 import { isElement, LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@workspace/lib/html';
 import { CSS_FETCH_FUNCTIONS, cssStatements, sheetText } from '@workspace/lib/mail/remote-content';
@@ -228,7 +228,8 @@ export function sanitizeSceneHtml(scene: VectorScene): VectorScene {
     return {
         ...scene,
         elements: scene.elements.map((el) =>
-            'html' in el ? { ...el, html: sanitizeExportHtml(el.html, LIGHT_EDITOR_ONLY) } : el,
+            // Most shapes hold no text, and DOMPurify parses even an empty body.
+            'html' in el && el.html !== '' ? { ...el, html: sanitizeExportHtml(el.html, LIGHT_EDITOR_ONLY) } : el,
         ),
     };
 }
