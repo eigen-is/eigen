@@ -16,6 +16,8 @@ An app must not wrap a mutation in `try/catch` + `toast.error()`: the hook alrea
 
 A caller that awaits `mutateAsync` and must still see other rejections asks `wasToasted(error)`: `onMutationError` records every error it toasts, so the caller swallows exactly those (`CardForm` does this).
 
+A confirm dialog whose action fails stays open beside the toast, so the user can try again (`useDialogPending`, which `ConfirmDialog` and `DeleteDialog` use). A refusal closes it: an `AppError` with a 400, 403, 404 or 422 (`isRefusal`), such as the organization's default team that can't be deleted, gets the same answer on every try. A hook whose dialog should close on a refusal throws an `AppError` carrying the server's status, as `useRemoveTeam` does with better-auth's error.
+
 A hook that recovers an expected error shows its own message instead and skips `onMutationError`. A contact write that meets a 412 reloads the list and says the contact changed elsewhere (`handleStaleWrite` in `use-contacts.ts`).
 
 ## A success toast is for a result the user can't see

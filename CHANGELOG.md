@@ -56,6 +56,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Sheets menus on a phone** — the six menus, File to Data, fit across a phone screen instead of the last one running under the **⋮** button
+- **Deleting a team in Admin** — when the server won't delete a team, such as the organization's default team, the dialog closes and the message says why
+- **Finding a person in a filter** — **Home** and **End** in the person search of a filter or an assignee picker, such as Stickies' **Filter › Assigned to**, move the cursor to the start or end of what you typed
 - **Picking a theme** — the new theme shows the moment you pick it in the account menu or on **Preferences**, without a **Settings saved** message
 - **Color scales in Sheets** — a color scale whose colors are written short, such as `#f00`, shades its cells instead of leaving them blank
 - **Sharing a calendar** — when the owner stops sharing a calendar with you, the list of who has access refreshes at once, as it does when they share it
