@@ -205,10 +205,11 @@ describe('sheet order on a copy, an add and a delete', () => {
         ]);
     });
 
-    test('an added sheet without an id takes the id it is switched to', () => {
+    test('an added sheet keeps its id, and the add switches to it', () => {
         const next = produce(threeSheets(), (draft: Context) =>
-            addSheet(draft, undefined, undefined, false, 'D', { name: 'D', order: 3 }),
+            addSheet(draft, undefined, undefined, false, 'D', { name: 'D', id: 'id_d', order: 3 }),
         );
-        expect(next.sheets[3].id).toBe(next.currentSheetId);
+        expect(next.sheets[3].id).toBe('id_d');
+        expect(next.currentSheetId).toBe('id_d');
     });
 });

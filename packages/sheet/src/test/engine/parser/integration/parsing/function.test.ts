@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import Parser from '../../../../../engine/parser/parser';
+import { Parser } from '../../../../../engine/parser/parser';
 
 describe('.parse() function', () => {
     let parser: Parser | null;

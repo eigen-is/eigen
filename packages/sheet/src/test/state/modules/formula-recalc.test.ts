@@ -211,4 +211,30 @@ describe('execFunctionGroup — index-driven recalc', () => {
         expect(ctx.sheets[0].data![0][2]?.v).toBe(12);
         expect(ctx.sheets[0].data![1][3]?.v).toBe(22);
     });
+
+    // An imported cell holds the value Excel computed. Once an input changes, IFERROR's fallback around a function
+    // the engine lacks would read as a real answer, so the cell shows #NAME?.
+    it('shows #NAME? for a real Excel function the engine lacks, even inside IFERROR, once an input changes', () => {
+        const ctx = makeCtx();
+        ctx.sheets[0].data![0][2] = { f: '=IFERROR(FILTER(A1:A3,A1:A3>1),"none")', v: 5, m: '5' };
+        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' });
+        warmFormulaCellInfoMap(ctx);
+
+        editCell(ctx, 0, 0, 7, 'id_1');
+
+        expect(ctx.sheets[0].data![0][2]?.v).toBe('#NAME?');
+    });
+
+    it('gives the fallback for a name Excel does not know either, such as a typo, as in Excel', () => {
+        const ctx = makeCtx();
+        ctx.sheets[0].data![0][2] = { f: '=IFERROR(FILTRE(A1),"x")', v: 'x', m: 'x' };
+        ctx.sheets[0].data![0][3] = { f: '=IFERROR(FILTRE(A1),A1)', v: 5, m: '5' };
+        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 0, c: 3, id: 'id_1' });
+        warmFormulaCellInfoMap(ctx);
+
+        editCell(ctx, 0, 0, 7, 'id_1');
+
+        expect(ctx.sheets[0].data![0][2]?.v).toBe('x');
+        expect(ctx.sheets[0].data![0][3]?.v).toBe(7);
+    });
 });

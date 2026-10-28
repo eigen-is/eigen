@@ -248,7 +248,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
             const ctx = contextRef.current;
             if (ctx.groupValuesRefreshData.length > 0) return;
             if (!refs.canvas.current) return;
-            const freeze = refs.globalCache.freezen?.[sheet.id!];
+            const freeze = refs.globalCache.freezen?.[sheet.id];
             const scroll: ScrollPos = {
                 scrollLeft: refs.globalCache.scrollLeft,
                 scrollTop: refs.globalCache.scrollTop,

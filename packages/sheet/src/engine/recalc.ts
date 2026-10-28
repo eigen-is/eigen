@@ -10,6 +10,7 @@ import { getCalculationOrder } from './dependency-graph';
 import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
+import { inlineNames } from './formula-shift';
 import { iscelldata, isFunctionRange, resolveCellRange } from './formula-utils';
 import type {
     CalcChainEntry,
@@ -19,185 +20,25 @@ import type {
     SheetWithCalcChain,
 } from './types';
 
-// A formula that reads the wall clock / RNG. Frozen during server recalc so
-// passive exports/search stay deterministic (neither Excel nor Sheets recompute
-// a closed-file read). Detected on the formula text with a word boundary +
-// call paren: `MYRAND(` misses (no `\b` between the two word
-// chars `Y` and `R`), while a literal `"NOW()"` string arg still MATCHES — `\b`
-// fires at the quote→`N` transition — so such a formula is frozen too. That
-// over-match is harmless: freezing is the safe direction, keeping the last
-// cached value rather than recomputing. RANDBETWEEN precedes RAND so the longer
-// name wins.
-const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
-
-function isVolatileFormula(formula: string): boolean {
-    return VOLATILE_RE.test(formula);
-}
-
-// Materialized, id-keyed view the ported graph builder reads instead of a
-// Context. `data` is always the dense matrix (never celldata).
+// A sheet's dense `data`, by id, which the ported graph builder reads where the editor reads its Context.
 type WorkingSheet = { sheet: Sheet; id: string; name: string; data: CellMatrix };
 
 type GraphCtx = {
     sheets: WorkingSheet[];
     indexById: Map<string, number>;
-    // Memoization of resolved cell references, mirroring
-    // formulaCache.cellTextToIndexList. Keyed by the raw ref text (cross-sheet)
-    // or `${text}_${sheetId}` (same-sheet).
+    // Resolved references, as the editor's formulaCache keeps them: by the reference's text for one into another
+    // sheet, by `${text}_${sheetId}` for one into the formula's own.
     cellTextToIndexList: Record<string, FormulaDependency>;
 };
 
-// The ranges a formula reads, as setFormulaCellInfo finds them in the editor. An INDIRECT, OFFSET or INDEX call goes
-// through isFunctionRange; any other formula runs the same quote-aware tokenizer.
-function extractDependencies(
-    g: GraphCtx,
-    calc_funcStr: string,
-    sheetId: string,
-    data: CellMatrix,
-): FormulaDependency[] {
-    const txt1 = calc_funcStr.toUpperCase();
-    const isOffsetFunc = txt1.indexOf('INDIRECT(') > -1 || txt1.indexOf('OFFSET(') > -1 || txt1.indexOf('INDEX(') > -1;
+type Extent = { rows: number; columns: number };
 
-    const formulaDependency: FormulaDependency[] = [];
-    if (isOffsetFunc) {
-        isFunctionRange(calc_funcStr, (str_nb: string) => {
-            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, str_nb.trim(), sheetId, data);
-            if (range != null) {
-                formulaDependency.push(range);
-            }
-        });
-    } else if (!(calc_funcStr.substring(0, 2) === '="' && calc_funcStr.substring(calc_funcStr.length - 1, 1) === '"')) {
-        let point = 0;
-        let squote = -1;
-        let dquote = -1;
-        const formulaTextArray: string[] = [];
-        const sq_end_array: number[] = [];
-        const calc_funcStr_length = calc_funcStr.length;
-        for (let j = 0; j < calc_funcStr_length; j += 1) {
-            const char = calc_funcStr.charAt(j);
-            if (char === "'" && dquote === -1) {
-                if (squote === -1) {
-                    if (point !== j) {
-                        formulaTextArray.push(
-                            ...calc_funcStr.substring(point, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
-                        );
-                    }
-                    squote = j;
-                    point = j;
-                } else {
-                    if (j < calc_funcStr_length - 1 && calc_funcStr.charAt(j + 1) === "'") {
-                        j += 1;
-                    } else {
-                        point = j + 1;
-                        formulaTextArray.push(calc_funcStr.substring(squote, point));
-                        sq_end_array.push(formulaTextArray.length - 1);
-                        squote = -1;
-                    }
-                }
-            } else if (char === '"' && squote === -1) {
-                if (dquote === -1) {
-                    if (point !== j) {
-                        formulaTextArray.push(
-                            ...calc_funcStr.substring(point, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
-                        );
-                    }
-                    dquote = j;
-                    point = j;
-                } else {
-                    if (j < calc_funcStr_length - 1 && calc_funcStr.charAt(j + 1) === '"') {
-                        j += 1;
-                    } else {
-                        point = j + 1;
-                        formulaTextArray.push(calc_funcStr.substring(dquote, point));
-                        dquote = -1;
-                    }
-                }
-            }
-        }
-        if (point !== calc_funcStr_length) {
-            formulaTextArray.push(
-                ...calc_funcStr.substring(point, calc_funcStr_length).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
-            );
-        }
-        for (let j = sq_end_array.length - 1; j >= 0; j -= 1) {
-            if (sq_end_array[j] !== formulaTextArray.length - 1) {
-                formulaTextArray[sq_end_array[j]] += formulaTextArray[sq_end_array[j] + 1];
-                formulaTextArray.splice(sq_end_array[j] + 1, 1);
-            }
-        }
-
-        for (let j = 0; j < formulaTextArray.length; j += 1) {
-            const t = formulaTextArray[j];
-            if (t.length <= 1) {
-                continue;
-            }
-
-            if ((t.substring(0, 1) === '"' && t.substring(t.length - 1, 1) === '"') || !iscelldata(t)) {
-                continue;
-            }
-
-            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, t.trim(), sheetId, data);
-            if (range == null) {
-                continue;
-            }
-
-            formulaDependency.push(range);
-        }
-    }
-
-    return formulaDependency;
-}
-
-// ── Write-back ─────────────────────────────────────────────────────────────────
-
-// Mirrors the client's setCellValue where cheap: error sentinels carry ct.t 'e', the rest display like the editor.
-function writeCellValue(cell: Cell, result: EvaluationResult): void {
-    if (result.type === 'error') {
-        const sentinel = String(result.value);
-        cell.v = sentinel;
-        cell.m = sentinel;
-        cell.ct = { ...(cell.ct ?? {}), t: 'e' };
-        return;
-    }
-
-    cell.v = result.value;
-
-    if (result.type === 'boolean') {
-        cell.m = booleanDisplay(Boolean(result.value));
-        return;
-    }
-
-    if (typeof result.value === 'number') {
-        cell.m = numberDisplay(result.value, cell.ct?.fa);
-        return;
-    }
-
-    cell.m = result.value == null ? '' : String(result.value);
-}
-
-// True when a cell already holds a usable computed value — a non-nil `v` that is
-// neither a `'#…'` error string nor flagged `ct.t === 'e'`. An engine error must
-// not overwrite such a value during recalc (see the evaluate loop).
-function hasNonErrorCachedValue(cell: Cell): boolean {
-    if (cell.v == null || cell.ct?.t === 'e') {
-        return false;
-    }
-    if (typeof cell.v === 'string' && cell.v.startsWith('#')) {
-        return false;
-    }
-    return true;
-}
-
-// ── Formula-cell discovery + read-path gate ────────────────────────────────────
-
-// A doc needs server recalc when a sheet carries formula cells but no populated
-// calcChain — true exactly for an import whose recalc failed.
-// Editor-flushed snapshots (and docs recalc'd at import) carry calcChain, so the
-// gate stays off and the read path pays nothing.
+// A workbook needs the server's recalc when a sheet has formula cells but no calcChain, which is true only for an
+// import whose recalc failed. The editor's flush and the import's recalc both write a calcChain, so the read path
+// pays nothing.
 export function sheetsNeedRecalc(sheets: SheetWithCalcChain[]): boolean {
     for (const sheet of sheets) {
-        // recalcSheets skips id-less sheets, so arming on one re-fires the pass on
-        // every read for nothing.
+        // recalcSheets skips a sheet without an id, so one must not arm the gate, or every read runs the pass for nothing.
         if (!sheet.id) continue;
         const { calcChain } = sheet;
         if (Array.isArray(calcChain) && calcChain.length > 0) {
@@ -210,9 +51,8 @@ export function sheetsNeedRecalc(sheets: SheetWithCalcChain[]): boolean {
     return false;
 }
 
-// Uses the same isFormula check as discovery below, so the gate and the pass
-// agree on what counts as a formula cell (a stray non-'=' `f` can't re-fire the
-// gate on every read).
+// Uses the isFormula check of the pass, so the gate and the pass agree on what a formula cell is: a stray `f` that
+// doesn't start with `=` can't fire the gate on every read.
 function sheetHasFormula(sheet: Sheet): boolean {
     if (sheet.data) {
         for (const row of sheet.data) {
@@ -230,34 +70,6 @@ function sheetHasFormula(sheet: Sheet): boolean {
     return false;
 }
 
-// ── Orchestration ──────────────────────────────────────────────────────────────
-
-// Materialize a sheet's dense `data` from `celldata` when missing, mirroring the
-// editor's initSheetData / replay's withMaterializedData (a resolver over null
-// `data` recomputes everything to blanks). Rows are freshly
-// sliced so writeback never mutates a frozen (immer) input matrix.
-function ensureWorkingData(sheet: Sheet): CellMatrix {
-    if (sheet.data) {
-        return sheet.data.map((row) => (row ? row.slice() : row));
-    }
-    const { row, column } = gridSize(sheet);
-    return celldataToData(sheet.celldata ?? [], row, column);
-}
-
-type Extent = { rows: number; columns: number };
-
-// A dependency cut to the cells its sheet holds, null when it holds none. Only a formula cell is looked up in the
-// index, and each lies in its sheet's data, so `SUM(A1:XFD1048576)` costs the blocks the sheet spans, not 16 million.
-function withinSheet(dep: FormulaDependency, extents: Map<string, Extent>): FormulaDependency | null {
-    const cells = cellsOf(dep);
-    const extent = cells && extents.get(cells.sheetId);
-    if (!cells || extent == null) return null;
-    const r1 = Math.min(extent.rows - 1, cells.r1);
-    const c1 = Math.min(extent.columns - 1, cells.c1);
-    if (cells.r0 > r1 || cells.c0 > c1) return null;
-    return { row: [cells.r0, r1], column: [cells.c0, c1], sheetId: cells.sheetId };
-}
-
 // `maxDependencyBlocks` bounds what the formulas' ranges cost the dependency index (dependencyBlocks), and
 // `maxCellsRead` what their evaluation reads (each range read, cut to its sheet, costs its cells): past either the
 // recalc throws before the work, so many ranges over a large sheet can't cost minutes and gigabytes. The server passes
@@ -266,7 +78,7 @@ export function recalcSheets(
     sheets: Sheet[],
     { maxDependencyBlocks = Number.POSITIVE_INFINITY, maxCellsRead = Number.POSITIVE_INFINITY } = {},
 ): Sheet[] {
-    // 1. Materialize a working view: dense data per sheet, id/name index.
+    // 1. Materialize each sheet's dense data, by id.
     const working: WorkingSheet[] = [];
     const indexById = new Map<string, number>();
     for (const sheet of sheets) {
@@ -283,8 +95,7 @@ export function recalcSheets(
         extents.set(w.id, { rows: w.data.length, columns });
     }
 
-    // 2. Discover formula cells by scanning data (never trust calcChain)
-    //    and build each cell's dependency ranges via the ported graph builder.
+    // 2. Find the formula cells by scanning the data, never trusting calcChain, and index the ranges each one reads.
     const infoMap: FormulaCellInfoMap = {};
     const depIndex = new DependencyIndex();
     let blocks = 0;
@@ -304,8 +115,7 @@ export function recalcSheets(
                 try {
                     deps = extractDependencies(g, f, w.id, w.data);
                 } catch {
-                    // A malformed formula must not abort discovery — treat it as
-                    // dependency-free (it still evaluates, in-band, below).
+                    // A malformed formula must not stop the scan. It reads nothing here and still evaluates below.
                     deps = [];
                 }
                 infoMap[key] = {
@@ -329,30 +139,24 @@ export function recalcSheets(
 
     const allInfos = Object.values(infoMap);
     if (allInfos.length === 0) {
-        // No formulas: still return a normalized shape (synced celldata +
-        // calcChain) so the read gate recognizes the doc as computed.
+        // No formulas: still write celldata and an empty calcChain, so the read gate sees the doc as computed.
         return finalize(working, sheets, calcChainBySheet);
     }
 
-    // 3. Build parent edges: parents[key] means "the formula at key depends on
-    //    me" (dependency-graph.ts convention). dependentsOf returns the formulas
-    //    reading this cell, i.e. exactly this cell's dependents.
+    // 3. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
     for (const info of allInfos) {
         for (const depKey of depIndex.dependentsOf(info.id, info.r, info.c)) {
             info.parents[depKey] = 1;
         }
     }
 
-    // 4. Topological order (cycle-tolerant by construction — no throw, no hang).
+    // 4. Order them. A cycle neither throws nor hangs.
     const order = getCalculationOrder(allInfos, infoMap);
 
-    // 5. Evaluate in order. Freshly-computed values travel via the engine's
-    //    execFunctionGlobalData cache (checked before the resolver), so a
-    //    downstream cell reads its upstream result. Volatiles are frozen. Each
-    //    cell is guarded so one poisoned formula never aborts the pass.
+    // 5. Evaluate in order. A computed value reaches the formulas downstream through the engine's
+    //    execFunctionGlobalData, which it reads before the resolver, and the resolver reads the matrices the pass writes.
+    //    Volatiles keep their value. Each cell is guarded, so one poisoned formula never stops the pass.
     const engine = new FormulaEngine({ maxCellsRead });
-    // Resolver over the working sheets: mirrors createArrayResolver's persisted
-    // shape but reads the live `data` matrices we mutate during the ordered pass.
     const resolver = createArrayResolver(
         working.map((w) => ({ id: w.id, name: w.name, data: w.data, calculationChain: [], dynamicArrayCompute: [] })),
     );
@@ -371,30 +175,210 @@ export function recalcSheets(
             if (!rowArr) continue;
             const existing = rowArr[info.c];
             if (existing == null) continue;
-            // An engine error must never overwrite a good cached value: functions
-            // this build lacks (LET, FILTER, …) evaluate to
-            // #NAME?, which would otherwise destroy Excel's correct cached result
-            // at import. When the cell already carries a non-error cached value,
-            // keep it AND skip the execFunctionGlobalData seed so downstream
-            // formulas read that cached value through the resolver — not the error
-            // (same freeze-is-safe direction as volatiles). Cells with no cached
-            // value still get the error sentinel (better than a silent blank).
-            if (result.type === 'error' && hasNonErrorCachedValue(existing)) continue;
+            // Our result is unreliable when it is an error, or when the formula uses a name the engine can't resolve.
+            // It never overwrites a cached value that is no error, because that value is Excel's. A function Excel has
+            // and the engine lacks is such an error, even inside IFERROR. Skipping the execFunctionGlobalData seed too
+            // makes the formulas downstream read the cached value. A cell with no cached value still shows the error.
+            const unreliable = () => result.type === 'error' || usesUnknownName(engine, info.calc_funcStr);
+            if (hasNonErrorCachedValue(existing) && unreliable()) continue;
             engine.state.execFunctionGlobalData[`${info.r}_${info.c}_${info.id}`] = { v: result.value };
-            // Clone before writing: the materialized matrix may reference the
-            // input snapshot's (frozen) cell objects.
+            // The matrix may hold the input snapshot's frozen cells, so write a copy.
             const cell: Cell = { ...existing };
             writeCellValue(cell, result);
             rowArr[info.c] = cell;
         } catch {
-            // Unexpected throw (e.g. ERROR_REF on a bad sheet name): leave the
-            // cached value in place.
+            // An unexpected throw, such as ERROR_REF for a bad sheet name, leaves the cached value.
         }
     }
     overRead();
 
-    // 6. Sync celldata from the computed data + stamp calcChain.
+    // 6. Write celldata from the computed data, and stamp each sheet's calcChain.
     return finalize(working, sheets, calcChainBySheet);
+}
+
+// A sheet's dense `data`, built from `celldata` when it has none, as the editor's initSheetData does: a resolver over
+// empty `data` computes every formula to a blank. The rows are copies, so the write-back never changes a frozen input.
+function ensureWorkingData(sheet: Sheet): CellMatrix {
+    if (sheet.data) {
+        return sheet.data.map((row) => (row ? row.slice() : row));
+    }
+    const { row, column } = gridSize(sheet);
+    return celldataToData(sheet.celldata ?? [], row, column);
+}
+
+// The ranges a formula reads, as setFormulaCellInfo finds them in the editor. An INDIRECT, OFFSET or INDEX call goes
+// through isFunctionRange; any other formula runs the same quote-aware tokenizer.
+function extractDependencies(g: GraphCtx, formula: string, sheetId: string, data: CellMatrix): FormulaDependency[] {
+    const upper = formula.toUpperCase();
+    const buildsReference = upper.includes('INDIRECT(') || upper.includes('OFFSET(') || upper.includes('INDEX(');
+
+    const dependencies: FormulaDependency[] = [];
+    if (buildsReference) {
+        isFunctionRange(formula, (reference: string) => {
+            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference.trim(), sheetId, data);
+            if (range != null) {
+                dependencies.push(range);
+            }
+        });
+    } else {
+        for (const token of tokenize(formula)) {
+            if (token.length <= 1) {
+                continue;
+            }
+
+            if (!iscelldata(token)) {
+                continue;
+            }
+
+            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, token.trim(), sheetId, data);
+            if (range == null) {
+                continue;
+            }
+
+            dependencies.push(range);
+        }
+    }
+
+    return dependencies;
+}
+
+const OPERATORS = /==|!=|<>|<=|>=|[,()=+-/*%&^><]/;
+
+// Splits a formula at its operators, where a split on the operators alone would cut a quoted sheet name such as
+// '1-2' or a string. A double-quoted string is one token. A single-quoted sheet name is one token with the reference
+// after it, so ='1-2'!A1+5 gives '1-2'!A1 and 5.
+function tokenize(formula: string): string[] {
+    let tokenStart = 0;
+    let singleQuoteStart = -1;
+    let doubleQuoteStart = -1;
+    const tokens: string[] = [];
+    // The index in tokens of each single-quoted sheet name.
+    const sheetNameTokens: number[] = [];
+    for (let j = 0; j < formula.length; j += 1) {
+        const char = formula.charAt(j);
+        if (char === "'" && doubleQuoteStart === -1) {
+            if (singleQuoteStart === -1) {
+                if (tokenStart !== j) {
+                    tokens.push(...formula.substring(tokenStart, j).split(OPERATORS));
+                }
+                singleQuoteStart = j;
+                tokenStart = j;
+            } else {
+                // Two quotes in a row are an escaped quote inside the name.
+                if (j < formula.length - 1 && formula.charAt(j + 1) === "'") {
+                    j += 1;
+                } else {
+                    tokenStart = j + 1;
+                    tokens.push(formula.substring(singleQuoteStart, tokenStart));
+                    sheetNameTokens.push(tokens.length - 1);
+                    singleQuoteStart = -1;
+                }
+            }
+        } else if (char === '"' && singleQuoteStart === -1) {
+            if (doubleQuoteStart === -1) {
+                if (tokenStart !== j) {
+                    tokens.push(...formula.substring(tokenStart, j).split(OPERATORS));
+                }
+                doubleQuoteStart = j;
+                tokenStart = j;
+            } else {
+                if (j < formula.length - 1 && formula.charAt(j + 1) === '"') {
+                    j += 1;
+                } else {
+                    tokenStart = j + 1;
+                    tokens.push(formula.substring(doubleQuoteStart, tokenStart));
+                    doubleQuoteStart = -1;
+                }
+            }
+        }
+    }
+    if (tokenStart !== formula.length) {
+        tokens.push(...formula.substring(tokenStart).split(OPERATORS));
+    }
+    // Glue each sheet name to the token after it, its `!A1`. Back to front, so the splices don't move the indexes
+    // still to come.
+    for (let k = sheetNameTokens.length - 1; k >= 0; k -= 1) {
+        const index = sheetNameTokens[k];
+        if (index !== tokens.length - 1) {
+            tokens[index] += tokens[index + 1];
+            tokens.splice(index + 1, 1);
+        }
+    }
+    return tokens;
+}
+
+// A dependency cut to the cells its sheet holds, null when it holds none. Only a formula cell is looked up in the
+// index, and each lies in its sheet's data, so `SUM(A1:XFD1048576)` costs the blocks the sheet spans, not 16 million.
+function withinSheet(dep: FormulaDependency, extents: Map<string, Extent>): FormulaDependency | null {
+    const cells = cellsOf(dep);
+    const extent = cells && extents.get(cells.sheetId);
+    if (!cells || extent == null) return null;
+    const r1 = Math.min(extent.rows - 1, cells.r1);
+    const c1 = Math.min(extent.columns - 1, cells.c1);
+    if (cells.r0 > r1 || cells.c0 > c1) return null;
+    return { row: [cells.r0, r1], column: [cells.c0, c1], sheetId: cells.sheetId };
+}
+
+// A formula that reads the clock or a random number. The server keeps its cached value, as Excel does when it reads a
+// closed file, so an export is the same every time. The check reads the formula text, so a string such as "NOW()"
+// matches too, which only keeps a value that could have been recomputed. RANDBETWEEN comes before RAND, so the longer
+// name wins.
+const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
+
+function isVolatileFormula(formula: string): boolean {
+    return VOLATILE_RE.test(formula);
+}
+
+// A name as Excel spells one: a letter, `_` or `\` first, then letters, digits, `_`, `.`, `\` or `?`.
+const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
+
+// True when the formula uses a name the engine can't resolve, such as a defined name the import couldn't inline. Its
+// #NAME? is one IFERROR traps, and the fallback is not what Excel computed. inlineNames hands over every leaf that is
+// no ref, such as a number or TRUE, and a name Excel reads past its last column (RhoCO2) where the engine reads a cell.
+function usesUnknownName(engine: FormulaEngine, formula: string): boolean {
+    let unknown = false;
+    inlineNames(formula, (name) => {
+        if (NAME_RE.test(name) && !engine.isKnownName(name)) unknown = true;
+        return undefined;
+    });
+    return unknown;
+}
+
+// True when a cell holds a value that is no error: not empty, not flagged `ct.t === 'e'`, and no `#` error string.
+function hasNonErrorCachedValue(cell: Cell): boolean {
+    if (cell.v == null || cell.ct?.t === 'e') {
+        return false;
+    }
+    if (typeof cell.v === 'string' && cell.v.startsWith('#')) {
+        return false;
+    }
+    return true;
+}
+
+// Writes a result as the editor's setCellValue does, where that is cheap: an error shows its sentinel and carries
+// ct.t 'e', any other value its display string.
+function writeCellValue(cell: Cell, result: EvaluationResult): void {
+    if (result.type === 'error') {
+        const sentinel = String(result.value);
+        cell.v = sentinel;
+        cell.m = sentinel;
+        cell.ct = { ...(cell.ct ?? {}), t: 'e' };
+        return;
+    }
+
+    cell.v = result.value;
+
+    if (result.type === 'boolean') {
+        cell.m = booleanDisplay(Boolean(result.value));
+        return;
+    }
+
+    if (typeof result.value === 'number') {
+        cell.m = numberDisplay(result.value, cell.ct?.fa);
+        return;
+    }
+
+    cell.m = result.value == null ? '' : String(result.value);
 }
 
 function finalize(working: WorkingSheet[], sheets: Sheet[], calcChainBySheet: Map<string, CalcChainEntry[]>): Sheet[] {

@@ -19,7 +19,7 @@ export function addSheet(
 
 export function setSheetOrder(ctx: Context, orderList: Record<string, number>) {
     for (const sheet of ctx.sheets) {
-        if (sheet.id != null && sheet.id in orderList) {
+        if (sheet.id in orderList) {
             sheet.order = orderList[sheet.id];
         }
     }

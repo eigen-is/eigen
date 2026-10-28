@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import Parser from '../../../../../../engine/parser/parser';
+import { Parser } from '../../../../../../engine/parser/parser';
 
 describe('.parse() logical formulas', () => {
     let parser: Parser | null;
@@ -176,10 +176,64 @@ describe('.parse() logical formulas', () => {
         expect(parser!.parse('IFERROR(1 + "x", "fb")')).toMatchObject({ error: null, result: 'fb' });
     });
 
+    // An unknown name or function is #NAME? like any other error, so IFERROR traps it, as in Excel.
+    it('IFERROR traps an unknown name or function', () => {
+        expect(parser!.parse('IFERROR(NOSUCHNAME, "fb")')).toMatchObject({ error: null, result: 'fb' });
+        expect(parser!.parse('IFERROR(NOSUCH(1), "fb")')).toMatchObject({ error: null, result: 'fb' });
+        expect(parser!.parse('ISERROR(NOSUCHNAME)')).toMatchObject({ error: null, result: true });
+        expect(parser!.parse('NOSUCHNAME + 1')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('NOSUCH(1)')).toMatchObject({ error: '#NAME?', result: null });
+    });
+
+    // A real Excel function the engine lacks is #NAME? that nothing traps: a fallback would read as Excel's answer.
+    it('IFERROR, IFNA and ISERROR leave the #NAME? of an Excel function the engine lacks', () => {
+        expect(parser!.parse('IFERROR(FILTER(1, TRUE), "fb")')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IFNA(INDIRECT("A1"), 0)')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('ISERROR(_xlfn.LET(x, 1, x))')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IF(ISERR(OFFSET(1, 0, 0)), 0, 1)')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('ISERROR(FILTER(1, TRUE))')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('ISNA(FILTER(1, TRUE))')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('ERROR.TYPE(FILTER(1, TRUE))')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IFERROR(FILTRE(1), "fb")')).toMatchObject({ error: null, result: 'fb' });
+    });
+
+    // Excel evaluates only the branch IF, CHOOSE, IFS, SWITCH or IFERROR takes, so the one it skips can hold a function
+    // the engine lacks.
+    it('a branch not taken may hold an Excel function the engine lacks', () => {
+        expect(parser!.parse('IF(FALSE, FILTER(1, TRUE), 1)')).toMatchObject({ error: null, result: 1 });
+        expect(parser!.parse('IF(TRUE, 1, LET(x, 1, x))')).toMatchObject({ error: null, result: 1 });
+        expect(parser!.parse('CHOOSE(1, 5, FILTER(1, TRUE))')).toMatchObject({ error: null, result: 5 });
+        expect(parser!.parse('IFS(FALSE, FILTER(1, TRUE), TRUE, 2)')).toMatchObject({ error: null, result: 2 });
+        expect(parser!.parse('SWITCH(1, 1, "a", FILTER(1, TRUE))')).toMatchObject({ error: null, result: 'a' });
+        expect(parser!.parse('IFERROR(1, FILTER(1, TRUE))')).toMatchObject({ error: null, result: 1 });
+    });
+
+    it('a branch taken, or a condition, holding an Excel function the engine lacks is #NAME?', () => {
+        expect(parser!.parse('IF(TRUE, FILTER(1, TRUE), 1)')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IF(FILTER(1, TRUE), 1, 2)')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('CHOOSE(FILTER(1, TRUE), 1, 2)')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IFS(FILTER(1, TRUE), 1, TRUE, 2)')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IFS(FALSE, 1, FILTER(1, TRUE), 2)')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('SWITCH(2, FILTER(1, TRUE), "a", "b")')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('SWITCH(FILTER(1, TRUE), 1, "a", "b")')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IFERROR(1/0, FILTER(1, TRUE))')).toMatchObject({ error: '#NAME?', result: null });
+    });
+
+    it('any other function or operator hands on the #NAME? of an Excel function the engine lacks', () => {
+        expect(parser!.parse('SUM(1, FILTER(1, TRUE))')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('ISNUMBER(FILTER(1, TRUE))')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('-FILTER(1, TRUE) + 1')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('IFERROR(CHOOSE(2, 5, FILTER(1, TRUE)), "fb")')).toMatchObject({
+            error: '#NAME?',
+            result: null,
+        });
+    });
+
     it('IFNA', () => {
         expect(parser!.parse('IFNA(1, "fb")')).toMatchObject({ error: null, result: 1 });
         expect(parser!.parse('IFNA(NA(), "fb")')).toMatchObject({ error: null, result: 'fb' });
         expect(parser!.parse('IFNA(1/0, "fb")')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('IFNA(NA(), 2)')).toMatchObject({ error: null, result: 2 });
     });
 
     it('ISERROR', () => {

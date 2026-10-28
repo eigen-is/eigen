@@ -1,3 +1,7 @@
+// The formula engine the editor and the server's recalc share. It owns one Parser, answers its cell and range reads
+// from a computed value in execFunctionGlobalData first and the CellResolver after, and turns each result into a cell
+// value, a display string and a type. Every range read is clamped to the sheet's grid and counted against maxCellsRead.
+
 import { DependencyIndex } from './dependency-index';
 import { cellValue } from './format';
 import { ERROR_REF, Parser } from './parser';
@@ -85,15 +89,14 @@ export class FormulaEngine {
                 let startCol = startCellCoord.column.index;
                 let endCol = endCellCoord.column.index;
 
-                // Handle whole-row / whole-column references
+                // A whole row or column (`3:3`, `A:A`) has no column or row index, so it spans the grid.
                 const emptyRow = startRow === -1 || endRow === -1;
                 const emptyCol = startCol === -1 || endCol === -1;
                 if (emptyRow && emptyCol) throw Error(ERROR_REF);
 
-                // The grid bounds every range, explicit endpoints included: an
-                // unclamped `A1:XFD1048576` (a shape real xlsx files carry) is 17
-                // billion cells. So `ROWS(A1:A100)` answers the grid row count, the
-                // convention `ROWS(A:A)` already follows.
+                // The grid bounds every range, explicit endpoints included, because an unclamped `A1:XFD1048576`, a
+                // shape real xlsx files carry, is 17 billion cells. So `ROWS(A1:A100)` answers the grid's row count,
+                // as `ROWS(A:A)` does.
                 const sheetData = resolver.getSheetData(sheetId);
                 const lastRow = (sheetData?.length ?? 0) - 1;
                 const lastCol = (sheetData?.[0]?.length ?? 0) - 1;
@@ -127,6 +130,11 @@ export class FormulaEngine {
         );
     }
 
+    // True for a name a formula may use bare, such as TRUE. The engine has no defined names, so any other is #NAME?.
+    public isKnownName(name: string): boolean {
+        return this.parser.getVariable(name) !== undefined;
+    }
+
     public evaluate(formula: string, sheetId: string, resolver: CellResolver): EvaluationResult {
         return this.evaluateCompiled(this.compile(formula), sheetId, resolver);
     }
@@ -150,16 +158,14 @@ export class FormulaEngine {
                 return { value: error, display: error, type: 'error' };
             }
 
-            // The engine has no spill, so an array result (a bare range, XLOOKUP's matched row,
-            // TRANSPOSE) keeps its top-left value: the value Excel's spill anchor holds, so a recalc
-            // of an imported anchor lands on Excel's cached value.
+            // The engine has no spill, so an array result, such as a bare range or TRANSPOSE, keeps its top-left
+            // value. That is the value Excel's spill anchor holds, so a recalc of an imported anchor lands on Excel's.
             let result = evaluated;
             while (Array.isArray(result)) result = result[0];
 
             if (result instanceof Date) {
-                // A Date result stores as its Excel serial — the same convention the
-                // parser's operators apply to Date operands. Stringifying it would
-                // turn a DATE/EOMONTH/NOW cell into text on the xlsx round trip.
+                // A Date result stores as its Excel serial, as the parser's operators read a Date operand. As a string,
+                // a DATE or EOMONTH cell would turn into text on the xlsx round trip.
                 const serial = dateToSerial(result);
                 return { value: serial, display: String(serial), type: 'date' };
             }

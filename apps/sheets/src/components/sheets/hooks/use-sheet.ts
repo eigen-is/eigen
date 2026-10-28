@@ -4,8 +4,9 @@
 // connected and alone, with no other client in the document, viewers included, writes the log into a fresh snapshot.
 
 import { useCollabDoc } from '@workspace/lib/collab';
+import type { Sheet } from '@workspace/lib/sheets';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
-import type { Op, Sheet, WorkbookInstance } from '@workspace/sheet';
+import type { Op, WorkbookInstance } from '@workspace/sheet';
 import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';

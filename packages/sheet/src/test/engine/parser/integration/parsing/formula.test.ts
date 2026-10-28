@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import Parser from '../../../../../engine/parser/parser';
+import { Parser } from '../../../../../engine/parser/parser';
 
 describe('sheet/formula-parser/integration/parsing/formula', () => {
     let parser: Parser | null;

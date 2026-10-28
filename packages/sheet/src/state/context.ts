@@ -423,35 +423,22 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
     ctx.ch_width = ch_width + 120; // add blank space at the far right
 }
 
+// Gives a sheet whose id another sheet already has a fresh one, and leaves exactly one sheet active: the first one
+// marked active, or else the first sheet.
 export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {
-    if (data?.length > 0) {
-        let hasActive = false;
-        const indexs: (string | number)[] = [];
-        for (const item of data) {
-            if (item.id == null) {
-                item.id = generateSheetId();
-            }
-            if (indexs.includes(item.id)) {
-                item.id = generateSheetId();
-            } else {
-                indexs.push(item.id);
-            }
-
-            if (item.status == null) {
-                item.status = 0;
-            }
-            if (item.status === 1) {
-                if (hasActive) {
-                    item.status = 0;
-                } else {
-                    hasActive = true;
-                }
-            }
-        }
-        if (!hasActive) {
-            data[0].status = 1;
+    if (data.length === 0) return;
+    const ids = new Set<string>();
+    let hasActive = false;
+    for (const item of data) {
+        if (ids.has(item.id)) item.id = generateSheetId();
+        else ids.add(item.id);
+        item.status ??= 0;
+        if (item.status === 1) {
+            if (hasActive) item.status = 0;
+            else hasActive = true;
         }
     }
+    if (!hasActive) data[0].status = 1;
 }
 
 export function firstVisibleSheetId(ctx: Context, excludeId?: string) {

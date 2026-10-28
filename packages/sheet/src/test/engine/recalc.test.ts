@@ -66,12 +66,26 @@ describe('engine/recalc — recalcSheets', () => {
         expect(s1.data![0][0]?.v).toBe(16);
     });
 
+    test("a quoted sheet name with an operator in it, as in ='1-2'!A1+5, orders its formula after that cell", () => {
+        // Sheet1 is scanned first, so only a recorded dependency makes it read the fresh 6 over the cached 0.
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula("='1-2'!A1+5")]]),
+            sheet('s2', '1-2', [[formula('=2*3', { v: 0 })]]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data?.[0][0]?.v).toBe(11);
+    });
+
+    test('a formula that starts and ends with a string, as ="x"&B1&"y" does, still reads the cells between', () => {
+        // A1 is scanned first, so only a recorded dependency makes it read B1's fresh 6 over the cached 0.
+        const sheets = [sheet('s1', 'Sheet1', [[formula('="x"&B1&"y"'), formula('=2*3', { v: 0 })]])];
+        const out = recalcSheets(sheets);
+        expect(out[0].data?.[0][0]?.v).toBe('x6y');
+    });
+
     test('INDEX-carrying formula is parsed via the special-case branch and evaluates', () => {
-        // The isOffsetFunc branch routes INDEX/OFFSET/INDIRECT through the ported
-        // isFunctionRange rather than the naive tokenizer (audit Risk 8). INDEX
-        // over literals resolves through the range read. (Note: a plain range
-        // arg registers no ORDERING dependency — that is the state layer's own
-        // behavior, faithfully preserved: only single-quoted range endpoints do.)
+        // A formula calling INDEX, OFFSET or INDIRECT finds its ranges through isFunctionRange, not the tokenizer.
+        // A plain range argument records no dependency there, as in the editor: only a single-quoted endpoint does.
         const sheets = [sheet('s1', 'Sheet1', [[num(10), num(20), formula('=INDEX(A1:B1,1,2)')]])];
         const out = recalcSheets(sheets);
         expect(out[0].data![0][2]?.v).toBe(20);
@@ -138,6 +152,63 @@ describe('engine/recalc — recalcSheets', () => {
         const out = recalcSheets(sheets);
         expect(out[0].data![0][1]?.v).toBe(7);
         expect(out[0].data![0][2]?.v).toBe(8);
+    });
+
+    // An Excel function the engine lacks fails the whole formula, past IFERROR and ISERROR, so Excel's value stays.
+    test('a formula naming a function the engine lacks keeps its cached value, inside IFERROR or ISERROR too', () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=IFERROR(FILTER(A1:A3,A1:A3>1),"none")', num(2))],
+                [num(2), formula('=IF(ISERROR(_xlfn.LET(x,A1,x+1)),0,1)', num(1))],
+                [num(3), formula('=B1+1')],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe(2);
+        expect(out[0].data![1][1]?.v).toBe(1);
+        // A cell that reads it sees the cached value, not the fallback.
+        expect(out[0].data![2][1]?.v).toBe(3);
+    });
+
+    test('a formula whose functions the engine knows recalculates under IFERROR, past a stale cached value', () => {
+        // Text that reads like a call or a name is neither, and nor is a boolean, a number or another sheet's cell.
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=IFERROR(SQRT(A1-2),"FILTER( Rate")', num(5))],
+                [num(2), formula("=IF(true,Sheet2!A1+'Sheet 3'!A1*1.5E0,FALSE)", num(5))],
+            ]),
+            sheet('s2', 'Sheet2', [[num(10)]]),
+            sheet('s3', 'Sheet 3', [[num(2)]]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe('FILTER( Rate');
+        expect(out[0].data![1][1]?.v).toBe(13);
+    });
+
+    // Excel never evaluates the branch IF skips, so the engine computes what Excel did.
+    test('a function the engine lacks in a branch IF skips recalculates past a stale cached value', () => {
+        const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=IF(A1>0,A1+1,FILTER(A1:A3,TRUE))', num(5))]])];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe(2);
+    });
+
+    // The importer writes each defined name into the formulas that use it. One it can't, such as a name into another
+    // workbook, stays as written, and the engine has no names, so IFERROR would hand back its fallback.
+    test("a formula using a defined name the import couldn't inline keeps its cached value, inside IFERROR too", () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=IFERROR(A1*TaxRate,0)', num(0.21))],
+                // Excel reads a name past its last column, XFD, as a name, where the engine reads a cell.
+                [num(2), formula('=IFERROR(A2*RhoCO2,0)', num(3.6))],
+                [num(3), formula('=IFERROR(Sheet1!Discount,7)', num(5)), formula('=B1*100')],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe(0.21);
+        expect(out[0].data![1][1]?.v).toBe(3.6);
+        expect(out[0].data![2][1]?.v).toBe(5);
+        // A cell that reads one sees the cached value.
+        expect(out[0].data![2][2]?.v).toBe(21);
     });
 
     test('imported VLOOKUP with a lower-case FALSE resolves against the looked-up sheet', () => {

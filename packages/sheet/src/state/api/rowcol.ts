@@ -1,3 +1,7 @@
+// The row and column calls of the Workbook's imperative API: freezing panes, inserting, deleting, hiding and showing
+// rows or columns, and reading or setting their sizes. Each finds its sheet with getSheet, by id or index, and an
+// insert or delete runs through the state module's insertRowCol and deleteRowCol.
+
 import { forEach, isNumber, isPlainObject } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { deleteRowCol, insertRowCol } from '../modules';
@@ -47,7 +51,7 @@ export function insertRowOrColumn(
     }
 
     const sheet = getSheet(ctx, options);
-    insertRowCol(ctx, { type, index, count, direction, id: sheet.id! });
+    insertRowCol(ctx, { type, index, count, direction, id: sheet.id });
 }
 
 export function deleteRowOrColumn(
@@ -63,7 +67,7 @@ export function deleteRowOrColumn(
 
     const sheet = getSheet(ctx, options);
 
-    deleteRowCol(ctx, { type, start, end, id: sheet.id! });
+    deleteRowCol(ctx, { type, start, end, id: sheet.id });
 }
 
 export function hideRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' | 'column') {

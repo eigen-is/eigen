@@ -21,6 +21,9 @@ describe("Excel's future functions", () => {
             '_xlfn.IFNA(SUM(A1:A2),_xlfn.XLOOKUP(1,B:B,C:C))+_xlfn._xlws.SORT(D1:D3)+_xlfn.stdev.s(A1:A2)',
         );
         expect(withFuturePrefixes('XMATCH(1,B:B)')).toBe('_xlfn.XMATCH(1,B:B)');
+        expect(withFuturePrefixes('REGEXTEST(A1,"x")+ENCODEURL(B1)')).toBe(
+            '_xlfn.REGEXTEST(A1,"x")+_xlfn.ENCODEURL(B1)',
+        );
     });
 
     test("the engine's dotted functions are Excel's, each but two added after 2007", () => {

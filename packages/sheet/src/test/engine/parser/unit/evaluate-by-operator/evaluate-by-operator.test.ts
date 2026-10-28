@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import evaluateByOperator, {
+import { UNSUPPORTED_FUNCTION } from '../../../../../engine/parser/error';
+import {
     callFunction,
+    evaluateByOperator,
 } from '../../../../../engine/parser/evaluate-by-operator/evaluate-by-operator';
 
 describe('evaluate-by-operator dispatch', () => {
@@ -47,5 +49,23 @@ describe('evaluate-by-operator dispatch', () => {
         expect(callFunction('IF', [true, err, 'ok'])).toBe(err);
         // IF(Error, ...) → formulajs returns the Error from the test arg.
         expect(callFunction('IF', [err, 1, 2])).toBe(err);
+    });
+
+    test('callFunction evaluates a registered name in any case, and answers #NAME? for one it lacks', () => {
+        expect(callFunction('xlookup', [2, [1, 2], ['a', 'b']])).toBe('b');
+        expect(callFunction('NORM.S.DIST', [0, true])).toBe(0.5);
+        expect(callFunction('FILTRE', [1])).toBeInstanceOf(Error);
+        expect(callFunction('FILTER', [1])).toBeInstanceOf(Error);
+    });
+
+    // Both read #NAME?, but only the typo's is formulajs's own, the one ISERROR recognizes.
+    test('an Excel function the engine lacks is UNSUPPORTED_FUNCTION, a typo the #NAME? IFERROR traps', () => {
+        expect(callFunction('FILTER', [1])).toBe(UNSUPPORTED_FUNCTION);
+        expect(callFunction('_xlfn.LET', [1])).toBe(UNSUPPORTED_FUNCTION);
+        expect(UNSUPPORTED_FUNCTION.message).toBe('#NAME?');
+        const typo = callFunction('FILTRE', [1]);
+        expect(typo).not.toBe(UNSUPPORTED_FUNCTION);
+        expect(callFunction('ISERROR', [typo])).toBe(true);
+        expect(callFunction('ISERROR', [UNSUPPORTED_FUNCTION])).toBe(UNSUPPORTED_FUNCTION);
     });
 });

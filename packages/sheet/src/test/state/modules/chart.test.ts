@@ -14,7 +14,7 @@ import {
     readChartSpec,
     sampleChartSpec,
 } from '@workspace/lib/charts';
-import type { SheetChart } from '@workspace/lib/sheets';
+import type { Sheet as LibSheet, SheetChart } from '@workspace/lib/sheets';
 import {
     decodeSheetsSnapshot,
     encodeSheetsSnapshot,
@@ -103,8 +103,8 @@ function workbook(): Context {
     return ctx;
 }
 
-const charts = (sheets: Sheet[]) => sheets.map((sheet) => sheet.charts);
-const rangeData = (sheets: Sheet[], sheet: number, id: string) => {
+const charts = (sheets: LibSheet[]) => sheets.map((sheet) => sheet.charts);
+const rangeData = (sheets: LibSheet[], sheet: number, id: string) => {
     const { spec } = readChartSpec(sheets[sheet].charts![id]);
     return spec?.data.source === 'range' ? spec.data : null;
 };
@@ -522,7 +522,7 @@ describe('two peers editing one chart keep both edits', () => {
     const set = (path: string[], value: unknown): ChartSpecChange => [{ op: 'set', path, value }];
     const title = set(['title', 'text'], 'Goals');
     const recolor = (index: number, color: string) => set(['points', 's-1', String(index)], { color });
-    const spec = (sheets: Sheet[], id = 'c1') => readChartSpec(sheets[0].charts![id]).spec;
+    const spec = (sheets: LibSheet[], id = 'c1') => readChartSpec(sheets[0].charts![id]).spec;
     const withChart = (id: string, value: ChartSpec) =>
         produce(workbook(), (ctx: Context) => {
             ctx.sheets[0].charts![id] = chart(id, value, 'a2');

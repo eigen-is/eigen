@@ -169,9 +169,9 @@ export const SheetTab: React.FC = () => {
                     <div ref={tabContainerRef} className="flex min-w-0 flex-1 overflow-hidden">
                         {[...context.sheets]
                             .sort((a, b) => sheetOrder(a) - sheetOrder(b))
-                            .map(
-                                (sheet) => sheet.id != null && <SheetItem key={sheet.id} id={sheet.id} sheet={sheet} />,
-                            )}
+                            .map((sheet) => (
+                                <SheetItem key={sheet.id} id={sheet.id} sheet={sheet} />
+                            ))}
                     </div>
                     {isShowBoundary && isShowScrollBtn && (
                         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-2 bg-gradient-to-l from-muted to-transparent" />

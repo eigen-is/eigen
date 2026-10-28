@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
-import type { SheetChart, SheetImage } from '@workspace/lib/sheets';
+import type { Sheet as LibSheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import { floatingItems } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
 import { applyPatches, produce } from 'immer';
@@ -29,7 +29,7 @@ import {
 } from '../../../state/modules/image';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { deleteSheet } from '../../../state/modules/sheet';
-import type { Op, Sheet } from '../../../state/types';
+import type { Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
 import { patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
@@ -63,7 +63,7 @@ const KINDS = [
     { kind: 'chart', id: 'c1', field: 'charts' },
 ] as const;
 
-const objects = (sheets: Sheet[]) => sheets.map(({ images, charts }) => ({ images, charts }));
+const objects = (sheets: LibSheet[]) => sheets.map(({ images, charts }) => ({ images, charts }));
 const paintOrder = (ctx: Context) => floatingItems(ctx.sheets[0]).map(({ object }) => object.id);
 
 describe('floating writers', () => {
@@ -329,7 +329,7 @@ describe('a pending name in the undo stack', () => {
         undoList: entries,
         redoList: [],
     });
-    const names = (sheet: Sheet | undefined) => Object.values(sheet?.images ?? {}).map((image) => image.mediaName);
+    const names = (sheet: LibSheet | undefined) => Object.values(sheet?.images ?? {}).map((image) => image.mediaName);
 
     test('undoing a row insert made while T uploads keeps the real name', () => {
         const op = { ...insertOp, id: T };

@@ -118,7 +118,6 @@ test('âŒ˜Z in a typed chart title takes the whole title back in one step, and â‡
                         id: 's1',
                         name: 'One',
                         order: 0,
-                        status: 1,
                         row: 20,
                         column: 10,
                         celldata: [],

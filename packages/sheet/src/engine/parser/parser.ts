@@ -15,7 +15,7 @@ import type {
     RangeCell,
 } from '../types';
 import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, toFormulaError } from './error';
-import evaluateByOperator, { callFunction } from './evaluate-by-operator/evaluate-by-operator';
+import { callFunction, evaluateByOperator } from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
 import { extractLabel, offsetCoordinate, offsetRange, toLabel } from './helper/cell';
 import { invertNumber, toNumber } from './helper/number';
@@ -23,7 +23,7 @@ import { trimEdges } from './helper/string';
 
 type GrammarParserInstance = { parse: (expression: string) => CompiledFormula; yy: Record<string, unknown> };
 
-class Parser {
+export class Parser {
     private parser: GrammarParserInstance;
     private variables: Record<string, FormulaArg>;
     private options: ParserOptions;
@@ -39,11 +39,11 @@ class Parser {
             // An error typed into a formula, such as `#N/A`, is a value like a computed one, so ISERROR,
             // ERROR.TYPE or IFERROR around it can inspect it, as in Excel.
             errorValue: (errorName: string) => toFormulaError(Error(errorName)),
-            callVariable: (variable: string) => this._callVariable(variable),
+            callVariable: (variable: string) => this.callVariable(variable),
             evaluateByOperator,
             callFunction,
-            cellValue: (value: string) => this._callCellValue(value),
-            rangeValue: (start: string, end: string) => this._callRangeValue(start, end),
+            cellValue: (value: string) => this.callCellValue(value),
+            rangeValue: (start: string, end: string) => this.callRangeValue(start, end),
         };
         this.variables = Object.create(null);
         this.options = Object.create(null);
@@ -112,17 +112,14 @@ class Parser {
         this.emitter.emit(event, ...args);
     }
 
-    private _callVariable(name: string): FormulaArg {
+    // An unknown name is #NAME? in-band, like an unknown function, so IFERROR can trap it.
+    private callVariable(name: string): FormulaArg {
         const value = this.getVariable(name);
-        if (value === undefined) {
-            throw Error(ERROR_NAME);
-        }
-
-        return value;
+        return value === undefined ? toFormulaError(Error(ERROR_NAME)) : value;
     }
 
     // Retrieve value by its label (`B3`, `B$3`, `$B$3`).
-    private _callCellValue(label: string): FormulaArg {
+    private callCellValue(label: string): FormulaArg {
         const parsed = extractLabel(label);
         if (!parsed) {
             throw Error(ERROR);
@@ -136,7 +133,7 @@ class Parser {
             return row.index + 1;
         }
         if (row.index === -1) {
-            return this._callVariable(label);
+            return this.callVariable(label);
         }
 
         const { rowOffset = 0, colOffset = 0 } = this.options;
@@ -156,7 +153,7 @@ class Parser {
     }
 
     // Retrieve values by range label (`B3:A1`, `B$3:A1`, `B$3:$A1`, `$B$3:A$1`).
-    private _callRangeValue(startLabel: string, endLabel: string): FormulaValue[] | FormulaValue[][] {
+    private callRangeValue(startLabel: string, endLabel: string): FormulaValue[] | FormulaValue[][] {
         const start = extractLabel(startLabel);
         const end = extractLabel(endLabel);
         if (!start || !end) {
@@ -199,5 +196,3 @@ class Parser {
         return value;
     }
 }
-
-export default Parser;
