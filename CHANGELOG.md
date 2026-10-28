@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Changed
+
+- **A shorter style list in Docs** — the style picker lists Normal text and the headings. **Title** and **Subtitle** move to **Format › Paragraph styles**, below **Heading 6**, and Word files keep them
+
 ## [0.4.1] - 2026-10-28
 
 Docs gets page-less documents, text boxes, a table of contents and an outline, and an image can sit behind or in front of the text. In Sheets you can style part of a cell's text, and undo keeps up with other people's edits. In Slides and Vector you can type in shapes, and charts can show their values. After you update, reload any Docs document you have open, or a tab still on 0.4.0 deletes the text boxes and tables of contents it receives and can shrink wide tables for everyone.

@@ -1,5 +1,5 @@
-// The paragraph-style dropdown at the start of Docs' formatting row: Normal text, the headings and the other styles
-// the active editor's schema holds, each drawn as it looks. It opens without blocking the page, as the bar's menus
+// The paragraph-style dropdown at the start of Docs' formatting row: Normal text and the headings, each drawn as it
+// looks; Title and Subtitle are in the Format menu. It opens without blocking the page, as the bar's menus
 // do, and hands the focus back to the editor as it closes.
 
 import type { Editor } from '@tiptap/react';
@@ -36,7 +36,7 @@ export const StylePicker = ({ editor, active, keepEditorFocus }: StylePickerProp
                 <Pilcrow className="h-4 w-4" /> Normal text
             </DropdownMenuItem>
             <Separator className="my-1" />
-            {paragraphStylesIn(editor.schema).map(({ name, type, attrs, icon: Icon, preview }) => (
+            {paragraphStylesIn(editor.schema, 'headings').map(({ name, type, attrs, icon: Icon, preview }) => (
                 <DropdownMenuItem
                     key={name}
                     onClick={() => editor.chain().focus().toggleNode(type, 'paragraph', attrs).run()}

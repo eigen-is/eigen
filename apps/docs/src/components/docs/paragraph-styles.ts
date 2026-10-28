@@ -1,5 +1,6 @@
-// The Docs paragraph styles after Normal text, such as Title and Heading 1, with their icons and previews. The style
-// picker and Format › Paragraph styles list them, and the toolbar reads which one the selection is in.
+// The Docs paragraph styles after Normal text, the headings and Title and Subtitle, with their icons and previews. The
+// style picker lists the headings, Format › Paragraph styles all of them, and the toolbar reads which one the selection
+// is in.
 
 import type { Node, Schema } from '@tiptap/pm/model';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
@@ -14,12 +15,10 @@ type ParagraphStyle = {
     preview: string;
 };
 
-// Format › Paragraph styles and the style picker list these after Normal text, in Google Docs' order. The picker
-// previews each as the editor draws it: the title largest, the subtitle in gray, the heading sizes stepping down, and
-// Heading 5 and 6 at the body's weight in gray, Heading 6 in italic.
+// The headings, then Title and Subtitle, which few people pick but Word and Google Docs files hold: the Format menu
+// lists them all, and the picker leaves those two out. The picker previews each heading as the editor draws it, the
+// sizes stepping down, and Heading 5 and 6 at the body's weight in gray, Heading 6 in italic.
 const PARAGRAPH_STYLES: ParagraphStyle[] = [
-    { name: 'Title', type: 'title', icon: Heading, preview: 'text-2xl' },
-    { name: 'Subtitle', type: 'subtitle', icon: LetterText, preview: 'text-base text-muted-foreground' },
     { name: 'Heading 1', type: 'heading', attrs: { level: 1 }, icon: Heading1, preview: 'text-xl font-medium' },
     { name: 'Heading 2', type: 'heading', attrs: { level: 2 }, icon: Heading2, preview: 'text-lg font-medium' },
     { name: 'Heading 3', type: 'heading', attrs: { level: 3 }, icon: Heading3, preview: 'text-base font-medium' },
@@ -38,6 +37,8 @@ const PARAGRAPH_STYLES: ParagraphStyle[] = [
         icon: Heading6,
         preview: 'text-sm text-muted-foreground italic',
     },
+    { name: 'Title', type: 'title', icon: Heading, preview: 'text-2xl' },
+    { name: 'Subtitle', type: 'subtitle', icon: LetterText, preview: 'text-base text-muted-foreground' },
 ];
 
 // The style a textblock is in; Normal text and code are none.
@@ -47,7 +48,8 @@ export function paragraphStyleOf(node: Node): ParagraphStyle | undefined {
     );
 }
 
-// The styles an editor's schema holds: a band's has no title or subtitle, and a command for a node it lacks throws.
-export function paragraphStylesIn(schema: Schema): ParagraphStyle[] {
-    return PARAGRAPH_STYLES.filter(({ type }) => type in schema.nodes);
+// The styles, or only the headings, that an editor's schema holds: a band's has no title or subtitle, and a command for
+// a node it lacks throws.
+export function paragraphStylesIn(schema: Schema, group: 'all' | 'headings'): ParagraphStyle[] {
+    return PARAGRAPH_STYLES.filter(({ type }) => type in schema.nodes && (group === 'all' || type === 'heading'));
 }

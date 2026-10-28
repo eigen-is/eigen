@@ -41,7 +41,9 @@ The style selector sits next to the font picker. It shows the current style of t
 
 1. Click inside the paragraph you want to change, or select several lines.
 2. Click the style selector to open the dropdown, or open **Format**, then **Paragraph styles**.
-3. Choose **Normal text**, **Title**, **Subtitle**, or one of **Heading 1** through **Heading 6**. In the **Format** menu, **Normal text** opens a menu of its own: choose **Apply 'Normal text'**.
+3. Choose **Normal text** or one of **Heading 1** through **Heading 6**. In the **Format** menu, **Normal text** opens a menu of its own: choose **Apply 'Normal text'**.
+
+**Title** and **Subtitle** are only in the **Format** menu, under **Paragraph styles**, below **Heading 6**. Word and Google Docs files that use them keep them, and the style selector shows them.
 
 These are block styles: the whole paragraph changes, not just the selected words. Choosing **Normal text** removes the style and returns the paragraph to the default style.
 

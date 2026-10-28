@@ -252,7 +252,7 @@ export const FormatMenu = ({
                         </DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
-                {paragraphStylesIn(editor.schema).map(({ name, type, attrs, icon: Icon }) => (
+                {paragraphStylesIn(editor.schema, 'all').map(({ name, type, attrs, icon: Icon }) => (
                     <DropdownMenuItem
                         key={name}
                         onClick={() => editor.chain().focus().toggleNode(type, 'paragraph', attrs).run()}
