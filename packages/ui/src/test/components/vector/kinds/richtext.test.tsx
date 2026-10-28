@@ -1,7 +1,7 @@
 // The in-place editor fills the whole shape, but the text in it may fill only part. A press on the rest must keep the
 // session: the caret stays in the text, so typing, Escape and the editor's keymap keep working.
 import { afterEach, expect, test } from 'bun:test';
-import type { VectorElement } from '@workspace/lib/vector';
+import type { VectorTextualElement } from '@workspace/lib/vector';
 import { DEFAULT_ELEMENT_PROPS, ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import { installHappyDom } from '../../../happy-dom';
 import { renderInDocument } from '../../../render-in-document';
@@ -11,7 +11,7 @@ installHappyDom();
 const { act, createElement } = await import('react');
 const { RichTextInPlaceEditor } = await import('../../../../components/vector/kinds/richtext');
 
-const shape: VectorElement = {
+const shape: VectorTextualElement = {
     ...DEFAULT_ELEMENT_PROPS,
     ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),
     id: 'r1',

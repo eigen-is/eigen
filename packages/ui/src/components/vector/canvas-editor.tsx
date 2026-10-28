@@ -1467,7 +1467,7 @@ export function CanvasEditor({
                 if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
                 // The layer still paints the box's backdrop; only its text body gives way to the
                 // in-place editor inside it, styled with the same CSS the renderer would have emitted.
-                if (el.id === richTextEditId) {
+                if (el.id === richTextEditId && isTextual(el)) {
                     return node(
                         renderEl(el),
                         <RichTextInPlaceEditor

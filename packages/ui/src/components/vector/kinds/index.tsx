@@ -26,14 +26,6 @@ import { ArrowPanelSection } from './arrow';
 import { ChartEditDialog, ChartPanelSection } from './chart';
 import { ImagePanelSection } from './image';
 
-// Mounted inside the element's own layer while its text is being edited on the canvas. `onChange` writes
-// straight through (unsealed, so keystrokes coalesce into one undo step); `onExit` ends the session.
-export type InPlaceEditorProps = {
-    element: VectorElement;
-    onChange: (fields: VectorElementPatch) => void;
-    onExit: () => void;
-};
-
 // Rows for a homogeneous selection of this kind. `onChange` applies ONE patch to every selected element
 // and `onChangeEach` a patch computed per element (a label's measured width, an arrow's re-docked
 // route), each in one sealed transact (the panel owns the sealing). `scene` resolves an element the
