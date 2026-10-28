@@ -23,7 +23,7 @@ You can download a copy of any spreadsheet to your computer without removing it 
 
 The downloaded file takes the name of the spreadsheet.
 
-A PDF or web page shows a cell that mixes several styles in the cell's own style. A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells, charts, images, and sheets past a size limit. An image counts toward that limit by its pixels as well as its file size, so a spreadsheet with many large images may leave some of them out. Even cut short, a PDF of a very large spreadsheet can take too long to make and fail. A sheet cut short in the PDF keeps the columns one page holds, 192 at the default width, because the page would cut off the rest. The web page keeps more columns while all of the sheet's rows fit. To keep everything, download it as Excel.
+A PDF or web page shows a cell that mixes several styles in the cell's own style. A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells, charts, images, and sheets past a size limit. A photo counts toward that limit by its file size. A PNG or GIF image, or one with transparency, also counts by its pixels, so a spreadsheet with many large ones may leave some of them out. Even cut short, a PDF of a very large spreadsheet can take too long to make and fail. A sheet cut short in the PDF keeps the columns one page holds, 192 at the default width, because the page would cut off the rest. The web page keeps more columns while all of the sheet's rows fit. To keep everything, download it as Excel.
 
 In the PDF and the web page, text that doesn't fit its cell's row is cut off at the row's edge, as it is in the spreadsheet.
 
