@@ -5,7 +5,7 @@ import type { JSONContent } from '@tiptap/core';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import type { CodeHighlighter } from '../../../document/lowlight';
 import type { Lost } from '../../../document/transform/protocol';
-import { A_NS, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../../ooxml/ooxml';
+import { A_NS, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS, WPS_NS } from '../../../ooxml/ooxml';
 import type { PartRelationships } from '../../../ooxml/opc';
 import type { NOTE_SEPARATORS, StyleId } from '../../../ooxml/wordml';
 import { SINGLE_LINE, WEB_VIEW, WORD_SETTINGS_URI } from '../../../ooxml/wordml';
@@ -22,6 +22,7 @@ export const DOCUMENT_NAMESPACES = [
     `xmlns:wp="${WP_NS}"`,
     `xmlns:a="${A_NS}"`,
     `xmlns:pic="${PIC_NS}"`,
+    `xmlns:wps="${WPS_NS}"`,
     `xmlns:w14="${W14_NS}"`,
     `xmlns:mc="${MC_NS}"`,
     `xmlns:m="${M_NS}"`,

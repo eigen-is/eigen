@@ -408,6 +408,7 @@ describe('docx writer — package', () => {
             'xmlns:wp': WP,
             'xmlns:a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
             'xmlns:pic': 'http://schemas.openxmlformats.org/drawingml/2006/picture',
+            'xmlns:wps': 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape',
             'xmlns:w14': 'http://schemas.microsoft.com/office/word/2010/wordml',
             'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
             'xmlns:m': 'http://schemas.openxmlformats.org/officeDocument/2006/math',
@@ -626,40 +627,142 @@ describe('docx writer — footnotes', () => {
     });
 });
 
-describe('docx writer — text boxes, written as their text', () => {
-    const box = (layout: string, ...paragraphs: JSONContent[]): JSONContent => ({
+describe('docx writer — text boxes', () => {
+    const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+    const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+    const box = (attrs: Record<string, unknown>, ...paragraphs: JSONContent[]): JSONContent => ({
         type: 'textBox',
-        attrs: { layout, offsetX: 40, offsetY: 10, fill: '#ffeeaa', outline: '1px solid #000000' },
-        content: paragraphs,
+        attrs: { width: 200, ...attrs },
+        content: paragraphs.length > 0 ? paragraphs : [p(text('Boxed'))],
     });
     const cell = (...content: JSONContent[]): JSONContent => ({
         type: 'table',
         content: [{ type: 'tableRow', content: [{ type: 'tableCell', content }] }],
     });
+    const shapeOf = async (json: JSONContent) => only(descendants(await bodyOf(json), WPS, 'wsp'));
 
-    // Until the writer draws a box, its paragraphs follow the one that holds it, as the import read Word's boxes.
-    test('a front, a block and an in-cell box write their paragraphs after the paragraph that holds them', async () => {
-        const json = doc(
-            p(box('front', p(text('Front one')), p(text('Front two'))), text('Anchor')),
-            p(text('Before'), box('block', p(text('Block')))),
-            cell(p(text('Cell'), box('front', p(text('In cell'))))),
-        );
-        const body = await bodyOf(json);
-        expect(xmlChildren(body, W, 'p').map(texts).slice(0, 5)).toEqual([
-            'Anchor',
-            'Front one',
-            'Front two',
-            'Before',
-            'Block',
+    // Word writes a shape inside AlternateContent's Choice, its anchor's children in the schema's order.
+    test('a box in front of the text is a wps anchor in mc:Choice at its paragraph’s start, its children in order', async () => {
+        const body = await bodyOf(doc(p(text('Anchor'), box({ layout: 'front', offsetX: 40, offsetY: 10 }))));
+        const choice = only(descendants(body, MC, 'Choice'));
+        expect(xmlAttr(choice, '', 'Requires')).toBe('wps');
+        const anchor = only(descendants(choice, WP, 'anchor'));
+        expect(shape(anchor)).toEqual([
+            'simplePos',
+            'positionH',
+            'positionV',
+            'extent',
+            'effectExtent',
+            'wrapNone',
+            'docPr',
+            'cNvGraphicFramePr',
+            'graphic',
         ]);
-        const tableCell = descendants(body, W, 'tc')[0];
-        expect(tableCell && xmlChildren(tableCell, W, 'p').map(texts)).toEqual(['Cell', 'In cell']);
-        expect(descendants(body, WP, 'anchor')).toEqual([]);
+        expect(xmlAttr(anchor, '', 'behindDoc')).toBe('0');
+        const offset = (local: string) =>
+            xmlText(only(descendants(only(descendants(anchor, WP, local)), WP, 'posOffset')));
+        expect(offset('positionH')).toBe(String(40 * 9525));
+        expect(offset('positionV')).toBe(String(10 * 9525));
+        // The anchor run opens the paragraph, before its text.
+        const paragraph = only(xmlChildren(body, W, 'p'));
+        expect(xmlElements(paragraph)[0]?.local).toBe('r');
+        expect(texts(paragraph)).toBe('BoxedAnchor');
+        expect(descendants(body, MC, 'Fallback')).toEqual([]);
     });
 
-    test('each box counts as a text box simplified', () => {
-        const json = doc(p(box('front', p(text('a'))), text('b')), p(box('block', p(text('c')))));
-        expect(lossesOf(json)).toEqual([{ code: 'text-simplified', count: 2 }]);
+    test('a box behind the text sets behindDoc, and X and Y count from the paragraph’s indent and padding', async () => {
+        const indented = { type: 'paragraph', attrs: { indentLeft: 36, spaceBefore: 6 }, content: [text('A')] };
+        const json = doc({ ...indented, content: [box({ layout: 'behind', offsetX: 10, offsetY: 20 }), text('A')] });
+        const anchor = only(descendants(await bodyOf(json), WP, 'anchor'));
+        expect(xmlAttr(anchor, '', 'behindDoc')).toBe('1');
+        const offset = (local: string) =>
+            Number(xmlText(only(descendants(only(descendants(anchor, WP, local)), WP, 'posOffset'))));
+        expect(offset('positionH')).toBe(Math.round((10 + 48) * 9525));
+        expect(offset('positionV')).toBe(Math.round((20 - 8) * 9525));
+    });
+
+    test('the shape is a text box holding its paragraphs, its insets, alignment and growth in bodyPr', async () => {
+        const wsp = await shapeOf(
+            doc(
+                p(
+                    box(
+                        { layout: 'front', paddingX: 12, paddingY: 6, verticalAlign: 'middle' },
+                        p(text('One')),
+                        p(text('Two')),
+                    ),
+                ),
+            ),
+        );
+        expect(xmlAttr(only(descendants(wsp, WPS, 'cNvSpPr')), '', 'txBox')).toBe('1');
+        const content = only(descendants(wsp, W, 'txbxContent'));
+        expect(xmlChildren(content, W, 'p').map(texts)).toEqual(['One', 'Two']);
+        const bodyPr = only(descendants(wsp, WPS, 'bodyPr'));
+        expect(bodyPr.attributes).toMatchObject({
+            wrap: 'square',
+            lIns: String(12 * 9525),
+            rIns: String(12 * 9525),
+            tIns: String(6 * 9525),
+            bIns: String(6 * 9525),
+            anchor: 'ctr',
+        });
+        // An auto box grows with its text.
+        expect(shape(bodyPr)).toEqual(['spAutoFit']);
+    });
+
+    test('a height that holds the text is fixed; one the text outgrows grows to the estimate', async () => {
+        const held = await shapeOf(doc(p(box({ layout: 'front', height: 200 }))));
+        const bodyPr = only(descendants(held, WPS, 'bodyPr'));
+        expect(shape(bodyPr)).toEqual(['noAutofit']);
+        expect(xmlAttr(only(descendants(held, A_NS, 'ext')), '', 'cy')).toBe(String(200 * 9525));
+
+        const long = 'A paragraph long enough to run over many lines of a narrow box. '.repeat(6);
+        const grown = await shapeOf(doc(p(box({ layout: 'front', height: 40 }, p(text(long))))));
+        expect(shape(only(descendants(grown, WPS, 'bodyPr')))).toEqual(['spAutoFit']);
+        expect(Number(xmlAttr(only(descendants(grown, A_NS, 'ext')), '', 'cy'))).toBeGreaterThan(40 * 9525 * 3);
+    });
+
+    test('the fill, the outline with its dash or double line, and rounded corners are the shape’s', async () => {
+        const look = async (attrs: Record<string, unknown>) => {
+            const spPr = only(descendants(await shapeOf(doc(p(box({ layout: 'front', ...attrs })))), WPS, 'spPr'));
+            return xmlElements(spPr).map(xmlOf).join('');
+        };
+        // A 200 by 100 px box: the 8 px radius is 8% of its shorter side.
+        expect(await look({ fill: '#ffeeaa', outline: '2px dashed #c00000', rounded: true, height: 100 })).toBe(
+            `<a:xfrm><a:off x="0" y="0"/><a:ext cx="${200 * 9525}" cy="${100 * 9525}"/></a:xfrm>` +
+                '<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 8000"/></a:avLst></a:prstGeom>' +
+                '<a:solidFill><a:srgbClr val="FFEEAA"/></a:solidFill>' +
+                `<a:ln w="${2 * 9525}"><a:solidFill><a:srgbClr val="C00000"/></a:solidFill><a:prstDash val="dash"/></a:ln>`,
+        );
+        expect(await look({ outline: '3px double #000000' })).toContain(`<a:ln w="${3 * 9525}" cmpd="dbl">`);
+        expect(await look({ outline: '1px dotted #000000' })).toContain('<a:prstDash val="sysDot"/>');
+        expect(await look({})).toContain(
+            '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln>',
+        );
+    });
+
+    test('a box in the flow is a wp:inline in a paragraph of its own; a wrapped one a wrapSquare anchor', async () => {
+        const body = await bodyOf(doc(p(text('Before'), box({ layout: 'block', alignment: 'right' }), text('after'))));
+        const paragraphs = xmlChildren(body, W, 'p');
+        expect(paragraphs.map(texts)).toEqual(['Before', 'Boxed', 'after']);
+        expect(descendants(body, WP, 'inline')).toHaveLength(1);
+        expect(w(child(child(paragraphs[1], 'pPr'), 'jc'), 'val')).toBe('right');
+
+        const wrapped = await bodyOf(doc(p(box({ layout: 'wrap-right' }), text('Text'))));
+        const anchor = only(descendants(wrapped, WP, 'anchor'));
+        expect(descendants(anchor, WP, 'wrapSquare')).toHaveLength(1);
+        expect(xmlText(only(descendants(anchor, WP, 'align')))).toBe('right');
+    });
+
+    test('in a table cell a box in front of the text is written in line', async () => {
+        const body = await bodyOf(doc(cell(p(text('Cell'), box({ layout: 'front', offsetX: 5, offsetY: 5 })))));
+        expect(descendants(body, WP, 'anchor')).toEqual([]);
+        expect(descendants(body, WP, 'inline')).toHaveLength(1);
+    });
+
+    test('the document declares wps, and a box loses nothing', async () => {
+        const zip = await unzip(doc(p(box({ layout: 'front' }))));
+        expect(entryText(zip, 'word/document.xml')).toContain(`xmlns:wps="${WPS}"`);
+        expect(lossesOf(doc(p(box({ layout: 'front' }), text('b')), p(box({ layout: 'block' }))))).toEqual([]);
     });
 });
 
@@ -3133,7 +3236,18 @@ const DRAWING_SEQUENCES: Record<string, string[]> = {
     'wp:inline': ['wp:extent', 'wp:effectExtent', 'wp:docPr', 'wp:cNvGraphicFramePr', 'a:graphic'],
     'wp:cNvGraphicFramePr': ['a:graphicFrameLocks', 'a:extLst'],
     'a:graphic': ['a:graphicData'],
-    'a:graphicData': ['pic:pic', 'c:chart'],
+    'wp:anchor': [
+        ...['wp:simplePos', 'wp:positionH', 'wp:positionV', 'wp:extent', 'wp:effectExtent'],
+        ...['wp:wrapNone', 'wp:wrapSquare', 'wp:wrapTight', 'wp:wrapThrough', 'wp:wrapTopAndBottom'],
+        ...['wp:docPr', 'wp:cNvGraphicFramePr', 'a:graphic'],
+    ],
+    'a:graphicData': ['pic:pic', 'c:chart', 'wps:wsp'],
+    // A text box (wps.xsd): its shape properties, its text and its body properties.
+    'wps:wsp': ['wps:cNvPr', 'wps:cNvSpPr', 'wps:spPr', 'wps:style', 'wps:txbx', 'wps:linkedTxbx', 'wps:bodyPr'],
+    'wps:spPr': ['a:xfrm', 'a:custGeom', 'a:prstGeom', 'a:noFill', 'a:solidFill', 'a:gradFill', 'a:ln', 'a:effectLst'],
+    'wps:bodyPr': ['a:prstTxWarp', 'a:noAutofit', 'a:normAutofit', 'a:spAutoFit', 'a:scene3d', 'a:sp3d', 'a:flatTx'],
+    'a:ln': ['a:noFill', 'a:solidFill', 'a:gradFill', 'a:pattFill', 'a:prstDash', 'a:custDash', 'a:round'],
+    'a:avLst': ['a:gd'],
     'pic:pic': ['pic:nvPicPr', 'pic:blipFill', 'pic:spPr', 'pic:style', 'pic:extLst'],
     'pic:nvPicPr': ['pic:cNvPr', 'pic:cNvPicPr', 'pic:nvPr'],
     'pic:blipFill': ['a:blip', 'a:srcRect', 'a:tile', 'a:stretch'],

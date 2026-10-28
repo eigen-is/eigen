@@ -64,6 +64,13 @@ async function docxDocumentXml(doc: Y.Doc): Promise<string> {
     return new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/document.xml'));
 }
 
+// The selectors of the flat rules whose declarations hold `declaration`.
+const rulesSetting = (css: string, declaration: string) =>
+    css
+        .split('}')
+        .filter((rule) => rule.includes(declaration))
+        .map((rule) => rule.slice(0, rule.indexOf('{')).trim());
+
 async function exportStyle(format: 'html' | 'pdf-html', doc = seededDoc()): Promise<string> {
     const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
     return new TextDecoder().decode(data).match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
@@ -246,10 +253,14 @@ describe('doc export — the stylesheet', () => {
         expect(css).toMatch(/strong \{ font-weight: 600; \}/);
     });
 
-    test('h5 and h6 print at the body size, which only eigen-prose sets', async () => {
+    // A text box restates the Normal, as it sits inside a heading or another paragraph whose look it must not take.
+    test('h5 and h6 print at the body size, which only eigen-prose sets, and a text box resets to', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).toContain('h1, h2, h3, h4, h5, h6 { font-size: inherit; }');
-        expect(css.match(/font-size: var\(--doc-font-size, 11pt\)/g)).toHaveLength(1);
+        expect(rulesSetting(css, 'font-size: var(--doc-font-size, 11pt)')).toEqual([
+            '.eigen-prose',
+            '.eigen-doc .text-box',
+        ]);
     });
 
     // Google Docs' Title and Subtitle, which the docx writer reads too.
@@ -263,10 +274,10 @@ describe('doc export — the stylesheet', () => {
         },
     );
 
-    test('the body text font and color are set once, by eigen-prose', async () => {
+    test('the body text font and color are set once, by eigen-prose, and a text box resets to them', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).not.toMatch(/(^|\n)\s*body \{/);
-        expect(css.match(/#1a1a2e/g)).toHaveLength(1);
+        expect(rulesSetting(css, '#1a1a2e')).toEqual(['.eigen-prose', '.eigen-doc .text-box']);
     });
 
     test('the dark theme stays out, whole', async () => {

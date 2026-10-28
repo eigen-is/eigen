@@ -864,8 +864,8 @@ const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efa
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '879322431215261fe1150cd2eeb105d9ac6656a15034ce76cd9916b4c620576a';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'ef2a6bd0dfb007540f51f2318ba81fa4eeb3b8689b8f463cdb11b98cfdf44cde';
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
-// libdeflate.
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'bd883985e840cef1ce64fb32910275793ad0ec43b10d20f87e9849ee90f9a491';
+// libdeflate. It last moved with the wps namespace a text box needs, which every document part declares.
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'c3a15846b8e2b9d1a095a816aa9d8bfe25ba59d8a148770401e309767fe7c1fd';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
 // The two exports embed canvas-text.css whole, its comments too, so they last moved with its header comment.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';

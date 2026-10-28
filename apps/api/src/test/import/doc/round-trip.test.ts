@@ -54,7 +54,7 @@ function sourceNames(media: ImportedMedia[]): Map<string, string> {
 // one holding none, only quotes, code, headings, rules or done tasks, comes back a body cell in the header's grey.
 // (13) A paragraph's format is what it sets apart from the Normal, so a value equal to the Normal's comes back as none.
 // (14) The chart part holds the look it draws, so a chart's unset background, label colour and stroke come back flat.
-// (15) Until the writer draws a text box, its paragraphs follow the paragraph that holds it. (16) The import gives every
+// (15) Until the reader reads a text box, its paragraphs follow the paragraph that holds it. (16) The import gives every
 // note a fresh story id.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
@@ -140,7 +140,9 @@ function boxesAfter(node: JSONContent): JSONContent[] {
     const boxes = node.content?.filter((child) => child.type === 'textBox') ?? [];
     if (boxes.length === 0) return [node];
     const rest = node.content?.filter((child) => child.type !== 'textBox');
-    return [{ ...node, content: rest }, ...boxes.flatMap((box) => box.content ?? [])];
+    // The box writes its paragraphs with no space after, which a paragraph read out of it keeps.
+    const paragraphs = boxes.flatMap((box) => box.content ?? []);
+    return [{ ...node, content: rest }, ...paragraphs.map((p) => ({ ...p, attrs: { ...p.attrs, spaceAfter: 0 } }))];
 }
 
 function blankBeforeBreak(siblings: JSONContent[], index: number): boolean {

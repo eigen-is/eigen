@@ -41,6 +41,7 @@ import { INLINES, LINE_BREAK, rPrXml, runsXml, textXml } from './runs';
 import type { Styles } from './styles';
 import { HAIRLINE_TWIPS } from './styles';
 import { TABLE_LOOK, tableOf } from './tables';
+import { anchoredTextBox, inlineTextBox } from './text-boxes';
 
 type Spacing = { before?: number; after?: number; line?: number; exact?: true };
 
@@ -267,8 +268,6 @@ export function blocksOf(
     // The runs of the figures in front of or behind the text, which open the textblock's first piece, as Word anchors
     // a picture at its paragraph's start.
     let anchors = '';
-    // Until the writer draws a text box, its paragraphs follow the textblock that holds it, in line.
-    const boxed: Block[] = [];
     const flush = () => {
         const faces: RunFace[] = [];
         const runs = runsXml(inline, context, props.style, faces);
@@ -282,10 +281,17 @@ export function blocksOf(
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
+        // A text box in front of or behind the text, or wrapped, opens its paragraph as an anchor, as Word anchors one;
+        // one in the flow, or positioned where nothing is, such as in a cell, is a paragraph of its own.
         if (node.type === 'textBox') {
-            context.pkg.lost('text-simplified');
-            const box = { ...context, positions: undefined, firstInFlow: false };
-            for (const block of blocksOf(node.content ?? [], {}, box)) boxed.push(block);
+            const { layout } = readFigureFrameAttrs(node.attrs ?? {});
+            const wrapped = layout === 'wrap-left' || layout === 'wrap-right';
+            if (textblock && ((context.positions && isPositioned(layout)) || wrapped)) {
+                anchors += anchoredTextBox(node, textblock, context);
+                continue;
+            }
+            if (inline.length > 0) flush();
+            pieces.push(blocks.push(inlineTextBox(node, context)) - 1);
             continue;
         }
         if (isFigureFrameNode(node.type)) {
@@ -348,7 +354,6 @@ export function blocksOf(
     const opening = first === undefined ? undefined : blocks[first];
     if (anchors && first !== undefined && opening && !('table' in opening))
         blocks[first] = { ...opening, runs: anchors + opening.runs };
-    for (const block of boxed) blocks.push(block);
     return blocks;
 }
 
