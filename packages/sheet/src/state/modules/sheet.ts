@@ -25,12 +25,7 @@ export function storeSheetSelections(ctx: Context) {
     file.selections = ctx.selections;
 }
 
-export function changeSheet(
-    ctx: Context,
-    id: string,
-    // The current sheet is going away (deleted, hidden, undone): no veto.
-    force = false,
-) {
+export function changeSheet(ctx: Context, id: string) {
     if (id === ctx.currentSheetId) {
         return;
     }
@@ -39,10 +34,6 @@ export function changeSheet(
     if (idx == null) return;
     const file = ctx.sheets[idx];
     if (file.hide === 1) return;
-
-    if (!force && ctx.hooks.beforeActivateSheet?.(id) === false) {
-        return;
-    }
 
     storeSheetSelections(ctx);
     ctx.sheetScrollRecord[ctx.currentSheetId] = {
@@ -62,19 +53,13 @@ export function changeSheet(
     ctx.selections = file.selections;
     ctx.formulaRangeSelections = [];
     applySheetView(ctx);
-
-    if (ctx.hooks.afterActivateSheet) {
-        setTimeout(() => {
-            ctx.hooks.afterActivateSheet?.(id);
-        });
-    }
 }
 
 // False when no other visible sheet is left to land on.
 export function leaveCurrentSheet(ctx: Context, excludeId?: string) {
     const next = firstVisibleSheetId(ctx, excludeId);
     if (next == null) return false;
-    changeSheet(ctx, next, true);
+    changeSheet(ctx, next);
     return true;
 }
 
@@ -132,10 +117,6 @@ export function addSheet(
         : sheetData;
     normalizeSheetConfig(sheetconfig);
     if (sheetName !== undefined) sheetconfig.name = sheetName;
-    if (ctx.hooks.beforeAddSheet?.(sheetconfig) === false) {
-        return;
-    }
-    // Only an add that goes ahead moves the other sheets along.
     if (!isNil(sheetData)) {
         const insertAt = sheetOrder(sheetData);
         for (const sheet of ctx.sheets) {
@@ -148,12 +129,6 @@ export function addSheet(
 
     if (!newSheetID) {
         changeSheet(ctx, id);
-    }
-
-    if (ctx.hooks.afterAddSheet) {
-        setTimeout(() => {
-            ctx.hooks.afterAddSheet?.(sheetconfig);
-        });
     }
 }
 
@@ -196,10 +171,6 @@ export function deleteSheet(
         return;
     }
 
-    if (ctx.hooks.beforeDeleteSheet?.(id) === false) {
-        return;
-    }
-
     const deletedOrder = sheetOrder(ctx.sheets[arrIndex]);
     ctx.sheets = ctx.sheets.map((sheet) => {
         const order = sheetOrder(sheet);
@@ -209,12 +180,6 @@ export function deleteSheet(
 
     ctx.sheets.splice(arrIndex, 1);
     if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
-
-    if (ctx.hooks.afterDeleteSheet) {
-        setTimeout(() => {
-            ctx.hooks.afterDeleteSheet?.(id);
-        });
-    }
 }
 
 export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
@@ -226,10 +191,6 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     }
     const oldtxt = editable.dataset.oldText || '';
     const txt = editable.innerText;
-
-    if (ctx.hooks.beforeUpdateSheetName?.(ctx.currentSheetId, oldtxt, txt) === false) {
-        return;
-    }
 
     if (txt.length === 0) {
         editable.innerText = oldtxt;
@@ -256,12 +217,6 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     }
 
     ctx.sheets[index].name = txt;
-
-    if (ctx.hooks.afterUpdateSheetName) {
-        setTimeout(() => {
-            ctx.hooks.afterUpdateSheetName?.(ctx.currentSheetId, oldtxt, txt);
-        });
-    }
 }
 
 export function expandRowsAndColumns(data: CellMatrix, rowsToAdd: number, columnsToAdd: number) {

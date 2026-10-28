@@ -113,7 +113,7 @@ An undo or redo that adds or deletes a sheet, rows or columns builds a batch of 
 
 ## Every sheet switch goes through `changeSheet`
 
-Tab clicks, the sheet list, search, hyperlinks, the API and the current sheet going away all call `changeSheet` (`state/modules/sheet.ts`). When the current sheet is hidden or deleted, locally, by a peer or by an undo, `leaveCurrentSheet` lands on the first visible sheet in tab order, with `force` skipping the `beforeActivateSheet` veto. A hidden target is refused, and so is hiding your last visible sheet.
+Tab clicks, the sheet list, search, hyperlinks, the API and the current sheet going away all call `changeSheet` (`state/modules/sheet.ts`). When the current sheet is hidden or deleted, locally, by a peer or by an undo, `leaveCurrentSheet` lands on the first visible sheet in tab order. A hidden target is refused, and so is hiding your last visible sheet.
 
 A switch closes the cell editor and any formula range selection, so Enter can never commit into a sheet a peer switched you to. It also derives everything the grid paints (`applySheetView`) inside the same recipe. The first frame after the commit paints before any effect runs, so anything left to an effect would draw the new sheet on the old sheet's geometry for one frame.
 

@@ -158,19 +158,6 @@ export function handleCellAreaMouseDown(
     }
 
     showLinkCard(ctx, row_index, col_index, false, true);
-    // Before cell mousedown hook
-    if (
-        ctx.hooks.beforeCellMouseDown?.(flowdata[row_index]?.[col_index], {
-            row: row_index,
-            column: col_index,
-            startRow: row_pre,
-            startColumn: col_pre,
-            endRow: row,
-            endColumn: col,
-        }) === false
-    ) {
-        return;
-    }
 
     // The cell's text area, the space both data-verification affordances are
     // laid out in — the same box, from the same builder, the canvas painter
@@ -533,19 +520,6 @@ export function handleCellAreaMouseDown(
     }
 
     ctx.selections = normalizeSelection(ctx, ctx.selections);
-
-    if (ctx.hooks.afterCellMouseDown) {
-        setTimeout(() => {
-            ctx.hooks.afterCellMouseDown?.(flowdata[row_index]?.[col_index], {
-                row: row_index,
-                column: col_index,
-                startRow: row_pre,
-                startColumn: col_pre,
-                endRow: row,
-                endColumn: col,
-            });
-        });
-    }
 }
 
 export function handleCellAreaDoubleClick(

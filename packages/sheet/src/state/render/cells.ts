@@ -128,7 +128,6 @@ export function nullCellRender(
     isMerge = false,
 ) {
     const {
-        sheetCtx,
         renderCtx,
         cfCompute,
         offsetLeft,
@@ -162,24 +161,6 @@ export function nullCellRender(
         endX - startX + BORDER_FIX[2] - (isMerge ? 1 : 0),
         endY - startY + BORDER_FIX[3],
     ];
-
-    // Before cell render (merged cells may re-render)
-    if (
-        sheetCtx.hooks.beforeRenderCell?.(
-            flowdata[r][c],
-            {
-                row: r,
-                column: c,
-                startX: cellsize[0],
-                startY: cellsize[1],
-                endX: cellsize[2] + cellsize[0],
-                endY: cellsize[3] + cellsize[1],
-            },
-            renderCtx,
-        ) === false
-    ) {
-        return;
-    }
 
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
@@ -242,20 +223,6 @@ export function nullCellRender(
             endY + offsetTop - 2 + HALF_PIXEL,
         );
     }
-
-    // After cell render
-    sheetCtx.hooks.afterRenderCell?.(
-        flowdata[r][c],
-        {
-            row: r,
-            column: c,
-            startY: cellsize[1],
-            startX: cellsize[0],
-            endY: cellsize[3] + cellsize[1],
-            endX: cellsize[2] + cellsize[0],
-        },
-        renderCtx,
-    );
 }
 
 export function cellRender(
@@ -309,24 +276,6 @@ export function cellRender(
         endX - startX + BORDER_FIX[2] - (isMerge ? 1 : 0),
         endY - startY + BORDER_FIX[3],
     ];
-
-    // Before cell render (merged cells may re-render)
-    if (
-        sheetCtx.hooks.beforeRenderCell?.(
-            flowdata[r][c],
-            {
-                row: r,
-                column: c,
-                startY: cellsize[1],
-                startX: cellsize[0],
-                endY: cellsize[3] + cellsize[1],
-                endX: cellsize[2] + cellsize[0],
-            },
-            renderCtx,
-        ) === false
-    ) {
-        return;
-    }
 
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
@@ -468,18 +417,4 @@ export function cellRender(
             endY + offsetTop - 2 + HALF_PIXEL,
         );
     }
-
-    // After cell render
-    sheetCtx.hooks.afterRenderCell?.(
-        flowdata[r]?.[c],
-        {
-            row: r,
-            column: c,
-            startX: cellsize[0],
-            startY: cellsize[1],
-            endX: cellsize[2] + cellsize[0],
-            endY: cellsize[3] + cellsize[1],
-        },
-        renderCtx,
-    );
 }

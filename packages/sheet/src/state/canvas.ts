@@ -142,8 +142,6 @@ export class Canvas {
             drawGridLines: !this.sheetCtx.currentSheetIsPivot && this.sheetCtx.showGridLines,
         };
 
-        this.sheetCtx.hooks.beforeRenderCellArea?.(flowdata, renderCtx);
-
         const cells = collectVisibleCells(pass);
         const mergedCells = renderCells(pass, cells);
         renderMergedCells(pass, mergedCells);

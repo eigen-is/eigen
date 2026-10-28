@@ -192,8 +192,6 @@ export type Context = {
     showGridLines: boolean;
     allowEdit: boolean;
 
-    fontList: unknown[];
-
     formatPainterOn: boolean;
     formatPainterOnce: boolean;
 
@@ -340,8 +338,6 @@ export function defaultContext(refs: RefValues): Context {
 
         showGridLines: true,
         allowEdit: true,
-
-        fontList: [],
 
         formatPainterOn: false,
         formatPainterOnce: false,

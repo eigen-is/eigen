@@ -557,9 +557,6 @@ export function updateCell(
 
     let curv = flowdata[r][c];
 
-    // ctx.old value for hook function
-    const oldValue = cloneDeep(curv);
-
     const isPrevInline = isInlineStringCell(curv);
     // Typed text is rich when its runs differ from the cell's own style or break the line. Text that is
     // all in the cell's style commits plain, as a formula always does.
@@ -585,12 +582,6 @@ export function updateCell(
 
     // API, we get value from user
     value = value || (runs.length === 1 && !isCurInline ? runs[0].v : $input?.innerText);
-
-    // Hook function
-    if (ctx.hooks.beforeUpdateCell?.(r, c, value) === false) {
-        cancelNormalSelected(ctx);
-        return;
-    }
 
     if (!isCurInline) {
         if (isRealNull(value) && !isPrevInline) {
@@ -724,14 +715,6 @@ export function updateCell(
                 cfg.rowlen[r] = currentRowLen;
             }
         }
-    }
-
-    if (ctx.hooks.afterUpdateCell) {
-        const newValue = cloneDeep(flowdata[r][c]);
-        const { afterUpdateCell } = ctx.hooks;
-        setTimeout(() => {
-            afterUpdateCell?.(r, c, oldValue, newValue);
-        });
     }
 
     setFormulaCellInfo(ctx, { r, c, id: ctx.currentSheetId });

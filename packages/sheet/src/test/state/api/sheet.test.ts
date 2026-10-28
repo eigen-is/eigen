@@ -154,37 +154,6 @@ describe('sheet order on a copy, an add and a delete', () => {
         ]);
     });
 
-    test('a copy that beforeAddSheet vetoes moves no sheet, not even the last one listed', () => {
-        const ctx = contextFactory({
-            sheets: [
-                { name: 'A', id: 'id_a', order: 0 },
-                { name: 'B', id: 'id_b', order: 1 },
-                { name: 'C', id: 'id_c', order: 2 },
-                { name: 'D', id: 'id_d', order: 3 },
-            ],
-            hooks: { beforeAddSheet: () => false },
-        }) as Context;
-        const next = produce(ctx, (draft: Context) => copySheet(draft, 'id_a'));
-        expect(orders(next)).toEqual([
-            ['A', 0],
-            ['B', 1],
-            ['C', 2],
-            ['D', 3],
-        ]);
-    });
-
-    test('an add that beforeAddSheet vetoes moves no sheet', () => {
-        const ctx = { ...threeSheets(), hooks: { beforeAddSheet: () => false } };
-        const next = produce(ctx, (draft: Context) =>
-            addSheet(draft, undefined, 'id_d', false, 'D', { name: 'D', id: 'id_d', order: 1 }),
-        );
-        expect(orders(next)).toEqual([
-            ['A', 0],
-            ['B', 1],
-            ['C', 2],
-        ]);
-    });
-
     test('an add counts a sheet without an order as 0', () => {
         const next = produce(threeSheets(unordered), (draft: Context) =>
             addSheet(draft, undefined, 'id_d', false, 'D', { name: 'D', id: 'id_d', order: 1 }),

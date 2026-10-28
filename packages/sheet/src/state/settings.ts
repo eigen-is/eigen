@@ -10,13 +10,7 @@ import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { v4 as uuidv4 } from 'uuid';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
-import type { Cell, CellMatrix } from '../engine/types';
-import type { Selection, Sheet, SheetConfig } from './types';
-
-// Cell value as accepted by setCellValue / surfaced through update hooks. Covers
-// raw scalar input from the formula bar / paste path plus the `Cell` object form
-// passed by callers like `api.setCellValue(0, 0, { f: '=SUM(A1:B1)', bg: '#0188fb' })`.
-export type CellValueInput = Cell | string | number | boolean | null | undefined;
+import type { Selection, SheetConfig } from './types';
 
 // Returned by the `getCommentInfo` hook for menu rendering (card/entry) and
 // canvas rendering (indicatorColor for the cell-corner triangle).
@@ -39,97 +33,7 @@ export type ChartPanelState = {
 };
 
 export type Hooks = {
-    beforeUpdateCell?: (r: number, c: number, value: CellValueInput) => boolean;
-    afterUpdateCell?: (row: number, column: number, oldValue: CellValueInput, newValue: CellValueInput) => void;
     afterSelectionChange?: (sheetId: string, selection: Selection) => void;
-    beforeRenderRowHeaderCell?: (
-        rowNumber: string,
-        rowIndex: number,
-        top: number,
-        width: number,
-        height: number,
-        ctx: CanvasRenderingContext2D,
-    ) => boolean;
-    afterRenderRowHeaderCell?: (
-        rowNumber: string,
-        rowIndex: number,
-        top: number,
-        width: number,
-        height: number,
-        ctx: CanvasRenderingContext2D,
-    ) => void;
-    beforeRenderColumnHeaderCell?: (
-        columnChar: string,
-        columnIndex: number,
-        left: number,
-        width: number,
-        height: number,
-        ctx: CanvasRenderingContext2D,
-    ) => boolean;
-    afterRenderColumnHeaderCell?: (
-        columnChar: string,
-        columnIndex: number,
-        left: number,
-        width: number,
-        height: number,
-        ctx: CanvasRenderingContext2D,
-    ) => void;
-    beforeRenderCellArea?: (cells: CellMatrix, ctx: CanvasRenderingContext2D) => boolean;
-    beforeRenderCell?: (
-        cell: Cell | null,
-        cellInfo: {
-            row: number;
-            column: number;
-            startX: number;
-            startY: number;
-            endX: number;
-            endY: number;
-        },
-        ctx: CanvasRenderingContext2D,
-    ) => boolean;
-    afterRenderCell?: (
-        cell: Cell | null,
-        cellInfo: {
-            row: number;
-            column: number;
-            startX: number;
-            startY: number;
-            endX: number;
-            endY: number;
-        },
-        ctx: CanvasRenderingContext2D,
-    ) => void;
-    beforeCellMouseDown?: (
-        cell: Cell | null,
-        cellInfo: {
-            row: number;
-            column: number;
-            startRow: number;
-            startColumn: number;
-            endRow: number;
-            endColumn: number;
-        },
-    ) => boolean;
-    afterCellMouseDown?: (
-        cell: Cell | null,
-        cellInfo: {
-            row: number;
-            column: number;
-            startRow: number;
-            startColumn: number;
-            endRow: number;
-            endColumn: number;
-        },
-    ) => void;
-    beforePaste?: (selection: Selection[] | undefined, content: string) => boolean;
-    beforeAddSheet?: (sheet: Sheet) => boolean;
-    afterAddSheet?: (sheet: Sheet) => void;
-    beforeActivateSheet?: (id: string) => boolean;
-    afterActivateSheet?: (id: string) => void;
-    beforeDeleteSheet?: (id: string) => boolean;
-    afterDeleteSheet?: (id: string) => void;
-    beforeUpdateSheetName?: (id: string, oldName: string, newName: string) => boolean;
-    afterUpdateSheetName?: (id: string, oldName: string, newName: string) => void;
     onAddComment?: (row: number, column: number) => void;
     onDeleteComment?: (row: number, column: number) => void;
     commentLifecycle?: ReturnType<typeof useCommentLifecycle>;
@@ -174,14 +78,11 @@ export type Settings = {
     data: LibSheet[];
     config?: SheetConfig;
     devicePixelRatio?: number;
-    forceCalculation?: boolean;
     rowHeaderWidth?: number;
     columnHeaderHeight?: number;
-    filterContextMenu?: string[];
     generateSheetId?: () => string;
     hooks?: Hooks;
     currency?: string;
-    fontList?: unknown[];
     // Keep aspect ratio for the selected image's or chart's corner grips. The app owns it (via
     // `useAspectLock`) so the same ON/OFF drives both the grips and the panel checkbox; never stored.
     aspectLocked?: boolean;
@@ -198,22 +99,10 @@ export const defaultSettings: Required<Settings> = {
     config: {}, // settings for row height, column width, merged cells, formulas, etc.
     devicePixelRatio: 0, // device pixel ratio; higher value gives sharper rendering, 0 means auto
     allowEdit: true, // whether to allow editing in the frontend
-    forceCalculation: false, // force formula recalculation; may cause performance issues with many formulas, use with caution
     rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
     columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
-    filterContextMenu: [
-        'sort-by-asc',
-        'sort-by-desc',
-        '|',
-        'filter-by-color',
-        '|',
-        'filter-by-condition',
-        '|',
-        'filter-by-value',
-    ], // filter context menu
     generateSheetId: () => uuidv4(),
     hooks: {},
     currency: '€',
-    fontList: [],
     aspectLocked: false,
 };

@@ -383,7 +383,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     }
                     draftCtx.allowEdit = mergedSettings.allowEdit;
                     draftCtx.hooks = mergedSettings.hooks;
-                    draftCtx.fontList = mergedSettings.fontList;
                     if (!draftCtx.currentSheetId) {
                         initSheetIndex(draftCtx);
                     }
@@ -438,7 +437,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             mergedSettings.columnHeaderHeight,
             mergedSettings.addRows,
             mergedSettings.currency,
-            mergedSettings.fontList,
         ]);
 
         const onKeyDown = useCallback(
