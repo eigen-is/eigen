@@ -661,7 +661,7 @@ export const VCARD_FILES: SeededVCardFile[] = [
 
 // --- Site plan (a vector drawing the seeder builds straight into the container's Y.Doc from this
 // spec — no fixture bytes; see vector-build.ts). Scene units are pixels, y down; every shape's
-// label is centered inside it. Shape keys are stable so arrows can bind to them by name. ---
+// label is the shape's own text, centered in it. Shape keys are stable so arrows can bind to them by name. ---
 
 export type CanvasSide = 'top' | 'right' | 'bottom' | 'left';
 
