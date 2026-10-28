@@ -5,7 +5,7 @@ import type { OrgMember } from '@workspace/lib/types/admin';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
-import { collectHomeObjects } from '../../lib/backup/safety-copy';
+import { collectHomeObjects, deleteBucketObjects } from '../../lib/backup/safety-copy';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { LocalStorage } from '../../lib/storage/local-storage';
@@ -601,9 +601,9 @@ describe("Delete user: the home's bucket objects", () => {
         const { user, keys } = await s3UserWithUploads('Dead Bucket S3', 30);
         for (const key of keys) fake.faults.set(key, 'deny');
         try {
-            const { objectCount, deleteObjects } = collectHomeObjects(homeDirOf(user.id));
-            expect(objectCount).toBe(30);
-            expect((await deleteObjects()).sort()).toEqual([...keys].sort());
+            const { buckets } = collectHomeObjects(homeDirOf(user.id));
+            expect(buckets.reduce((sum, bucket) => sum + bucket.keys.size, 0)).toBe(30);
+            expect((await deleteBucketObjects(buckets)).sort()).toEqual([...keys].sort());
             const attempts = keys.reduce((sum, key) => sum + (fake.deletes.get(key) ?? 0), 0);
             expect(attempts).toBeGreaterThanOrEqual(10);
             expect(attempts).toBeLessThan(20);

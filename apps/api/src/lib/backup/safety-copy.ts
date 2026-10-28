@@ -1,6 +1,7 @@
 // Lists, measures and deletes the safety copies that restores leave beside a home. A home whose files live in an
 // S3 bucket has its objects deleted with the copy, so the delete asks the mount settings in the folder where they
-// are. An admin lists the copies in the backup pane and decides, and deleting their user removes them too.
+// are. An admin lists the copies in the backup pane and decides. Deleting the owner, such as a user or a team,
+// removes them too, and this file says which bucket objects that home and its copies name.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
@@ -34,50 +35,6 @@ type FolderSize = { bytes: number; truncated: boolean };
 // walking a whole home on each of those would stall the event loop for every user on the server.
 const measuredBytes = new Map<string, FolderSize>();
 
-export async function measureFolder(dir: string, maxFiles = MAX_WALKED_FILES): Promise<FolderSize> {
-    let bytes = 0;
-    let walked = 0;
-    const stack = [dir];
-    for (let current = stack.pop(); current !== undefined; current = stack.pop()) {
-        for (const entry of await fsp.readdir(current, { withFileTypes: true })) {
-            if (walked++ >= maxFiles) return { bytes, truncated: true };
-            const abs = path.join(current, entry.name);
-            if (entry.isDirectory()) stack.push(abs);
-            else if (entry.isFile()) bytes += (await fsp.stat(abs)).size;
-        }
-    }
-    return { bytes, truncated: false };
-}
-
-async function measureSafetyCopy(dir: string): Promise<FolderSize> {
-    const known = measuredBytes.get(dir);
-    if (known) return known;
-    const size = await measureFolder(dir);
-    measuredBytes.set(dir, size);
-    return size;
-}
-
-// Every way a safety copy stops being at that path: deleted, or renamed back over the home by a
-// restore of it. A later copy can land on the same name (one stamp per second), and it would then
-// list the size of the folder that used to be there.
-export function forgetSafetyCopySize(dir: string): void {
-    measuredBytes.delete(dir);
-}
-
-// Every folder that stands for a state of the home: the home itself and the safety copies beside it.
-function homeFolders(homeDir: string): string[] {
-    const parent = path.dirname(homeDir);
-    const homeName = path.basename(homeDir);
-    const folders = [homeDir];
-    if (!fs.existsSync(parent)) return folders;
-    for (const entry of fs.readdirSync(parent, { withFileTypes: true })) {
-        if (entry.isDirectory() && parseSafetyCopyName(entry.name)?.homeName === homeName) {
-            folders.push(path.join(parent, entry.name));
-        }
-    }
-    return folders;
-}
-
 // The folders a restore left beside this home, as the admin pane lists them: with their size and the delete.
 export async function listSafetyCopies(ownerId: string): Promise<BackupSafetyCopy[]> {
     const homeDir = await resolveHomeDir(ownerId);
@@ -106,50 +63,111 @@ export async function resolveSafetyCopy(
     return { folder: path.join(path.dirname(homeDir), name), homeDir, kind: parsed.kind };
 }
 
-// The storage keys one mount's metadata.db points at, on a flat-key backend. Read-write on purpose:
-// a WAL database whose owner is not holding it open has no -shm beside it, and a read-only open of
-// one fails outright — which is exactly the shape of a home folder moved aside.
-function storageKeysIn(metadataPath: string): Set<string> {
-    const db = new Database(metadataPath, { readwrite: true, create: false });
-    try {
-        const keys = new Set<string>();
-        const rows = db.query<{ id: string; file: string }, []>("SELECT id, file FROM paths WHERE type = 'file'");
-        for (const row of rows.iterate()) keys.add(flatStorageKey(row));
-        return keys;
-    } finally {
-        db.close();
-    }
+export async function deleteSafetyCopy(folder: string, homeDir: string): Promise<void> {
+    await deleteRemoteObjects(folder, homeDir);
+    await fsp.rm(folder, { recursive: true, force: true });
+    forgetSafetyCopySize(folder);
 }
 
-type RemoteMount = { id: string; mountDir: string; metadataPath: string; config: MountConfig };
+// The objects deleting an owner leaves in buckets: every object its home and safety copies name on an s3 mount,
+// grouped by bucket. Read before the folders go, since they are the only record of whose objects these are. All of
+// them go: no other home names these keys, because a copy writes new objects, a restore rekeys, and a team's mount
+// is its own.
+export type BucketObjects = { storage: StorageBackend; keys: Set<string> };
 
-// The s3 mounts of one home folder that have a metadata.db to name their keys, each with the config its
-// objects are under.
-function remoteMountsOf(folder: string): RemoteMount[] {
-    const mounts = readHomeMounts(folder);
-    if (!mounts) {
-        console.warn(`[backup] ${path.basename(folder)}: ${PATHS.SETTINGS} is unreadable, leaving its objects alone`);
-        return [];
-    }
-    const remote: RemoteMount[] = [];
-    for (const [id, settings] of Object.entries(mounts)) {
-        if (settings.storageType !== 's3') continue;
-        // settings.json of a safety copy came from an archive, so its keys are untrusted: a mount id that
-        // resolves outside this folder would have this reading — and deleting the objects of — another home.
-        const mountDir = resolveMountDir(folder, id);
-        if (!mountDir) continue;
-        const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
-        if (!fs.existsSync(metadataPath)) continue;
-        // A mount with no S3 config of its own keeps its objects in the server's default bucket; a bucket two
-        // servers share has only its versioning to undo a delete (BACKUP.md).
-        const config = createMountConfig(id, settings);
-        if (!config.s3Config) {
-            console.warn(`[backup] ${path.basename(folder)}: mount ${id} has no S3 config, leaving its objects`);
-            continue;
+export function collectHomeObjects(homeDir: string): { folders: string[]; buckets: BucketObjects[] } {
+    const folders = homeFolders(homeDir).filter((folder) => fs.existsSync(folder));
+    const buckets = new Map<string, BucketObjects>();
+    for (const folder of folders) {
+        for (const { id, mountDir, metadataPath, config } of remoteMountsOf(folder)) {
+            let keys: Set<string>;
+            try {
+                keys = storageKeysIn(metadataPath);
+            } catch (error) {
+                console.warn(
+                    `[backup] ${path.basename(folder)}: mount ${id} does not read, leaving its objects:`,
+                    error,
+                );
+                continue;
+            }
+            const destination = JSON.stringify(config.s3Config);
+            let bucket = buckets.get(destination);
+            if (!bucket) {
+                bucket = { storage: createMountStorage(config, mountDir), keys: new Set() };
+                buckets.set(destination, bucket);
+            }
+            for (const key of keys) bucket.keys.add(key);
         }
-        remote.push({ id, mountDir, metadataPath, config });
     }
-    return remote;
+    return { folders, buckets: [...buckets.values()] };
+}
+
+// Deletes the objects and answers the keys that did not go. A failed DELETE is kept and the rest go on, since
+// nothing retries them. A bucket that refuses a run of them is down or revoked, so its remaining keys count as
+// failed rather than waiting out a timeout each.
+export async function deleteBucketObjects(buckets: BucketObjects[]): Promise<string[]> {
+    const failed: string[] = [];
+    for (const { storage, keys } of buckets) {
+        const pending = [...keys];
+        let refusedInARow = 0;
+        for (let start = 0; start < pending.length; start += OBJECT_DELETES_IN_FLIGHT) {
+            const chunk = pending.slice(start, start + OBJECT_DELETES_IN_FLIGHT);
+            const results = await Promise.all(chunk.map((key) => storage.delete(key)));
+            for (const [i, deleted] of results.entries()) {
+                refusedInARow = deleted ? 0 : refusedInARow + 1;
+                if (!deleted) failed.push(chunk[i]);
+            }
+            if (refusedInARow >= MAX_REFUSED_DELETES_IN_A_ROW) {
+                failed.push(...pending.slice(start + chunk.length));
+                break;
+            }
+        }
+    }
+    return failed;
+}
+
+// Every way a safety copy stops being at that path: deleted, or renamed back over the home by a
+// restore of it. A later copy can land on the same name (one stamp per second), and it would then
+// list the size of the folder that used to be there.
+export function forgetSafetyCopySize(dir: string): void {
+    measuredBytes.delete(dir);
+}
+
+export async function measureFolder(dir: string, maxFiles = MAX_WALKED_FILES): Promise<FolderSize> {
+    let bytes = 0;
+    let walked = 0;
+    const stack = [dir];
+    for (let current = stack.pop(); current !== undefined; current = stack.pop()) {
+        for (const entry of await fsp.readdir(current, { withFileTypes: true })) {
+            if (walked++ >= maxFiles) return { bytes, truncated: true };
+            const abs = path.join(current, entry.name);
+            if (entry.isDirectory()) stack.push(abs);
+            else if (entry.isFile()) bytes += (await fsp.stat(abs)).size;
+        }
+    }
+    return { bytes, truncated: false };
+}
+
+async function measureSafetyCopy(dir: string): Promise<FolderSize> {
+    const known = measuredBytes.get(dir);
+    if (known) return known;
+    const size = await measureFolder(dir);
+    measuredBytes.set(dir, size);
+    return size;
+}
+
+// Every folder that stands for a state of the home: the home itself and the safety copies beside it.
+function homeFolders(homeDir: string): string[] {
+    const parent = path.dirname(homeDir);
+    const homeName = path.basename(homeDir);
+    const folders = [homeDir];
+    if (!fs.existsSync(parent)) return folders;
+    for (const entry of fs.readdirSync(parent, { withFileTypes: true })) {
+        if (entry.isDirectory() && parseSafetyCopyName(entry.name)?.homeName === homeName) {
+            folders.push(path.join(parent, entry.name));
+        }
+    }
+    return folders;
 }
 
 // A remote mount keeps its bytes in a bucket, not in the home folder, so removing a safety copy has
@@ -192,66 +210,48 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
     }
 }
 
-export async function deleteSafetyCopy(folder: string, homeDir: string): Promise<void> {
-    await deleteRemoteObjects(folder, homeDir);
-    await fsp.rm(folder, { recursive: true, force: true });
-    forgetSafetyCopySize(folder);
+type RemoteMount = { id: string; mountDir: string; metadataPath: string; config: MountConfig };
+
+// The s3 mounts of one home folder that have a metadata.db to name their keys, each with the config its
+// objects are under.
+function remoteMountsOf(folder: string): RemoteMount[] {
+    const mounts = readHomeMounts(folder);
+    if (!mounts) {
+        console.warn(`[backup] ${path.basename(folder)}: ${PATHS.SETTINGS} is unreadable, leaving its objects alone`);
+        return [];
+    }
+    const remote: RemoteMount[] = [];
+    for (const [id, settings] of Object.entries(mounts)) {
+        if (settings.storageType !== 's3') continue;
+        // settings.json of a safety copy came from an archive, so its keys are untrusted. A mount id that
+        // resolves outside this folder would have this read, and delete, the objects of another home.
+        const mountDir = resolveMountDir(folder, id);
+        if (!mountDir) continue;
+        const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
+        if (!fs.existsSync(metadataPath)) continue;
+        // A mount with no S3 config of its own keeps its objects in the server's default bucket. On a bucket two
+        // servers share, only its versioning can undo a delete.
+        const config = createMountConfig(id, settings);
+        if (!config.s3Config) {
+            console.warn(`[backup] ${path.basename(folder)}: mount ${id} has no S3 config, leaving its objects`);
+            continue;
+        }
+        remote.push({ id, mountDir, metadataPath, config });
+    }
+    return remote;
 }
 
-// What deleting an owner leaves in buckets: every object its home and safety copies name on an s3 mount. Read
-// before the folders go, since they are the only record of whose objects these are. All of them go: no other
-// home names these keys (a copy writes new objects, a restore rekeys, a team's mount is its own).
-export function collectHomeObjects(homeDir: string): {
-    folders: string[];
-    objectCount: number;
-    deleteObjects: () => Promise<string[]>;
-} {
-    const folders = homeFolders(homeDir).filter((folder) => fs.existsSync(folder));
-    const buckets = new Map<string, { storage: StorageBackend; keys: Set<string> }>();
-    for (const folder of folders) {
-        for (const { id, mountDir, metadataPath, config } of remoteMountsOf(folder)) {
-            let keys: Set<string>;
-            try {
-                keys = storageKeysIn(metadataPath);
-            } catch (error) {
-                console.warn(
-                    `[backup] ${path.basename(folder)}: mount ${id} does not read, leaving its objects:`,
-                    error,
-                );
-                continue;
-            }
-            const destination = JSON.stringify(config.s3Config);
-            const bucket = buckets.get(destination) ?? {
-                storage: createMountStorage(config, mountDir),
-                keys: new Set(),
-            };
-            buckets.set(destination, bucket);
-            for (const key of keys) bucket.keys.add(key);
-        }
+// The storage keys one mount's metadata.db points at, on a flat-key backend. Read-write on purpose:
+// a WAL database whose owner is not holding it open has no -shm beside it, and a read-only open of
+// one fails outright. That is exactly the shape of a home folder moved aside.
+function storageKeysIn(metadataPath: string): Set<string> {
+    const db = new Database(metadataPath, { readwrite: true, create: false });
+    try {
+        const keys = new Set<string>();
+        const rows = db.query<{ id: string; file: string }, []>("SELECT id, file FROM paths WHERE type = 'file'");
+        for (const row of rows.iterate()) keys.add(flatStorageKey(row));
+        return keys;
+    } finally {
+        db.close();
     }
-    // A failed DELETE is kept and the rest go on, since nothing retries them; a bucket that refuses a run of
-    // them is down or revoked, and its remaining keys count as failed rather than waiting out a timeout each.
-    const deleteObjects = async (): Promise<string[]> => {
-        const failed: string[] = [];
-        for (const { storage, keys } of buckets.values()) {
-            const pending = [...keys];
-            let refusedInARow = 0;
-            for (let start = 0; start < pending.length; start += OBJECT_DELETES_IN_FLIGHT) {
-                const chunk = pending.slice(start, start + OBJECT_DELETES_IN_FLIGHT);
-                const results = await Promise.all(chunk.map((key) => storage.delete(key)));
-                for (const [i, deleted] of results.entries()) {
-                    refusedInARow = deleted ? 0 : refusedInARow + 1;
-                    if (!deleted) failed.push(chunk[i]);
-                }
-                if (refusedInARow >= MAX_REFUSED_DELETES_IN_A_ROW) {
-                    failed.push(...pending.slice(start + chunk.length));
-                    break;
-                }
-            }
-        }
-        return failed;
-    };
-    let objectCount = 0;
-    for (const { keys } of buckets.values()) objectCount += keys.size;
-    return { folders, objectCount, deleteObjects };
 }
