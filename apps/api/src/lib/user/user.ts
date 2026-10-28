@@ -11,9 +11,10 @@ import { getServerConfig } from '../config/server-config';
 // configured `auth`, so it follows the plugins and matches what getSession hands the route handlers.
 export type User = typeof auth.$Infer.Session.user;
 
-// Actor display: name, else email local-part, else undefined (callers guard the undefined case).
-export const actorDisplayName = (name?: string | null, email?: string | null): string | undefined =>
-    name ?? email?.split('@')[0];
+// The name to show for whoever did something: their name, else the part of their address before the @.
+export function actorDisplayName(name?: string | null, email?: string | null): string | undefined {
+    return name ?? email?.split('@')[0];
+}
 
 export async function getUserByEmail(email: string): Promise<User | null> {
     const db = getAuthDrizzleDb();
