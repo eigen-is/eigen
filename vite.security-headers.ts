@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 
 // The inline theme-flash script injected into every app's <head> by vite.shared.config.ts.
 // It is the single source: the CSP script-src hash below is computed from these exact bytes,
-// so the two can never drift. Keep in sync with applyTheme/getCachedTheme in theme-provider.tsx.
+// so the two can never drift. Keep in sync with ThemeProvider's copy key and applyTheme. With no copy it draws
+// light, the default themeOf gives.
 export const THEME_FLASH_SCRIPT =
     'try{var t=localStorage.getItem("eigen-theme");var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark")}catch{}';
 
