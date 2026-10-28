@@ -5,10 +5,8 @@
 
 import type { EditorSaveResult } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
-import { enforceMountQuota } from '../lib/config/enforcement';
-import { ApiError, computeEtag, StaleWriteError } from '../lib/core';
 import { getSharedDrive } from '../lib/drive';
-import { getEditableContent, prepareSaveContent } from '../lib/drive/inline-edit';
+import { getEditableContent, saveEditableContent } from '../lib/drive/inline-edit';
 import { betterAuth } from './auth';
 
 export const editorRouter = new Elysia({ name: 'editor' })
@@ -28,36 +26,14 @@ export const editorRouter = new Elysia({ name: 'editor' })
         '/editor/:ownerId/:mountId/:pathId/content',
         async ({ params, body, user }): Promise<EditorSaveResult> => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const { path } = await drive.resolveFile(params.mountId, params.pathId);
-            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No write permission');
-            }
-            const data = prepareSaveContent(path, body.content, body.frontmatter ?? null);
-            // Without force a save needs the etag it loaded, the one value and not an If-Match list or `*`.
-            // A tab opened before the editor sent one has none, and gets the conflict dialog, whose
-            // Download and Overwrite keep its edits. The write checks the etag again under the file's
-            // lock, where two saves can't both pass.
-            const etag = computeEtag(path);
-            if (!body.force && body.expectedEtag !== etag) return { conflict: true, currentEtag: etag };
-            // Quota pre-check at the route boundary, where the Buffer length is known (mirrors WebDAV PUT).
-            await enforceMountQuota(params.ownerId, params.mountId, data.length, path.size);
-            try {
-                const written = await drive.writeFileContent(params.mountId, params.pathId, data, {
-                    user,
-                    ifMatch: body.force ? undefined : body.expectedEtag,
-                    event: 'edited',
-                });
-                return { conflict: false, etag: written.etag };
-            } catch (e) {
-                if (e instanceof StaleWriteError) return { conflict: true, currentEtag: e.currentEtag };
-                throw e;
-            }
+            return await saveEditableContent(drive, user, params, body);
         },
         {
             body: t.Object({
                 content: t.String(),
                 frontmatter: t.Optional(t.String()),
-                expectedEtag: t.Optional(t.String()),
+                // One etag as the read gave it, never an If-Match list or `*`, which would match any file.
+                expectedEtag: t.Optional(t.String({ pattern: '^"[^",]*"$' })),
                 force: t.Optional(t.Boolean()),
             }),
             auth: true,
