@@ -14,7 +14,7 @@ const { docEditorOptions } = await import('../../../components/docs/doc-editor')
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
 const { insertNote } = await import('../../../components/docs/extensions/footnote');
 const { FootnoteList } = await import('../../../components/docs/footnote-list');
-const { useOpenNote } = await import('../../../components/docs/hooks/use-open-note');
+const { useOpenStory } = await import('../../../components/docs/hooks/use-open-story');
 
 type TestEditor = InstanceType<typeof Editor>;
 type Target = Parameters<typeof docEditorOptions>[0]['target'];
@@ -70,9 +70,10 @@ async function setup(second: JSONContent = paragraph(text('Second note'))) {
             ),
         ],
     });
-    const note = mount(doc, { body: () => body, onLeave: () => {} });
+    const note = mount(doc, { body: () => body, onLeave: () => {}, story: 'footnote' });
+    const editors = { footnote: note, textBox: mount(doc, { body: () => body, onLeave: () => {}, story: 'textBox' }) };
     function Host() {
-        const session = useOpenNote(body, note, true);
+        const session = useOpenStory(body, editors, true);
         return createElement(FootnoteList, {
             body,
             note,

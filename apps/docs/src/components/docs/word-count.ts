@@ -1,7 +1,10 @@
+// Tools › Word count: the words and characters of a doc and of its selection, counted as Google Docs counts them. It
+// reads the body's text through the story walk, so a note's text stays out and a text box's words count on their own.
+
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import { isFigureFrameNode, readEquation, readFigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
-import { textOutsideNotes } from './extensions/footnote';
+import { textOutsideStories } from './extensions/story';
 
 export type TextCounts = { words: number; characters: number; charactersExcludingSpaces: number };
 
@@ -32,9 +35,15 @@ function countText(text: string): TextCounts {
 }
 
 // The whole doc, and the selection when it holds any range (a table's cells are several). A footnote's note counts
-// nothing, as in Google Docs, and its reference ends the word before it.
+// nothing, as in Google Docs, and its reference ends the word before it. A text box's words count, as Word counts them,
+// as words of their own, never run on from its anchor's.
+function storyText(story: Node): string {
+    if (story.type.name !== 'textBox') return '\n';
+    return `\n${story.textBetween(0, story.content.size, '\n', leafText)}\n`;
+}
+
 export function countWords({ doc, selection }: EditorState): { document: TextCounts; selection: TextCounts | null } {
-    const textOf = (from: number, to: number) => textOutsideNotes(doc, from, to, '\n', '\n', leafText);
+    const textOf = (from: number, to: number) => textOutsideStories(doc, from, to, '\n', storyText, leafText);
     return {
         document: countText(textOf(0, doc.content.size)),
         selection: selection.empty

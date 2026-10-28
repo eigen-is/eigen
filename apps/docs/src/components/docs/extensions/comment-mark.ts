@@ -5,8 +5,14 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
 import type { FigureFrameNode } from '@workspace/lib/docs/eigendoc';
-import { CommentMarkSchema, isFigureFrameNode, PAGE_NUMBER_TEXT, readEquation } from '@workspace/lib/docs/eigendoc';
-import { textOutsideNotes } from './footnote';
+import {
+    CommentMarkSchema,
+    isFigureFrameNode,
+    isStoryNode,
+    PAGE_NUMBER_TEXT,
+    readEquation,
+} from '@workspace/lib/docs/eigendoc';
+import { textOutsideStories } from './story';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -59,8 +65,8 @@ export function addCommentAnchor(editor: Editor, { from, to }: { from: number; t
 }
 
 // Whether addCommentAnchor would anchor a card on the selection: a node holding a card attribute selected alone, or
-// text. AtomMarks strips the mark from any other atom, so a page number alone takes no comment, and a footnote's note
-// keeps the body's marks off its text, so a reference alone takes none either.
+// text. AtomMarks strips the mark from any other atom, so a page number alone takes no comment, and a story keeps the
+// body's marks off its text, so a note's reference alone takes none either; a text box takes its card as a figure does.
 export function canAnchorComment({ doc, selection: { from, to, empty } }: EditorState): boolean {
     if (empty) return false;
     const node = doc.nodeAt(from);
@@ -68,7 +74,7 @@ export function canAnchorComment({ doc, selection: { from, to, empty } }: Editor
     let text = false;
     doc.nodesBetween(from, to, (child) => {
         text ||= child.isText;
-        return !text && child.type.name !== 'footnote';
+        return !text && !isStoryNode(child.type.name);
     });
     return text;
 }
@@ -97,14 +103,21 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
 const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart', textBox: 'Text box' };
 
 // A comment on an image or a chart alone has no text to quote, so it reads as "Image" or "Chart", and an equation with
-// no text as "Equation", and a page number as its #. A footnote's note is no part of the quote, as its reference takes no
+// no text as "Equation", and a page number as its #. A story's text is no part of the quote, as its node takes no
 // comment.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
-    return textOutsideNotes(doc, from, to, ' ', '', (leaf) => {
-        if (isFigureFrameNode(leaf.type.name)) return QUOTE_WORDS[leaf.type.name];
-        if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text || 'Equation';
-        return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
-    }).slice(0, 100);
+    return textOutsideStories(
+        doc,
+        from,
+        to,
+        ' ',
+        () => '',
+        (leaf) => {
+            if (isFigureFrameNode(leaf.type.name)) return QUOTE_WORDS[leaf.type.name];
+            if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text || 'Equation';
+            return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
+        },
+    ).slice(0, 100);
 }
 
 function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet {

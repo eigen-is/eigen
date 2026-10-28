@@ -66,7 +66,7 @@ import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-sea
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
 import { Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
@@ -91,7 +91,7 @@ import { insertNote } from './extensions/footnote';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { FootnoteList } from './footnote-list';
 import { useActiveComments } from './hooks/use-active-comments';
-import { useOpenNote } from './hooks/use-open-note';
+import { useOpenStory } from './hooks/use-open-story';
 import { useOutlineShown } from './hooks/use-outline-shown';
 import type { SelectionPanel } from './hooks/use-selection-panel';
 import { useSelectionPanel } from './hooks/use-selection-panel';
@@ -387,10 +387,20 @@ const TiptapEditor = ({
         yDoc,
         provider: null,
         editable: canWrite,
-        target: { body: () => editorRef.current, onLeave: () => leaveNoteRef.current() },
+        target: { body: () => editorRef.current, onLeave: () => leaveNoteRef.current(), story: 'footnote' },
         equation,
     });
-    const notes = useOpenNote(editor, noteEditor, bandsAllowed);
+    // The open text box's live editor, which draws in the box itself.
+    const boxEditor = useDocEditor({
+        media,
+        yDoc,
+        provider: null,
+        editable: canWrite,
+        target: { body: () => editorRef.current, onLeave: () => leaveNoteRef.current(), story: 'textBox' },
+        equation,
+    });
+    const storyEditors = useMemo(() => ({ footnote: noteEditor, textBox: boxEditor }), [noteEditor, boxEditor]);
+    const notes = useOpenStory(editor, storyEditors, bandsAllowed);
     leaveNoteRef.current = notes.leave;
     const openNote = (pos: number, at: { left: number; top: number } | null) => {
         setEditingBand(null);
@@ -407,7 +417,8 @@ const TiptapEditor = ({
         return pos !== null;
     };
     insertFootnoteRef.current = insertFootnote;
-    const activeEditor = editingBand ? bands[editingBand] : notes.anchor ? noteEditor : editor;
+    const storyEditor = notes.editor;
+    const activeEditor = editingBand ? bands[editingBand] : (storyEditor ?? editor);
     // A jump leaves a band or a note and puts the caret at the start of the heading, which scrolls to a small margin
     // below the top of the view: the selection's own scroll stops as soon as the heading shows, at the bottom. The
     // margin keeps a note number above the heading's line in view. A phone's pane closes first, and the scroll waits a
@@ -440,13 +451,13 @@ const TiptapEditor = ({
         enterBand(entryBand(preset.band));
     };
     // An image goes where the caret is and settles into that editor: a band's lives as long as the doc, and the body's
-    // is read again once the upload lands. A note's settles in the body, which holds every note.
+    // is read again once the upload lands. A story's settles in the body, which holds every story.
     const insertTarget = editingBand
         ? () => bands[editingBand]
-        : notes.anchor
-          ? () => noteEditor
+        : storyEditor
+          ? () => storyEditor
           : () => editorRef.current;
-    const settleTarget = notes.anchor ? () => editorRef.current : insertTarget;
+    const settleTarget = storyEditor ? () => editorRef.current : insertTarget;
 
     // From the undo manager's own events: it moves an undone step onto the redo stack after the transaction that undid
     // it, so an editor transaction reads the stacks too early.
@@ -829,7 +840,8 @@ const TiptapEditor = ({
                                                   if (
                                                       !(target instanceof Element) ||
                                                       !e.currentTarget.contains(target) ||
-                                                      noteEditor.view.dom.contains(target)
+                                                      e.defaultPrevented ||
+                                                      notes.editor?.view.dom.contains(target)
                                                   ) {
                                                       return;
                                                   }

@@ -1,7 +1,7 @@
-// The open footnote: one live editor on the note, its edits forwarded into the body by diff, the body's changes pulled
-// back, anchored on the note's Yjs element, one history with the body, and the find bar's matches and reveal. Two
-// Y.Docs synced by hand stand in for two tabs.
-import { afterEach, expect, spyOn, test } from 'bun:test';
+// The open story: one live editor on a note or a text box, its edits forwarded into the body by diff, the body's changes
+// pulled back, anchored on the story's Yjs element and found again by its id, one history with the body, and the find
+// bar's matches and reveal. Two Y.Docs synced by hand stand in for two tabs.
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -18,7 +18,7 @@ const { useProseMirrorSearchController } = await import(
 );
 const { docEditorOptions } = await import('../../../../components/docs/doc-editor');
 const { createDocUndoManager } = await import('../../../../components/docs/page-setup');
-const { useOpenNote } = await import('../../../../components/docs/hooks/use-open-note');
+const { useOpenStory } = await import('../../../../components/docs/hooks/use-open-story');
 
 type TestEditor = InstanceType<typeof Editor>;
 type Target = Parameters<typeof docEditorOptions>[0]['target'];
@@ -71,14 +71,34 @@ const footnote = (...content: JSONContent[]): JSONContent => ({ type: 'footnote'
 // "Claim" 1..6, the note at 6 holding "Hello world" (8..19), ". More" from 21.
 const DOC = [paragraph(text('Claim'), footnote(paragraph(text('Hello world'))), text('. More'))];
 
-type Session = ReturnType<typeof useOpenNote>;
+type Session = ReturnType<typeof useOpenStory>;
 
 // Tab A's body and note editors with the hook, tab B a plain body on a synced doc.
 async function setup(content: JSONContent[] = DOC) {
     const yA = new Y.Doc();
     const yB = new Y.Doc();
-    yA.on('update', (update: Uint8Array, origin: unknown) => origin !== 'peer' && Y.applyUpdate(yB, update, 'peer'));
-    yB.on('update', (update: Uint8Array, origin: unknown) => origin !== 'peer' && Y.applyUpdate(yA, update, 'peer'));
+    // While held, each tab's updates wait, as two tabs' edits cross on the wire.
+    const link = { held: false, queue: [] as (() => void)[] };
+    const send = (to: InstanceType<typeof Y.Doc>) => (update: Uint8Array, origin: unknown) => {
+        if (origin === 'peer') return;
+        if (link.held) link.queue.push(() => Y.applyUpdate(to, update, 'peer'));
+        else Y.applyUpdate(to, update, 'peer');
+    };
+    yA.on('update', send(yB));
+    yB.on('update', send(yA));
+    const hold = () => {
+        link.held = true;
+    };
+    const release = async () => {
+        link.held = false;
+        await act(async () => {
+            for (const apply of link.queue.splice(0)) apply();
+        });
+        // The renewed story forwards its text once the change that moved it is done.
+        await act(async () => {
+            await Promise.resolve();
+        });
+    };
     const a = bodyOn(yA);
     const b = bodyOn(yB);
     a.commands.setContent({ type: 'doc', content });
@@ -86,13 +106,15 @@ async function setup(content: JSONContent[] = DOC) {
     if (!undoManager) throw new Error('no undo manager');
     undoManager.clear();
     const leaving = { current: () => {} };
-    const note = mount(yA, { body: () => a, onLeave: () => leaving.current() }, []);
+    const note = mount(yA, { body: () => a, onLeave: () => leaving.current(), story: 'footnote' }, []);
+    const box = mount(yA, { body: () => a, onLeave: () => leaving.current(), story: 'textBox' }, []);
+    const editors = { footnote: note, textBox: box };
     const session: { current: Session | null; search: ReturnType<typeof useProseMirrorSearchController> | null } = {
         current: null,
         search: null,
     };
     function Host() {
-        session.current = useOpenNote(a, note, true);
+        session.current = useOpenStory(a, editors, true);
         session.search = useProseMirrorSearchController(a, true);
         leaving.current = session.current.leave;
         return null;
@@ -102,7 +124,7 @@ async function setup(content: JSONContent[] = DOC) {
     const open = async (pos: number) => {
         await act(async () => session.current?.open(pos, { focus: true, at: null, selection: null }));
     };
-    return { a, b, note, yA, yB, undoManager, session, open };
+    return { a, b, note, box, yA, yB, undoManager, session, open, hold, release };
 }
 
 const noteOf = (editor: TestEditor, index = 0) => {
@@ -297,9 +319,9 @@ test('a body editor built anew finds the open note on the same Yjs element', asy
     await open(6);
     const anchor = session.current?.anchor;
     if (!anchor) throw new Error('no note open');
-    const { findNote } = await import('../../../../components/docs/extensions/footnote');
+    const { findStory } = await import('../../../../components/docs/extensions/story');
     const rebuilt = bodyOn(yA);
-    expect(findNote(rebuilt, anchor)?.pos).toBe(6);
+    expect(findStory(rebuilt, anchor)?.pos).toBe(6);
     expect(note.isDestroyed).toBe(false);
 });
 
@@ -551,4 +573,44 @@ test('⌘Z of a note inserted right before another reference closes it, and neve
     expect(session.current?.anchor).toBeNull();
     expect(noteOf(a)).toBe('Old');
     expect(noteOf(a, 1)).toBeUndefined();
+});
+
+// A cut and a paste of a reference in another tab gives its note a new Yjs element, and keystrokes made meanwhile went
+// into the old one. The note's id finds the new node, and the open editor puts its text back.
+describe("a peer's cut and paste of the open note's reference", () => {
+    const moved = (id: string | null) => [
+        paragraph(text('One')),
+        paragraph(text('Two'), { ...footnote(paragraph(text('Note'))), attrs: { id } }, text('.')),
+    ];
+    const cutAndPaste = (b: TestEditor) => {
+        const node = b.state.doc.nodeAt(9);
+        if (!node) throw new Error('no note');
+        b.view.dispatch(b.state.tr.delete(9, 9 + node.nodeSize).insert(4, node));
+    };
+
+    test('keeps it open, and what was typed meanwhile reaches both tabs', async () => {
+        const { a, b, note, session, open, hold, release } = await setup(moved('n1'));
+        await open(9);
+        hold();
+        await act(async () => {
+            cutAndPaste(b);
+            note.commands.setTextSelection(5);
+            typeInto(note, '!');
+        });
+        await release();
+        expect(session.current?.anchor?.pos).toBe(4);
+        expect(noteOf(a)).toBe('Note!');
+        expect(noteOf(b)).toBe('Note!');
+        typeInto(note, '?');
+        expect(noteOf(b)).toBe('Note!?');
+    });
+
+    test('closes a note without an id, as before', async () => {
+        const { b, session, open, hold, release } = await setup(moved(null));
+        await open(9);
+        hold();
+        await act(async () => cutAndPaste(b));
+        await release();
+        expect(session.current?.anchor).toBeNull();
+    });
 });
