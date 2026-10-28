@@ -4,7 +4,7 @@
 // find bar rather than to the host's editor.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
-import { REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/collab';
+import { REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/constants/hotkeys';
 import { DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut } from '@workspace/ui/components/dropdown-menu';
 import { Redo, Search, TextSearch, Undo } from 'lucide-react';
 import type { ReactNode } from 'react';

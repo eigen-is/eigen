@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2092 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2093 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1022,7 +1022,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1106)
+## Utilities & constants (1107)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1262,9 +1262,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getItemMapRoot` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `NORMALIZE_ORIGIN` | `@workspace/lib/collab` | packages/lib/src/core/collab/normalize-refs.ts |
 | `normalizeParentChildRefs` | `@workspace/lib/collab` | packages/lib/src/core/collab/normalize-refs.ts |
-| `REDO_HOTKEY` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-hotkeys.ts |
 | `restoreYjsDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
-| `UNDO_HOTKEY` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-hotkeys.ts |
 | `parseQuery` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/parse-query.ts |
 | `applyCardPatch` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
 | `COMMENT_STATUS_FILTERS` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
@@ -1365,6 +1363,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PPTX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `readCssFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `readFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `REDO_ALT_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
+| `REDO_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `S3_ABORT_INCOMPLETE_UPLOAD_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_LIFECYCLE_RULE_ID` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_NONCURRENT_DAYS_DEFAULT` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
@@ -1381,6 +1381,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `THEME_COPY_KEY` | `@workspace/lib/constants` | packages/lib/src/constants/theme.ts |
+| `UNDO_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `UPLOAD_CAP_MAX_MB` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `VCARD_CONTENT_TYPE` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
