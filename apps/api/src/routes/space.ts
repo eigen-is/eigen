@@ -9,6 +9,7 @@ import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/auth/access';
 import { getUserHome } from '../lib/home';
 import { betterAuth } from './auth';
+import { optionalEnum } from './shared-schemas';
 
 export const spaceRouter = new Elysia({ name: 'space' })
     .use(betterAuth)
@@ -34,7 +35,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
         },
         {
             body: t.Object({
-                theme: t.Optional(t.Union(USER_THEMES.map((theme) => t.Literal(theme)))),
+                theme: optionalEnum(USER_THEMES),
                 email: t.Optional(
                     t.Object({
                         signatures: t.Optional(

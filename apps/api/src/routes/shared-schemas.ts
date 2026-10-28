@@ -1,3 +1,6 @@
+// The request-body schemas and schema helpers that more than one route uses, such as an S3 config, a drive import or
+// a document type. They stay in the API, not in the shared lib, so only the backend depends on Elysia's type system.
+
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
 import type { DocumentImportOptions, DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
@@ -24,6 +27,12 @@ type _EigenDocSchemaCoversAll =
     (typeof EIGEN_DOC_TYPES)[number] extends Static<typeof eigenDocTypeSchema> ? true : never;
 const _eigenDocSchemaCheck: _EigenDocSchemaCoversAll = true;
 void _eigenDocSchemaCheck;
+
+// An optional enum field of a partial-update body. Elysia gives a UnionEnum its first value as its default and fills it
+// into a body that leaves the field out, so a save that sends other fields would overwrite the stored one.
+export function optionalEnum<const T extends readonly [string, ...string[]]>(values: T) {
+    return t.Optional(t.UnionEnum(values, { default: undefined }));
+}
 
 export const attachmentReferenceSchema = t.Object({
     type: t.Literal('reference'),
