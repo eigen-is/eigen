@@ -8,7 +8,9 @@ import { DOCUMENT_FONT, readFontSize } from '@workspace/lib/constants/fonts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     flattenNestedStories,
+    MAX_HEADING_LEVEL,
     PROSE_TEXTBLOCKS,
+    pageColumnWidth,
     pagePx,
     pageTwips,
     ptToMm,
@@ -39,7 +41,6 @@ import type { Part } from '../../ooxml/opc';
 import {
     BODY_TEXT_OUTLINE_LEVEL,
     CHECKBOX_GLYPHS,
-    DEEPEST_HEADING_LEVEL,
     DEFAULT_RUN_SIZE,
     LIST_LEVELS,
     NO_TOC_ENTRIES,
@@ -145,8 +146,6 @@ export function createReader(
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
     const size = sectionPage(sectPr);
     const page = { ...size, differentFirstPage: pkg.titlePg, pageless: pkg.webView };
-    const px = pagePx(page);
-    const twips = pageTwips(page);
     // A size past the range lands in it, as a run's does.
     const bodySize = 2 * (readFontSize((body.size ?? DEFAULT_RUN_SIZE) / 2) ?? DEFAULT_RUN_SIZE / 2);
     const font = fontMark(byFace(' ', body.fonts, body, false)[0]?.font, fontTable) ?? DOCUMENT_FONT;
@@ -183,8 +182,8 @@ export function createReader(
             color: body.color?.hex && markColor(body.color.hex),
         }),
         page,
-        columnTwips: twips.width - twips.margin.left - twips.margin.right,
-        columnPx: Math.floor(px.width - px.margin.left - px.margin.right),
+        columnTwips: pageColumnWidth(pageTwips(page)),
+        columnPx: Math.floor(pageColumnWidth(pagePx(page))),
         lost,
         publicOrigin,
     };
@@ -346,7 +345,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // body text.
     const outline = styles.para(styleId).outlineLvl;
     const tocEntry = style !== undefined && tocLevel(style.name) !== undefined;
-    if (role.kind === 'paragraph' && outline !== undefined && outline < DEEPEST_HEADING_LEVEL && !tocEntry)
+    if (role.kind === 'paragraph' && outline !== undefined && outline < MAX_HEADING_LEVEL && !tocEntry)
         role = { kind: 'heading', level: outline + 1 };
     // A style based on a heading that sets body text's level, as TOC Heading does, is no heading.
     if (role.kind === 'heading' && outline === BODY_TEXT_OUTLINE_LEVEL) role = { kind: 'paragraph' };

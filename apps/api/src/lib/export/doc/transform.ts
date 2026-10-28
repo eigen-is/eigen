@@ -14,6 +14,7 @@ import {
     normalStyleProperties,
     PAGE_BAND_CLASS,
     PAGE_BREAK_CLASS,
+    pageColumnWidth,
     pagePx,
     pageStylesheet,
     pxToPt,
@@ -84,8 +85,7 @@ export async function renderEigendocExport(
     const notes = footnotesInOrder(json);
     const pageNotes = pdf && notesFitPages(notes, page);
     const equations = renderEquations(pdf ? await svgEquations(roots.map(({ content }) => content)) : undefined);
-    const px = pagePx(page);
-    const columnPx = px.width - px.margin.left - px.margin.right;
+    const columnPx = pageColumnWidth(pagePx(page));
     const body = roots
         .map(({ part, content }) => {
             const html = renderDocHtml(
@@ -205,7 +205,7 @@ export const MAX_PAGE_NOTES = 1500;
 function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
     if (notes.length > MAX_PAGE_NOTES) return false;
     const { sizePt } = FOOTNOTE_LOOK;
-    const columnPt = mmToPt(page.width - page.margin.left - page.margin.right);
+    const columnPt = mmToPt(pageColumnWidth(page));
     const linePt = sizePt * Math.max(...EIGEN_FONTS.map((font) => font.lineHeight));
     const lineChars = columnPt / (0.6 * sizePt);
     const pageLines = mmToPt(page.height - page.margin.top - page.margin.bottom) / linePt - 3;
