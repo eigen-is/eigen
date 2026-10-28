@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { getTestContext } from '../setup';
 
 describe('Public sign-up', () => {
@@ -15,7 +14,7 @@ describe('Public sign-up', () => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    email: `probe-${randomUUID()}@test.eigen.is`,
+                    email: `probe-${crypto.randomUUID()}@test.eigen.is`,
                     password: 'testpassword123',
                     name: 'Probe',
                 }),

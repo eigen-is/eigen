@@ -2,7 +2,6 @@
 // the bucket later, so saving stays fast and survives a restart. A failed upload tries again after a growing delay,
 // and uploads to the same bucket share a limit. Each mount has one queue, and the mount starts, drains and stops it.
 
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { and, asc, count, eq, lte } from 'drizzle-orm';
@@ -81,7 +80,7 @@ export class UploadQueue {
     // queue was written for managed databases — and nothing reads it: what a copy holds is the
     // row's `isDatabase`, never its name.
     public newStagingPath(): string {
-        return path.join(this.stagingDir, `${randomUUID()}.db`);
+        return path.join(this.stagingDir, `${crypto.randomUUID()}.db`);
     }
 
     // Resolve a stored stagingPath to an absolute path. New rows store a basename (relocation-safe);

@@ -1,5 +1,4 @@
 import { beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CHAT_ROOM_DB_CONFIG } from '../../lib/chat/db-config';
 import { messages } from '../../lib/chat/schema';
@@ -37,7 +36,7 @@ test('the search text of a chat keeps every message of a second that spans a pag
 
     const createdAt = new Date('2026-10-05T12:00:00Z');
     const rows = Array.from({ length: 600 }, (_, i) => ({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         authorEmail: ctx.alice.user.email,
         type: 'message' as const,
         content: `message ${i}`,

@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { eq, sql } from 'drizzle-orm';
 import type { Calendar } from '../../lib/calendar/calendar';
@@ -203,9 +202,12 @@ describe('putResource', () => {
             calendarId,
             'twins.ics',
             vcal(
-                event('twins@eigen', 'First master', [`X-EIGEN-EVENT-ID:${randomUUID()}`, 'RRULE:FREQ=WEEKLY;COUNT=3']),
+                event('twins@eigen', 'First master', [
+                    `X-EIGEN-EVENT-ID:${crypto.randomUUID()}`,
+                    'RRULE:FREQ=WEEKLY;COUNT=3',
+                ]),
                 event('twins@eigen', 'Second master', [
-                    `X-EIGEN-EVENT-ID:${randomUUID()}`,
+                    `X-EIGEN-EVENT-ID:${crypto.randomUUID()}`,
                     'RRULE:FREQ=WEEKLY;COUNT=3',
                 ]),
             ),

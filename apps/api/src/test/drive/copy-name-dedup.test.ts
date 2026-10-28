@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { authedRequest, driveGet, drivePost, driveUpload, getTestContext } from '../setup';
 
@@ -19,7 +18,7 @@ describe('copy route name dedup', () => {
             ctx.alice.user.id,
             MOUNT,
             `folder/${rootId}`,
-            { folderName: `copy-dedup-${randomUUID()}` },
+            { folderName: `copy-dedup-${crypto.randomUUID()}` },
         );
         folderId = folder.id;
         const src = await driveUpload(

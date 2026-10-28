@@ -2,7 +2,6 @@
 // document. Drive opens a room for each chat request. The room stores, edits and deletes messages,
 // and after a post it notifies the people mentioned, the earlier participants and the file's watchers.
 
-import { randomUUID } from 'node:crypto';
 import { chatActivityTag, chatMentionTag } from '@workspace/lib/notification/tags';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
@@ -112,7 +111,7 @@ export class ChatRoom {
             }
         }
 
-        const id = randomUUID();
+        const id = crypto.randomUUID();
         const now = new Date();
         const attachmentData = attachments && attachments.length > 0 ? attachments : null;
 

@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { teamOwnerId } from '@workspace/lib/types';
 import { getSyntheticTeamUser, TeamHome } from '../../lib/home/team-home';
@@ -23,7 +22,7 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
     });
 
     async function freshTeamHome(): Promise<TeamHome> {
-        const owner = teamOwnerId(randomUUID().replace(/-/g, '')); // parseOwnerId wants 32 alnum chars
+        const owner = teamOwnerId(crypto.randomUUID().replace(/-/g, '')); // parseOwnerId wants 32 alnum chars
         const home = new TeamHome(getSyntheticTeamUser(owner, 'Live Update Team'));
         homeDirs.push(home.homeDir);
         await home.init();

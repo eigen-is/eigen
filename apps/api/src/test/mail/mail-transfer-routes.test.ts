@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { CalendarEventOccurrence } from '@workspace/lib/types/calendar';
@@ -36,7 +35,7 @@ const message = (subject: string, parts: string[] = ['Saved from another client.
         'From: Grace Hopper <grace@eml-import.example>',
         'To: alice@eml-import.example',
         `Subject: ${subject}`,
-        `Message-ID: <${randomUUID()}@eml-import.example>`,
+        `Message-ID: <${crypto.randomUUID()}@eml-import.example>`,
         'Date: Mon, 20 Apr 2026 10:00:00 +0000',
         'MIME-Version: 1.0',
         'Content-Type: text/plain; charset=utf-8',
@@ -109,8 +108,8 @@ describe('Mail transfer routes', () => {
         bobMountId = await firstMountId(bob.sessionToken, bob.id);
         bobRootId = (await driveGet(bob.sessionToken, bob.id, bobMountId, 'root')).id;
 
-        const email = `eml-import-guest-${randomUUID()}@external.com`;
-        const password = randomUUID();
+        const email = `eml-import-guest-${crypto.randomUUID()}@external.com`;
+        const password = crypto.randomUUID();
         const created = await auth.api.createUser({ body: { email, password, name: 'Import Guest', role: 'user' } });
         // Set to 'guest' directly — the admin plugin only allows 'user'/'admin' via the API.
         getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();
@@ -152,7 +151,7 @@ describe('Mail transfer routes', () => {
     });
 
     test('an invitation inside an imported file creates no calendar event', async () => {
-        const uid = `imported-invite-${randomUUID()}@external.com`;
+        const uid = `imported-invite-${crypto.randomUUID()}@external.com`;
         const boundary = 'eml-import-invite';
         const raw = [
             'From: organizer@external.com',
@@ -200,7 +199,7 @@ describe('Mail transfer routes', () => {
     });
 
     test('the same file imported twice gives two messages, as an IMAP APPEND would', async () => {
-        const subject = `Twice over ${randomUUID()}`;
+        const subject = `Twice over ${crypto.randomUUID()}`;
         const raw = message(subject);
 
         expect((await importRequest(alice, raw)).status).toBe(200);
@@ -239,7 +238,7 @@ describe('Mail transfer routes', () => {
     });
 
     test('import-from-drive on own drive imports the file as a message', async () => {
-        const subject = `From Drive ${randomUUID()}`;
+        const subject = `From Drive ${crypto.randomUUID()}`;
         const uploaded = await uploadEml(message(subject));
 
         const res = await importFromDrive(alice, uploaded);
@@ -251,7 +250,7 @@ describe('Mail transfer routes', () => {
     // The whole message parses and indexes before the route answers, so it exempts itself from the
     // server-wide idle timeout the way the raw import and both contacts imports do.
     test('import-from-drive exempts its request from the idle timeout', async () => {
-        const uploaded = await uploadEml(message(`Timeout ${randomUUID()}`));
+        const uploaded = await uploadEml(message(`Timeout ${crypto.randomUUID()}`));
         // app.handle() runs with no server, so the route's `server?.timeout` is a no-op in tests: give the
         // app a real one to observe the call, and take it away again.
         const server = Bun.serve({ port: 0, fetch: () => new Response('') });
@@ -277,7 +276,7 @@ describe('Mail transfer routes', () => {
 
     test('import-from-drive on a folder named like a message is 400', async () => {
         const folder = await drivePost<DrivePath>(alice.sessionToken, alice.id, mountId, `folder/${rootId}`, {
-            folderName: `folder-${randomUUID()}.eml`,
+            folderName: `folder-${crypto.randomUUID()}.eml`,
         });
 
         const res = await importFromDrive(alice, folder);
@@ -285,7 +284,7 @@ describe('Mail transfer routes', () => {
     });
 
     test('import-from-drive is 413 when the file outgrew the size its row claims', async () => {
-        const uploaded = await uploadEml(message('Grew after the check'), `grew-${randomUUID()}.eml`);
+        const uploaded = await uploadEml(message('Grew after the check'), `grew-${crypto.randomUUID()}.eml`);
         const mount = findOrFail((await getHome(alice.id)).drive.getMounts(), (m) => m.id === mountId);
         await mount.storage.write(await mount.getStorageKey(uploaded.id), Buffer.alloc(EML_MAX_BYTES + 1, 0x41));
 
@@ -327,7 +326,7 @@ describe('Mail transfer routes', () => {
     });
 
     test('a server without hosted mail refuses both import routes and writes nothing', async () => {
-        const uploaded = await uploadEml(message(`Mail off ${randomUUID()}`));
+        const uploaded = await uploadEml(message(`Mail off ${crypto.randomUUID()}`));
         const before = (await inbox(alice)).length;
         process.env['MAIL_ENABLED'] = '0';
         for (const res of [await importRequest(alice, message('Mail off')), await importFromDrive(alice, uploaded)]) {

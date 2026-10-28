@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
@@ -510,8 +509,8 @@ describe('File watch + fan-out', () => {
 
     test('guests cannot watch', async () => {
         // Guest creation idiom from guest-auth.test.ts: create, flip role, sign in
-        const email = `watch-guest-${randomUUID()}@external.com`;
-        const password = randomUUID();
+        const email = `watch-guest-${crypto.randomUUID()}@external.com`;
+        const password = crypto.randomUUID();
         const created = await auth.api.createUser({ body: { email, password, name: 'Watch Guest', role: 'user' } });
         getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();
         const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });

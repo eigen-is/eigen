@@ -2,7 +2,6 @@
 // iCalendar file it came from, and every other column is read from that file. The class is the one door for the REST
 // routes, the CalDAV server and the invitation code. It also checks names and colors.
 
-import { randomUUID } from 'node:crypto';
 import { CALENDAR_NAME_MAX_LENGTH, DEFAULT_CALENDAR_COLOR } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, isHexColor } from '@workspace/lib/constants/colors';
 import type {
@@ -249,7 +248,7 @@ export class Calendar {
         isDefault?: boolean;
     }): Promise<CalendarItem> {
         validateCalendarProps(input);
-        const id = input.id ?? randomUUID();
+        const id = input.id ?? crypto.randomUUID();
         if (sanitizeCalendarId(id) !== id) throw new ApiError(400, 'Invalid calendar name');
 
         // Inside the lock, so two creates of one id cannot both read the name as free.

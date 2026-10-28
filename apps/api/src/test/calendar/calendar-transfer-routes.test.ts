@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -179,7 +178,7 @@ describe('Calendar transfer routes', () => {
     // This event Alice organizes IS mailed about, and it is created and deleted after the silent one, so its
     // cancellation is composed behind anything the silent delete owed. Returns the subject to wait for.
     const controlCancellation = async (): Promise<string> => {
-        const title = `Control ${randomUUID()}`;
+        const title = `Control ${crypto.randomUUID()}`;
         const created = await assertJson<CalendarEvent>(
             await authedRequest(alice.sessionToken, `/calendar/${alice.id}/calendars/${calendarId}/events`, {
                 method: 'POST',
@@ -224,8 +223,8 @@ describe('Calendar transfer routes', () => {
         mountId = await firstMountId(alice.sessionToken, alice.id);
         rootId = (await driveGet(alice.sessionToken, alice.id, mountId, 'root')).id;
 
-        const email = `ics-import-guest-${randomUUID()}@external.com`;
-        const password = randomUUID();
+        const email = `ics-import-guest-${crypto.randomUUID()}@external.com`;
+        const password = crypto.randomUUID();
         const guest = await auth.api.createUser({ body: { email, password, name: 'Import Guest', role: 'user' } });
         // Set to 'guest' directly — the admin plugin only allows 'user'/'admin' via the API.
         getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, guest.user.id)).run();
@@ -235,7 +234,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('a file of events lands in the calendar, and each one is the importing user to edit and delete', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const file = vcal(
             vevent(`plain-1-${stamp}@other`, 'Kickoff', '20260402T090000Z', '20260402T100000Z'),
             vevent(`plain-2-${stamp}@other`, 'Retro', '20260403T090000Z', '20260403T100000Z'),
@@ -288,7 +287,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('re-importing the same file skips every event', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const file = vcal(
             vevent(`twice-1-${stamp}@other`, 'Once', '20260405T090000Z', '20260405T100000Z'),
             vevent(`twice-2-${stamp}@other`, 'Again', '20260405T110000Z', '20260405T120000Z'),
@@ -308,7 +307,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('a UID already in another calendar of the home is skipped', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const file = vcal(vevent(`elsewhere-${stamp}@other`, 'Only once', '20260406T090000Z', '20260406T100000Z'));
 
         expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
@@ -326,7 +325,7 @@ describe('Calendar transfer routes', () => {
     // The Home holds a UID once. Two imports of one file into two calendars both read "nobody holds it"
     // before either writes, so the rule has to be decided where the write is, inside the write lock.
     test('two concurrent imports of one UID into two calendars leave one series', async () => {
-        const uid = `race-${randomUUID()}@other`;
+        const uid = `race-${crypto.randomUUID()}@other`;
         const file = vcal(vevent(uid, 'Raced', '20260430T090000Z', '20260430T100000Z'));
 
         const results = await Promise.all([
@@ -342,7 +341,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('an invitation file is stored as plain events: no organizer, no attendees, every alarm', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const uid = `invite-${stamp}@external.com`;
         const alarmCount = 8;
         const alarms = Array.from({ length: alarmCount }, (_, i) => [
@@ -413,7 +412,7 @@ describe('Calendar transfer routes', () => {
     // R19: the stored bytes are the truth, so an import keeps every line the client wrote and drops scheduling only.
     // Everything here is something Eigen does not model — ATTACH, CATEGORIES, GEO, RDATE, a rich VALARM.
     test('a kitchen-sink event imports with every line the file wrote, scheduling aside', async () => {
-        const uid = `kitchen-${randomUUID()}@client`;
+        const uid = `kitchen-${crypto.randomUUID()}@client`;
         const vevent = [
             'BEGIN:VEVENT',
             `UID:${uid}`,
@@ -474,7 +473,7 @@ describe('Calendar transfer routes', () => {
     // RFC 5545 §3.1: a content line may carry a group prefix, and "A.ATTENDEE" is an ATTENDEE. The master
     // and every override lose theirs.
     test('group-prefixed scheduling lines are dropped like any other', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const uid = `grouped-${stamp}@external.com`;
         const organizer = `grouped-org-${stamp}@external.com`;
         const file = vcal(
@@ -510,7 +509,7 @@ describe('Calendar transfer routes', () => {
     // R19: an imported invitation is the user's own event, filed under the address that organized it — so
     // that organizer, and nobody else, may later claim it back over iMIP.
     test('an inbound REQUEST from the address an import filed adopts that event in place', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const uid = `adopt-${stamp}@external.com`;
         const organizer = `adopt-org-${stamp}@external.com`;
         const stranger = `adopt-other-${stamp}@external.com`;
@@ -545,7 +544,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('a forged iMIP REPLY for an imported UID has no attendee list to move', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const uid = `reply-target-${stamp}@external.com`;
         const file = vcal(
             vevent(uid, 'Imported meeting', '20260408T090000Z', '20260408T100000Z', [
@@ -595,7 +594,7 @@ describe('Calendar transfer routes', () => {
     // RFC 5545 §3.4: a `.ics` may be a stream of VCALENDAR objects, which several exporters emit one per
     // event. A series split across two objects is still one series.
     test('a stream of several VCALENDAR objects imports as one file', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const uid = `stream-series-${stamp}@other`;
         const file = [
             vcal(vevent(`stream-1-${stamp}@other`, 'First object', '20260416T090000Z', '20260416T100000Z')),
@@ -620,7 +619,7 @@ describe('Calendar transfer routes', () => {
     // One resource is one series, so a zone two series share has to be copied into both files — a
     // reference the second write moved would leave the first one's wall times floating.
     test('two series naming one VTIMEZONE each carry their own copy of it', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const uids = [`zone-a-${stamp}@other`, `zone-b-${stamp}@other`];
         const timed = (uid: string, summary: string, day: string) => [
             'BEGIN:VEVENT',
@@ -649,7 +648,7 @@ describe('Calendar transfer routes', () => {
     // A zone hangs off a property, and not every property is the VEVENT's own: a VALARM's absolute TRIGGER
     // names one too, and the series file has to carry the definition or the alarm's wall time floats.
     test('a VTIMEZONE a VALARM trigger names travels with the series', async () => {
-        const uid = `alarm-zone-${randomUUID()}@other`;
+        const uid = `alarm-zone-${crypto.randomUUID()}@other`;
         const file = vcal(VTZ_NY, [
             'BEGIN:VEVENT',
             `UID:${uid}`,
@@ -676,7 +675,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('a VEVENT naming no UID is imported under a minted one', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const file = vcal([
             'BEGIN:VEVENT',
             `SUMMARY:Nameless ${stamp}`,
@@ -695,7 +694,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('an unusable UID fails while the rest of the file imports', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const file = vcal(
             vevent(`bad/\u0001uid-${stamp}@other`, 'Unusable', '20260409T090000Z', '20260409T100000Z'),
             vevent(`fine-1-${stamp}@other`, 'Fine one', '20260409T110000Z', '20260409T120000Z'),
@@ -715,7 +714,7 @@ describe('Calendar transfer routes', () => {
     // A whole file used to be "not a calendar" over one VEVENT the parser could not read. Both members it
     // cannot write are counted as failures, and the readable event still lands.
     test('a VEVENT with no start and an override with no master fail while the rest of the file imports', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const file = vcal(
             vevent(`readable-${stamp}@other`, 'Readable', '20260411T090000Z', '20260411T100000Z'),
             ['BEGIN:VEVENT', `UID:no-start-${stamp}@other`, 'SUMMARY:No start at all', 'END:VEVENT'],
@@ -742,7 +741,7 @@ describe('Calendar transfer routes', () => {
     // One seam, one rule: an import writes through the same PUT a device takes, so a file the PUT refuses
     // fails here too. An event ending before it starts is nobody's real event, on either surface.
     test('an event whose end precedes its start fails, as a CalDAV PUT of it is refused', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const uid = `reversed-${stamp}@other`;
         const file = vcal(vevent(uid, 'Backwards', '20260410T120000Z', '20260410T100000Z'));
 
@@ -753,11 +752,11 @@ describe('Calendar transfer routes', () => {
         });
         expect((await april()).some((e) => e.title === 'Backwards')).toBe(false);
 
-        expect((await putIcs(secondCalendarId, `${randomUUID()}.ics`, file)).status).toBe(403);
+        expect((await putIcs(secondCalendarId, `${crypto.randomUUID()}.ics`, file)).status).toBe(403);
     });
 
     test('two series with overrides in one file keep each override on its own master', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const uidA = `series-a-${stamp}@other`;
         const uidB = `series-b-${stamp}@other`;
         const file = vcal(
@@ -788,7 +787,7 @@ describe('Calendar transfer routes', () => {
     // A file naming one occurrence twice is malformed, and the import keeps the members it was given: the
     // resource is what a CalDAV PUT of the same file stores, down to the occurrence the expansion draws.
     test('two VEVENTs for one occurrence store what a CalDAV PUT of the file stores', async () => {
-        const uid = `dupe-override-${randomUUID()}@other`;
+        const uid = `dupe-override-${crypto.randomUUID()}@other`;
         const file = vcal(
             vevent(uid, 'Daily', '20260601T090000Z', '20260601T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
             vevent(uid, 'First write', '20260602T140000Z', '20260602T150000Z', ['RECURRENCE-ID:20260602T090000Z']),
@@ -800,7 +799,7 @@ describe('Calendar transfer routes', () => {
             skipped: 0,
             failed: 0,
         });
-        expect((await putIcs(secondCalendarId, `${randomUUID()}.ics`, file)).status).toBe(201);
+        expect((await putIcs(secondCalendarId, `${crypto.randomUUID()}.ics`, file)).status).toBe(201);
 
         const home = await getHome(alice.id);
         const rowsOf = async (calId: string) =>
@@ -819,7 +818,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('a series of overrides is one broadcast, and every occurrence matches a CalDAV PUT of the same file', async () => {
-        const uid = `overrides-${randomUUID()}@other`;
+        const uid = `overrides-${crypto.randomUUID()}@other`;
         const day = (offset: number) =>
             new Date(Date.UTC(2026, 4, 1 + offset)).toISOString().slice(0, 10).replaceAll('-', '');
         const file = vcal(
@@ -849,7 +848,7 @@ describe('Calendar transfer routes', () => {
 
         // The same file through a CalDAV PUT, the other writer of exception rows.
         const put = await app.handle(
-            new Request(`http://localhost/dav/calendars/${alice.id}/${secondCalendarId}/${randomUUID()}.ics`, {
+            new Request(`http://localhost/dav/calendars/${alice.id}/${secondCalendarId}/${crypto.randomUUID()}.ics`, {
                 method: 'PUT',
                 headers: { Authorization: basicAuth(alice.email), 'Content-Type': ICS_MIME },
                 body: file,
@@ -864,7 +863,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('imported overrides get a resource name of their own, never one built from the file UID', async () => {
-        const uid = `../../weird-${randomUUID()}@other`;
+        const uid = `../../weird-${crypto.randomUUID()}@other`;
         const file = vcal(
             vevent(uid, 'Traversal', '20260901T090000Z', '20260901T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
             vevent(uid, 'Traversal moved', '20260902T110000Z', '20260902T113000Z', ['RECURRENCE-ID:20260902T090000Z']),
@@ -898,7 +897,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('a series whose override is invalid keeps none of its rows while the rest of the file imports', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const halfUid = `half-${stamp}@other`;
         const wholeUid = `whole-${stamp}@other`;
         const file = vcal(
@@ -925,7 +924,7 @@ describe('Calendar transfer routes', () => {
     // names it: a small file can ask for many times its own size in stored bytes. The run stops at its
     // budget, says how far it got, and a retry carries on from there.
     test('an import that would store many times the file it was given stops at its byte budget', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const events = 50;
         const zone = [
             'BEGIN:VTIMEZONE',
@@ -966,7 +965,7 @@ describe('Calendar transfer routes', () => {
     }, 60_000);
 
     test('a file past the event ceiling is refused before anything is written', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const file = vcal(
             ...Array.from({ length: ICS_IMPORT_MAX_EVENTS + 1 }, (_, i) =>
                 vevent(`over-${i}-${stamp}@other`, `Over ${i}`, '20260420T090000Z', '20260420T100000Z'),
@@ -983,7 +982,7 @@ describe('Calendar transfer routes', () => {
     // what it says it holds, not after it is parsed (26 805 such VEVENTs cost 21 s of that thread). Twice
     // the ceiling is what fits under ICS_MAX_BYTES: past that the body reader answers first.
     test('a file far past the ceiling is refused on its VEVENT count, before the parse', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const file = vcal(
             ...Array.from({ length: ICS_IMPORT_MAX_EVENTS * 2 }, (_, i) => [
                 'BEGIN:VEVENT',
@@ -1005,7 +1004,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('the ceiling counts every VEVENT: a file of one master and its overrides is refused too', async () => {
-        const uid = `flood-${randomUUID()}@other`;
+        const uid = `flood-${crypto.randomUUID()}@other`;
         const file = vcal(
             vevent(uid, 'Flood', '20261101T090000Z', '20261101T093000Z', [
                 `RRULE:FREQ=DAILY;COUNT=${ICS_IMPORT_MAX_EVENTS}`,
@@ -1024,7 +1023,7 @@ describe('Calendar transfer routes', () => {
     // A bulk file, not the ceiling: writing every event the ceiling allows is a minute of disk this suite
     // does not need to spend to learn that a file is one broadcast.
     test('a thousand events are one calendar broadcast', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const file = vcal(
             ...Array.from({ length: 1000 }, (_, i) =>
                 vevent(`bulk-${i}-${stamp}@other`, `Bulk ${i}`, '20260421T090000Z', '20260421T100000Z'),
@@ -1041,7 +1040,7 @@ describe('Calendar transfer routes', () => {
     }, 30_000);
 
     test('CalDAV clients pick the imported events up', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const syncReport = (token?: string) => `<?xml version="1.0" encoding="utf-8"?>
 <D:sync-collection xmlns:D="DAV:">
   <D:sync-token>${token ?? ''}</D:sync-token>
@@ -1080,7 +1079,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('an imported event gets a resource name of its own, never the file author UID', async () => {
-        const uid = `weird/uid with spaces&<${randomUUID()}>@other`;
+        const uid = `weird/uid with spaces&<${crypto.randomUUID()}>@other`;
         expect(
             (
                 await importRequest(
@@ -1116,7 +1115,7 @@ describe('Calendar transfer routes', () => {
         const res = await importRequest(
             alice,
             bobCalendarId,
-            vcal(vevent(`shared-${randomUUID()}@other`, 'Not mine', '20260423T090000Z', '20260423T100000Z')),
+            vcal(vevent(`shared-${crypto.randomUUID()}@other`, 'Not mine', '20260423T090000Z', '20260423T100000Z')),
         );
         expect(res.status).toBe(404);
     });
@@ -1139,7 +1138,12 @@ describe('Calendar transfer routes', () => {
                     method: 'POST',
                     headers: { 'Content-Type': ICS_MIME },
                     body: vcal(
-                        vevent(`cross-home-${randomUUID()}@other`, 'Not mine', '20260423T090000Z', '20260423T100000Z'),
+                        vevent(
+                            `cross-home-${crypto.randomUUID()}@other`,
+                            'Not mine',
+                            '20260423T090000Z',
+                            '20260423T100000Z',
+                        ),
                     ),
                 },
             );
@@ -1166,7 +1170,12 @@ describe('Calendar transfer routes', () => {
                     method: 'POST',
                     headers: { 'Content-Type': ICS_MIME },
                     body: vcal(
-                        vevent(`odd-owner-${randomUUID()}@other`, 'Not mine', '20260424T090000Z', '20260424T100000Z'),
+                        vevent(
+                            `odd-owner-${crypto.randomUUID()}@other`,
+                            'Not mine',
+                            '20260424T090000Z',
+                            '20260424T100000Z',
+                        ),
                     ),
                 },
             );
@@ -1184,8 +1193,8 @@ describe('Calendar transfer routes', () => {
     test('an unknown calendar is 404', async () => {
         const res = await importRequest(
             alice,
-            randomUUID(),
-            vcal(vevent(`unknown-${randomUUID()}@other`, 'Nowhere', '20260424T090000Z', '20260424T100000Z')),
+            crypto.randomUUID(),
+            vcal(vevent(`unknown-${crypto.randomUUID()}@other`, 'Nowhere', '20260424T090000Z', '20260424T100000Z')),
         );
         expect(res.status).toBe(404);
     });
@@ -1241,7 +1250,7 @@ describe('Calendar transfer routes', () => {
     });
 
     test('import-from-drive on own drive imports the file into the calendar', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const uploaded = await uploadIcs(
             vcal(vevent(`drive-${stamp}@other`, 'From Drive', '20260425T090000Z', '20260425T100000Z')),
         );
@@ -1254,7 +1263,7 @@ describe('Calendar transfer routes', () => {
     // A file at the event ceiling writes a row apiece before the route answers — far longer than any
     // server-wide idleTimeout — so both import routes exempt their request from it.
     test('both import routes exempt their request from the idle timeout', async () => {
-        const stamp = randomUUID();
+        const stamp = crypto.randomUUID();
         const uploaded = await uploadIcs(
             vcal(vevent(`timeout-drive-${stamp}@other`, 'Long run', '20260428T090000Z', '20260428T100000Z')),
         );
@@ -1290,7 +1299,7 @@ describe('Calendar transfer routes', () => {
 
     test('import-from-drive on a folder named like a calendar is 400', async () => {
         const folder = await drivePost<DrivePath>(alice.sessionToken, alice.id, mountId, `folder/${rootId}`, {
-            folderName: `folder-${randomUUID()}.ics`,
+            folderName: `folder-${crypto.randomUUID()}.ics`,
         });
 
         expect((await importFromDrive(alice, calendarId, folder)).status).toBe(400);
@@ -1303,7 +1312,9 @@ describe('Calendar transfer routes', () => {
             {
                 method: 'POST',
                 headers: { 'Content-Type': ICS_MIME },
-                body: vcal(vevent(`mallory-${randomUUID()}@other`, 'Mallory', '20260427T090000Z', '20260427T100000Z')),
+                body: vcal(
+                    vevent(`mallory-${crypto.randomUUID()}@other`, 'Mallory', '20260427T090000Z', '20260427T100000Z'),
+                ),
             },
         );
         expect(res.status).toBe(403);
@@ -1316,7 +1327,9 @@ describe('Calendar transfer routes', () => {
             {
                 method: 'POST',
                 headers: { 'Content-Type': ICS_MIME },
-                body: vcal(vevent(`guest-${randomUUID()}@other`, 'Guest', '20260428T090000Z', '20260428T100000Z')),
+                body: vcal(
+                    vevent(`guest-${crypto.randomUUID()}@other`, 'Guest', '20260428T090000Z', '20260428T100000Z'),
+                ),
             },
         );
         expect(raw.status).toBe(403);
@@ -1349,7 +1362,7 @@ describe('Calendar transfer routes', () => {
         const sse = await collectSSE(bob.id);
         try {
             const file = vcal(
-                vevent(`shared-import-${randomUUID()}@other`, 'Shared', '20260401T090000Z', '20260401T100000Z'),
+                vevent(`shared-import-${crypto.randomUUID()}@other`, 'Shared', '20260401T090000Z', '20260401T100000Z'),
             );
             const result = await assertJson<ImportCountsResult>(await importRequest(alice, secondCalendarId, file));
             expect(result.imported).toBe(1);
@@ -1547,8 +1560,8 @@ describe('Calendar transfer routes', () => {
         });
 
         test('an unknown event id is 404 and an unknown calendar is 404', async () => {
-            expect((await exportRequest(alice, alice.id, exportCalendarId, [randomUUID()])).status).toBe(404);
-            expect((await exportRequest(alice, alice.id, randomUUID())).status).toBe(404);
+            expect((await exportRequest(alice, alice.id, exportCalendarId, [crypto.randomUUID()])).status).toBe(404);
+            expect((await exportRequest(alice, alice.id, crypto.randomUUID())).status).toBe(404);
         });
 
         // The clamp cuts at a UTF-16 unit, so a title whose 200th unit is half an emoji reaches the header

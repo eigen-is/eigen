@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
@@ -76,7 +75,7 @@ describe('Contacts export', () => {
 
     test('export of an unknown id throws 404', async () => {
         const { instance: contacts } = await makeContacts();
-        await expect(contacts.exportCards([randomUUID()])).rejects.toMatchObject({ status: 404 });
+        await expect(contacts.exportCards([crypto.randomUUID()])).rejects.toMatchObject({ status: 404 });
     });
 
     test('the self card exports without the server-owned X-EIGEN-ID', async () => {
@@ -111,9 +110,9 @@ describe('Contacts import', () => {
         const { instance: contacts } = await makeContacts();
         const before = (await contacts.getContacts()).length;
         const text =
-            card30('Grace Hopper', 'grace@example.com', randomUUID()) +
-            card30('Alan Turing', 'alan@example.com', randomUUID()) +
-            card40('Ada Lovelace', 'ada@example.com', randomUUID());
+            card30('Grace Hopper', 'grace@example.com', crypto.randomUUID()) +
+            card30('Alan Turing', 'alan@example.com', crypto.randomUUID()) +
+            card40('Ada Lovelace', 'ada@example.com', crypto.randomUUID());
 
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 3, skipped: 0, failed: 0 });
 
@@ -127,9 +126,9 @@ describe('Contacts import', () => {
     test('re-import skips all three by UID', async () => {
         const { instance: contacts } = await makeContacts();
         const text =
-            card30('Grace Hopper', 'grace@example.com', randomUUID()) +
-            card30('Alan Turing', 'alan@example.com', randomUUID()) +
-            card40('Ada Lovelace', 'ada@example.com', randomUUID());
+            card30('Grace Hopper', 'grace@example.com', crypto.randomUUID()) +
+            card30('Alan Turing', 'alan@example.com', crypto.randomUUID()) +
+            card40('Ada Lovelace', 'ada@example.com', crypto.randomUUID());
 
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 3, skipped: 0, failed: 0 });
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 0, skipped: 3, failed: 0 });
@@ -139,22 +138,22 @@ describe('Contacts import', () => {
         const { instance: contacts } = await makeContacts();
         await contacts.addContact(validContact({ firstName: 'Grace', email: ['grace@example.com'] }));
 
-        const again = card30('Grace Hopper', '  GRACE@Example.COM  ', randomUUID());
+        const again = card30('Grace Hopper', '  GRACE@Example.COM  ', crypto.randomUUID());
         expect(await contacts.importCards(fileBytes(again))).toEqual({ imported: 0, skipped: 1, failed: 0 });
     });
 
     test('duplicate email inside one file imports once', async () => {
         const { instance: contacts } = await makeContacts();
         const text =
-            card30('Grace Hopper', 'grace@example.com', randomUUID()) +
-            card30('Grace Hopper', 'grace@example.com', randomUUID());
+            card30('Grace Hopper', 'grace@example.com', crypto.randomUUID()) +
+            card30('Grace Hopper', 'grace@example.com', crypto.randomUUID());
 
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 1, skipped: 1, failed: 0 });
     });
 
     test('a KIND:group card is skipped', async () => {
         const { instance: contacts } = await makeContacts();
-        const text = card30('Colleagues', 'group@example.com', randomUUID(), ['X-ADDRESSBOOKSERVER-KIND:group']);
+        const text = card30('Colleagues', 'group@example.com', crypto.randomUUID(), ['X-ADDRESSBOOKSERVER-KIND:group']);
 
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 0, skipped: 1, failed: 0 });
     });
@@ -162,9 +161,9 @@ describe('Contacts import', () => {
     test('a malformed card fails, the others import', async () => {
         const { instance: contacts } = await makeContacts();
         const text =
-            card30('Grace Hopper', 'grace@example.com', randomUUID()) +
+            card30('Grace Hopper', 'grace@example.com', crypto.randomUUID()) +
             'BEGIN:VCARD\nVERSION:3.0\nthis line carries no colon\nEND:VCARD\n' +
-            card30('Alan Turing', 'alan@example.com', randomUUID());
+            card30('Alan Turing', 'alan@example.com', crypto.randomUUID());
 
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 2, skipped: 0, failed: 1 });
     });
@@ -174,8 +173,8 @@ describe('Contacts import', () => {
     test('a card over the card ceiling fails, the other imports', async () => {
         const { instance: contacts } = await makeContacts();
         const text =
-            card30('Grace Hopper', 'grace@example.com', randomUUID()) +
-            card30('Fat Card', 'fat@example.com', randomUUID(), [`NOTE:${'n'.repeat(6 * 1024 * 1024)}`]);
+            card30('Grace Hopper', 'grace@example.com', crypto.randomUUID()) +
+            card30('Fat Card', 'fat@example.com', crypto.randomUUID(), [`NOTE:${'n'.repeat(6 * 1024 * 1024)}`]);
 
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 1, skipped: 0, failed: 1 });
     });
@@ -202,8 +201,8 @@ describe('Contacts import', () => {
         // With no self row, a device PUT carrying either claim would take the link.
         db.delete(contactsSchema.contacts).where(eq(contactsSchema.contacts.eigenId, user.id)).run();
         const text =
-            card30('Forged Id', 'forged@example.com', randomUUID(), [`X-EIGEN-ID:${user.id}`]) +
-            card30('Owner Mail', user.email, randomUUID());
+            card30('Forged Id', 'forged@example.com', crypto.randomUUID(), [`X-EIGEN-ID:${user.id}`]) +
+            card30('Owner Mail', user.email, crypto.randomUUID());
 
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 2, skipped: 0, failed: 0 });
 
@@ -220,7 +219,7 @@ describe('Contacts import', () => {
     test('a whole file broadcasts one batched event, not one per card', async () => {
         const { instance: contacts, broadcasts } = await makeContacts();
         const text = Array.from({ length: 25 }, (_, i) =>
-            card30(`Batch${i} Import`, `batch-${i}@example.com`, randomUUID()),
+            card30(`Batch${i} Import`, `batch-${i}@example.com`, crypto.randomUUID()),
         ).join('');
         broadcasts.length = 0;
 
@@ -237,7 +236,7 @@ describe('Contacts import', () => {
     test('more than VCARD_IMPORT_MAX_CARDS throws 413', async () => {
         const { instance: contacts } = await makeContacts();
         const text = Array.from({ length: VCARD_IMPORT_MAX_CARDS + 1 }, (_, i) =>
-            card30(`Card${i} Many`, `many-${i}@example.com`, randomUUID()),
+            card30(`Card${i} Many`, `many-${i}@example.com`, crypto.randomUUID()),
         ).join('');
 
         await expect(contacts.importCards(fileBytes(text))).rejects.toMatchObject({ status: 413 });
@@ -262,8 +261,8 @@ describe('Contacts import quota', () => {
             await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.floor(used / MB) + 2 } });
 
             const text =
-                card30('Small Card', 'small@example.com', randomUUID()) +
-                card30('Fat Card', 'fat@example.com', randomUUID(), [`NOTE:${'n'.repeat(3 * MB)}`]);
+                card30('Small Card', 'small@example.com', crypto.randomUUID()) +
+                card30('Fat Card', 'fat@example.com', crypto.randomUUID(), [`NOTE:${'n'.repeat(3 * MB)}`]);
 
             await expect(home.contacts.importCards(fileBytes(text))).rejects.toMatchObject({
                 status: 507,

@@ -1,5 +1,4 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq } from 'drizzle-orm';
 import { member as memberSchema } from '../../../auth-schema';
@@ -67,7 +66,7 @@ describe('Backup job pokes', () => {
         // shared by the whole suite.
         const signUp = await auth.api.signUpEmail({
             body: {
-                email: `backup-second-admin-${randomUUID()}@test.eigen.is`,
+                email: `backup-second-admin-${crypto.randomUUID()}@test.eigen.is`,
                 password: 'testpassword123',
                 name: 'Second Admin',
             },
@@ -78,7 +77,7 @@ describe('Backup job pokes', () => {
 
         const sse = await collectSSE(signUp.user.id);
         try {
-            const ownerId = `poke-owner-${randomUUID()}`;
+            const ownerId = `poke-owner-${crypto.randomUUID()}`;
             const job = startBackupJob('backup', ownerId, ctx.alice.user.id, async () => 'artifact.tar.zst');
             await drainBackupJobs();
 
@@ -96,7 +95,7 @@ describe('Backup job pokes', () => {
 
 describe('Backup job slot', () => {
     test("a per-home start refused by a running server backup is not told the server archive's name", async () => {
-        const ownerId = `slot-owner-${randomUUID()}`;
+        const ownerId = `slot-owner-${crypto.randomUUID()}`;
         const spy = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
         const gate = Promise.withResolvers<void>();
         try {

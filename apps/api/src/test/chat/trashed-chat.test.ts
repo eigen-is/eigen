@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { ChatMessage, DrivePath } from '@workspace/lib/types';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount';
@@ -39,7 +38,7 @@ describe('A trashed chat', () => {
         const aliceId = ctx.alice.user.id;
         const rootId = (await driveGet<DrivePath>(token, aliceId, MOUNT, 'root')).id;
         chat = await drivePost<DrivePath>(token, aliceId, MOUNT, `folder/${rootId}/create/chat`, {
-            fileName: `trashed-chat-${randomUUID()}`,
+            fileName: `trashed-chat-${crypto.randomUUID()}`,
         });
         await drivePut(token, aliceId, MOUNT, `path/${chat.id}/acl`, {
             add: [{ id: ctx.bob.user.email, read: true, write: true }],

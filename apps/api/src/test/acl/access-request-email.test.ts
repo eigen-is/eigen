@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
@@ -131,8 +130,8 @@ describe('Access-request email', () => {
     });
 
     test('rejects a guest caller with 403', async () => {
-        const email = `access-req-guest-${randomUUID()}@external.com`;
-        const password = randomUUID();
+        const email = `access-req-guest-${crypto.randomUUID()}@external.com`;
+        const password = crypto.randomUUID();
         const created = await auth.api.createUser({ body: { email, password, name: 'Guest Req', role: 'user' } });
         // Admin plugin only allows 'user'/'admin' via the API — demote directly to 'guest'.
         getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();

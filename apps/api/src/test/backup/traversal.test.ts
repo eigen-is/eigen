@@ -1,6 +1,5 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
@@ -277,7 +276,7 @@ describe('Backup refuses an archive whose paths table leaves the mount', () => {
 
     test('a restore of one throws and the file outside the home is untouched', async () => {
         const name = await packHostile(await hostileArchive(keyMountId, 'file', escapePathFrom(keyMountId), keyFileId));
-        await expect(restoreHome(name, owner.id, `traversal-rows-${randomUUID()}`)).rejects.toThrow();
+        await expect(restoreHome(name, owner.id, `traversal-rows-${crypto.randomUUID()}`)).rejects.toThrow();
         expect(readFileSync(OUTSIDE_PATH, 'utf8')).toBe(OUTSIDE_CONTENT);
         expect((await authedRequest(owner.sessionToken, `/drive/${owner.id}/mounts`)).status).toBe(200);
     });
@@ -295,7 +294,7 @@ describe('Backup refuses an archive whose paths table leaves the mount', () => {
             failures: [],
         });
         try {
-            await expect(restoreHome(name, owner.id, `traversal-rows-${randomUUID()}`)).rejects.toThrow();
+            await expect(restoreHome(name, owner.id, `traversal-rows-${crypto.randomUUID()}`)).rejects.toThrow();
         } finally {
             spy.mockRestore();
         }

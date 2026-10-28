@@ -1,6 +1,5 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
@@ -216,7 +215,7 @@ describe('concurrent same-name create → exactly one 409', () => {
         ['s.txt', 'ſ.txt'],
         ['office.txt', 'oﬃce.txt'],
     ])("creates of %s and %s keep the winner's bytes, path-based (local)", async (first, second) => {
-        const config = createTestMountConfig(`race-bytes-local-${randomUUID()}`, 'local');
+        const config = createTestMountConfig(`race-bytes-local-${crypto.randomUUID()}`, 'local');
         const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
@@ -443,7 +442,7 @@ describe('a local rename or create onto bytes already on disk', () => {
     async function create(mount: Mount, kind: CreateKind, parentId: string, name: string): Promise<string> {
         if (kind === 'folder') return mount.createFolder(parentId, name);
         if (kind === 'file') return mount.createFile(parentId, name, 'text/plain', 3, Buffer.from('new'));
-        const tempId = randomUUID();
+        const tempId = crypto.randomUUID();
         const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Buffer.from('new'));
         try {
             return await mount.createFileFromTemp(parentId, name, 'text/plain', size, hash, tempId);

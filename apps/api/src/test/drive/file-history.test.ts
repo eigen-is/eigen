@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath, FileEditorContent } from '@workspace/lib/types/drive';
@@ -283,7 +282,7 @@ describe('FileHistory', () => {
             metaDb.db
                 .insert(fileEvents)
                 .values({
-                    id: randomUUID(),
+                    id: crypto.randomUUID(),
                     pathId: fileId,
                     eventType: 'renamed',
                     actorUserId: 'u6',
@@ -326,7 +325,7 @@ describe('FileHistory edited-row prune', () => {
         metaDb.db
             .insert(fileEvents)
             .values({
-                id: randomUUID(),
+                id: crypto.randomUUID(),
                 pathId: fileId,
                 eventType: 'created',
                 actorUserId: 'u7',
@@ -339,7 +338,7 @@ describe('FileHistory edited-row prune', () => {
             metaDb.db
                 .insert(fileEvents)
                 .values({
-                    id: randomUUID(),
+                    id: crypto.randomUUID(),
                     pathId: fileId,
                     eventType: 'edited',
                     actorUserId: 'u7',

@@ -2,7 +2,6 @@
 // other side: guests hear about an invitation or a cancellation, and the organizer hears about an answer. Calendar
 // hands its event changes to it, so the routes and the invitation code share one path.
 
-import { randomUUID } from 'node:crypto';
 import { heldAttendees, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
@@ -167,10 +166,10 @@ export async function writeEvent(
     if (input.parentEventId) return writeOverride(calendar, calendarId, input);
 
     // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
-    const uri = `${randomUUID()}.ics`;
-    const uid = input.uid || randomUUID();
+    const uri = `${crypto.randomUUID()}.ics`;
+    const uid = input.uid || crypto.randomUUID();
     if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
-    const event = eventForResource({ id: randomUUID(), calendarId, uid, input, now: new Date() });
+    const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input, now: new Date() });
     await calendar.writeResource({
         calendarId,
         uri,
@@ -194,7 +193,7 @@ async function writeOverride(calendar: Calendar, calendarId: string, input: Crea
     }
 
     const override = eventForResource({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         calendarId,
         uid: parent.uid,
         input: { ...input, rrule: null },
@@ -427,7 +426,7 @@ export async function moveEvent(
         }
         // A name the target already holds becomes a fresh one, or the move would collide on (calendarId, uri).
         const taken = !!davStore.getResourceMeta(calendar, targetCalendarId, resource.uri);
-        const targetUri = taken ? `${randomUUID()}.ics` : resource.uri;
+        const targetUri = taken ? `${crypto.randomUUID()}.ics` : resource.uri;
 
         calendar.db.transaction((tx) => {
             const sourceCtag = calendar.bumpCtag(tx, calendarId);

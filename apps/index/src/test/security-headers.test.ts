@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
 import {
     buildContentSecurityPolicy,
     buildSecurityMetaTags,
@@ -20,7 +19,7 @@ describe('buildSecurityMetaTags', () => {
 
 describe('buildContentSecurityPolicy', () => {
     test('prod script-src pins the theme script by a hash of its exact bytes', () => {
-        const expected = `'sha256-${createHash('sha256').update(THEME_FLASH_SCRIPT).digest('base64')}'`;
+        const expected = `'sha256-${new Bun.CryptoHasher('sha256').update(THEME_FLASH_SCRIPT).digest('base64')}'`;
         expect(themeScriptCspSource()).toBe(expected);
 
         const prod = buildContentSecurityPolicy({ dev: false, apiHost: '/eigen' });
@@ -57,7 +56,7 @@ describe('buildContentSecurityPolicy', () => {
 });
 
 describe('withInlineScriptHashes', () => {
-    const sha = (body: string) => `'sha256-${createHash('sha256').update(body).digest('base64')}'`;
+    const sha = (body: string) => `'sha256-${new Bun.CryptoHasher('sha256').update(body).digest('base64')}'`;
     const page = (scripts: string) =>
         `<html><head>${buildSecurityMetaTags({ dev: false, apiHost: '/eigen' })}<script>${THEME_FLASH_SCRIPT}</script></head><body>${scripts}</body></html>`;
 

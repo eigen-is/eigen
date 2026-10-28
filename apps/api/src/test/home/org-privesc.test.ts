@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { member as memberSchema } from '../../../auth-schema';
 import { requireAdmin } from '../../lib/auth/access';
@@ -30,7 +29,7 @@ describe('Org role privilege escalation: requireAdmin is scoped to the default o
         defaultOrgId = config.orgId;
 
         // Throwaway attacker: a normal user, auto-joined to the default org as 'member'.
-        const email = `attacker-${randomUUID()}@test.eigen.is`;
+        const email = `attacker-${crypto.randomUUID()}@test.eigen.is`;
         const password = 'testpassword123';
         const signUp = await auth.api.signUpEmail({ body: { email, password, name: 'Attacker' } });
         attackerId = signUp.user.id;
@@ -42,7 +41,7 @@ describe('Org role privilege escalation: requireAdmin is scoped to the default o
         // (userId + no session — the path setup uses), reproducing the exploit precondition even
         // though allowUserToCreateOrganization:false blocks the session-bearing route.
         const org2 = await auth.api.createOrganization({
-            body: { name: 'Attacker Org', slug: `attacker-${randomUUID()}`, userId: attackerId },
+            body: { name: 'Attacker Org', slug: `attacker-${crypto.randomUUID()}`, userId: attackerId },
         });
         if (!org2) throw new Error('failed to create second org');
         secondOrgId = org2.id;
@@ -53,7 +52,7 @@ describe('Org role privilege escalation: requireAdmin is scoped to the default o
         const res = await authedRequest(ctx.bob.user.sessionToken, '/auth/organization/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: 'Bob Org', slug: `bob-${randomUUID()}` }),
+            body: JSON.stringify({ name: 'Bob Org', slug: `bob-${crypto.randomUUID()}` }),
         });
         expect(res.status).toBe(403);
     });

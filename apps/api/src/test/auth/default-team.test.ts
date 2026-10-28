@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import { teamOwnerId } from '@workspace/lib/types';
 import { and, eq } from 'drizzle-orm';
@@ -54,7 +53,7 @@ describe('a new user joins the default team', () => {
     }
 
     async function adminCreatesUser(local: string): Promise<{ id: string; email: string }> {
-        const email = `${local}-${randomUUID().slice(0, 8)}@test.eigen.is`;
+        const email = `${local}-${crypto.randomUUID().slice(0, 8)}@test.eigen.is`;
         const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/admin/create-user', {
             method: 'POST',
             headers: JSON_HEADERS,
@@ -83,7 +82,7 @@ describe('a new user joins the default team', () => {
             await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/default/folder/${root.id}`, {
                 method: 'POST',
                 headers: JSON_HEADERS,
-                body: JSON.stringify({ folderName: `everyone-${randomUUID()}` }),
+                body: JSON.stringify({ folderName: `everyone-${crypto.randomUUID()}` }),
             }),
         );
         const setAcl = (body: object) =>
@@ -139,7 +138,7 @@ describe('a new user joins the default team', () => {
         await updateServerSettings({ guests: { openSignup: true } });
         const send = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         try {
-            const email = `guest-${randomUUID()}@external.com`;
+            const email = `guest-${crypto.randomUUID()}@external.com`;
             const requested = await ctx.app.handle(
                 new Request('http://localhost/guest-auth/request-otp', {
                     method: 'POST',
@@ -176,7 +175,9 @@ describe('a new user joins the default team', () => {
         });
 
         test('a deleted default team still lets the user join the organization', async () => {
-            const gone = await auth.api.createTeam({ body: { name: `Gone ${randomUUID()}`, organizationId: orgId } });
+            const gone = await auth.api.createTeam({
+                body: { name: `Gone ${crypto.randomUUID()}`, organizationId: orgId },
+            });
             await updateServerConfig({ defaultTeamId: gone.id });
             getAuthDrizzleDb().delete(teamSchema).where(eq(teamSchema.id, gone.id)).run();
 

@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, FONT_FACES } from '@workspace/lib/constants/fonts';
@@ -15,7 +14,7 @@ function faces(css: string, bytesOf: (src: string) => Buffer): string[] {
         .map((block) => {
             const field = (name: string) => block.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim();
             const src = block.match(/url\("([^"]+)"\)/)?.[1] ?? '';
-            const hash = createHash('sha256').update(bytesOf(src)).digest('hex');
+            const hash = new Bun.CryptoHasher('sha256').update(bytesOf(src)).digest('hex');
             return `${field('font-family')} | ${field('font-weight')} | ${field('font-style')} | ${hash}`;
         })
         .sort();

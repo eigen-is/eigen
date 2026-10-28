@@ -1,4 +1,7 @@
-import { randomUUID } from 'node:crypto';
+// Whole-file calendar transfer in the iCalendar format. Export joins the stored events of one
+// calendar into a single .ics file. Import splits a file into series and saves each one the way a
+// device sync would, so the same rules and limits apply. Routes for "import" and "export" call it.
+
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -90,7 +93,7 @@ export async function importEvents(
         }
         for (const vevent of root.getAllSubcomponents('vevent')) {
             vevents++;
-            if (!uidOf(vevent)) vevent.updatePropertyWithValue('uid', randomUUID());
+            if (!uidOf(vevent)) vevent.updatePropertyWithValue('uid', crypto.randomUUID());
             const uid = uidOf(vevent);
             const group = series.get(uid) ?? { master: null, overrides: [] };
             series.set(uid, group);
@@ -133,7 +136,7 @@ export async function importEvents(
             const body = serializeResource(resource);
             let put: PutResourceResult;
             try {
-                put = await calendar.putResource(calendarId, `${randomUUID()}.ics`, body, {
+                put = await calendar.putResource(calendarId, `${crypto.randomUUID()}.ics`, body, {
                     ifMatch: null,
                     ifNoneMatch: '*',
                     actor,

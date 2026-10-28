@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
@@ -22,7 +21,11 @@ describe('Mail turned off on the server', () => {
 
     test('every mail route refuses, and a home booted meanwhile has no Maildir and no mail hits', async () => {
         process.env['MAIL_ENABLED'] = '0';
-        const user = await createTestUser(`mail-off-${randomUUID()}@test.eigen.is`, 'testpassword123', 'Mail Off');
+        const user = await createTestUser(
+            `mail-off-${crypto.randomUUID()}@test.eigen.is`,
+            'testpassword123',
+            'Mail Off',
+        );
 
         for (const route of ['mailboxes', 'mailbox/inbox', 'message/some-id']) {
             const res = await authedRequest(user.sessionToken, `/mail/${user.id}/${route}`);
@@ -48,7 +51,11 @@ describe('Mail turned off on the server', () => {
 
     // A loaded home and the admin's cold read of an unloaded one report the same storage.
     test('mail kept from before still counts toward storage', async () => {
-        const user = await createTestUser(`mail-kept-${randomUUID()}@test.eigen.is`, 'testpassword123', 'Mail Kept');
+        const user = await createTestUser(
+            `mail-kept-${crypto.randomUUID()}@test.eigen.is`,
+            'testpassword123',
+            'Mail Kept',
+        );
         const before = await getHome(user.id);
         await before.mail.mailboxDeliver(Buffer.from(makeEml('Kept while mail is off', { to: user.email })));
         await before.mail.mailboxGet(MAILBOX_INBOX);

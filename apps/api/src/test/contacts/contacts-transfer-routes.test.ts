@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { VCARD_MIMES } from '@workspace/lib/types/drive';
@@ -21,7 +20,7 @@ import {
 import { importFromDriveRequest, importRaw } from '../transfer-test-helpers';
 
 // LF-terminated 3.0 cards, the way every desktop client writes an export.
-const card = (fn: string, email: string, uid: string = randomUUID()) =>
+const card = (fn: string, email: string, uid: string = crypto.randomUUID()) =>
     `${[
         'BEGIN:VCARD',
         'VERSION:3.0',
@@ -191,7 +190,7 @@ describe('Contacts transfer routes', () => {
 
     test('import-from-drive on a folder named like a vCard is 400', async () => {
         const folder = await drivePost<DrivePath>(alice.sessionToken, alice.id, mountId, `folder/${rootId}`, {
-            folderName: `folder-${randomUUID()}.vcf`,
+            folderName: `folder-${crypto.randomUUID()}.vcf`,
         });
 
         const res = await importFromDrive(alice, folder);
@@ -231,7 +230,7 @@ describe('Contacts transfer routes', () => {
             card('Ada Second', 'ada-second@vcard-routes.example') +
             card('Bob Second', 'bob-second@vcard-routes.example');
         const res = await app.handle(
-            new Request(`http://localhost/dav/addressbooks/${alice.id}/contacts/${randomUUID()}.vcf`, {
+            new Request(`http://localhost/dav/addressbooks/${alice.id}/contacts/${crypto.randomUUID()}.vcf`, {
                 method: 'PUT',
                 headers: {
                     Authorization: basicAuth(alice.email),

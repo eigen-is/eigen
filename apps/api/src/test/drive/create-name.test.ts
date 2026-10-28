@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getHome } from '../../lib/home/get-home';
 import { authedRequest, createTestUserOnStorage, driveGet, drivePost, getTestContext } from '../setup';
@@ -22,7 +21,7 @@ describe('Drive.create stem validation', () => {
             ctx.alice.user.id,
             MOUNT,
             `folder/${rootId}`,
-            { folderName: `create-name-${randomUUID()}` },
+            { folderName: `create-name-${crypto.randomUUID()}` },
         );
         folderId = folder.id;
     });

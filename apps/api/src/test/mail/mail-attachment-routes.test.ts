@@ -1,6 +1,5 @@
 import type { Mock } from 'bun:test';
 import { afterEach, beforeAll, beforeEach, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
@@ -147,8 +146,8 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         const list = await assertJson<EmailSummary[]>(listRes);
         messageId = findOrFail(list, (m) => m.subject === SUBJECT).id;
 
-        const email = `attachment-route-guest-${randomUUID()}@external.com`;
-        const password = randomUUID();
+        const email = `attachment-route-guest-${crypto.randomUUID()}@external.com`;
+        const password = crypto.randomUUID();
         const created = await auth.api.createUser({ body: { email, password, name: 'Route Guest', role: 'user' } });
         // Set to 'guest' directly — the admin plugin only allows 'user'/'admin' via the API.
         getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();

@@ -3,7 +3,6 @@
 // routes call it to store and serve these images. The avatars folder is a second source of truth beside the
 // cards, not a cache.
 
-import { randomUUID } from 'node:crypto';
 import { PATHS } from '../config/paths';
 import { ApiError } from '../core';
 import { generateImagePreview } from '../shared/thumbnails';
@@ -57,7 +56,7 @@ export async function uploadAvatar(contacts: Contacts, file: File): Promise<stri
         format = 'jpeg';
     }
 
-    const webpName = `${randomUUID()}.webp`;
+    const webpName = `${crypto.randomUUID()}.webp`;
     const embedName = stagedEmbedName(webpName, format);
     // The encodes stay outside the lock; the writes and their byte delta take it, so the sweep's recount can't land between them.
     await contacts.writeLock.run(async () => {

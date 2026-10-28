@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
@@ -171,7 +170,7 @@ describe('direct (non-queued) PUTs', () => {
         const { mount, fault } = createS3Mount('direct-upload-stall');
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
-        const tempId = randomUUID();
+        const tempId = crypto.randomUUID();
         writeFileSync(mount.getTempPath(tempId), 'upload');
 
         fault.parkWrites = true;

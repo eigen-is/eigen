@@ -2,7 +2,6 @@
 // the base, so a caller can't reach outside it. Besides plain reads and writes it offers the durable forms, which
 // fsync the bytes and the folder, and atomic writes, which a reader sees whole or not at all.
 
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
@@ -109,7 +108,7 @@ export class LocalFilesystem {
     public async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
         const tempPath = path.join(
             path.dirname(filePath),
-            `.${path.basename(filePath)}${ATOMIC_TEMP_INFIX}${randomUUID()}`,
+            `.${path.basename(filePath)}${ATOMIC_TEMP_INFIX}${crypto.randomUUID()}`,
         );
         try {
             await this.writeDurable(tempPath, data);

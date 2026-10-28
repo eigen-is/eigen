@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
 import {
     organization as organizationSchema,
@@ -20,7 +19,7 @@ describe('pinDefaultTeam', () => {
     const madeTeamIds: string[] = [];
 
     function addTeam(name: string, createdAt: Date): string {
-        const id = randomUUID();
+        const id = crypto.randomUUID();
         getAuthDrizzleDb().insert(teamSchema).values({ id, name, organizationId: orgId, createdAt }).run();
         madeTeamIds.push(id);
         return id;
@@ -103,7 +102,11 @@ describe('pinDefaultTeam', () => {
 
     test('adds no existing member to the team it pins', async () => {
         await updateServerConfig({ defaultTeamId: undefined });
-        const user = await createTestUser(`unpinned-${randomUUID()}@test.eigen.is`, 'testpassword123', 'Unpinned');
+        const user = await createTestUser(
+            `unpinned-${crypto.randomUUID()}@test.eigen.is`,
+            'testpassword123',
+            'Unpinned',
+        );
         await pinDefaultTeam();
         expect(getServerConfig()?.defaultTeamId).toBe(setupTeamId);
         const teamRows = getAuthDrizzleDb()

@@ -2,7 +2,6 @@
 // and the places inside an archive where each part of a home goes. It also resolves a path inside a folder without
 // ever leaving it, which every restore step needs before it touches the disk.
 
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -67,7 +66,7 @@ export function wipeBackupStaging(): void {
 // the staging root so a crash leaves nothing behind that the boot-time wipe does not clear, and on
 // the same filesystem as the artifacts, so the last rename of a pack is atomic.
 export function getBackupTempPath(suffix: string): string {
-    return path.join(getBackupStagingDir('archive'), `${randomUUID()}${suffix}`);
+    return path.join(getBackupStagingDir('archive'), `${crypto.randomUUID()}${suffix}`);
 }
 
 const NO_CONTROL = new RegExp(NO_CONTROL_PATTERN);

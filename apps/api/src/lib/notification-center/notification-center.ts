@@ -3,7 +3,6 @@
 // tag always replaces the older notification, instead of piling up. One that asks to coalesce and comes within a
 // short time of it raises no new live alert.
 
-import { randomUUID } from 'node:crypto';
 import type { Notification, NotificationPersistInput } from '@workspace/lib/types/notification';
 import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -41,7 +40,7 @@ export class NotificationCenter {
                 ? this.db.select().from(schema.notifications).where(eq(schema.notifications.tag, input.tag)).get()
                 : undefined;
         const row = {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             type: input.type,
             actorEmail: input.actorEmail ?? null,
             title: input.title,

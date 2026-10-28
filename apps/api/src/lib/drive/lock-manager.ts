@@ -1,4 +1,8 @@
-import { randomUUID } from 'node:crypto';
+// WebDAV locks for one Drive. A client such as an office app locks a file while it edits, and the
+// manager decides which later requests may write: shared locks can coexist, an exclusive lock
+// excludes the rest. It also covers a folder lock that reaches the items inside. Locks live in
+// memory and expire on their own. The WebDAV handlers call it for LOCK, UNLOCK and every write.
+
 import { ApiError } from '../core/errors';
 
 // In-memory WebDAV lock state for a single Drive (one per Home). Locks are scoped to the
@@ -66,7 +70,7 @@ export class LockManager {
         if ((this.byPath.get(args.pathId)?.size ?? 0) >= MAX_LOCKS_PER_PATH) {
             throw new ApiError(423, 'Too many locks');
         }
-        const token = `urn:uuid:${randomUUID()}`;
+        const token = `urn:uuid:${crypto.randomUUID()}`;
         const lock: Lock = {
             token,
             pathId: args.pathId,

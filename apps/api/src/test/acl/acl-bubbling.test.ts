@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { DriveACL, InviteResult } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
@@ -213,7 +212,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.id,
                 aliceMountId,
                 `folder/${aliceRootId}/create/doc`,
-                { fileName: `acl-bubble-other-${randomUUID()}` },
+                { fileName: `acl-bubble-other-${crypto.randomUUID()}` },
             );
             const findContainerPath = drive.findContainerPath.bind(drive);
             let lookups = 0;
@@ -477,8 +476,8 @@ describe('ACL Bubbling', () => {
 
     describe('a guest', () => {
         test('with write on a chat is refused an invite, which adds no one and mails no one', async () => {
-            const email = `invite-guest-${randomUUID()}@external.com`;
-            const password = randomUUID();
+            const email = `invite-guest-${crypto.randomUUID()}@external.com`;
+            const password = crypto.randomUUID();
             const created = await auth.api.createUser({ body: { email, password, name: 'Guest', role: 'user' } });
             // The admin plugin only makes 'user' or 'admin': demote directly.
             getAuthDrizzleDb()

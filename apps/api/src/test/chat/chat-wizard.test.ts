@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { ChatMatch } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -61,7 +60,7 @@ async function byMembers(token: string, ownerId: string, emails: string): Promis
 
 // A throwaway user with a fresh default mount — isolates folder-migration tests from the shared trio.
 async function signUpFreshUser(label: string): Promise<{ id: string; token: string }> {
-    const email = `chats-${label}-${randomUUID()}@test.eigen.is`;
+    const email = `chats-${label}-${crypto.randomUUID()}@test.eigen.is`;
     const password = 'testpassword123';
     const signUp = await auth.api.signUpEmail({ body: { email, password, name: `Chats ${label}` } });
     const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });
@@ -517,7 +516,7 @@ describe('Chat wizard — create with members', () => {
         // The share email is the only way an account-less person ever learns about the chat.
         await setUserAclEmail(true);
         await setGuestAclEmail(true);
-        const outsiderEmail = `outsider-${randomUUID()}@example.org`;
+        const outsiderEmail = `outsider-${crypto.randomUUID()}@example.org`;
 
         const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
@@ -597,8 +596,8 @@ describe('Chat wizard — create with members', () => {
     });
 
     test('rejects guest callers with 403', async () => {
-        const email = `wizard-guest-${randomUUID()}@external.com`;
-        const password = randomUUID();
+        const email = `wizard-guest-${crypto.randomUUID()}@external.com`;
+        const password = crypto.randomUUID();
         const created = await auth.api.createUser({ body: { email, password, name: 'Wizard Guest', role: 'user' } });
         // Set to 'guest' directly — the admin plugin only allows 'user'/'admin' via the API.
         getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();

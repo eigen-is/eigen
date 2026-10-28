@@ -2,7 +2,6 @@
 // and turns a file into the rows that search and listing read, so that the file stays the only source of truth.
 // Calendar and the CalDAV code write through it.
 
-import { randomUUID } from 'node:crypto';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 import { and, eq, sql } from 'drizzle-orm';
 import type ICAL from 'ical.js';
@@ -89,7 +88,7 @@ export function projectRows(
     const now = new Date();
     const claimed = new Set<string>();
     const identified = projected.events.map((event) => {
-        const id = event.eventId && !claimed.has(event.eventId) ? event.eventId : randomUUID();
+        const id = event.eventId && !claimed.has(event.eventId) ? event.eventId : crypto.randomUUID();
         claimed.add(id);
         return { event, id };
     });
@@ -155,7 +154,7 @@ export function prepareResource(
     resource: ICAL.Component,
     existingId: string | null,
 ): PreparedResource {
-    const id = existingId ?? randomUUID();
+    const id = existingId ?? crypto.randomUUID();
     const text = serializeResource(resource);
     const bytes = Buffer.from(new TextEncoder().encode(text));
     return {

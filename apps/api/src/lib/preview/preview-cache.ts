@@ -3,7 +3,6 @@
 // a card's preview is built in the transform process, a plain text file's and an image's here. A name stamped with
 // updatedAt and the format lets a new version or renderer write a new file, so a response can be cached long.
 
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
@@ -122,7 +121,7 @@ export async function pruneOldVersions(previewsDir: string, pathId: string, keep
 // Temp + rename: readCachedText deletes a file it can't parse, so a reader catching a half-written one
 // would unlink the landed regeneration. Dot-prefixed so pruneOldVersions and stale reads never see it.
 async function writeCacheFile(cacheFile: string, data: string | Buffer): Promise<void> {
-    const tempFile = path.join(path.dirname(cacheFile), `.${path.basename(cacheFile)}.tmp-${randomUUID()}`);
+    const tempFile = path.join(path.dirname(cacheFile), `.${path.basename(cacheFile)}.tmp-${crypto.randomUUID()}`);
     try {
         await Bun.write(tempFile, data);
         await fs.promises.rename(tempFile, cacheFile);

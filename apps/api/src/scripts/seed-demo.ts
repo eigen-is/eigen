@@ -4,7 +4,7 @@
 // file history and notifications fill in. The hourly demo reset wipes the data root and runs it again, and it refuses
 // a completed setup. EIGEN_DATA_ROOT is required; MAIL_DOMAIN, DOMAIN and EIGEN_DEMO_ADMIN_PASSWORD are optional.
 
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
@@ -536,7 +536,7 @@ async function main(): Promise<void> {
             }
             // Title = anchored text, matching the editor's create flow.
             const card: CommentCard = {
-                id: randomUUID(),
+                id: crypto.randomUUID(),
                 title: comment.anchor.slice(0, 100),
                 description: '',
                 color: DEFAULT_CARD_COLOR,
@@ -828,9 +828,9 @@ async function main(): Promise<void> {
     const inviteIcs = (invite: SeededInvite, organizer: { name: string; email: string }, attendee: User): string => {
         const { start, end } = timedSlot(invite);
         const event: CalendarEvent = {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             calendarId: '',
-            uid: `${randomUUID()}@${organizer.email.split('@')[1]}`,
+            uid: `${crypto.randomUUID()}@${organizer.email.split('@')[1]}`,
             uri: '',
             title: invite.title,
             description: invite.description ?? null,
@@ -875,7 +875,7 @@ async function main(): Promise<void> {
         ): Promise<Buffer> => {
             const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
             date.setHours(message.hour, 0, 0, 0);
-            const messageId = `${randomUUID()}@${MAIL_DOMAIN}`;
+            const messageId = `${crypto.randomUUID()}@${MAIL_DOMAIN}`;
             const from = senderOf(message);
             const ownHtml = o.html ?? textToHtml(message.text);
             const reply = previous && ownHtml + formatReplyQuote(previous.from, previous.date, previous.html);

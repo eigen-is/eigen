@@ -1,4 +1,8 @@
-import { randomUUID } from 'node:crypto';
+// A calendar share lets one user see another user's calendar next to their own. This file keeps the
+// receiving side: each Home stores one row per calendar shared with it, with the colour and
+// visibility the reader chose. It also answers what a reader may do on a calendar of this Home.
+// The Calendar facade and the share routes call it, and so does reconciliation when shares change.
+
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -67,7 +71,7 @@ function insertSharedCalendar(
     calendar.db
         .insert(schema.sharedCalendars)
         .values({
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             ownerUserId,
             calendarId,
             calendarName,

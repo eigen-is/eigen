@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { MountInfo } from '@workspace/lib/types';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
@@ -364,7 +363,7 @@ describe('Share Registry', () => {
             const teamRes = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: `Team Source ${randomUUID()}`, organizationId: orgId }),
+                body: JSON.stringify({ name: `Team Source ${crypto.randomUUID()}`, organizationId: orgId }),
             });
             const team = (await teamRes.json()) as { id: string; name: string };
             const teamOwner = teamOwnerId(team.id);
@@ -401,7 +400,7 @@ describe('Share Registry', () => {
             );
             const folder = (await folderRes.json()) as DrivePath;
 
-            const email = `team-source-${randomUUID()}@test.eigen.is`;
+            const email = `team-source-${crypto.randomUUID()}@test.eigen.is`;
             await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/drive/${teamOwner}/${teamMountId}/path/${folder.id}/acl`,
@@ -455,8 +454,8 @@ describe('Share Registry', () => {
             });
 
             // Two teams: the source owns the drive path, the target is the ACL entry it is granted to.
-            const sourceTeamId = await createTeam(ctx, orgId, `Member Source ${randomUUID()}`);
-            const targetTeamId = await createTeam(ctx, orgId, `Member Target ${randomUUID()}`);
+            const sourceTeamId = await createTeam(ctx, orgId, `Member Source ${crypto.randomUUID()}`);
+            const targetTeamId = await createTeam(ctx, orgId, `Member Target ${crypto.randomUUID()}`);
             const sourceOwner = teamOwnerId(sourceTeamId);
             const targetOwner = teamOwnerId(targetTeamId);
 
@@ -480,7 +479,7 @@ describe('Share Registry', () => {
             expect(await getEntriesForTarget(targetOwner)).toContain(sourceOwner);
 
             // A user who joins the target team only afterwards — the ACL fan-out already passed them by.
-            const email = `team-member-${randomUUID()}@test.eigen.is`;
+            const email = `team-member-${crypto.randomUUID()}@test.eigen.is`;
             const { auth } = await import('../../lib/auth/auth');
             const signUp = await auth.api.signUpEmail({
                 body: { email, password: 'testpassword123', name: 'Team Member User' },
@@ -518,7 +517,7 @@ describe('Share Registry', () => {
             const teamRes = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: `Team Grant ${randomUUID()}`, organizationId: orgId }),
+                body: JSON.stringify({ name: `Team Grant ${crypto.randomUUID()}`, organizationId: orgId }),
             });
             const team = (await teamRes.json()) as { id: string; name: string };
             const teamOwner = teamOwnerId(team.id);
@@ -546,12 +545,12 @@ describe('Share Registry', () => {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fileName: `team-grant-doc-${randomUUID()}` }),
+                    body: JSON.stringify({ fileName: `team-grant-doc-${crypto.randomUUID()}` }),
                 },
             );
             const doc = (await docRes.json()) as DrivePath;
 
-            const guestEmail = `team-guest-${randomUUID()}@external.com`;
+            const guestEmail = `team-guest-${crypto.randomUUID()}@external.com`;
 
             const { updateServerSettings } = await import('../../lib/config/server-settings');
             await updateServerSettings({ guests: { openSignup: false } });

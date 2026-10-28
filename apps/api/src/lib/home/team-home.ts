@@ -2,7 +2,6 @@
 // team: members reach it through their own access, and a notification to the team goes to them.
 // The team's admins add and change its drives here.
 
-import { randomUUID } from 'node:crypto';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
@@ -73,7 +72,7 @@ export class TeamHome extends Home {
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
         }
 
-        const mountId = randomUUID().slice(0, 8);
+        const mountId = crypto.randomUUID().slice(0, 8);
         const mountSettings: MountSettings = {
             storageType: resolvedType,
             maxSizeMB: input.maxSizeMB ?? serverSettings.quotas.defaultMountMaxSizeMB,

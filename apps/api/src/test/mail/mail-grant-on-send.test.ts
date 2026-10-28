@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
@@ -159,9 +158,9 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 1. External To + Cc both gain a read ACL; only send copies go out (no share email leaks).
     test('grants read to external To and Cc recipients; no share emails; registry for unknown', async () => {
         startCapture();
-        const docId = await createDoc(`grant-tocc-${randomUUID()}`);
-        const toEmail = `grant-to-${randomUUID()}@external.example`;
-        const ccEmail = `grant-cc-${randomUUID()}@external.example`;
+        const docId = await createDoc(`grant-tocc-${crypto.randomUUID()}`);
+        const toEmail = `grant-to-${crypto.randomUUID()}@external.example`;
+        const ccEmail = `grant-cc-${crypto.randomUUID()}@external.example`;
 
         const { res, subject } = await sendWithGrant({ to: toEmail, cc: ccEmail, refs: [ref(docId)], grant: [docId] });
         expect(res.status).toBe(200);
@@ -179,9 +178,9 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 2. A bcc'd address is never granted (it is excluded from the grant email set by construction).
     test('a bcc identity is never written to the ACL', async () => {
         startCapture();
-        const docId = await createDoc(`grant-bcc-${randomUUID()}`);
-        const toEmail = `grant-to2-${randomUUID()}@external.example`;
-        const bccEmail = `grant-bcc-${randomUUID()}@external.example`;
+        const docId = await createDoc(`grant-bcc-${crypto.randomUUID()}`);
+        const toEmail = `grant-to2-${crypto.randomUUID()}@external.example`;
+        const bccEmail = `grant-bcc-${crypto.randomUUID()}@external.example`;
 
         const { res } = await sendWithGrant({ to: toEmail, bcc: bccEmail, refs: [ref(docId)], grant: [docId] });
         expect(res.status).toBe(200);
@@ -194,8 +193,8 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 3. A recipient who already reads the doc gets no additional ACL entry.
     test('a recipient who already has read gets no new ACL entry', async () => {
         startCapture();
-        const docId = await createDoc(`grant-hasread-${randomUUID()}`);
-        const email = `grant-existing-${randomUUID()}@external.example`;
+        const docId = await createDoc(`grant-hasread-${crypto.randomUUID()}`);
+        const email = `grant-existing-${crypto.randomUUID()}@external.example`;
         await setAcl(docId, { add: [{ id: email, read: true, write: false }] });
 
         const { res } = await sendWithGrant({ to: email, refs: [ref(docId)], grant: [docId] });
@@ -211,10 +210,10 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
         await updateServerSettings({ guests: { openSignup: false } });
         try {
             startCapture();
-            const docId = await createDoc(`grant-public-${randomUUID()}`);
+            const docId = await createDoc(`grant-public-${crypto.randomUUID()}`);
             await setAcl(docId, { visibility: 'public-read' });
             const before = await getAcl(docId);
-            const email = `grant-public-ext-${randomUUID()}@example.com`;
+            const email = `grant-public-ext-${crypto.randomUUID()}@example.com`;
 
             const { res } = await sendWithGrant({ to: email, refs: [ref(docId)], grant: [docId] });
             expect(res.status).toBe(200);
@@ -237,7 +236,7 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ organizationId: orgId }),
         });
-        const teamId = await createTeam(ctx, orgId, `Grant Source ${randomUUID()}`);
+        const teamId = await createTeam(ctx, orgId, `Grant Source ${crypto.randomUUID()}`);
         // Alice must be a member to write to (and share from) the team drive.
         await addMember(ctx, teamId, ctx.alice.user.id);
         await addTeamMount(ctx, teamId, 'Team Drive');
@@ -246,14 +245,14 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
         const teamMountId = await firstMountId(token, teamOwner);
         const teamRoot = await driveGet<DrivePath>(token, teamOwner, teamMountId, 'root');
         const doc = await drivePost<DrivePath>(token, teamOwner, teamMountId, `folder/${teamRoot.id}/create/doc`, {
-            fileName: `grant-team-public-${randomUUID()}`,
+            fileName: `grant-team-public-${crypto.randomUUID()}`,
         });
         await drivePut(token, teamOwner, teamMountId, `path/${doc.id}/acl`, { visibility: 'public-read' });
 
         await updateServerSettings({ guests: { openSignup: false } });
         try {
             startCapture();
-            const email = `grant-team-ext-${randomUUID()}@example.com`;
+            const email = `grant-team-ext-${crypto.randomUUID()}@example.com`;
 
             const { res } = await sendWithGrant({
                 to: email,
@@ -271,9 +270,9 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 5. Chat exclusion keys off the RESOLVED path type, not the client-authored driveType.
     test('a chat referenced with a lied driveType:doc is rejected by resolved type; nothing sent', async () => {
         startCapture();
-        const chatId = await createChat(`grant-chat-${randomUUID()}`);
+        const chatId = await createChat(`grant-chat-${crypto.randomUUID()}`);
         const before = await getAcl(chatId);
-        const email = `grant-chat-ext-${randomUUID()}@external.example`;
+        const email = `grant-chat-ext-${crypto.randomUUID()}@external.example`;
 
         const { res } = await sendWithGrant({
             to: email,
@@ -288,7 +287,7 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 5b. An existing write-only entry keeps its write bit when upgraded to read.
     test('write bit is preserved when upgrading a write-only entry to read', async () => {
         startCapture();
-        const docId = await createDoc(`grant-writebit-${randomUUID()}`);
+        const docId = await createDoc(`grant-writebit-${crypto.randomUUID()}`);
         const bobEmail = ctx.bob.user.email;
         await setAcl(docId, { add: [{ id: bobEmail, read: false, write: true }] });
 
@@ -301,10 +300,10 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 6. A read-only sharer cannot grant onward: 403, draft kept, ACL untouched, nothing sent.
     test('a read-only sharer cannot grant: 403, draft kept, ACL unchanged, nothing sent', async () => {
         startCapture();
-        const docId = await createDoc(`grant-readonly-${randomUUID()}`);
+        const docId = await createDoc(`grant-readonly-${crypto.randomUUID()}`);
         await setAcl(docId, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
         const before = await getAcl(docId);
-        const email = `grant-ro-ext-${randomUUID()}@external.example`;
+        const email = `grant-ro-ext-${crypto.randomUUID()}@external.example`;
 
         const { draftId, res } = await sendWithGrant({
             token: ctx.bob.user.sessionToken,
@@ -327,12 +326,12 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     //    aborts the whole grant — the first doc must NOT gain a grant.
     test('preflight-all: an unshareable second ref aborts with no grant on the first', async () => {
         startCapture();
-        const docA = await createDoc(`grant-pf-a-${randomUUID()}`);
-        const docB = await createDoc(`grant-pf-b-${randomUUID()}`);
+        const docA = await createDoc(`grant-pf-a-${crypto.randomUUID()}`);
+        const docB = await createDoc(`grant-pf-b-${crypto.randomUUID()}`);
         await setAcl(docA, { add: [{ id: ctx.bob.user.email, read: true, write: true }] });
         await setAcl(docB, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
         const beforeA = await getAcl(docA);
-        const email = `grant-pf-ext-${randomUUID()}@external.example`;
+        const email = `grant-pf-ext-${crypto.randomUUID()}@external.example`;
 
         const { res } = await sendWithGrant({
             token: ctx.bob.user.sessionToken,
@@ -350,8 +349,8 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 7b. A mid-loop runtime failure never rolls back grants that already persisted.
     test('a mid-loop mutation failure never rolls back earlier grants', async () => {
         startCapture();
-        const docA = await createDoc(`grant-midfail-a-${randomUUID()}`);
-        const docB = await createDoc(`grant-midfail-b-${randomUUID()}`);
+        const docA = await createDoc(`grant-midfail-a-${crypto.randomUUID()}`);
+        const docB = await createDoc(`grant-midfail-b-${crypto.randomUUID()}`);
 
         const originalUpdate = Drive.prototype.updateACLDelta;
         daclSpy = spyOn(Drive.prototype, 'updateACLDelta').mockImplementation(function (
@@ -362,7 +361,7 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
             return originalUpdate.apply(this, args);
         });
 
-        const email = `grant-midfail-ext-${randomUUID()}@external.example`;
+        const email = `grant-midfail-ext-${crypto.randomUUID()}@external.example`;
         const { draftId, res } = await sendWithGrant({
             to: email,
             refs: [ref(docA), ref(docB)],
@@ -383,7 +382,7 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 8. suppressShareEmail 'all' stops the email but the in-app share notification still fires.
     test('an in-app share notification is still persisted for a registered recipient', async () => {
         startCapture();
-        const docId = await createDoc(`grant-notify-${randomUUID()}`);
+        const docId = await createDoc(`grant-notify-${crypto.randomUUID()}`);
 
         const { res } = await sendWithGrant({ to: ctx.bob.user.email, refs: [ref(docId)], grant: [docId] });
         expect(res.status).toBe(200);
@@ -397,9 +396,9 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 9. Demo mode short-circuits before grants: 403 and the ACL is untouched.
     test('demo mode: send with grants is 403 and the ACL is untouched', async () => {
         startCapture();
-        const docId = await createDoc(`grant-demo-${randomUUID()}`);
+        const docId = await createDoc(`grant-demo-${crypto.randomUUID()}`);
         const before = await getAcl(docId);
-        const email = `grant-demo-ext-${randomUUID()}@external.example`;
+        const email = `grant-demo-ext-${crypto.randomUUID()}@external.example`;
 
         process.env['EIGEN_DEMO'] = '1';
         const { res } = await sendWithGrant({ to: email, refs: [ref(docId)], grant: [docId] });
@@ -411,9 +410,9 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 10. Without grantAccessRefIds nothing is granted: refs are just links.
     test('without grantAccessRefIds the ACL is unchanged', async () => {
         startCapture();
-        const docId = await createDoc(`grant-absent-${randomUUID()}`);
+        const docId = await createDoc(`grant-absent-${crypto.randomUUID()}`);
         const before = await getAcl(docId);
-        const email = `grant-absent-ext-${randomUUID()}@external.example`;
+        const email = `grant-absent-ext-${crypto.randomUUID()}@external.example`;
 
         const { res } = await sendWithGrant({ to: email, refs: [ref(docId)] });
         expect(res.status).toBe(200);
@@ -425,8 +424,8 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     test('duplicated grant ref ids produce a single grant and a single propagation', async () => {
         startCapture();
         daclSpy = spyOn(Drive.prototype, 'updateACLDelta');
-        const docId = await createDoc(`grant-dupe-${randomUUID()}`);
-        const email = `grant-dupe-ext-${randomUUID()}@external.example`;
+        const docId = await createDoc(`grant-dupe-${crypto.randomUUID()}`);
+        const email = `grant-dupe-ext-${crypto.randomUUID()}@external.example`;
 
         const { res } = await sendWithGrant({ to: email, refs: [ref(docId)], grant: [docId, docId, docId] });
         expect(res.status).toBe(200);
@@ -442,12 +441,12 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     test('over the reference cap is rejected with 422 before any grant', async () => {
         startCapture();
         daclSpy = spyOn(Drive.prototype, 'updateACLDelta');
-        const docId = await createDoc(`grant-cap-${randomUUID()}`);
+        const docId = await createDoc(`grant-cap-${crypto.randomUUID()}`);
         const before = await getAcl(docId);
-        const grant = Array.from({ length: 21 }, () => randomUUID());
+        const grant = Array.from({ length: 21 }, () => crypto.randomUUID());
 
         const { res } = await sendWithGrant({
-            to: `grant-cap-ext-${randomUUID()}@external.example`,
+            to: `grant-cap-ext-${crypto.randomUUID()}@external.example`,
             refs: [ref(docId)],
             grant,
         });
@@ -460,9 +459,9 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
     // 13. A dotless-domain recipient can't be an ACL id, so it is skipped instead of aborting the send.
     test('a dotless-domain recipient is skipped, not granted, and the send still succeeds', async () => {
         startCapture();
-        const docId = await createDoc(`grant-dotless-${randomUUID()}`);
-        const dotless = `grant-dotless-${randomUUID()}@intranet`;
-        const normal = `grant-dotless-ext-${randomUUID()}@external.example`;
+        const docId = await createDoc(`grant-dotless-${crypto.randomUUID()}`);
+        const dotless = `grant-dotless-${crypto.randomUUID()}@intranet`;
+        const normal = `grant-dotless-ext-${crypto.randomUUID()}@external.example`;
 
         const { res } = await sendWithGrant({ to: `${dotless}, ${normal}`, refs: [ref(docId)], grant: [docId] });
         expect(res.status).toBe(200);

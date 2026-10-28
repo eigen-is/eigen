@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import type { DriveAccessCheckResult, DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
@@ -32,7 +31,7 @@ async function accessCheck(token: string, ownerId: string, pathId: string, email
 
 async function createGuest(email: string): Promise<void> {
     const created = await auth.api.createUser({
-        body: { email, password: randomUUID(), name: 'AC Guest', role: 'user' },
+        body: { email, password: crypto.randomUUID(), name: 'AC Guest', role: 'user' },
     });
     getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();
 }
@@ -52,7 +51,7 @@ describe('Drive access check', () => {
             ctx.alice.user.id,
             MOUNT,
             `folder/${parentId}`,
-            { folderName: `${name}-${randomUUID()}` },
+            { folderName: `${name}-${crypto.randomUUID()}` },
         );
         return folder.id;
     }
@@ -171,7 +170,7 @@ describe('Drive access check', () => {
 
         test('unknown email × openSignup true → false', async () => {
             await updateServerSettings({ guests: { openSignup: true } });
-            const email = `ac-unknown-${randomUUID()}@example.com`;
+            const email = `ac-unknown-${crypto.randomUUID()}@example.com`;
             const body = await assertJson<DriveAccessCheckResult>(
                 await accessCheck(ctx.alice.user.sessionToken, ctx.alice.user.id, folderId, [email]),
             );
@@ -180,7 +179,7 @@ describe('Drive access check', () => {
 
         test('unknown email × openSignup false → true', async () => {
             await updateServerSettings({ guests: { openSignup: false } });
-            const email = `ac-unknown-${randomUUID()}@example.com`;
+            const email = `ac-unknown-${crypto.randomUUID()}@example.com`;
             const body = await assertJson<DriveAccessCheckResult>(
                 await accessCheck(ctx.alice.user.sessionToken, ctx.alice.user.id, folderId, [email]),
             );
@@ -189,7 +188,7 @@ describe('Drive access check', () => {
 
         test('unknown email with a registry entry × closed → false', async () => {
             await updateServerSettings({ guests: { openSignup: false } });
-            const email = `ac-registered-${randomUUID()}@example.com`;
+            const email = `ac-registered-${crypto.randomUUID()}@example.com`;
             await addRegistryEntry(ctx.alice.user.id, email);
             const body = await assertJson<DriveAccessCheckResult>(
                 await accessCheck(ctx.alice.user.sessionToken, ctx.alice.user.id, folderId, [email]),
@@ -199,7 +198,7 @@ describe('Drive access check', () => {
 
         test('registered guest × closed → false', async () => {
             await updateServerSettings({ guests: { openSignup: false } });
-            const email = `ac-guest-${randomUUID()}@example.com`;
+            const email = `ac-guest-${crypto.randomUUID()}@example.com`;
             await createGuest(email);
             const body = await assertJson<DriveAccessCheckResult>(
                 await accessCheck(ctx.alice.user.sessionToken, ctx.alice.user.id, folderId, [email]),
@@ -294,7 +293,7 @@ describe('Drive access check', () => {
     // 7. Missing path → 404; over the recipient cap → rejected before the handler.
     describe('bounds', () => {
         test('unknown pathId → 404', async () => {
-            const res = await accessCheck(ctx.alice.user.sessionToken, ctx.alice.user.id, randomUUID(), [
+            const res = await accessCheck(ctx.alice.user.sessionToken, ctx.alice.user.id, crypto.randomUUID(), [
                 'probe@test.eigen.is',
             ]);
             expect(res.status).toBe(404);

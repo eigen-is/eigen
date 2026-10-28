@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { ServerWebSocket } from 'elysia/ws/bun';
@@ -21,7 +20,7 @@ afterAll(() => {
 });
 
 async function homeWithDoc(): Promise<{ home: TeamHome; mountId: string; docId: string }> {
-    const owner = teamOwnerId(randomUUID().replace(/-/g, ''));
+    const owner = teamOwnerId(crypto.randomUUID().replace(/-/g, ''));
     const home = new TeamHome(getSyntheticTeamUser(owner, 'Teardown Team'));
     homeDirs.push(home.homeDir);
     await home.init();

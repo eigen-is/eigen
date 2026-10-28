@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
@@ -15,7 +14,7 @@ import { getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
 // card writes is charged to the second one.
 describe('CardDAV quota gate', () => {
     const burstCard = (i: number) => {
-        const uid = randomUUID();
+        const uid = crypto.randomUUID();
         const body = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nN:Burst;Card${i};;;\r\nFN:Card${i} Burst\r\nEMAIL:burst-${uid}@example.org\r\nEND:VCARD\r\n`;
         return { uri: `${uid}.vcf`, body };
     };
@@ -96,7 +95,7 @@ describe('a refused write derives no avatar cache', () => {
                 contacts.addContact({
                     firstName: 'Overflow',
                     lastName: 'Photo',
-                    email: [`overflow-${randomUUID()}@example.org`],
+                    email: [`overflow-${crypto.randomUUID()}@example.org`],
                     phone: [],
                     avatar: staged,
                 }),
@@ -122,7 +121,7 @@ describe('a refused write derives no avatar cache', () => {
             const filesBefore = readdirSync(avatarsDir).sort();
             const avatarsBytesBefore = contacts.avatarsBytes;
 
-            const uid = randomUUID();
+            const uid = crypto.randomUUID();
             const body = [
                 'BEGIN:VCARD',
                 'VERSION:3.0',

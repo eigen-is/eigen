@@ -4,7 +4,6 @@
 // backup opens one to read a mount the home does not serve. Some of its work lives in sibling modules,
 // such as trash, copy, search and the document databases.
 
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isSearchableTextFile } from '@workspace/lib/constants';
@@ -275,7 +274,7 @@ export class Mount {
         const root = await this.db.select().from(paths).where(isNull(paths.parentId)).get();
         if (root) return;
 
-        const rootId = randomUUID();
+        const rootId = crypto.randomUUID();
         await this.db.insert(paths).values({
             id: rootId,
             file: '',
@@ -523,7 +522,7 @@ export class Mount {
 
     public async createFolder(parentId: string, name: string, type: DriveContainerType = 'folder'): Promise<string> {
         name = validateName(name);
-        const folderId = randomUUID();
+        const folderId = crypto.randomUUID();
         // A document container takes its mime type from the eigendoc registry. Only a plain folder has
         // no entry there.
         const mimeType = type === DRIVE_TYPE_FOLDER ? DRIVE_MIME_FOLDER : EIGEN_DOC_TYPE_INFO[type].mime;
@@ -598,7 +597,7 @@ export class Mount {
         hash: string | null,
         writeBytes: (storageKey: string) => Promise<void>,
     ): Promise<string> {
-        const fileId = randomUUID();
+        const fileId = crypto.randomUUID();
         const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
 
         const searchable = isSearchableTextFile(mimeType, name);
@@ -1232,7 +1231,7 @@ export class Mount {
     // truncated file at the temp path, because the next open would adopt it as crash recovery.
     // Returns the byte count.
     public async replaceTempFrom(tempId: string, source: StorageFile): Promise<number> {
-        const sideId = randomUUID();
+        const sideId = crypto.randomUUID();
         let size: number;
         try {
             ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, { signal: this.downloads.signal }));

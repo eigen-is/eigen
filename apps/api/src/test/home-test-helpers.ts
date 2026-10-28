@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SSEvent } from '@workspace/lib/types/sse';
@@ -77,7 +76,7 @@ export async function openTestHome<T extends TestHomeDomain>(
 export function makeTestHome<T extends TestHomeDomain>(create: (home: Home) => T, root: string): Promise<TestHome<T>> {
     const n = counter++;
     return openTestHome(create, join(root, `home-${n}`), {
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         email: `me-${n}@test.local`,
         name: 'Ada Lovelace',
     });
