@@ -6,7 +6,7 @@
 import type { CommandProps } from '@tiptap/core';
 import type { DOMOutputSpec } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
-import { MAX_PAPER_MM, mmToPx } from '../page';
+import { MAX_PAPER_PX } from '../page';
 
 // The nodes drawn in the figure's frame: an image, a chart and a text box.
 export const FIGURE_FRAME_NODES = ['figure', 'chart', 'textBox'] as const;
@@ -33,9 +33,6 @@ export const isPositioned = (layout: FigureLayout | null | undefined): layout is
 // A positioned figure anchors on a body paragraph. Inside these nodes it draws in line, as a block.
 export const BLOCK_ONLY_FIGURE_PARENTS = ['tableCell', 'tableHeader', 'footnote', 'textBox'];
 
-// No paper is larger, so a forged offset or width can't stall the layout.
-const MAX_POSITION_PX = mmToPx(MAX_PAPER_MM);
-
 // The box a figure sits in: its place on the page, its caption and its comment card. Every attr defaults to null.
 // The offsets are page px from the anchor paragraph's padding box, kept while the figure is in the flow, so a switch
 // back to in front or behind restores its place.
@@ -51,12 +48,10 @@ export type FigureFrameAttrs = {
 // A figure's or a chart's stored width or height, which a collaborator can write as anything. One that isn't a positive
 // number reads as unset, and one past the largest paper as that paper.
 export const readFrameSide = (value: unknown): number | null =>
-    typeof value === 'number' && value > 0 ? Math.min(MAX_POSITION_PX, value) : null;
+    typeof value === 'number' && value > 0 ? Math.min(MAX_PAPER_PX, value) : null;
 
 const readOffset = (value: unknown) =>
-    typeof value === 'number' && Number.isFinite(value)
-        ? Math.min(MAX_POSITION_PX, Math.max(-MAX_POSITION_PX, value))
-        : null;
+    typeof value === 'number' && Number.isFinite(value) ? Math.min(MAX_PAPER_PX, Math.max(-MAX_PAPER_PX, value)) : null;
 
 // Only Eigen's own span places a figure: another app's <figure> or absolute <img> has no anchor paragraph to count from.
 export const isOwnSpan = (element: HTMLElement) => element.tagName === 'SPAN';
@@ -88,7 +83,7 @@ export function figureLayoutStyle({
 }: FigureFrameAttrs & { width?: number | null }): { left: number; top: number; width?: number } | undefined {
     if (!isPositioned(layout)) return undefined;
     const place = { left: offsetX ?? 0, top: offsetY ?? 0 };
-    return width ? { ...place, width: Math.min(MAX_POSITION_PX, width) } : place;
+    return width ? { ...place, width: Math.min(MAX_PAPER_PX, width) } : place;
 }
 
 // A positioned box's offsets from its paragraph, kept on the paper: between the paper's left and right edges, and below

@@ -1,3 +1,8 @@
+// The data-validation dialog: it edits the rule draft in ctx.dataVerification.dataRegulation for the
+// selected range, such as a drop-down list, a tick box or a number condition. On open it seeds the
+// draft from the focus cell's rule, and on confirm it checks the draft with confirmMessage and applies
+// it with applyDataVerification. A range field opens the cell-range picker and reopens this dialog.
+
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -16,8 +21,8 @@ import {
     getDropdownList,
     getRangeByTxt,
     getRangetxt,
-    getSheetIndex,
 } from '../../state';
+import { getSheet } from '../../state/api/common';
 import { CellRangeDialog } from '../CellRangeDialog';
 
 const VERIFICATION_TYPES = [
@@ -73,9 +78,9 @@ export function DataVerification() {
     const closeRangePicker = useCallback(
         (rangeTxt?: string) => {
             setContext((ctx) => {
-                if (rangeTxt != null) ctx.rangeDialog!.rangeTxt = rangeTxt;
-                ctx.rangeDialog!.show = false;
-                ctx.rangeDialog!.singleSelect = false;
+                if (rangeTxt != null) ctx.rangeDialog.rangeTxt = rangeTxt;
+                ctx.rangeDialog.show = false;
+                ctx.rangeDialog.singleSelect = false;
             });
             showDialog(<DataVerification />);
         },
@@ -86,9 +91,9 @@ export function DataVerification() {
     const dataSelectRange = useCallback(
         (type: string, value: string) => {
             setContext((ctx) => {
-                ctx.rangeDialog!.show = true;
-                ctx.rangeDialog!.type = type;
-                ctx.rangeDialog!.rangeTxt = value;
+                ctx.rangeDialog.show = true;
+                ctx.rangeDialog.type = type;
+                ctx.rangeDialog.rangeTxt = value;
             });
             showNonModalDialog(
                 <CellRangeDialog
@@ -112,13 +117,13 @@ export function DataVerification() {
                 setContext((ctx) => {
                     const isPass = confirmMessage(ctx);
                     if (isPass) {
-                        const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
+                        const range = getRangeByTxt(ctx, ctx.dataVerification.dataRegulation.rangeTxt);
                         if (range.length === 0) {
                             return;
                         }
                         const target = range[range.length - 1];
                         if (!target) return;
-                        const regulation = ctx.dataVerification!.dataRegulation!;
+                        const regulation = ctx.dataVerification.dataRegulation;
                         const item = { ...regulation };
                         if (regulation.type === 'dropdown') {
                             item.value1 = getDropdownList(ctx, regulation.value1).join(',');
@@ -128,13 +133,12 @@ export function DataVerification() {
                 });
             } else if (type === 'delete') {
                 setContext((ctx) => {
-                    const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
+                    const range = getRangeByTxt(ctx, ctx.dataVerification.dataRegulation.rangeTxt);
                     if (range.length === 0) {
                         showDialog('The selection operation has not been performed yet', 'ok');
                         return;
                     }
-                    const currentDataVerification =
-                        ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification ?? {};
+                    const currentDataVerification = getSheet(ctx).dataVerification ?? {};
                     const str = range[range.length - 1]?.row[0];
                     const edr = range[range.length - 1]?.row[1];
                     const stc = range[range.length - 1]?.column[0];
@@ -165,8 +169,7 @@ export function DataVerification() {
             }
 
             // Initialize values
-            const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-            const ctxDataVerification = ctx.sheets[index].dataVerification ?? {};
+            const ctxDataVerification = getSheet(ctx).dataVerification ?? {};
             if (!ctx.selections) return;
             const last = ctx.selections[ctx.selections.length - 1];
             const rowIndex = last.row_focus;
@@ -176,29 +179,20 @@ export function DataVerification() {
             const defaultItem = item ?? {};
             let rangValue = defaultItem.value1 ?? '';
             // Range assignment related
-            if (
-                ctx.rangeDialog?.type === 'dropDown' &&
-                ctx.dataVerification &&
-                ctx.dataVerification.dataRegulation &&
-                ctx.dataVerification.dataRegulation.rangeTxt
-            ) {
+            const { dataRegulation } = ctx.dataVerification;
+            if (ctx.rangeDialog.type === 'dropDown' && dataRegulation.rangeTxt) {
                 // When it's a dropdown list selection, assign dropdown selection, keep range unchanged
-                rangeT = ctx.dataVerification.dataRegulation.rangeTxt;
+                rangeT = dataRegulation.rangeTxt;
                 rangValue = ctx.rangeDialog.rangeTxt;
-            } else if (
-                ctx.rangeDialog?.type === 'rangeTxt' &&
-                ctx.dataVerification &&
-                ctx.dataVerification.dataRegulation &&
-                ctx.dataVerification.dataRegulation.value1
-            ) {
+            } else if (ctx.rangeDialog.type === 'rangeTxt' && dataRegulation.value1) {
                 // When it's a range selection, assign range, keep dropdown selection unchanged
-                rangValue = ctx.dataVerification.dataRegulation.value1;
+                rangValue = dataRegulation.value1;
                 rangeT = ctx.rangeDialog.rangeTxt;
             }
-            ctx.rangeDialog!.type = '';
+            ctx.rangeDialog.type = '';
 
             if (item) {
-                ctx.dataVerification!.dataRegulation = {
+                ctx.dataVerification.dataRegulation = {
                     ...item,
                     value1: rangValue,
                     rangeTxt: rangeT,
@@ -209,7 +203,7 @@ export function DataVerification() {
                     hintValue: item.hintValue ?? '',
                 };
             } else {
-                ctx.dataVerification!.dataRegulation! = {
+                ctx.dataVerification.dataRegulation = {
                     type: 'dropdown',
                     type2: '',
                     rangeTxt: rangeT,
@@ -225,6 +219,8 @@ export function DataVerification() {
         });
     }, []);
 
+    const regulation = context.dataVerification.dataRegulation;
+
     return (
         <div className="flex flex-col gap-4 select-none">
             <DialogHeader>
@@ -238,11 +234,11 @@ export function DataVerification() {
                         <Input
                             className="flex-1 border-none rounded-none h-full"
                             spellCheck={false}
-                            value={context.dataVerification!.dataRegulation?.rangeTxt}
+                            value={regulation.rangeTxt}
                             onChange={(e) => {
                                 const { value } = e.target;
                                 setContext((ctx) => {
-                                    ctx.dataVerification!.dataRegulation!.rangeTxt = value;
+                                    ctx.dataVerification.dataRegulation.rangeTxt = value;
                                 });
                             }}
                         />
@@ -252,7 +248,7 @@ export function DataVerification() {
                             className="rounded-none"
                             onClick={() => {
                                 hideDialog();
-                                dataSelectRange('rangeTxt', context.dataVerification!.dataRegulation!.rangeTxt);
+                                dataSelectRange('rangeTxt', regulation.rangeTxt);
                             }}
                         >
                             <Table />
@@ -263,12 +259,12 @@ export function DataVerification() {
                 <div className="space-y-2">
                     <div className="text-sm font-medium">Verification condition</div>
                     <Select
-                        value={context.dataVerification!.dataRegulation!.type}
+                        value={regulation.type}
                         onValueChange={(value) => {
                             setContext((ctx) => {
-                                ctx.dataVerification!.dataRegulation!.type = value;
+                                ctx.dataVerification.dataRegulation.type = value;
                                 if (value === 'dropdown' || value === 'checkbox') {
-                                    ctx.dataVerification!.dataRegulation!.type2 = '';
+                                    ctx.dataVerification.dataRegulation.type2 = '';
                                 } else if (
                                     value === 'number' ||
                                     value === 'number_integer' ||
@@ -276,18 +272,16 @@ export function DataVerification() {
                                     value === 'text_length' ||
                                     value === 'date'
                                 ) {
-                                    ctx.dataVerification!.dataRegulation!.type2 = 'between';
+                                    ctx.dataVerification.dataRegulation.type2 = 'between';
                                 } else if (value === 'text_content') {
-                                    ctx.dataVerification!.dataRegulation!.type2 = 'include';
+                                    ctx.dataVerification.dataRegulation.type2 = 'include';
                                 }
                                 // A tick box arrives usable: the same TRUE/FALSE
                                 // pair Insert → Tick box writes, so the two
                                 // routes to a checkbox rule agree.
                                 const isCheckbox = value === 'checkbox';
-                                ctx.dataVerification!.dataRegulation!.value1 = isCheckbox ? CHECKBOX_CHECKED_VALUE : '';
-                                ctx.dataVerification!.dataRegulation!.value2 = isCheckbox
-                                    ? CHECKBOX_UNCHECKED_VALUE
-                                    : '';
+                                ctx.dataVerification.dataRegulation.value1 = isCheckbox ? CHECKBOX_CHECKED_VALUE : '';
+                                ctx.dataVerification.dataRegulation.value2 = isCheckbox ? CHECKBOX_UNCHECKED_VALUE : '';
                             });
                         }}
                     >
@@ -303,18 +297,18 @@ export function DataVerification() {
                         </SelectContent>
                     </Select>
 
-                    {context.dataVerification?.dataRegulation?.type === 'dropdown' && (
+                    {regulation.type === 'dropdown' && (
                         <div className="space-y-2">
                             <div className="flex h-8 rounded-md border border-input overflow-hidden">
                                 <Input
                                     className="flex-1 border-none rounded-none h-full"
                                     spellCheck={false}
-                                    value={context.dataVerification!.dataRegulation!.value1}
+                                    value={regulation.value1}
                                     placeholder="Please enter the options, separated by commas, such as 1,2,3,4,5"
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
-                                            ctx.dataVerification!.dataRegulation!.value1 = value;
+                                            ctx.dataVerification.dataRegulation.value1 = value;
                                         });
                                     }}
                                 />
@@ -322,19 +316,17 @@ export function DataVerification() {
                                     variant="ghost"
                                     size="icon-sm"
                                     className="rounded-none"
-                                    onClick={() =>
-                                        dataSelectRange('dropDown', context.dataVerification!.dataRegulation!.value1)
-                                    }
+                                    onClick={() => dataSelectRange('dropDown', regulation.value1)}
                                 >
                                     <Table />
                                 </Button>
                             </div>
                             <Label className="flex items-center gap-1.5">
                                 <Checkbox
-                                    checked={context.dataVerification!.dataRegulation!.type2 === 'true'}
+                                    checked={regulation.type2 === 'true'}
                                     onCheckedChange={(checked) => {
                                         setContext((ctx) => {
-                                            ctx.dataVerification!.dataRegulation!.type2 = `${checked}`;
+                                            ctx.dataVerification.dataRegulation.type2 = `${checked}`;
                                         });
                                     }}
                                 />
@@ -343,18 +335,18 @@ export function DataVerification() {
                         </div>
                     )}
 
-                    {context.dataVerification?.dataRegulation?.type === 'checkbox' && (
+                    {regulation.type === 'checkbox' && (
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
                                 <span className="text-sm shrink-0">Selected</span>
                                 <Input
                                     className="h-8"
                                     placeholder="Please enter content"
-                                    value={context.dataVerification?.dataRegulation?.value1}
+                                    value={regulation.value1}
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
-                                            ctx.dataVerification!.dataRegulation!.value1 = value;
+                                            ctx.dataVerification.dataRegulation.value1 = value;
                                         });
                                     }}
                                 />
@@ -364,11 +356,11 @@ export function DataVerification() {
                                 <Input
                                     className="h-8"
                                     placeholder="Please enter content"
-                                    value={context.dataVerification?.dataRegulation?.value2}
+                                    value={regulation.value2}
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
-                                            ctx.dataVerification!.dataRegulation!.value2 = value;
+                                            ctx.dataVerification.dataRegulation.value2 = value;
                                         });
                                     }}
                                 />
@@ -376,18 +368,18 @@ export function DataVerification() {
                         </div>
                     )}
 
-                    {(context.dataVerification?.dataRegulation?.type === 'number' ||
-                        context.dataVerification?.dataRegulation?.type === 'number_integer' ||
-                        context.dataVerification?.dataRegulation?.type === 'number_decimal' ||
-                        context.dataVerification?.dataRegulation?.type === 'text_length') && (
+                    {(regulation.type === 'number' ||
+                        regulation.type === 'number_integer' ||
+                        regulation.type === 'number_decimal' ||
+                        regulation.type === 'text_length') && (
                         <div className="space-y-2">
                             <Select
-                                value={context.dataVerification.dataRegulation.type2}
+                                value={regulation.type2}
                                 onValueChange={(value) => {
                                     setContext((ctx) => {
-                                        ctx.dataVerification!.dataRegulation!.type2 = value;
-                                        ctx.dataVerification!.dataRegulation!.value1 = '';
-                                        ctx.dataVerification!.dataRegulation!.value2 = '';
+                                        ctx.dataVerification.dataRegulation.type2 = value;
+                                        ctx.dataVerification.dataRegulation.value1 = '';
+                                        ctx.dataVerification.dataRegulation.value2 = '';
                                     });
                                 }}
                             >
@@ -402,18 +394,17 @@ export function DataVerification() {
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {context.dataVerification.dataRegulation.type2 === 'between' ||
-                            context.dataVerification.dataRegulation.type2 === 'notBetween' ? (
+                            {regulation.type2 === 'between' || regulation.type2 === 'notBetween' ? (
                                 <div className="flex items-center gap-2">
                                     <Input
                                         type="number"
                                         className="h-8"
                                         placeholder="1"
-                                        value={context.dataVerification.dataRegulation.value1}
+                                        value={regulation.value1}
                                         onChange={(e) => {
                                             const { value } = e.target;
                                             setContext((ctx) => {
-                                                ctx.dataVerification!.dataRegulation!.value1 = value;
+                                                ctx.dataVerification.dataRegulation.value1 = value;
                                             });
                                         }}
                                     />
@@ -422,11 +413,11 @@ export function DataVerification() {
                                         type="number"
                                         className="h-8"
                                         placeholder="100"
-                                        value={context.dataVerification.dataRegulation.value2}
+                                        value={regulation.value2}
                                         onChange={(e) => {
                                             const { value } = e.target;
                                             setContext((ctx) => {
-                                                ctx.dataVerification!.dataRegulation!.value2 = value;
+                                                ctx.dataVerification.dataRegulation.value2 = value;
                                             });
                                         }}
                                     />
@@ -436,11 +427,11 @@ export function DataVerification() {
                                     type="number"
                                     className="h-8"
                                     placeholder="Numeric value, such as 10"
-                                    value={context.dataVerification.dataRegulation.value1}
+                                    value={regulation.value1}
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
-                                            ctx.dataVerification!.dataRegulation!.value1 = value;
+                                            ctx.dataVerification.dataRegulation.value1 = value;
                                         });
                                     }}
                                 />
@@ -448,15 +439,15 @@ export function DataVerification() {
                         </div>
                     )}
 
-                    {context.dataVerification?.dataRegulation?.type === 'text_content' && (
+                    {regulation.type === 'text_content' && (
                         <div className="space-y-2">
                             <Select
-                                value={context.dataVerification.dataRegulation.type2}
+                                value={regulation.type2}
                                 onValueChange={(value) => {
                                     setContext((ctx) => {
-                                        ctx.dataVerification!.dataRegulation!.type2 = value;
-                                        ctx.dataVerification!.dataRegulation!.value1 = '';
-                                        ctx.dataVerification!.dataRegulation!.value2 = '';
+                                        ctx.dataVerification.dataRegulation.type2 = value;
+                                        ctx.dataVerification.dataRegulation.value1 = '';
+                                        ctx.dataVerification.dataRegulation.value2 = '';
                                     });
                                 }}
                             >
@@ -474,26 +465,26 @@ export function DataVerification() {
                             <Input
                                 className="h-8"
                                 placeholder="Please enter the specified text"
-                                value={context.dataVerification.dataRegulation.value1}
+                                value={regulation.value1}
                                 onChange={(e) => {
                                     const { value } = e.target;
                                     setContext((ctx) => {
-                                        ctx.dataVerification!.dataRegulation!.value1 = value;
+                                        ctx.dataVerification.dataRegulation.value1 = value;
                                     });
                                 }}
                             />
                         </div>
                     )}
 
-                    {context.dataVerification?.dataRegulation?.type === 'date' && (
+                    {regulation.type === 'date' && (
                         <div className="space-y-2">
                             <Select
-                                value={context.dataVerification.dataRegulation.type2}
+                                value={regulation.type2}
                                 onValueChange={(value) => {
                                     setContext((ctx) => {
-                                        ctx.dataVerification!.dataRegulation!.type2 = value;
-                                        ctx.dataVerification!.dataRegulation!.value1 = '';
-                                        ctx.dataVerification!.dataRegulation!.value2 = '';
+                                        ctx.dataVerification.dataRegulation.type2 = value;
+                                        ctx.dataVerification.dataRegulation.value1 = '';
+                                        ctx.dataVerification.dataRegulation.value2 = '';
                                     });
                                 }}
                             >
@@ -508,17 +499,16 @@ export function DataVerification() {
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {context.dataVerification.dataRegulation.type2 === 'between' ||
-                            context.dataVerification.dataRegulation.type2 === 'notBetween' ? (
+                            {regulation.type2 === 'between' || regulation.type2 === 'notBetween' ? (
                                 <div className="flex items-center gap-2">
                                     <Input
                                         type="date"
                                         className="h-8"
-                                        value={context.dataVerification.dataRegulation.value1}
+                                        value={regulation.value1}
                                         onChange={(e) => {
                                             const { value } = e.target;
                                             setContext((ctx) => {
-                                                ctx.dataVerification!.dataRegulation!.value1 = value;
+                                                ctx.dataVerification.dataRegulation.value1 = value;
                                             });
                                         }}
                                     />
@@ -526,11 +516,11 @@ export function DataVerification() {
                                     <Input
                                         type="date"
                                         className="h-8"
-                                        value={context.dataVerification.dataRegulation.value2}
+                                        value={regulation.value2}
                                         onChange={(e) => {
                                             const { value } = e.target;
                                             setContext((ctx) => {
-                                                ctx.dataVerification!.dataRegulation!.value2 = value;
+                                                ctx.dataVerification.dataRegulation.value2 = value;
                                             });
                                         }}
                                     />
@@ -540,11 +530,11 @@ export function DataVerification() {
                                     type="date"
                                     className="h-8"
                                     placeholder="Numeric value, such as 10"
-                                    value={context.dataVerification.dataRegulation.value1}
+                                    value={regulation.value1}
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
-                                            ctx.dataVerification!.dataRegulation!.value1 = value;
+                                            ctx.dataVerification.dataRegulation.value1 = value;
                                         });
                                     }}
                                 />
@@ -558,30 +548,26 @@ export function DataVerification() {
                         <Label className="flex items-center gap-1.5" key={value}>
                             <Checkbox
                                 id={value}
-                                checked={context.dataVerification!.dataRegulation![value]}
+                                checked={regulation[value]}
                                 onCheckedChange={() => {
                                     setContext((ctx) => {
-                                        const dataRegulation = ctx.dataVerification?.dataRegulation;
-                                        if (value === 'prohibitInput') {
-                                            dataRegulation!.prohibitInput = !dataRegulation!.prohibitInput;
-                                        } else if (value === 'hintShow') {
-                                            dataRegulation!.hintShow = !dataRegulation!.hintShow;
-                                        }
+                                        const { dataRegulation } = ctx.dataVerification;
+                                        dataRegulation[value] = !dataRegulation[value];
                                     });
                                 }}
                             />
                             {label}
                         </Label>
                     ))}
-                    {context.dataVerification?.dataRegulation?.hintShow && (
+                    {regulation.hintShow && (
                         <Input
                             className="h-8"
                             placeholder="Please enter the prompt displayed when the cell is selected"
-                            value={context.dataVerification!.dataRegulation!.hintValue}
+                            value={regulation.hintValue}
                             onChange={(e) => {
                                 const { value } = e.target;
                                 setContext((ctx) => {
-                                    ctx.dataVerification!.dataRegulation!.hintValue = value;
+                                    ctx.dataVerification.dataRegulation.hintValue = value;
                                 });
                             }}
                         />

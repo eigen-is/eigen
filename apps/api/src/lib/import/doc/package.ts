@@ -1,6 +1,6 @@
-// The docx package as the reader reads it: the document part, the parts it names (styles, numbering, theme, notes, the
-// final section's headers and footers), the caps a crafted file is held to, and the WordprocessingML attribute
-// helpers every reader file shares.
+// The docx package as the reader reads it: the document part and the parts it names, such as the styles, the
+// numbering and the final section's headers and footers. It also holds the caps a crafted file is held to, and the
+// WordprocessingML attribute helpers every reader file shares.
 
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspace/lib/docs/eigendoc';

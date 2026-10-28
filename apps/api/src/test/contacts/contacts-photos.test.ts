@@ -495,6 +495,32 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(await contacts.size()).toBe(cardBytesOf(db) + avatarBytesOf(dir));
     });
 
+    // A Home closes on idle, restore and deletion while an upload's sweep may still be listing the folder.
+    test('closing the contacts mid-sweep stops the sweep before it reads the closed database', async () => {
+        const { instance: contacts } = await makeContacts();
+        const listing = Promise.withResolvers<void>();
+        const gate = Promise.withResolvers<void>();
+        const listFiles = contacts.storage.list.bind(contacts.storage);
+        const list = spyOn(contacts.storage, 'list').mockImplementationOnce(async (dirPath) => {
+            listing.resolve();
+            await gate.promise;
+            return listFiles(dirPath);
+        });
+        const warn = spyOn(console, 'warn');
+        try {
+            const upload = stageAvatar(contacts).catch(() => '');
+            await listing.promise;
+            const closed = contacts.destruct();
+            gate.resolve();
+            await Promise.all([closed, upload]);
+            expect(warn.mock.calls.flat().join(' ')).not.toContain('avatar sweep failed');
+        } finally {
+            gate.resolve();
+            list.mockRestore();
+            warn.mockRestore();
+        }
+    });
+
     test('downloadAvatar serves only the staged and derived cache-name shapes', async () => {
         const { instance: contacts, dir } = await makeContacts();
         const staged = (await stageAvatar(contacts)).split('/').pop()!;

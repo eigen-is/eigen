@@ -43,7 +43,7 @@ export function marked(data: ChartData): ChartSpec['series'] {
 }
 
 // Data labels on the series the ids name, every series of the data by default.
-export function labelled(data: ChartData, ids = data.series.map(({ id }) => id)): ChartSpec['series'] {
+export function labeled(data: ChartData, ids = data.series.map(({ id }) => id)): ChartSpec['series'] {
     return Object.fromEntries(ids.map((id) => [id, style({ labels: { visible: true } })]));
 }
 

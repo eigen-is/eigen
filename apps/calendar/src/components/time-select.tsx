@@ -1,3 +1,8 @@
+// The time picker of the event dialogs: a text field with a list of quarter hours, which for an end time shows each
+// slot's duration and whether it falls on a later day. The same file holds the "hh:mm" helpers the dialogs use to
+// pick a default start and to keep an end after its start.
+
+import { toLocalDateString } from '@workspace/lib/calendar';
 import { formatTime } from '@workspace/lib/date';
 import { Input } from '@workspace/ui/components/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
@@ -108,12 +113,7 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
 
                 const idx = filteredTimeSlots.findIndex((slot) => slot.time === target.time);
 
-                if (idx >= 0) {
-                    const el = listRef.current.children[idx] as HTMLElement;
-                    if (el) {
-                        el.scrollIntoView({ block: 'center' });
-                    }
-                }
+                listRef.current.children.item(idx)?.scrollIntoView({ block: 'center' });
             }, 100);
         }
     }, [open, value]);
@@ -203,6 +203,12 @@ export function roundToNext15Minutes(date: Date): Date {
         d.setMinutes(mins, 0, 0);
     }
     return d;
+}
+
+// The end of an event that starts at `start`, as the dialog's date and time fields: past midnight it is the next day.
+export function endAfter(start: Date, minutes: number): { date: string; time: string } {
+    const end = new Date(start.getTime() + minutes * 60_000);
+    return { date: toLocalDateString(end), time: toTimeString(end) };
 }
 
 export function addMinutes(time: string, minutes: number): string {

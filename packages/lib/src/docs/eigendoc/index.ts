@@ -9,7 +9,7 @@ export {
     PAGE_BAND_CLASS,
 } from './bands';
 export { getDocExtensions } from './extensions';
-export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from './heading';
+export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR, MAX_HEADING_LEVEL } from './heading';
 export type { Caps } from './nodes/caps';
 export type { ChartAttrs } from './nodes/chart';
 export { ChartNode, chartSvg, readChartAttrs } from './nodes/chart';
@@ -63,6 +63,7 @@ export {
     readCellBackground,
     readCellBorder,
 } from './nodes/table-cell';
+export { canInsertTableOfContents, readTocLevels, TableOfContentsNode } from './nodes/table-of-contents';
 export type { TextBoxAttrs, TextBoxEdit, TextBoxVerticalAlign } from './nodes/text-box';
 export {
     insertTextBox,
@@ -82,8 +83,8 @@ export {
 export type { TitleType } from './nodes/title';
 export type { NormalStyle } from './normal-style';
 export { DEFAULT_NORMAL_STYLE, normalStyleProperties, readNormalStyle, STYLE_ROOT } from './normal-style';
-export type { OutlineHeading } from './outline';
-export { readOutline } from './outline';
+export type { OutlineEntry, OutlineHeading } from './outline';
+export { outlineEntry, readOutline } from './outline';
 export type { PageMargin, PageSetup, PaperSizeName } from './page';
 export {
     cmText,
@@ -121,4 +122,4 @@ export {
     selectionParagraphFormat,
 } from './paragraph-format';
 export { attributeSearchText } from './search-text';
-export { columnFit, fitColumnWidths, MIN_TABLE_COLUMN_PX } from './table';
+export { columnFit, MIN_TABLE_COLUMN_PX } from './table';

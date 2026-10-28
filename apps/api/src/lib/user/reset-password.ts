@@ -6,8 +6,9 @@ import { eq } from 'drizzle-orm';
 import { apikey } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
 import { ApiError } from '../core/errors';
+import { isGuest } from './guest';
 import type { User } from './user';
-import { getUserByEmail, isGuest } from './user';
+import { getUserByEmail } from './user';
 
 // What the control socket's POST /reset-password answers with.
 export type ResetPasswordResult = { email: string };

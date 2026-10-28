@@ -4,7 +4,7 @@ import { posix } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, readOutline } from '@workspace/lib/docs/eigendoc';
 import { serializeFill } from '@workspace/lib/vector';
 import type { MathRow } from '@workspace/math';
 import { MATH_LIMITS, MATHML_NAMESPACE, readOmml, writeMathml } from '@workspace/math';
@@ -3171,6 +3171,8 @@ const SEQUENCES: Record<string, string[]> = {
         ...['rPr', 'tblPr', 'trPr', 'tcPr', 'tblStylePr'],
     ],
     docDefaults: ['rPrDefault', 'pPrDefault'],
+    sdt: ['sdtPr', 'sdtEndPr', 'sdtContent'],
+    docPartObj: ['docPartGallery', 'docPartCategory', 'docPartUnique'],
     pBdr: ['top', 'left', 'bottom', 'right', 'between', 'bar'],
     tbl: ['tblPr', 'tblGrid', 'tr'],
     tblPr: [
@@ -3337,6 +3339,116 @@ describe('docx writer — property order', () => {
         }
         expect(outOfOrder).toEqual([]);
         expect([...seen].sort()).toEqual([...Object.keys(SEQUENCES), ...Object.keys(QUALIFIED_SEQUENCES)].sort());
+    });
+});
+
+describe('docx writer — table of contents', () => {
+    const toc = (levels: number | null = null): JSONContent => ({ type: 'tableOfContents', attrs: { levels } });
+    const sdtOf = (body: XmlElement) => only(xmlChildren(body, W, 'sdt'));
+    const instructions = (root: XmlElement) => descendants(root, W, 'instrText').map((i) => xmlText(i).trim());
+    // Each bookmark's name and the text of the paragraph that holds it.
+    const bookmarks = (body: XmlElement) =>
+        xmlChildren(body, W, 'p').flatMap((paragraph) =>
+            descendants(paragraph, W, 'bookmarkStart').map((bookmark) => [w(bookmark, 'name'), texts(paragraph)]),
+        );
+
+    test("is Word's TOC field in its gallery's content control, each entry a link to its heading's bookmark", async () => {
+        const body = await bodyOf(
+            doc(
+                toc(),
+                heading(1, text('Intro')),
+                p(text('Text')),
+                heading(2, text('Method')),
+                heading(4, text('Deep')),
+            ),
+        );
+        const sdt = sdtOf(body);
+        expect(xmlOf(child(sdt, 'sdtPr'))).toBe(
+            '<w:sdtPr><w:docPartObj><w:docPartGallery w:val="Table of Contents"/><w:docPartUnique/></w:docPartObj></w:sdtPr>',
+        );
+        const content = child(sdt, 'sdtContent');
+        if (!content) throw new Error('no w:sdtContent');
+        expect(instructions(content)).toEqual(['TOC \\o "1-3" \\h \\z \\u', 'PAGEREF _Toc1 \\h', 'PAGEREF _Toc2 \\h']);
+        const [first, second, end] = xmlChildren(content, W, 'p');
+        // Marked dirty, so Word asks to update the field and fills in the page numbers.
+        expect(w(descendants(content, W, 'fldChar')[0], 'dirty')).toBe('true');
+        expect([first, second].map((entry) => w(child(child(entry, 'pPr'), 'pStyle'), 'val'))).toEqual([
+            'TOC1',
+            'TOC2',
+        ]);
+        expect([first, second].map((entry) => w(only(descendants(entry, W, 'hyperlink')), 'anchor'))).toEqual([
+            '_Toc1',
+            '_Toc2',
+        ]);
+        expect(xmlOf(child(child(first, 'pPr'), 'tabs'))).toBe(
+            '<w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9638"/></w:tabs>',
+        );
+        expect(texts(first ?? body)).toBe('Intro');
+        expect(xmlOf(end)).toBe('<w:p><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>');
+        // Every listed heading holds its bookmark, the one deeper than the field's levels too.
+        expect(bookmarks(body)).toEqual([
+            ['_Toc1', 'Intro'],
+            ['_Toc2', 'Method'],
+            ['_Toc3', 'Deep'],
+        ]);
+    });
+
+    test('writes its levels as the range of its \\o switch', async () => {
+        expect(instructions(await bodyOf(doc(toc(2), heading(1, text('Intro'))))).at(0)).toBe(
+            'TOC \\o "1-2" \\h \\z \\u',
+        );
+    });
+
+    test("with no headings it shows Word's own text for an empty table of contents", async () => {
+        const sdt = sdtOf(await bodyOf(doc(toc(), p(text('Text')))));
+        expect(texts(sdt)).toBe('No table of contents entries found.');
+    });
+
+    test("Word's toc 1 to toc 6 styles indent each level as the editor does", async () => {
+        const all = await styles(doc(toc(), heading(1, text('Intro'))));
+        const indent = (level: number) => w(child(child(style(all, `TOC${level}`), 'pPr'), 'ind'), 'left');
+        expect(w(child(style(all, 'TOC1'), 'name'), 'val')).toBe('toc 1');
+        expect(indent(1)).toBeUndefined();
+        const em = proseValue('.eigen-prose nav[data-type="table-of-contents"] > [data-level="3"]', 'padding-left');
+        expect(indent(3)).toBe(String(twips(cssPt(em, 11))));
+    });
+
+    // The writer reads the stored JSON with no schema, the editor a node: the one rule numbers both alike.
+    test("bookmarks the all-features doc's headings in readOutline's order", async () => {
+        const json = buildAllFeaturesDocJson();
+        const body = await bodyOf(json);
+        const written = descendants(body, W, 'bookmarkStart').map((b) => w(b, 'name'));
+        const outline = readOutline(schema.nodeFromJSON(json));
+        expect(written).toEqual(outline.map((_heading, index) => `_Toc${index + 1}`));
+        expect(bookmarks(body).map(([, heading]) => heading)).toEqual(outline.map(({ text }) => text));
+    });
+
+    test("a band's heading and a note's text get no bookmark", async () => {
+        const zip = await unzip(doc(toc(), heading(1, text('Body'))), undefined, undefined, undefined, {
+            header: doc(heading(1, text('Running head'))),
+        });
+        expect(entryText(zip, 'word/header1.xml')).not.toContain('bookmarkStart');
+        expect(descendants(await part(zip, 'word/document.xml'), W, 'bookmarkStart')).toHaveLength(1);
+        // A note holds paragraphs, but a peer can forge a heading into one, which no outline lists.
+        const forged = { type: 'footnote', content: [heading(1, text('Forged'))] };
+        const noted = await unzip(doc(toc(), p(text('Claim'), forged), heading(1, text('Body'))));
+        expect(entryText(noted, 'word/footnotes.xml')).toContain('Forged');
+        expect(entryText(noted, 'word/footnotes.xml')).not.toContain('bookmarkStart');
+        const body = child(await part(noted, 'word/document.xml'), 'body');
+        if (!body) throw new Error('no w:body');
+        expect(texts(sdtOf(body))).toBe('Body');
+        expect(bookmarks(body)).toEqual([['_Toc1', 'Body']]);
+    });
+
+    test('a doc with no table of contents bookmarks no heading and has no toc styles, as Word writes it', async () => {
+        const json = doc(heading(1, text('Intro')));
+        expect(descendants(await bodyOf(json), W, 'bookmarkStart')).toEqual([]);
+        expect([...(await styles(json)).keys()].filter((id) => id.startsWith('TOC'))).toEqual([]);
+    });
+
+    test('two exports of one doc are the same bytes', () => {
+        const json = doc(toc(), heading(1, text('Intro')), heading(2, text('Method')));
+        expect(docx(json)).toEqual(docx(json));
     });
 });
 

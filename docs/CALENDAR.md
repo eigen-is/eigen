@@ -130,6 +130,8 @@ A stripped rule stays in the stored bytes. The event draws as one occurrence, an
 
 An all-day event's bounds are midnight UTC, and `endTime` is the day after the last day. The frontend reads the UTC date and never converts it. With an exclusive end, one invariant covers both kinds: `endTime < startTime` is a 400 over REST and a 403 on a PUT, and a zero-length event is legal. Inbound iMIP clamps a reversed interval to zero instead, because dropping an emailed invite is worse than showing it short.
 
+The web dialogs hold a timed event as a date and an `hh:mm` per end, so a default end is computed from the start as a `Date` (`endAfter`), never by adding minutes to the time string: that wraps at midnight onto the start's date, and a new event made after 23:15 ended before it began. The New Event default starts at the wall clock's next quarter hour, and `bun test` runs in UTC, so a test of it pins the clock with `setSystemTime`.
+
 `timezone` is nullable: only the web dialogs always set one. So `formatEventWhen` takes the fallback zone as a required argument. The browser passes `viewerTimeZone()`, the zone the grid draws in, so the detail dialog names the slot the grid shows. Invitation mail has no viewer and must not borrow the server's zone, so it renders a zone-less event in UTC and says so.
 
 ## Sharing is pushed, and team calendars are off by default

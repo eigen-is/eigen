@@ -55,6 +55,7 @@ describe('the header and footer bands', () => {
             'footnote',
             'pageBreak',
             'subtitle',
+            'tableOfContents',
             'textBox',
             'title',
         ]);

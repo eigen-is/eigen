@@ -45,8 +45,8 @@ const VERTICAL_ALIGNS = new Map<string, BoxLook['verticalAlign']>([
     ['b', 'bottom'],
 ]);
 
-// A box's paragraphs own no spacing, as a cell's don't, and its text sits on its fill.
-export const textBoxScope = (scope: Scope): Scope => ({ ...scope, box: true, onFill: true });
+// A box's paragraphs own no spacing, as a cell's don't, its text sits on its fill, and it holds no table of contents.
+export const textBoxScope = (scope: Scope): Scope => ({ ...scope, box: true, onFill: true, inShape: true });
 
 // The wps shape a drawing's graphic holds alone, when it holds text: a text box. A group, a canvas or a picture is no
 // box.

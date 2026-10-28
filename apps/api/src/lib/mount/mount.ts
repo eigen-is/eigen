@@ -951,10 +951,8 @@ export class Mount {
         return files;
     }
 
-    // The queued upload and its staged copy are cancelled first, so a PUT in flight can't bring back
-    // the object this deletes. A file's delete ends here, and a document database's with it, such as a
-    // container delete or the chat-restore replace. So do a folder's delete on a mount with id keys, a
-    // failed create, and the new bytes of an overwrite that a delete raced past.
+    // Every delete of one object ends here, such as a file's delete or a failed create. The queued upload
+    // and its staged copy are canceled first, so a PUT in flight can't bring back the object this deletes.
     private async removeObject(pathId: string, storageKey: string): Promise<void> {
         await deleteThumbnail(this.thumbsDir, pathId);
         if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
@@ -1089,13 +1087,13 @@ export class Mount {
     // ---- Overwriting ----
 
     // ifMatch is an If-Match value: one etag, a list of them or `*`. The write happens only when the
-    // file's etag matches it. It answers the etag of the bytes it wrote, taken under the lock, so a
-    // write that lands after this one can't hand its etag to this caller.
+    // file's etag matches it. It answers the row it committed, taken under the lock, so a write that
+    // lands after this one can't hand its etag or updatedAt to this caller.
     public async writeFile(
         pathId: string,
         data: Buffer | Uint8Array | ArrayBuffer | BunFile,
         ifMatch?: string,
-    ): Promise<string> {
+    ): Promise<DrivePath> {
         const size = data instanceof Blob ? data.size : data.byteLength;
         const hash = await this.computeHash(data);
 
@@ -1117,7 +1115,7 @@ export class Mount {
         size: number,
         hash: string,
         ifMatch?: string,
-    ): Promise<string> {
+    ): Promise<DrivePath> {
         return this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
                 await this.assertOverwritable(pathId, ifMatch);
@@ -1140,8 +1138,9 @@ export class Mount {
     // Runs under the path lock once the bytes landed. deletePath doesn't wait for that lock, so a delete
     // during the write leaves the new bytes behind, and they go here. Off `local` no lock this holds
     // stops an ancestor's trash either. The row then still records the new bytes, and the caller gets a 404.
-    // It answers the committed row's etag, as computeEtag gives it to a GET.
-    private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<string> {
+    // It answers the row as the update stored it, so its etag and updatedAt are what a GET reads: the
+    // column keeps whole seconds, which a Date taken here would not.
+    private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<DrivePath> {
         const row = await this.db
             .select({ name: paths.name, mimeType: paths.mimeType })
             .from(paths)
@@ -1149,12 +1148,11 @@ export class Mount {
             .get();
         const searchable = !!row && isSearchableTextFile(row.mimeType, row.name);
         if (searchable) this.reindexQueue?.bumpGeneration(pathId);
-        const updatedAt = new Date();
         const committed = await this.db
             .update(paths)
-            .set({ size, hash, updatedAt, contentDirty: searchable ? 1 : 0 })
+            .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
             .where(eq(paths.id, pathId))
-            .returning({ trashedAt: paths.trashedAt })
+            .returning()
             .get();
         if (!committed) {
             await this.removeObject(pathId, storageKey);
@@ -1163,7 +1161,7 @@ export class Mount {
         await this.invalidateAncestorsOf(pathId);
         if (searchable) this.reindexQueue?.kick();
         if (committed.trashedAt) throw new ApiError(404, 'File is in trash');
-        return computeEtag({ id: pathId, hash, size, updatedAt });
+        return this.toDrivePath(committed);
     }
 
     // ---- Temp files ----

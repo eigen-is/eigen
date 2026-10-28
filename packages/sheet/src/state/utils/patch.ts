@@ -10,7 +10,7 @@ import type { Patch } from 'immer';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { Op, Sheet } from '../types';
-import { getSheetIndex } from '.';
+import { getSheetIndex, sheetOrder } from '.';
 
 export type PatchOptions = {
     insertRowColOp?: {
@@ -220,9 +220,9 @@ export function deleteSheetOps(deleted: Sheet, sheets: Sheet[]): Op[] {
 }
 
 function orderOps(changed: Sheet, sheets: Sheet[]): Op[] {
-    const from = changed.order ?? 0;
+    const from = sheetOrder(changed);
     return sheets
-        .filter((sheet) => sheet.id !== changed.id && (sheet.order ?? 0) >= from)
+        .filter((sheet) => sheet.id !== changed.id && sheetOrder(sheet) >= from)
         .map((sheet): Op => ({ op: 'replace', id: sheet.id, path: ['order'], value: sheet.order }));
 }
 

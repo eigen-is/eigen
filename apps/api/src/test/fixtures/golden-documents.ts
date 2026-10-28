@@ -297,6 +297,7 @@ export function buildAllFeaturesDocJson(): JSONContent {
                 attrs: { textAlign: 'center' },
                 content: [{ type: 'text', text: 'Every node and mark' }, marked(' in bold', { type: 'bold' })],
             },
+            { type: 'tableOfContents', attrs: { levels: 3 } },
             ...headings,
             ...aligned,
             {

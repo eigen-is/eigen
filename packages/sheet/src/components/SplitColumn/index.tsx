@@ -1,3 +1,6 @@
+// The Split text to columns dialog: the separators to split on, a preview of the result, and a warning before
+// the split overwrites cells to the right of the selected column.
+
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -37,14 +40,16 @@ export function SplitColumn() {
     const certainBtn = useCallback(() => {
         hideDialog();
         const dataArr = getDataArr(splitOperate, context);
-        const r = context.selections![0].row[0];
-        const c = context.selections![0].column[0];
-        if (dataArr[0].length === 1) return;
-        let dataCover = false;
+        const selection = context.selections?.[0];
         const data = getFlowdata(context);
+        // The dialog opens on a selected column of a loaded sheet.
+        if (!selection || !data || dataArr[0].length === 1) return;
+        const r = selection.row[0];
+        const c = selection.column[0];
+        let dataCover = false;
         for (let i = 0; i < dataArr.length; i += 1) {
             for (let j = 1; j < dataArr[0].length; j += 1) {
-                const cell = data![r + i][c + j];
+                const cell = data[r + i][c + j];
                 if (cellValue(cell) != null) {
                     dataCover = true;
                     break;

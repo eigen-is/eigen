@@ -165,13 +165,13 @@ describe('Editor', () => {
         test.each([
             ['*', () => '*'],
             ['a list', (etag: string) => `"stale", ${etag}`],
-        ])('a save with expectedEtag %s is a conflict', async (_, ifMatchValue) => {
+        ])('a save with expectedEtag %s is refused', async (_, ifMatchValue) => {
             const uploaded = await uploadTextFile('wildcard-etag.txt', 'original');
             const { data: initial } = await editorGet(uploaded.id);
 
             const expectedEtag = ifMatchValue(initial.etag);
-            const { data } = await editorPut(uploaded.id, { content: 'unguarded', expectedEtag });
-            expect(data?.conflict).toBe(true);
+            const { status } = await editorPut(uploaded.id, { content: 'unguarded', expectedEtag });
+            expect(status).toBe(422);
             expect((await editorGet(uploaded.id)).data.content).toBe('original');
         });
 
@@ -184,9 +184,9 @@ describe('Editor', () => {
             const { mount } = await (await getHome(ctx.alice.user.id)).drive.resolveFile(mountId, uploaded.id);
             const writeFile = mount.writeFile.bind(mount);
             const write = spyOn(mount, 'writeFile').mockImplementationOnce(async (...args) => {
-                const etag = await writeFile(...args);
+                const committed = await writeFile(...args);
                 await writeFile(uploaded.id, Buffer.from('theirs'));
-                return etag;
+                return committed;
             });
             let saved: Awaited<ReturnType<typeof editorPut>>;
             try {

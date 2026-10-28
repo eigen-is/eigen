@@ -1,3 +1,8 @@
+// The DOM layer over the grid canvas: the row and column headers, the scrolling cell area with the cell editor,
+// selections and floating images and charts, the validation and link cards, and the add-rows footer. It turns the
+// pointer's down, move, up and double click on the cell area into the state handlers, such as
+// handleCellAreaMouseDown, and coalesces mouse moves to one update per frame.
+
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
@@ -17,6 +22,7 @@ import {
     computeOverlayRegions,
     getCellHyperlink,
     getCellRowColumn,
+    getFlowdata,
     getRangetxt,
     getSheetConfig,
     getSheetIndex,
@@ -63,18 +69,23 @@ export const SheetOverlay: React.FC = () => {
             const { nativeEvent } = e;
             // Skip cell-selection logic when the click originated inside a floating UI
             // (validation dropdown, hint box, etc.) that should not move the selection.
+            // React types a mouse event's target as an EventTarget; on this div it is always an element.
             if ((e.target as HTMLElement).closest?.('.sheet-mousedown-cancel')) return;
             if (e.button !== 2) {
                 // onContextMenu event will not call onMouseDown
                 setContext((draftCtx) => {
+                    // The recipe can run after the grid unmounts, and then its refs are unset.
+                    const cellInput = refs.cellInput.current;
+                    const cellArea = refs.cellArea.current;
+                    if (!cellInput || !cellArea) return;
                     const consumed = handleCellAreaMouseDown(
                         draftCtx,
                         refs.globalCache,
                         nativeEvent,
-                        refs.cellInput.current!,
-                        refs.cellArea.current!,
-                        refs.fxInput.current!,
-                        refs.canvas.current!.getContext('2d')!,
+                        cellInput,
+                        cellArea,
+                        refs.fxInput.current,
+                        refs.canvas.current?.getContext('2d') ?? undefined,
                     );
 
                     // Skip the input focus when the mousedown opened a menu — the
@@ -104,7 +115,9 @@ export const SheetOverlay: React.FC = () => {
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
             setContext((draftCtx) => {
-                handleCellAreaDoubleClick(draftCtx, refs.globalCache, settings, nativeEvent, refs.cellArea.current!);
+                const cellArea = refs.cellArea.current;
+                if (!cellArea) return;
+                handleCellAreaDoubleClick(draftCtx, refs.globalCache, settings, nativeEvent, cellArea);
             });
         },
         [refs.cellArea, refs.globalCache, setContext, settings],
@@ -115,7 +128,8 @@ export const SheetOverlay: React.FC = () => {
     // hit-testing and the canvas redraw) and fire the bus — never setContext,
     // which would re-render every context consumer on each scroll tick.
     const onCellAreaScroll = useCallback(() => {
-        const el = refs.cellArea.current!;
+        const el = refs.cellArea.current;
+        if (!el) return;
         refs.globalCache.scrollLeft = el.scrollLeft;
         refs.globalCache.scrollTop = el.scrollTop;
         refs.globalCache.notifyScrollListeners();
@@ -175,23 +189,21 @@ export const SheetOverlay: React.FC = () => {
                 pendingMouseMoveRef.current = null;
                 setContext(
                     (draftCtx) => {
+                        const container = containerRef.current;
+                        const cellArea = refs.cellArea.current;
+                        const cellInput = refs.cellInput.current;
+                        if (!container || !cellArea || !cellInput) return;
                         // Skip link-card hover detection during active selection drag
                         if (!draftCtx.selectionActive && !draftCtx.scrolling) {
-                            overShowLinkCard(
-                                draftCtx,
-                                refs.globalCache,
-                                ev,
-                                containerRef.current!,
-                                refs.cellArea.current!,
-                            );
+                            overShowLinkCard(draftCtx, refs.globalCache, ev, container, cellArea);
                         }
                         handleOverlayMouseMove(
                             draftCtx,
                             refs.globalCache,
                             ev,
-                            refs.cellInput.current!,
-                            refs.cellArea.current!,
-                            containerRef.current!,
+                            cellInput,
+                            cellArea,
+                            container,
                             refs.fxInput.current,
                         );
                     },
@@ -205,14 +217,17 @@ export const SheetOverlay: React.FC = () => {
     const onMouseUp = useCallback(
         (nativeEvent: MouseEvent) => {
             setContext((draftCtx) => {
+                const cellArea = refs.cellArea.current;
+                const container = containerRef.current;
+                if (!cellArea || !container) return;
                 try {
                     handleOverlayMouseUp(
                         draftCtx,
                         refs.globalCache,
                         settings,
                         nativeEvent,
-                        refs.cellArea.current!,
-                        containerRef.current!,
+                        cellArea,
+                        container,
                         refs.cellInput.current,
                         refs.fxInput.current,
                     );
@@ -233,10 +248,11 @@ export const SheetOverlay: React.FC = () => {
         if (value < 1) {
             return;
         }
+        const data = getFlowdata(context);
+        if (!data) return;
         const insertRowColOp: SetContextOptions['insertRowColOp'] = {
             type: 'row',
-            index:
-                context.sheets[getSheetIndex(context, context!.currentSheetId! as string) as number].data!.length - 1,
+            index: data.length - 1,
             count: value,
             direction: 'rightbottom',
             id: context.currentSheetId,
@@ -556,7 +572,7 @@ export const SheetOverlay: React.FC = () => {
                                         onClick={() => {
                                             // cellArea is the scroll source; its native scroll
                                             // event syncs globalCache and triggers the redraw.
-                                            refs.cellArea.current!.scrollTop = 0;
+                                            if (refs.cellArea.current) refs.cellArea.current.scrollTop = 0;
                                         }}
                                     >
                                         Back to the top

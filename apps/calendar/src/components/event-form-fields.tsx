@@ -1,3 +1,6 @@
+// The fields the New Event and event detail dialogs share: title, dates and times, all day, repeat, calendar, place
+// and notes. The dialogs own the state; this file keeps an end after its start when the start or all day changes.
+
 import { toLocalDateString } from '@workspace/lib/calendar';
 import type { CalendarOption } from '@workspace/lib/types/calendar';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -8,7 +11,7 @@ import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { RecurrencePicker } from './recurrence-picker';
-import { addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes, toTimeString } from './time-select';
+import { addMinutes, endAfter, roundToNext15Minutes, TimeSelect, timeToMinutes, toTimeString } from './time-select';
 
 type EventFormFieldsProps = {
     titlePlaceholder: string;
@@ -82,12 +85,9 @@ export function EventFormFields({
         const minEndMinutes = timeToMinutes(minEnd);
 
         if (currentEndMinutes < minEndMinutes) {
-            const newEnd = addMinutes(newStart, 30);
-            setEndTime(newEnd);
-            const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
-            const d = new Date(`${startDate}T00:00`);
-            if (wraps) d.setDate(d.getDate() + 1);
-            setEndDate(toLocalDateString(d));
+            const end = endAfter(new Date(`${startDate}T${newStart}`), 30);
+            setEndTime(end.time);
+            setEndDate(end.date);
         }
     };
 
@@ -170,9 +170,12 @@ export function EventFormFields({
                                     const isAllDay = !!checked;
                                     setAllDay(isAllDay);
                                     if (!isAllDay) {
-                                        const now = roundToNext15Minutes(new Date());
-                                        setStartTime(toTimeString(now));
-                                        setEndTime(addMinutes(toTimeString(now), 30));
+                                        const start = toTimeString(roundToNext15Minutes(new Date()));
+                                        const end = endAfter(new Date(`${startDate}T${start}`), 30);
+                                        setStartTime(start);
+                                        setEndTime(end.time);
+                                        // An event over several days keeps its last day.
+                                        if (endDate <= startDate) setEndDate(end.date);
                                     }
                                 }}
                             />

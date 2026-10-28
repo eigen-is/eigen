@@ -69,7 +69,7 @@ export function layoutChart({ spec, data, sourceFormat, ...box }: ChartLayoutInp
         const style = chartSeriesStyle(spec, s.id);
         const place = spec.data.series.findIndex(({ id }) => id === s.id);
         const color = style.color ?? chartColor(place === -1 ? i : place);
-        return { ...s, style, color, labelled: style.labels.visible && !capped };
+        return { ...s, style, color, labeled: style.labels.visible && !capped };
     });
     const type = spec.chart.type;
     // A pie draws its first series, whose points are its slices.
@@ -91,12 +91,12 @@ export function layoutChart({ spec, data, sourceFormat, ...box }: ChartLayoutInp
     // Past MAX_SKETCH_POINTS the data marks draw unsketched and solid, their labels still the chart's.
     const marks: Context = capped ? { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } } : ctx;
     const cartesian = (painted: PaintedSeries[]) =>
-        layoutCartesian(ctx, marks, spec, categories, painted, values, frame, sourceFormat ?? null);
+        layoutCartesian(ctx, marks, spec, categories, painted, values, frame, sourceFormat);
     // Data labels are the first thing to give: a plot too small with them is laid out again without.
     const plot =
         type === 'pie'
             ? layoutPie(marks, spec, pieId, categories, values[0], frame)
-            : (cartesian(series) ?? cartesian(series.map((s) => ({ ...s, labelled: false }))));
+            : (cartesian(series) ?? cartesian(series.map((s) => ({ ...s, labeled: false }))));
     if (!plot) return message(CHART_MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
 }

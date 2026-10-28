@@ -67,13 +67,12 @@ export function handleColSizeHandleMouseDown(
     ctx.colsResizing = true;
     ctx.scrolling = true;
     const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
-    if (changeSizeLine) {
-        const ele = changeSizeLine as HTMLDivElement;
-        ele.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
-        ele.style.borderWidth = '0 1px 0 0';
-        ele.style.top = '0';
-        ele.style.left = `${col}px`;
-        ele.style.width = '1px';
+    if (changeSizeLine instanceof HTMLElement) {
+        changeSizeLine.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
+        changeSizeLine.style.borderWidth = '0 1px 0 0';
+        changeSizeLine.style.top = '0';
+        changeSizeLine.style.left = `${col}px`;
+        changeSizeLine.style.width = '1px';
     }
     ctx.colsResizeStart = [e.pageX, col_index];
     e.stopPropagation();
@@ -113,13 +112,12 @@ export function handleRowSizeHandleMouseDown(
     ctx.rowsResizing = true;
     ctx.scrolling = true;
     const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
-    if (changeSizeLine) {
-        const ele = changeSizeLine as HTMLDivElement;
-        ele.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
-        ele.style.borderWidth = '0 0 1px 0';
-        ele.style.top = `${row}px`;
-        ele.style.left = '0';
-        ele.style.height = '1px';
+    if (changeSizeLine instanceof HTMLElement) {
+        changeSizeLine.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
+        changeSizeLine.style.borderWidth = '0 0 1px 0';
+        changeSizeLine.style.top = `${row}px`;
+        changeSizeLine.style.left = '0';
+        changeSizeLine.style.height = '1px';
     }
     ctx.rowsResizeStart = [e.pageY, row_index];
     e.stopPropagation();
@@ -147,23 +145,21 @@ export function handleColFreezeHandleMouseDown(
     ctx.colsFreezeDragging = true;
     ctx.scrolling = true;
     const freezeDragLine = workbookContainer.querySelector('.sheet-freeze-drag-line');
-    if (freezeDragLine) {
-        const ele = freezeDragLine as HTMLDivElement;
-        ele.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
-        ele.style.borderWidth = '0 3px 0 0';
-        ele.style.top = '0';
-        ele.style.left = `${col - 3}px`;
-        ele.style.width = '1px';
+    if (freezeDragLine instanceof HTMLElement) {
+        freezeDragLine.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
+        freezeDragLine.style.borderWidth = '0 3px 0 0';
+        freezeDragLine.style.top = '0';
+        freezeDragLine.style.left = `${col - 3}px`;
+        freezeDragLine.style.width = '1px';
     }
     // Reuse change-size-line to show a thin resize indicator alongside the freeze line
     const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
-    if (changeSizeLine) {
-        const ele = changeSizeLine as HTMLDivElement;
-        ele.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
-        ele.style.borderWidth = '0 1px 0 0';
-        ele.style.top = '0';
-        ele.style.left = `${col - 3}px`;
-        ele.style.width = '1px';
+    if (changeSizeLine instanceof HTMLElement) {
+        changeSizeLine.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
+        changeSizeLine.style.borderWidth = '0 1px 0 0';
+        changeSizeLine.style.top = '0';
+        changeSizeLine.style.left = `${col - 3}px`;
+        changeSizeLine.style.width = '1px';
     }
     e.stopPropagation();
 }
@@ -190,23 +186,21 @@ export function handleRowFreezeHandleMouseDown(
     ctx.rowsFreezeDragging = true;
     ctx.scrolling = true;
     const freezeDragLine = workbookContainer.querySelector('.sheet-freeze-drag-line');
-    if (freezeDragLine) {
-        const ele = freezeDragLine as HTMLDivElement;
-        ele.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
-        ele.style.borderWidth = '0 0 3px 0';
-        ele.style.top = `${row - 3}px`;
-        ele.style.left = '0';
-        ele.style.height = '1px';
+    if (freezeDragLine instanceof HTMLElement) {
+        freezeDragLine.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
+        freezeDragLine.style.borderWidth = '0 0 3px 0';
+        freezeDragLine.style.top = `${row - 3}px`;
+        freezeDragLine.style.left = '0';
+        freezeDragLine.style.height = '1px';
     }
     // Reuse change-size-line to show a thin resize indicator alongside the freeze line
     const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
-    if (changeSizeLine) {
-        const ele = changeSizeLine as HTMLDivElement;
-        ele.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
-        ele.style.borderWidth = '0 0 1px 0';
-        ele.style.top = `${row - 3}px`;
-        ele.style.left = '0';
-        ele.style.height = '1px';
+    if (changeSizeLine instanceof HTMLElement) {
+        changeSizeLine.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
+        changeSizeLine.style.borderWidth = '0 0 1px 0';
+        changeSizeLine.style.top = `${row - 3}px`;
+        changeSizeLine.style.left = '0';
+        changeSizeLine.style.height = '1px';
     }
     e.stopPropagation();
 }

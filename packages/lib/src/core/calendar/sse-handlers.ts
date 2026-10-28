@@ -7,13 +7,11 @@ import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { debouncePerOwner } from '../debounce-per-owner';
 import {
-    calendarKeys,
-    invalidateCalendarCreated,
+    invalidateCalendarAccess,
     invalidateCalendarDeleted,
-    invalidateCalendarShared,
-    invalidateCalendarUnshared,
-    invalidateCalendarUpdated,
+    invalidateCalendarList,
     invalidateEventList,
+    invalidateSharedCalendars,
 } from './hooks/keys';
 
 // Debounced for the burst a whole-file import sends. The writing tab's own onSuccess still refetches at once.
@@ -24,11 +22,8 @@ export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, 
 
     switch (event.type) {
         case SSEventType.CALENDAR_CREATED:
-            invalidateCalendarCreated(queryClient, event.ownerId);
-            return true;
-
         case SSEventType.CALENDAR_UPDATED:
-            invalidateCalendarUpdated(queryClient, event.ownerId);
+            invalidateCalendarList(queryClient, event.ownerId);
             return true;
 
         case SSEventType.CALENDAR_DELETED:
@@ -44,13 +39,10 @@ export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, 
             return true;
 
         case SSEventType.CALENDAR_SHARED:
-            invalidateCalendarShared(queryClient, userId);
-            // The event names the sharing owner, whose share dialog lists who has access.
-            queryClient.invalidateQueries({ queryKey: calendarKeys.accessAll(event.ownerId) });
-            return true;
-
         case SSEventType.CALENDAR_UNSHARED:
-            invalidateCalendarUnshared(queryClient, userId);
+            invalidateSharedCalendars(queryClient, userId);
+            // The event names the sharing owner, whose share dialog lists who has access.
+            invalidateCalendarAccess(queryClient, event.ownerId);
             return true;
 
         // An invitation event names the organizer's home, so these refetch the reader's own ranges.

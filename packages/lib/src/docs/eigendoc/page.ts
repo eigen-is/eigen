@@ -1,4 +1,8 @@
-// In millimetres because paper is defined in them; pagePx and pageTwips return this shape in their unit. Orientation is width > height.
+// A doc's page: its paper, margins and bands, the one reader of the page a doc stores, and the units it is measured
+// in. The editor, the PDF and the docx all lay out from the PageSetup readPageSetup returns, so they agree on the page.
+
+// In millimeters, because paper is defined in them. pagePx and pageTwips return this shape in their unit. Orientation
+// is width > height.
 export type PageMargin = { top: number; right: number; bottom: number; left: number };
 // headerDistance and footerDistance: a band's distance from the paper's top or bottom edge, Word's Header from top and
 // Footer from bottom. differentFirstPage: page 1 takes the headerFirst and footerFirst bands instead of header and footer.
@@ -144,6 +148,9 @@ function convert(setup: PageSetup, fromMm: (mm: number) => number): PageSetup {
 // The lengths a doc is measured in, unrounded: mm on paper, CSS px at 96 dpi (Docs stores a figure's width in them),
 // points, and Word's twips, twentieths of a point.
 export const mmToPx = (mm: number) => (mm / 25.4) * 96;
+// The largest paper's side in px, 2112. A stored box, such as a figure's or a chart's, is held to it, as no page holds
+// a larger one.
+export const MAX_PAPER_PX = mmToPx(MAX_PAPER_MM);
 export const pxToMm = (px: number) => (px / 96) * 25.4;
 export const mmToPt = (mm: number) => (mm / 25.4) * 72;
 export const ptToMm = (pt: number) => (pt / 72) * 25.4;

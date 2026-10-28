@@ -68,9 +68,9 @@ describe('a change that has landed', () => {
         const before = await settledTempFiles();
         const writeFileFromTemp = mount.writeFileFromTemp.bind(mount);
         const write = spyOn(mount, 'writeFileFromTemp').mockImplementationOnce(async (...args) => {
-            const etag = await writeFileFromTemp(...args);
+            const committed = await writeFileFromTemp(...args);
             await mount.deletePath(file.id);
-            return etag;
+            return committed;
         });
         try {
             const result = await home.drive

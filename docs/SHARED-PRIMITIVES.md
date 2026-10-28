@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2073 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2082 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -215,7 +215,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (17)
+## Contexts, schemas & classes (18)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -227,6 +227,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `FootnoteNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
 | `PageNumberNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
+| `TableOfContentsNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-of-contents.ts |
 | `TextBoxNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/text-box.ts |
 | `CreateUnconfirmedError` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
@@ -237,7 +238,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (300)
+## Hooks (301)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -479,6 +480,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateOrgName` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-organization.ts |
 | `useUpdateServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useUpdateServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
+| `useSettingWithCopy` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-setting-with-copy.ts |
 | `useSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
 | `useUpdateSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
 | `useSSE` | `@workspace/lib/sse` | packages/lib/src/core/sse/hooks/use-sse.ts |
@@ -542,7 +544,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (467)
+## Types (470)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -567,6 +569,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CreateCommentCardInput` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `BundledFontFace` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `BytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `ColorChannels` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `FontFaceFile` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
@@ -588,6 +591,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureFrameNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `NormalStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
+| `OutlineEntry` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `OutlineHeading` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `PageMargin` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
@@ -632,6 +636,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SheetImage` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetWithCalcChain` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SingleRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `SettingWithCopy` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-setting-with-copy.ts |
 | `ActivityLines` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `Address` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `AddressObject` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -1014,7 +1019,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1095)
+## Utilities & constants (1099)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1321,6 +1326,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFontFamily` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getFontName` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `hexChannels` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `ICS_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `INDICATOR_RED` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `isExiftoolExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -1403,6 +1409,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `bandEdge` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `bandHasContent` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `BLOCK_ONLY_FIGURE_PARENTS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
+| `canInsertTableOfContents` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-of-contents.ts |
 | `CELL_BORDER_SIDES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `CELL_BORDER_STYLES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `cellBorderValue` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
@@ -1417,7 +1424,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FIGURE_FRAME_NODES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `figureLayoutStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FIRST_PAGE_BAND` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
-| `fitColumnWidths` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `flattenNestedStories` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/stories.ts |
 | `FOOTNOTE_PARAGRAPH` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
 | `FOOTNOTE_SELECTOR` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
@@ -1436,6 +1442,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `matchPaperSize` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mathAsText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
 | `MAX_CELL_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `MAX_HEADING_LEVEL` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `MAX_PAPER_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `MAX_TEXT_BOX_PADDING` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/text-box.ts |
 | `MIN_CELL_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
@@ -1446,6 +1453,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mmToTwips` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `newStoryId` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/stories.ts |
 | `normalStyleProperties` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
+| `outlineEntry` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/outline.ts |
 | `PAGE_BAND_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `PAGE_BREAK_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-break.ts |
 | `PAGE_NUMBER_KINDS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
@@ -1483,6 +1491,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readStoryId` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/stories.ts |
 | `readTextBoxAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/text-box.ts |
 | `readTextBoxSide` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/text-box.ts |
+| `readTocLevels` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-of-contents.ts |
 | `selectionFontSizes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/font-size.ts |
 | `selectionParagraphFormat` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
 | `setFigureAttributes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |

@@ -1,3 +1,6 @@
+// Sorting the selected range by one of its columns, ascending or descending, from the Data menu and the Custom
+// sort dialog. Formulas in the sorted rows are shifted to the rows they land on and evaluated again.
+
 import { clone, findIndex } from 'es-toolkit/compat';
 import numeral from 'numeral';
 import { cellValue } from '../../engine/format';
@@ -79,7 +82,7 @@ export function sortDataRange(
                     func = `=${functionCopy(func, moveOffset, 0)}`;
                 }
                 const funcV = execfunction(ctx, func, r, c, undefined, undefined, true, undefined, resolver);
-                [, cell!.v, cell!.f] = funcV;
+                [, cell.v, cell.f] = funcV;
                 cell.m = numberDisplay(cell.v, cell.ct?.fa);
             }
             sheetData[r][c] = cell;

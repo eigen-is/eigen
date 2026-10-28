@@ -1,3 +1,7 @@
+// The cell calls of the Workbook's imperative API: reading a cell's value, writing a value, a formula or a
+// style, clearing a cell, setting one format attribute and an auto-fill between two ranges. Each finds its
+// sheet with getSheet, by id or index, and writes through the same state modules a typed edit uses.
+
 import { forEach, isNil, isNumber, isPlainObject } from 'es-toolkit/compat';
 import { numberDisplay, richText } from '../../engine/format';
 import type { Cell, CellMatrix, CellStyle } from '../../engine/types';
@@ -94,10 +98,7 @@ export function setCellValue(
     } else if (value instanceof Object) {
         if (!data) throw sheetNotFound();
         const curv: Cell = {};
-        if (data[row]?.[column] == null) {
-            data[row][column] = {};
-        }
-        const cell = data[row][column]!;
+        const cell = (data[row][column] ??= {});
         if (value.f != null && value.v == null) {
             curv.f = value.f;
             if (value.ct != null) {
@@ -126,14 +127,15 @@ export function setCellValue(
         }
         forEach(value, (v, attr) => {
             if (FORMAT_KEYS.has(attr)) {
-                updateFormatCell(ctx, data!, attr as keyof CellStyle, v as string | number, row, row, column, column); // change range format
+                // FORMAT_KEYS holds only style keys, whose values are strings or numbers.
+                updateFormatCell(ctx, data, attr as keyof CellStyle, v as string | number, row, row, column, column); // change range format
             } else {
                 // forEach hands us `attr: string` (Cell key as plain key); the union of
                 // value-shapes can't be statically aligned with the union of key-shapes.
                 (cell as Record<string, unknown>)[attr] = v;
             }
         });
-        data![row][column] = cell;
+        data[row][column] = cell;
     } else {
         if (value.toString().substr(0, 1) === '=' || value.toString().substr(0, 5) === '<span') {
             updateCell(ctx, row, column, cellInput, value); // update formula value or convert inline string html to object
@@ -188,17 +190,22 @@ export function setCellFormat(
 
     const sheet = getSheet(ctx, options);
 
-    const targetSheetData = sheet.data!;
+    const targetSheetData = sheet.data;
+    if (!targetSheetData) {
+        throw sheetNotFound();
+    }
 
-    const cellData = targetSheetData?.[row]?.[column] || {};
+    const cellData = targetSheetData[row]?.[column] || {};
 
+    // The caller's value is unchecked: this API writes whatever it is given, and checks only a ct's shape.
     const ctValue = value as { fa?: string; t?: string } | null | undefined;
 
     // special format
-    if (attr === 'ct' && (!ctValue || ctValue.fa == null || ctValue.t == null)) {
-        throw new Error("'fa' and 't' should be present in value when attr is 'ct'");
-    } else if (attr === 'ct' && !isNil(cellData.v)) {
-        cellData.m = numberDisplay(cellData.v, ctValue!.fa);
+    if (attr === 'ct') {
+        if (!ctValue || ctValue.fa == null || ctValue.t == null) {
+            throw new Error("'fa' and 't' should be present in value when attr is 'ct'");
+        }
+        if (!isNil(cellData.v)) cellData.m = numberDisplay(cellData.v, ctValue.fa);
     }
 
     (cellData as Record<string, unknown>)[attr] = value;

@@ -67,6 +67,8 @@ import { PageNumber } from './extensions/page-number';
 import { PositionedFigures } from './extensions/positioned-figure';
 import { STORY_EDIT, StoryDecorations, StoryFormatting } from './extensions/story';
 import { cellPosAt, EditorTable } from './extensions/table';
+import type { TableOfContentsOptions } from './extensions/table-of-contents';
+import { TableOfContents } from './extensions/table-of-contents';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import type { TextBoxOptions } from './extensions/text-box';
 import { TextBox } from './extensions/text-box';
@@ -282,6 +284,7 @@ type DocEditorOptions = {
     table?: { onContextMenu: (editor: Editor, pos: number, event: MouseEvent) => boolean };
     footnote?: Partial<FootnoteOptions>;
     textBox?: Partial<TextBoxOptions>;
+    tableOfContents?: Partial<TableOfContentsOptions>;
     // An extension named as a schema node or mark takes its place, as the body's comment mark does.
     extensions?: Extensions;
     media: () => DocMedia;
@@ -302,6 +305,7 @@ export function docEditorOptions({
     table,
     footnote,
     textBox,
+    tableOfContents,
     extensions = [],
     media,
     editor,
@@ -358,6 +362,7 @@ export function docEditorOptions({
                     'equation',
                     'table',
                     'pageNumber',
+                    'tableOfContents',
                     ...extensions.map((extension) => extension.name),
                 ],
             }).map((extension) =>
@@ -369,6 +374,7 @@ export function docEditorOptions({
             ...(band ? [] : [Chart.configure(chart)]),
             Equation.configure(equation),
             PageNumber,
+            ...(band ? [] : [TableOfContents.configure(tableOfContents)]),
             ...(band || note ? [] : [Footnote.configure(footnote), TextBox.configure(textBox), StoryFormatting]),
             TableWidthClamp.configure({ textColumnWidth, paperWidth, band }),
             noPageBreaksWhenPageless(pageless),

@@ -67,8 +67,8 @@ export function handleGlobalEnter(
         moveHighlightCell(ctx, 'down', 1, 'rangeOfSelect');
         e.preventDefault();
     } else if ((ctx.selections?.length ?? 0) > 0) {
-        const last = ctx.selections![ctx.selections!.length - 1];
-        if (last.row_focus == null || last.column_focus == null) return;
+        const last = ctx.selections?.at(-1);
+        if (last?.row_focus == null || last.column_focus == null) return;
         ctx.editingCellPosition = [last.row_focus, last.column_focus];
         e.preventDefault();
     }
@@ -368,7 +368,7 @@ export function handleGlobalKeyDown(
         return;
     }
 
-    // Ctrl+Shift+F toggles the sheet's focus lock: released, keys fall through to the host
+    // SHEET_HOTKEYS.focusLock toggles the sheet's focus lock: released, keys fall through to the host
     // app so a keyboard user can tab out of the grid. Runs independently of sheetFocused so the
     // lock can be re-taken from anywhere inside the workbook — the keydown listener is on the
     // workbook container, so focus that has left it can't come back this way.
@@ -435,7 +435,7 @@ export function handleGlobalKeyDown(
         // function keys (F1-F12 = 112-123), modifier/system keys (kcode <= 46
         // except backspace/space/delete/0), NumLock (144), Numpad equals (108),
         // and modified key combos handled elsewhere — but always allow
-        // Backspace (8), Space (32), Delete (46), key 0, and Ctrl+V (86).
+        // Backspace (8), Space (32), Delete (46) and key 0.
         !(
             (kcode >= 112 && kcode <= 123) ||
             kcode <= 46 ||
@@ -448,14 +448,13 @@ export function handleGlobalKeyDown(
         kcode === 8 ||
         kcode === 32 ||
         kcode === 46 ||
-        kcode === 0 ||
-        (e.ctrlKey && kcode === 86)
+        kcode === 0
     ) {
         if (!allowEdit) return;
         if (!isEmpty(ctx.selections) && kstr !== 'CapsLock' && kcode !== 18) {
             // Activate the input box and forward the keypress to it.
-            const last = ctx.selections![ctx.selections!.length - 1];
-            if (last.row_focus == null || last.column_focus == null) return;
+            const last = ctx.selections?.at(-1);
+            if (last?.row_focus == null || last.column_focus == null) return;
             ctx.editingCellPosition = [last.row_focus, last.column_focus];
             cache.overwriteCell = true;
 

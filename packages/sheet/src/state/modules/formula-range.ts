@@ -1,3 +1,7 @@
+// Picking a range into a formula with the pointer: while a formula is open, a click or drag on the grid or a
+// header writes its reference into the editor at the caret (rangeSetValue) and draws the colored boxes over the
+// formula's ranges (createRangeHightlight). The drag handlers here move that pick as the pointer moves.
+
 import { escapeHtml } from '@workspace/lib/html';
 import type { Context } from '../context';
 import { getSheetConfig } from '../context';
@@ -69,7 +73,8 @@ export function setCaretPosition(ctx: Context, textDom: HTMLElement, children: n
         el.focus();
     } catch (err) {
         console.error(err);
-        moveToEnd(ctx.formulaCache.rangeResizeTo![0]);
+        const resizeTo = ctx.formulaCache.rangeResizeTo?.[0];
+        if (resizeTo) moveToEnd(resizeTo);
     }
 }
 
@@ -81,8 +86,8 @@ export function rangeSetValue(
 ) {
     let $editor = cellInput;
     let $copyTo = fxInput;
-    if (document.activeElement?.id === 'sheet-functionbox-cell') {
-        $editor = fxInput!;
+    if (document.activeElement?.id === 'sheet-functionbox-cell' && fxInput) {
+        $editor = fxInput;
         $copyTo = cellInput;
     }
     let range = '';
@@ -107,10 +112,8 @@ export function rangeSetValue(
         !israngeseleciton(ctx) &&
         (ctx.formulaCache.rangestart || ctx.formulaCache.rangedrag_column_start || ctx.formulaCache.rangedrag_row_start)
     ) {
-        const span = $editor.querySelector(
-            `span[rangeindex='${ctx.formulaCache.rangechangeindex}']`,
-        ) as HTMLSpanElement;
-        if (span) {
+        const span = $editor.querySelector(`span[rangeindex='${ctx.formulaCache.rangechangeindex}']`);
+        if (span instanceof HTMLElement) {
             // `range` embeds the sheet's name, which updateSheetName only screens for the
             // six characters a reference may not contain — markup is a legal sheet name,
             // and this is innerHTML. The caret offset stays the RAW length: that is what
@@ -177,7 +180,8 @@ export function onFormulaRangeDragEnd(ctx: Context) {
 // The formula range select renders once per overlay pane region; write every
 // copy — each region's clip shows exactly its portion.
 function setRangeSelect(container: HTMLDivElement, left: number, top: number, height: number, width: number) {
-    for (const rangeElement of container.querySelectorAll<HTMLDivElement>('.sheet-formula-functionrange-select')) {
+    for (const rangeElement of container.querySelectorAll('.sheet-formula-functionrange-select')) {
+        if (!(rangeElement instanceof HTMLElement)) continue;
         rangeElement.style.left = `${left}px`;
         rangeElement.style.top = `${top}px`;
         rangeElement.style.height = `${height}px`;
@@ -247,7 +251,7 @@ export function rangeDrag(
         columnseleted = [func_selectedrange.column[0], col_index];
     }
 
-    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, func_selectedrange, top, height, left, width);
+    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, top, height, left, width);
     if (changeparam != null) {
         [columnseleted, rowseleted, top, height, left, width] = changeparam;
     }
@@ -320,16 +324,7 @@ export function rangeDragColumn(
         columnseleted = [func_selectedrange.column[0], col_index];
     }
 
-    const changeparam = mergeMoveMain(
-        ctx,
-        columnseleted,
-        [0, row_index],
-        func_selectedrange,
-        row_pre,
-        row - row_pre - 1,
-        left,
-        width,
-    );
+    const changeparam = mergeMoveMain(ctx, columnseleted, [0, row_index], row_pre, row - row_pre - 1, left, width);
     if (changeparam != null) {
         [columnseleted, , , , left, width] = changeparam;
     }
@@ -398,16 +393,7 @@ export function rangeDragRow(
         rowseleted = [func_selectedrange.row[0], row_index];
     }
 
-    const changeparam = mergeMoveMain(
-        ctx,
-        [0, col_index],
-        rowseleted,
-        func_selectedrange,
-        top,
-        height,
-        col_pre,
-        col - col_pre - 1,
-    );
+    const changeparam = mergeMoveMain(ctx, [0, col_index], rowseleted, top, height, col_pre, col - col_pre - 1);
     if (changeparam != null) {
         [, rowseleted, top, height] = changeparam;
     }

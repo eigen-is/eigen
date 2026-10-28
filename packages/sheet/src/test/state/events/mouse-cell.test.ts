@@ -22,6 +22,7 @@ const g = globalThis as any;
 const win = new Window();
 g.window = win;
 g.document = win.document;
+g.HTMLElement = win.HTMLElement;
 
 const TICK_BOX: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
 

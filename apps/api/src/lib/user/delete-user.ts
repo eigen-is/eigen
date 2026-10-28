@@ -9,8 +9,9 @@ import { getGuestHomePath, getUserHomePath } from '../config/paths';
 import { ApiError } from '../core';
 import { deleteHomeData } from '../home/delete-home';
 import { removeEntriesForTarget, removeEntriesFromSource } from '../share/registry';
+import { isGuest } from './guest';
 import type { User } from './user';
-import { getUserById, isGuest } from './user';
+import { getUserById } from './user';
 
 // Every better-auth deletion passes the user.delete.before hook while the user row still exists, so the hook runs
 // this. A throw here stops better-auth from deleting the row.

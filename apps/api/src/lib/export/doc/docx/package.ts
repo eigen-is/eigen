@@ -15,6 +15,7 @@ import type { FontSlot } from './fonts';
 import type { List } from './numbering';
 import type { Block, NumberingRef } from './paragraphs';
 import type { Styles } from './styles';
+import type { DocxOutline } from './table-of-contents';
 
 export const DOCUMENT_NAMESPACES = [
     `xmlns:w="${W_NS}"`,
@@ -51,6 +52,8 @@ export type Package = {
     faces: Map<string, Set<FontSlot>>;
     // The notes the body references, note n at index n - 1.
     footnotes: JSONContent[];
+    // The body's headings that a table of contents lists and links to.
+    outline: DocxOutline;
     // The doc's Normal, which docDefaults and the Normal style write, and the styles built on it.
     normal: NormalStyle;
     styles: Styles;
@@ -101,12 +104,14 @@ export function sectionXml(
     return `<w:sectPr>${references}<w:pgSz w:w="${width}" w:h="${height}"${orient}/><w:pgMar w:top="${margin.top}" w:right="${margin.right}" w:bottom="${margin.bottom}" w:left="${margin.left}" w:header="${headerDistance}" w:footer="${footerDistance}" w:gutter="0"/>${titlePg}</w:sectPr>`;
 }
 
-// Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
-// Word names the notes part's separators here. A page-less doc opens in Web Layout, where a wide table fits the window;
-// w:view comes first, as CT_Settings orders its children and the writer writes no w:writeProtection.
-export function settingsXml(footnotes: boolean, pageless: boolean): string {
-    const separators = footnotes ? '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>' : '';
-    const view = pageless ? `<w:view w:val="${WEB_VIEW}"/>` : '';
+// Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset
+// flag is set. Word names the notes part's separators here. A page-less doc opens in Web Layout, where a wide table
+// fits the window. w:view comes first, because CT_Settings orders its children and the writer writes no
+// w:writeProtection.
+export function settingsXml(pkg: Package): string {
+    const separators =
+        pkg.footnotes.length > 0 ? '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>' : '';
+    const view = pkg.pageless ? `<w:view w:val="${WEB_VIEW}"/>` : '';
     return `<w:settings xmlns:w="${W_NS}">${view}<w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/>${separators}<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="${WORD_SETTINGS_URI}" w:val="15"/></w:compat></w:settings>`;
 }
 

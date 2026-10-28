@@ -17,6 +17,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Table borders in Word files** — a Word table keeps its borders, their colors, widths and dashes, when it comes in and when you download a document as Word. A table without borders in Word has none in Docs
 - **Styling part of a cell in Sheets** — while you edit a cell, select some of its words and make them bold, italic, underlined, struck through, or another color, font or size. **Ctrl+B**, **Ctrl+I** and **Ctrl+U** (Mac: **⌘B**, **⌘I**, **⌘U**) work as you type, and a style you pick with no words selected applies to what you type next. Text you type or paste over selected words takes their style, and text you paste comes in as plain text, as in Google Sheets. The cell keeps its styles when you download it as Excel
 - **Outline in Docs** — **Tools → Show outline** lists the document's headings on the left, over the document, and a click jumps to one. It stays shown or hidden in your browser from one document to the next. On a phone it opens from the **⋮** menu
+- **Table of contents in Docs** — **Insert → Table of contents** lists the document's headings to Heading 3, and keeps the list up to date as you or anyone else edits them. Click a line to jump to its heading. The PDF shows each heading's page number, and the Word file holds Word's own table of contents, which fills in its page numbers when Word updates it. Reload a document left open since the update before you add one, or the older tab removes it
+- **Tables of contents in Word files** — a Word file's table of contents comes in as one that lists the document's headings. The message after an import says when those differ from the entries Word saved
 - **Celebrations** — tick the last box of a card's checklist in Stickies, or of a comment card elsewhere, and now and then confetti bursts from it. Turn it off on the **Preferences** page in Space
 - **Page-less documents in Docs** — **File → Page setup…** has **Pages** and **Page-less** tabs, as in Google Docs, and **Format** switches between them. A page-less document is one continuous column of text without page breaks, headers or footers, for everyone who opens it. It still prints on its paper
 - **Text width** — in a page-less document, pick **Narrow**, **Medium**, **Wide** or **Full** on the **Page-less** tab. The width is yours: it follows you to every page-less document and device, and the people you share with keep theirs
@@ -52,6 +54,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Color scales in Sheets** — a color scale whose colors are written short, such as `#f00`, shades its cells instead of leaving them blank
+- **Sharing a calendar** — when the owner stops sharing a calendar with you, the list of who has access refreshes at once, as it does when they share it
+- **Contents title in Word files** — the title Word puts above a table of contents, such as **Contents**, comes in as normal text instead of a Heading 1, so it no longer lists itself in the outline
 - **Trash in Drive** — a file or folder deleted for good disappears from the Trash open in your other tabs too
 - **Unread counts in Mail** — a message you read in another mail app clears its unread count in Eigen's sidebar at once
 - **Saving a text file in Drive** — when someone else changed the file since you opened it, even within the same second, Drive shows **File conflict** instead of overwriting their change
@@ -87,6 +92,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Deleting a team in Admin** — deletes the team's drives with every file on them, and its calendar, instead of leaving them on the server. While a backup or a restore of the team runs, the team can't be deleted, and the team named after your organization, which everyone joins, can't be deleted at all
 - **Sheets shortcuts on other keyboard layouts** — on Dvorak, **Ctrl+C** (Mac: **⌘C**) copies the selected cells and **Ctrl+X** (Mac: **⌘X**) cuts them, instead of doing nothing or making them bold. On a Russian or Greek layout, **Ctrl+B**, **Ctrl+I** and **Ctrl+U** style the words you select while typing in a cell. On a Mac the shortcuts take **⌘**, not Ctrl, as in Docs
 - **Undo while you type in a cell** — in Sheets, **Ctrl+Z** (Mac: **⌘Z**) in an open cell undoes your typing and leaves the spreadsheet's earlier changes alone
+- **New events late in the evening in Calendar** — a new event made after 23:15 ends half an hour after it starts, on the next day, instead of before it starts. Turning off **All day** that late does the same
 
 ## [0.4.0] - 2026-10-26
 

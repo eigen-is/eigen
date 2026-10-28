@@ -324,7 +324,7 @@ function seriesXml(spec: ChartSpec, width: number, sources: Source[]): string {
         .join('');
 }
 
-// A labelled series' values, where Eigen draws them: past a bar's end, in a stacked segment's middle, above a point.
+// A labeled series' values, where Eigen draws them: past a bar's end, in a stacked segment's middle, above a point.
 // The position is stated because Office's default differs by kind. So is the values' format, which Eigen draws every
 // label in, since Office would otherwise read each cell's own.
 function labelsXml(spec: ChartSpec): string {
@@ -366,7 +366,8 @@ function axesXml(spec: ChartSpec, look: ChartLook, width: number, size: number):
         `<c:scaling><c:orientation val="${orientation}"/>${bounds}</c:scaling>`;
     const { min, max } = valueAxis.scale;
     const bounds = [max === null ? '' : `<c:max val="${max}"/>`, min === null ? '' : `<c:min val="${min}"/>`].join('');
-    // A 100% stack's axis formats shares, so its values' format goes with the values and their labels instead.
+    // A 100% stack's axis shows each value's share of its stack. So the values' own format goes with the values and
+    // their labels instead.
     const percent = spec.plots[type].stacking === 'percent';
     const own = valueAxis.labels.format;
     const format = percent ? PERCENT_AXIS_FORMAT : (own ?? 'General');

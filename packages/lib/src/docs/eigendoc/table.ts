@@ -12,9 +12,3 @@ export function columnFit(columnPx: number, total: number): (width: number) => n
     const scale = columnPx / total;
     return (width) => Math.max(MIN_TABLE_COLUMN_PX, Math.floor(width * scale));
 }
-
-// A whole table's widths in px fitted into a column `columnPx` wide, by `columnFit`.
-export function fitColumnWidths(widths: number[], columnPx: number): number[] {
-    const total = widths.reduce((sum, width) => sum + width, 0);
-    return total <= columnPx ? widths : widths.map(columnFit(columnPx, total));
-}

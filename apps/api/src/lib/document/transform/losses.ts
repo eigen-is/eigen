@@ -8,7 +8,7 @@ import type { CountedWarningCode, TransformWarning } from './protocol';
 type OneAndMany = readonly [one: string, many: string];
 
 // What happened to a kind, one clause each, in this order: what is missing first.
-const OUTCOMES = ['unread', 'dropped', 'cut', 'simplified', 'renamed', 'flattened', 'unshown'] as const;
+const OUTCOMES = ['unread', 'dropped', 'cut', 'simplified', 'renamed', 'flattened', 'unshown', 'updated'] as const;
 type Outcome = (typeof OUTCOMES)[number];
 
 // Each outcome said of one and of more. Only a kind left out depends on the way the document went.
@@ -19,6 +19,7 @@ const SAID_EITHER_WAY: Record<Exclude<Outcome, 'dropped'>, OneAndMany> = {
     renamed: ['was renamed', 'were renamed'],
     flattened: ['lost its layout', 'lost their layout'],
     unshown: ["can't be shown", "can't be shown"],
+    updated: ["now lists the document's headings", "now list the document's headings"],
 };
 const PREDICATES: Record<'import' | 'export', Record<Outcome, OneAndMany>> = {
     import: { ...SAID_EITHER_WAY, dropped: ['was not imported', 'were not imported'] },
@@ -61,6 +62,8 @@ const LOSSES: Record<CountedWarningCode, { noun: OneAndMany; what: Outcome }> = 
     'diagrams-flattened': { noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'flattened' },
     'blocks-flattened': { noun: ['part of the document', 'parts of the document'], what: 'flattened' },
     'images-unshown': { noun: ['picture', 'pictures'], what: 'unshown' },
+    // Word's saved entries differ from the headings the table of contents lists now.
+    'toc-entries-changed': { noun: ['table of contents', 'tables of contents'], what: 'updated' },
 };
 
 // "2 tables and 1 SmartArt graphic were not imported; 5 shapes were simplified.", or null when nothing was lost. A

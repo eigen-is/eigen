@@ -1,3 +1,6 @@
+// The New Event dialog, opened from the toolbar or from a click on a day. It starts at the next quarter hour, on the
+// clicked day when there is one, for half an hour, in the default calendar, and saves through useCreateEvent.
+
 import { useAuth } from '@workspace/lib/auth';
 import {
     toLocalDateString,
@@ -22,7 +25,7 @@ import { useEffect, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
 import { buildEventTimes } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
-import { addMinutes, roundToNext15Minutes, toTimeString } from './time-select';
+import { endAfter, roundToNext15Minutes, toTimeString } from './time-select';
 
 type CreateEventDialogProps = {
     open: boolean;
@@ -62,9 +65,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
             const targetDate = defaultDate ? new Date(defaultDate) : rounded;
             targetDate.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
 
-            const dateStr = toLocalDateString(targetDate);
-            const start = toTimeString(targetDate);
-            const end = addMinutes(start, 30);
+            const end = endAfter(targetDate, 30);
 
             setTitle('');
             setDescription('');
@@ -74,10 +75,10 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
                 : calendarOptions[0];
             setSelectedCalKey(defaultCal ? `${defaultCal.ownerId}:${defaultCal.id}` : '');
             setAllDay(false);
-            setStartDate(dateStr);
-            setEndDate(dateStr);
-            setStartTime(start);
-            setEndTime(end);
+            setStartDate(toLocalDateString(targetDate));
+            setEndDate(end.date);
+            setStartTime(toTimeString(targetDate));
+            setEndTime(end.time);
             setRruleString(null);
             setAttendees([]);
         }

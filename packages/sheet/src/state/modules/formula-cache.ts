@@ -1,8 +1,12 @@
+// The editor's formula bookkeeping: FormulaCache, the per-workbook state of the formula engine and the reference
+// picker, the map of which cells hold formulas, and the resolver that lets the engine read cells from the live
+// context. setFormulaCellInfo keeps the map in step with each write, and an undo or redo replays its patches.
+
 import { isNil } from 'es-toolkit/compat';
 import { current, isDraft } from 'immer';
 import type { DependencyIndex } from '../../engine/dependency-index';
 import { FormulaEngine } from '../../engine/formula-engine';
-import { iscelldata } from '../../engine/formula-utils';
+import { iscelldata, isFunctionRange } from '../../engine/formula-utils';
 import type {
     CalcChainEntry,
     Cell,
@@ -17,7 +21,7 @@ import { getFlowdata } from '../context';
 import type { FormulaCell, History, Selection } from '../types';
 import { getSheetIdByName } from '../utils';
 import { getcellFormula } from './cell';
-import { execfunction, getcellrange, isFunctionRange, warmFormulaCellInfoMap } from './formula-exec';
+import { execfunction, getcellrange, warmFormulaCellInfoMap } from './formula-exec';
 
 // Shared mutable state accessed by formula-editor.ts and formula-range.ts.
 // Wrapped in an object so mutations are visible across module boundaries.
@@ -183,7 +187,7 @@ export class FormulaCache {
         for (const patch of type === 'undo' ? history.inversePatches : history.patches) {
             const [root, sheetIndex, field, r, c, cellField] = patch.path;
             if (root !== 'sheets' || (field != null && field !== 'data')) continue;
-            const id = ctx.sheets[sheetIndex as number]?.id;
+            const id = typeof sheetIndex === 'number' ? ctx.sheets[sheetIndex]?.id : undefined;
             if (typeof r === 'number' && typeof c === 'number') {
                 if (id != null && (cellField == null || cellField === 'f')) setFormulaCellInfo(ctx, { r, c, id });
                 continue;
@@ -228,7 +232,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
 
     const formulaDependency: FormulaDependency[] = [];
     if (isOffsetFunc) {
-        isFunctionRange(ctx, calc_funcStr, formulaCell.id, (str_nb: string) => {
+        isFunctionRange(calc_funcStr, (str_nb: string) => {
             const range = getcellrange(ctx, str_nb.trim(), formulaCell.id, cellData);
             if (!isNil(range)) {
                 formulaDependency.push(range);

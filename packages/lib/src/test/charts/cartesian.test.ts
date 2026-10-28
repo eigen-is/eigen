@@ -9,7 +9,7 @@ import type { VectorLinearElement, VectorRectangleElement } from '../../vector/t
 import type { AxisPatch, SpecPatch } from './layout-fixtures';
 import {
     labelBounds,
-    labelled,
+    labeled,
     layout,
     lines,
     marked,
@@ -789,7 +789,7 @@ describe('data labels', () => {
         series: [series('S1', [12.3, 45.6, null]), series('S2', [-7.5, 23.4, 31.2])],
     };
     const bare: SpecPatch = { ...UNTITLED, title: { text: '' }, legend: { position: 'none' } };
-    const on: SpecPatch = { ...bare, series: labelled(data) };
+    const on: SpecPatch = { ...bare, series: labeled(data) };
     const big = { data, width: 800, height: 500 };
     const fontSize = chartFontSize(800, 500);
     const gap = fontSize / 2;
@@ -806,7 +806,7 @@ describe('data labels', () => {
     };
     const plotTop = (out: ChartLayout) => Math.min(...lines(out, 'gridline').map((shape) => shape.y));
 
-    test('a labelled series shows each value in the values format, and a blank none, even one plotted as zero', () => {
+    test('a labeled series shows each value in the values format, and a blank none, even one plotted as zero', () => {
         const out = layout('column', on, big);
         for (const text of ['12.3', '45.6', '-7.5', '23.4', '31.2']) expect(has(out, text)).toBe(true);
         expect(layout('column', { ...on, chart: { blanks: 'zero' } }, big).labels).toEqual(out.labels);
@@ -814,8 +814,8 @@ describe('data labels', () => {
         expect(has(formatted, '45.60')).toBe(true);
     });
 
-    test('only the labelled series show labels', () => {
-        const out = layout('column', { ...bare, series: labelled(data, ['S2']) }, big);
+    test('only the labeled series show labels', () => {
+        const out = layout('column', { ...bare, series: labeled(data, ['S2']) }, big);
         expect(has(out, '23.4')).toBe(true);
         expect(has(out, '45.6')).toBe(false);
     });
@@ -872,7 +872,7 @@ describe('data labels', () => {
             for (const type of ['column', 'bar'] as const) {
                 const out = layout(
                     type,
-                    { ...bare, plots: plots(stacking), series: labelled(stack) },
+                    { ...bare, plots: plots(stacking), series: labeled(stack) },
                     { ...big, data: stack },
                 );
                 const segment = bar(out, '0:0');
@@ -893,11 +893,7 @@ describe('data labels', () => {
             [8000.5, 7900.5],
         ]) {
             const crowd: ChartData = { categories: ['A'], series: values.map((v, i) => series(`S${i}`, [v])) };
-            const out = layout(
-                'column',
-                { ...bare, series: labelled(crowd) },
-                { data: crowd, width: 140, height: 300 },
-            );
+            const out = layout('column', { ...bare, series: labeled(crowd) }, { data: crowd, width: 140, height: 300 });
             expect([has(out, '8000.5'), has(out, '7900.5')]).toEqual([true, false]);
         }
     });
@@ -913,7 +909,7 @@ describe('data labels', () => {
             };
             const out = layout(
                 'line',
-                { ...bare, series: labelled(crowd) },
+                { ...bare, series: labeled(crowd) },
                 { data: crowd, ...{ width: 400, height: 300 } },
             );
             expect([has(out, first), has(out, second)]).toEqual([true, false]);
@@ -925,7 +921,7 @@ describe('data labels', () => {
             categories: Array.from({ length: 16 }, (_, i) => `C${i}`),
             series: [series('S', [1234.5, ...Array.from({ length: 15 }, () => 10)])],
         };
-        const patch = { ...bare, series: labelled(wide) };
+        const patch = { ...bare, series: labeled(wide) };
         expect(has(layout('column', patch, { data: wide, width: 400, height: 300 }), '1234.5')).toBe(false);
         expect(has(layout('column', patch, { data: wide, width: 1200, height: 300 }), '1234.5')).toBe(true);
     });
@@ -939,11 +935,11 @@ describe('data labels', () => {
 
     test('a chart lays out as without labels when none show: no values, a pie, or past the sketch cap', () => {
         const blank: ChartData = { ...data, series: [...data.series, series('S3', [null, null, null])] };
-        expect(layout('column', { ...bare, series: labelled(blank, ['S3']) }, { ...big, data: blank })).toEqual(
+        expect(layout('column', { ...bare, series: labeled(blank, ['S3']) }, { ...big, data: blank })).toEqual(
             layout('column', bare, { ...big, data: blank }),
         );
         const pie = sampleData('pie');
-        expect(layout('pie', { series: labelled(pie) }, { data: pie })).toEqual(layout('pie', {}, { data: pie }));
+        expect(layout('pie', { series: labeled(pie) }, { data: pie })).toEqual(layout('pie', {}, { data: pie }));
     });
 
     test('a chart too small for its labels draws without them rather than give way to the message', () => {
@@ -956,7 +952,7 @@ describe('data labels', () => {
             const options = { data: wide, width, height };
             const off = layout('bar', patch, options);
             expect(has(off, CHART_MESSAGES.tooSmall)).toBe(false);
-            expect(layout('bar', { ...patch, series: labelled(wide) }, options)).toEqual(off);
+            expect(layout('bar', { ...patch, series: labeled(wide) }, options)).toEqual(off);
         }
     });
 
@@ -965,7 +961,7 @@ describe('data labels', () => {
         const patch: SpecPatch = {
             ...bare,
             plots: plots('percent'),
-            series: labelled(stack),
+            series: labeled(stack),
             axes: { x: {}, y: { labels: { format: '0.0%' } } },
         };
         for (const type of ['column', 'bar'] as const) {
@@ -975,7 +971,7 @@ describe('data labels', () => {
         }
     });
 
-    test('200 labelled points draw labels and 201 draw none', () => {
+    test('200 labeled points draw labels and 201 draw none', () => {
         const count = (points: number) => {
             const many: ChartData = {
                 categories: Array.from({ length: points }, (_, i) => `${i}`),
@@ -986,7 +982,7 @@ describe('data labels', () => {
                     ),
                 ],
             };
-            const out = layout('column', { ...bare, series: labelled(many) }, { data: many, width: 2112, height: 300 });
+            const out = layout('column', { ...bare, series: labeled(many) }, { data: many, width: 2112, height: 300 });
             return out.labels.filter((label) => label.text.endsWith('.5')).length;
         };
         expect(count(200)).toBeGreaterThan(0);

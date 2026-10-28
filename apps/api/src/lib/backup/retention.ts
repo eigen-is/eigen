@@ -1,7 +1,7 @@
-// Which whole-server archives to delete, decided from their names and records alone: locally after every server
-// backup, and in the backup bucket after every upload. Each reason keeps its own count, a failed night never
-// pushes out the last good archive (in the bucket, the newest complete one stays, warned or not), and the
-// pre-update archive ./eigen rollback needs always stays.
+// Which whole-server archives to delete, decided from their names and records alone. It runs locally after every
+// server backup, and in the backup bucket after every upload. Each reason for a backup keeps its own count. A
+// failed night never pushes out the last good archive. In the bucket, the newest complete archive stays, even with
+// warnings. The pre-update archive that ./eigen rollback needs always stays.
 
 import type { BackupReason } from '@workspace/lib/types/backup';
 import { parseServerArchiveNames } from '@workspace/lib/validation';

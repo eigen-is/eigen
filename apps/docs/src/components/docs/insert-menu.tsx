@@ -31,6 +31,7 @@ import {
     SquareDashed,
     Superscript,
     Table,
+    TableOfContents,
 } from 'lucide-react';
 import { useRef } from 'react';
 import { pageWidths } from './extensions/text-column';
@@ -212,6 +213,13 @@ export function InsertMenu({
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
             )}
+            {/* Last before the comment, as Google's Insert lists its table of contents. Only between the body's blocks. */}
+            <DropdownMenuItem
+                disabled={inNote || !active.canInsertTableOfContents}
+                onClick={() => editor.chain().focus().insertTableOfContents().run()}
+            >
+                <TableOfContents className="h-4 w-4" /> Table of contents
+            </DropdownMenuItem>
             {onAddComment && (
                 <>
                     <DropdownMenuSeparator />

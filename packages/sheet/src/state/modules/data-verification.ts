@@ -1,10 +1,14 @@
+// Data-validation rules on the grid: a rule per cell key in a sheet's dataVerification, such as a
+// drop-down list, a tick box or a number condition. This module checks a value against its rule, lays
+// out and toggles tick boxes and list chevrons for the painter and the hit test, writes the hint a
+// selected cell shows, and validates and applies the draft the data-validation dialog edits.
+
 import { isNil } from 'es-toolkit/compat';
 import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell } from '../../engine/types';
 import type { CellMatrix, Context, DataVerificationRule, SingleRange } from '..';
 import {
-    colLocationByIndex,
     diff,
     getCellValue,
     getcellrange,
@@ -20,9 +24,9 @@ import {
     mergeBorder,
     normalizedAttr,
     normalizedCellAttr,
-    rowLocationByIndex,
     setCellValue,
 } from '..';
+import { getSheet } from '../api/common';
 import type { Rect } from '../types';
 import { clipToUsedExtent, replaceHtml } from '../utils';
 
@@ -52,45 +56,11 @@ const OPTION_LABEL: Record<string, string> = {
 // passes the user-typed innerText.
 type CellValueForValidation = string | number | boolean | null | undefined;
 
-// TODO: Add mouse selection for multiple ranges later
-// Enable range selection
-export function dataRangeSelection(ctx: Context, rangT: string, type: string, value: string) {
-    ctx.rangeDialog!.show = true;
-    ctx.rangeDialog!.type = type;
-    ctx.rangeDialog!.rangeTxt = value;
-    if (ctx.selections && rangT) {
-        const last = ctx.selections[ctx.selections.length - 1];
-        const row_index = last.row_focus as number;
-        const col_index = last.column_focus as number;
-        ctx.editingCellPosition = [row_index, col_index];
-
-        const range = getRangeByTxt(ctx, rangT);
-        const r = range[0]?.row;
-        const c = range[0]?.column;
-        if (isNil(r) || isNil(c)) return;
-        const row_pre = rowLocationByIndex(r[0], ctx.visibledatarow)[0];
-        const row = rowLocationByIndex(r[1], ctx.visibledatarow)[1];
-        const col_pre = colLocationByIndex(c[0], ctx.visibledatacolumn)[0];
-        const col = colLocationByIndex(c[1], ctx.visibledatacolumn)[1];
-
-        ctx.formulaRangeSelect = {
-            height: row - row_pre - 1,
-            left: col_pre,
-            rangeIndex: ctx.formulaRangeSelect?.rangeIndex ?? 0,
-            top: row_pre,
-            width: col - col_pre - 1,
-        };
-    } else {
-        ctx.editingCellPosition = [0, 0];
-    }
-}
-
 export function getDropdownList(ctx: Context, txt: string) {
     const list: (string | number | boolean)[] = [];
     if (iscelldata(txt)) {
         const range = getcellrange(ctx, txt);
-        const index = getSheetIndex(ctx, range?.sheetId || ctx.currentSheetId) as number;
-        const d = ctx.sheets[index].data;
+        const d = getSheet(ctx, { id: range?.sheetId }).data;
         if (!d || !range) return [];
         for (let r = range.row[0]; r <= range.row[1]; r += 1) {
             for (let c = range.column[0]; c <= range.column[1]; c += 1) {
@@ -461,10 +431,10 @@ export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: 
 // must keep the data; isCheckboxChecked reads whatever was already there.
 export function applyDataVerification(ctx: Context, range: SingleRange, item: DataVerificationRule) {
     if (!isAllowEdit(ctx)) return;
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const d = getFlowdata(ctx);
     if (!d) return;
-    const rules = ctx.sheets[index].dataVerification ?? {};
+    const sheet = getSheet(ctx);
+    const rules = sheet.dataVerification ?? {};
     // One clone for the whole range: the rules are read-only to everything that
     // consumes them, paste and drop-cell already alias one rule across cells, and
     // the serialized snapshot is the same either way.
@@ -480,7 +450,7 @@ export function applyDataVerification(ctx: Context, range: SingleRange, item: Da
             }
         }
     }
-    ctx.sheets[index].dataVerification = rules;
+    sheet.dataVerification = rules;
     if (seeded) jfrefreshgrid(ctx, d, [range]);
 }
 
@@ -683,7 +653,7 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
 
 // input data validation
 export function confirmMessage(ctx: Context): boolean {
-    const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
+    const range = getRangeByTxt(ctx, ctx.dataVerification.dataRegulation.rangeTxt);
     if (range.length === 0) {
         ctx.warnDialog = 'The selection operation has not been performed yet';
         return false;
@@ -706,8 +676,8 @@ export function confirmMessage(ctx: Context): boolean {
     if (edc > d[0].length - 1) {
         edc = d[0].length - 1;
     }
-    const regulation = ctx.dataVerification!.dataRegulation!;
-    const verifacationT = regulation?.type;
+    const regulation = ctx.dataVerification.dataRegulation;
+    const verifacationT = regulation.type;
     const { value1, value2, type2 } = regulation;
     // check if the value is a number
     const v1 = parseFloat(value1).toString() !== 'NaN';

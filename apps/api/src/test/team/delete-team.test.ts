@@ -119,7 +119,7 @@ describe('Delete team', () => {
         expect((await removeTeam(kept.teamId)).status).toBe(200);
     });
 
-    test("the organisation's default team can't be deleted: 403, and its files stay", async () => {
+    test("the organization's default team can't be deleted: 403, and its files stay", async () => {
         const defaultTeamId = getServerConfig()?.defaultTeamId;
         if (!defaultTeamId) throw new Error('setup pins a default team');
         // A second team, so better-auth's own last-team guard (a 400) isn't what refuses.
@@ -133,7 +133,7 @@ describe('Delete team', () => {
 
         const res = await removeTeam(defaultTeamId);
         expect(res.status).toBe(403);
-        expect(await res.text()).toContain("The organisation's default team can't be deleted");
+        expect(await res.text()).toContain("The organization's default team can't be deleted");
         expect(await getTeamExists(defaultTeamId)).toBe(true);
         expect(existsSync(join(teamDir, 'mounts', mount.id))).toBe(true);
         expect((await removeTeam(sibling)).status).toBe(200);
