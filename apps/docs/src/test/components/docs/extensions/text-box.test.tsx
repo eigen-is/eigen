@@ -100,8 +100,8 @@ async function setup(content: JSONContent[] = DOC) {
         const current = useOpenStory(a, editors, true);
         session.current = current;
         leaving.current = current.leave;
-        const openId = current.anchor?.type === 'textBox' ? current.anchor.id : null;
-        const value = useMemo(() => ({ openId, editor: boxEditor }), [openId]);
+        const anchor = current.anchor?.type === 'textBox' ? current.anchor : null;
+        const value = useMemo(() => ({ anchor, editor: boxEditor }), [anchor]);
         return createElement(TextBoxContext.Provider, { value }, createElement(EditorContent, { editor: a }));
     }
     const rendered = await renderInDocument(createElement(Host));
@@ -219,6 +219,69 @@ test("a peer's edit to the box pulls into the open editor, and a peer's delete h
     });
     expect(session.current?.anchor).toBeNull();
     expect(a.view.dom.querySelector('.text-box')).toBeNull();
+});
+
+// A peer's paste of an earlier copy and an undo of the original's delete can leave two boxes with one id.
+const boxTexts = (editor: TestEditor) => {
+    const texts: string[] = [];
+    editor.state.doc.descendants((node) => {
+        if (node.type.name === 'textBox') texts.push(node.textContent);
+        return node.type.name !== 'textBox';
+    });
+    return texts;
+};
+
+test('the open box found again by an id two boxes hold closes, and neither copy takes its text', async () => {
+    const { a, boxEditor, session } = await opened();
+    await act(async () => {
+        boxEditor.commands.setTextSelection(7);
+        typeInto(boxEditor, ' typed');
+    });
+    await act(async () => {
+        const node = a.state.doc.nodeAt(BOX);
+        if (!node) throw new Error('no box');
+        const copy = () => a.schema.nodeFromJSON(box('block', paragraph(text('Copy'))));
+        const tr = a.state.tr.delete(BOX, BOX + node.nodeSize);
+        tr.insert(tr.doc.content.size - 1, [copy(), copy()]);
+        a.view.dispatch(tr);
+        await Promise.resolve();
+    });
+    expect(session.current?.anchor).toBeNull();
+    expect(boxTexts(a)).toEqual(['Copy', 'Copy']);
+});
+
+test("only the open box's own node draws its editor when a peer's copy holds its id", async () => {
+    const { a, b, boxEditor, session } = await opened();
+    const editorsIn = () => [...a.view.dom.querySelectorAll('[data-story-editor]')];
+    await act(async () => {
+        const copy = b.schema.nodeFromJSON(box('block', paragraph(text('Copy'))));
+        b.view.dispatch(b.state.tr.insert(b.state.doc.content.size - 1, copy));
+    });
+    expect(boxTexts(a)).toEqual(['Inside', 'Copy']);
+    expect(editorsIn()).toHaveLength(1);
+    expect(a.view.nodeDOM(BOX)?.contains(boxEditor.view.dom)).toBe(true);
+    // Typing here changes the box's node, which draws before the binding maps the box's element to it.
+    await act(async () => {
+        boxEditor.commands.setTextSelection(7);
+        typeInto(boxEditor, '!');
+    });
+    expect(boxTexts(a)).toEqual(['Inside!', 'Copy']);
+    expect(editorsIn()).toHaveLength(1);
+    // A peer's edit in the box and before both moves it, and its node view draws before the anchor follows.
+    await act(async () => {
+        b.view.dispatch(b.state.tr.insertText('Peer ', BOX + 2).insertText('Pre ', 1));
+    });
+    expect(session.current?.anchor).toMatchObject({ type: 'textBox', pos: BOX + 4 });
+    expect(boxTexts(a)).toEqual(['Peer Inside!', 'Copy']);
+    expect(editorsIn()).toHaveLength(1);
+    expect(a.view.nodeDOM(BOX + 4)?.contains(boxEditor.view.dom)).toBe(true);
+    // A peer's split of the anchor paragraph draws the box in a new view, before the anchor follows.
+    await act(async () => {
+        b.view.dispatch(b.state.tr.split(3));
+    });
+    expect(session.current?.anchor).toMatchObject({ type: 'textBox', pos: BOX + 6 });
+    expect(editorsIn()).toHaveLength(1);
+    expect(a.view.nodeDOM(BOX + 6)?.contains(boxEditor.view.dom)).toBe(true);
 });
 
 test('Esc leaves the box selected, and a second Esc puts the caret after it', async () => {

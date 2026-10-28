@@ -96,15 +96,33 @@ export function storyKey(editor: Editor, { pos, node }: { pos: number; node: PMN
     return `story-${key}`;
 }
 
-// The first story node of `type` that carries `id`.
-function storyWithId(doc: PMNode, type: StoryNode, id: string): number | null {
-    let found: number | null = null;
+// Where the story nodes of `type` that carry `id` stand, the first two at most. Two can: a peer pastes an earlier copy
+// of a box another tab deleted, and that tab undoes the delete.
+function storiesWithId(doc: PMNode, type: StoryNode, id: string): number[] {
+    const found: number[] = [];
     doc.descendants((node, pos) => {
-        if (found !== null) return false;
-        if (node.type.name === type && node.attrs['id'] === id) found = pos;
+        if (found.length === 2) return false;
+        if (node.type.name === type && node.attrs['id'] === id) found.push(pos);
         return !isStoryNode(node.type.name);
     });
     return found;
+}
+
+// The one story node of `type` that carries `id`. None when two do, as the open editor's text would replace the
+// paragraphs of whichever came first: the story closes instead.
+function storyWithId(doc: PMNode, type: StoryNode, id: string): number | null {
+    const [first, second] = storiesWithId(doc, type, id);
+    return second === undefined ? (first ?? null) : null;
+}
+
+// Whether `node` draws the open story's live editor. Its id names it. Where two nodes hold the id, only the one the
+// anchor's element maps to draws it, as one editor mounts in one place.
+export function drawsStory(editor: Editor, anchor: StoryAnchor, node: PMNode): boolean {
+    const { id, type } = anchor;
+    if (id === null || node.type.name !== type || readStoryId(node.attrs['id']) !== id) return false;
+    return (
+        storiesWithId(editor.state.doc, type, id).length < 2 || bindingOf(editor)?.mapping.get(anchor.element) === node
+    );
 }
 
 export type FoundStory = {

@@ -23,16 +23,17 @@ import { StaticStory } from '../footnote-list';
 import type { FigureFrameOptions } from './figure-frame';
 import { FigureFrame, figureFramePlugins, figureMaxWidth, useFigureResize } from './figure-frame';
 import { behindFigureAt } from './positioned-figure';
-import { registerStoryView } from './story';
+import type { StoryAnchor } from './story';
+import { drawsStory, registerStoryView } from './story';
 
 export type TextBoxOptions = FigureFrameOptions & {
     // A press on a closed box's text, with where it landed, or Enter on a selected box; the body's editor only.
     onOpen: (pos: number, at: { left: number; top: number } | null) => void;
 };
 
-// The story the body's editor has open, by its id, and the box's live editor, which the open box draws.
-export const TextBoxContext = createContext<{ openId: string | null; editor: Editor | null }>({
-    openId: null,
+// The story the body's editor has open and the box's live editor, which the open box draws.
+export const TextBoxContext = createContext<{ anchor: StoryAnchor | null; editor: Editor | null }>({
+    anchor: null,
     editor: null,
 });
 
@@ -59,7 +60,7 @@ function TextBoxView(props: NodeViewProps) {
     const { onOpen }: TextBoxOptions = extension.options;
     const story = useContext(TextBoxContext);
     const attrs = useMemo(() => readTextBoxAttrs(node.attrs), [node.attrs]);
-    const open = attrs.id !== null && story.openId === attrs.id ? story.editor : null;
+    const open = story.anchor && drawsStory(editor, story.anchor, node) ? story.editor : null;
     const isEditable = editor.isEditable;
     const boxRef = useRef<HTMLSpanElement>(null);
     // The box's drawn height, its text's or its minimum, which a grip starts from. A gesture that leaves it as it was

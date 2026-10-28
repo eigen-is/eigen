@@ -443,8 +443,8 @@ const TiptapEditor = ({
         openStory(pos, null);
     };
     const storyEditor = notes.editor;
-    const openBoxId = notes.anchor?.type === 'textBox' ? notes.anchor.id : null;
-    const textBoxContext = useMemo(() => ({ openId: openBoxId, editor: boxEditor }), [openBoxId, boxEditor]);
+    const openBox = notes.anchor?.type === 'textBox' ? notes.anchor : null;
+    const textBoxContext = useMemo(() => ({ anchor: openBox, editor: boxEditor }), [openBox, boxEditor]);
     const activeEditor = editingBand ? bands[editingBand] : (storyEditor ?? editor);
     // A jump from the outline or a table of contents leaves a band or a note and puts the caret at the start of the
     // heading, which scrolls to a small margin below the top of the view: the selection's own scroll stops as soon as
