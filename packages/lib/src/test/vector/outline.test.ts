@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { solidFill } from '../../vector/fill';
 import type { Point } from '../../vector/geometry';
 import { outlineIntersections } from '../../vector/geometry';
+import { textualDefaults, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import {
     cornerRadius,
     diamondOutline,
@@ -16,7 +17,7 @@ import {
     sharpDiamondOffset,
 } from '../../vector/outline';
 import type { VectorRectangleElement, VectorShapeElement } from '../../vector/types';
-import { DEFAULT_ELEMENT_PROPS } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_SHAPE_TEXT_PROPS } from '../../vector/types';
 
 // The box every outline routine takes; outline.ts keeps its own copy private.
 type OutlineBox = { x: number; y: number; width: number; height: number };
@@ -24,6 +25,7 @@ type OutlineBox = { x: number; y: number; width: number; height: number };
 // Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
+    ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
     x: 0,
     y: 0,
     width: 100,

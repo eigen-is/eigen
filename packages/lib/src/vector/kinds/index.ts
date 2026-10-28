@@ -8,6 +8,7 @@ import type {
     VectorElement,
     VectorElementBase,
     VectorElementType,
+    VectorTextualElement,
 } from '../types';
 import { BASE_ELEMENT_FIELDS, DEFAULT_ELEMENT_PROPS, prop } from '../types';
 import { arrowKind } from './arrow';
@@ -27,8 +28,10 @@ import { richTextKind } from './richtext';
 
 export type { RenderOutput, StyleDefaults } from './kind';
 export { NEW_TEXT_BOX_SIZE, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from './kind';
-// The in-place editor paints its box with the SAME string the renderer emits, so the two cannot drift.
-export { richTextCssText, richTextFitHeight } from './richtext';
+export { richTextFitHeight } from './richtext';
+// The text block every kind with text shares. The in-place editor paints its box with the SAME string the
+// renderer emits (richTextCssText), so the two cannot drift.
+export { richTextCssText, textualDefaults } from './textual';
 
 // Each entry keeps its own element type, so `ELEMENT_KINDS.richtext.defaults(style)` is rich text's
 // field set and a generic `ELEMENT_KINDS[el.type]` lookup still answers with the union.
@@ -75,6 +78,12 @@ export function convertToShapes(el: VectorElement): VectorElement[] {
 // capability rather than by being added to a list.
 export function isBindable(el: VectorElement): el is VectorBindableElement {
     return capabilitiesOf(el).bindable;
+}
+
+// The elements that hold rich text, such as a text box or a rectangle: the ones the in-place editor, the panel's
+// text rows and the renderer act on. Read through the capability accessor, so an open path, a line, holds none.
+export function isTextual(el: VectorElement): el is VectorTextualElement {
+    return capabilitiesOf(el).text;
 }
 
 // The registry answers the vocabulary question too, so a stored `type` is validated against the one

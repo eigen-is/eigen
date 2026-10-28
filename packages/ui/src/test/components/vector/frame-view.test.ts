@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { VectorFrame, VectorShapeElement } from '@workspace/lib/vector';
-import { DEFAULT_ELEMENT_PROPS, SLIDE_SIZES, solidFill } from '@workspace/lib/vector';
+import {
+    DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SHAPE_TEXT_PROPS,
+    SLIDE_SIZES,
+    solidFill,
+    textualDefaults,
+    VECTOR_STYLE_DEFAULTS,
+} from '@workspace/lib/vector';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FrameView, sameThumbnail } from '../../../components/vector/frame-view';
@@ -16,6 +23,7 @@ const frame = (over: Partial<VectorFrame> = {}): VectorFrame => ({
 
 const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
     roughness: 1,
     id: 'r1',
     type: 'rectangle',

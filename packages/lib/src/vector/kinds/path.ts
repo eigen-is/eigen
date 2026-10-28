@@ -1,15 +1,18 @@
-// The path kind: a contour of SVG path commands, normalized to its box, so a resize scales it. A closed path fills
-// and takes bindings, an open one is only its stroke. Its hit test and outline sample the curves, cached per element.
+// The path kind: a contour of SVG path commands, normalized to its box, so a resize scales it. A closed path fills,
+// takes bindings and holds text; an open one is only its stroke. Its hit test and outline sample the curves, cached
+// per element.
 
-import { isTransparentFill, parseFill } from '../fill';
+import { isBordered, isTransparentFill, parseFill } from '../fill';
 import type { Bounds, Point } from '../geometry';
 import { boxCenter, distanceToPolyline, LINEAR_HIT_SCREEN_FACTOR, rotatePoint } from '../geometry';
 import { bezierAt, clamp, nearestPoint, polylineOutline, scaledPathCommands } from '../outline';
 import { pointsBounds } from '../points';
 import type { VectorPathElement } from '../types';
+import { DEFAULT_SHAPE_TEXT_PROPS } from '../types';
 import { boxAnchorPoints, defineKind } from './kind';
 import { bool, fillField, parseNormalizedPath } from './read-fields';
-import { isBordered, renderRoughShape } from './render-utils';
+import { renderRoughShape } from './render-utils';
+import { plainText, readTextual, textRender, textualDefaults } from './textual';
 
 // A new path fills its box until a caller gives it a contour.
 const DEFAULT_PATH = 'M 0 0 L 1 0 L 1 1 L 0 1 Z';
@@ -38,25 +41,32 @@ export const pathKind = defineKind<VectorPathElement>({
         edges: false,
         strokeOptional: true,
         bindable: true,
+        text: true,
         silhouette: 'box',
         creation: 'none',
     },
-    // An open path is its stroke: nothing to fill, no edge to dock to, no body without it.
-    capabilitiesOf: (el) => (el.closed ? {} : { fill: false, bindable: false, strokeOptional: false }),
+    // An open path is its stroke: nothing to fill, no edge to dock to, no body without it, no room for text.
+    capabilitiesOf: (el) => (el.closed ? {} : { fill: false, bindable: false, strokeOptional: false, text: false }),
     defaults: (style) => ({
         fill: style.fill,
         path: DEFAULT_PATH,
         closed: true,
+        ...textualDefaults(style, DEFAULT_SHAPE_TEXT_PROPS),
     }),
     read: (src, base) => {
         const path = parseNormalizedPath(src.get('path'));
         if (path === null) return null;
+        const closed = bool(src.get('closed'), false) && path.includes('Z');
+        const text = readTextual(src, DEFAULT_SHAPE_TEXT_PROPS);
         return {
             ...base,
             type: 'path',
             fill: fillField(src.get('fill')),
             path,
-            closed: bool(src.get('closed'), false) && path.includes('Z'),
+            closed,
+            ...text,
+            // An open path's text stays stored for when it closes, but nothing draws, searches or exports it.
+            html: closed ? text.html : '',
         };
     },
     // A control point may pull a curve past the box, so the export, the marquee and the ring read the contour.
@@ -86,8 +96,10 @@ export const pathKind = defineKind<VectorPathElement>({
             rotatePoint(nearestOnPolyline(outer, rotatePoint(m, center, -el.angle)), center, el.angle),
         );
     },
-    paintsNothing: (el) => !isBordered(el) && (!el.closed || isTransparentFill(parseFill(el.fill))),
-    render: (el) => ({ svg: renderRoughShape(el) }),
+    paintsNothing: (el) =>
+        !isBordered(el) && (!el.closed || isTransparentFill(parseFill(el.fill))) && plainText(el) === '',
+    render: (el) => textRender(el, renderRoughShape(el)),
+    searchText: plainText,
 });
 
 // Every subpath as a polyline in the unrotated scene frame, its curves flattened, a closed one ending on

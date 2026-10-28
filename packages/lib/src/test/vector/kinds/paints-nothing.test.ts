@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { solidFill } from '../../../vector/fill';
 import { paintsNothing } from '../../../vector/kinds';
-import { image, linear, richtext, shape } from '../element-factories';
+import { ellipse, image, linear, path, pie, richtext, shape } from '../element-factories';
 
 // A fresh element is created unpainted but bordered (DEFAULT_ELEMENT_PROPS' ink stroke), so every
 // "invisible" fixture below says `strokeColor: 'transparent'` — that IS the case being described.
@@ -22,6 +22,19 @@ describe('paintsNothing', () => {
 
     test('a zero-width border paints nothing either', () => {
         expect(paintsNothing(shape({ id: 'r', type: 'rectangle', strokeWidth: 0 }))).toBe(true);
+    });
+
+    test('an unpainted shape with text puts ink on the page; one whose text is an empty paragraph does not', () => {
+        const unpainted = { strokeColor: 'transparent' };
+        const shapes = (html: string) => [
+            shape({ id: 'r', type: 'rectangle', ...unpainted, html }),
+            shape({ id: 'd', type: 'diamond', ...unpainted, html }),
+            ellipse({ id: 'e', ...unpainted, html }),
+            pie({ id: 'p', ...unpainted, html }),
+            path({ id: 'c', ...unpainted, html }),
+        ];
+        for (const el of shapes('<p>label</p>')) expect([el.type, paintsNothing(el)]).toEqual([el.type, false]);
+        for (const el of shapes('<p></p>')) expect([el.type, paintsNothing(el)]).toEqual([el.type, true]);
     });
 
     test('an empty rich text box is invisible; one with text is not', () => {

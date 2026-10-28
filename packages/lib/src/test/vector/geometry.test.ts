@@ -47,7 +47,7 @@ import {
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
-import { ELEMENT_KINDS } from '../../vector/kinds';
+import { ELEMENT_KINDS, textualDefaults, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { outlineDistance } from '../../vector/outline';
 import { parsePoints, serializePoints } from '../../vector/points';
 import type {
@@ -60,7 +60,7 @@ import type {
     VectorRichTextElement,
     VectorShapeElement,
 } from '../../vector/types';
-import { arrowsBoundTo, DEFAULT_ELEMENT_PROPS, serializeBinding } from '../../vector/types';
+import { arrowsBoundTo, DEFAULT_ELEMENT_PROPS, DEFAULT_SHAPE_TEXT_PROPS, serializeBinding } from '../../vector/types';
 import { byIdOf, richtext } from './element-factories';
 
 const box = (over: Partial<Box>): Box => ({ x: 0, y: 0, width: 100, height: 60, angle: 0, ...over });
@@ -154,6 +154,7 @@ describe('hitTestElement', () => {
     const make = (type: 'rectangle' | 'diamond' | 'ellipse' | 'richtext' | 'image'): VectorElement => {
         const base = {
             ...DEFAULT_ELEMENT_PROPS,
+            ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
             id: 'e',
             x: 0,
             y: 0,
@@ -621,6 +622,7 @@ describe('marqueeHits', () => {
 // Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
+    ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
     x: 0,
     y: 0,
     width: 100,

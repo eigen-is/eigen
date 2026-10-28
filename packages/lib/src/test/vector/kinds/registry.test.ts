@@ -9,13 +9,20 @@ import {
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
     isBindable,
+    isTextual,
     isVectorElementType,
     VECTOR_STYLE_DEFAULTS,
 } from '../../../vector/kinds';
 import { EMPTY_OUTLINE } from '../../../vector/outline';
 import { serializePoints } from '../../../vector/points';
 import { readElementFromFields } from '../../../vector/read-vector';
-import type { VectorElement, VectorElementBase, VectorRichTextElement } from '../../../vector/types';
+import type {
+    Textual,
+    VectorElement,
+    VectorElementBase,
+    VectorRichTextElement,
+    VectorTextualElement,
+} from '../../../vector/types';
 import { BASE_ELEMENT_FIELDS, DEFAULT_ELEMENT_PROPS } from '../../../vector/types';
 import { chart, ellipse, image, linear, path, pie, richtext, shape } from '../element-factories';
 
@@ -110,6 +117,63 @@ describe('ELEMENT_KINDS', () => {
         expect(isBindable(richtext({ id: 't' }))).toBe(true);
         expect(isBindable(shape({ id: 'r', type: 'rectangle' }))).toBe(true);
         expect(isBindable(linear({ id: 'l', type: 'line' }))).toBe(false);
+    });
+
+    test('the text kinds are the rich-text box and the closed shapes, pinned against VectorTextualElement', () => {
+        // A Record over the union's types: a type the union gains or loses fails to compile here, and the
+        // capability list below must then match it.
+        const textual: Record<VectorTextualElement['type'], true> = {
+            rectangle: true,
+            diamond: true,
+            ellipse: true,
+            pie: true,
+            path: true,
+            richtext: true,
+        };
+        expect(TYPES.filter((type) => ELEMENT_KINDS[type].capabilities.text)).toEqual(
+            TYPES.filter((type) => Object.hasOwn(textual, type)),
+        );
+        for (const el of [
+            shape({ id: 'r', type: 'rectangle' }),
+            shape({ id: 'd', type: 'diamond' }),
+            ellipse({ id: 'e' }),
+            pie({ id: 'p' }),
+            path({ id: 'c' }),
+            richtext({ id: 't' }),
+        ]) {
+            expect([el.type, isTextual(el)]).toEqual([el.type, true]);
+        }
+        for (const el of [chart({ id: 'c' }), image({ id: 'i' }), linear({ id: 'l', type: 'line' })]) {
+            expect([el.type, isTextual(el)]).toEqual([el.type, false]);
+        }
+    });
+
+    test('an open path is a line and holds no text; a closed one does', () => {
+        expect(capabilitiesOf(path({ id: 'c' })).text).toBe(true);
+        expect(capabilitiesOf(path({ id: 'o', path: 'M 0 0 L 1 1', closed: false })).text).toBe(false);
+        expect(isTextual(path({ id: 'o', path: 'M 0 0 L 1 1', closed: false }))).toBe(false);
+    });
+
+    test('every text kind stores every Textual key', () => {
+        // A Record over Textual's keys, so a key the block gains must be listed here too.
+        const keys: Record<keyof Textual, true> = {
+            html: true,
+            fontFamily: true,
+            fontSize: true,
+            fontWeight: true,
+            fontStyle: true,
+            textDecoration: true,
+            textAlign: true,
+            verticalAlign: true,
+            color: true,
+            letterSpacing: true,
+            lineHeight: true,
+            padding: true,
+        };
+        for (const type of ['rectangle', 'diamond', 'ellipse', 'pie', 'path', 'richtext'] as const) {
+            for (const key of Object.keys(keys))
+                expect([type, ELEMENT_KINDS[type].fields]).toEqual([type, expect.arrayContaining([key])]);
+        }
     });
 
     test('every bindable kind answers the docking questions', () => {
@@ -252,20 +316,52 @@ describe('ELEMENT_KINDS', () => {
         expect(el.lineHeight).toBe(1.2);
     });
 
-    test('searchText covers rich text and arrow labels only, tags stripped', () => {
+    test('the shape factories carry the text block, so a fixture is exactly the stored field set', () => {
+        for (const el of [
+            shape({ id: 'r', type: 'rectangle' }),
+            shape({ id: 'd', type: 'diamond' }),
+            ellipse({ id: 'e' }),
+            pie({ id: 'p' }),
+            path({ id: 'c' }),
+        ]) {
+            expect([el.type, Object.keys(el).sort()]).toEqual([
+                el.type,
+                [...BASE_ELEMENT_FIELDS, ...ELEMENT_KINDS[el.type].fields].sort(),
+            ]);
+            expect(el).toMatchObject({ html: '', textAlign: 'center', verticalAlign: 'center', padding: 10 });
+        }
+    });
+
+    test('searchText covers the text kinds and arrow labels, tags stripped', () => {
         expect(
             ELEMENT_KINDS.richtext.searchText(richtext({ id: 'x', html: '<p>hello <strong>world</strong></p>' })),
         ).toBe('hello world');
         expect(ELEMENT_KINDS.rectangle.searchText(shape({ id: 'r', type: 'rectangle' }))).toBe('');
+        for (const el of [
+            shape({ id: 'r', type: 'rectangle', html: '<p>in <em>shape</em></p>' }),
+            shape({ id: 'd', type: 'diamond', html: '<p>in <em>shape</em></p>' }),
+            ellipse({ id: 'e', html: '<p>in <em>shape</em></p>' }),
+            pie({ id: 'p', html: '<p>in <em>shape</em></p>' }),
+            path({ id: 'c', html: '<p>in <em>shape</em></p>' }),
+        ]) {
+            expect([el.type, ELEMENT_KINDS[el.type].searchText(el)]).toEqual([el.type, 'in shape']);
+        }
+    });
+
+    test('a shape with text embeds its face in an SVG download; one without embeds none', () => {
+        const el = shape({ id: 'r', type: 'rectangle', html: '<p>hi</p>', fontFamily: 'Inter' });
+        expect(ELEMENT_KINDS.rectangle.fontFamilies(el)).toEqual(['Inter']);
+        expect(ELEMENT_KINDS.rectangle.fontFamilies(shape({ id: 'r', type: 'rectangle' }))).toEqual([]);
     });
 });
 
 describe('capabilities agree with the stored fields', () => {
-    test('fill and corners are derivable from each kind own fields', () => {
+    test('fill, corners and text are derivable from each kind own fields', () => {
         for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
             const fields = kind.fields;
             expect([type, kind.capabilities.fill]).toEqual([type, fields.includes('fill')]);
             expect([type, kind.capabilities.corners]).toEqual([type, fields.includes('corners')]);
+            expect([type, kind.capabilities.text]).toEqual([type, fields.includes('html')]);
             // roughness and seed are the base's, so no kind may declare them again.
             expect([type, fields.includes('roughness') || fields.includes('seed')]).toEqual([type, false]);
         }

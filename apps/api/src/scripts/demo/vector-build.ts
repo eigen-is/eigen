@@ -26,6 +26,7 @@ import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FILL_STYLE,
     DEFAULT_LINE_ROUNDNESS,
+    DEFAULT_SHAPE_TEXT_PROPS,
     elbowBindPoint,
     followBindings,
     generateNKeysBetween,
@@ -38,6 +39,7 @@ import {
     serializeBinding,
     shapeAnchorPoints,
     solidFill,
+    textualDefaults,
     VECTOR_STYLE_DEFAULTS,
     writeElementInDoc,
 } from '@workspace/lib/vector';
@@ -141,6 +143,8 @@ function buildShape(s: SitePlanShape): VectorShapeElement {
         strokeWidth: s.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: s.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill(s.fill ?? 'transparent', s.fillStyle ?? DEFAULT_FILL_STYLE),
+        // The label is a text box on top (buildLabel), so the shape itself holds none.
+        ...textualDefaults(SITE_PLAN_STYLE, DEFAULT_SHAPE_TEXT_PROPS),
     };
     // An ellipse has no corners to treat, so it carries no `corners` field.
     if (s.kind === 'ellipse') return { ...box, type: 'ellipse' };

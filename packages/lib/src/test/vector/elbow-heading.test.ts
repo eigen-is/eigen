@@ -11,6 +11,7 @@ import {
     linearLocalToScene,
     normalizeFixedPoint,
 } from '../../vector/geometry';
+import { textualDefaults, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { parsePoints } from '../../vector/points';
 import type {
     Corners,
@@ -19,12 +20,13 @@ import type {
     VectorRectangleElement,
     VectorShapeElement,
 } from '../../vector/types';
-import { DEFAULT_ELEMENT_PROPS, parseBinding, serializeBinding } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_SHAPE_TEXT_PROPS, parseBinding, serializeBinding } from '../../vector/types';
 import { byIdOf } from './element-factories';
 
 // Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
+    ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
     x: 0,
     y: 0,
     width: 100,

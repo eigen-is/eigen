@@ -54,6 +54,9 @@ export type Capabilities = {
     // image's body is pixels rather than a Fill.
     strokeOptional: boolean;
     bindable: boolean;
+    // Whether the element holds rich text that the editor, the panel and the renderer act on. Read it
+    // through capabilitiesOf(el): an open path is a line and holds none.
+    text: boolean;
     // Which family the elbow router's heading heuristics follow — the silhouette, not the exact outline.
     // A new BINDABLE kind picks one of the three instead of adding a branch to elbow-heading; nothing
     // asks a kind an arrow cannot dock to, so those declare none.
