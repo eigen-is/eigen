@@ -1661,3 +1661,30 @@ describe('a text box in the flow', () => {
         expect(stored(json)).toEqual(stored(expected(source, json)));
     });
 });
+
+describe('a positioned text box', () => {
+    // Word shrinks a box written to grow to its text, so a callout whose title is above the body's size came back
+    // with no height.
+    test('a callout with a larger title keeps the height that holds it', () => {
+        const title = { type: 'text', text: 'Note', marks: [{ type: 'textStyle', attrs: { fontSize: 14 } }] };
+        const box = {
+            type: 'textBox',
+            attrs: { layout: 'front', width: 240, height: 140 },
+            content: [{ type: 'paragraph', content: [title] }, p('A short line under it.')],
+        };
+        const json = docxToPmJson(
+            Buffer.from(
+                writeDocx(
+                    {
+                        json: { type: 'doc', content: [{ type: 'paragraph', content: [box] }, p('After')] },
+                        bands: {},
+                        page: DEFAULT_PAGE_SETUP,
+                        style: DEFAULT_NORMAL_STYLE,
+                    },
+                    { title: 'Callout', media: [], lost: () => {} },
+                ),
+            ),
+        ).json;
+        expect(nodesOfType(json, 'textBox').map((node) => node.attrs?.['height'])).toEqual([140]);
+    });
+});

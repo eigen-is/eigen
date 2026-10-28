@@ -5,13 +5,15 @@
 // does in Eigen.
 
 import type { JSONContent } from '@tiptap/core';
+import { CHART_DEFAULT_SIZE } from '@workspace/lib/charts';
 import { DOCUMENT_LINE_RATIO, readFontSize } from '@workspace/lib/constants/fonts';
 import type { TextBoxAttrs } from '@workspace/lib/docs/eigendoc';
 import {
     flattenNestedStories,
-    isFigureFrameNode,
     isPositioned,
     ptToPx,
+    readChartAttrs,
+    readFigureAttrs,
     readTextBoxAttrs,
     TEXT_BOX_RADIUS,
     textBoxPadding,
@@ -20,9 +22,10 @@ import { anchorIndentPx, anchorPaddingPx, BODY, boxSide, cssPt, FIGURE_MARGIN } 
 import { proseValue } from '../../../document/prose-css';
 import { EMU_PER_PX, WPS_NS } from '../../../ooxml/ooxml';
 import { SINGLE_LINE, TWIPS_PER_PX } from '../../../ooxml/wordml';
+import { figureMediaKey } from '../pasted-media';
 import type { Placement } from './drawings';
 import { drawingHead } from './drawings';
-import type { Context } from './package';
+import type { Context, Package } from './package';
 import type { Paragraph } from './paragraphs';
 import { blocksOf, blocksXml, indentOf, quoteBar } from './paragraphs';
 
@@ -96,13 +99,9 @@ function textBoxRun(node: JSONContent, attrs: TextBoxAttrs, context: Context, pl
     const story = flattenNestedStories(node);
     const content = blocksXml(blocksOf(story.content ?? [], {}, inside), pkg.styles);
     // Word clips a box at a fixed height and refits one that fits its text, so a box whose text may run past its
-    // height grows: the larger of the two is its extent, and Word refits it on layout. A picture or larger type the
-    // estimate can't measure grows it too.
-    const estimate = textHeight(story, attrs, context) + 2 * padding.y + 2 * (pen?.width ?? 0);
-    const holds =
-        attrs.height !== null &&
-        attrs.height >= estimate &&
-        !(story.content ?? []).some((child) => isUnmeasured(child, pkg.normal.size));
+    // height grows: the larger of the two is its extent, and Word refits it on layout.
+    const estimate = contentHeight(story, attrs, pkg) + 2 * padding.y + 2 * (pen?.width ?? 0);
+    const holds = attrs.height !== null && attrs.height >= estimate;
     const cx = emu(attrs.width);
     const cy = emu(holds && attrs.height !== null ? attrs.height : Math.max(attrs.height ?? 0, estimate));
     const { head, frame } = drawingHead(n, cx, cy, placement);
@@ -134,26 +133,48 @@ function roundness(cx: number, cy: number): number {
     return Math.round(Math.min(50000, (emu(TEXT_BOX_RADIUS) / Math.min(cx, cy)) * 100000));
 }
 
-// The height the box's text takes at the Normal's size and line, each paragraph's characters over the box's column.
-function textHeight(node: JSONContent, attrs: TextBoxAttrs, { pkg }: Context): number {
-    const { size, lineSpacing } = pkg.normal;
-    const line = ptToPx(size * lineSpacing * DOCUMENT_LINE_RATIO);
+// The height the box's content takes: each paragraph's characters over the box's column at its largest run's size
+// and the Normal's line, and its pictures and charts as tall as the writer draws them in that column.
+function contentHeight(node: JSONContent, attrs: TextBoxAttrs, pkg: Package): number {
+    const { size: normal, lineSpacing } = pkg.normal;
     const column = Math.max(1, attrs.width - 2 * textBoxPadding(attrs).x);
-    const perLine = Math.max(1, Math.floor(column / (ptToPx(size) * CHARACTER_WIDTH)));
-    let lines = 0;
-    for (const paragraph of node.content ?? []) lines += Math.max(1, Math.ceil(characters(paragraph) / perLine));
-    return lines * line;
+    let height = 0;
+    for (const paragraph of node.content ?? []) {
+        const size = Math.max(normal, largestRun(paragraph));
+        const perLine = Math.max(1, Math.floor(column / (ptToPx(size) * CHARACTER_WIDTH)));
+        const count = characters(paragraph);
+        const figures = figuresHeight(paragraph, column, pkg);
+        // A paragraph that holds only a picture is the picture's height; an empty one is still a line.
+        const lines = count > 0 || figures === 0 ? Math.max(1, Math.ceil(count / perLine)) : 0;
+        height += lines * ptToPx(size * lineSpacing * DOCUMENT_LINE_RATIO) + figures;
+    }
+    return height;
 }
 
-// A picture or a chart, or a run above the body's size: what the estimate, counting characters at that size, can't
-// measure, so a box holding one grows with its text.
-function isUnmeasured(node: JSONContent, normalPt: number): boolean {
-    if (isFigureFrameNode(node.type)) return true;
-    const larger = node.marks?.some(
-        (mark) => mark.type === 'textStyle' && (readFontSize(mark.attrs?.['fontSize']) ?? 0) > normalPt,
+// The largest size a run in the node sets, in pt; 0 when none sets one.
+function largestRun(node: JSONContent): number {
+    const own = (node.marks ?? []).map((mark) =>
+        mark.type === 'textStyle' ? (readFontSize(mark.attrs?.['fontSize']) ?? 0) : 0,
     );
-    if (larger) return true;
-    return (node.content ?? []).some((child) => isUnmeasured(child, normalPt));
+    return Math.max(0, ...own, ...(node.content ?? []).map(largestRun));
+}
+
+// How tall the node's pictures and charts draw, at most the column wide and at their stored or own ratio, as the
+// drawing writer sizes them. A picture with no media to draw adds nothing, as the writer drops it.
+function figuresHeight(node: JSONContent, column: number, pkg: Package): number {
+    if (node.type === 'chart') {
+        const { width, height } = readChartAttrs(node.attrs ?? {});
+        const natural = width ?? CHART_DEFAULT_SIZE.width;
+        return (Math.min(natural, column) * (height ?? CHART_DEFAULT_SIZE.height)) / natural;
+    }
+    if (node.type === 'figure') {
+        const attrs = readFigureAttrs(node.attrs ?? {});
+        const media = pkg.images.media.get(figureMediaKey(attrs) ?? '');
+        if (!media?.width || !media.height) return 0;
+        const ratio = attrs.height && attrs.width ? attrs.height / attrs.width : media.height / media.width;
+        return Math.min(attrs.width ?? media.width, column) * ratio;
+    }
+    return (node.content ?? []).reduce((sum, child) => sum + figuresHeight(child, column, pkg), 0);
 }
 
 function characters(node: JSONContent): number {

@@ -721,23 +721,24 @@ describe('docx writer — text boxes', () => {
         expect(Number(xmlAttr(only(descendants(grown, A_NS, 'ext')), '', 'cy'))).toBeGreaterThan(40 * 9525 * 3);
     });
 
-    // The estimate counts characters at the body's size, so it can't tell a picture or larger type would fit.
-    test('a box holding a picture or type above the body size grows, whatever its height', async () => {
-        const fit = async (...content: JSONContent[]) =>
+    // A callout's 14 pt title in an ample box keeps its height in Word, and a tall picture grows a short box.
+    test("the estimate counts a picture's drawn height and a run's own size", async () => {
+        const fit = async (height: number, ...content: JSONContent[]) =>
             shape(
                 only(
-                    descendants(
-                        await shapeOf(doc(p(box({ layout: 'front', height: 200 }, p(...content))))),
-                        WPS,
-                        'bodyPr',
-                    ),
+                    descendants(await shapeOf(doc(p(box({ layout: 'front', height }, p(...content))))), WPS, 'bodyPr'),
                 ),
             );
-        const picture = { type: 'figure', attrs: { mediaName: 'a.png', width: 120 } };
+        // chart.png is 800 by 500, so 120 px wide it draws 75 px tall.
+        const picture = { type: 'figure', attrs: { mediaName: 'chart.png', width: 120 } };
+        const stretched = { type: 'figure', attrs: { mediaName: 'chart.png', width: 120, height: 150 } };
         const sized = (fontSize: number) => text('Big', { type: 'textStyle', attrs: { fontSize } });
-        expect(await fit(text('Short'), picture)).toEqual(['spAutoFit']);
-        expect(await fit(sized(DEFAULT_NORMAL_STYLE.size + 1))).toEqual(['spAutoFit']);
-        expect(await fit(sized(DEFAULT_NORMAL_STYLE.size))).toEqual(['noAutofit']);
+        expect(await fit(200, text('Short'), picture)).toEqual(['noAutofit']);
+        expect(await fit(60, text('Short'), picture)).toEqual(['spAutoFit']);
+        expect(await fit(120, text('Short'), stretched)).toEqual(['spAutoFit']);
+        expect(await fit(200, sized(14))).toEqual(['noAutofit']);
+        expect(await fit(50, sized(DEFAULT_NORMAL_STYLE.size))).toEqual(['noAutofit']);
+        expect(await fit(50, sized(40))).toEqual(['spAutoFit']);
     });
 
     test('the fill, the outline with its dash or double line, and rounded corners are the shape’s', async () => {
