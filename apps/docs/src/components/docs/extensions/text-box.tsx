@@ -68,16 +68,28 @@ function TextBoxView(props: NodeViewProps) {
     );
     const resize = useFigureResize({ editor, getPos, node, getMaxWidth, fit: fitTextBox, stored });
     const preview = resize.preview?.size;
+    const dragging = preview !== undefined;
 
-    // The look as every surface draws it, a grip's preview size in its place.
+    // The look as every surface draws it, a grip's preview size in its place. The node changes with every keystroke in
+    // the open box, and its attributes only with an edit of the look.
     useLayoutEffect(() => {
         const element = boxRef.current;
         if (!element) return;
         for (const name of element.getAttributeNames()) element.removeAttribute(name);
         const look = preview ? { ...attrs, ...preview } : attrs;
         for (const [name, value] of Object.entries(textBoxHTMLAttributes(look))) element.setAttribute(name, value);
+    }, [attrs, preview]);
+
+    // The height as drawn, which its text and its look change. A grip's drag keeps the one it pressed at: its preview
+    // draws the box at the size it asks, and that height read back would be the gesture's own.
+    useLayoutEffect(() => {
+        const element = boxRef.current;
+        if (!element || dragging) return;
         setDrawnHeight(element.offsetHeight);
-    }, [attrs, preview, node, open]);
+        const observer = new ResizeObserver(() => setDrawnHeight(element.offsetHeight));
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [dragging]);
 
     // A delete and an insert of the node, such as a re-anchor, mounts the open editor in a new view, and the browser
     // drops the focus of the one it took away. Nothing else has taken it, so it goes back.
