@@ -11,7 +11,7 @@ import { createUi, glyphLine, wrap } from './ui';
 type ReleaseNote = { version: string; intro: string; breaking: string[]; fullBackup: string[] };
 
 // This image's own changelog, which knows every version up to it.
-export const CHANGELOG = join(ROOT, 'CHANGELOG.md');
+export const CHANGELOG_PATH = join(ROOT, 'CHANGELOG.md');
 // A release that migrates what a Light backup leaves out, such as a document's own database: the backup before the
 // update is Full, so a rollback brings it back. Unlike (breaking), nothing asks.
 export const FULL_BACKUP_MARKER = '(full backup)';
@@ -34,6 +34,52 @@ A breaking change is asked about on a terminal and refused elsewhere (run by ./e
   --accept-breaking   Go ahead despite breaking changes
   --level             Print only the level of the backup the update makes first: level=full when a release
                       since <version> has breaking changes or is marked ${FULL_BACKUP_MARKER}, else level=light`;
+
+export async function updateCheck(
+    flags: ReturnType<typeof parseArgs<{ options: typeof UPDATE_CHECK_OPTIONS }>>['values'],
+): Promise<void> {
+    const ui = await createUi(false);
+    const from = flags.from ?? '';
+    if (!VERSION_PATTERN.test(from)) ui.fail('--from takes a version, like 0.2.0.', 'Run it through ./eigen update.');
+    if (Bun.semver.order(from, VERSION) > 0) {
+        ui.fail(
+            `Eigen ${VERSION} is older than Eigen ${from}, which runs here.`,
+            './eigen rollback goes back to the version before the last update.',
+        );
+    }
+
+    // What changed since `from` up to this image.
+    const notes = releaseNotes(readFileSync(CHANGELOG_PATH, 'utf8'), from, VERSION);
+    if (flags.level) {
+        console.log(`level=${backupLevel(notes)}`);
+        return;
+    }
+    for (const { version, intro, breaking } of notes) {
+        console.log(glyphLine('active', `Eigen ${version}`));
+        for (const line of wrap(intro, 76)) if (line) console.log(glyphLine('bar', line));
+        for (const change of breaking) {
+            const [first = '', ...rest] = wrap(change, 76);
+            console.log([glyphLine('warn', first), ...rest.map((line) => glyphLine('bar', line))].join('\n'));
+        }
+    }
+    if (flags['accept-breaking'] || !hasBreaking(notes)) return;
+
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        ui.fail(
+            `Eigen ${VERSION} has breaking changes, listed above.`,
+            'Read them, then run ./eigen update --accept-breaking.',
+        );
+    }
+    const go = await ui.confirm({
+        message: `Update to Eigen ${VERSION} despite the breaking changes above?`,
+        initial: false,
+        flag: '--accept-breaking',
+    });
+    if (!go) {
+        ui.outro('Nothing was changed.');
+        process.exit(DECLINED);
+    }
+}
 
 // A section's list items that carry `marker`, as plain text.
 function markedLines(lines: string[], marker: string): string[] {
@@ -80,50 +126,4 @@ function hasBreaking(notes: ReleaseNote[]): boolean {
 // A breaking or marked release may convert what a Light backup leaves out, so only a Full one could bring it back.
 export function backupLevel(notes: ReleaseNote[]): 'full' | 'light' {
     return hasBreaking(notes) || notes.some(({ fullBackup }) => fullBackup.length > 0) ? 'full' : 'light';
-}
-
-export async function updateCheck(
-    flags: ReturnType<typeof parseArgs<{ options: typeof UPDATE_CHECK_OPTIONS }>>['values'],
-): Promise<void> {
-    const ui = await createUi(false);
-    const from = flags.from ?? '';
-    if (!VERSION_PATTERN.test(from)) ui.fail('--from takes a version, like 0.2.0.', 'Run it through ./eigen update.');
-    if (Bun.semver.order(from, VERSION) > 0) {
-        ui.fail(
-            `Eigen ${VERSION} is older than Eigen ${from}, which runs here.`,
-            './eigen rollback goes back to the version before the last update.',
-        );
-    }
-
-    // What changed since `from` up to this image.
-    const notes = releaseNotes(readFileSync(CHANGELOG, 'utf8'), from, VERSION);
-    if (flags.level) {
-        console.log(`level=${backupLevel(notes)}`);
-        return;
-    }
-    for (const { version, intro, breaking } of notes) {
-        console.log(glyphLine('active', `Eigen ${version}`));
-        for (const line of wrap(intro, 76)) if (line) console.log(glyphLine('bar', line));
-        for (const change of breaking) {
-            const [first = '', ...rest] = wrap(change, 76);
-            console.log([glyphLine('warn', first), ...rest.map((line) => glyphLine('bar', line))].join('\n'));
-        }
-    }
-    if (flags['accept-breaking'] || !hasBreaking(notes)) return;
-
-    if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        ui.fail(
-            `Eigen ${VERSION} has breaking changes, listed above.`,
-            'Read them, then run ./eigen update --accept-breaking.',
-        );
-    }
-    const go = await ui.confirm({
-        message: `Update to Eigen ${VERSION} despite the breaking changes above?`,
-        initial: false,
-        flag: '--accept-breaking',
-    });
-    if (!go) {
-        ui.outro('Nothing was changed.');
-        process.exit(DECLINED);
-    }
 }

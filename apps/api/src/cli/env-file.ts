@@ -4,6 +4,44 @@
 
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
+export function readEnvFile(path: string): Map<string, string> {
+    const entries = new Map<string, string>();
+    if (!existsSync(path)) return entries;
+    for (const line of parseEnvLines(readFileSync(path, 'utf8'))) {
+        if (line.key !== null) entries.set(line.key, line.value);
+    }
+    return entries;
+}
+
+// `entries` is the whole new content: lines of keys it lacks are dropped, a line whose value is unchanged
+// stays byte-for-byte, and keys the file did not have are appended in insertion order. Unchanged text leaves the
+// file alone: the running eigen-api mounts it by inode, and Compose recreates it only when a value changes.
+export function writeEnvFile(path: string, entries: Map<string, string>): void {
+    const before = existsSync(path) ? readFileSync(path, 'utf8') : null;
+    const text = before?.replace(/\n$/, '') ?? '';
+    const lines = text ? parseEnvLines(text) : [];
+    const out: string[] = [];
+    const written = new Set<string>();
+    for (const line of lines) {
+        if (line.key === null) {
+            out.push(line.raw);
+            continue;
+        }
+        const value = entries.get(line.key);
+        if (value === undefined) continue;
+        out.push(value === line.value ? line.raw : `${line.key}=${formatEnvValue(value)}`);
+        written.add(line.key);
+    }
+    for (const [key, value] of entries) {
+        if (!written.has(key)) out.push(`${key}=${formatEnvValue(value)}`);
+    }
+    const after = `${out.join('\n')}\n`;
+    if (after === before) return;
+    const temp = `${path}.${process.pid}.tmp`;
+    writeFileSync(temp, after, { mode: 0o600 });
+    renameSync(temp, path);
+}
+
 type EnvLine = { raw: string; key: string | null; value: string };
 
 const KEY_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
@@ -53,42 +91,4 @@ function formatEnvValue(value: string): string {
         .replaceAll('\\', '\\\\')
         .replaceAll('"', '\\"')
         .replaceAll('$', () => '$$')}"`;
-}
-
-export function readEnvFile(path: string): Map<string, string> {
-    const entries = new Map<string, string>();
-    if (!existsSync(path)) return entries;
-    for (const line of parseEnvLines(readFileSync(path, 'utf8'))) {
-        if (line.key !== null) entries.set(line.key, line.value);
-    }
-    return entries;
-}
-
-// `entries` is the whole new content: lines of keys it lacks are dropped, a line whose value is unchanged
-// stays byte-for-byte, and keys the file did not have are appended in insertion order. Unchanged text leaves the
-// file alone: the running eigen-api mounts it by inode, and Compose recreates it only when a value changes.
-export function writeEnvFile(path: string, entries: Map<string, string>): void {
-    const before = existsSync(path) ? readFileSync(path, 'utf8') : null;
-    const text = before?.replace(/\n$/, '') ?? '';
-    const lines = text ? parseEnvLines(text) : [];
-    const out: string[] = [];
-    const written = new Set<string>();
-    for (const line of lines) {
-        if (line.key === null) {
-            out.push(line.raw);
-            continue;
-        }
-        const value = entries.get(line.key);
-        if (value === undefined) continue;
-        out.push(value === line.value ? line.raw : `${line.key}=${formatEnvValue(value)}`);
-        written.add(line.key);
-    }
-    for (const [key, value] of entries) {
-        if (!written.has(key)) out.push(`${key}=${formatEnvValue(value)}`);
-    }
-    const after = `${out.join('\n')}\n`;
-    if (after === before) return;
-    const temp = `${path}.${process.pid}.tmp`;
-    writeFileSync(temp, after, { mode: 0o600 });
-    renameSync(temp, path);
 }

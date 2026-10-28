@@ -8,7 +8,7 @@
 // @workspace/* through this checkout's node_modules.
 import { readFileSync } from 'node:fs';
 import { ROOT, VERSION_PATTERN } from '../cli/install';
-import { CHANGELOG, FULL_BACKUP_MARKER, releaseNotes } from '../cli/update-check';
+import { CHANGELOG_PATH, FULL_BACKUP_MARKER, releaseNotes } from '../cli/update-check';
 import { CONTAINER_DB_CONFIGS } from '../lib/backup/archive-layout';
 
 const RELEASE_TAG = /^v(\d+\.\d+\.\d+)$/;
@@ -99,7 +99,7 @@ if (import.meta.main) {
     }
     const after = Object.values(CONTAINER_DB_CONFIGS).map(({ name, currentVersion }) => ({ name, currentVersion }));
     const error = containerDbMarkerError(
-        readFileSync(CHANGELOG, 'utf8'),
+        readFileSync(CHANGELOG_PATH, 'utf8'),
         previous,
         version,
         containerDbVersionsAt(`v${previous}`),

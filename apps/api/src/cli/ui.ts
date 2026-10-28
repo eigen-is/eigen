@@ -47,6 +47,12 @@ export function glyphLine(glyph: Glyph, text: string): string {
     return text ? `${shown}  ${text}` : shown;
 }
 
+// A wrong argument: the reason, then the command's usage, and exit 2, as the launcher's own refusal does.
+export function refuseUsage(message: string, usage: string): never {
+    console.error(`${message}\n\n${usage}`);
+    process.exit(2);
+}
+
 // Word-wraps each paragraph, since clack's log keeps its guide bar only on the lines it is given.
 export function wrap(text: string, width: number): string[] {
     const lines: string[] = [];
@@ -65,8 +71,8 @@ export function wrap(text: string, width: number): string[] {
     return lines;
 }
 
-// The Clack prompts only run on a terminal, when no flags are given and NO_COLOR is not set. Clack's styleText does
-// not check NO_COLOR itself. A scripted run never loads Clack.
+// The Clack prompts only run on a terminal, when no flags are given and NO_COLOR is not set. A scripted run never
+// loads Clack.
 export async function createUi(flagsGiven: boolean): Promise<Ui> {
     const interactive = process.stdin.isTTY && process.stdout.isTTY && !flagsGiven;
     if (interactive && !process.env['NO_COLOR']) {
@@ -185,22 +191,19 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
             const error = validate(answer);
             return error ? fail(error, `Pass ${flag}.`) : answer;
         },
-        note: (title, lines) =>
-            console.log(
-                [glyphLine('bar', ''), glyphLine('ok', title), ...lines.map((line) => glyphLine('bar', line))].join(
-                    '\n',
-                ),
-            ),
-        warn: (title, lines) =>
-            console.log(
-                [glyphLine('bar', ''), glyphLine('warn', title), ...lines.map((line) => glyphLine('bar', line))].join(
-                    '\n',
-                ),
-            ),
+        note: (title, lines) => printNote('ok', title, lines),
+        warn: (title, lines) => printNote('warn', title, lines),
         outro: (message) => {
             reader?.close();
             console.log(glyphLine('end', message));
         },
         fail,
     };
+}
+
+// A note or a warning in a scripted run: its title on its glyph, its lines on the guide bar.
+function printNote(glyph: Glyph, title: string, lines: string[]): void {
+    console.log(
+        [glyphLine('bar', ''), glyphLine(glyph, title), ...lines.map((line) => glyphLine('bar', line))].join('\n'),
+    );
 }

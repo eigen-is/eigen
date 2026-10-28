@@ -41,9 +41,38 @@ Reports on the running server with what ./eigen status gathers from Docker and t
 
 type StatusFlags = ReturnType<typeof parseArgs<{ options: typeof STATUS_OPTIONS }>>['values'];
 
-// Red while the newest scheduled attempt failed, whatever came after it: the schedule is what the
-// owner counts on. Yellow while its archive is here but not in the bucket, the more urgent, while the newest archive
-// was backed up with warnings, and while the schedule is on and no complete Full verified in two days.
+const NO_BACKUP_YET = 'none yet; ./eigen backup makes one';
+
+// The launcher runs this in the API container while eigen-api runs, and on its own when it does not.
+export async function status(flags: StatusFlags): Promise<void> {
+    const services = (flags.services ?? '')
+        .split('\n')
+        .filter(Boolean)
+        .map((line): Service => {
+            const [service = '', state = '', health = ''] = line.split('\t');
+            return { service, state, health };
+        })
+        // Compose lists them in a different order from run to run.
+        .sort((a, b) => a.service.localeCompare(b.service));
+    const ui = await createUi(true);
+    if (!services.some(({ service, state }) => service === 'eigen-api' && state === 'running')) {
+        printReport(flags, services, null);
+        ui.fail('Eigen is not running.', 'Run ./eigen logs eigen-api to see why.');
+    }
+    const res = await callControl('/status', (message, next) => {
+        printReport(flags, services, null);
+        return ui.fail(message, next);
+    });
+    if (!res.ok) {
+        printReport(flags, services, null);
+        ui.fail(await res.text(), 'Run ./eigen logs eigen-api to see what went wrong.');
+    }
+    printReport(flags, services, await res.json());
+}
+
+// Red while the newest scheduled attempt failed, whatever came after it, because the schedule is what the owner
+// counts on. Yellow, in this order of urgency: while its archive is here but not in the bucket, while the newest
+// archive was backed up with warnings, and while the schedule is on and no complete Full verified in two days.
 function backupRow({
     scheduleEnabled,
     newest,
@@ -67,7 +96,7 @@ function backupRow({
         const value = `${name} backed up with warnings, ${formatTimeAgo(createdAt)}${why(error)}`;
         return { level: 'warn', label: 'Backup', value };
     }
-    if (!newest) return { level: 'warn', label: 'Backup', value: 'none yet; ./eigen backup makes one' };
+    if (!newest) return { level: 'warn', label: 'Backup', value: NO_BACKUP_YET };
     const parts = [newest.name, formatTimeAgo(newest.createdAt)];
     if (newest.bytes !== null) parts.push(formatFileSize(newest.bytes, 1));
     if (newest.state === 'running') parts.push('running');
@@ -84,7 +113,7 @@ function backupRow({
 // Without the API, the newest archive in backups/ by the time in its name; whether it verified is in its record.
 function listedBackupRow(listing: string): Row {
     const [newest] = parseServerArchiveNames(listing.split('\n'));
-    if (!newest) return { level: 'warn', label: 'Backup', value: 'none yet; ./eigen backup makes one' };
+    if (!newest) return { level: 'warn', label: 'Backup', value: NO_BACKUP_YET };
     const value = `${newest.name}, ${BACKUP_LEVEL_NAMES[newest.level]}, ${formatTimeAgo(newest.at)}`;
     return { level: 'ok', label: 'Backup', value };
 }
@@ -204,31 +233,4 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
             )
             .join(`\n${glyphLine('bar', '')}\n`),
     );
-}
-
-// The launcher runs this in the API container while eigen-api runs, and on its own when it does not.
-export async function status(flags: StatusFlags): Promise<void> {
-    const services = (flags.services ?? '')
-        .split('\n')
-        .filter(Boolean)
-        .map((line): Service => {
-            const [service = '', state = '', health = ''] = line.split('\t');
-            return { service, state, health };
-        })
-        // Compose lists them in a different order from run to run.
-        .sort((a, b) => a.service.localeCompare(b.service));
-    const ui = await createUi(true);
-    if (!services.some(({ service, state }) => service === 'eigen-api' && state === 'running')) {
-        printReport(flags, services, null);
-        ui.fail('Eigen is not running.', 'Run ./eigen logs eigen-api to see why.');
-    }
-    const res = await callControl('/status', (message, next) => {
-        printReport(flags, services, null);
-        return ui.fail(message, next);
-    });
-    if (!res.ok) {
-        printReport(flags, services, null);
-        ui.fail(await res.text(), 'Run ./eigen logs eigen-api to see what went wrong.');
-    }
-    printReport(flags, services, await res.json());
 }

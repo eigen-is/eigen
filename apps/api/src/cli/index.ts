@@ -11,6 +11,7 @@ import { RESET_PASSWORD_OPTIONS, RESET_PASSWORD_USAGE, resetPassword } from './r
 import { RESTORE_OPTIONS, RESTORE_USAGE, restore } from './restore';
 import { setupLink } from './setup-link';
 import { STATUS_OPTIONS, STATUS_USAGE, status } from './status';
+import { refuseUsage } from './ui';
 import { UPDATE_CHECK_OPTIONS, UPDATE_CHECK_USAGE, updateCheck } from './update-check';
 
 // --help prints the usage; a flag the command does not know, or one argument more than it takes, is refused with it.
@@ -20,10 +21,6 @@ function parseFlags<T extends NonNullable<ParseArgsConfig['options']>>(
     usage: string,
     positionals = 0,
 ) {
-    const refuse = (message: string): never => {
-        console.error(`${message}\n\n${usage}`);
-        process.exit(2);
-    };
     if (args.includes('--help') || args.includes('-h')) {
         console.log(usage);
         process.exit(0);
@@ -36,10 +33,10 @@ function parseFlags<T extends NonNullable<ParseArgsConfig['options']>>(
         if (!(error instanceof Error)) throw error;
         // Worded like the launcher's refusal, without the advice about -- that follows the option's name.
         const unknown = /^Unknown option '(.+?)'/.exec(error.message)?.[1];
-        return refuse(unknown ? `Unknown argument "${unknown}".` : error.message);
+        return refuseUsage(unknown ? `Unknown argument "${unknown}".` : error.message, usage);
     }
     const extra = parsed.positionals[positionals];
-    if (extra !== undefined) refuse(`Unknown argument "${extra}".`);
+    if (extra !== undefined) refuseUsage(`Unknown argument "${extra}".`, usage);
     return parsed;
 }
 
