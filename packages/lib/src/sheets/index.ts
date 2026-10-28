@@ -23,6 +23,7 @@ export {
     sheetRowsHeight,
     sheetTrackAt,
 } from './defaults';
+export { EXCEL_FUTURE_FUNCTIONS, isExcelFunction } from './excel-functions';
 export {
     chartsWithinEntryCap,
     floatingItems,
