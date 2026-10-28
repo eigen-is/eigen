@@ -135,7 +135,7 @@ The verdict goes into the sidecar, which the admin pane's list reads. The manife
 A per-home restore starts on **Restore**, which asks first, naming the home. Then:
 
 1. The home is marked as restoring (`markHomeRestoring` in `apps/api/src/lib/home/get-home.ts`), which is also the lock against a second restore.
-2. The home archive is extracted into staging and fully verified. A failure ends the job with nothing touched.
+2. The home archive is extracted into staging and fully verified, and its `shares.json` is read, since a share row that does not read must stop the restore before any identity row goes in. A failure ends the job with nothing touched.
 3. The home's collab sockets are closed, then the home is evicted.
 4. The home folder is renamed aside as `<id>.pre-restore-<date>-<time>`. A deleted user has none.
 5. The archive's home folder is installed. A `local` mount's files go in as they are, a `local-key` mount's under their flat keys, and an `s3` mount's are staged with a pending-upload row each, so the upload queue drains them with its retry and backoff. Every restored row gets a fresh key, so no bucket object is overwritten.

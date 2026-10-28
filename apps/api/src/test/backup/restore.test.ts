@@ -28,7 +28,7 @@ import {
     buildHomeFolderName,
     getBackupsDir,
 } from '../../lib/backup/paths';
-import { restoreHome, restoreShares } from '../../lib/backup/restore';
+import { readShares, restoreHome, restoreShares } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -816,6 +816,29 @@ describe('Backup restore refuses an archive this server cannot open', () => {
         expect(getAuthDrizzleDb().select().from(userScheme).where(eq(userScheme.id, doomed.id)).all()).toEqual([]);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
+
+    test('a deleted user is not re-created by an archive whose shares.json does not read', async () => {
+        const ctx = await getTestContext();
+        const doomed = await createTestUser('restore-shares-deleted@test.eigen.is', PASSWORD, 'Restore Bad Shares');
+        expect((await authedRequest(doomed.sessionToken, `/drive/${doomed.id}/mounts`)).status).toBe(200);
+        const artifact = await backup(doomed.id, new Date(), async (manifest, folder) => {
+            writeFileSync(join(folder, ARCHIVE_SHARES_FILE), JSON.stringify([{ target: 'no identifier' }]));
+            await restateEntry(manifest, folder, ARCHIVE_SHARES_FILE);
+        });
+        expect(
+            (await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${doomed.id}`, { method: 'DELETE' }))
+                .status,
+        ).toBe(200);
+
+        await expect(restoreHome(artifact, doomed.id, `restore-deleted-shares-${Date.now()}`)).rejects.toThrow(
+            /shares\.json is not a set of share-registry rows/,
+        );
+
+        // Judged with the archive, before the home goes aside: no row goes in, and no folder is left half written.
+        expect(getAuthDrizzleDb().select().from(userScheme).where(eq(userScheme.id, doomed.id)).all()).toEqual([]);
+        expect(safetyCopies(doomed.id, FAILED_RESTORE_SUFFIX)).toEqual([]);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
 });
 
 describe('Backup restore after the user is deleted', () => {
@@ -870,7 +893,7 @@ describe('Backup restore after the user is deleted', () => {
                 join(folder, ARCHIVE_SHARES_FILE),
                 JSON.stringify([{ targetIdentifier: 'Mixed.Case@External.Test' }]),
             );
-            await restoreShares(deleted.id, folder);
+            await restoreShares(deleted.id, readShares(folder));
         } finally {
             rmSync(folder, { recursive: true, force: true });
         }

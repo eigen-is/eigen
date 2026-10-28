@@ -68,6 +68,9 @@ export async function restoreHome(
             const incomplete = incompleteReason(manifest);
             if (incomplete) throw new ApiError(400, `${artifactName} ${incomplete}`);
             requireVerified(await verifyFolder(folder, onProgress), artifactName);
+            // Read before the first write, since nothing takes an auth row back: a shares.json that does not read
+            // would otherwise leave a deleted user signed in to an empty home.
+            const shares = readShares(folder);
 
             return async (stamp) => {
                 // The archive's `home/` IS the home folder, one for one.
@@ -92,7 +95,7 @@ export async function restoreHome(
 
                 // The rows that live outside the home folder (users only).
                 restoreAuthRows(ownerId, manifest, folder);
-                await restoreShares(ownerId, folder);
+                await restoreShares(ownerId, shares);
                 await restoreAvatar(ownerId, folder);
             };
         },
@@ -152,12 +155,17 @@ export async function restoreSafetyCopy(
     onProgress?.('done', 1, 1);
 }
 
-// Inserts only the missing rows: a registry row that is already there describes a live share.
-export async function restoreShares(ownerId: string, folder: string): Promise<void> {
+// The share-registry rows the archive holds: none for a team, which has no shares.json.
+export function readShares(folder: string): { targetIdentifier: string }[] {
     const sharesPath = path.join(folder, ARCHIVE_SHARES_FILE);
-    if (!fs.existsSync(sharesPath)) return;
+    if (!fs.existsSync(sharesPath)) return [];
     const rows = parseBackupShares(fs.readFileSync(sharesPath, 'utf8'));
     if (!rows) throw new ApiError(400, `${ARCHIVE_SHARES_FILE} is not a set of share-registry rows`);
+    return rows;
+}
+
+// Inserts only the missing rows: a registry row that is already there describes a live share.
+export async function restoreShares(ownerId: string, rows: { targetIdentifier: string }[]): Promise<void> {
     for (const row of rows) await addRegistryEntry(ownerId, row.targetIdentifier);
 }
 
