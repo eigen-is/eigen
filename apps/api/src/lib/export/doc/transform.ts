@@ -122,7 +122,9 @@ export async function renderEigendocExport(
 }
 
 // A table drawn past the text column, as a page-less doc's may be, would run off the paper, so each one is fitted to the
-// column by its first row's widths, one factor for every cell. A column without a width keeps none.
+// column by its first row's widths, one factor for every cell, as Word's autofit shrinks one. Paper needs no column wide
+// enough to drag, so the floor is 1 px: 63 columns at the editor's 25 px floor are wider than A4's column. A column
+// without a width keeps none.
 function withTablesFitted(node: JSONContent, columnPx: number): JSONContent {
     const content = node.content?.map((child) => withTablesFitted(child, columnPx));
     if (node.type !== 'table') return content ? { ...node, content } : node;
@@ -130,7 +132,7 @@ function withTablesFitted(node: JSONContent, columnPx: number): JSONContent {
         .flatMap((cell): unknown[] => (Array.isArray(cell.attrs?.['colwidth']) ? cell.attrs['colwidth'] : []))
         .filter(isWidth)
         .reduce((sum, width) => sum + width, 0);
-    const fit = columnFit(columnPx, total);
+    const fit = columnFit(columnPx, total, 1);
     const fitted = (cell: JSONContent): JSONContent => {
         const colwidth: unknown = cell.attrs?.['colwidth'];
         if (!Array.isArray(colwidth)) return cell;
@@ -323,6 +325,12 @@ input, button, textarea, select { font: inherit; color: inherit; background-colo
 a { color: inherit; text-decoration: inherit; }
 table { border-collapse: collapse; border-spacing: 0; }
 h1, h2, h3, h4, h5, h6 { font-size: inherit; }
+
+/* A table whose columns all store widths draws at them, as the docx's fixed layout does: the auto layout widens a
+   column to its longest word and its padding, which ran an imported 604 px table to 1,284 px, off the paper. The
+   renderer writes such a table's width as its style, and a min-width when a column has none, which keeps the auto
+   layout */
+table[style^="width:"] { table-layout: fixed; }
 
 /* The page is the stacking context of the figures in front of and behind the text, as the editor's page is. Not
    isolation, which WeasyPrint doesn't read */

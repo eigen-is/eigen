@@ -1,8 +1,9 @@
 // A doc's body or band as HTML, the DOM the editor holds, for the HTML and PDF exports and the doc preview alike. Each
-// node the static renderer draws otherwise is mapped here, such as a code block, a figure, a text box, a note, a table
-// of contents or a small-caps run on paper. The docx writer shares its link rule.
+// node the static renderer draws otherwise is mapped here, such as a code block, a table, a figure, a text box, a note,
+// a table of contents or a small-caps run on paper. The docx writer shares its link rule.
 
 import type { JSONContent } from '@tiptap/core';
+import { createColGroup } from '@tiptap/extension-table';
 import type { Node } from '@tiptap/pm/model';
 import {
     domOutputSpecToHTMLString,
@@ -27,6 +28,7 @@ import {
     isFigureFrameNode,
     isPositioned,
     isStoryNode,
+    MIN_TABLE_COLUMN_PX,
     outlineEntry,
     PROSE_TEXTBLOCKS,
     readChartAttrs,
@@ -86,6 +88,7 @@ export function renderDocHtml(
             nodeMapping: {
                 codeBlock: ({ node }) => renderCodeBlockNode(node, highlight),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
+                table: ({ node, children }) => renderTable(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
                 chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
                 textBox: ({ node, renderElement }) => renderTextBox(readTextBoxAttrs(node.attrs), node, renderElement),
@@ -149,6 +152,21 @@ function renderCodeBlockNode(node: Node, highlight: CodeHighlighter): string {
     // withTrailingBreaks' rule: a code block holds only text, so it ends open when empty or in a newline.
     const trailingBreak = code === '' || code.endsWith('\n') ? '<br>' : '';
     return `<pre><code class="hljs${langClass}">${highlighted}${trailingBreak}</code></pre>`;
+}
+
+// TipTap's table, but for a column stored narrower than TipTap's 25 px minimum, which it draws at 25 px: the export fits
+// a table of many columns below that floor (withTablesFitted, export/doc/transform.ts), and columns widened back would
+// run the table off the paper again. So the minimum is the narrowest stored width, a column with none its min-width.
+function renderTable(node: Node, children: string | string[] | undefined): string {
+    const widths: number[] = [];
+    node.firstChild?.forEach((cell) => {
+        const colwidth: unknown = cell.attrs['colwidth'];
+        if (Array.isArray(colwidth))
+            widths.push(...colwidth.filter((width): width is number => typeof width === 'number' && width > 0));
+    });
+    const { colgroup, tableWidth, tableMinWidth } = createColGroup(node, Math.min(MIN_TABLE_COLUMN_PX, ...widths));
+    const style = tableWidth ? `width: ${tableWidth}` : `min-width: ${tableMinWidth}`;
+    return domOutputSpecToHTMLString(['table', { style }, colgroup, ['tbody', 0]])(children);
 }
 
 // The tiptap static renderer drops the `checked` attribute, so the checkbox is rendered here.
