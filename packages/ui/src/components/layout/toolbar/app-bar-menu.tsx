@@ -30,8 +30,16 @@ export function AppBarMenu({ label, value, contentClassName, onCloseAutoFocus, c
                     const bar = event.currentTarget.closest('[role="menubar"]');
                     openedByHoverRef.current = !!bar?.querySelector('[data-state="open"]');
                 }}
+                // A pointer that leaves without a press opened nothing a later press aims at.
+                onPointerLeave={() => {
+                    openedByHoverRef.current = false;
+                }}
                 onPointerDown={(event) => {
-                    if (event.currentTarget.dataset.state === 'open' && openedByHoverRef.current) {
+                    if (
+                        event.button === 0 &&
+                        event.currentTarget.dataset.state === 'open' &&
+                        openedByHoverRef.current
+                    ) {
                         keepOpenPressRef.current = event.nativeEvent;
                         // The open menu keeps the focus, as after a press that opened it, so the arrow keys work in it.
                         event.preventDefault();

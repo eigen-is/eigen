@@ -108,6 +108,41 @@ test('an open menu leaves the page live, and one press on another trigger opens 
     expect(openMenu()).toBe('0 menus');
 });
 
+async function key(name: string) {
+    await act(async () => {
+        document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
+    });
+}
+
+// A pointer that moved onto Edit opened it, then left without a press. The arrow keys bring Edit back, and a press on
+// it now closes it, as on any open trigger.
+test('a menu the pointer opened and left closes on the next press once the arrow keys bring it back', async () => {
+    await render(1600);
+    await press('Format');
+    await hover('Edit');
+    await act(async () => {
+        trigger('Edit')?.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, relatedTarget: document.body }));
+    });
+    await key('ArrowLeft');
+    expect(openMenu()).toBe('Format');
+    await key('ArrowRight');
+    expect(openMenu()).toBe('Edit');
+    await press('Edit');
+    expect(openMenu()).toBe('0 menus');
+});
+
+// Only the main button's press is the one a hover-opened menu stays open through; Radix toggles on no other.
+test('a right press on a trigger the pointer opened keeps the browser default', async () => {
+    await render(1600);
+    await press('Format');
+    await hover('Edit');
+    const down = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 2 });
+    await act(async () => {
+        trigger('Edit')?.dispatchEvent(down);
+    });
+    expect(down.defaultPrevented).toBe(false);
+});
+
 // A finger enters and presses in one go, before the menu it opens listens for a press outside. Outside act, React
 // renders in the microtask after each event, as in a browser, and no timer runs in between.
 async function tap(label: string) {
