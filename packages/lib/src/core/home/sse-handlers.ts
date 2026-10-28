@@ -9,17 +9,8 @@ import { DATA_EPOCHS_KEY, reloadReplacedHome } from './reload-replaced-home';
 
 const loadedEpochs = new Map<string, string>(Object.entries(readStoredEpochs()));
 
-// sessionStorage throws where the browser refuses storage.
-function readStoredEpochs(): Record<string, string> {
-    try {
-        return parseStringRecord(window.sessionStorage.getItem(DATA_EPOCHS_KEY) ?? '{}') ?? {};
-    } catch {
-        return {};
-    }
-}
-
-export function handleHomeSSEvent(event: SSEvent): boolean {
-    if (event?.type !== SSEventType.HOME_DATA_EPOCHS) return false;
+export function handleHomeSSEvent(event: SSEvent): void {
+    if (event.type !== SSEventType.HOME_DATA_EPOCHS) return;
 
     let changed = false;
     let replaced = false;
@@ -31,14 +22,21 @@ export function handleHomeSSEvent(event: SSEvent): boolean {
         loadedEpochs.set(ownerId, epoch);
         changed = true;
     }
-    if (!changed) return true;
     // A page kept by the leave prompt asks only once: the map already holds the epoch it reloaded for.
     if (replaced) {
         reloadReplacedHome();
-        return true;
+    } else if (changed) {
+        try {
+            window.sessionStorage.setItem(DATA_EPOCHS_KEY, JSON.stringify(Object.fromEntries(loadedEpochs)));
+        } catch {}
     }
+}
+
+// sessionStorage throws, on a read and on a write, where the browser refuses storage.
+function readStoredEpochs(): Record<string, string> {
     try {
-        window.sessionStorage.setItem(DATA_EPOCHS_KEY, JSON.stringify(Object.fromEntries(loadedEpochs)));
-    } catch {}
-    return true;
+        return parseStringRecord(window.sessionStorage.getItem(DATA_EPOCHS_KEY) ?? '{}') ?? {};
+    } catch {
+        return {};
+    }
 }

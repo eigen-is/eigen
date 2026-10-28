@@ -6,15 +6,14 @@ import { publicUserKeys } from '@workspace/lib/public';
 import type { PublicUser } from '@workspace/lib/types/public';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import type { ExternalToast } from 'sonner';
 import { toast } from 'sonner';
 import { formatChatPreview } from '../chat/format-preview';
 import { CHAT_TEXT_NOTIFICATION_TYPES } from './describe';
 import { invalidateNotifications } from './hooks/keys';
 import { isClickableNotification, resolveNotificationLink } from './resolve-link';
 
-export function handleNotificationSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
-    if (!event?.type?.startsWith('notification:')) return false;
-
+export function handleNotificationSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): void {
     switch (event.type) {
         case SSEventType.NOTIFICATION_CREATED: {
             invalidateNotifications(queryClient, userId);
@@ -29,7 +28,7 @@ export function handleNotificationSSEvent(event: SSEvent, queryClient: QueryClie
                         queryClient.getQueryData<PublicUser | null>(publicUserKeys.detail(email))?.name,
                 });
             }
-            const options: Parameters<typeof toast>[1] = description ? { description } : {};
+            const options: ExternalToast = description ? { description } : {};
             if (tag && isClickableNotification(notificationType)) {
                 options.action = {
                     label: 'View',
@@ -43,14 +42,11 @@ export function handleNotificationSSEvent(event: SSEvent, queryClient: QueryClie
                 };
             }
             toast(event.title, options);
-            return true;
+            break;
         }
 
         case SSEventType.NOTIFICATION_CHANGED:
             invalidateNotifications(queryClient, userId);
-            return true;
-
-        default:
-            return false;
+            break;
     }
 }

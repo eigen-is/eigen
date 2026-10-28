@@ -1,3 +1,8 @@
+// Carries a change to a shared calendar out of its owner's Home. notifySharedCalendarUsers sends one of
+// the owner's calendar events to the open tabs of the users it is shared with by name.
+// propagateCalendarShare tells every user who gains or loses the calendar, a team's members included,
+// so their Home adds or drops it with the permission they now have. Calendar calls both.
+
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { SSEvent } from '@workspace/lib/types/sse';
@@ -5,20 +10,18 @@ import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
-import { getMemberships, getUserByEmail } from '../user/';
+import { getMemberships, getUserByEmail } from '../user';
 
 export async function notifySharedCalendarUsers(
     ownerHome: Home,
     calendar: CalendarItem,
     event: SSEvent,
 ): Promise<void> {
-    const shares = calendar.shares;
-    if (!shares || shares.length === 0) return;
-
     const userIds = new Set<string>();
 
-    // Named users only: team members re-sync team calendars themselves, and resolving every member on every share change costs more.
-    for (const share of shares) {
+    // Only the users it is shared with by name hear it. A team's members refetch a team calendar
+    // themselves, and looking up every member on every change would cost more.
+    for (const share of calendar.shares ?? []) {
         if (parseOwnerId(share.targetId).type !== 'user') continue;
         const user = await getUserByEmail(share.targetId);
         if (user) userIds.add(user.id);
@@ -40,9 +43,7 @@ export async function propagateCalendarShare(
     calendar: CalendarItem,
     oldShares: CalendarShare[] | null,
 ): Promise<void> {
-    const newShares = calendar.shares || [];
-    const allShares = [...(oldShares || []), ...newShares];
-
+    const allShares = [...(oldShares ?? []), ...(calendar.shares ?? [])];
     const targets = new Map<string, string>();
 
     for (const share of allShares) {
@@ -63,7 +64,7 @@ export async function propagateCalendarShare(
         }
     }
 
-    // Don't propagate to the calendar owner
+    // The owner can be a member of a team the calendar is shared with.
     targets.delete(ownerHome.user.id);
 
     for (const [userId, email] of targets) {

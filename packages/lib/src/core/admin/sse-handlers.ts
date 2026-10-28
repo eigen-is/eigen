@@ -7,17 +7,9 @@ import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateBackup, invalidateServerBackup } from './hooks/keys';
 
-export function handleAdminSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
-    if (!event?.type?.startsWith('backup:')) return false;
-
-    switch (event.type) {
-        // A server job's start and end write the record the server archive list shows.
-        case SSEventType.BACKUP_JOB_UPDATED:
-            if (parseOwnerId(event.ownerId).type === 'org') invalidateServerBackup(queryClient, event.ownerId);
-            else invalidateBackup(queryClient, event.ownerId);
-            return true;
-
-        default:
-            return false;
-    }
+export function handleAdminSSEvent(event: SSEvent, queryClient: QueryClient): void {
+    if (event.type !== SSEventType.BACKUP_JOB_UPDATED) return;
+    // A server job's start and end write the record the server archive list shows.
+    if (parseOwnerId(event.ownerId).type === 'org') invalidateServerBackup(queryClient, event.ownerId);
+    else invalidateBackup(queryClient, event.ownerId);
 }

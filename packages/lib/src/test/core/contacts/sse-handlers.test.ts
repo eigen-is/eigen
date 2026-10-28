@@ -42,7 +42,7 @@ describe('handleContactsSSEvent — burst', () => {
                     : i % 3 === 1
                       ? SSEventType.CONTACT_UPDATED
                       : SSEventType.CONTACT_DELETED;
-            expect(handleContactsSSEvent({ type, contactId }, queryClient, owner)).toBe(true);
+            handleContactsSSEvent({ type, contactId }, queryClient, owner);
         }
 
         expect(countKey(touched, contactKeys.lists(owner))).toBe(0);
@@ -56,7 +56,7 @@ describe('handleContactsSSEvent — burst', () => {
         const owner = 'owner-batched';
         const { queryClient, touched } = trackingClient();
 
-        expect(handleContactsSSEvent({ type: SSEventType.CONTACTS_CHANGED }, queryClient, owner)).toBe(true);
+        handleContactsSSEvent({ type: SSEventType.CONTACTS_CHANGED }, queryClient, owner);
         await settle();
 
         expect(countKey(touched, contactKeys.lists(owner))).toBe(1);

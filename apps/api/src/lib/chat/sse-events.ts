@@ -12,7 +12,7 @@ export function buildChatEvent(type: SSEventChat['type'], chat: SSEventChat['cha
     return { type, chat };
 }
 
-export function buildCommentIndexUpdatedEvent(containerId: string, ownerId: string, mountId: string): SSEventChat {
+export function buildCommentIndexUpdatedEvent(ownerId: string, mountId: string, containerId: string): SSEventChat {
     return buildChatEvent(SSEventType.CHAT_COMMENT_INDEX_UPDATED, { chatId: containerId, ownerId, mountId });
 }
 
@@ -25,7 +25,7 @@ export async function broadcastCommentIndexUpdated(
     containerId: string,
     members?: EffectiveMember[],
 ): Promise<void> {
-    const event = buildCommentIndexUpdatedEvent(containerId, ownerId, mountId);
+    const event = buildCommentIndexUpdatedEvent(ownerId, mountId, containerId);
     const resolved = members ?? (await drive.getEffectiveMembers(mountId, containerId));
     await Promise.all([
         sendToHome(ownerId, { type: 'broadcast', event }).catch(() => {}),

@@ -13,7 +13,7 @@ const HANDLERS = '../../../core/home/sse-handlers';
 let pageLoads = 0;
 
 // A page load: the module starts over, the tab's sessionStorage does not. The query makes bun evaluate it anew.
-async function loadPage(): Promise<(epochs: Record<string, string>) => boolean> {
+async function loadPage(): Promise<(epochs: Record<string, string>) => void> {
     pageLoads += 1;
     const { handleHomeSSEvent }: typeof import('../../../core/home/sse-handlers') = await import(
         `${HANDLERS}?load=${pageLoads}`
@@ -29,13 +29,13 @@ beforeEach(() => {
 describe('handleHomeSSEvent', () => {
     test('reloads only when an epoch the tab already holds changes', async () => {
         const announce = await loadPage();
-        expect(announce({ user_a: 'server-1' })).toBe(true);
-        expect(announce({ user_a: 'server-1' })).toBe(true);
+        announce({ user_a: 'server-1' });
+        announce({ user_a: 'server-1' });
         // A team joined after the tab loaded is a new home to it, not a replaced one.
-        expect(announce({ user_a: 'server-1', team_b: 'server-1' })).toBe(true);
+        announce({ user_a: 'server-1', team_b: 'server-1' });
         expect(reload).not.toHaveBeenCalled();
 
-        expect(announce({ user_a: 'server-1', team_b: 'server-1home-b' })).toBe(true);
+        announce({ user_a: 'server-1', team_b: 'server-1home-b' });
         expect(reload).toHaveBeenCalledTimes(1);
     });
 
@@ -72,6 +72,8 @@ describe('handleHomeSSEvent', () => {
 
     test('leaves every other event to the other handlers', async () => {
         const { handleHomeSSEvent } = await import('../../../core/home/sse-handlers');
-        expect(handleHomeSSEvent({ type: SSEventType.NOTIFICATION_CHANGED })).toBe(false);
+        handleHomeSSEvent({ type: SSEventType.NOTIFICATION_CHANGED });
+        expect(window.sessionStorage.length).toBe(0);
+        expect(reload).not.toHaveBeenCalled();
     });
 });

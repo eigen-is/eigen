@@ -16,7 +16,7 @@ export async function readChatContent(mount: Mount, drivePath: DrivePath, capByt
 
     const managedDb = await mount.openDatabase(CHAT_ROOM_DB_CONFIG, dataDbPath.id);
 
-    // Walk the newest messages a page at a time, on getMessages' keyset, and stop the moment `out` reaches
+    // Walk the newest messages a page at a time, on getMessagesForUser's keyset, and stop the moment `out` reaches
     // capBytes, so a long chat never materialises more than one page past the cap.
     let out = '';
     let before: { createdAt: Date; rowid: number } | undefined;

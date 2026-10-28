@@ -6,13 +6,13 @@ import { requireSelf } from '../lib/auth/access';
 import { createSSEStream, getHome } from '../lib/home';
 import { betterAuth } from './auth';
 
-// X-Accel-Buffering: no defends against reverse proxies (nginx, Cloudflare) that buffer by
-// default — without it, events stack up in the proxy until the connection closes.
 export const sseRouter = new Elysia({ name: 'sse' }).use(betterAuth).get(
     '/sse/:ownerId/events',
     async ({ params, user, set }) => {
         requireSelf(params.ownerId, user.id);
         const home = await getHome(user.id);
+        // A reverse proxy such as nginx buffers a response by default, and would hold the events until
+        // the stream closes. This header turns that off.
         set.headers['X-Accel-Buffering'] = 'no';
         return sse(createSSEStream(home));
     },

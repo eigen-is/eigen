@@ -16,28 +16,11 @@ import { buildNotificationChangedEvent, buildNotificationCreatedEvent } from './
 
 const COALESCE_WINDOW_MS = 30_000;
 
-function toNotification(row: typeof schema.notifications.$inferSelect): Notification {
-    return {
-        id: row.id,
-        type: row.type,
-        actorEmail: row.actorEmail,
-        title: row.title,
-        body: row.body,
-        tag: row.tag,
-        read: row.read,
-        createdAt: row.createdAt,
-        details: row.details,
-    };
-}
-
 export class NotificationCenter {
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
-    private home: Home;
 
-    public constructor(home: Home) {
-        this.home = home;
-    }
+    public constructor(private readonly home: Home) {}
 
     public async init(): Promise<void> {
         this.managedDb = await this.home.getLocalDatabase(NOTIFICATION_CENTER_DB_CONFIG, PATHS.NOTIFICATIONS.DB);
@@ -51,15 +34,14 @@ export class NotificationCenter {
     }
 
     public persist(input: NotificationPersistInput): Notification {
-        const id = randomUUID();
         const now = new Date();
-        // Select BEFORE the upsert — afterwards the row always exists with createdAt = now.
+        // The earlier row is read before the upsert, because the upsert sets its createdAt to now.
         const prior =
             input.coalesce && input.tag
                 ? this.db.select().from(schema.notifications).where(eq(schema.notifications.tag, input.tag)).get()
                 : undefined;
         const row = {
-            id,
+            id: randomUUID(),
             type: input.type,
             actorEmail: input.actorEmail ?? null,
             title: input.title,
@@ -94,17 +76,14 @@ export class NotificationCenter {
     }
 
     // The first page also holds every unread row, however old, so chat's unread dots can read this one list.
-    public list(limit: number = 50, before?: Date): Notification[] {
+    public list(limit = 50, before?: Date): Notification[] {
         const { notifications } = schema;
         const newestFirst = desc(notifications.createdAt);
         const query = this.db.select().from(notifications).orderBy(newestFirst).$dynamic();
-        if (before) return query.where(lt(notifications.createdAt, before)).limit(limit).all().map(toNotification);
+        if (before) return query.where(lt(notifications.createdAt, before)).limit(limit).all();
 
         const newest = this.db.select({ id: notifications.id }).from(notifications).orderBy(newestFirst).limit(limit);
-        return query
-            .where(or(eq(notifications.read, false), inArray(notifications.id, newest)))
-            .all()
-            .map(toNotification);
+        return query.where(or(eq(notifications.read, false), inArray(notifications.id, newest))).all();
     }
 
     public unreadCount(): number {

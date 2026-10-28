@@ -8,18 +8,17 @@ import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
-import type { SSEvent } from '@workspace/lib/types/sse';
+import type { SSEvent, SSEventChat } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
-import type { ManagedDatabase } from '../core/managed-database';
 import type { Drive } from '../drive';
 import type { Home } from '../home';
 import { relayEventToMembers, sendToUserHomes } from '../home/home-relay';
-import type { User } from '../user/';
-import { getUserByEmail } from '../user/';
+import type { User } from '../user';
+import { getUserByEmail } from '../user';
 import { formatEmoteForViewer, parseCommand, searchableMessageText } from './commands';
 import type { CommentIndex } from './comment-index';
 import { openCommentIndex, RECENT_TEXT_CAP } from './comment-index';
@@ -29,18 +28,14 @@ import * as schema from './schema';
 import { buildChatEvent, buildCommentIndexUpdatedEvent } from './sse-events';
 
 export class ChatRoom {
-    private drive: Drive;
-    private home: Home;
-    private path: DrivePath;
     private containerPath: DrivePath | null = null;
     private db!: BunSQLiteDatabase<typeof schema>;
-    private managedDb!: ManagedDatabase<typeof schema>;
 
-    public constructor(drive: Drive, home: Home, path: DrivePath) {
-        this.drive = drive;
-        this.home = home;
-        this.path = path;
-    }
+    public constructor(
+        private readonly drive: Drive,
+        private readonly home: Home,
+        private readonly path: DrivePath,
+    ) {}
 
     public static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
         // The databases are set up in one step that cleans up after itself. A storage failure then leaves
@@ -71,8 +66,7 @@ export class ChatRoom {
             this.drive.openDatabase(this.path.mountId, CHAT_ROOM_DB_CONFIG, dataDbId),
             this.drive.findContainerPath(this.path.mountId, this.path.parentId ?? ''),
         ]);
-        this.managedDb = managedDb;
-        this.db = this.managedDb.db;
+        this.db = managedDb.db;
         this.containerPath = containerPath;
 
         return this;
@@ -146,12 +140,7 @@ export class ChatRoom {
             createdAt: now,
         };
 
-        const event = buildChatEvent(SSEventType.CHAT_MESSAGE_POSTED, {
-            chatId: this.path.id,
-            ownerId: this.path.ownerId,
-            mountId: this.path.mountId,
-        });
-        this.home.broadcast(event);
+        const event = this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_POSTED);
 
         // Each getEffectiveMembers walks the whole chain of ACLs and teams. So the members are read once
         // here, and the comment index and the notifications below both use them.
@@ -317,7 +306,7 @@ export class ChatRoom {
         return message;
     }
 
-    private async getMessages(limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
+    public async getMessagesForUser(userEmail: string, limit = 50, beforeId?: string): Promise<ChatMessage[]> {
         const before = beforeId
             ? await this.db
                   .select({ createdAt: schema.messages.createdAt, rowid: sql<number>`rowid` })
@@ -334,14 +323,9 @@ export class ChatRoom {
             .limit(limit)
             .all();
 
-        return rows.map((r) => this.toMessage(r)).reverse();
-    }
-
-    public async getMessagesForUser(userEmail: string, limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
-        const allMessages = await this.getMessages(limit, beforeId);
         const viewerEmail = userEmail.toLowerCase();
-
-        return allMessages.map((msg) => {
+        return rows.reverse().map((row) => {
+            const msg = this.toMessage(row);
             if (msg.type === 'whisper') {
                 const isAuthor = msg.authorEmail.toLowerCase() === viewerEmail;
                 const isRecipient = msg.whisperTo?.toLowerCase() === viewerEmail;
@@ -380,12 +364,7 @@ export class ChatRoom {
 
         const updated = this.toMessage({ ...existing, content, editedAt: now });
 
-        const event = buildChatEvent(SSEventType.CHAT_MESSAGE_EDITED, {
-            chatId: this.path.id,
-            ownerId: this.path.ownerId,
-            mountId: this.path.mountId,
-        });
-        this.home.broadcast(event);
+        const event = this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_EDITED);
         const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
         this.notifySharedUsers(event, members);
 
@@ -426,12 +405,7 @@ export class ChatRoom {
             }
         }
 
-        const event = buildChatEvent(SSEventType.CHAT_MESSAGE_DELETED, {
-            chatId: this.path.id,
-            ownerId: this.path.ownerId,
-            mountId: this.path.mountId,
-        });
-        this.home.broadcast(event);
+        const event = this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_DELETED);
         const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
         this.notifySharedUsers(event, members);
 
@@ -442,14 +416,28 @@ export class ChatRoom {
         }
     }
 
-    private async updateCommentIndex(fn: (index: CommentIndex) => Promise<void>, members?: EffectiveMember[]) {
+    // Reaches the owner's own tabs at once. The members' tabs get the event through notifySharedUsers.
+    private broadcastMessageEvent(type: SSEventChat['type']): SSEventChat {
+        const event = buildChatEvent(type, {
+            chatId: this.path.id,
+            ownerId: this.path.ownerId,
+            mountId: this.path.mountId,
+        });
+        this.home.broadcast(event);
+        return event;
+    }
+
+    private async updateCommentIndex(
+        fn: (index: CommentIndex) => Promise<void>,
+        members?: EffectiveMember[],
+    ): Promise<void> {
         if (!this.containerPath) return;
         try {
             const index = await openCommentIndex(this.drive, this.containerPath);
             await fn(index);
             await index.setRecentText(this.path.name, await this.buildRecentText());
 
-            const event = buildCommentIndexUpdatedEvent(this.containerPath.id, this.path.ownerId, this.path.mountId);
+            const event = buildCommentIndexUpdatedEvent(this.path.ownerId, this.path.mountId, this.containerPath.id);
             this.home.broadcast(event);
             this.notifySharedUsers(event, members);
         } catch (error) {
@@ -484,7 +472,7 @@ export class ChatRoom {
 
     // Sends the event to the tabs of everyone with access, through the folders above, a team or the
     // document's ACL. A caller that read the members already passes them, so they aren't read twice.
-    private async notifySharedUsers(event: SSEvent, members?: EffectiveMember[]) {
+    private async notifySharedUsers(event: SSEvent, members?: EffectiveMember[]): Promise<void> {
         // Every caller starts this without waiting for it. So a failure is logged here, and it never breaks
         // the change that sent the event.
         try {
