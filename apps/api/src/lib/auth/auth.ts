@@ -117,6 +117,18 @@ function rejectRoleAddress(email: string | undefined): void {
     }
 }
 
+// better-auth answers any error but its own APIError with a 500. A busy home's 409 is rethrown as its CONFLICT.
+async function busyHomeAsConflict(run: () => unknown): Promise<void> {
+    try {
+        await run();
+    } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+            throw new APIError('CONFLICT', { message: error.message });
+        }
+        throw error;
+    }
+}
+
 // Every app password is this many ASCII letters, from the plugin's generator with no prefix. So protocol auth can
 // tell one from an account password without a key lookup.
 export const APP_PASSWORD_LENGTH = 64;
@@ -181,7 +193,7 @@ export const auth = betterAuth({
                 before: async (hookUser) => {
                     const user = hookUser as User;
                     const { teardownUserData } = await import('../user/delete-user');
-                    await teardownUserData(user);
+                    await busyHomeAsConflict(() => teardownUserData(user));
                 },
             },
         },
@@ -201,12 +213,7 @@ export const auth = betterAuth({
             // Admins only: anyone else gets the plugin's 403, not word of a running job.
             if (ctx.path === '/admin/remove-user' && session.user['role'] === 'admin') {
                 const { requireHomeSlotFree } = await import('../backup/jobs');
-                try {
-                    requireHomeSlotFree(targetId);
-                } catch (error) {
-                    if (error instanceof ApiError) throw new APIError('CONFLICT', { message: error.message });
-                    throw error;
-                }
+                await busyHomeAsConflict(() => requireHomeSlotFree(targetId));
             }
         }),
     },
@@ -262,7 +269,6 @@ export const auth = betterAuth({
                     await reconcileSharesForNewTeamMember(teamMember.userId, teamMember.teamId);
                 },
                 // The team row still exists here, and a throw keeps it, as user.delete.before does for a user.
-                // better-auth answers any error but its own APIError with a 500, so a busy home becomes its 409.
                 // The default team holds the org-wide drive every member joins, and its teardown can't be undone.
                 beforeDeleteTeam: async ({ team }) => {
                     if (team.id === getServerConfig()?.defaultTeamId) {
@@ -271,14 +277,7 @@ export const auth = betterAuth({
                         });
                     }
                     const { teardownTeamData } = await import('../team/delete-team');
-                    try {
-                        await teardownTeamData(team.id);
-                    } catch (error) {
-                        if (error instanceof ApiError && error.status === 409) {
-                            throw new APIError('CONFLICT', { message: error.message });
-                        }
-                        throw error;
-                    }
+                    await busyHomeAsConflict(() => teardownTeamData(team.id));
                 },
                 afterDeleteTeam: async ({ team }) => {
                     // Lazy import to avoid the static cycle (home-relay → get-home → team → auth).
