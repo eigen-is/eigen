@@ -27,11 +27,15 @@ function getStorageUsageColor(ratio: number) {
     return '';
 }
 
+// Clamp: over-quota users exist in prod, and Progress must not exceed 100%. No quota reads as empty.
+function usageRatio(total: { used: number; max: number }) {
+    return total.max > 0 ? Math.min(total.used / total.max, 1) : 0;
+}
+
 // Presentational storage breakdown: total line + fill bar + Drive/Mail rows. Shared by the admin
 // user detail pane and any other surface that already has a StorageData in hand.
 export function StorageUsageBars({ data, className }: { data: StorageData; className?: string }) {
-    // Clamp: over-quota users exist in prod, and Progress must not exceed 100%.
-    const ratio = data.total.max > 0 ? Math.min(data.total.used / data.total.max, 1) : 0;
+    const ratio = usageRatio(data.total);
     const homeDataLabel = useHomeDataLabel();
 
     return (
@@ -64,7 +68,7 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
 
     const totalUsed = storageData?.total.used ?? 0;
     const totalMax = storageData?.total.max ?? 0;
-    const ratio = totalMax > 0 ? Math.min(totalUsed / totalMax, 1) : 0;
+    const ratio = usageRatio({ used: totalUsed, max: totalMax });
 
     return (
         <button
@@ -88,11 +92,7 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
                         </span>
                     </div>
                 )}
-                <Progress
-                    value={storageLoading || !storageData ? 0 : ratio * 100}
-                    indicatorClassName={getStorageUsageColor(storageLoading || !storageData ? 0 : ratio)}
-                    className="h-1.5"
-                />
+                <Progress value={ratio * 100} indicatorClassName={getStorageUsageColor(ratio)} className="h-1.5" />
             </div>
 
             <div
