@@ -1,5 +1,11 @@
+// The interactive layer over the painted grid: the row and column headers, and the cell area that takes presses,
+// double clicks and right clicks. Inside it sit what a selection shows, such as the selection box, the cell editor,
+// the floating objects and a data-verification dropdown. The grid itself is a canvas drawn underneath; the handlers
+// here hand each event to the state's mouse functions inside a setContext recipe.
+
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
+import { pressClosesMenu } from '@workspace/ui/components/menubar';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -423,6 +429,10 @@ export const SheetOverlay: React.FC = () => {
                 <div
                     ref={refs.cellArea}
                     className="sheet-cell-area"
+                    // Radix closes an open menu on the pointerdown, before the mousedown reads this.
+                    onPointerDownCapture={() => {
+                        refs.globalCache.pressClosedMenu = pressClosesMenu();
+                    }}
                     onMouseDown={cellAreaMouseDown}
                     onDoubleClick={cellAreaDoubleClick}
                     onContextMenu={cellAreaContextMenu}

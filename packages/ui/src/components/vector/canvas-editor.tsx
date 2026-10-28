@@ -75,6 +75,7 @@ import {
 import { FileDropOverlay } from '../file-drop-overlay';
 import { HintPill } from '../hint-pill';
 import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
+import { pressClosesMenu } from '../menubar';
 import { ObjectTransform } from '../transform/object-transform';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
@@ -1089,6 +1090,8 @@ export function CanvasEditor({
         // Focus the tabIndex=-1 container so a following paste lands on our onPaste — a bare canvas
         // div never holds focus, so image paste would otherwise bubble past us to the body.
         containerRef.current?.focus();
+        // A press that closes an open menu, such as File, only closes it.
+        if (pressClosesMenu()) return;
         // Touch gestures get first dibs (a second finger must intercept even while frozen).
         if (touch.onPointerDown(e)) return;
         // A pointerdown that reaches the CONTAINER is outside the editor (the editor stops its own), so

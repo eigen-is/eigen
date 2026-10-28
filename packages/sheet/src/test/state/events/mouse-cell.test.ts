@@ -43,12 +43,12 @@ function tickBoxContext(): Context {
 // empty style yields is NaN, the painter's middle default.
 const PAINTED_BOX = checkboxRect(cellTextBox(0, 20, 74, 40), checkboxAlign(null, TICK_BOX, 'FALSE'), Number.NaN);
 
-function mouseDownAt(ctx: Context, x: number, y: number) {
+function mouseDownAt(ctx: Context, x: number, y: number, globalCache: Partial<GlobalCache> = {}) {
     const container = win.document.createElement('div') as unknown as HTMLDivElement;
     container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
     const cellInput = win.document.createElement('div') as unknown as HTMLDivElement;
     const event = { button: 0, pageX: x, pageY: y, shiftKey: false, preventDefault() {} } as unknown as MouseEvent;
-    handleCellAreaMouseDown(ctx, {} as GlobalCache, event, cellInput, container);
+    handleCellAreaMouseDown(ctx, globalCache as GlobalCache, event, cellInput, container);
 }
 
 function mouseDownOnTickBox(ctx: Context) {
@@ -87,6 +87,27 @@ describe('handleCellAreaMouseDown — tick box', () => {
         // The click did its editing job: A2 is the range the formula picked up.
         expect(ctx.formulaCache.func_selectedrange?.row).toEqual([1, 1]);
         expect(ctx.formulaCache.func_selectedrange?.column).toEqual([0, 0]);
+    });
+});
+
+// The menu bar's menus leave the page live, so the press that closes one reaches the grid too.
+describe('handleCellAreaMouseDown — a press that closes a menu', () => {
+    test('puts no reference into the formula being composed', () => {
+        const ctx = tickBoxContext();
+        ctx.editingCellPosition = [0, 0];
+        ctx.formulaCache.rangestart = true;
+        ctx.formulaRangeHighlight = [];
+        mouseDownAt(ctx, 30, 30, { pressClosedMenu: true });
+        expect(ctx.formulaCache.func_selectedrange).toBeUndefined();
+
+        mouseDownAt(ctx, 30, 30, { pressClosedMenu: false });
+        expect(ctx.formulaCache.func_selectedrange?.row).toEqual([1, 1]);
+    });
+
+    test('still moves the selection when no formula waits for a reference', () => {
+        const ctx = tickBoxContext();
+        mouseDownAt(ctx, 30, 30, { pressClosedMenu: true });
+        expect(ctx.selections?.[0]?.row).toEqual([1, 1]);
     });
 });
 

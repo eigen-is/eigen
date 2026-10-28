@@ -1,3 +1,7 @@
+// The grid's mouse handlers for the cell area: a press that selects a cell, extends a range or puts its reference into
+// the formula being composed, a double click that opens the editor, and a right click that selects before its menu
+// opens. SheetOverlay calls them inside a setContext recipe; the drag that follows a press lives in its own file.
+
 import { isNil, last } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
@@ -56,6 +60,19 @@ export function cellGlyphAtPointer(
     return cellGlyphAt(ctx, x, y);
 }
 
+// Whether a press on a cell puts its reference into the formula being composed, rather than committing the edit.
+function takesFormulaReference(ctx: Context): boolean {
+    return (
+        ctx.editingCellPosition.length > 0 &&
+        Boolean(
+            ctx.formulaCache.rangestart ||
+                ctx.formulaCache.rangedrag_column_start ||
+                ctx.formulaCache.rangedrag_row_start ||
+                israngeseleciton(ctx),
+        )
+    );
+}
+
 // Returns true when the filter button consumed the click (the caller must then
 // skip the cell-input focus, whose auto-scroll would close the just-opened menu).
 export function handleCellAreaMouseDown(
@@ -70,6 +87,8 @@ export function handleCellAreaMouseDown(
     ctx.filterContextMenu = undefined;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
+    // The press that closes an open menu puts no reference into the formula being composed.
+    if (globalCache.pressClosedMenu && takesFormulaReference(ctx)) return;
 
     deselectFloatingObject(ctx);
     const rect = container.getBoundingClientRect();
@@ -207,12 +226,7 @@ export function handleCellAreaMouseDown(
 
     // Formula-related
     if (ctx.editingCellPosition.length > 0) {
-        if (
-            ctx.formulaCache.rangestart ||
-            ctx.formulaCache.rangedrag_column_start ||
-            ctx.formulaCache.rangedrag_row_start ||
-            israngeseleciton(ctx)
-        ) {
+        if (takesFormulaReference(ctx)) {
             // Formula range selection
             let rowseleted = [row_index, row_index_ed];
             let columnseleted = [col_index, col_index_ed];
