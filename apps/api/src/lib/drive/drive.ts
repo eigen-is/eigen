@@ -867,6 +867,17 @@ export class Drive {
         return this.membersFromCrumbs(await mount.getBreadcrumb(pathId));
     }
 
+    // Who to tell about a change to the path, such as its open tabs. An unshared path in a user's home has
+    // nobody but its owner, who hears the event first anyway, so it costs one breadcrumb read and no account
+    // lookup. Most paths are unshared, and that halves what such an event costs.
+    private async membersToTell(mountId: string, pathId: string): Promise<EffectiveMember[]> {
+        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
+        const shared =
+            parseOwnerId(this.owner.id).type === 'team' ||
+            (!isTrashedChain(crumbs) && crumbs.some((crumb) => crumb.acl?.length));
+        return shared ? this.membersFromCrumbs(crumbs) : [];
+    }
+
     // Takes the breadcrumb of the path, so checkAccessForEmails can use the one it already has. A path
     // in the trash is its owner's alone, so the ACLs of its chain let nobody else in until the restore.
     private async membersFromCrumbs(crumbs: DrivePath[]): Promise<EffectiveMember[]> {
@@ -1190,7 +1201,7 @@ export class Drive {
     // Refreshes the open Activity panels of the owner and of everyone the path is shared with. Nobody
     // waits for it, so a failed broadcast never fails or slows the change itself.
     private broadcastHistoryUpdated(mountId: string, path: DrivePath): void {
-        broadcastFileHistoryUpdated(this.owner.id, path, this.getEffectiveMembers(mountId, path.id)).catch(() => {});
+        broadcastFileHistoryUpdated(this.owner.id, path, this.membersToTell(mountId, path.id)).catch(() => {});
     }
 
     public async watchPath(mountId: string, pathId: string, user: User): Promise<void> {
@@ -1277,7 +1288,7 @@ export class Drive {
     ): void {
         broadcastToOwnerAndMembers(
             this.owner.id,
-            options.members ?? this.getEffectiveMembers(path.mountId, path.id),
+            options.members ?? this.membersToTell(path.mountId, path.id),
             buildDriveEvent(type, path, options.oldParentId ?? undefined),
         ).catch(() => {});
     }
