@@ -260,18 +260,6 @@ function adjustRoughness(el: RoughBoxElement | VectorLinearElement | VectorArrow
     return Math.min(el.roughness / (maxSize < 10 ? 3 : 2), 2.5);
 }
 
-// The DOM-box kinds (image, rich text) use the stroke fields as a BORDER rather than a drawn outline,
-// so "does this one paint a border" is one predicate, not a repeated pair of tests.
-export function isBordered(el: { strokeWidth: number; strokeColor: string }): boolean {
-    return el.strokeWidth > 0 && !isTransparentColor(el.strokeColor);
-}
-
-// Neither a painted fill nor a painted stroke: the element's own paint puts no ink on the page. The
-// shared half of a kind's `paintsNothing` — rich text adds "and no text", an image "and no picture".
-export function isUnpainted(el: { fill: string; strokeWidth: number; strokeColor: string }): boolean {
-    return !isBordered(el) && isTransparentFill(parseFill(el.fill));
-}
-
 // The stroke-style vocabulary as roughjs `strokeLineDash`: one dash table behind every stroke roughjs
 // draws, the DOM boxes' borders included.
 function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {

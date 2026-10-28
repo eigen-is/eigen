@@ -86,11 +86,27 @@ export type VectorElementBase = {
 // transparent solid fill.
 type Fillable = { fill: string };
 
-export type VectorRectangleElement = VectorElementBase & Fillable & { type: 'rectangle'; corners: Corners };
-export type VectorDiamondElement = VectorElementBase & Fillable & { type: 'diamond'; corners: Corners };
+// The text a box or a closed shape holds: its HTML and its typography, one block every text kind composes.
+export type Textual = {
+    html: string;
+    fontFamily: string;
+    fontSize: number;
+    fontWeight: FontWeight;
+    fontStyle: FontStyle;
+    textDecoration: TextDecoration;
+    textAlign: TextAlign;
+    verticalAlign: VerticalAlign;
+    color: string;
+    letterSpacing: number;
+    lineHeight: number;
+    padding: number; // px inset between the box edge and the text; the box keeps its stored size
+};
+
+export type VectorRectangleElement = VectorElementBase & Fillable & Textual & { type: 'rectangle'; corners: Corners };
+export type VectorDiamondElement = VectorElementBase & Fillable & Textual & { type: 'diamond'; corners: Corners };
 // An ellipse has no corners to treat, so it carries no `corners` field; the panel hides the row
 // through the kind's capabilities.
-export type VectorEllipseElement = VectorElementBase & Fillable & { type: 'ellipse' };
+export type VectorEllipseElement = VectorElementBase & Fillable & Textual & { type: 'ellipse' };
 
 // The roughjs-drawn closed shapes.
 export type VectorShapeElement = VectorRectangleElement | VectorDiamondElement | VectorEllipseElement;
@@ -99,7 +115,8 @@ export type VectorShapeElement = VectorRectangleElement | VectorDiamondElement |
 // box-normalized circle (roughjs arc's parametric angle), so a resize scales the slice like any shape.
 // Start + sweep, not start + end: a 360° slice has no distinct end.
 export type VectorPieElement = VectorElementBase &
-    Fillable & {
+    Fillable &
+    Textual & {
         type: 'pie';
         startAngle: number; // [0, 360)
         sweepAngle: number; // (0, 360]
@@ -108,8 +125,10 @@ export type VectorPieElement = VectorElementBase &
 // A free contour of lines and Bézier curves (a pptx custGeom). `path` is absolute M/L/C/Q/Z in the unit
 // box, the canonical string parseNormalizedPath writes, so a resize changes width/height and never the path.
 // A hole is a subpath wound the other way, where SVG's nonzero fill and roughjs's even-odd hatching agree.
+// An open path keeps the text it stores, but reads, draws and offers none until it closes.
 export type VectorPathElement = VectorElementBase &
-    Fillable & {
+    Fillable &
+    Textual & {
         type: 'path';
         path: string;
         // Whether the path fills; it reads false for a path without a Z. An open path only strokes.
@@ -123,26 +142,14 @@ export type VectorImageElement = VectorElementBase & {
     objectFit: ObjectFit; // → preserveAspectRatio none / xMidYMid meet / xMidYMid slice
 };
 
-// The one text kind: TipTap HTML in a box, styled by its own typography fields.
+// The text box: TipTap HTML in a box that grows to fit it, where a shape lets its text spill.
 // `strokeColor`/`strokeWidth`/`strokeStyle` are its border, `fill` its box background — both painted as
 // the same roughjs drawable a rectangle draws, behind the text, hatch style included.
-export type VectorRichTextElement = VectorElementBase &
-    Fillable & {
-        type: 'richtext';
-        html: string;
-        corners: Corners;
-        fontFamily: string;
-        fontSize: number;
-        fontWeight: FontWeight;
-        fontStyle: FontStyle;
-        textDecoration: TextDecoration;
-        textAlign: TextAlign;
-        verticalAlign: VerticalAlign;
-        color: string;
-        letterSpacing: number;
-        lineHeight: number;
-        padding: number; // px inset between the box edge and the text; the box keeps its stored size
-    };
+export type VectorRichTextElement = VectorElementBase & Fillable & Textual & { type: 'richtext'; corners: Corners };
+
+// The kinds that hold text. The runtime answer is the `text` capability (isTextual in kinds/index.ts); the
+// registry test pins the two against each other.
+export type VectorTextualElement = VectorShapeElement | VectorPieElement | VectorPathElement | VectorRichTextElement;
 
 // One line of plain text in a kind's local frame, as svgTextLine draws it. y is the line's TOP: a renderer
 // adds the font's baseline offset. The line turns `rotate` degrees about (x, y).
@@ -340,8 +347,11 @@ export const DEFAULT_ELEMENT_PROPS = {
     'strokeColor' | 'strokeWidth' | 'strokeStyle' | 'opacity' | 'frameId' | 'commentCardIds' | 'roughness' | 'seed'
 >;
 
-// Rich-text defaults beyond the host's style table: the typography a fresh box starts in, and the
-// fallback a corrupt stored value degrades to.
+// The typography a kind's text starts in beyond the host's style table, which gives the font, the size and the
+// color. It is also the fallback a corrupt stored value reads as.
+export type TextProps = Omit<Textual, 'html' | 'fontFamily' | 'fontSize' | 'color'>;
+
+// A text box's text starts at its top left, flush with its edge.
 export const DEFAULT_RICHTEXT_PROPS = {
     fontWeight: 'normal',
     fontStyle: 'normal',
@@ -351,17 +361,15 @@ export const DEFAULT_RICHTEXT_PROPS = {
     letterSpacing: 0,
     lineHeight: 1.2,
     padding: 0,
-} satisfies Pick<
-    VectorRichTextElement,
-    | 'fontWeight'
-    | 'fontStyle'
-    | 'textDecoration'
-    | 'textAlign'
-    | 'verticalAlign'
-    | 'letterSpacing'
-    | 'lineHeight'
-    | 'padding'
->;
+} satisfies TextProps;
+
+// A shape's text starts in its middle, inset from its edge.
+export const DEFAULT_SHAPE_TEXT_PROPS = {
+    ...DEFAULT_RICHTEXT_PROPS,
+    textAlign: 'center',
+    verticalAlign: 'center',
+    padding: 10,
+} satisfies TextProps;
 
 // Arrow-only defaults. Plain arrow, head on the end only, unbound, no label — Excalidraw's
 // currentItem defaults.

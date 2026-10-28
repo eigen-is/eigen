@@ -34,6 +34,7 @@ export const freedrawKind = defineKind<VectorLinearElement>({
         edges: false,
         strokeOptional: false,
         bindable: false,
+        text: false,
         creation: 'freedraw',
     },
     // An OPEN stroke paints no fill (render below), so it has none to offer.

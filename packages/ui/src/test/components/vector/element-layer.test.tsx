@@ -2,11 +2,13 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import type { VectorArrowElement, VectorRichTextElement, VectorShapeElement } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SHAPE_TEXT_PROPS,
     ELEMENT_KINDS,
     readElementFromFields,
     serializeBinding,
     serializePoints,
     solidFill,
+    textualDefaults,
     VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -28,6 +30,7 @@ const { createRoot } = await import('react-dom/client');
 
 const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
     roughness: 1,
     id: 'r1',
     type: 'rectangle',

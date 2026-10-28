@@ -29,7 +29,7 @@ export {
     num,
     oneOf,
 } from './kinds/read-fields';
-export { isBordered, SVG_NS } from './kinds/render-utils';
+export { SVG_NS } from './kinds/render-utils';
 export * from './media-refs';
 export * from './outline';
 export * from './points';

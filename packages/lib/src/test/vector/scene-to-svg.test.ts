@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { solidFill } from '../../vector/fill';
 import { eigenMediaHref } from '../../vector/media-refs';
+import { readElementFromFields } from '../../vector/read-vector';
 import { elementToSvg, sceneToSvg } from '../../vector/scene-to-svg';
 import type {
     VectorElement,
@@ -10,7 +11,7 @@ import type {
     VectorScene,
 } from '../../vector/types';
 import { DEFAULT_ELEMENT_PROPS } from '../../vector/types';
-import { richtext, scene, shape } from './element-factories';
+import { path, richtext, scene, shape } from './element-factories';
 
 // Freedraw/line/arrow rows carry the paint + roughjs fields the shared defaults no longer hold.
 const LINEAR_PAINT = { fill: solidFill('transparent'), roughness: 1 } as const;
@@ -439,6 +440,25 @@ describe('sceneToSvg', () => {
         const group = svg.slice(svg.indexOf('<g transform='));
         expect(group).toStartWith('<g transform="translate(0 0) rotate(90 50 30)">');
         expect(group.indexOf('#ffcc00')).toBeLessThan(group.indexOf('<text>hi</text>'));
+    });
+
+    test('a shape with text draws its shape and then its text in one <g>', () => {
+        const svg = sceneToSvg(
+            scene([shape({ id: 'r', type: 'ellipse', html: '<p>label</p>', fill: solidFill('#ffcc00') })]),
+        );
+        const group = svg.slice(svg.indexOf('<g transform='));
+        expect(group.indexOf('#ffcc00')).toBeLessThan(group.indexOf('<foreignObject'));
+        expect(group).toContain('text-align:center');
+        expect(group).toContain('<p>label</p></div></foreignObject>');
+    });
+
+    test('an open path with stored text draws no text', () => {
+        const stored = { ...path({ id: 'o', path: 'M 0 0 L 1 1', closed: false }), html: '<p>hidden</p>' };
+        const el = readElementFromFields(new Map(Object.entries(stored)));
+        const svg = sceneToSvg(scene(el ? [el] : []));
+        expect(svg).toContain('<path');
+        expect(svg).not.toContain('hidden');
+        expect(svg).not.toContain('<foreignObject');
     });
 
     test('XML-escapes hostile shape attribute values (stroke color)', () => {

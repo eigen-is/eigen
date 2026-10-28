@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2031 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2038 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -545,7 +545,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (432)
+## Types (435)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -902,6 +902,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `StyleDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `TextAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TextLine` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `TextProps` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `Textual` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorArrowElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorBindableElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorChartElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -921,6 +923,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorRichTextElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorTextualElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VerticalAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `ZOp` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `LatexCommand` | `@workspace/math` | packages/math/src/latex-commands.ts |
@@ -982,7 +985,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1085)
+## Utilities & constants (1089)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1773,6 +1776,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `DEFAULT_RICHTEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_SHAPE_TEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEG_TO_RAD` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
 | `diamondOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `distance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1829,14 +1833,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `hitThresholdScreen` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `IMAGE_CASCADE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isBindable` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
-| `isBordered` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/render-utils.ts |
+| `isBordered` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isClosedLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isClosedPath` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isColorToken` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `isSafeMediaName` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
+| `isTextual` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `isTransparentColor` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isTransparentFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
+| `isUnpainted` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isValidFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `isVectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `keysAfter` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
@@ -1924,7 +1930,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `resizeRotatedRect` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `rewriteEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `RICH_TEXT_CLASS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
-| `richTextCssText` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/richtext.ts |
+| `richTextCssText` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/textual.ts |
 | `richTextFitHeight` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/richtext.ts |
 | `richTextSvg` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1970,6 +1976,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_WIDTH_RANGES` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
+| `textualDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/textual.ts |
 | `topmostIndex` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `TRANSPARENT_COLOR` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `TRANSPARENT_FILL` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |

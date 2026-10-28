@@ -1,11 +1,16 @@
+// The rectangle kind: a box with treated corners, drawn rough, and the text it holds drawn over it. An arrow aims at
+// it along its corner diagonals, as in Excalidraw.
+
+import { isUnpainted } from '../fill';
 import type { Point } from '../geometry';
 import { boxCenter, hitTestBox, rotatePoint } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
 import type { VectorRectangleElement } from '../types';
-import { CORNERS, DEFAULT_CORNERS } from '../types';
+import { CORNERS, DEFAULT_CORNERS, DEFAULT_SHAPE_TEXT_PROPS } from '../types';
 import { defineKind } from './kind';
 import { fillField, oneOf } from './read-fields';
-import { isUnpainted, renderRoughShape } from './render-utils';
+import { renderRoughShape } from './render-utils';
+import { plainText, readTextual, textRender, textualDefaults } from './textual';
 
 // Excalidraw shrinks a rectangle's projection diagonals by 15px at each end
 // (getDiagonalsForBindableElement) — the focus points behave oddly right at the corners.
@@ -22,18 +27,21 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
         edges: false,
         strokeOptional: true,
         bindable: true,
+        text: true,
         silhouette: 'box',
         creation: 'box',
     },
     defaults: (style) => ({
         fill: style.fill,
         corners: style.corners,
+        ...textualDefaults(style, DEFAULT_SHAPE_TEXT_PROPS),
     }),
     read: (src, base) => ({
         ...base,
         type: 'rectangle',
         fill: fillField(src.get('fill')),
         corners: oneOf(src.get('corners'), CORNERS, DEFAULT_CORNERS),
+        ...readTextual(src, DEFAULT_SHAPE_TEXT_PROPS),
     }),
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>
@@ -51,8 +59,9 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
             [rot(up[0]), rot(up[1])],
         ];
     },
-    paintsNothing: isUnpainted,
-    render: (el) => ({ svg: renderRoughShape(el) }),
+    paintsNothing: (el) => isUnpainted(el) && plainText(el) === '',
+    render: (el) => textRender(el, renderRoughShape(el)),
+    searchText: plainText,
 });
 
 // Pull a segment in by DIAGONAL_SHRINK at each end, along its own direction. A segment with no room for

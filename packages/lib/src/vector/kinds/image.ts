@@ -2,6 +2,7 @@
 // border, transparent by default.
 
 import { escapeXml } from '../../core/xml';
+import { isBordered } from '../fill';
 import { hitTestBox } from '../geometry';
 import { cornerRadius, outlinePath, rectOutline } from '../outline';
 import { round } from '../points';
@@ -9,7 +10,7 @@ import type { VectorImageElement } from '../types';
 import { CORNERS, DEFAULT_CORNERS, DEFAULT_OBJECT_FIT, OBJECT_FITS } from '../types';
 import { defineKind } from './kind';
 import { oneOf, str } from './read-fields';
-import { isBordered, PLACEHOLDER_STROKE, renderRoughShape, svgId } from './render-utils';
+import { PLACEHOLDER_STROKE, renderRoughShape, svgId } from './render-utils';
 
 export const imageKind = defineKind<VectorImageElement>({
     type: 'image',
@@ -22,6 +23,7 @@ export const imageKind = defineKind<VectorImageElement>({
         edges: false,
         strokeOptional: true,
         bindable: true,
+        text: false,
         silhouette: 'box',
         creation: 'none',
     },

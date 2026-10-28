@@ -22,6 +22,7 @@ export const lineKind = defineKind<VectorLinearElement>({
         edges: true,
         strokeOptional: false,
         bindable: false,
+        text: false,
         creation: 'polyline',
     },
     // An OPEN polyline paints no fill (linearRoughOptions), so it has none to offer.

@@ -1,7 +1,8 @@
 // The stored-fill codec. An element's `fill` is a JSON scalar like `points` — one string field, so the
 // scalar-only ELEMENT_FIELDS convention holds — and a frame's `background` is the same codec widened to
 // the image variant. Strict: '' or anything malformed reads back as the transparent solid fill, so a
-// corrupt peer write can never throw on a render path.
+// corrupt peer write can never throw on a render path. Beside it sit the predicates that ask whether an
+// element's fill and stroke paint at all, which a kind's renderer and text inset both read.
 
 import { isHexColor } from '../constants/colors';
 import type { BackgroundFill, Fill, FillPaint } from '../types/background';
@@ -29,6 +30,18 @@ export function isTransparentColor(color: string): boolean {
 
 export function isTransparentFill(fill: Fill): boolean {
     return fill.type === 'solid' && isTransparentColor(fill.color);
+}
+
+// Whether the stroke paints at all. The DOM-box kinds (image, rich text) use it as a border, and a shape's text
+// is inset past it, so "does this one paint a border" is one predicate, not a repeated pair of tests.
+export function isBordered(el: { strokeWidth: number; strokeColor: string }): boolean {
+    return el.strokeWidth > 0 && !isTransparentColor(el.strokeColor);
+}
+
+// Neither a painted fill nor a painted stroke: the element's own paint puts no ink on the page. The
+// shared half of a kind's `paintsNothing` — a kind with text adds "and no text", an image "and no picture".
+export function isUnpainted(el: { fill: string; strokeWidth: number; strokeColor: string }): boolean {
+    return !isBordered(el) && isTransparentFill(parseFill(el.fill));
 }
 
 // An element fill is the paint plus the hatch style stored beside it; a missing or unknown style reads

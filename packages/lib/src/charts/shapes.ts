@@ -1,17 +1,21 @@
 // The canvas elements a chart is drawn as: rectangles, ellipses, pie slices and lines, made in the chart's paint.
 // They are the canvas's own element types, so a bar paints exactly as a rectangle with the same fields, and Convert
-// to shapes can unpack them. Each id is the chart's id and the shape's key, and each seed comes from both.
+// to shapes can unpack them. Each id is the chart's id and the shape's key, and each seed comes from both. A shape
+// holds no text, and starts any text it is given after Convert to shapes in the chart's own font.
 
 import { serializeFill, TRANSPARENT_COLOR, TRANSPARENT_FILL } from '../vector/fill';
 import type { Box, Point } from '../vector/geometry';
+import { textualDefaults } from '../vector/kinds/textual';
 import { pointsBounds, serializePoints } from '../vector/points';
 import type {
+    Textual,
     VectorElementBase,
     VectorEllipseElement,
     VectorLinearElement,
     VectorPieElement,
     VectorRectangleElement,
 } from '../vector/types';
+import { DEFAULT_SHAPE_TEXT_PROPS } from '../vector/types';
 import type { Context } from './context';
 
 const PIE_EDGE_WIDTH = 1;
@@ -33,7 +37,13 @@ export function rectangle(
     strokeColor: string,
     fill: string,
 ): VectorRectangleElement {
-    return { ...elementBase(ctx, key, box, strokeColor), type: 'rectangle', fill, corners: 'straight' };
+    return {
+        ...elementBase(ctx, key, box, strokeColor),
+        ...shapeText(ctx),
+        type: 'rectangle',
+        fill,
+        corners: 'straight',
+    };
 }
 
 export function ellipse(
@@ -43,7 +53,7 @@ export function ellipse(
     strokeColor: string,
     fill: string,
 ): VectorEllipseElement {
-    return { ...elementBase(ctx, key, box, strokeColor), type: 'ellipse', fill };
+    return { ...elementBase(ctx, key, box, strokeColor), ...shapeText(ctx), type: 'ellipse', fill };
 }
 
 export function pieSlice(
@@ -57,6 +67,7 @@ export function pieSlice(
 ): VectorPieElement {
     return {
         ...elementBase(ctx, key, box, strokeColor),
+        ...shapeText(ctx),
         strokeWidth: PIE_EDGE_WIDTH,
         type: 'pie',
         fill,
@@ -107,6 +118,14 @@ function elementBase(
         roughness: ctx.paint.roughness,
         seed: seedOf(ctx.paint.seed, key),
     };
+}
+
+// No text yet, in the font and size of the chart's labels and in their color.
+function shapeText(ctx: Context): Textual {
+    return textualDefaults(
+        { fontFamily: ctx.fontFamily, fontSize: ctx.fontSize, color: ctx.paint.color },
+        DEFAULT_SHAPE_TEXT_PROPS,
+    );
 }
 
 // Seeds from the paint's seed and the shape's key, so a chart redraws the same jitter and no two of its

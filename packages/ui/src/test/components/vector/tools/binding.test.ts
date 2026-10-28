@@ -13,6 +13,7 @@ import {
     boundEndpoint,
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SHAPE_TEXT_PROPS,
     ELEMENT_KINDS,
     parseBinding,
     projectFixedPointOntoDiagonal,
@@ -20,6 +21,7 @@ import {
     serializeBinding,
     shapeAnchorPoints,
     solidFill,
+    textualDefaults,
     VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
 import { bindArrow, bindFocusPoint, bindingCandidate } from '../../../../components/vector/tools/binding';
@@ -34,6 +36,7 @@ function dist(a: { x: number; y: number }, b: { x: number; y: number }): number 
 
 const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
     roughness: 1,
     type: 'rectangle',
     // A filled shape binds anywhere inside (a transparent one binds only in the outline band), so a

@@ -32,6 +32,7 @@ export const chartKind = defineKind<VectorChartElement>({
         edges: false,
         strokeOptional: true,
         bindable: true,
+        text: false,
         silhouette: 'box',
         creation: 'none',
     },

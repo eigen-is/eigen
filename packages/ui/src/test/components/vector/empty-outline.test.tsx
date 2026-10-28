@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { Box, VectorRichTextElement, VectorShapeElement } from '@workspace/lib/vector';
-import { DEFAULT_ELEMENT_PROPS, ELEMENT_KINDS, solidFill, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
+import {
+    DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SHAPE_TEXT_PROPS,
+    ELEMENT_KINDS,
+    solidFill,
+    textualDefaults,
+    VECTOR_STYLE_DEFAULTS,
+} from '@workspace/lib/vector';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { EmptyOutlines } from '../../../components/vector/empty-outline';
 
@@ -24,6 +31,7 @@ const richtext = (over: Partial<VectorRichTextElement> = {}): VectorRichTextElem
 
 const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
     roughness: 1,
     id: 'r1',
     type: 'rectangle',

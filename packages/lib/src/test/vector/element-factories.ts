@@ -17,6 +17,7 @@ import type {
     VectorRectangleElement,
     VectorRichTextElement,
     VectorScene,
+    VectorShapeElement,
 } from '../../vector/types';
 import { DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META } from '../../vector/types';
 
@@ -45,7 +46,7 @@ const RICHTEXT_BASE: Omit<VectorRichTextElement, 'id' | 'type'> = {
     ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
 };
 
-export function shape(over: Partial<VectorElement> & Pick<VectorElement, 'id' | 'type'>): VectorElement {
+export function shape(over: Partial<VectorElement> & Pick<VectorElement, 'id' | 'type'>): VectorShapeElement {
     const el = { ...SHAPE_BASE, ...over };
     if (el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse') return el;
     throw new Error('shape() expects a shape type');

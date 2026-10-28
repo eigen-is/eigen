@@ -11,6 +11,7 @@ import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_RICHTEXT_PROPS,
     DEFAULT_SCENE_META,
+    DEFAULT_SHAPE_TEXT_PROPS,
     FRAME_FIELDS,
     generateNKeysBetween,
     SLIDE_SIZES,
@@ -18,6 +19,8 @@ import {
     serializeFill,
     solidFill,
     TRANSPARENT_FILL,
+    textualDefaults,
+    VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
 import type { MathRow } from '@workspace/math';
 import { readOmml, writeMathml } from '@workspace/math';
@@ -836,10 +839,13 @@ export function buildGoldenVectorScene(): VectorScene {
     const base = { ...DEFAULT_ELEMENT_PROPS, angle: 0, roughness: 1 };
     // The fill codec's transparent solid — what every element painted before `fill` existed.
     const filled = { fill: solidFill('transparent') } as const;
+    // The shapes hold no text, as every shape drawn before shapes held text.
+    const noText = textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS);
     const elements: VectorElement[] = [
         {
             ...base,
             ...filled,
+            ...noText,
             id: 'v-rect',
             type: 'rectangle',
             x: 0,
@@ -853,6 +859,7 @@ export function buildGoldenVectorScene(): VectorScene {
         {
             ...base,
             ...filled,
+            ...noText,
             id: 'v-ellipse',
             type: 'ellipse',
             x: 140,
@@ -988,6 +995,7 @@ export function buildGoldenVectorScene(): VectorScene {
         // inside the element's own <svg>. The export golden is what keeps that true.
         {
             ...base,
+            ...noText,
             id: 'v-gradient',
             type: 'rectangle',
             x: 260,

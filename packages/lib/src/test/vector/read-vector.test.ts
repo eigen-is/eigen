@@ -17,6 +17,7 @@ import {
 import { ELEMENT_FIELDS } from '../../vector/kinds';
 import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES, MAX_HTML_DEPTH } from '../../vector/kinds/read-fields';
 import { readVectorFromDoc } from '../../vector/read-vector';
+import { sceneToSvg } from '../../vector/scene-to-svg';
 import {
     DEFAULT_CORNERS,
     DEFAULT_ELEMENT_PROPS,
@@ -720,14 +721,32 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
 
     const paint = { fill: '{"type":"solid","color":"#123456","style":"cross-hatch"}' };
     const sketch = { roughness: 3, seed: 999 };
+    const text = {
+        html: '<p>inside</p>',
+        fontFamily: 'Source Serif 4',
+        fontSize: 28,
+        fontWeight: 'bold',
+        fontStyle: 'italic',
+        textDecoration: 'line-through',
+        textAlign: 'right',
+        verticalAlign: 'bottom',
+        color: '#0d0e0f',
+        letterSpacing: 3,
+        lineHeight: 1.7,
+        padding: 14,
+    };
+    const TEXT_FIELDS = Object.keys(text);
 
-    const rect = base({ id: 'rect1', type: 'rectangle', ...paint, ...sketch, corners: 'round' });
-    const pie = base({ id: 'pie1', type: 'pie', ...paint, ...sketch, startAngle: 120, sweepAngle: 45 });
+    const rect = base({ id: 'rect1', type: 'rectangle', ...paint, ...sketch, ...text, corners: 'round' });
+    const diamond = base({ id: 'diamond1', type: 'diamond', ...paint, ...sketch, ...text, corners: 'straight' });
+    const ellipse = base({ id: 'ellipse1', type: 'ellipse', ...paint, ...sketch, ...text });
+    const pie = base({ id: 'pie1', type: 'pie', ...paint, ...sketch, ...text, startAngle: 120, sweepAngle: 45 });
     const path = base({
         id: 'path1',
         type: 'path',
         ...paint,
         ...sketch,
+        ...text,
         path: 'M 0 1 Q 0.5 -0.25 1 1 Z',
         closed: true,
     });
@@ -804,9 +823,17 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
     });
 
     const cases = [
-        { record: rect, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'corners'] },
-        { record: pie, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'startAngle', 'sweepAngle'] },
-        { record: path, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'path', 'closed'] },
+        { record: rect, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, ...TEXT_FIELDS, 'corners'] },
+        { record: diamond, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, ...TEXT_FIELDS, 'corners'] },
+        { record: ellipse, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, ...TEXT_FIELDS] },
+        {
+            record: pie,
+            fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, ...TEXT_FIELDS, 'startAngle', 'sweepAngle'],
+        },
+        {
+            record: path,
+            fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, ...TEXT_FIELDS, 'path', 'closed'],
+        },
         {
             record: chart,
             fields: [
@@ -1154,5 +1181,110 @@ describe('readVectorFromDoc — the slide size', () => {
         peer.getMap('meta').set('slideSize', '4:3');
         Y.applyUpdate(local, Y.encodeStateAsUpdate(peer, Y.encodeStateVector(local)));
         expect(sizes(local)).toEqual([SLIDE_SIZES['4:3'], SLIDE_SIZES['4:3']]);
+    });
+});
+
+describe('readVectorFromDoc — a document stored before shapes held text', () => {
+    // What a build before text in shapes stored for each shape: its geometry and paint, and none of the text keys.
+    const paint = {
+        angle: 0,
+        frameId: '',
+        commentCardIds: '',
+        opacity: 100,
+        strokeColor: '#1e1e1e',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        roughness: 1,
+        fill: '{"type":"solid","color":"#ffc9c9","style":"cross-hatch"}',
+    };
+    const OLD_SHAPES: Record<string, unknown>[] = [
+        { type: 'rectangle', id: 'r', index: 'a0', x: 0, y: 0, width: 120, height: 80, seed: 1, corners: 'curved' },
+        { type: 'diamond', id: 'd', index: 'a1', x: 140, y: 0, width: 120, height: 80, seed: 2, corners: 'straight' },
+        { type: 'ellipse', id: 'e', index: 'a2', x: 0, y: 100, width: 120, height: 80, seed: 3 },
+        {
+            type: 'pie',
+            id: 'p',
+            index: 'a3',
+            x: 140,
+            y: 100,
+            width: 80,
+            height: 80,
+            seed: 4,
+            startAngle: 270,
+            sweepAngle: 120,
+        },
+        {
+            type: 'path',
+            id: 'c',
+            index: 'a4',
+            x: 0,
+            y: 200,
+            width: 100,
+            height: 60,
+            seed: 5,
+            path: 'M 0 0 L 1 0 L 0.5 1 Z',
+            closed: true,
+        },
+        {
+            type: 'path',
+            id: 'o',
+            index: 'a5',
+            x: 140,
+            y: 200,
+            width: 100,
+            height: 60,
+            seed: 6,
+            path: 'M 0 0 L 1 1',
+            closed: false,
+        },
+    ];
+    const oldDoc = () =>
+        docWith((elements) => {
+            for (const record of OLD_SHAPES) writeElement(elements, String(record.id), { ...paint, ...record });
+        });
+
+    test('every shape reads the shape text defaults: no text, centered both ways, 10 px in, Excalifont 20 px', () => {
+        for (const el of readVectorFromDoc(oldDoc()).elements) {
+            expect(el).toMatchObject({
+                html: '',
+                fontFamily: 'Excalifont',
+                fontSize: 20,
+                fontWeight: 'normal',
+                fontStyle: 'normal',
+                textDecoration: 'none',
+                textAlign: 'center',
+                verticalAlign: 'center',
+                color: '#1e1e1e',
+                letterSpacing: 0,
+                lineHeight: 1.2,
+                padding: 10,
+            });
+        }
+    });
+
+    test('a text box that stores no typography still reads top left and flush, unlike a shape', () => {
+        const doc = docWith((elements) => writeElement(elements, 't', { ...paint, type: 'richtext', index: 'a0' }));
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({
+            textAlign: 'left',
+            verticalAlign: 'top',
+            padding: 0,
+        });
+    });
+
+    test('an open path reads no text, and its stored text stays in the map for when it closes', () => {
+        const doc = docWith((elements) =>
+            writeElement(elements, 'o', { ...paint, ...OLD_SHAPES[5], html: '<p>hidden</p>', textAlign: 'right' }),
+        );
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el).toMatchObject({ type: 'path', closed: false, html: '', textAlign: 'right' });
+        const stored = doc.getMap('elements').get('o');
+        expect(stored instanceof Y.Map && stored.get('html')).toBe('<p>hidden</p>');
+    });
+
+    test('draws byte for byte what a build before text in shapes drew', () => {
+        const svg = sceneToSvg(readVectorFromDoc(oldDoc()));
+        expect(new Bun.CryptoHasher('sha256').update(svg).digest('hex')).toBe(
+            '717be37c20db6f9ca28210852cd74e758f985b85c42c3e4a6eca99475efaf6fd',
+        );
     });
 });

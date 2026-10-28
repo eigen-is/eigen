@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { VectorFrame } from '../../vector/frames';
 import { SLIDE_SIZES } from '../../vector/frames';
+import { readElementFromFields } from '../../vector/read-vector';
 import { searchScene } from '../../vector/search-scene';
 import type { VectorScene } from '../../vector/types';
-import { arrow, richtext, scene, shape } from './element-factories';
+import { arrow, ellipse, path, pie, richtext, scene, shape } from './element-factories';
 
 const frame = (id: string, index: string): VectorFrame => ({
     id,
@@ -39,6 +40,27 @@ describe('searchScene', () => {
 
     test('a match id is the element id — self-describing, resolvable without a cached search', () => {
         expect(searchScene(scene([richtext({ id: 'el-9', html: '<p>hit</p>' })]), /hit/gi)[0].id).toBe('el-9');
+    });
+
+    test('finds the text in a shape, in reading order among the text boxes', () => {
+        const doc = scene([
+            richtext({ id: 'box', index: 'a2', html: '<p>plan</p>' }),
+            shape({ id: 'rect', type: 'rectangle', index: 'a0', html: '<p>the <em>plan</em></p>' }),
+            pie({ id: 'pie', index: 'a4', html: '<p>plan</p>' }),
+            ellipse({ id: 'ellipse', index: 'a1', html: '<p>plan</p>' }),
+            shape({ id: 'diamond', type: 'diamond', index: 'a3', html: '<p>plan</p>' }),
+            path({ id: 'path', index: 'a5', html: '<p>plan</p>' }),
+        ]);
+        const matches = searchScene(doc, /plan/gi);
+        expect(matches.map((m) => m.id)).toEqual(['rect', 'ellipse', 'box', 'diamond', 'pie', 'path']);
+        expect(matches[0].label).toBe('the plan');
+    });
+
+    test("an open path's stored text is not found", () => {
+        const stored = { ...path({ id: 'o', path: 'M 0 0 L 1 1', closed: false }), html: '<p>plan</p>' };
+        const el = readElementFromFields(new Map(Object.entries(stored)));
+        expect(el?.type).toBe('path');
+        expect(searchScene(scene(el ? [el] : []), /plan/gi)).toEqual([]);
     });
 
     test('kinds with no text never match', () => {

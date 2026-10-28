@@ -2,13 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { elbowRoute } from '../../vector/elbow-route';
 import { solidFill } from '../../vector/fill';
 import type { Bounds, Point } from '../../vector/geometry';
+import { textualDefaults, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import type { VectorArrowElement, VectorRectangleElement, VectorShapeElement } from '../../vector/types';
-import { DEFAULT_ELEMENT_PROPS, serializeBinding } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_SHAPE_TEXT_PROPS, serializeBinding } from '../../vector/types';
 import { byIdOf, richtext } from './element-factories';
 
 // Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
+    ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
     x: 0,
     y: 0,
     width: 100,

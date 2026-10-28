@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
+import { ELEMENT_KINDS, richTextCssText, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
+import { readElementFromFields } from '../../vector/read-vector';
 import {
     elementLayer,
     layerBoxCss,
@@ -11,7 +12,7 @@ import {
 } from '../../vector/scene-layers';
 import type { VectorArrowElement, VectorElement, VectorImageElement } from '../../vector/types';
 import { DEFAULT_ARROW_PROPS, DEFAULT_ELEMENT_PROPS } from '../../vector/types';
-import { arrow, chart, ellipse, image, linear, pie, richtext, scene, shape } from './element-factories';
+import { arrow, chart, ellipse, image, linear, path, pie, richtext, scene, shape } from './element-factories';
 
 describe('sceneLayers', () => {
     test('orders by fractional index and carries the element box and opacity', () => {
@@ -214,6 +215,35 @@ describe('elementLayer', () => {
         const html = layer === null ? '' : layerInnerHtml(layer.content);
         expect(html).toContain(`<div class="${RICH_TEXT_CLASS}" style="`);
         expect(html).toContain('<ul><li>one</li></ul>');
+    });
+
+    test('a shape with text draws its own shape with the styled text div over it', () => {
+        for (const bare of [
+            shape({ id: 'r', type: 'rectangle' }),
+            shape({ id: 'd', type: 'diamond' }),
+            ellipse({ id: 'e' }),
+            pie({ id: 'p' }),
+            path({ id: 'c' }),
+        ]) {
+            const el = { ...bare, html: '<p>label</p>' };
+            const drawn = layerContent(bare);
+            const svg = drawn && !('html' in drawn) ? drawn.svg : 'no shape';
+            expect({ type: el.type, content: layerContent(el) }).toEqual({
+                type: el.type,
+                content: { html: '<p>label</p>', style: richTextCssText(el), svg },
+            });
+        }
+        const layer = elementLayer(shape({ id: 'r', type: 'rectangle', html: '<p>label</p>' }));
+        const html = layer === null ? '' : layerInnerHtml(layer.content);
+        expect(html).toStartWith('<svg');
+        expect(html).toContain(`</svg><div class="${RICH_TEXT_CLASS}" style="`);
+    });
+
+    test('an open path with stored text draws its stroke alone', () => {
+        const stored = { ...path({ id: 'o', path: 'M 0 0 L 1 1', closed: false }), html: '<p>hidden</p>' };
+        const el = readElementFromFields(new Map(Object.entries(stored)));
+        const content = el && layerContent(el);
+        expect(content !== null && !('html' in content)).toBe(true);
     });
 
     test('an svg body carries no rich-text wrapper', () => {

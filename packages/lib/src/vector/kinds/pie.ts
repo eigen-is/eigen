@@ -1,15 +1,19 @@
 // The pie kind: a slice of an ellipse, from a start angle through a sweep, in degrees. It is a shape of its own, and
-// a pie chart's slices draw through it, so a chart's slice and a drawn one are the same SVG.
+// a pie chart's slices draw through it, so a chart's slice and a drawn one are the same SVG. Like the other closed
+// shapes it holds text, laid out in its whole box.
 
+import { isUnpainted } from '../fill';
 import type { Point } from '../geometry';
 import { boxCenter, rotatePoint } from '../geometry';
 import type { OutlineShape } from '../outline';
 import { EMPTY_OUTLINE, ellipseOutline, normalizeAngle, outlineDistance } from '../outline';
 import { DEG_TO_RAD } from '../points';
 import type { VectorPieElement } from '../types';
+import { DEFAULT_SHAPE_TEXT_PROPS } from '../types';
 import { defineKind } from './kind';
 import { fillField, num } from './read-fields';
-import { isUnpainted, renderRoughShape } from './render-utils';
+import { renderRoughShape } from './render-utils';
+import { plainText, readTextual, textRender, textualDefaults } from './textual';
 
 // A new slice is a quarter from 12 o'clock, where a pie chart's first slice starts.
 const DEFAULT_START_ANGLE = 270;
@@ -30,6 +34,7 @@ export const pieKind = defineKind<VectorPieElement>({
         edges: false,
         strokeOptional: true,
         bindable: true,
+        text: true,
         silhouette: 'ellipse',
         creation: 'none',
     },
@@ -37,6 +42,7 @@ export const pieKind = defineKind<VectorPieElement>({
         fill: style.fill,
         startAngle: DEFAULT_START_ANGLE,
         sweepAngle: DEFAULT_SWEEP_ANGLE,
+        ...textualDefaults(style, DEFAULT_SHAPE_TEXT_PROPS),
     }),
     read: (src, base) => ({
         ...base,
@@ -44,6 +50,7 @@ export const pieKind = defineKind<VectorPieElement>({
         fill: fillField(src.get('fill')),
         startAngle: normalizeAngle(num(src.get('startAngle'), DEFAULT_START_ANGLE)),
         sweepAngle: sweepField(src.get('sweepAngle')),
+        ...readTextual(src, DEFAULT_SHAPE_TEXT_PROPS),
     }),
     hitTest: (el, point, threshold) => {
         if (el.width <= 0 || el.height <= 0) return false;
@@ -63,8 +70,9 @@ export const pieKind = defineKind<VectorPieElement>({
             c,
         ].map((p) => rotatePoint(p, c, el.angle));
     },
-    paintsNothing: isUnpainted,
-    render: (el) => ({ svg: renderRoughShape(el) }),
+    paintsNothing: (el) => isUnpainted(el) && plainText(el) === '',
+    render: (el) => textRender(el, renderRoughShape(el)),
+    searchText: plainText,
 });
 
 // A slice of nothing is malformed, not empty: a chart leaves a zero value out.

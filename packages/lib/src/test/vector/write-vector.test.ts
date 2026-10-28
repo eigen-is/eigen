@@ -19,7 +19,7 @@ import { arrow, chart, ellipse, image, linear, pie, richtext, shape } from './el
 const RECT = shape({ id: 'r', type: 'rectangle', index: 'a0', x: 10, y: 20, seed: 11 });
 const SLIDE_KINDS = [
     RECT,
-    ellipse({ id: 'e', index: 'a1', seed: 12 }),
+    ellipse({ id: 'e', index: 'a1', seed: 12, html: '<p>Label</p>' }),
     shape({ id: 'd', type: 'diamond', index: 'a2', seed: 13 }),
     pie({ id: 'p', index: 'a3', startAngle: 30, sweepAngle: 120 }),
     linear({ id: 'l', type: 'line', index: 'a4', roundness: 'round' }),
@@ -52,6 +52,51 @@ describe('writeElementInDoc', () => {
             roughness: SLIDES_STYLE_DEFAULTS.roughness,
             ...ELEMENT_KINDS.rectangle.defaults(SLIDES_STYLE_DEFAULTS),
         });
+    });
+
+    test("a new shape stores all twelve text keys, in the host's font, size and color, centered and inset", () => {
+        for (const [style, host] of [
+            [VECTOR_STYLE_DEFAULTS, { fontFamily: 'Excalifont', fontSize: 20, color: '#1e1e1e' }],
+            [SLIDES_STYLE_DEFAULTS, { fontFamily: 'Inter', fontSize: 48, color: '#000000' }],
+        ] as const) {
+            for (const type of ['rectangle', 'diamond', 'ellipse', 'pie', 'path'] as const) {
+                const doc = new Y.Doc();
+                const id = writeElementInDoc(doc, { type }, 'a0', style);
+                const stored = doc.getMap('elements').get(id);
+                const json = stored instanceof Y.Map ? stored.toJSON() : {};
+                const text = Object.fromEntries(
+                    [
+                        'html',
+                        'fontFamily',
+                        'fontSize',
+                        'fontWeight',
+                        'fontStyle',
+                        'textDecoration',
+                        'textAlign',
+                        'verticalAlign',
+                        'color',
+                        'letterSpacing',
+                        'lineHeight',
+                        'padding',
+                    ].map((key) => [key, json[key]]),
+                );
+                expect([type, text]).toEqual([
+                    type,
+                    {
+                        html: '',
+                        ...host,
+                        fontWeight: 'normal',
+                        fontStyle: 'normal',
+                        textDecoration: 'none',
+                        textAlign: 'center',
+                        verticalAlign: 'center',
+                        letterSpacing: 0,
+                        lineHeight: 1.2,
+                        padding: 10,
+                    },
+                ]);
+            }
+        }
     });
 
     test('honors a caller-supplied seed and id, and draws fresh ones otherwise', () => {
