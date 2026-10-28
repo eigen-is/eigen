@@ -26,7 +26,7 @@ Position, size, and rotation. Shown for any selection.
 
 ## Text
 
-Shown for text boxes and for the shapes that hold text: rectangles, diamonds, ellipses, and closed freeform shapes from an imported file. It styles the text itself. The box or shape behind the text uses the **Fill** and **Stroke** sections below.
+Shown for text boxes and for the shapes that hold text: rectangles, diamonds, ellipses, pie slices, and closed freeform shapes from an imported file. **Convert to shapes** on a pie chart makes the pie slices. It styles the text itself. The box or shape behind the text uses the **Fill** and **Stroke** sections below.
 
 | Control | What it does |
 |---|---|
@@ -110,7 +110,7 @@ Sections show only where they mean something for the object you picked.
 | **Transform**, **Stroke**, **Sketch**, **Appearance** | Every object |
 | **Fill** | Shapes, text, and charts, plus a closed line or drawing |
 | **Labels** | Charts |
-| **Text**, **Spacing** | Text boxes, rectangles, diamonds, ellipses, and closed freeform shapes from an imported file |
+| **Text**, **Spacing** | Text boxes, rectangles, diamonds, ellipses, pie slices, and closed freeform shapes from an imported file |
 | **Image** | Images |
 | **Shape** (**Corners**) | Rectangles, diamonds, text, and images |
 | **Shape** (**Edges**) | Lines |
