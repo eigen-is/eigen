@@ -28,6 +28,9 @@ const restoringHomes = new Set<string>();
 // Homes whose owner is being deleted, from the teardown until better-auth has deleted the owner's row.
 // The row and the members' sessions outlive the folder for that moment, and a request in it must not
 // build a new home over the deleted folder.
+// A deletion that fails after the folder is gone (the registry delete, authDeleteUserReferences or the better-auth
+// row delete throws) keeps the mark until a restart: the home answers 404 "Home is being deleted", and a retry of the
+// delete clears it (docs/ROADMAP.md).
 const deletingHomes = new Set<string>();
 
 export function atHome(ownerId: string): boolean {
@@ -66,6 +69,10 @@ export function clearHomeRestoring(ownerId: string): void {
 
 export function markHomeDeleting(ownerId: string): void {
     deletingHomes.add(ownerId);
+}
+
+export function isHomeDeleting(ownerId: string): boolean {
+    return deletingHomes.has(ownerId);
 }
 
 // Once the owner's row is gone, or when the deletion stopped before it removed anything.

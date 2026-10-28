@@ -26,6 +26,7 @@ import { PIN_KEYS } from '../config/release';
 import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
+import { isHomeDeleting } from '../home/get-home';
 import { pullHomeBackupBytes, pullHomeSnapshot } from '../home/home-relay';
 import { getTeamExists } from '../team/team';
 import { getUserById } from '../user';
@@ -134,9 +135,11 @@ async function appendHome(
         const all = [...(manifest.warnings ?? []), ...(verify.warnings ?? [])];
         warnings = all.length > 0 ? all : undefined;
     } catch (error) {
-        // A delete mid-capture throws whatever the torn-down home throws: the row says whether it is gone.
+        // A delete mid-capture throws whatever the torn-down home throws: the mark or the row says whether it is gone.
         const id = parseOwnerId(home.ownerId).id;
-        const gone = home.kind === 'team' ? !(await getTeamExists(id)) : !(await getUserById(home.ownerId));
+        const gone =
+            isHomeDeleting(home.ownerId) ||
+            (home.kind === 'team' ? !(await getTeamExists(id)) : !(await getUserById(home.ownerId)));
         return gone ? { ...home, skipped: HOME_DELETED } : { ...home, failed: describeError(error) };
     } finally {
         await fsp.rm(folder, { recursive: true, force: true });
