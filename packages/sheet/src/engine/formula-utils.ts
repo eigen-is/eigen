@@ -355,7 +355,7 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
                         let stackCeilPri = op[cal1[0]];
 
                         while (cal1.length > 0 && stackCeilPri != null) {
-                            cal2.unshift(cal1.shift()!);
+                            cal2.unshift(...cal1.splice(0, 1));
                             stackCeilPri = op[cal1[0]];
                         }
                     }
@@ -385,7 +385,7 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
                         sPri = sPri == null ? 1000 : sPri;
 
                         while (cal1.length > 0 && sPri >= stackCeilPri) {
-                            cal2.unshift(cal1.shift()!);
+                            cal2.unshift(...cal1.splice(0, 1));
 
                             stackCeilPri = op[cal1[0]];
                             stackCeilPri = stackCeilPri == null ? 1000 : stackCeilPri;
