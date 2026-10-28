@@ -4,7 +4,7 @@
 import { isTransparentFill, parseFill } from '../fill';
 import type { Bounds, Point } from '../geometry';
 import { boxCenter, distanceToPolyline, LINEAR_HIT_SCREEN_FACTOR, rotatePoint } from '../geometry';
-import { clamp, nearestPoint, polylineOutline, scaledPathCommands } from '../outline';
+import { bezierAt, clamp, nearestPoint, polylineOutline, scaledPathCommands } from '../outline';
 import { pointsBounds } from '../points';
 import type { VectorPathElement } from '../types';
 import { boxAnchorPoints, defineKind } from './kind';
@@ -135,18 +135,6 @@ function flatten(control: Point[]): Point[] {
     for (let s = 1; s < steps; s++) out.push(bezierAt(control, s / steps));
     out.push(control[degree]);
     return out;
-}
-
-function bezierAt(control: Point[], t: number): Point {
-    let points = control;
-    while (points.length > 1) {
-        const previous = points;
-        points = previous.slice(1).map((p, i) => ({
-            x: previous[i].x + (p.x - previous[i].x) * t,
-            y: previous[i].y + (p.y - previous[i].y) * t,
-        }));
-    }
-    return points[0];
 }
 
 // The nonzero winding number of `p` over every subpath, each closed back to its start as a fill closes it.

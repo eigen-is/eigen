@@ -414,6 +414,20 @@ export function scaleNormalizedPath(path: string, width: number, height: number)
     return serializePath(scaledPathCommands(path, width, height));
 }
 
+// The point at `t` (0 to 1) along a Bézier curve of any degree, given its start, its control points and
+// its end, by De Casteljau's construction.
+export function bezierAt(control: Point[], t: number): Point {
+    let points = control;
+    while (points.length > 1) {
+        const previous = points;
+        points = previous.slice(1).map((p, i) => ({
+            x: previous[i].x + (p.x - previous[i].x) * t,
+            y: previous[i].y + (p.y - previous[i].y) * t,
+        }));
+    }
+    return points[0];
+}
+
 // --- primitives ---------------------------------------------------------------------------------
 
 // Excalidraw's ellipseDistanceFromPoint (ported from elbow-heading, verbatim): three Newton-style

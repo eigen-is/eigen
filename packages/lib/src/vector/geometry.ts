@@ -11,7 +11,15 @@ import { getLineHeightPx } from './font-metrics';
 // geometry's body does. Any entry works except one that reaches geometry through a kind's own module or
 // defineKind's: the registry then evaluates while that module is in its TDZ and throws a ReferenceError.
 import { ELEMENT_KINDS, isBindable } from './kinds';
-import { clamp, distanceToSegment, nearestPoint, outlineHits, pointInPolygon, segSegIntersect } from './outline';
+import {
+    bezierAt,
+    clamp,
+    distanceToSegment,
+    nearestPoint,
+    outlineHits,
+    pointInPolygon,
+    segSegIntersect,
+} from './outline';
 import { DEG_TO_RAD, parsePoints, pointsBounds, round, serializePoints } from './points';
 import type { Arrowhead, VectorArrowElement, VectorBindableElement, VectorElement, VectorLinearElement } from './types';
 import { parseBinding, serializeBinding } from './types';
@@ -540,18 +548,6 @@ export function arrowCurveBeziers(points: Point[]): CubicBezier[] {
     return beziers;
 }
 
-function cubicAt(bez: CubicBezier, t: number): Point {
-    const mt = 1 - t;
-    const a = mt * mt * mt;
-    const b = 3 * mt * mt * t;
-    const c = 3 * mt * t * t;
-    const d = t * t * t;
-    return {
-        x: a * bez[0].x + b * bez[1].x + c * bez[2].x + d * bez[3].x,
-        y: a * bez[0].y + b * bez[1].y + c * bez[2].y + d * bez[3].y,
-    };
-}
-
 // Sample count per terminal bezier when docking a curved arrow's bound end onto the outline.
 const CURVE_DOCK_SAMPLES = 24;
 
@@ -578,7 +574,7 @@ function curveOutlineDock(
     let prev: Point | null = null;
     for (const bez of span) {
         for (let s = 0; s <= CURVE_DOCK_SAMPLES; s++) {
-            const pt = cubicAt(bez, s / CURVE_DOCK_SAMPLES);
+            const pt = bezierAt(bez, s / CURVE_DOCK_SAMPLES);
             if (prev) {
                 const hits = outlineIntersections(shape, prev, pt, gap);
                 if (hits.length > 0) return nearestPoint(hits, prev);
