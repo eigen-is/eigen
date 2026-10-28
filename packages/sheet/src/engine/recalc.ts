@@ -208,103 +208,103 @@ function ensureWorkingData(sheet: Sheet): CellMatrix {
 
 // The ranges a formula reads, as setFormulaCellInfo finds them in the editor. An INDIRECT, OFFSET or INDEX call goes
 // through isFunctionRange; any other formula runs the same quote-aware tokenizer.
-function extractDependencies(
-    g: GraphCtx,
-    calc_funcStr: string,
-    sheetId: string,
-    data: CellMatrix,
-): FormulaDependency[] {
-    const txt1 = calc_funcStr.toUpperCase();
-    const isOffsetFunc = txt1.indexOf('INDIRECT(') > -1 || txt1.indexOf('OFFSET(') > -1 || txt1.indexOf('INDEX(') > -1;
+function extractDependencies(g: GraphCtx, formula: string, sheetId: string, data: CellMatrix): FormulaDependency[] {
+    const upper = formula.toUpperCase();
+    const buildsReference = upper.includes('INDIRECT(') || upper.includes('OFFSET(') || upper.includes('INDEX(');
 
-    const formulaDependency: FormulaDependency[] = [];
-    if (isOffsetFunc) {
-        isFunctionRange(calc_funcStr, (str_nb: string) => {
-            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, str_nb.trim(), sheetId, data);
+    const dependencies: FormulaDependency[] = [];
+    if (buildsReference) {
+        isFunctionRange(formula, (reference: string) => {
+            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference.trim(), sheetId, data);
             if (range != null) {
-                formulaDependency.push(range);
+                dependencies.push(range);
             }
         });
-    } else if (!(calc_funcStr.substring(0, 2) === '="' && calc_funcStr.substring(calc_funcStr.length - 1, 1) === '"')) {
-        let point = 0;
-        let squote = -1;
-        let dquote = -1;
-        const formulaTextArray: string[] = [];
-        const sq_end_array: number[] = [];
-        const calc_funcStr_length = calc_funcStr.length;
-        for (let j = 0; j < calc_funcStr_length; j += 1) {
-            const char = calc_funcStr.charAt(j);
-            if (char === "'" && dquote === -1) {
-                if (squote === -1) {
-                    if (point !== j) {
-                        formulaTextArray.push(
-                            ...calc_funcStr.substring(point, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
-                        );
-                    }
-                    squote = j;
-                    point = j;
-                } else {
-                    if (j < calc_funcStr_length - 1 && calc_funcStr.charAt(j + 1) === "'") {
-                        j += 1;
-                    } else {
-                        point = j + 1;
-                        formulaTextArray.push(calc_funcStr.substring(squote, point));
-                        sq_end_array.push(formulaTextArray.length - 1);
-                        squote = -1;
-                    }
-                }
-            } else if (char === '"' && squote === -1) {
-                if (dquote === -1) {
-                    if (point !== j) {
-                        formulaTextArray.push(
-                            ...calc_funcStr.substring(point, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
-                        );
-                    }
-                    dquote = j;
-                    point = j;
-                } else {
-                    if (j < calc_funcStr_length - 1 && calc_funcStr.charAt(j + 1) === '"') {
-                        j += 1;
-                    } else {
-                        point = j + 1;
-                        formulaTextArray.push(calc_funcStr.substring(dquote, point));
-                        dquote = -1;
-                    }
-                }
-            }
-        }
-        if (point !== calc_funcStr_length) {
-            formulaTextArray.push(
-                ...calc_funcStr.substring(point, calc_funcStr_length).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
-            );
-        }
-        for (let j = sq_end_array.length - 1; j >= 0; j -= 1) {
-            if (sq_end_array[j] !== formulaTextArray.length - 1) {
-                formulaTextArray[sq_end_array[j]] += formulaTextArray[sq_end_array[j] + 1];
-                formulaTextArray.splice(sq_end_array[j] + 1, 1);
-            }
-        }
-
-        for (let j = 0; j < formulaTextArray.length; j += 1) {
-            const t = formulaTextArray[j];
-            if (t.length <= 1) {
+    } else if (!(formula.substring(0, 2) === '="' && formula.substring(formula.length - 1, 1) === '"')) {
+        for (const token of tokenize(formula)) {
+            if (token.length <= 1) {
                 continue;
             }
 
-            if ((t.substring(0, 1) === '"' && t.substring(t.length - 1, 1) === '"') || !iscelldata(t)) {
+            if ((token.substring(0, 1) === '"' && token.substring(token.length - 1, 1) === '"') || !iscelldata(token)) {
                 continue;
             }
 
-            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, t.trim(), sheetId, data);
+            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, token.trim(), sheetId, data);
             if (range == null) {
                 continue;
             }
 
-            formulaDependency.push(range);
+            dependencies.push(range);
         }
     }
 
-    return formulaDependency;
+    return dependencies;
+}
+
+const OPERATORS = /==|!=|<>|<=|>=|[,()=+-/*%&^><]/;
+
+// Splits a formula at its operators, where a split on the operators alone would cut a quoted sheet name such as
+// '1-2' or a string. A double-quoted string is one token. A single-quoted sheet name is one token with the reference
+// after it, so ='1-2'!A1+5 gives '1-2'!A1 and 5.
+function tokenize(formula: string): string[] {
+    let tokenStart = 0;
+    let singleQuoteStart = -1;
+    let doubleQuoteStart = -1;
+    const tokens: string[] = [];
+    // The index in tokens of each single-quoted sheet name.
+    const sheetNameTokens: number[] = [];
+    for (let j = 0; j < formula.length; j += 1) {
+        const char = formula.charAt(j);
+        if (char === "'" && doubleQuoteStart === -1) {
+            if (singleQuoteStart === -1) {
+                if (tokenStart !== j) {
+                    tokens.push(...formula.substring(tokenStart, j).split(OPERATORS));
+                }
+                singleQuoteStart = j;
+                tokenStart = j;
+            } else {
+                // Two quotes in a row are an escaped quote inside the name.
+                if (j < formula.length - 1 && formula.charAt(j + 1) === "'") {
+                    j += 1;
+                } else {
+                    tokenStart = j + 1;
+                    tokens.push(formula.substring(singleQuoteStart, tokenStart));
+                    sheetNameTokens.push(tokens.length - 1);
+                    singleQuoteStart = -1;
+                }
+            }
+        } else if (char === '"' && singleQuoteStart === -1) {
+            if (doubleQuoteStart === -1) {
+                if (tokenStart !== j) {
+                    tokens.push(...formula.substring(tokenStart, j).split(OPERATORS));
+                }
+                doubleQuoteStart = j;
+                tokenStart = j;
+            } else {
+                if (j < formula.length - 1 && formula.charAt(j + 1) === '"') {
+                    j += 1;
+                } else {
+                    tokenStart = j + 1;
+                    tokens.push(formula.substring(doubleQuoteStart, tokenStart));
+                    doubleQuoteStart = -1;
+                }
+            }
+        }
+    }
+    if (tokenStart !== formula.length) {
+        tokens.push(...formula.substring(tokenStart).split(OPERATORS));
+    }
+    // Glue each sheet name to the token after it, its `!A1`. Back to front, so the splices don't move the indexes
+    // still to come.
+    for (let k = sheetNameTokens.length - 1; k >= 0; k -= 1) {
+        const index = sheetNameTokens[k];
+        if (index !== tokens.length - 1) {
+            tokens[index] += tokens[index + 1];
+            tokens.splice(index + 1, 1);
+        }
+    }
+    return tokens;
 }
 
 // A dependency cut to the cells its sheet holds, null when it holds none. Only a formula cell is looked up in the

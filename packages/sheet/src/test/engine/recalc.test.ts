@@ -66,6 +66,16 @@ describe('engine/recalc — recalcSheets', () => {
         expect(s1.data![0][0]?.v).toBe(16);
     });
 
+    test("a quoted sheet name with an operator in it, as in ='1-2'!A1+5, orders its formula after that cell", () => {
+        // Sheet1 is scanned first, so only a recorded dependency makes it read the fresh 6 over the cached 0.
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula("='1-2'!A1+5")]]),
+            sheet('s2', '1-2', [[formula('=2*3', { v: 0 })]]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data?.[0][0]?.v).toBe(11);
+    });
+
     test('INDEX-carrying formula is parsed via the special-case branch and evaluates', () => {
         // The isOffsetFunc branch routes INDEX/OFFSET/INDIRECT through the ported
         // isFunctionRange rather than the naive tokenizer (audit Risk 8). INDEX
