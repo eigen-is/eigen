@@ -803,6 +803,14 @@ describe('text boxes as boxes', () => {
         ]);
     });
 
+    // As a DrawingML offset does: a box whose centre sits past the column's middle wraps on the right.
+    test("a VML box with no mso-position-horizontal wraps on the side its margin-left's centre is on", async () => {
+        const at = (left: string) =>
+            vmlBox(PLACED.replace('margin-left:30pt', `margin-left:${left}`), '<w10:wrap type="square"/>');
+        const boxes = await vmlBoxesOf(at('0pt'), at('300pt'));
+        expect(boxes.map((box) => box.attrs?.['layout'])).toEqual(['wrap-left', 'wrap-right']);
+    });
+
     test("a VML box grows by its textbox's mso-fit-shape-to-text and aligns its text by v-text-anchor", async () => {
         const boxes = await vmlBoxesOf(
             vmlBox(`${PLACED};v-text-anchor:middle`, '', ' style="mso-fit-shape-to-text:t"'),
@@ -814,6 +822,11 @@ describe('text boxes as boxes', () => {
             [80, 'bottom'],
             [80, null],
         ]);
+    });
+
+    test("a VML box grows by the shape's own mso-fit-shape-to-text too", async () => {
+        const boxes = await vmlBoxesOf(vmlBox(`${PLACED};mso-fit-shape-to-text:t`));
+        expect(boxes.map((box) => box.attrs?.['height'])).toEqual([null]);
     });
 
     // A box holds no note and no box: each is its text, and the import says it drew the text simpler.
@@ -832,6 +845,18 @@ describe('text boxes as boxes', () => {
         const legacy = await boxesOf(anchored({ content: paragraph(vml) }));
         expect(legacy.boxes.map(lines)).toEqual([['Legacy']]);
         expect(legacy.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+    });
+
+    test('a box drawn simpler for three reasons is counted once', async () => {
+        const noted = paragraph('<w:r><w:t>Boxed</w:t></w:r><w:r><w:footnoteReference w:id="1"/></w:r>');
+        const table = `<w:tbl><w:tr><w:tc>${text('Cell')}</w:tc></w:tr></w:tbl>`;
+        const footnotes = `<w:footnote w:id="1">${text('Noted')}</w:footnote>`;
+        const ellipse = '<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>';
+        const { boxes, warnings } = await boxesOf(anchored({ content: `${noted}${table}`, spPr: ellipse }), {
+            footnotes,
+        });
+        expect(boxes).toHaveLength(1);
+        expect(warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
     });
 
     // A box Word draws, by its fill or its line, stays a box around its picture; an unpainted one is the picture.

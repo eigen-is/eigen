@@ -92,11 +92,14 @@ export function readTextBox(
     const grows = !!bodyPr && xmlElements(bodyPr).some((child) => child.local === 'spAutoFit');
     const geometry = spPr && xmlChild(spPr, A_NS, 'prstGeom');
     const preset = geometry ? xmlAttr(geometry, '', 'prst') : 'rect';
-    if (preset !== 'rect' && preset !== 'roundRect') reader.lost('text-simplified');
-    if (bodyPr && (Number(xmlAttr(bodyPr, '', 'rot') ?? 0) !== 0 || (xmlAttr(bodyPr, '', 'vert') ?? 'horz') !== 'horz'))
-        reader.lost('text-simplified');
-    if (spPr && Number(xmlAttr(xmlChild(spPr, A_NS, 'xfrm') ?? spPr, '', 'rot') ?? 0) !== 0)
-        reader.lost('text-simplified');
+    // An odd shape, a turned shape or turned text is drawn simpler. So is a box that continues another's story: Word
+    // stores the whole story in the chain's first box, so this one holds none of its own.
+    const simplified =
+        (preset !== 'rect' && preset !== 'roundRect') ||
+        (!!bodyPr &&
+            (Number(xmlAttr(bodyPr, '', 'rot') ?? 0) !== 0 || (xmlAttr(bodyPr, '', 'vert') ?? 'horz') !== 'horz')) ||
+        (!!spPr && Number(xmlAttr(xmlChild(spPr, A_NS, 'xfrm') ?? spPr, '', 'rot') ?? 0) !== 0) ||
+        !xmlChild(shape, WPS_NS, 'txbx');
     const look: BoxLook = {
         width: cx > 0 ? Math.min(room, cx / EMU_PER_PX) : null,
         height: grows || cy <= 0 ? null : cy / EMU_PER_PX,
@@ -106,9 +109,7 @@ export function readTextBox(
         verticalAlign: VERTICAL_ALIGNS.get(bodyPr ? (xmlAttr(bodyPr, '', 'anchor') ?? 't') : 't') ?? null,
         rounded: preset === 'roundRect',
     };
-    // A box that continues another's story holds none of its own: the chain's first box holds it all, as Word stores it.
-    if (!xmlChild(shape, WPS_NS, 'txbx')) reader.lost('text-simplified');
-    return textBoxNode(reader, items, look, layout);
+    return textBoxNode(reader, items, look, layout, simplified);
 }
 
 // A VML shape holding a v:textbox outside a Fallback: its CSS style places and sizes it, its w10:wrap says how the text
@@ -137,17 +138,17 @@ export function readVmlTextBox(
     const wrapped = VML_FLOATING_WRAPS.has(wrapType ?? '');
     if (!inLine && !wrapped && !placed) return null;
     const behind = Number(css.get('z-index') ?? 0) < 0;
+    const width = px('width');
+    const height = px('height');
     const layout: FigureFrameAttrs = inLine
         ? {}
         : wrapped
-          ? { layout: css.get('mso-position-horizontal') === 'right' ? 'wrap-right' : 'wrap-left' }
+          ? { layout: vmlWrapSide(css, width ?? 0, room) }
           : {
                 layout: behind ? 'behind' : 'front',
                 offsetX: px('margin-left') ?? 0,
                 offsetY: (px('margin-top') ?? 0) - (relativeV === 'text' ? spaceBefore : 0),
             };
-    const width = px('width');
-    const height = px('height');
     const filled = xmlAttr(shape, '', 'filled') !== 'f' && xmlAttr(shape, '', 'filled') !== 'false';
     const stroked = xmlAttr(shape, '', 'stroked') !== 'f' && xmlAttr(shape, '', 'stroked') !== 'false';
     const weight = cssPx(xmlAttr(shape, '', 'strokeweight') ?? '0.75pt') ?? 1;
@@ -156,7 +157,7 @@ export function readVmlTextBox(
     const [left, top, right, bottom] = inset;
     const look: BoxLook = {
         width: width === null ? null : Math.min(room, width),
-        height: cssOf(textbox).get('mso-fit-shape-to-text') === 't' ? null : height,
+        height: [css, cssOf(textbox)].some((style) => style.get('mso-fit-shape-to-text') === 't') ? null : height,
         fill: filled ? readCellBackground(xmlAttr(shape, '', 'fillcolor') ?? '#ffffff') : null,
         outline:
             stroked && strokeColor
@@ -167,16 +168,33 @@ export function readVmlTextBox(
         verticalAlign: VML_TEXT_ANCHORS.get((css.get('v-text-anchor') ?? '').split('-')[0] ?? '') ?? null,
         rounded: shape.local === 'roundrect',
     };
-    return textBoxNode(reader, items, look, layout);
+    return textBoxNode(reader, items, look, layout, false);
 }
 
-// The box's paragraphs, read as a note's: a list's, a heading's or a table's become paragraphs, counted, and a nested
-// box or note its text.
-function textBoxNode(reader: Reader, items: Item[], look: BoxLook, layout: FigureFrameAttrs): JSONContent | null {
+// The side a wrapped VML box sits on: its mso-position-horizontal's, else the side of the column its centre is on, as
+// a DrawingML offset's.
+function vmlWrapSide(css: Map<string, string>, width: number, room: number): 'wrap-left' | 'wrap-right' {
+    const side = css.get('mso-position-horizontal');
+    if (side) return side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left';
+    return (cssPx(css.get('margin-left')) ?? 0) + width / 2 > room / 2 ? 'wrap-right' : 'wrap-left';
+}
+
+// The box's paragraphs, read as a note's: a list's, a heading's or a table's become paragraphs and a nested box or note
+// its text, the box counted once with whatever its shape `simplified`.
+function textBoxNode(
+    reader: Reader,
+    items: Item[],
+    look: BoxLook,
+    layout: FigureFrameAttrs,
+    simplified: boolean,
+): JSONContent | null {
     const blocks = buildBlocks(items);
-    if (blocks.some((block) => block.type !== 'paragraph')) reader.lost('text-simplified');
     const paragraphs = blocks.flatMap(storyParagraphs);
-    if (paragraphs.some((paragraph) => paragraph.content?.some((node) => isStoryNode(node.type))))
+    if (
+        simplified ||
+        blocks.some((block) => block.type !== 'paragraph') ||
+        paragraphs.some((paragraph) => paragraph.content?.some((node) => isStoryNode(node.type)))
+    )
         reader.lost('text-simplified');
     const shows = paragraphs.some((paragraph) => (paragraph.content ?? []).length > 0);
     if (!shows && !look.fill && !look.outline) return null;
