@@ -3,6 +3,7 @@
 // shell and the drawing app cannot drift. The box background is the generic Fill row, its border the
 // generic Stroke row; this section is the text itself.
 
+import type { Editor } from '@tiptap/react';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import { isTextual, RICH_TEXT_CLASS, richTextCssText, round, slidePtToPx, slidePxToPt } from '@workspace/lib/vector';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
@@ -38,6 +39,7 @@ import type { InPlaceEditorProps, KindPanelSectionProps } from './index';
 // see it live.
 export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEditorProps) {
     const boxRef = useRef<HTMLDivElement>(null);
+    const editorRef = useRef<Editor | null>(null);
     // Not a state mirror: the element's own paint/typography, re-applied when a panel row changes it
     // mid-session. React never manages this attribute, so nothing fights over it.
     const css = isTextual(element) ? richTextCssText(element) : '';
@@ -60,6 +62,16 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
             // double-click here must not re-open a session over the open one.
             onPointerDown={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
+            // The box fills the shape, but the text inside it may not. A press on the rest of the box would move
+            // the focus to the canvas and end the typing, so it puts the caret at the end of the text instead.
+            onMouseDown={(e) => {
+                const editor = editorRef.current;
+                const text = editor?.view.dom;
+                if (editor && text && e.target instanceof Node && e.target !== text && e.target.contains(text)) {
+                    e.preventDefault();
+                    editor.commands.focus('end');
+                }
+            }}
             onKeyDown={(e) => {
                 // The text-edit layer of the layered Escape stack (CANVAS.md): claimed here, so the
                 // canvas' own document listener never sees it while a session is open.
@@ -82,7 +94,10 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
                 // box the renderer paints, and the auto-fit measures one height for both.
                 className={`${RICH_TEXT_CLASS} min-h-0 break-words`}
                 containerClassName="relative flex flex-col w-full"
-                onReady={({ editor }) => editor.chain().focus('end').run()}
+                onReady={({ editor }) => {
+                    editorRef.current = editor;
+                    editor.chain().focus('end').run();
+                }}
             />
         </div>
     );
