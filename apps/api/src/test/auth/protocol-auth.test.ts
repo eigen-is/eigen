@@ -50,17 +50,14 @@ describe('Protocol Auth', () => {
 
         test('leaves the last sign-in alone', async () => {
             const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
-            const { getUserById } = await import('../../lib/user');
             const { user } = await import('../../../auth-schema');
             const { eq } = await import('drizzle-orm');
+            const aliceRow = eq(user.id, ctx.alice.user.id);
             const lastSignIn = new Date('2026-01-05T09:00:00Z');
-            getAuthDrizzleDb()
-                .update(user)
-                .set({ lastLoginAt: lastSignIn })
-                .where(eq(user.id, ctx.alice.user.id))
-                .run();
+            getAuthDrizzleDb().update(user).set({ lastLoginAt: lastSignIn }).where(aliceRow).run();
             await verifyProtocolAuth(ctx.alice.user.email, 'testpassword123');
-            expect((await getUserById(ctx.alice.user.id))?.lastLoginAt).toEqual(lastSignIn);
+            const row = getAuthDrizzleDb().select({ lastLoginAt: user.lastLoginAt }).from(user).where(aliceRow).get();
+            expect(row?.lastLoginAt).toEqual(lastSignIn);
         });
 
         test('a wrong one is refused and counts toward the limit', async () => {
