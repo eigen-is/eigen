@@ -951,10 +951,8 @@ export class Mount {
         return files;
     }
 
-    // The queued upload and its staged copy are cancelled first, so a PUT in flight can't bring back
-    // the object this deletes. A file's delete ends here, and a document database's with it, such as a
-    // container delete or the chat-restore replace. So do a folder's delete on a mount with id keys, a
-    // failed create, and the new bytes of an overwrite that a delete raced past.
+    // Every delete of one object ends here, such as a file's delete or a failed create. The queued upload
+    // and its staged copy are canceled first, so a PUT in flight can't bring back the object this deletes.
     private async removeObject(pathId: string, storageKey: string): Promise<void> {
         await deleteThumbnail(this.thumbsDir, pathId);
         if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);

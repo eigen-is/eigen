@@ -347,13 +347,11 @@ function windowBorders(
     return kept;
 }
 
-// The merges that meet the window, as stored, without the ones that overlap an earlier one in reading order, as Excel
-// forbids overlapping merges. The renderer spans only the tracks a merge covers in the window, and a merge kept whole
-// draws no border on a side the window cut, where the editor draws none. The sweep keeps, for each column, the last
-// row a kept merge covers, so a merge overlaps a kept one exactly when one of its columns is covered at its first row.
-// Two merges that overlap outside the window overlap inside it too, since both start inside it. A merge as wide as the
-// grid would make a scan of its columns cost the window's width for each merge, so a segment tree answers for the
-// whole span in log time.
+// The merges that meet the window, each as stored. Excel forbids overlapping merges, so a merge that overlaps an
+// earlier one in reading order is left out. A merge overlaps a kept one exactly when one of its columns is covered at
+// its first row. Two merges that overlap outside the window overlap inside it too, since both start inside it. A scan
+// of a merge's columns would cost the window's width for a merge as wide as the grid, so a segment tree answers in log
+// time.
 function windowMerges(merges: MergeCell[], range: GridRange): Record<string, MergeCell> {
     const [firstRow, lastRow, firstCol, lastCol] = range;
     const clipped: { stored: MergeCell; m: MergeCell }[] = [];
