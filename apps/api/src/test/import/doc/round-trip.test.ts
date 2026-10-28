@@ -743,7 +743,7 @@ describe("a link's own look", () => {
         expect(stored(json)).toEqual(stored(expected(source, json)));
     });
 
-    test('a plain link comes back plain, without the underline its style draws', async () => {
+    test('a plain link comes back plain', async () => {
         const { source, json } = await roundTrip([
             { type: 'paragraph', content: [{ type: 'text', text: 'Link', marks: [link] }] },
         ]);
