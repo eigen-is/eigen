@@ -211,29 +211,27 @@ export function countHomeDeliveries(): number {
     return deliveries.size;
 }
 
-// Tells the open tabs of the owner and of each member about one event, such as everyone who can read a
-// changed path. The owner hears it at once. The members may still be read, and a failed read costs only
-// their copies. Only homes that are open receive it, so a closed home costs nothing.
+// Tells the open tabs of the owner and of each member who can read the path about one event. A member
+// whose ACL entry grants only write, or nothing, cannot list the path, so the event would name a path
+// they may not see. The owner hears it at once, and only once: in a user's home the owner is one of the
+// members. The members may still be read, and a failed read costs only their copies. They are looked up
+// in one query, because a team can have many, and a member without an account is skipped. Only homes
+// that are open receive it, so a closed home costs nothing.
 export async function broadcastToOwnerAndMembers(
     ownerId: string,
     members: EffectiveMember[] | Promise<EffectiveMember[]>,
     event: SSEvent,
 ): Promise<void> {
     await sendToHome(ownerId, { type: 'broadcast', event });
+    let readers: User[];
     try {
-        await relayEventToMembers(ownerId, await members, event);
-    } catch {}
-}
-
-// Tells the open tabs of each member once, but for the owner, who heard it already. In a user's home the
-// owner is one of the members. The members are looked up in one query, because a team can have many. A
-// member without an account is skipped.
-export async function relayEventToMembers(ownerId: string, members: EffectiveMember[], event: SSEvent): Promise<void> {
-    const users = await getUsersByEmails([...new Set(members.map((member) => member.email))]);
+        const emails = (await members).filter((member) => member.read).map((member) => member.email);
+        readers = await getUsersByEmails([...new Set(emails)]);
+    } catch {
+        return;
+    }
     await Promise.all(
-        users
-            .filter((user) => user.id !== ownerId)
-            .map((user) => sendToHome(user.id, { type: 'broadcast', event }).catch(() => {})),
+        readers.filter((user) => user.id !== ownerId).map((user) => sendToHome(user.id, { type: 'broadcast', event })),
     );
 }
 

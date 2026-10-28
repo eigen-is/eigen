@@ -171,6 +171,26 @@ describe('a drive change inside a shared folder', () => {
         expect(namedEvents(charlieSSE, inside.id)).toEqual([]);
     });
 
+    // An ACL entry may grant no read, and its holder cannot list the folder, so an event would name a path
+    // they may not see.
+    test('reaches no sharee who may not read the folder', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const dropBox = await createFolder(token, ctx.alice.user.id, aliceMountId, aliceRoot.id, 'sse-write-only');
+        await drivePut(token, ctx.alice.user.id, aliceMountId, `path/${dropBox.id}/acl`, {
+            add: [{ id: ctx.charlie.user.email, read: false, write: true }],
+        });
+        await drainACLFanOuts();
+        const aliceSSE = await collectSSE(ctx.alice.user.id);
+        const charlieSSE = await collectSSE(ctx.charlie.user.id);
+        const inside = await createFolder(token, ctx.alice.user.id, aliceMountId, dropBox.id, 'sse-write-only-inside');
+        await aliceSSE.next(driveEvent(SSEventType.DRIVE_FOLDER_CREATED, inside.id));
+        await settle();
+        aliceSSE.stop();
+        charlieSSE.stop();
+
+        expect(namedEvents(charlieSSE, inside.id)).toEqual([]);
+    });
+
     // After the move or the trash, Bob can no longer read the path. His open view of the shared folder
     // still lists it, so he hears that it left.
     test('tells the sharee that a path left the folder, by a move or a trash', async () => {
