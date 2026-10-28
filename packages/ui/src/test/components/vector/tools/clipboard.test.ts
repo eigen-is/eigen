@@ -207,6 +207,23 @@ describe('buildSelectionData', () => {
         expect(drawn).not.toContain('onclick');
     });
 
+    test("the svg flavour sanitizes a shape's text as it does a text box's", () => {
+        const forged: VectorElement = {
+            ...BASE,
+            ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),
+            id: 'r1',
+            type: 'rectangle',
+            index: 'a0',
+            seed: 1,
+            html: '<p>label</p><script>alert(1)</script><img src="https://evil.example/x.png">',
+        };
+        const { data } = buildSelectionData([forged], ['r1'], meta, '', () => undefined);
+        const drawn = (data.svg ?? '').split('</metadata>')[1] ?? '';
+        expect(drawn).toContain('label');
+        expect(drawn).not.toContain('script');
+        expect(drawn).not.toContain('evil.example');
+    });
+
     test('a text-only selection ships NO svg, so it lands in a document as text and not as a picture', () => {
         // Every foreign host runs its svg rung before the typed items, so an svg here would make a
         // copied text box paste as a flat image with its typography unread.
