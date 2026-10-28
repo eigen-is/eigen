@@ -7,13 +7,13 @@ import type { EditorView } from '@tiptap/pm/view';
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
-import { FigureNode, readFigureAttrs, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
+import { FigureNode, heightAtWidth, readFigureAttrs, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
 import { ImagePlaceholder } from '@workspace/ui/components/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FigureFrameOptions } from './figure-frame';
+import type { FigureFrameOptions, FigureSize } from './figure-frame';
 import {
     aspectLockedIn,
     clampFigureWidth,
@@ -86,7 +86,7 @@ function FigureView(props: NodeViewProps) {
     // A picture at its own ratio keeps its width alone, so its height follows that ratio wherever it draws. A stretched
     // one, or one an unlocked grip stretches, keeps both sides.
     const stored = useCallback(
-        (size: { width: number; height: number }) =>
+        (size: FigureSize) =>
             locked && !height ? { width: size.width } : { width: size.width, height: Math.round(size.height) },
         [locked, height],
     );
@@ -119,8 +119,8 @@ function FigureView(props: NodeViewProps) {
             return;
         }
 
-        // SVGs without explicit dimensions report 0x0 — set a width, then read
-        // the rendered aspect ratio after the browser lays out using the viewBox
+        // An SVG without a width and a height of its own reports 0x0. It gets a width, and its ratio is read
+        // once the browser has laid it out from its viewBox.
         if (!width) {
             setAttributes({ width: Math.round(maxWidth === Infinity ? FIGURE_DEFAULT_WIDTH : maxWidth) });
         }
@@ -207,7 +207,7 @@ export const Figure = FigureNode.extend<FigureFrameOptions>({
             // A stretched picture keeps its shape.
             return this.editor.commands.resizeFigure(selection.from, {
                 width,
-                ...(height && { height: Math.round((height * width) / from) }),
+                ...(height && { height: Math.round(heightAtWidth({ width: from, height }, width)) }),
             });
         };
         return Object.fromEntries(

@@ -32,6 +32,7 @@ import {
     getDocExtensions,
     PAGE_BAND_CLASS,
     PAGE_ROOT,
+    pageColumnWidth,
     pagePx,
     readNormalStyle,
     readPageSetup,
@@ -318,10 +319,7 @@ export function docEditorOptions({
     // editor before React draws the new page. A band prints in the body's column. Tables and indents keep within it,
     // and a positioned figure on its paper.
     const page = () => pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
-    const textColumnWidth = () => {
-        const { width, margin } = page();
-        return width - margin.left - margin.right;
-    };
+    const textColumnWidth = () => pageColumnWidth(page());
     const paperWidth = () => page().width;
     const pageless = () => page().pageless;
     // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one. A note's

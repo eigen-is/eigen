@@ -5,6 +5,7 @@ import type { FigureLayout } from '../../../../docs/eigendoc';
 import {
     figureLayoutStyle,
     getDocExtensions,
+    heightAtWidth,
     isPositioned,
     MAX_PAPER_MM,
     mmToPx,
@@ -264,5 +265,13 @@ describe('readFigureAttrs', () => {
             offsetX: -mmToPx(MAX_PAPER_MM),
             offsetY: 64,
         });
+    });
+});
+
+describe('heightAtWidth', () => {
+    test("scales a box's height with its width, so it keeps its shape, unrounded", () => {
+        expect(heightAtWidth({ width: 400, height: 300 }, 200)).toBe(150);
+        expect(heightAtWidth({ width: 300, height: 100 }, 200)).toBeCloseTo(66.6667, 4);
+        expect(heightAtWidth({ width: 100, height: 50 }, 250)).toBe(125);
     });
 });

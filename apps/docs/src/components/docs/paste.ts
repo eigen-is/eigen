@@ -9,11 +9,13 @@ import { bundledFontOfStack, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspac
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     FOOTNOTE_SELECTOR,
+    heightAtWidth,
     ITALIC_HEADING_SELECTOR,
     isStoryNode,
     keepOnPaper,
     newStoryId,
     POSITIONED_SELECTOR,
+    pageColumnWidth,
     unwrapRenderedMath,
 } from '@workspace/lib/docs/eigendoc';
 
@@ -30,7 +32,7 @@ export function cleanPastedHTML(
     footnotes = true,
 ): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const column = page.width - page.margin.left - page.margin.right;
+    const column = pageColumnWidth(page);
     const capOf = (el: Element) => (el.closest(POSITIONED_SELECTOR) ? page.width : column);
     unwrapRenderedMath(doc.body);
 
@@ -84,7 +86,7 @@ export function cleanPastedHTML(
             el.style.width = `${Math.round(maxWidth)}px`;
             // A stretched picture keeps its shape.
             const height = Number.parseInt(el.getAttribute('height') ?? '', 10);
-            if (height > 0) el.setAttribute('height', String(Math.round((height * maxWidth) / width)));
+            if (height > 0) el.setAttribute('height', String(Math.round(heightAtWidth({ width, height }, maxWidth))));
         }
     }
 
@@ -95,7 +97,7 @@ export function cleanPastedHTML(
         const maxWidth = capOf(el);
         if (width > maxWidth) {
             el.setAttribute('data-width', String(Math.round(maxWidth)));
-            el.setAttribute('data-height', String(Math.round((height * maxWidth) / width)));
+            el.setAttribute('data-height', String(Math.round(heightAtWidth({ width, height }, maxWidth))));
         }
     }
 

@@ -16,6 +16,7 @@ import type { PageSetup, PositionedLayout } from '@workspace/lib/docs/eigendoc';
 import {
     BLOCK_ONLY_FIGURE_PARENTS,
     DEFAULT_PAGE_SETUP,
+    heightAtWidth,
     isFigureFrameNode,
     isPositioned,
     keepOnPaper,
@@ -409,13 +410,15 @@ export const PositionedFigures = Extension.create<PositionedFiguresOptions, Posi
                     const width = Math.min(paper.width, stored ?? (box?.width ?? 0) / pageScale(view.dom));
                     // A figure wider than the paper is capped at it, its height scaled alongside so it keeps its shape.
                     const capped = stored !== null && stored > paper.width;
+                    const cappedHeight =
+                        capped && height && Math.round(heightAtWidth({ width: stored, height }, paper.width));
                     setFigureAttributes(tr, pos, {
                         layout,
                         ...(box && anchor
                             ? offsetsOnPaper(view, paper, { left: box.left, top: box.top, width }, anchor)
                             : { offsetX: 0, offsetY: 0 }),
                         ...(capped && { width: paper.width }),
-                        ...(capped && height && { height: Math.round((height * paper.width) / stored) }),
+                        ...(cappedHeight && { height: cappedHeight }),
                     });
                     const run = leadingRun($from.parent);
                     if ($from.index() > run.count) {
