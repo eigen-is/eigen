@@ -7,11 +7,10 @@ import { Node } from '@tiptap/core';
 import type { Schema } from '@tiptap/pm/model';
 import { DOMSerializer, Fragment, DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
-import { TextSelection } from '@tiptap/pm/state';
-import { MAX_PAPER_MM, mmToPx } from '../page';
+import { MAX_PAPER_PX, mmToPx } from '../page';
 import type { FigureFrameAttrs } from './figure-frame';
 import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
-import { flattenNestedStories, isStoryNode, newStoryId, readStoryId } from './stories';
+import { flattenNestedStories, insertStory, newStoryId, readStoryId, STORY_ID_ATTRIBUTE } from './stories';
 import type { CellBorder } from './table-cell';
 import { cellBorderValue, readCellBackground, readCellBorder } from './table-cell';
 
@@ -30,7 +29,6 @@ export type TextBoxVerticalAlign = (typeof TEXT_BOX_VERTICAL_ALIGNS)[number];
 // paper, so a forged size can't stall the layout.
 export const TEXT_BOX_DEFAULT_WIDTH = Math.round(mmToPx(60));
 export const TEXT_BOX_MIN_SIDE = 24;
-const MAX_SIDE = mmToPx(MAX_PAPER_MM);
 
 // Word's default insets, 0.1 inch left and right and 0.05 inch above and below, in px. A box with no padding stored
 // draws these.
@@ -80,7 +78,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
 export const readTextBoxSide = (value: unknown): number | null =>
-    isFiniteNumber(value) ? clamp(value, TEXT_BOX_MIN_SIDE, MAX_SIDE) : null;
+    isFiniteNumber(value) ? clamp(value, TEXT_BOX_MIN_SIDE, MAX_PAPER_PX) : null;
 
 const readPadding = (value: unknown): number | null =>
     isFiniteNumber(value) ? clamp(value, 0, MAX_TEXT_BOX_PADDING) : null;
@@ -107,7 +105,7 @@ export const textBoxPadding = ({ paddingX, paddingY }: Pick<TextBoxAttrs, 'paddi
 });
 
 // The box's own span, inside the frame's: its look as data attributes, which a paste reads back, and as a style, which
-// every surface draws. A box with no fill and no outline draws neither; the editor alone shows a guide around it.
+// every surface draws. A box with no fill and no outline draws neither. The editor alone shows a guide around it.
 export function textBoxHTMLAttributes(attrs: TextBoxAttrs): Record<string, string> {
     const { id, width, height, fill, outline, paddingX, paddingY, verticalAlign, rounded } = attrs;
     const padding = textBoxPadding(attrs);
@@ -122,7 +120,7 @@ export function textBoxHTMLAttributes(attrs: TextBoxAttrs): Record<string, strin
     return {
         class: 'text-box',
         'data-type': 'text-box',
-        ...(id && { 'data-story-id': id }),
+        ...(id && { [STORY_ID_ATTRIBUTE]: id }),
         'data-width': String(width),
         ...(height !== null && { 'data-height': String(height) }),
         ...(fill && { 'data-fill': fill }),
@@ -169,25 +167,20 @@ function boxContent(dom: globalThis.Node, schema: Schema): Fragment {
     return parsed ? schema.nodeFromJSON(flattenNestedStories(parsed.toJSON())).content : Fragment.empty;
 }
 
-// A box after the selection, in the flow and aligned left, Word's default look, holding one empty paragraph. Returns
-// where it is, or null where no box goes: inside a story, where the textblock takes no inline node (a code block), and in
-// a schema without one (a band's).
+// A new box's line, Word's black one, which the panel's first line starts from too.
+export const TEXT_BOX_DEFAULT_OUTLINE = { width: 1, style: 'solid', color: '#000000' } as const satisfies CellBorder;
+
+// A box after the selection, where insertStory puts a story: in the flow and aligned left, with Word's white fill and
+// black line, holding one empty paragraph.
 export function insertTextBox(tr: Transaction): number | null {
-    const { $to } = tr.selection;
     const box = tr.doc.type.schema.nodes[NAME]?.createAndFill({
         id: newStoryId(),
         alignment: 'left',
         width: TEXT_BOX_DEFAULT_WIDTH,
         fill: '#ffffff',
-        outline: '1px solid #000000',
+        outline: cellBorderValue(TEXT_BOX_DEFAULT_OUTLINE),
     });
-    const inStory = Array.from({ length: $to.depth }, (_, depth) => $to.node(depth + 1)).some((node) =>
-        isStoryNode(node.type.name),
-    );
-    if (!box || inStory || !$to.parent.canReplaceWith($to.index(), $to.index(), box.type)) return null;
-    tr.insert($to.pos, box);
-    tr.setSelection(TextSelection.create(tr.doc, $to.pos + box.nodeSize));
-    return $to.pos;
+    return insertStory(tr, box);
 }
 
 export const TextBoxNode = Node.create({
@@ -208,24 +201,23 @@ export const TextBoxNode = Node.create({
     draggable: true,
 
     addAttributes() {
-        const number = (value: string) => Number(value);
         return {
             ...figureFrameAttributes(),
             // A box draws no caption; a figure's inside it keeps its own.
             caption: { default: null, parseHTML: () => null },
-            id: boxAttribute('data-story-id', readStoryId),
+            id: boxAttribute(STORY_ID_ATTRIBUTE, readStoryId),
             width: {
-                ...boxAttribute('data-width', (value) => readTextBoxSide(number(value)) ?? TEXT_BOX_DEFAULT_WIDTH),
+                ...boxAttribute('data-width', (value) => readTextBoxSide(Number(value)) ?? TEXT_BOX_DEFAULT_WIDTH),
                 default: TEXT_BOX_DEFAULT_WIDTH,
             },
-            height: boxAttribute('data-height', (value) => readTextBoxSide(number(value))),
+            height: boxAttribute('data-height', (value) => readTextBoxSide(Number(value))),
             fill: boxAttribute('data-fill', readCellBackground),
             outline: boxAttribute('data-outline', (value) => {
                 const border = readCellBorder(value);
                 return border && cellBorderValue(border);
             }),
-            paddingX: boxAttribute('data-padding-x', (value) => readPadding(number(value))),
-            paddingY: boxAttribute('data-padding-y', (value) => readPadding(number(value))),
+            paddingX: boxAttribute('data-padding-x', (value) => readPadding(Number(value))),
+            paddingY: boxAttribute('data-padding-y', (value) => readPadding(Number(value))),
             verticalAlign: boxAttribute('data-vertical-align', (value) =>
                 TEXT_BOX_VERTICAL_ALIGNS.find((align) => align === value),
             ),

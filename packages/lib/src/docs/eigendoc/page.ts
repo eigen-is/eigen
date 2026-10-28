@@ -1,5 +1,6 @@
 // A doc's page: its paper, margins and bands, the one reader of the page a doc stores, and the units it is measured
-// in. The editor, the PDF and the docx all lay out from the PageSetup readPageSetup returns, so they agree on the page.
+// in. Every surface that lays out a page, such as the editor or the PDF, lays out from the PageSetup readPageSetup
+// returns, so they agree on the page.
 
 // In millimeters, because paper is defined in them. pagePx and pageTwips return this shape in their unit. Orientation
 // is width > height.
