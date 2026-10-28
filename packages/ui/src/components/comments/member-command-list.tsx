@@ -75,6 +75,11 @@ export function PinnedAssigneeFilterRows({
     );
 }
 
+// The keys that move the caret in the person search. Let ArrowLeft and ArrowRight through and a menu around the list
+// would close its submenu or move to the next bar menu; let Home and End through and cmdk would select the first or
+// last person instead.
+const CARET_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'Home', 'End']);
+
 type MemberCommandListProps = {
     members: EffectiveMember[];
     selectedEmail: string | null;
@@ -100,10 +105,8 @@ export function MemberCommandList({
             {showSearch && (
                 <CommandInput
                     placeholder="Find person…"
-                    // ArrowLeft and ArrowRight move the caret in the field. Let them through and a menu around the
-                    // list would close its submenu or move to the next bar menu.
                     onKeyDown={(event) => {
-                        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') event.stopPropagation();
+                        if (CARET_KEYS.has(event.key)) event.stopPropagation();
                     }}
                 />
             )}
