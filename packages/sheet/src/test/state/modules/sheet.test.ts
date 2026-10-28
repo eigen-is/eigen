@@ -113,6 +113,12 @@ describe('firstVisibleSheetId', () => {
         expect(firstVisibleSheetId(ctx, 'b')).toBe('a');
     });
 
+    test('counts a sheet without an order as 0, as the tab strip does', () => {
+        const ctx = tabOrderContext();
+        delete ctx.sheets[3].order;
+        expect(firstVisibleSheetId(ctx, 'b')).toBe('d');
+    });
+
     test('initSheetIndex opens the first visible sheet in tab order when none is active', () => {
         const ctx = tabOrderContext();
         ctx.currentSheetId = '';

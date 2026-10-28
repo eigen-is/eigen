@@ -37,6 +37,12 @@ export function rgbToHex(color: string): string {
     return parseRgb(color)?.hex ?? color;
 }
 
+// A sheet without an order sorts as 0. Every reader of a sheet's place asks here, so the tab strip, find and an add
+// or a delete agree on where it is.
+export function sheetOrder(sheet: Sheet): number {
+    return sheet.order ?? 0;
+}
+
 export function getSheetIndex(ctx: Context, id: string) {
     for (let i = 0; i < ctx.sheets.length; i += 1) {
         if (ctx.sheets[i]?.id === id) {

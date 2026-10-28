@@ -1,3 +1,7 @@
+// Find and replace over the workbook. collectMatches lists every cell whose shown value matches, sheet by sheet in
+// tab order, and the highlight, reveal and replace calls act on those matches. The Workbook's imperative API exposes
+// them to the shared find bar, the same bar Docs uses.
+
 import { applyPreserveCase, buildSearchRegex } from '@workspace/lib/doc-search';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
@@ -6,6 +10,7 @@ import { valueShowEs } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { SearchHighlight, SearchResult } from '../types';
+import { sheetOrder } from '../utils';
 import { setCellValue as setCellValueInternal } from './cell';
 import { delFunctionGroup, execFunctionGroup, groupValuesRefresh } from './formula-exec';
 import { checkCellIsLocked } from './protection';
@@ -33,7 +38,7 @@ export function collectMatches(ctx: Context, query: string, opts: DocSearchOptio
     const out: SearchResult[] = [];
     const ordered = sortBy(
         ctx.sheets.filter((s) => s.hide !== 1),
-        (s) => s.order,
+        sheetOrder,
     );
     for (const sheet of ordered) {
         const sheetId = sheet.id;

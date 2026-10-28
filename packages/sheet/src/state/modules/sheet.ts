@@ -14,7 +14,7 @@ import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
-import { generateRandomSheetName, getSheetIndex } from '../utils';
+import { generateRandomSheetName, getSheetIndex, sheetOrder } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { applySheetFilter } from './filter';
 
@@ -135,12 +135,11 @@ export function addSheet(
     if (ctx.hooks.beforeAddSheet?.(sheetconfig) === false) {
         return;
     }
-    // Only an add that goes ahead moves the other sheets along. A sheet without an order sorts as 0, as the tab
-    // strip sorts it.
+    // Only an add that goes ahead moves the other sheets along.
     if (!isNil(sheetData)) {
-        const insertAt = sheetData.order ?? 0;
+        const insertAt = sheetOrder(sheetData);
         for (const sheet of ctx.sheets) {
-            const order = sheet.order ?? 0;
+            const order = sheetOrder(sheet);
             sheet.order = order < insertAt ? sheet.order : order + 1;
         }
     }
@@ -201,9 +200,9 @@ export function deleteSheet(
         return;
     }
 
-    const deletedOrder = ctx.sheets[arrIndex].order ?? 0;
+    const deletedOrder = sheetOrder(ctx.sheets[arrIndex]);
     ctx.sheets = ctx.sheets.map((sheet) => {
-        const order = sheet.order ?? 0;
+        const order = sheetOrder(sheet);
         sheet.order = order < deletedOrder ? sheet.order : order - 1;
         return sheet;
     });
