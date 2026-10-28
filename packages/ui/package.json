@@ -18,7 +18,6 @@
     "@tanstack/react-virtual": "^3.14.23",
     "@workspace/lib": "workspace:*",
     "cmdk": "^1.1.1",
-    "nanoid": "^5.1.16",
     "prosemirror-search": "^1.1.1",
     "radix-ui": "^1.8.1",
     "y-websocket": "^3.1.0",
