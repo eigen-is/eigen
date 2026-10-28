@@ -1,4 +1,4 @@
-// One contact shown as a card: name, company, emails, phone numbers, addresses, birthday and notes. Views such as
+// One contact shown as a card: name, job title, company, emails, phone numbers, addresses, birthday and notes. Views such as
 // Contacts' detail and the .vcf preview show it.
 
 import { getMailComposeUrl } from '@workspace/lib/api';
@@ -31,7 +31,9 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                 name={`${contact.firstName} ${contact.lastName}`}
                 email={contact.email[0]}
                 imageUrl={contact.avatar}
-                subtitle={contact.jobTitle && contact.company ? `${contact.jobTitle} at ${contact.company}` : undefined}
+                subtitle={
+                    contact.company && contact.jobTitle ? `${contact.jobTitle} at ${contact.company}` : contact.jobTitle
+                }
                 badges={
                     labels.length > 0
                         ? labels.map((label, index) => (

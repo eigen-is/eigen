@@ -26,7 +26,7 @@ One of the cards is you. Contacts keeps a card linked to your own Eigen account,
 
 The list fills the page until you pick someone. Click any row to open the contact's details on the right, beside a narrower list. On a phone, the details take the place of the list, and the back arrow returns to it. To go back to the full list on a computer, click **Close** (the **X**) in the toolbar above the details.
 
-The detail panel shows their **Contact information** (email addresses and phone numbers), company (with the job title beside it), birthday, **Addresses**, and **Notes**, depending on what has been filled in.
+The detail panel shows their **Contact information** (email addresses and phone numbers), company and job title, birthday, **Addresses**, and **Notes**, depending on what has been filled in.
 
 If a contact has an email address, you can click it to open a new message to them in Mail.
 
