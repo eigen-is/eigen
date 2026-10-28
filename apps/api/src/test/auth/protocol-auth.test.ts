@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { app, getTestContext } from '../setup';
+import type { TestUser } from '../setup';
+import { app, createTestGuest, createTestUser, getTestContext } from '../setup';
 
 describe('Protocol Auth', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -69,6 +70,73 @@ describe('Protocol Auth', () => {
             await expect(verifyProtocolAuth(ctx.alice.user.email, 'testpassword123')).rejects.toThrow(
                 'Too many failed',
             );
+        });
+    });
+
+    // An unknown address, a guest and a 2FA account's account password all answer as a wrong password does, at the
+    // cost of one password hash, so neither the answer nor its time tells them apart.
+    describe('every refusal looks the same', () => {
+        let guest: TestUser;
+        let twoFactorEmail: string;
+
+        beforeAll(async () => {
+            guest = await createTestGuest('Protocol Guest');
+            const member = await createTestUser('protocol-2fa@test.eigen.is', 'testpassword123', 'Protocol 2FA');
+            twoFactorEmail = member.email;
+            const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
+            const { user } = await import('../../../auth-schema');
+            const { eq } = await import('drizzle-orm');
+            getAuthDrizzleDb().update(user).set({ twoFactorEnabled: true }).where(eq(user.id, member.id)).run();
+        });
+
+        async function passwordWork(run: () => Promise<unknown>): Promise<number> {
+            const { password } = await auth.$context;
+            const hash = spyOn(password, 'hash');
+            const verify = spyOn(password, 'verify');
+            try {
+                await run().catch(() => {});
+                return hash.mock.calls.length + verify.mock.calls.length;
+            } finally {
+                hash.mockRestore();
+                verify.mockRestore();
+            }
+        }
+
+        const refusals: [string, () => [string, string]][] = [
+            ['an unknown address', () => ['nobody-protocol@test.eigen.is', 'testpassword123']],
+            ['a guest address', () => [guest.email, 'testpassword123']],
+            ['a 2FA account on its account password', () => [twoFactorEmail, 'testpassword123']],
+            ['a wrong password', () => [ctx.alice.user.email, 'wrongpassword']],
+        ];
+
+        for (const [name, credentials] of refusals) {
+            test(`${name} answers 401 and spends one password hash`, async () => {
+                const [email, password] = credentials();
+                const res = await app.handle(
+                    new Request('http://localhost/dav/', {
+                        method: 'PROPFIND',
+                        headers: { Authorization: `Basic ${btoa(`${email}:${password}`)}`, Depth: '0' },
+                    }),
+                );
+                expect(res.status).toBe(401);
+                expect(await passwordWork(() => verifyProtocolAuth(email, password))).toBe(1);
+            });
+
+            test(`${name} counts toward the failure limit`, async () => {
+                const [email, password] = credentials();
+                for (let i = 0; i < 10; i++) {
+                    await expect(verifyProtocolAuth(email, password)).rejects.toThrow('Unauthorized');
+                }
+                await expect(verifyProtocolAuth(email, password)).rejects.toThrow('Too many failed');
+            });
+        }
+
+        test("a guest's own app password is refused as well", async () => {
+            const created = await auth.api.createApiKey({
+                body: { name: 'guest-app-password' },
+                headers: { cookie: `better-auth.session_token=${guest.sessionToken}` },
+            });
+            await expect(verifyProtocolAuth(guest.email, created?.key ?? '')).rejects.toThrow('Unauthorized');
         });
     });
 
