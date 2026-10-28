@@ -1,9 +1,9 @@
-// shadcn's Menubar on Radix: the row of menus, such as File, Edit and Format, at the left of an app's bar. One open menu
-// leaves the page live, so one press, a hover or an arrow key moves to the next menu. The trigger keeps the bar's
-// ghost-button size and fills while its menu is open. The rows come from the DropdownMenu file: MenubarContent hands
-// them the Menubar's Radix parts, so the same rows serve every bar menu and every dropdown. The two checks at the end
-// tell an editor or a canvas beside the bar what a closing menu, or a press that closes one, leaves to it.
+// shadcn's Menubar on Radix: the row of menus, such as File, Edit and Format, at the left of an app's bar. An open menu
+// leaves the page live, so one press, a hover or an arrow key moves to the next menu. The trigger is a small ghost
+// button that stays filled while its menu is open. The rows come from the DropdownMenu file, so the same rows serve
+// every bar menu and every dropdown.
 
+import { buttonVariants } from '@workspace/ui/components/button';
 import { MenuRows } from '@workspace/ui/components/dropdown-menu';
 import { OPEN_MENU } from '@workspace/ui/hooks/use-dialog-open';
 import { cn } from '@workspace/ui/lib/utils';
@@ -24,7 +24,8 @@ function MenubarTrigger({ className, ...props }: React.ComponentProps<typeof Men
         <MenubarPrimitive.Trigger
             data-slot="menubar-trigger"
             className={cn(
-                'inline-flex h-8 shrink-0 items-center rounded-md px-3 text-sm font-medium whitespace-nowrap outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground dark:hover:bg-accent/50',
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                'select-none focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:ring-0 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground',
                 className,
             )}
             {...props}
@@ -62,7 +63,7 @@ function MenubarContent({
 // Whether a closing menu leaves the focus for the editor to take back: on the page's body, where a pick or Esc leaves it
 // as the menu unmounts, or on a menu's trigger. A press outside the open menu focuses what it lands on, such as an
 // input, and the next menu or a dialog a pick opened takes the focus too; those keep it.
-export function focusLeftToEditor(): boolean {
+function focusLeftToEditor(): boolean {
     const focused = document.activeElement;
     return !focused || focused === document.body || focused.matches('[aria-haspopup="menu"]');
 }
@@ -70,8 +71,8 @@ export function focusLeftToEditor(): boolean {
 // Whether a press lands while a menu is open, such as a bar menu, and so only closes it. The menu leaves the page live,
 // so the press reaches what lies under it too, where an eraser or a text tool would act on it. A pointerdown handler
 // asks this before Radix closes the menu on the same press.
-export function pressClosesMenu(): boolean {
+function pressClosesMenu(): boolean {
     return document.querySelector(OPEN_MENU) !== null;
 }
 
-export { Menubar, MenubarContent, MenubarMenu, MenubarTrigger };
+export { focusLeftToEditor, Menubar, MenubarContent, MenubarMenu, MenubarTrigger, pressClosesMenu };
