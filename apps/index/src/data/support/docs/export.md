@@ -6,7 +6,7 @@ category: Files
 tags: [docs, export, download, word, pdf, html]
 related: [docs/import-word, docs/print]
 order: 90
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original document in Eigen stays exactly as it was.
@@ -34,6 +34,8 @@ You do not need to open the document to export it. In Drive, right-click the doc
 The exported file contains the document text and all formatting: headings, lists, tables, images, charts, code blocks, and other content. Code blocks keep their colors. Code blocks with no language set keep them up to about 65,000 characters of code in all. Past that, they are exported as plain text. Comment threads are not included in the exported file. In the Word file, a chart is a Word chart with its numbers, kept the way Word keeps a chart's data. A sketched, hatched, or dashed look is drawn plain, and a gradient background becomes its middle color. A WebP image is saved as PNG or JPEG, since Word, PowerPoint and Google's editors can't show WebP.
 
 The PDF and the Word file put the header and footer on every page, with the page numbers and page count filled in, and give the first page its own when you set one. The web page shows the header at the top and the footer at the end, with **#** for a page number. See [Add headers, footers, and page numbers](/support/docs/headers-and-footers).
+
+A text box looks in the PDF and the web page as it does in the editor, and is a Word text box in the Word file. A box whose text runs past the height you set grows to fit it in Word too. See [Add text boxes](/support/docs/text-boxes).
 
 Footnotes print at the bottom of their page in the PDF and are Word footnotes in the Word file. When a document has more than 1,500 footnotes, or one footnote longer than a page, the PDF lists them all at the end instead, as the web page does. The web page numbers them in the text and lists them at the end, each linking back to its place.
 

@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit, docs/page-setup]
 order: 100
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, images, charts, and equations.
@@ -49,6 +49,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Images keep their size and caption. An image that floats left or right of the text floats there in Eigen too.
 - An image or a chart behind or in front of the text stays behind or in front of it, at its place relative to its paragraph. One that Word places from the top of the page or a margin goes to the top of its paragraph. One in a table, or a group of several pictures, sits on a line of its own. Where pictures overlap, a later one draws over an earlier one in the same layer. See [Insert images, charts, and tables](/support/docs/images-and-tables).
 - Column, bar, line, and pie charts become charts you can edit, with their data, colors, title, background, text and line colors, data labels, size, and caption. A chart floats as an image does, and a 3-D chart comes in flat. See [Insert images, charts, and tables](/support/docs/images-and-tables).
+- Text boxes stay text boxes, at their place, with their size, fill, outline, the space around their text, and rounded corners. A list or a table in a text box comes in as its paragraphs. A text box in a header or footer, in a footnote, or grouped with pictures or other shapes comes in as its text, after the paragraph it belongs to. See [Add text boxes](/support/docs/text-boxes).
 - Footnotes stay footnotes, with their formatting and links, and endnotes become footnotes. A footnote with a custom mark, such as *, gets a number instead.
 - The header and footer come across, with page numbers and page counts, and the first page's own header and footer when the Word file has them. An image that floats in a header or footer comes in on a line of its own.
 - A page break, "Page break before" in Word's paragraph settings, and a section break that starts a new page all start a new page in Eigen.
@@ -67,6 +68,7 @@ After an import into an open document, a message counts what didn't come across,
 - Tracked changes come in as if you had accepted them all.
 - Line spacing set to **Exactly** or **At least** in Word follows the normal text's, and normal text set that way is single-spaced.
 - A SmartArt graphic comes in as its text, one paragraph per shape.
+- A text box that is turned, has vertical text, or isn't a rectangle comes in as an upright rectangle. The message counts it among the text boxes that were simplified, as it does a text box that held a list or a table.
 - A chart Eigen can't draw the way Word does, such as an area, scatter, doughnut, or combo chart, becomes a line that names the kind of chart and its title, for example **Scatter chart not imported**. A chart with more than 32 series, or more than 2,000 values in all, becomes a line that says **Chart not imported**, with its title.
 - A chart in a header, footer, or footnote comes in as its title only.
 - An equation takes the size of the text around it, so a size set inside a Word equation doesn't come across.
