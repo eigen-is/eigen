@@ -3,13 +3,7 @@
 // per workbook. Other readers, such as the rich strings and the rules, reuse its font and color readers.
 
 import { bundledFont } from '@workspace/lib/constants/fonts';
-import type {
-    BorderSide,
-    CellBorderSides,
-    CellStyle,
-    DefaultConditionalFormatRule,
-    Cell as FortuneCell,
-} from '@workspace/lib/sheets';
+import type { BorderSide, Cell, CellBorderSides, CellStyle, DefaultConditionalFormatRule } from '@workspace/lib/sheets';
 import { BORDER_STYLES } from '@workspace/lib/sheets';
 import { is_date, isValidNumberFormat } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
@@ -29,7 +23,7 @@ export type ThemePalette = string[];
 
 export type Look = {
     // The keys every cell of the format carries.
-    cell: FortuneCell;
+    cell: Cell;
     // Its font's, which a rich string's plain text takes.
     font: CellStyle;
     // What a value displays with, as written; undefined for General and for a format numfmt can't parse, which shows
@@ -185,8 +179,8 @@ export function fontLook(font: XmlElement | undefined, palette: ThemePalette): C
     return look;
 }
 
-function alignmentLook(alignment: XmlElement): FortuneCell {
-    const look: FortuneCell = {};
+function alignmentLook(alignment: XmlElement): Cell {
+    const look: Cell = {};
     const horizontal = HORIZONTAL_MAP.get(xmlAttr(alignment, '', 'horizontal') ?? '');
     if (horizontal !== undefined) look.ht = horizontal;
     const vertical = VERTICAL_MAP.get(xmlAttr(alignment, '', 'vertical') ?? '');
