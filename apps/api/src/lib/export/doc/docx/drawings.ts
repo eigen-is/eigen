@@ -35,7 +35,7 @@ type Drawn = { image: Image | WordChart; cx: number; cy: number; alt: string };
 // Where an anchored drawing sits: in front of or behind the text, in EMU from the text column and from the top of its
 // paragraph's first line, or wrapped by the text on one side of the column, at its paragraph's top, with the gap the
 // text keeps from it in EMU.
-type Placement =
+export type Placement =
     | { x: number; y: number; behind: boolean }
     | { side: 'left' | 'right'; fromText: { top: number; right: number; bottom: number; left: number } };
 

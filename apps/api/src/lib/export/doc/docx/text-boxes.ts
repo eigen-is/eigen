@@ -1,13 +1,15 @@
 // A text box as Word's own: a wps shape holding its paragraphs, in front of or behind the text at its offsets, wrapped
-// on one side, or in its own line. The paragraph walker calls textBoxRun for each box it meets. The shape sits in
-// mc:AlternateContent with no VML fallback, as Word for the web writes one, and its fill, outline, insets, vertical
-// alignment and rounded corners are the box's. A box whose text runs past its height grows, as it does in Eigen.
+// on one side, or in its own line. The paragraph walker calls anchoredTextBox or inlineTextBox for each box it meets.
+// The shape sits in mc:AlternateContent with no VML fallback, as Word for the web writes one, and its fill, outline,
+// insets, vertical alignment and rounded corners are the box's. A box whose text may run past its height grows, as it
+// does in Eigen.
 
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_LINE_RATIO } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_LINE_RATIO, readFontSize } from '@workspace/lib/constants/fonts';
 import type { TextBoxAttrs } from '@workspace/lib/docs/eigendoc';
 import {
     flattenNestedStories,
+    isFigureFrameNode,
     isPositioned,
     ptToPx,
     readTextBoxAttrs,
@@ -18,6 +20,7 @@ import { anchorIndentPx, anchorPaddingPx, BODY, boxSide, cssPt, FIGURE_MARGIN } 
 import { proseValue } from '../../../document/prose-css';
 import { EMU_PER_PX, WPS_NS } from '../../../ooxml/ooxml';
 import { SINGLE_LINE, TWIPS_PER_PX } from '../../../ooxml/wordml';
+import type { Placement } from './drawings';
 import { drawingHead } from './drawings';
 import type { Context } from './package';
 import type { Paragraph } from './paragraphs';
@@ -72,18 +75,12 @@ export function inlineTextBox(node: JSONContent, context: Context): Paragraph {
     };
 }
 
-function textBoxRun(
-    node: JSONContent,
-    attrs: TextBoxAttrs,
-    context: Context,
-    placement?: Parameters<typeof drawingHead>[3],
-): string {
+function textBoxRun(node: JSONContent, attrs: TextBoxAttrs, context: Context, placement?: Placement): string {
     const { pkg } = context;
     const n = ++pkg.lastDrawingId;
     const padding = textBoxPadding(attrs);
     const pen = attrs.outline === 'none' ? null : attrs.outline;
-    // The box's paragraphs, in its column, with no space between them, as a cell's. A forged note or box inside is its
-    // text, since Word refuses a note reference or a shape in a box.
+    // The box's paragraphs, in its column, with no space between them, as a cell's.
     const column = Math.max(1, Math.round((attrs.width - 2 * padding.x - 2 * (pen?.width ?? 0)) * TWIPS_PER_PX));
     const inside: Context = {
         pkg,
@@ -95,11 +92,17 @@ function textBoxRun(
         quotes: 0,
         after: 0,
     };
-    const content = blocksXml(blocksOf(flattenNestedStories(node).content ?? [], {}, inside), pkg.styles);
+    // A forged note or box inside is its text, since Word refuses a note reference or a shape in a box.
+    const story = flattenNestedStories(node);
+    const content = blocksXml(blocksOf(story.content ?? [], {}, inside), pkg.styles);
     // Word clips a box at a fixed height and refits one that fits its text, so a box whose text may run past its
-    // height grows: the larger of the two is its extent, and Word refits it on layout.
-    const estimate = textHeight(node, attrs, context) + 2 * padding.y + 2 * (pen?.width ?? 0);
-    const holds = attrs.height !== null && attrs.height >= estimate;
+    // height grows: the larger of the two is its extent, and Word refits it on layout. A picture or larger type the
+    // estimate can't measure grows it too.
+    const estimate = textHeight(story, attrs, context) + 2 * padding.y + 2 * (pen?.width ?? 0);
+    const holds =
+        attrs.height !== null &&
+        attrs.height >= estimate &&
+        !(story.content ?? []).some((child) => isUnmeasured(child, pkg.normal.size));
     const cx = emu(attrs.width);
     const cy = emu(holds && attrs.height !== null ? attrs.height : Math.max(attrs.height ?? 0, estimate));
     const { head, frame } = drawingHead(n, cx, cy, placement);
@@ -140,6 +143,17 @@ function textHeight(node: JSONContent, attrs: TextBoxAttrs, { pkg }: Context): n
     let lines = 0;
     for (const paragraph of node.content ?? []) lines += Math.max(1, Math.ceil(characters(paragraph) / perLine));
     return lines * line;
+}
+
+// A picture or a chart, or a run above the body's size: what the estimate, counting characters at that size, can't
+// measure, so a box holding one grows with its text.
+function isUnmeasured(node: JSONContent, normalPt: number): boolean {
+    if (isFigureFrameNode(node.type)) return true;
+    const larger = node.marks?.some(
+        (mark) => mark.type === 'textStyle' && (readFontSize(mark.attrs?.['fontSize']) ?? 0) > normalPt,
+    );
+    if (larger) return true;
+    return (node.content ?? []).some((child) => isUnmeasured(child, normalPt));
 }
 
 function characters(node: JSONContent): number {

@@ -721,6 +721,25 @@ describe('docx writer — text boxes', () => {
         expect(Number(xmlAttr(only(descendants(grown, A_NS, 'ext')), '', 'cy'))).toBeGreaterThan(40 * 9525 * 3);
     });
 
+    // The estimate counts characters at the body's size, so it can't tell a picture or larger type would fit.
+    test('a box holding a picture or type above the body size grows, whatever its height', async () => {
+        const fit = async (...content: JSONContent[]) =>
+            shape(
+                only(
+                    descendants(
+                        await shapeOf(doc(p(box({ layout: 'front', height: 200 }, p(...content))))),
+                        WPS,
+                        'bodyPr',
+                    ),
+                ),
+            );
+        const picture = { type: 'figure', attrs: { mediaName: 'a.png', width: 120 } };
+        const sized = (fontSize: number) => text('Big', { type: 'textStyle', attrs: { fontSize } });
+        expect(await fit(text('Short'), picture)).toEqual(['spAutoFit']);
+        expect(await fit(sized(DEFAULT_NORMAL_STYLE.size + 1))).toEqual(['spAutoFit']);
+        expect(await fit(sized(DEFAULT_NORMAL_STYLE.size))).toEqual(['noAutofit']);
+    });
+
     test('the fill, the outline with its dash or double line, and rounded corners are the shape’s', async () => {
         const look = async (attrs: Record<string, unknown>) => {
             const spPr = only(descendants(await shapeOf(doc(p(box({ layout: 'front', ...attrs })))), WPS, 'spPr'));
