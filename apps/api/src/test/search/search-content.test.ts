@@ -10,9 +10,11 @@ import {
     assertJson,
     authedRequest,
     chatPost,
+    createTestUser,
     driveDelete,
     driveGet,
     drivePost,
+    drivePut,
     driveUpload,
     getTestContext,
 } from '../setup';
@@ -202,6 +204,28 @@ describe('Drive content-index', () => {
         expect((await searchFile('temples')).file.some((h) => h.id === chat.id)).toBe(true);
         expect((await searchFile('mindblown')).file.some((h) => h.id === chat.id)).toBe(false);
         expect((await searchFile('hushedquokka')).file.some((h) => h.id === chat.id)).toBe(false);
+    });
+
+    test("a CHAT message is searchable by its author's name and by their email", async () => {
+        const ottoline = await createTestUser('ottoline@test.eigen.is', 'testpassword123', 'Ottoline Brackwater');
+        const chat = await drivePost(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/chat`,
+            { fileName: 'author-chat' },
+        );
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${chat.id}/acl`, {
+            add: [{ id: ottoline.email, read: true, write: true }],
+        });
+        await chatPost(ottoline.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
+            content: 'the agenda is attached',
+        });
+        await home.drive.flushContainerDb(mountId, chat.id);
+        await flushContentReindex(home.drive);
+
+        expect((await searchFile('brackwater')).file.some((h) => h.id === chat.id)).toBe(true);
+        expect((await searchFile(encodeURIComponent(ottoline.email))).file.some((h) => h.id === chat.id)).toBe(true);
     });
 
     // Plaintext files get contentDirty = 1 at upload time (write-path mark), so no
