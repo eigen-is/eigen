@@ -26,7 +26,7 @@ The column header updates straight away.
 
 ## Delete a column
 
-Deleting a column removes it and all the cards it contains. This cannot be undone.
+Deleting a column removes it and all the cards it contains. Press **Ctrl+Z** (Mac: **⌘Z**) straight after to bring them back.
 
 1. Open **Column settings** for the column you want to remove.
 2. Click **Delete column**.
@@ -35,7 +35,7 @@ Deleting a column removes it and all the cards it contains. This cannot be undon
 
 <div class="eigen-callout">
 
-Deleting a column deletes all the cards inside it, including any comments on those cards. There is no way to recover them.
+Deleting a column deletes all the cards inside it, including any comments on those cards. Once you close the board, you can't recover them.
 
 </div>
 

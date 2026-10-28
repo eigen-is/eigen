@@ -120,7 +120,7 @@ These toggles control whether Eigen sends an email for each type of event. A use
 | **Email guests when added to share** | A guest is given access to a file or folder. Guests have no in-app notifications, so this is often the only way they learn about the share. On by default. |
 | **Email users when added to share** | A registered user is given access to a file or folder. An in-app notification already fires. Off by default. |
 | **Email users for calendar invites** | A user receives a calendar invitation. On by default. |
-| **Email owner on access request** | Someone requests access to a file the owner has locked. On by default. |
+| **Email owner on access request** | Someone clicks **Request access** on a file or folder they can't open. The email goes to its owner, or to the members of the team that owns it. On by default. |
 
 Click the toggle to change a setting. Click **Reset** to discard all unsaved changes.
 

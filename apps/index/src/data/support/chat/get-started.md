@@ -43,7 +43,7 @@ Click the paperclip button next to the message box. You can pick a file from Dri
 
 ## Edit or delete a message
 
-Hover over one of your messages. An action bar appears in the top-right corner of the message. Click the pencil icon to edit the text, or the bin icon to delete the message.
+Hover over one of your messages. An action bar appears in the top-right corner of the message. Click the pencil icon to edit the text, or the bin icon to delete the message. On a touchscreen there is no action bar. Press and hold the message instead (or right-click it) to open a menu with **Edit** and **Delete**.
 
 ## Personal and team chats
 

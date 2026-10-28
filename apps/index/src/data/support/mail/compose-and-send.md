@@ -46,7 +46,8 @@ When the message is ready, click **Send**. Mail sends the email and takes you ba
 A couple of checks happen before the email goes out:
 
 - If you haven't added anyone to **To**, Mail asks you to specify at least one recipient.
-- If you've left the subject empty, Mail asks **Send without subject?** first. Click **Send** to send it anyway, or close the question to go back and add one.
+- If you've left the subject empty but written a message, Mail asks **Send without subject?** first. Click **Send** to send it anyway, or close the question to go back and add one.
+- If the subject and the message are both empty, Mail asks you to add a subject or message.
 
 <div class="eigen-callout">
 

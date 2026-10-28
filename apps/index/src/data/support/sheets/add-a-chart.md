@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, charts, graphs]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 147
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 You can turn a table of numbers into a chart that floats over the grid. The chart reads its cells, so it changes as soon as you change a value.
@@ -29,7 +29,7 @@ Click a chart to select it, and a panel headed **Chart** opens on the right. Its
 
 - **Data range** shows the cells the chart reads, such as `A1:D10`. Type a new range and press Enter to chart other cells. To chart cells on another tab, put the tab name in front, such as `'Sales 2026'!A1:D10`.
 - **Switch rows/columns** turns each row into a series instead of each column.
-- **Use row 1 as headers** and **Use column A as labels** say whether the first row and column hold names or values.
+- **Use row 1 as headers** and **Use column A as labels** say whether the first row and column hold names or values. The row number and column letter follow the first row and column of the chart's range, so a chart that starts at C5 reads **Use row 5 as headers** and **Use column C as labels**. With **Switch rows/columns** on, they read **Use column C as headers** and **Use row 5 as labels**.
 
 Below that you pick the axis titles, whether each axis shows (**Show axis**), whether the category axis runs the other way (**Reverse axis order**), the lowest and highest value on the value axis (a percent on a **100%** stack, and automatic again when you switch to or from **100%**), the gridlines, and a color for each series or pie slice, which reads **Automatic** until you pick one.
 

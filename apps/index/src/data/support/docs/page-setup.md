@@ -13,7 +13,7 @@ A new document is A4, portrait, with 2 cm margins on every side. You can change 
 
 ## Open the page setup
 
-Click **File** in the toolbar and choose **Page setup…**. You can also choose **Format → Page orientation**, which opens the same window. While you edit a header or footer, **Options → Page setup…** on its bar opens it too.
+Click **File** in the toolbar and choose **Page setup…**. You can also choose **Format → Page orientation**, which opens the same window. A page-less document has no such item. While you edit a header or footer, **Options → Page setup…** on its bar opens it too.
 
 The window has two tabs. **Pages** holds the paper and margins described here. **Page-less** shows the document as one continuous column of text, and holds your own text width. See [Use page-less mode and set your text width](/support/docs/page-less).
 

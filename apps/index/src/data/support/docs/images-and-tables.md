@@ -42,7 +42,7 @@ Click an image to select it. Resize handles appear at its corners. Drag a handle
 
 On a wide screen, selecting an image also opens the **Image** panel on the right side of the editor. From there you can:
 
-- **Width** and **Height**: type the image's width or height in centimeters and press Enter. While **Keep aspect ratio** is checked, the other side follows. Uncheck it to stretch the image. The width is at least 2.65 cm, and the image is no wider than the text (half of it for a floating image, the width of the paper for an image behind or in front of the text); a wider size shrinks to fit, keeping its shape.
+- **Width** and **Height**: type the image's width or height in centimeters and press Enter. While **Keep aspect ratio** is checked, the other side follows. Uncheck it to stretch the image. The width is at least 2.65 cm, and the image is no wider than the text (half of it for a floating image, and the width of the paper for an image behind or in front of the text, or for any image that doesn't float in a page-less document); a wider size shrinks to fit, keeping its shape.
 - **Keep aspect ratio**: checked for an image when you select it. Unchecking it lasts while the image stays selected.
 - **Style**: set the image to sit on its own line (the default), float to the left, or float to the right with text wrapping around it, or place it behind or in front of the text (see below). An image wider than half the text shrinks to half when it starts to float, so the text has room beside it.
 - **Align**: when the image is on its own line, choose left, center, or right alignment.
@@ -121,7 +121,7 @@ Under **Columns**, click **Before** or **After** to add a column on either side 
 
 **Resize columns**
 
-Point at the border between two columns until the cursor changes, then drag it left or right. One column gets wider and the one beside it narrower, so the table keeps its width. To make the whole table wider or narrower, drag its right edge; it stops at the edge of the page's text, or of the list item or table cell it sits in. Dragging needs a mouse or trackpad; on a touchscreen the columns keep their widths.
+Point at the border between two columns until the cursor changes, then drag it left or right. One column gets wider and the one beside it narrower, so the table keeps its width. To make the whole table wider or narrower, drag its right edge; it stops at the edge of the page's text, or of the list item or table cell it sits in. In a page-less document, a table that sits in the text itself can go past the text (see [Use page-less mode and set your text width](/support/docs/page-less)). Dragging needs a mouse or trackpad; on a touchscreen the columns keep their widths.
 
 Click **Distribute columns** under **Columns** to give every column the same width.
 

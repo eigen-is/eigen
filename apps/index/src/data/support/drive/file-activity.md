@@ -7,7 +7,7 @@ tags: [drive, activity, history, collaboration, docs]
 related: [drive/watch-for-changes, drive/file-versions]
 crossSections: [docs]
 order: 130
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 Eigen keeps a record of what happens to your files: who created one, who edited it, who changed the sharing, and who left a comment. You can read that record in Drive, or in more detail inside an editor.
@@ -30,10 +30,11 @@ The wording follows the action:
 - **created** or **uploaded**, with the file size for an upload.
 - **edited**, for a change inside a document, spreadsheet, presentation, board, or drawing, and for a text file saved in Drive's editor.
 - **renamed**, with the old and new name.
-- **moved**, **copied**, **trashed**, or **deleted**.
+- **moved**, **copied**, **trashed**, **restored** (taken out of the trash), or **deleted**.
 - **updated sharing**, with the people and teams added or removed underneath.
 - **restored a version**, with the name of the version.
 - **commented**, with a short preview of the comment.
+- **assigned a comment**, **resolved a comment**, or **reopened a comment**.
 - **added a card**, **moved a card**, or **removed a card**, for a board in Stickies.
 
 Click a line to go to what it describes. A comment line opens that comment, a card line opens that card, a sharing line opens the **Share** dialog, and the rest open the file.

@@ -56,6 +56,6 @@ The star has no button or menu item yet, so the only way to set one is from the 
 
 ## Permanently delete from Trash
 
-Deleting a message moves it to the Trash, where you can still get it back. Deleting messages that are already in the Trash removes them for good, so Mail asks you to confirm first. The confirmation names how many you're about to remove, for example **Delete 4 Emails**.
+Deleting a message moves it to the Trash, where you can still get it back. Deleting messages that are already in the Trash removes them for good, so Mail asks you to confirm first. The confirmation names how many you're about to remove, for example **Delete 4 emails**.
 
 For more on these actions one message at a time, see [Archive, delete, and report spam](/support/mail/archive-delete-spam) and [Move email between folders](/support/mail/move-email-between-folders).
