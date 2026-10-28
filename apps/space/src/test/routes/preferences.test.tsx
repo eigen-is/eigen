@@ -122,8 +122,8 @@ test('the Celebrations switch shows the setting, on when unset, and a flip saves
     expect(control('Celebrations')?.getAttribute('aria-checked')).toBe('false');
 });
 
-test('Personal info holds the profile without Celebrations', async () => {
+test('Personal info, titled as its nav link, holds the profile without Celebrations', async () => {
     const text = await open('/user');
-    expect(text()).toContain('Edit profile');
+    expect(document.querySelector('.eigen-toolbar-title')?.textContent).toBe('Personal info');
     expect(text()).not.toContain('Celebrations');
 });
