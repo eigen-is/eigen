@@ -4,7 +4,6 @@
 
 import cors from '@elysiajs/cors';
 import { serverTiming } from '@elysiajs/server-timing';
-import swagger from '@elysiajs/swagger';
 import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive';
 import Elysia from 'elysia';
 import { rateLimit } from 'elysia-rate-limit';
@@ -72,9 +71,8 @@ export const app = new Elysia({
         maxPayloadLength: 128 * 1024 * 1024,
     },
 })
-    // swagger() publishes the full OpenAPI schema + try-it-out UI, serverTiming() leaks
-    // phase timings in response headers — both are dev-only surface.
-    .use((app) => (isProduction() ? app : app.use(serverTiming()).use(swagger())))
+    // serverTiming() leaks phase timings in response headers, so it is dev-only surface.
+    .use((app) => (isProduction() ? app : app.use(serverTiming())))
     // Handle CalDAV/WebDAV OPTIONS before CORS intercepts them — DAV clients need capability headers
     .onRequest(({ request }) => {
         if (request.method !== 'OPTIONS') return;
