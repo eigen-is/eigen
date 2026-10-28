@@ -185,6 +185,13 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![1][1]?.v).toBe(13);
     });
 
+    // Excel never evaluates the branch IF skips, so the engine computes what Excel did.
+    test('a function the engine lacks in a branch IF skips recalculates past a stale cached value', () => {
+        const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=IF(A1>0,A1+1,FILTER(A1:A3,TRUE))', num(5))]])];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe(2);
+    });
+
     // The importer writes each defined name into the formulas that use it. One it can't, such as a name into another
     // workbook, stays as written, and the engine has no names, so IFERROR would hand back its fallback.
     test("a formula using a defined name the import couldn't inline keeps its cached value, inside IFERROR too", () => {

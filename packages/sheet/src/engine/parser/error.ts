@@ -1,3 +1,7 @@
+// The formula engine's errors: the ids it raises, such as `DIV/0`, the text a cell shows for each, such as `#DIV/0!`,
+// and the error objects formulajs's functions compare against. An error in a formula is a value, not a throw, so
+// IFERROR or ISERROR around it can inspect it, and these objects are what they inspect.
+
 // @ts-expect-error - No types available for @formulajs/formulajs
 import { utils } from '@formulajs/formulajs';
 
@@ -54,14 +58,17 @@ export function valueIsError(value: string): boolean {
     return errorValues.includes(value);
 }
 
-// formulajs's trapping functions (IFERROR, IFNA, ISERROR, ISERR, ISNA) recognize an error
-// by object IDENTITY against its own singletons, never `instanceof`. An Error thrown by one
-// of our operators — `Error('DIV/0')` from a division — is therefore invisible to them, so
-// `IFERROR(1/0, "fallback")` returned #DIV/0! instead of the fallback. Mapping onto the
-// singleton at the one seam where a thrown error becomes a returned value keeps every
-// trapping function working, whichever side raised the error. An error we don't recognize
-// (a genuine JS bug rather than a formula error) passes through untouched.
+// formulajs's trapping functions, such as IFERROR and ISERROR, recognize an error by identity with one of formulajs's
+// own error objects, not by `instanceof`. So an error our operators throw, such as `Error('DIV/0')` from a division,
+// becomes formulajs's object for it when the throw turns into a returned value. An error we don't recognize, a
+// JavaScript bug rather than a formula error, passes through unchanged.
 export function toFormulaError(e: Error): Error {
     const formatted = error(e.message);
     return formulaErrors.find((f) => f.message === formatted) ?? e;
 }
+
+// The #NAME? of a real Excel function the engine lacks, such as FILTER. It reads #NAME? wherever it surfaces, but it
+// is not formulajs's #NAME?, so no trapping function recognizes it: IFERROR's fallback or ISERROR's TRUE would read as
+// the answer Excel computed. `callFunction` hands it on through every function, unless it sits in a branch IF or
+// CHOOSE skips.
+export const UNSUPPORTED_FUNCTION = Error('#NAME?');
