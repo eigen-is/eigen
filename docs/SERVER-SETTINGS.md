@@ -38,6 +38,7 @@ At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded v
 - `set()` writes a temp file and renames it over the old one, and rolls the in-memory state back when the write fails.
 - The file appears at the first `set()`, not at `load()`.
 - A settings PUT takes a partial update, so its typebox schema is `t.Optional` all the way down, matching the `DeepPartial` the store merges.
+- An optional enum in a body is `optionalEnum` (`routes/shared-schemas.ts`), not a bare `t.Optional(t.UnionEnum(...))`. Elysia gives a `UnionEnum` its first value as its default and fills it into a body that leaves the field out, at least at the top level, so a save that sends only other fields would set `theme` to `light`, and a team mount added without a storage type got `local` instead of the server default. A `t.Union` of mapped `t.Literal`s is no way out: it loses the tuple, and the Eden client then types the field as `undefined`.
 
 ## What settings.json holds
 

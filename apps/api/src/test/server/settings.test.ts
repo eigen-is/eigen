@@ -483,6 +483,21 @@ describe('Team Mount Management', () => {
         expect((await assertJson<MountSettings>(update)).s3Config).toEqual({ ...s3Config, prefix: '' });
     });
 
+    test('a mount added without a storage type takes the server default', async () => {
+        const before = getServerSettings().defaults.mount.storageType;
+        await updateServerSettings({ defaults: { mount: { storageType: 'local-id' } } });
+        try {
+            const add = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Server default' }),
+            });
+            expect((await assertJson<MountResponse>(add)).storageType).toBe('local-key');
+        } finally {
+            await updateServerSettings({ defaults: { mount: { storageType: before } } });
+        }
+    });
+
     test('only a team admin lists the mounts, S3 secret included', async () => {
         await addMember(ctx, teamId, ctx.bob.user.id);
         const members = await authedRequest(ctx.bob.user.sessionToken, `/team/${teamOwnerId(teamId)}/members`);

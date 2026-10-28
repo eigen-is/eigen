@@ -13,7 +13,7 @@ import { pushTeamAvatar } from '../lib/home/home-relay';
 import { generateImagePreview } from '../lib/shared/thumbnails';
 import { getTeamExists, getTeamMembers } from '../lib/team';
 import { betterAuth } from './auth';
-import { s3ConfigBody, toS3Config } from './shared-schemas';
+import { optionalEnum, s3ConfigBody, toS3Config } from './shared-schemas';
 
 function teamId(ownerId: string): string {
     const parsed = parseOwnerId(ownerId);
@@ -96,7 +96,7 @@ export const teamRouter = new Elysia({ name: 'team' })
         {
             body: t.Object({
                 name: t.String({ minLength: 1 }),
-                storageType: t.Optional(t.UnionEnum(MOUNT_STORAGE_TYPES)),
+                storageType: optionalEnum(MOUNT_STORAGE_TYPES),
                 maxSizeMB: t.Optional(t.Number({ minimum: 10 })),
                 s3Config: t.Optional(s3ConfigBody),
             }),
