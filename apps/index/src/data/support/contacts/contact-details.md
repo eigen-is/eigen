@@ -28,7 +28,7 @@ In the **Basic information** section:
 - **Company**: the organization this person works for.
 - **Job title**: their role at that organization.
 
-Both fields appear together in the contact detail view, shown as "Job title at Company".
+The contact detail view shows them under the name as "Job title at Company". With a job title and no company, it shows the job title alone.
 
 ## Labels
 
