@@ -8,7 +8,7 @@ import type { BackupArtifact } from '@workspace/lib/types/backup';
 import { BACKUP_ARTIFACT_EXTENSION, parseBackupArtifactName } from '@workspace/lib/validation';
 import { ApiError } from '../core';
 import { errnoOf, writeTempWithHash } from '../storage';
-import { readArtifactManifest, readSidecar, writeSidecar } from './archive';
+import { ARCHIVE_MODE, readArtifactManifest, readSidecar, writeSidecar } from './archive';
 import { backupsDirPath, getBackupTempPath, sidecarPath } from './paths';
 
 // One home's artifacts, newest first, read from the sidecars alone: opening an archive to answer a
@@ -91,6 +91,7 @@ export async function landUpload(body: ReadableStream<Uint8Array>, name: string,
         const { size } = await writeTempWithHash(tempPath, body);
         // Content-Length is the client's word for it; the bytes are what count.
         if (size !== declared) throw new ApiError(400, 'Upload does not match its Content-Length');
+        fs.chmodSync(tempPath, ARCHIVE_MODE);
         landUploadedArtifact(tempPath, artifactPath);
     } finally {
         fs.rmSync(tempPath, { force: true });

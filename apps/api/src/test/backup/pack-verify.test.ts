@@ -244,6 +244,8 @@ describe('Backup pack and verify', () => {
         'packs into a .tar.zst and verifies a fresh extract',
         async () => {
             expect(Bun.file(artifact).size).toBeGreaterThan(0);
+            // It holds password hashes and keys, so only the API's own user reads it.
+            expect(fs.statSync(artifact).mode & 0o777).toBe(0o600);
             const dir = await extractFresh('extract-ok-');
             const record = await verifyFolder(join(dir, folderName));
             expect(record.failures).toEqual([]);

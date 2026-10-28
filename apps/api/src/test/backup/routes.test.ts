@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -254,7 +254,7 @@ describe('Backup routes', () => {
         const bytes = Uint8Array.from(readFileSync(packed));
         const res = await uploadRequest(name, bytes);
         expect(await assertJson<{ name: string }>(res)).toEqual({ name });
-        expect(existsSync(join(getBackupsDir(), name))).toBe(true);
+        expect(statSync(join(getBackupsDir(), name)).mode & 0o777).toBe(0o600);
 
         const uploaded = (await listArtifacts(target.id)).artifacts.find((entry) => entry.name === name);
         expect(uploaded?.verify.status).toBe('unverified');

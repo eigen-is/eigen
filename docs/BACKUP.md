@@ -106,7 +106,7 @@ The server creates the folder only when a backup needs it, so it must be writabl
 
 ## An archive is as secret as data/ itself
 
-A home archive holds every file and mail, the password hash, app passwords, API keys, the 2FA secret and every mount's S3 keys. A server archive adds `users3.db` with every session, the auth secret in `config.json`, the relay password in `.env.production`, the DKIM key and the TLS key. Credentials are not stripped, because a backup that cannot restore a mount or send mail is not a complete backup. Archives are not encrypted: they sit beside `data/` on the same disk, with the same exposure. So the per-home routes are admin-only, the whole-server ones owner-only, and the backup bucket must be private.
+A home archive holds every file and mail, the password hash, app passwords, API keys, the 2FA secret and every mount's S3 keys. A server archive adds `users3.db` with every session, the auth secret in `config.json`, the relay password in `.env.production`, the DKIM key and the TLS key. Credentials are not stripped, because a backup that cannot restore a mount or send mail is not a complete backup. Archives are not encrypted: they sit beside `data/` on the same disk, with the same exposure. So every archive is written 0600, for the API's user alone, a home archive, an uploaded one and a server archive with each of its members alike (`ARCHIVE_MODE` in `archive.ts`); the per-home routes are admin-only, the whole-server ones owner-only, and the backup bucket must be private. Their sidecars stay readable, since `./eigen` reads a server archive's record as the operator to tell whether a backup runs.
 
 ## One job per home at a time, and the user keeps working
 
