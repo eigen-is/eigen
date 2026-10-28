@@ -7,12 +7,11 @@ import { renderInDocument } from '../../../render-in-document';
 
 const window = installHappyDom();
 
-// The person search reads display names for the session's user.
+// The person search reads display names for the session's user. One session object, as the real hook returns, so no
+// effect that reads it runs on every render.
+const session = { user: { id: 'me', email: 'me@example.com' } };
 const realAuth = await import('@workspace/lib/auth');
-mock.module('@workspace/lib/auth', () => ({
-    ...realAuth,
-    useAuth: () => ({ user: { id: 'me', email: 'me@example.com' } }),
-}));
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
 
 const { act, createElement } = await import('react');
 const { ChoiceMenuSub, DropdownMenuItem } = await import('../../../../components/dropdown-menu');
@@ -110,9 +109,11 @@ test('an open menu leaves the page live, and one press on another trigger opens 
 // renders in the microtask after each event, as in a browser, and no timer runs in between.
 async function tap(label: string) {
     const button = trigger(label);
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', false);
     button?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     await Promise.resolve();
     button?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
     await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
 }
 
