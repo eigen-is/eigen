@@ -9,8 +9,11 @@ type EnvLine = { raw: string; key: string | null; value: string };
 const KEY_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
 const BARE_SAFE = /^[\w.,:/@+=%-]*$/;
 
-// Compose's dotenv rules, but for `$NAME`, which configure never writes and reads literally: single quotes are
-// literal; double quotes and bare values take `$$` as `$`; a bare value ends at ` #`; the last duplicate wins.
+// Compose's dotenv rules, with one exception: configure never writes `$NAME` and reads it literally.
+// - Single quotes are literal.
+// - Double quotes and bare values read `$$` as `$`.
+// - A bare value ends at ` #`.
+// - The last duplicate key wins.
 function parseEnvLines(text: string): EnvLine[] {
     return text.split('\n').map((raw) => {
         const match = raw.replace(/\r$/, '').match(KEY_LINE);
