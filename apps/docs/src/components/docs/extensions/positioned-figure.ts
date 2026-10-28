@@ -339,7 +339,10 @@ export function behindFigureAt(view: EditorView, x: number, y: number, alt: bool
         const textblock = $top.parent.isTextblock ? view.nodeDOM($top.before()) : null;
         if (textblock instanceof Element && overText(textblock, x, y)) return null;
     }
-    const pos = view.posAtDOM(box, 0);
+    // Before an image, as it is an atom, and at the start of a text box's own paragraphs, which it holds.
+    const at = view.posAtDOM(box, 0);
+    const $at = view.state.doc.resolve(at);
+    const pos = isPositionedFigure(view.state.doc.nodeAt(at)) || $at.depth === 0 ? at : $at.before();
     return isPositionedFigure(view.state.doc.nodeAt(pos)) ? pos : null;
 }
 

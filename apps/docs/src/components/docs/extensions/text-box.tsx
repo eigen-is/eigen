@@ -3,8 +3,9 @@
 // it is typed in. A press on its text opens it; one on its edge band selects, moves or drags it, and its grips resize it
 // with its height as a minimum. The editor component provides the open story through TextBoxContext.
 
-import type { Editor } from '@tiptap/core';
-import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state';
+import { Editor } from '@tiptap/core';
+import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import type { EditorView } from '@tiptap/pm/view';
 import type { NodeViewProps, NodeViewRendererProps } from '@tiptap/react';
 import { EditorContent, ReactNodeView, ReactNodeViewRenderer } from '@tiptap/react';
 import {
@@ -114,6 +115,50 @@ function TextBoxView(props: NodeViewProps) {
     );
 }
 
+// The live editor a box draws while it is open, which TipTap names on its view's element.
+function openEditorIn(dom: globalThis.Node | null): Editor | null {
+    const element = dom instanceof Element ? dom.querySelector('[data-story-editor] .ProseMirror') : null;
+    return element && 'editor' in element && element.editor instanceof Editor ? element.editor : null;
+}
+
+// Letters, digits and the underscore, which a double-click selects a run of.
+const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
+
+// A press on an open box behind the text lands on the text's layer above it, so the browser never puts the box's
+// selection down. Here the caret goes where it pressed and a drag selects on from there, and a double or a triple
+// press selects the word or the paragraph.
+function pressInto(story: EditorView, event: MouseEvent) {
+    const at = ({ clientX, clientY }: MouseEvent) => story.posAtCoords({ left: clientX, top: clientY })?.pos;
+    const anchor = at(event);
+    if (anchor === undefined) return;
+    const select = (from: number, to: number) =>
+        story.dispatch(story.state.tr.setSelection(TextSelection.create(story.state.doc, from, to)));
+    const $anchor = story.state.doc.resolve(anchor);
+    story.focus();
+    if (event.detail >= 3) select($anchor.start(), $anchor.end());
+    else if (event.detail === 2) {
+        const text = $anchor.parent.textBetween(0, $anchor.parent.content.size, undefined, ' ');
+        let from = $anchor.parentOffset;
+        let to = from;
+        while (from > 0 && WORD_CHARACTER.test(text.charAt(from - 1))) from--;
+        while (to < text.length && WORD_CHARACTER.test(text.charAt(to))) to++;
+        select($anchor.start() + from, $anchor.start() + to);
+    } else {
+        select(anchor, anchor);
+        const gesture = new AbortController();
+        const { signal } = gesture;
+        document.addEventListener(
+            'mousemove',
+            (move) => {
+                const head = at(move);
+                if (head !== undefined) select(anchor, head);
+            },
+            { signal },
+        );
+        document.addEventListener('mouseup', () => gesture.abort(), { signal });
+    }
+}
+
 // No contentDOM: the box's paragraphs are its own editor's, never the body's DOM, as a note's are. Every event inside the
 // open editor stays there, a drag of its text too, which TipTap would hand to the body.
 class TextBoxNodeView extends ReactNodeView {
@@ -167,14 +212,16 @@ export const TextBox = TextBoxNode.extend<TextBoxOptions>({
                 key: new PluginKey('behindTextBox'),
                 props: {
                     handleDOMEvents: {
-                        // A box behind the text opens where no text covers it; Alt selects it, as the positioned
-                        // figures' hit test does.
+                        // A box behind the text opens where no text covers it, and once open takes the press
+                        // there. Alt selects it, as the positioned figures' hit test does.
                         mousedown(view, event) {
                             if (event.button !== 0 || event.altKey || !view.editable) return false;
                             const pos = behindFigureAt(view, event.clientX, event.clientY, false);
                             if (pos === null || view.state.doc.nodeAt(pos)?.type.name !== 'textBox') return false;
                             event.preventDefault();
-                            onOpen(pos, { left: event.clientX, top: event.clientY });
+                            const story = openEditorIn(view.nodeDOM(pos));
+                            if (story) pressInto(story.view, event);
+                            else onOpen(pos, { left: event.clientX, top: event.clientY });
                             return true;
                         },
                     },

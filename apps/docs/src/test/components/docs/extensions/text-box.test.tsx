@@ -2,7 +2,7 @@
 // it in place in the box's live editor, a press on its edge selects it, and Esc leaves it. Its edits forward into the
 // body as one undo step, the body's changes pull back, and the body's formatting never reaches its text. Two Y.Docs
 // synced by hand stand in for two tabs.
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -204,6 +204,44 @@ test('a box with less padding than the edge band keeps the band off its text', a
     await pressAt(laidOutBox(a), 150, 101);
     expect(session.current?.anchor).toBeNull();
     expect(a.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
+});
+
+// The paragraph's box lies over a behind box, so a press there lands on the text's layer, never in the box's editor.
+test('a drag and a double-click in an open behind box select its text', async () => {
+    const { a, boxEditor, session } = await setup([paragraph(box('behind'), text('Anchor'))]);
+    await act(async () => session.current?.open(1, { focus: true, at: null, selection: null }));
+    const anchor = session.current?.anchor;
+    const paragraphDom = a.view.nodeDOM(0);
+    const frame = a.view.dom.querySelector('.figure[data-layout="behind"]');
+    if (!(paragraphDom instanceof HTMLElement) || !frame) throw new Error('not drawn');
+    const restore = { points: document.elementsFromPoint, rects: Range.prototype.getClientRects };
+    cleanups.push(() => {
+        document.elementsFromPoint = restore.points;
+        Range.prototype.getClientRects = restore.rects;
+    });
+    document.elementsFromPoint = () => [paragraphDom, a.view.dom, frame];
+    // The anchor's one line of text lies above the press.
+    const line = DOMRect.fromRect({ x: 0, y: 0, width: 50, height: 20 });
+    Range.prototype.getClientRects = () => ({
+        0: line,
+        length: 1,
+        item: (index: number) => (index === 0 ? line : null),
+        [Symbol.iterator]: () => [line][Symbol.iterator](),
+    });
+    spyOn(boxEditor.view, 'posAtCoords').mockImplementation(({ left }) => ({ pos: left / 50, inside: -1 }));
+    const mouse = (type: string, target: EventTarget, clientX: number, detail = 1) =>
+        act(async () => {
+            target.dispatchEvent(
+                new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY: 150, detail }),
+            );
+        });
+    await mouse('mousedown', paragraphDom, 100);
+    await mouse('mousemove', document, 250);
+    await mouse('mouseup', document, 250);
+    expect(session.current?.anchor).toBe(anchor);
+    expect(boxEditor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 2, head: 5 });
+    await mouse('mousedown', paragraphDom, 150, 2);
+    expect(boxEditor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 1, head: 7 });
 });
 
 test('typing in the open box forwards as one undo step, and ⌘Z in the box takes it back', async () => {
