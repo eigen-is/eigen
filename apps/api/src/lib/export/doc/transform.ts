@@ -35,15 +35,12 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
-import { isDataUri } from '../../shared/data-uri';
+import { dataUriMediaType, isDataUri } from '../../shared/data-uri';
 import { exportHtmlDocument } from '../html-document';
 import { withSvgFallbacks } from '../office-image';
 import { renderEquations, svgEquations } from './equations';
 import { figureMediaKey, pastedFigureMedia } from './pasted-media';
 import { renderDocHtml, withAbsoluteLinks } from './render';
-
-// A percent-encoded or plain-text SVG, which draws as it is. The media type matches in any case, as splitDataUri reads it.
-const SVG_DATA_URI = /^data:image\/svg\+xml[;,]/i;
 
 // HTML and PDF render the same document: WeasyPrint prints what the HTML download serves, but for the small caps the
 // PDF fakes and the equations it draws as SVG. The docx writer loads lazily, so an HTML export never evaluates it, its
@@ -96,9 +93,9 @@ export async function renderEigendocExport(
                 (mediaName, src) => {
                     const key = figureMediaKey({ mediaName, src });
                     if (key) return dataUriMap.get(key) ?? null;
-                    // Only a base64 src is re-encoded, so any other data: src but an SVG's would carry its bytes, EXIF
-                    // included, out as pasted: it draws nothing, as a src no image decodes from does.
-                    return src && isDataUri(src) && !SVG_DATA_URI.test(src) ? null : src;
+                    // Only a base64 src is re-encoded. Any other data: src would carry its bytes out, EXIF included,
+                    // so it draws nothing. A plain-text or percent-encoded SVG holds no EXIF and draws as it is.
+                    return src && isDataUri(src) && dataUriMediaType(src) !== 'image/svg+xml' ? null : src;
                 },
                 {
                     ...(pdf && { smallCapsFont: style.font }),
@@ -201,10 +198,10 @@ function printedBands(bands: EigendocBands): { printed: EigendocBands; cut: numb
 // 60 s timeout. Past either, the PDF lists the notes after the body, as the download does.
 export const MAX_PAGE_NOTES = 1500;
 
-// A note's lines at 10 pt in the tallest bundled face, as its runs may draw in any, a character at most 0.6 em wide on
-// average, and a picture at its stored height, else as tall as it is wide, or as the column where it stores no width,
-// a chart at its height:
-// against the page's text less the reference's line and the rule above the notes.
+// Whether every note fits on one page, by a rough count of its lines. Text counts at 10 pt in the tallest bundled face,
+// because a run may draw in any, with characters 0.6 em wide on average. A picture counts at its stored height, else
+// as tall as it is wide, and as tall as the column when it stores no width. A chart counts at its height. The room is
+// the page's text less three lines, for the reference's line and the rule above the notes.
 function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
     if (notes.length > MAX_PAGE_NOTES) return false;
     const { sizePt } = FOOTNOTE_LOOK;
