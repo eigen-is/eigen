@@ -225,7 +225,7 @@ Audit a layer right before a feature builds on it: findings are cheapest to fix 
 
 The recipe, per area:
 
-1. Clean up the area with the [source-file skill](../.claude/skills/source-file/SKILL.md), held to the [CODE-STANDARDS.md](CODE-STANDARDS.md) bar. Risk findings are reported, not fixed.
+1. Clean up the area with the [source-file skill](../.claude/skills/source-file/SKILL.md), every step of it, held to the [CODE-STANDARDS.md](CODE-STANDARDS.md) bar: renames, top-down order, moves to the right module, splits, honest types, visibility and imports, not only headers and comments. The report is the skill's per-file table. Code that exists for the area but lives in other modules moves into the area. Risk findings are reported, not fixed.
 2. A cold review of the result.
 3. One fix round, each fix with a red test first.
 4. A scoped re-review of the fix diff.
@@ -243,9 +243,9 @@ Still to do:
 - `packages/ui`.
 - The apps, thin ones last.
 - Duplication folding, on the next touch of each domain: the copy-mutation quartet (`useCopyFiles`, `useCopyToMediaFolder`, `useCopyPath`, `useDuplicatePath` in `packages/lib/src/core/drive/hooks/writes.ts`), and the per-domain action lists, the same action built again in the desktop toolbar, the compact menu, right-click, the command palette and the mobile menus, drifted in permission, label, keyboard and visibility. Extract a small action catalog per domain as its drift is fixed, in the shape `FILE_ACTIONS` (`packages/lib/src/core/file-actions.ts`) gives the file actions, not a generic menu framework.
-- Auth, guests and the share registry (better-auth wrapper, `verifyProtocolAuth`, guest cleanup, `addRegistryEntry`), before SSO adds a second identity path: cleanup done, review pending.
-- The ops path: `./eigen` backup, restore, update and rollback, `docker/` and first-run setup, as restore drills and upgrade rehearsals: cleanup done, review pending. The drills still wait for a Docker run of `docker/test-*.sh`.
-- The SSE to query-key contract: every `sse-events.ts` emitter against `sse-handlers.ts` and the `*Keys` in `packages/lib`. Cleanup done, review pending.
+- Auth, guests and the share registry (better-auth wrapper, `verifyProtocolAuth`, guest cleanup, `addRegistryEntry`), before SSO adds a second identity path: headers, comments and duplicate merges done and reviewed; the full source-file pass is still to do.
+- The ops path: `./eigen` backup, restore, update and rollback, `docker/` and first-run setup, as restore drills and upgrade rehearsals: headers and comments done and reviewed; the full source-file pass, with backup and restore code moved out of the modules that host it, is still to do. The drills still wait for a Docker run of `docker/test-*.sh`.
+- The SSE to query-key contract: every `sse-events.ts` emitter against `sse-handlers.ts` and the `*Keys` in `packages/lib`. The contract is fixed, tested and reviewed; the full source-file pass is still to do.
 - WebDAV and CalDAV conformance, the measured gaps first (litmus 0.17, cadaver, vdirsyncer 0.21):
   - `webdav/propfind.ts` answers allprop to every request (no prop selection, no 404 propstat, `Brief` ignored); `lib/dav/propfind.ts` is the shared machine for it, and adopting it also means the dav multistatus builders and `encodePathSegment` (WebDAV hrefs return `%40` for `@`), so it needs a client round (Finder, Explorer, rclone, Mountain Duck).
   - DELETE, MOVE, COPY and PROPPATCH ignore `If-Match` and `If-None-Match` (RFC 7232 section 3.1: 412).
