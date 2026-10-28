@@ -129,14 +129,14 @@ function withTrailingBreaks(node: JSONContent): JSONContent {
 // A positioned figure or chart anchors on a body paragraph. In a table cell, a note or a band, where a forged doc can
 // hold one, it draws in line, as the editor resets it there. A node with no such figure inside comes back as it was.
 function withBodyOnlyPositions(node: JSONContent, inFlow: boolean): JSONContent {
-    if (inFlow && isFigureFrameNode(node.type) && isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout)) {
-        return { ...node, attrs: { ...node.attrs, layout: 'block' } };
-    }
     const { content } = node;
-    if (!content) return node;
     const nested = inFlow || BLOCK_ONLY_FIGURE_PARENTS.includes(node.type ?? '');
-    const kept = content.map((child) => withBodyOnlyPositions(child, nested));
-    return kept.every((child, index) => child === content[index]) ? node : { ...node, content: kept };
+    const kept = content?.map((child) => withBodyOnlyPositions(child, nested));
+    const inner = kept?.some((child, index) => child !== content?.[index]) ? { ...node, content: kept } : node;
+    if (inFlow && isFigureFrameNode(node.type) && isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout)) {
+        return { ...inner, attrs: { ...node.attrs, layout: 'block' } };
+    }
+    return inner;
 }
 
 // A peer can store any JSON as the language.
@@ -206,9 +206,9 @@ function renderChartNode(attrs: ChartAttrs): string {
 
 type RenderElement = (props: { content: Node; parent?: Node }) => string | string[];
 
-// The frame's span holding the box's, as the editor's renderHTML writes it: each paragraph rendered as elsewhere, its
-// marks, links and inline figures with it, then written as a span carrying the <p>'s own attributes, as a <p> inside
-// the body's <p> would close it.
+// The frame's span holding the box's, as the editor's renderHTML writes it. Each paragraph renders as it does
+// elsewhere, and is then rewritten as a span that carries the attributes of its <p>. A <p> inside the body's <p>
+// would close it.
 function renderTextBox(attrs: TextBoxAttrs, node: Node, renderElement: RenderElement): string {
     const box = Object.entries(textBoxHTMLAttributes(attrs))
         .map(([name, value]) => ` ${name}="${escapeHtml(value)}"`)
