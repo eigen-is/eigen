@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import Parser from '../../../../../engine/parser/parser';
+import { Parser } from '../../../../../engine/parser/parser';
 import type { CellInfo, ParserDoneCallback, ParserOptions, RangeCell } from '../../../../../engine/types';
 
 describe('.parse() coordinates', () => {

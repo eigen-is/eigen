@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import Parser from '../../../../../../engine/parser/parser';
+import { Parser } from '../../../../../../engine/parser/parser';
 
 describe('.parse() date & time formulas', () => {
     let parser: Parser | null;
