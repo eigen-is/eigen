@@ -1,3 +1,6 @@
+// How much storage a Home uses: a total, a fill bar and the split between Drive and Mail. The sidebar shows the
+// signed-in user's own, and other surfaces, such as an admin's user detail, draw it from data they already hold.
+
 import { formatFileSize } from '@workspace/lib/format';
 import { useHomeSize } from '@workspace/lib/home';
 import { useHomeDataLabel } from '@workspace/lib/public';
@@ -6,7 +9,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
 import { EigenLoader } from '../braket/eigen-loader';
 
-export type StorageData = {
+type StorageData = {
     homeData: { used: number; max: number };
     drive: { default: { used: number; max: number } };
     total: { used: number; max: number };
@@ -17,7 +20,7 @@ type StorageUsageProps = {
     condensed?: boolean;
 };
 
-export const getStorageUsageColor = (storageUsed: number): string => {
+const getStorageUsageColor = (storageUsed: number): string => {
     if (!storageUsed || Number.isNaN(storageUsed) || storageUsed === Infinity) return '';
     else if (storageUsed > 0.85) return 'bg-destructive';
     else if (storageUsed > 0.65) return 'bg-warning';

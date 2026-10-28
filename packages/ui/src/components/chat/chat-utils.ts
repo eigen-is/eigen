@@ -1,3 +1,6 @@
+// Reads what the chat composer is typing to decide which suggestions to show: an @mention, or the target of a slash
+// command, such as a room member for /whisper or a contact for /invite.
+
 import { getEmoteCommand, resolveEmoteKey } from '@workspace/lib/chat';
 
 export function getAtSuggestQuery(text: string): string | null {
@@ -12,7 +15,7 @@ export function getAtSuggestQuery(text: string): string | null {
     return after;
 }
 
-export type SlashTargetContext = {
+type SlashTargetContext = {
     query: string;
     mode: 'members' | 'contacts';
     appendSpace: boolean;

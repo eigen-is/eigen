@@ -1,10 +1,13 @@
+// Find-in-document for ProseMirror editors: the bar's options become a search query, and a one-shot flash marks a
+// match the command palette jumps to while the bar is closed.
+
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { SearchQuery, search } from 'prosemirror-search';
 
-export type FlashRange = { from: number; to: number } | null;
+type FlashRange = { from: number; to: number } | null;
 
 // One-shot flash for the palette reveal path — the bar is closed, so no query is installed and an
 // unfocused editor's selection is invisible. Set via meta; cleared on a timer by the controller.

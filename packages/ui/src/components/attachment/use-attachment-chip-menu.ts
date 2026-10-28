@@ -1,3 +1,6 @@
+// Opens the shared context menu for an attachment chip, with a right-click on a pointer device or a long-press on
+// touch. Surfaces such as the mail reader and the chat message list each say which menu a chip gets.
+
 import type React from 'react';
 import { useCallback, useRef } from 'react';
 import { useLongPress } from '../../hooks/use-long-press';
@@ -8,7 +11,7 @@ import { attachmentKeyAt } from './simple-attachment-chip';
 // row the press landed on. Undefined opens no menu. Keep it in a useCallback: the handlers memoise on it.
 type ToMenuItem<T, H> = (chipKey: string | null, host: H) => T | undefined;
 
-export type AttachmentChipMenu<T, H> = {
+type AttachmentChipMenu<T, H> = {
     contextMenu: ReturnType<typeof useContextMenu<T>>;
     // Spread on the element holding the chips; `host` is the row the press belongs to.
     bind: (host: H) => ReturnType<ReturnType<typeof useLongPress<H>>['bind']> & {

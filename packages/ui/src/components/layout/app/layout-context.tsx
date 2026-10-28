@@ -1,6 +1,9 @@
+// The layout state every app shell shares, such as the app's name, the document title and whether the sidebar is
+// open or the screen is a phone. Components read it with useLayout.
+
 import { createContext, useContext } from 'react';
 
-export type LayoutContextType = {
+type LayoutContextType = {
     appName: string;
     setAppName: (name: string) => void;
     documentTitle: string;
