@@ -100,7 +100,7 @@ fi
 scratch_run sh -c 'echo "$2" >"$1/.eigen/bundle"' sh "$INSTALL" "$(docker image inspect --format '{{.Id}}' "$EIGEN_API_IMAGE")"
 eigen status
 scratch_run rm "$INSTALL/.eigen/bundle"
-if says "▲  Update  *files of $VERSION (.*), running $VERSION (.*): run ./eigen update"; then
+if says "▲  Update  *files of $VERSION (.*), running $VERSION (.*): run ./eigen restart"; then
     ok "status says an update is unfinished while the files are of another api image"
 else
     fail "status does not flag files of another api image"
