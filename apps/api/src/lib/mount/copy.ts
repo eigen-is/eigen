@@ -1,3 +1,8 @@
+// Copies a file or folder inside one mount. A folder is created again and walked item by item,
+// so a copied Eigen document keeps its type but starts without its old version history. A file is
+// saved again from a fresh temp copy, and the copy gets its own search entry and thumbnail. It
+// also records where each copy came from. Mount.copyPath calls it.
+
 import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
 import { storageGone } from '../core';

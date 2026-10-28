@@ -1,3 +1,7 @@
+// Whole-file calendar transfer in the iCalendar format. Export joins the stored events of one
+// calendar into a single .ics file. Import splits a file into series and saves each one the way a
+// device sync would, so the same rules and limits apply. Routes for "import" and "export" call it.
+
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, inArray } from 'drizzle-orm';

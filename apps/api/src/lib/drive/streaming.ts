@@ -1,3 +1,8 @@
+// Receives an upload without holding it in memory. It reads a multipart request part by part,
+// writes each file to a temp file on the mount, and hashes it on the way. The caller gets the
+// temp ids, hashes and sizes, and moves the files into place. On any failure it deletes the temp
+// files it made. Drive calls it when an upload request arrives.
+
 import type { CryptoHasher, FileSink } from 'bun';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';

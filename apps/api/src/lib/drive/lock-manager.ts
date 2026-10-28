@@ -1,3 +1,8 @@
+// WebDAV locks for one Drive. A client such as an office app locks a file while it edits, and the
+// manager decides which later requests may write: shared locks can coexist, an exclusive lock
+// excludes the rest. It also covers a folder lock that reaches the items inside. Locks live in
+// memory and expire on their own. The WebDAV handlers call it for LOCK, UNLOCK and every write.
+
 import { ApiError } from '../core/errors';
 
 // In-memory WebDAV lock state for a single Drive (one per Home). Locks are scoped to the

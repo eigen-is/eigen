@@ -1,3 +1,8 @@
+// Labels group contacts, like "Family" or "Work". A label is a row with a name and a colour, but
+// the card itself holds the truth: each member card lists its labels in CATEGORIES. So a rename
+// or a delete rewrites every member card, in one transaction. The Contacts facade and the label
+// routes call these functions.
+
 import { LABEL_NAME_MAX_LENGTH } from '@workspace/lib/constants/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';

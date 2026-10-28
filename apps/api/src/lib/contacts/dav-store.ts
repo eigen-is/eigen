@@ -1,3 +1,8 @@
+// The storage side of the CardDAV protocol for one address book. It lists, reads, writes and
+// deletes cards by their uri, and reports what changed since a sync token such as a ctag. A write
+// checks the client's preconditions and keeps the card's search index and photo in step. The
+// CardDAV server and the contact import call it.
+
 import { eq, gt } from 'drizzle-orm';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, matchesIfMatch, matchesIfNoneMatch, normalizeResourceUri } from '../core';

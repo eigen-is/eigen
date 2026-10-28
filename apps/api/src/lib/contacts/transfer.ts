@@ -1,3 +1,7 @@
+// Whole-file vCard transfer for an address book. Export joins the stored cards into one .vcf file
+// and leaves out the lines that belong to Eigen alone. Import splits a file into cards and saves
+// each one through putCard, as a CardDAV PUT would. Routes for "import" and "export" call it.
+
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
 import type { PutResourceResult } from '../core';
