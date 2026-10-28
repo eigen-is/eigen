@@ -19,7 +19,7 @@ import { alertOwner } from '../user/alert-owner';
 import { writeRecord } from './archive';
 import { listBackupJobs, runningJobOn } from './jobs';
 import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath } from './paths';
-import type { RetainedArchive } from './retention';
+import type { RetentionCandidate } from './retention';
 import { pruneServerArchives } from './retention';
 
 const INTERRUPTED = 'interrupted by a restart';
@@ -145,7 +145,7 @@ export async function deleteServerArchive(name: string): Promise<void> {
 
 // Retention by each sidecar: an archive is good only when its job ended done and no home in it has warnings.
 export async function pruneLocalArchives(): Promise<void> {
-    const archives: RetainedArchive[] = [];
+    const archives: RetentionCandidate[] = [];
     const unread: string[] = [];
     for (const record of listServerArchiveNames()) {
         const sidecar = await readServerSidecar(record.archivePath);
