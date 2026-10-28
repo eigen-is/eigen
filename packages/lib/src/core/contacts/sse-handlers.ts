@@ -8,8 +8,9 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { debouncePerOwner } from '../debounce-per-owner';
 import { invalidateContactList, invalidateLabelChanged, invalidateLabelCreated } from './hooks/keys';
 
-// Debounced for a burst of card events. The writing tab's own onSuccess still refetches at once.
-const invalidateListSoon = debouncePerOwner(invalidateContactList, 250);
+// Debounced for a burst of card events, refetching every 1.5 s while a long one goes on. The writing tab's
+// own onSuccess still refetches at once.
+const invalidateListSoon = debouncePerOwner(invalidateContactList, 250, 1500);
 
 export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): void {
     switch (event.type) {

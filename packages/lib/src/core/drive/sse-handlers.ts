@@ -38,12 +38,17 @@ const CHAT_MATCH_EVENTS = new Set<SSEventTypeName>([
 
 // A burst, such as 500 files dropped into a team folder, sends every open tab of every member one event
 // per file. Each invalidation restarts the open listing's fetch, and 500 fetches per tab trip the server's
-// per-IP rate limit, which the tabs of one office share. So the listings refetch once, after the burst.
-const invalidateNewPathsSoon = debouncePerOwner((queryClient, ownerId) => {
-    invalidateListings(queryClient, ownerId);
-    invalidateSearchOwner(queryClient, ownerId);
-    invalidateFileHistory(queryClient, ownerId);
-}, 250);
+// per-IP rate limit, which the tabs of one office share. So the listings refetch once, after the burst,
+// and every 1.5 s while a long upload goes on.
+const invalidateNewPathsSoon = debouncePerOwner(
+    (queryClient, ownerId) => {
+        invalidateListings(queryClient, ownerId);
+        invalidateSearchOwner(queryClient, ownerId);
+        invalidateFileHistory(queryClient, ownerId);
+    },
+    250,
+    1500,
+);
 
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): void {
     if (!('path' in event)) return;
