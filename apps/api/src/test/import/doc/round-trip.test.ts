@@ -54,8 +54,7 @@ function sourceNames(media: ImportedMedia[]): Map<string, string> {
 // one holding none, only quotes, code, headings, rules or done tasks, comes back a body cell in the header's grey.
 // (13) A paragraph's format is what it sets apart from the Normal, so a value equal to the Normal's comes back as none.
 // (14) The chart part holds the look it draws, so a chart's unset background, label colour and stroke come back flat.
-// (15) Until the reader reads a text box, its paragraphs follow the paragraph that holds it. (16) The import gives every
-// note a fresh story id.
+// (15) The import gives every note and text box a fresh story id.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -65,7 +64,7 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         for (const name of ['colwidth', 'width', ...(source.type === 'figure' ? ['height'] : [])])
             if (name in attrs && attrs[name] === null) attrs[name] = imported?.attrs?.[name] ?? null;
         if ('commentCardId' in attrs) attrs['commentCardId'] = null;
-        if (source.type === 'footnote') attrs['id'] = imported?.attrs?.['id'] ?? null;
+        if (source.type === 'footnote' || source.type === 'textBox') attrs['id'] = imported?.attrs?.['id'] ?? null;
         if (attrs['textAlign'] === 'left') attrs['textAlign'] = null;
         if (source.type === 'equation') attrs['mathml'] = writeMathml(readStoredEquation(attrs).row);
         if (source.type === 'chart')
@@ -93,7 +92,6 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
     const mixed = source.type === 'tableRow' && source.content?.some((cell) => cell.type === 'tableCell');
     const kept = source.content
         ?.filter((_, index, siblings) => !blankBeforeBreak(siblings, index))
-        .flatMap(boxesAfter)
         .flatMap(splitAtOwnParagraphs)
         .map((child) =>
             mixed && child.type === 'tableHeader' && !child.content?.some(isPlain) ? asBodyCell(child) : child,
@@ -134,15 +132,6 @@ function splitAtOwnParagraphs(node: JSONContent): JSONContent[] {
                 ? { ...node, attrs: { ...node.attrs, spaceAfter: 0 }, content }
                 : { ...node, content },
         );
-}
-
-function boxesAfter(node: JSONContent): JSONContent[] {
-    const boxes = node.content?.filter((child) => child.type === 'textBox') ?? [];
-    if (boxes.length === 0) return [node];
-    const rest = node.content?.filter((child) => child.type !== 'textBox');
-    // The box writes its paragraphs with no space after, which a paragraph read out of it keeps.
-    const paragraphs = boxes.flatMap((box) => box.content ?? []);
-    return [{ ...node, content: rest }, ...paragraphs.map((p) => ({ ...p, attrs: { ...p.attrs, spaceAfter: 0 } }))];
 }
 
 function blankBeforeBreak(siblings: JSONContent[], index: number): boolean {

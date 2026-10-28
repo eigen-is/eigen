@@ -104,7 +104,10 @@ export function buildBlocks(raw: Item[]): JSONContent[] {
 export function placeAnchors(blocks: JSONContent[], normal: NormalStyle): JSONContent[] {
     const walk = (node: JSONContent, indent: number, depth: number, quotes: number) => {
         if (PROSE_TEXTBLOCKS.includes(node.type ?? '')) {
-            const anchored = node.content?.filter((child) => isFigureFrameNode(child.type) && !isInFlowFigure(child));
+            const anchored = node.content?.filter(
+                (child) =>
+                    isFigureFrameNode(child.type) && isPositioned(readFigureFrameAttrs(child.attrs ?? {}).layout),
+            );
             if (!anchored || anchored.length === 0) return;
             const contained = depth > 0 || quotes > 0;
             for (const { attrs } of anchored) {
@@ -164,8 +167,14 @@ export function isFigureOnly(para: ParagraphItem): boolean {
     );
 }
 
+// A picture or a chart in the flow. A text box in the flow is no figure: a paragraph that holds one keeps its role and
+// takes no caption.
 function isInFlowFigure(node: JSONContent): boolean {
-    return isFigureFrameNode(node.type) && !isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout);
+    return (
+        isFigureFrameNode(node.type) &&
+        node.type !== 'textBox' &&
+        !isPositioned(readFigureFrameAttrs(node.attrs ?? {}).layout)
+    );
 }
 
 // A blank line before a page ends there and would draw as a blank page in Eigen, whose empty lines are taller than Word's.

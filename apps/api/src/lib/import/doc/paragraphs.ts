@@ -118,6 +118,8 @@ export type Scope = {
     room?: number;
     onFill?: boolean;
     fill?: string;
+    // Inside a text box, whose paragraphs own no spacing and whose pictures draw in line.
+    box?: boolean;
 };
 
 export function createReader(
@@ -269,7 +271,7 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     reader.openNotes.pop();
     reader.fields = fields;
     reader.numbering = numbering;
-    const paragraphs = blocks.flatMap(noteParagraphs);
+    const paragraphs = blocks.flatMap(storyParagraphs);
     trimStart(paragraphs[0]?.content ?? []);
     const content =
         flattenNestedStories({
@@ -280,13 +282,13 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     return content;
 }
 
-// A note holds paragraphs: a heading's or a code block's text is one, and a list's, a quote's or a table's paragraphs
-// are its own. A rule or a break holds none.
-function noteParagraphs(block: JSONContent): JSONContent[] {
+// A note or a text box holds paragraphs: a heading's or a code block's text is one, and a list's, a quote's or a table's
+// paragraphs are its own. A rule or a break holds none.
+export function storyParagraphs(block: JSONContent): JSONContent[] {
     if (block.type === 'paragraph') return [block];
     if (PROSE_TEXTBLOCKS.includes(block.type ?? '') || block.type === 'codeBlock')
         return [{ type: 'paragraph', ...(block.content && { content: block.content }) }];
-    return (block.content ?? []).flatMap(noteParagraphs);
+    return (block.content ?? []).flatMap(storyParagraphs);
 }
 
 function weightOf(nodes: JSONContent[]): number {
@@ -481,8 +483,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // A cell's paragraphs take their spacing from the cell.
     const format = {
         lineSpacing,
-        spaceBefore: scope.tables > 0 || before === (base.before ?? 0) ? undefined : twipsToPt(before),
-        spaceAfter: scope.tables > 0 || after === (base.after ?? 0) ? undefined : twipsToPt(after),
+        spaceBefore: scope.tables > 0 || scope.box || before === (base.before ?? 0) ? undefined : twipsToPt(before),
+        spaceAfter: scope.tables > 0 || scope.box || after === (base.after ?? 0) ? undefined : twipsToPt(after),
     };
     // An item's indent holds its number or checkbox.
     const indent =
