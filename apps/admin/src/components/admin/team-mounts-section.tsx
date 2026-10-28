@@ -1,3 +1,6 @@
+// The storage section of a team's admin page: the team's Drive mounts, each with its storage and size, and the
+// dialogs that add and edit one.
+
 import { STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import { useCheckS3Connection, useHardenS3Bucket, useServerSettings } from '@workspace/lib/settings';
 import { useAddTeamMount, useTeamMounts, useUpdateTeamMount } from '@workspace/lib/team';
@@ -67,8 +70,8 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                 onSubmit={handleAddMount}
                 onS3Check={handleS3Check}
                 onS3Harden={handleS3Harden}
-                title="Add Mount"
-                submitLabel="Create Mount"
+                title="Add mount"
+                submitLabel="Create mount"
                 defaultStorageType={serverSettings && mapStorageType(serverSettings.defaults.mount.storageType)}
                 defaultMaxSizeMB={serverSettings?.quotas.defaultMountMaxSizeMB}
                 defaultS3Config={serverSettings?.defaults.mount.s3Config}
@@ -92,8 +95,8 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                           }
                         : undefined
                 }
-                title="Edit Mount"
-                submitLabel="Save Changes"
+                title="Edit mount"
+                submitLabel="Save changes"
                 isEdit
             />
 

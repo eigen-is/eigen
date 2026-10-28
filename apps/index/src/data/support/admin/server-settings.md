@@ -5,7 +5,7 @@ type: reference
 tags: [admin, settings, quotas, storage, notifications, mail, backup]
 related: [admin/get-started, admin/storage-quotas, self-hosting/back-up-and-restore]
 order: 80
-updated: 2026-10-05
+updated: 2026-10-28
 ---
 
 The **Settings** page in Admin is where the server owner sets up the organization, mail, storage, backups, and notifications. Only the owner sees it in the sidebar.
@@ -46,14 +46,14 @@ On a server without mailboxes that sends through a relay, a **Relay sends as use
 
 ## Storage quotas
 
-These four limits apply by default to every user. A changed **Default Mount (MB)** reaches drives created after the change: a user's existing drive keeps the limit it was created with. You can also set quota overrides per team from the Teams panel in Admin; when a user belongs to multiple teams, the most permissive limit wins.
+These four limits apply by default to every user. A changed **Default mount (MB)** reaches drives created after the change: a user's existing drive keeps the limit it was created with. You can also set quota overrides per team from the Teams panel in Admin; when a user belongs to multiple teams, the most permissive limit wins.
 
 | Field | What it controls | Default |
 |---|---|---|
 | **Mail, Contacts & Calendar (MB)** | Combined storage for all a user's email, contacts, and calendars. On a server without mailboxes it reads **Contacts & Calendar (MB)**. | 100 MB |
-| **Default Mount (MB)** | Storage for a user's primary Drive | 500 MB |
-| **Max Upload (MB)** | Largest single file a user can upload, at most 1023 MB | 35 MB |
-| **Trash Retention (days)** | How long deleted files stay in the Trash before being permanently removed. 0 keeps them until the Trash is emptied. | 30 days |
+| **Default mount (MB)** | Storage for a user's primary Drive | 500 MB |
+| **Max upload (MB)** | Largest single file a user can upload, at most 1023 MB | 35 MB |
+| **Trash retention (days)** | How long deleted files stay in the Trash before being permanently removed. 0 keeps them until the Trash is emptied. | 30 days |
 
 Enter a number in each field. The **Save** button appears at the bottom of the page once you have made a change.
 
@@ -61,7 +61,7 @@ Enter a number in each field. The **Save** button appears at the bottom of the p
 
 ### Storage type
 
-**Storage Type** controls where new users' Drive files are written. Eigen sets it the first time a new user's workspace opens, usually at their first sign-in. Changing it moves no one's files and reaches only users who have not signed in yet.
+**Storage type** controls where new users' Drive files are written. Eigen sets it the first time a new user's workspace opens, usually at their first sign-in. Changing it moves no one's files and reaches only users who have not signed in yet.
 
 | Option | Where files are stored |
 |---|---|
@@ -69,7 +69,7 @@ Enter a number in each field. The **Save** button appears at the bottom of the p
 | **Local (ID-based)** | On the server's local disk, using internal identifiers |
 | **S3 bucket** | In an S3-compatible object storage bucket |
 
-When you select **S3 bucket**, an **S3 Configuration** form appears. Fill in all the fields below, then click **Test Connection** to confirm Eigen can reach the bucket before saving.
+When you select **S3 bucket**, an **S3 configuration** form appears. Fill in all the fields below, then click **Test connection** to confirm Eigen can reach the bucket before saving.
 
 | Field | What to enter |
 |---|---|
@@ -77,8 +77,8 @@ When you select **S3 bucket**, an **S3 Configuration** form appears. Fill in all
 | **Bucket** | The name of the bucket |
 | **Prefix** | An optional path prefix within the bucket, for example `eigen/` |
 | **Region** | The bucket's region, for example `eu-west-1` |
-| **Access Key ID** | Your S3 access key ID |
-| **Secret Access Key** | Your S3 secret access key |
+| **Access key ID** | Your S3 access key ID |
+| **Secret access key** | Your S3 secret access key |
 
 <div class="eigen-callout">
 
@@ -99,7 +99,7 @@ A backup of the whole server: every user and team, and the server's own database
 | **Upload to a backup bucket** | Sends each backup that verified to a private S3 bucket that holds nothing else of Eigen. Backups made before an update stay on this server. | Off |
 | **Backups to keep in the bucket** | How many nightly backups the bucket keeps, up to 365. It always keeps the newest one that holds every user and team, and backups made by hand stay. | 30 |
 
-With **Upload to a backup bucket** on, the same S3 fields appear as for the storage type, with **Test Connection**. The test refuses a bucket or an access key that Eigen keeps files with, and a bucket anyone can read. It warns when no rule cleans up uploads that were cut off halfway. The **Secret Access Key** is never shown again: leave it empty to keep the saved one. Once you save a new bucket, a notice asks you to write its details down somewhere other than this server, with any warning from the test.
+With **Upload to a backup bucket** on, the same S3 fields appear as for the storage type, with **Test connection**. The test refuses a bucket or an access key that Eigen keeps files with, and a bucket anyone can read. It warns when no rule cleans up uploads that were cut off halfway. The **Secret access key** is never shown again: leave it empty to keep the saved one. Once you save a new bucket, a notice asks you to write its details down somewhere other than this server, with any warning from the test.
 
 Below the settings, **Back up now** makes a backup at the level you pick: **Full**, **Light**, or **Full + S3** when a drive is in an S3 bucket. The section shows its progress while it runs. Each backup in the list shows:
 

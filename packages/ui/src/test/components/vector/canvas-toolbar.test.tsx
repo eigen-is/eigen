@@ -139,5 +139,5 @@ test("the drawing's File › Download › SVG is the canvas's own image of the w
 
 test("a deck's File › Download is the export route's formats alone", async () => {
     await render();
-    expect(await openDownloads()).toEqual(['Microsoft PowerPoint (.pptx)', 'PDF (.pdf)', 'Web Page (.html)']);
+    expect(await openDownloads()).toEqual(['Microsoft PowerPoint (.pptx)', 'PDF (.pdf)', 'Web page (.html)']);
 });

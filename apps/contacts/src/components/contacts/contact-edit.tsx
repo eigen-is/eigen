@@ -1,3 +1,6 @@
+// The form that creates or edits a contact: names, emails, phone numbers, addresses, labels, birthday and notes.
+// The new-contact and edit routes show it and save what it returns.
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLabels } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
@@ -60,7 +63,7 @@ type ContactEditToolbarProps = {
 export function ContactEditToolbar({ isNew }: ContactEditToolbarProps) {
     return (
         <Toolbar>
-            <ToolbarTitle>{isNew ? 'Create Contact' : 'Edit Contact'}</ToolbarTitle>
+            <ToolbarTitle>{isNew ? 'Create contact' : 'Edit contact'}</ToolbarTitle>
         </Toolbar>
     );
 }
@@ -202,7 +205,7 @@ export function ContactEdit({ contact, onSave, onCancel, onReload, staleWrite }:
 
                             <div className="space-y-6">
                                 <div>
-                                    <h3 className="text-lg font-medium">Basic Information</h3>
+                                    <h3 className="text-lg font-medium">Basic information</h3>
                                     <p className="text-sm text-muted-foreground">
                                         Update your basic contact information.
                                     </p>
@@ -342,14 +345,14 @@ export function ContactEdit({ contact, onSave, onCancel, onReload, staleWrite }:
 
                             <div className="space-y-6">
                                 <div>
-                                    <h3 className="text-lg font-medium">Contact Information</h3>
+                                    <h3 className="text-lg font-medium">Contact information</h3>
                                     <p className="text-sm text-muted-foreground">
                                         Manage how people can reach this contact.
                                     </p>
                                 </div>
 
                                 <div className="grid gap-6">
-                                    <RepeatableField label="Email Addresses" onAdd={() => appendEmail({ value: '' })}>
+                                    <RepeatableField label="Email addresses" onAdd={() => appendEmail({ value: '' })}>
                                         {emailFields.map((item, index) => (
                                             <FormField
                                                 key={item.id}
@@ -380,7 +383,7 @@ export function ContactEdit({ contact, onSave, onCancel, onReload, staleWrite }:
                                         ))}
                                     </RepeatableField>
 
-                                    <RepeatableField label="Phone Numbers" onAdd={() => appendPhone({ value: '' })}>
+                                    <RepeatableField label="Phone numbers" onAdd={() => appendPhone({ value: '' })}>
                                         {phoneFields.map((item, index) => (
                                             <FormField
                                                 key={item.id}
@@ -532,7 +535,7 @@ export function ContactEdit({ contact, onSave, onCancel, onReload, staleWrite }:
 
                             <div className="space-y-6">
                                 <div>
-                                    <h3 className="text-lg font-medium">Additional Information</h3>
+                                    <h3 className="text-lg font-medium">Additional information</h3>
                                     <p className="text-sm text-muted-foreground">
                                         Add extra details about this contact.
                                     </p>

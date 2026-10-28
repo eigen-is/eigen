@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, kanban, columns, board, getting-started]
 related: [stickies/get-started, stickies/add-and-edit-cards]
 order: 20
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 A Stickies board is a kanban board made of columns. You can create as many boards as you like and shape each one with the columns that match your workflow.
@@ -29,23 +29,23 @@ Every new board starts with three columns: **To Do**, **In Progress**, and **Don
 You need write access to the board to add or change columns.
 
 1. Open the board.
-2. Open the **Insert** menu in the toolbar and choose **Column**. The **Add Column** dialog opens.
+2. Open the **Insert** menu in the toolbar and choose **Column**. The **Add column** dialog opens.
 3. Type a name in the **Title** field.
-4. Click **Add Column**. The new column appears at the right end of the board.
+4. Click **Add column**. The new column appears at the right end of the board.
 
 ## Rename a column
 
 1. Find the column you want to rename.
-2. Click the pencil icon in the column header. The **Column Settings** dialog opens.
+2. Click the pencil icon in the column header. The **Column settings** dialog opens.
 3. Edit the text in the **Title** field.
-4. Click **Save Changes**.
+4. Click **Save changes**.
 
 ## Delete a column
 
 Deleting a column also deletes all the cards in it. This cannot be undone.
 
-1. Click the pencil icon in the column header to open **Column Settings**.
-2. Click **Delete Column**. A confirmation dialog appears.
+1. Click the pencil icon in the column header to open **Column settings**.
+2. Click **Delete column**. A confirmation dialog appears.
 3. Confirm the deletion.
 
 <div class="eigen-callout">

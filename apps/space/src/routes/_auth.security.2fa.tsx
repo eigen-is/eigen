@@ -1,3 +1,6 @@
+// Space's two-factor authentication page. With it off, it shows the setup steps; with it on, it shows the state
+// and the form that turns it off again.
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { authClient, useDisable2FA, useInitialize2FA, useVerifyTotp } from '@workspace/lib/auth';
@@ -85,7 +88,7 @@ function TwoFaComponent() {
 
     if (twoFactorEnabled === null) return null;
 
-    const toolbar = <ToolbarTitle>Two-Factor Authentication</ToolbarTitle>;
+    const toolbar = <ToolbarTitle>Two-factor authentication</ToolbarTitle>;
 
     if (twoFactorEnabled) {
         return (
@@ -103,7 +106,7 @@ function TwoFaComponent() {
 
                                 {!showDisableForm ? (
                                     <Button variant="destructive" onClick={() => setShowDisableForm(true)}>
-                                        Disable Two-Factor Authentication
+                                        Disable two-factor authentication
                                     </Button>
                                 ) : (
                                     <Form {...disableForm}>

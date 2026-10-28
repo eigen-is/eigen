@@ -1,3 +1,6 @@
+// The comment thread beside a document or a card: the messages of its chat room, the composer, and the dialog that
+// deletes a message.
+
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { useRef, useState } from 'react';
@@ -67,7 +70,7 @@ function CommentThreadInner({
             <DeleteDialog
                 open={!!editing.deleteTarget}
                 onOpenChange={(open) => !open && editing.setDeleteTarget(null)}
-                title="Delete Message"
+                title="Delete message"
                 description="Are you sure you want to delete this message? This cannot be undone."
                 onDelete={editing.handleDeleteConfirm}
             />

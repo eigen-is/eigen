@@ -145,14 +145,14 @@ const chatLinks = () =>
         .map((a) => [a.textContent, a.getAttribute('href'), !!a.querySelector('.rounded-full.bg-destructive')]);
 const buttonTexts = () => [...document.querySelectorAll('button')].map((b) => b.textContent?.trim());
 
-test('the sidebar lists personal chats first, then team chats under Team Chats, without the extension', async () => {
+test('the sidebar lists personal chats first, then team chats under Team chats, without the extension', async () => {
     const page = await open('/me@test.eigen.is/default/c1');
     expect(chatLinks().map(([label, href]) => [label, href])).toEqual([
         ['General', '/me@test.eigen.is/default/c1'],
         ['Random', '/me@test.eigen.is/default/c2'],
         ['Design crit', '/team-1/default/c3'],
     ]);
-    expect(page.text()).toContain('Team Chats');
+    expect(page.text()).toContain('Team chats');
 });
 
 test('an unread chat wears the dot and a read one does not', async () => {

@@ -6,7 +6,7 @@ category: Basics
 tags: [admin, setup, getting-started, configuration]
 related: [admin/manage-members, admin/server-settings]
 order: 10
-updated: 2026-10-04
+updated: 2026-10-28
 ---
 
 The setup wizard creates your admin account and gets the server ready for everyone else. It opens from the setup link that `./eigen setup` prints when it finishes. This page walks you through what to expect.
@@ -19,19 +19,19 @@ The link works once, so nobody who finds your server before you can claim it. Op
 
 ### Server configuration
 
-**Organization Name** is the display name for your organization. It appears in the interface and in emails sent to members.
+**Organization name** is the display name for your organization. It appears in the interface and in emails sent to members.
 
 **Sender name** and **Sender address** are who Eigen's own emails come from. Leave **Sender name** empty to send as your organization name, which the field shows in gray. **Sender address** starts as `noreply@` your mail domain. As the form says: "Notifications, codes and invitations are sent from this address. Your mail relay must be allowed to send from it." You can change both later on the **Settings** page.
 
-**Storage Type** controls where Eigen stores user files. Three options are available:
+**Storage type** controls where Eigen stores user files. Three options are available:
 
 - **Local (full names)**: files are stored on the server's local disk using their original names. A good default for most self-hosted setups.
 - **Local (ID-based)**: files are stored on disk using internal identifiers rather than names.
-- **S3 bucket**: files are stored in an S3-compatible object storage bucket. If you choose this option, extra fields appear for the **Endpoint**, **Bucket**, **Prefix**, **Region**, **Access Key ID**, and **Secret Access Key**. Click **Test Connection**: setup completes only once the connection works.
+- **S3 bucket**: files are stored in an S3-compatible object storage bucket. If you choose this option, extra fields appear for the **Endpoint**, **Bucket**, **Prefix**, **Region**, **Access key ID**, and **Secret access key**. Click **Test connection**: setup completes only once the connection works.
 
 ### Admin account
 
-**Full Name** is the display name for your admin user account.
+**Full name** is the display name for your admin user account.
 
 **Username** is the first part of your admin address. The suffix next to it (for example `@example.com`) is the mail domain you picked in `./eigen setup`. You sign in with this address. Role and system names, like `admin`, `root`, `support` and `postmaster`, are reserved, so use your own name, like `jane`.
 
@@ -39,7 +39,7 @@ The link works once, so nobody who finds your server before you can claim it. Op
 
 ### Completing setup
 
-Click **Complete Setup**. Eigen creates the organization and the admin account, then shows a **Setup Complete!** confirmation. Click **Go to Login** to reach the sign-in page.
+Click **Complete setup**. Eigen creates the organization and the admin account, then shows a **Setup complete!** confirmation. Click **Go to login** to reach the sign-in page.
 
 ## What you can do after signing in
 

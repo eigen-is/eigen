@@ -132,7 +132,7 @@ export function ManageRules() {
     return (
         <div className="flex flex-col min-h-0 flex-1 gap-4">
             <DialogHeader>
-                <DialogTitle>Conditional Formatting Rules</DialogTitle>
+                <DialogTitle>Conditional formatting rules</DialogTitle>
             </DialogHeader>
 
             {rules.length === 0 ? (

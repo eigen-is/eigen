@@ -10,7 +10,7 @@ export const Route = createFileRoute('/_auth/user')({
 
 function RouteComponent() {
     return (
-        <SettingsPage title="Edit Profile">
+        <SettingsPage title="Edit profile">
             <ProfileEditor />
         </SettingsPage>
     );

@@ -7,7 +7,7 @@ tags: [calendar, getting-started, events, scheduling]
 related: [calendar/create-event, calendar/views]
 crossSections: [getting-started]
 order: 10
-updated: 2026-09-22
+updated: 2026-10-28
 ---
 
 Calendar is where you keep your schedule in Eigen. You can create events, invite other people, and see calendars that others have shared with you. This page is a quick tour of the layout and the things you'll do most.
@@ -31,13 +31,13 @@ The title in the toolbar updates to show the period you're looking at: a month n
 
 ## Your calendars
 
-The sidebar lists the calendars you own under **My Calendars**. Each calendar has a color-coded checkbox next to its name. Tick or untick the checkbox to show or hide that calendar's events in the grid.
+The sidebar lists the calendars you own under **My calendars**. Each calendar has a color-coded checkbox next to its name. Tick or untick the checkbox to show or hide that calendar's events in the grid.
 
-If someone has shared a calendar with you, it appears under **Shared with me**. Team calendars show up under **Team Calendars**. You can show or hide these the same way.
+If someone has shared a calendar with you, it appears under **Shared with me**. Team calendars show up under **Team calendars**. You can show or hide these the same way.
 
 ## Create an event
 
-There are two ways to open the **New Event** dialog:
+There are two ways to open the **New event** dialog:
 
 - Click **Create event** at the top of the sidebar.
 - Click directly on a day in the grid. The dialog opens with that date already filled in.

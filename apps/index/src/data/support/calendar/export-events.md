@@ -6,7 +6,7 @@ category: Basics
 tags: [calendar, export, download, ics]
 related: [calendar/import-events, calendar/show-hide-calendars, connect/calendar-client]
 order: 95
-updated: 2026-09-21
+updated: 2026-10-28
 ---
 
 Calendar can hand you an `.ics` file, the standard calendar format every calendar program reads. Use it to move a schedule into another app, to send one event to someone, or to keep a copy of your own.
@@ -19,7 +19,7 @@ Calendar can hand you an `.ics` file, the standard calendar format every calenda
 
 Your browser downloads a file named after the calendar, for example `Work.ics`, holding every event in it.
 
-Your own calendars under **My Calendars** and any team calendar under **Team Calendars** can be exported. A calendar someone shared with you from their own account cannot: it lives in their account, so you export it from theirs or ask them for the file.
+Your own calendars under **My calendars** and any team calendar under **Team calendars** can be exported. A calendar someone shared with you from their own account cannot: it lives in their account, so you export it from theirs or ask them for the file.
 
 ## Export one event
 

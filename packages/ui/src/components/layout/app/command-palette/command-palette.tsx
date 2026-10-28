@@ -1,3 +1,6 @@
+// The command palette every app opens with Cmd+K: the search input with its scope chip, and the result sections
+// the engine built for the query.
+
 import { parseQuery, useCommandPalette, useCommandResults } from '@workspace/lib/command-palette';
 import type { CommandContext, PaletteResult, PaletteScope, Sections } from '@workspace/lib/types/command-palette';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandList } from '@workspace/ui/components/command';
@@ -164,7 +167,7 @@ export function CommandPalette({ ctx }: Props) {
                             {docScopeNoDoc ? 'Open a document to search inside it' : 'No results.'}
                         </CommandEmpty>
                         {sections.topHit && (
-                            <CommandGroup heading="Top Hit">{renderResult(sections.topHit)}</CommandGroup>
+                            <CommandGroup heading="Top hit">{renderResult(sections.topHit)}</CommandGroup>
                         )}
                         {sections.groups.map((g) => (
                             <CommandGroup key={g.id} heading={g.heading}>

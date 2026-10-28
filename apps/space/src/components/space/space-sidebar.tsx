@@ -69,7 +69,7 @@ export function SpaceSidebar({ condensed = false }: SpaceSidebarProps) {
                 />
                 <SidebarItem
                     icon={<KeySquare className="h-4 w-4" />}
-                    label="Two factor authentication"
+                    label="Two-factor authentication"
                     condensed={condensed}
                     to="/security/2fa"
                     params={{}}

@@ -1,3 +1,6 @@
+// The panel that shows one event when it is clicked in the month or week view: its time, place, guests and
+// calendar, the reply to an invite, and the buttons that edit or delete it.
+
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
     heldAttendees,
@@ -305,7 +308,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
             <DeleteDialog
                 open={showDeleteDialog}
                 onOpenChange={setShowDeleteDialog}
-                title="Delete Event"
+                title="Delete event"
                 description="Are you sure you want to delete this event?"
                 itemName={event.title}
                 onDelete={handleNonRecurringDelete}

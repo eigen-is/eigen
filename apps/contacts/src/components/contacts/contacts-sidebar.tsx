@@ -1,3 +1,6 @@
+// Contacts' sidebar: all the user's contacts, their labels, and each team's members, with the button that
+// creates a contact.
+
 import { Link } from '@tanstack/react-router';
 import { useLabels } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
@@ -34,7 +37,7 @@ export function ContactsSidebar({ condensed = false, onAssignLabel }: ContactsSi
                 <SidebarSection condensed={condensed}>
                     <SidebarItem
                         icon={<UsersRound className="h-4 w-4" />}
-                        label="My Contacts"
+                        label="My contacts"
                         to="/$filterType/$filterId"
                         params={{ filterType: 'book', filterId: 'all' }}
                         condensed={condensed}

@@ -333,7 +333,7 @@ function MailRoute() {
                     if (!open) setPendingDeleteEmails([]);
                 }}
                 title={
-                    pendingDeleteEmails.length === 1 ? 'Delete Email' : `Delete ${pendingDeleteEmails.length} Emails`
+                    pendingDeleteEmails.length === 1 ? 'Delete email' : `Delete ${pendingDeleteEmails.length} emails`
                 }
                 description={
                     pendingDeleteEmails.length === 1

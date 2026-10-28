@@ -5,7 +5,7 @@ type: how-to
 tags: [account, security, two-factor, authenticator, backup codes]
 related: [account/change-password]
 order: 30
-updated: 2026-06-08
+updated: 2026-10-28
 ---
 
 Two-factor authentication (2FA) adds a second check at sign-in. After you enter your password, Eigen asks for a six-digit code from an authenticator app on your phone. If someone gets hold of your password, they still cannot sign in without that code.
@@ -16,12 +16,12 @@ You need an authenticator app on your phone or tablet. Any TOTP-compatible app w
 
 ## Turn on two-factor authentication
 
-1. Open [**Two-Factor Authentication**](/space/security/2fa) in Space.
-2. In the **Current Password** field, enter your Eigen password and click **Enable Two-Factor Authentication**.
+1. Open [**Two-factor authentication**](/space/security/2fa) in Space.
+2. In the **Current password** field, enter your Eigen password and click **Enable two-factor authentication**.
 3. A QR code appears. Open your authenticator app, choose to add a new account, and scan the code.
 4. If you cannot scan the QR code, click the copy button next to the setup key and paste it into your app manually.
 5. Click **Continue**.
-6. Your app shows a six-digit code. Enter it in the **Verification Code** field and click **Verify and Enable**.
+6. Your app shows a six-digit code. Enter it in the **Verification code** field and click **Verify and enable**.
 
 If the code is correct, two-factor authentication is now on and Eigen shows your recovery codes.
 
@@ -46,12 +46,12 @@ You can tick **Trust this device** to skip the code check on that device for 30 
 
 ## Use a recovery code to sign in
 
-If you do not have your authenticator app to hand, click **Use a backup code instead** on the sign-in screen. Enter one of your saved recovery codes in the **Backup Code** field and click **Verify with backup code**.
+If you do not have your authenticator app to hand, click **Use a backup code instead** on the sign-in screen. Enter one of your saved recovery codes in the **Backup code** field and click **Verify with backup code**.
 
 ## Turn off two-factor authentication
 
-1. Open [**Two-Factor Authentication**](/space/security/2fa) in Space.
-2. Click **Disable Two-Factor Authentication**.
+1. Open [**Two-factor authentication**](/space/security/2fa) in Space.
+2. Click **Disable two-factor authentication**.
 3. Enter your password in the **Confirm your password** field and click **Disable**.
 
 Two-factor authentication is removed from your account straight away.

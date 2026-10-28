@@ -1,3 +1,6 @@
+// The admin's Onboarding page: the landing page's waitlist, the email an accepted person gets with their invite,
+// and what a new user starts with, such as a welcome mail. It edits the server settings and saves them as one form.
+
 import { useMailEnabled } from '@workspace/lib/public';
 import { useServerSettings, useUpdateServerSettings } from '@workspace/lib/settings';
 import type { ServerSettings } from '@workspace/lib/types/settings';
@@ -67,7 +70,7 @@ export function OnboardingSettingsPage() {
         <div className="space-y-6">
             <SettingsSection
                 title="Waitlist"
-                description='When enabled, the landing page shows a "Join Waitlist" form.'
+                description='When enabled, the landing page shows a "Join waitlist" form.'
             >
                 <div className="flex items-center gap-3">
                     <Switch
@@ -80,7 +83,7 @@ export function OnboardingSettingsPage() {
 
             {current.waitlist.enabled && (
                 <SettingsSection
-                    title="Invite Email"
+                    title="Invite email"
                     description="Email sent to waitlist members when their application is accepted."
                 >
                     <div className="space-y-1.5">

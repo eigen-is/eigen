@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, backup, restore, s3, cron]
 related: [self-hosting/move-to-another-server, self-hosting/update, admin/server-settings, admin/back-up-home, admin/backup-contents]
 order: 90
-updated: 2026-10-12
+updated: 2026-10-28
 ---
 
 Eigen backs up the whole server while it runs: every account's mail, files, contacts, and calendars, the settings, the server databases, `.env.production`, the key that signs your mail, and the mail server's certificate. Nobody is signed out and nothing stops: only a rename or move on a drive, and the saves and uploads on that drive after it, can wait while the backup copies one very large file there. This page shows how to back up every night, how to keep a copy off the server, and what a backup leaves out. To put one back, go to [Put a backup back](#put-a-backup-back).
@@ -32,8 +32,8 @@ A backup that fails, one with warnings, or a copy that does not reach the bucket
 A backup on the same disk does not survive the loss of that disk. Eigen can send every backup to an S3 bucket:
 
 1. In **Settings → Backups**, turn on **Upload to a backup bucket**.
-2. Fill in the **Endpoint**, **Bucket**, **Access Key ID**, and **Secret Access Key** of a bucket you made for this alone. **Prefix** and **Region** are optional.
-3. Click **Test Connection**.
+2. Fill in the **Endpoint**, **Bucket**, **Access key ID**, and **Secret access key** of a bucket you made for this alone. **Prefix** and **Region** are optional.
+3. Click **Test connection**.
 4. Set **Backups to keep in the bucket**. The default is 30.
 5. Click **Save**.
 
@@ -114,7 +114,7 @@ The question also says whether the backup holds `.env.production`, the key that 
 
 A user or team that failed during the backup is not in it, and the question names them. After a restore of a Full backup, their data is in `data.pre-restore-<date>-<time>` only. One with warnings is in it, without the files the warning named, and the question names it with its first warning.
 
-Everyone is signed in as they were when the backup was made. Every open browser tab reloads once. After a restore, everything in the Trash stays there for the full **Trash Retention (days)** period, counted from the restore. `--yes` skips the question, for scripts.
+Everyone is signed in as they were when the backup was made. Every open browser tab reloads once. After a restore, everything in the Trash stays there for the full **Trash retention (days)** period, counted from the restore. `--yes` skips the question, for scripts.
 
 Restore refuses a backup of a newer Eigen than the one you run: update first, then restore. `data/` must be a plain folder inside the install folder, on the same disk, with room to unpack the backup. Restore checks this before it stops Eigen. If a restore is cut off while it swaps the data in, Eigen stays stopped and `./eigen` says so. `./eigen restart` finishes the restore and starts Eigen. Any other `./eigen` command except `logs`, `reset-password`, and `help` finishes it too, before it does anything else.
 

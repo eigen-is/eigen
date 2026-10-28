@@ -1,3 +1,5 @@
+// The form that edits the user's name and avatar. Space's profile page shows it.
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';
 import { useMeContact, useUpdateContact } from '@workspace/lib/contacts';
@@ -92,7 +94,7 @@ export function ProfileEditor() {
                         name="firstName"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>First Name</FormLabel>
+                                <FormLabel>First name</FormLabel>
                                 <FormControl>
                                     <Input placeholder="Enter your first name" {...field} />
                                 </FormControl>
@@ -106,7 +108,7 @@ export function ProfileEditor() {
                         name="lastName"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Last Name</FormLabel>
+                                <FormLabel>Last name</FormLabel>
                                 <FormControl>
                                     <Input placeholder="Enter your last name" {...field} />
                                 </FormControl>

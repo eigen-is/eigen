@@ -5,14 +5,14 @@ type: how-to
 tags: [contacts, search, find, email, name]
 related: [contacts/get-started, contacts/labels-and-groups]
 order: 60
-updated: 2026-06-08
+updated: 2026-10-28
 ---
 
 The search bar in Contacts filters your list as you type, so you can find anyone by first name, last name, or email address without scrolling through the whole list.
 
 ## Search your contacts
 
-1. Open [Contacts](/contacts). You land on **My Contacts** by default.
+1. Open [Contacts](/contacts). You land on **My contacts** by default.
 2. Click the search bar at the top of the list. It shows the placeholder text **Search contacts...**.
 3. Type part of a name or email address. The list updates immediately and shows only the contacts that match.
 4. Click the contact you want to open their details.

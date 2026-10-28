@@ -1,3 +1,5 @@
+// The dialog that renames a column of a board or deletes it, after a confirmation.
+
 import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
 import { DeleteDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -83,7 +85,7 @@ export function ColumnSettingsDialog({
         <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
             <DialogContent size="sm">
                 <DialogHeader>
-                    <DialogTitle>Column Settings</DialogTitle>
+                    <DialogTitle>Column settings</DialogTitle>
                     <DialogDescription className="sr-only">Rename this column or delete it.</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit}>
@@ -100,13 +102,13 @@ export function ColumnSettingsDialog({
                             className="mr-auto"
                             onClick={() => setIsDeleteDialogOpen(true)}
                         >
-                            Delete Column
+                            Delete column
                         </Button>
                         <Button type="button" variant="outline" onClick={onClose}>
                             Cancel
                         </Button>
                         <Button type="submit" disabled={!title.trim()}>
-                            Save Changes
+                            Save changes
                         </Button>
                     </DialogFooter>
                 </form>
@@ -115,7 +117,7 @@ export function ColumnSettingsDialog({
             <DeleteDialog
                 open={isDeleteDialogOpen}
                 onOpenChange={setIsDeleteDialogOpen}
-                title="Delete Column"
+                title="Delete column"
                 description={
                     cardCount > 0
                         ? `This will permanently delete the column and ${cardCount} ${cardCount === 1 ? 'card' : 'cards'} within it. This action cannot be undone.`

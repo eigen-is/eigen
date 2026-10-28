@@ -208,7 +208,7 @@ test('a team calendar the viewer may write in is a target, named after its team,
 test('the two headings the sidebar uses group the targets', async () => {
     const { cleanup, openList, textsOf } = await open();
     await openList();
-    expect(textsOf('[data-slot="select-label"]')).toEqual(['My Calendars', 'Team Calendars']);
+    expect(textsOf('[data-slot="select-label"]')).toEqual(['My calendars', 'Team calendars']);
     await cleanup();
 });
 

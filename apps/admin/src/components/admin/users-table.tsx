@@ -52,7 +52,7 @@ export function AdminUsersToolbar({ searchQuery, onSearchChange, organizationId,
                 <>
                     <TooltipButton
                         icon={Plus}
-                        tooltipText="Create User"
+                        tooltipText="Create user"
                         className="shrink-0"
                         onClick={() => setShowCreateDialog(true)}
                     />

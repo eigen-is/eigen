@@ -1,3 +1,6 @@
+// The admin's waitlist: the people who asked to join from the landing page, in tabs by status. The admin accepts
+// and invites, rejects, resends an invite or deletes an entry from the toolbar of the selected one.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
     useAcceptWaitlistEntry,
@@ -143,7 +146,7 @@ function WaitlistRoute() {
             <DeleteDialog
                 open={showDelete}
                 onOpenChange={setShowDelete}
-                title="Delete Waitlist Entry"
+                title="Delete waitlist entry"
                 description={`Permanently delete the waitlist entry for ${selected?.email}?`}
                 onDelete={handleDelete}
             />
@@ -170,7 +173,7 @@ function WaitlistDetailToolbar({
         <div className="flex items-center gap-1 ml-auto">
             {entry.status === 'pending' && (
                 <>
-                    <TooltipButton icon={Check} tooltipText="Accept & Invite" onClick={onAccept} disabled={isPending} />
+                    <TooltipButton icon={Check} tooltipText="Accept & invite" onClick={onAccept} disabled={isPending} />
                     <TooltipButton icon={X} tooltipText="Reject" onClick={onReject} disabled={isPending} />
                 </>
             )}
@@ -178,7 +181,7 @@ function WaitlistDetailToolbar({
                 <>
                     <TooltipButton
                         icon={RefreshCw}
-                        tooltipText="Resend Invite"
+                        tooltipText="Resend invite"
                         onClick={onResend}
                         disabled={isPending}
                     />
@@ -186,7 +189,7 @@ function WaitlistDetailToolbar({
                 </>
             )}
             {entry.status === 'rejected' && (
-                <TooltipButton icon={Check} tooltipText="Re-accept & Invite" onClick={onAccept} disabled={isPending} />
+                <TooltipButton icon={Check} tooltipText="Re-accept & invite" onClick={onAccept} disabled={isPending} />
             )}
             <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isPending} />
         </div>

@@ -6,7 +6,7 @@ category: Files
 tags: [docs, export, download, word, pdf, html]
 related: [docs/import-word, docs/print]
 order: 90
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original document in Eigen stays exactly as it was.
@@ -19,7 +19,7 @@ You can download a copy of any document as a Word file, a PDF, or a standalone w
 4. Choose one of the three formats:
    - **Microsoft Word (.docx)**: opens in Word, Pages, or any compatible word processor.
    - **PDF (.pdf)**: a fixed-layout version suitable for printing or sharing.
-   - **Web Page (.html)**: a standalone HTML file with embedded fonts and images.
+   - **Web page (.html)**: a standalone HTML file with embedded fonts and images.
 
 A progress dialog appears while the file is being prepared. Your browser downloads the file automatically when it is ready. The file is named after your document.
 

@@ -1,3 +1,6 @@
+// The dialog that adds or edits a label: its name and color, and deleting it after a confirmation. Contacts
+// opens it from its label list.
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, LABEL_NAME_MAX_LENGTH } from '@workspace/lib/constants';
 import type { Label } from '@workspace/lib/types/label';
@@ -94,7 +97,7 @@ export function LabelDialog({
             <Dialog open={open && !showDeleteConfirmation} onOpenChange={onOpenChange}>
                 <DialogContent size="sm">
                     <DialogHeader>
-                        <DialogTitle>{isEditMode ? 'Edit Label' : 'Add Label'}</DialogTitle>
+                        <DialogTitle>{isEditMode ? 'Edit label' : 'Add label'}</DialogTitle>
                         <DialogDescription>
                             {isEditMode ? 'Make changes to your label here.' : 'Add a new label to your collection.'}
                         </DialogDescription>
@@ -140,7 +143,7 @@ export function LabelDialog({
                                     name="name"
                                     render={({ field, fieldState }) => (
                                         <FormItem className="flex-1">
-                                            <FormLabel>Label Name</FormLabel>
+                                            <FormLabel>Label name</FormLabel>
                                             <FormControl>
                                                 <Input
                                                     placeholder="Enter label name"
@@ -187,7 +190,7 @@ export function LabelDialog({
             <DeleteDialog
                 open={showDeleteConfirmation}
                 onOpenChange={setShowDeleteConfirmation}
-                title="Delete Label"
+                title="Delete label"
                 description="Are you sure you want to delete this label"
                 itemName={selectedLabel?.name}
                 onDelete={onDelete}

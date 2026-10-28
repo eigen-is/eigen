@@ -5,19 +5,19 @@ type: how-to
 tags: [account, password, security]
 related: [account/update-profile, account/two-factor]
 order: 20
-updated: 2026-06-08
+updated: 2026-10-28
 ---
 
-You can change your Eigen password at any time from [**Change Password**](/space/security/password) in Space. You will need to know your current password to complete the change.
+You can change your Eigen password at any time from [**Change password**](/space/security/password) in Space. You will need to know your current password to complete the change.
 
 ## Change your password
 
-1. Open [**Change Password**](/space/security/password) in Space.
-2. Enter your current password in the **Current Password** field.
-3. Enter a new password in the **New Password** field. It must be at least 8 characters. A strength indicator appears as you type, showing **Weak**, **Good**, or **Strong**.
-4. Re-enter the same password in **Confirm New Password**.
+1. Open [**Change password**](/space/security/password) in Space.
+2. Enter your current password in the **Current password** field.
+3. Enter a new password in the **New password** field. It must be at least 8 characters. A strength indicator appears as you type, showing **Weak**, **Good**, or **Strong**.
+4. Re-enter the same password in **Confirm new password**.
 5. The **Log out of all other devices** box is ticked by default. Leave it ticked to end any active sessions on other browsers or devices. Untick it if you want those sessions to stay open.
-6. Click **Change Password**.
+6. Click **Change password**.
 
 Eigen returns you to the home page once the change is saved.
 

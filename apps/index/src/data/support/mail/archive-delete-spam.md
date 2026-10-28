@@ -6,10 +6,10 @@ category: Basics
 tags: [mail, email, archive, delete, spam]
 related: [mail/move-email-between-folders, mail/work-with-several-emails, mail/get-started]
 order: 40
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
-When you are done with a message, you can keep it out of the way without losing it, throw it away, or flag it as junk. This page covers all three: **Archive**, **Delete**, and **Report Spam**.
+When you are done with a message, you can keep it out of the way without losing it, throw it away, or flag it as junk. This page covers all three: **Archive**, **Delete**, and **Report spam**.
 
 Each action has two ways in. Open a message and use the buttons in the toolbar above it, or right-click a message in the list and pick the action from the menu. The same actions also live in the **More actions** menu (the **⋮** button) above an open message.
 
@@ -26,12 +26,12 @@ To bring an archived message back, open **Archive** in the sidebar and move the 
 
 ## Report spam
 
-If a message is junk, report it. **Report Spam** moves it to your **Spam** mailbox and takes it out of the Inbox.
+If a message is junk, report it. **Report spam** moves it to your **Spam** mailbox and takes it out of the Inbox.
 
 1. Open the message, or right-click it in the list.
-2. Click the **Report Spam** button in the toolbar, or choose **Report Spam** from the menu.
+2. Click the **Report spam** button in the toolbar, or choose **Report spam** from the menu.
 
-The **Report Spam** button is hidden when you are already in the **Spam** mailbox. If a real message ends up in Spam by mistake, open **Spam** in the sidebar and move it back to your Inbox.
+The **Report spam** button is hidden when you are already in the **Spam** mailbox. If a real message ends up in Spam by mistake, open **Spam** in the sidebar and move it back to your Inbox.
 
 ## Delete a message
 
@@ -50,7 +50,7 @@ To remove a message permanently, open **Trash** in the sidebar and delete it fro
 
 1. Open **Trash** in the sidebar.
 2. Open or right-click the message, then choose **Delete**.
-3. In the **Delete Email** dialog, check the subject, then click **Delete** to confirm.
+3. In the **Delete email** dialog, check the subject, then click **Delete** to confirm.
 
 <div class="eigen-callout">
 

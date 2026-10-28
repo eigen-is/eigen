@@ -7,7 +7,7 @@ tags: [mail, imap, smtp, thunderbird, apple mail, app passwords, integrations]
 related: [connect/app-passwords, connect/overview]
 crossSections: [mail]
 order: 30
-updated: 2026-06-08
+updated: 2026-10-28
 ---
 
 Your Eigen mailbox is available over IMAP and SMTP, so you can use any standard email client alongside or instead of the browser. This article walks you through getting the connection details and entering them in your client.
@@ -35,7 +35,7 @@ All the values you need are on the [**Integrations**](/space/services) page unde
 | Setting | Value |
 |---|---|
 | **IMAP server** | Your Eigen host (shown on the Integrations page) |
-| **IMAP Port** | `993` |
+| **IMAP port** | `993` |
 | **Security** | SSL/TLS |
 | **SMTP server** | Your Eigen host (same as IMAP) |
 | **SMTP port** | `465` |

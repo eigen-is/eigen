@@ -1,3 +1,6 @@
+// The sidebar of Drive and the document apps: the New button, a filter row per kind of file, such as All images,
+// the user's own drives and the team drives. A guest sees only what was shared with them.
+
 import { getDriveAppUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useListTrash, useRootFolder } from '@workspace/lib/drive';
@@ -180,7 +183,7 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
             </SidebarSection>
 
             {myTeams?.some((t) => t.mounts.length > 0) && (
-                <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Drives'}>
+                <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team drives'}>
                     {myTeams.flatMap((team) =>
                         team.mounts
                             .filter((mount) => mount.rootPathId)

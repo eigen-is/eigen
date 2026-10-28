@@ -1,4 +1,4 @@
-// Create User turns the username into an address on the server's mail domain: lowercase, and anything an
+// Create user turns the username into an address on the server's mail domain: lowercase, and anything an
 // admin pastes after an @ dropped. A username the rules refuse is named and nothing is created.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';

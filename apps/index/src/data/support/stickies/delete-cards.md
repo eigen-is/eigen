@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, cards, delete, kanban]
 related: [stickies/add-and-edit-cards, stickies/move-cards]
 order: 60
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 You can delete any card you no longer need. Deletion is permanent, but you can undo it straight away if you change your mind.
@@ -16,7 +16,7 @@ You need write access to the board to delete cards. The option does not appear i
 
 1. Right-click the card on the board to open the context menu.
 2. Click **Delete sticky**.
-3. A confirmation dialog appears with the title **Delete Card**. It warns you that the deletion is permanent.
+3. A confirmation dialog appears with the title **Delete card**. It warns you that the deletion is permanent.
 4. Click **Delete** to confirm, or **Cancel** to go back.
 
 The card is removed from the board immediately.

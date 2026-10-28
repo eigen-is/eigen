@@ -1,3 +1,6 @@
+// The form for a Drive mount: its name, its storage type and its maximum size, with the S3 fields when a bucket is
+// picked. The admin's mount dialogs show it.
+
 import { isStorageType, STORAGE_TYPE_HINTS, STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import type { MountStorageType, S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types/mount';
@@ -39,7 +42,7 @@ export function MountForm({
     onCancel,
     onS3Check,
     onS3Harden,
-    submitLabel = 'Create Mount',
+    submitLabel = 'Create mount',
     isEdit = false,
 }: MountFormProps) {
     const [name, setName] = useState(initialValues?.name ?? '');
@@ -83,7 +86,7 @@ export function MountForm({
             </div>
 
             <div className="space-y-1.5">
-                <Label>Storage Type</Label>
+                <Label>Storage type</Label>
                 <Select
                     value={storageType}
                     onValueChange={(value) => isStorageType(value) && setStorageType(value)}
@@ -104,7 +107,7 @@ export function MountForm({
             </div>
 
             <div className="space-y-1.5">
-                <Label>Max Size (MB)</Label>
+                <Label>Max size (MB)</Label>
                 <Input
                     type="number"
                     min={10}

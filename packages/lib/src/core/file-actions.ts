@@ -1,3 +1,6 @@
+// The things a user can do with a file wherever it shows up, such as preview, download, convert or import, each
+// with the test that says when it applies. Menus and the command palette ask fileActionsFor for the list.
+
 import {
     BookUser,
     CalendarPlus,
@@ -44,14 +47,14 @@ export const FILE_ACTIONS: readonly FileAction[] = [
     },
     {
         id: 'convert-to-sheet',
-        label: 'Convert to Sheet',
+        label: 'Convert to sheet',
         icon: Sheet,
         group: 'convert',
         applies: convertsTo('eigensheets'),
     },
     {
         id: 'convert-to-document',
-        label: 'Convert to Document',
+        label: 'Convert to document',
         icon: FileText,
         group: 'convert',
         applies: convertsTo('eigendoc'),

@@ -1,3 +1,6 @@
+// The settings section of a team's admin page: its name and avatar, whether it has a calendar, and the quota
+// overrides that raise its members' storage limits above the server's defaults.
+
 import { useUpdateTeam } from '@workspace/lib/admin';
 import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
 import { useHomeDataLabel } from '@workspace/lib/public';
@@ -141,7 +144,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                     </div>
 
                     <div className="space-y-1.5">
-                        <Label>Team Name</Label>
+                        <Label>Team name</Label>
                         <Input value={draftName} onChange={(e) => setDraftName(e.target.value)} />
                     </div>
 
@@ -188,7 +191,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                     <Separator />
 
                     <SettingsSection
-                        title="Quota Overrides"
+                        title="Quota overrides"
                         description="Override server defaults for members of this team. Leave empty to inherit."
                     >
                         <div className="grid grid-cols-2 gap-4">
@@ -203,7 +206,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <Label>Default Mount (MB)</Label>
+                                <Label>Default mount (MB)</Label>
                                 <Input
                                     type="number"
                                     min={10}
@@ -219,7 +222,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                         <Button variant="outline" onClick={() => setShowSettingsForm(false)}>
                             Cancel
                         </Button>
-                        <Button onClick={handleSaveSettings}>Save Settings</Button>
+                        <Button onClick={handleSaveSettings}>Save settings</Button>
                     </div>
                 </div>
             ) : (

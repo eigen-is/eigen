@@ -230,7 +230,7 @@ export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
     xlsx: 'Microsoft Excel (.xlsx)',
     pptx: 'Microsoft PowerPoint (.pptx)',
     pdf: 'PDF (.pdf)',
-    html: 'Web Page (.html)',
+    html: 'Web page (.html)',
 };
 
 export function getEigenDocInfoByType(type: DrivePathType): EigenDocTypeInfo | undefined {

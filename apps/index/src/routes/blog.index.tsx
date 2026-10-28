@@ -1,3 +1,5 @@
+// The blog's overview page on the public site: the newest post large at the top, and the other posts below it.
+
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { formatDateOnly } from '@workspace/lib/date';
 import { Column, ColumnLayout } from '@workspace/ui';
@@ -39,7 +41,7 @@ function BlogOverviewComponent() {
 
                         {otherPosts.length > 0 && (
                             <div className="mt-16 pt-8 border-t border-border">
-                                <h2 className="text-2xl font-medium mb-6">Other Posts</h2>
+                                <h2 className="text-2xl font-medium mb-6">Other posts</h2>
                                 <div className="space-y-8">
                                     {otherPosts.map((post) => (
                                         <article key={post.slug}>

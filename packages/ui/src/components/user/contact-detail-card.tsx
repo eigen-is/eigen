@@ -1,3 +1,6 @@
+// One contact shown as a card: name, company, emails, phone numbers, addresses, birthday and notes. Contacts
+// shows it for the selected contact, and the file preview shows it for a .vcf file.
+
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatDateOnly } from '@workspace/lib/date';
 import { useMailEnabled } from '@workspace/lib/public';
@@ -46,7 +49,7 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
 
             <div className="flex-1 space-y-6">
                 <div className="space-y-4">
-                    <h3 className="text-lg font-medium border-b pb-2">Contact Information</h3>
+                    <h3 className="text-lg font-medium border-b pb-2">Contact information</h3>
 
                     {contact.email.length > 0 && (
                         <div className="space-y-2">

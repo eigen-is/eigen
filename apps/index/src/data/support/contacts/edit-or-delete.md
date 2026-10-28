@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, edit, delete]
 related: [contacts/add-a-contact]
 order: 30
-updated: 2026-10-05
+updated: 2026-10-28
 ---
 
 You can update any of a contact's details at any time, and delete contacts you no longer need.
@@ -15,9 +15,9 @@ You can update any of a contact's details at any time, and delete contacts you n
 1. Open Contacts and click the contact you want to change. Their details appear on the right.
 2. Click the pencil icon (**Edit**) in the toolbar.
 3. Make your changes. The form is divided into three sections:
-   - **Basic Information**: **First name**, **Last name**, **Company**, **Job title**, and **Labels**.
-   - **Contact Information**: **Email Addresses**, **Phone Numbers**, and **Addresses**.
-   - **Additional Information**: **Birthday** and **Notes**.
+   - **Basic information**: **First name**, **Last name**, **Company**, **Job title**, and **Labels**.
+   - **Contact information**: **Email addresses**, **Phone numbers**, and **Addresses**.
+   - **Additional information**: **Birthday** and **Notes**.
 4. Click **Save**. You are returned to the contact's detail view.
 
 To cancel without saving, click **Cancel**.

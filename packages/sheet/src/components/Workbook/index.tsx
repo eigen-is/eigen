@@ -727,7 +727,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             tabIndex={0}
                             aria-live="polite"
                         >
-                            <h2 id="shortcuts-heading">Keyboard Shortcuts</h2>
+                            <h2 id="shortcuts-heading">Keyboard shortcuts</h2>
                             <ul>
                                 <li>Toggle sheet focus lock: {formatWithLabels(SHEET_HOTKEYS.focusLock)}.</li>
                                 <li>Select range: Shift, arrow keys.</li>

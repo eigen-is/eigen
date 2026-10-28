@@ -1,3 +1,6 @@
+// The admin's Server settings page, in sections such as the organization's name, the sender of the server's mail,
+// the storage quotas and defaults, and the landing page's links. It saves through the server-settings hooks.
+
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import { useHomeDataLabel, useMailEnabled, usePublicConfig } from '@workspace/lib/public';
@@ -247,7 +250,7 @@ export function ServerSettingsPage() {
 
             <Separator />
 
-            <SettingsSection title="Storage Quotas">
+            <SettingsSection title="Storage quotas">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                         <Label>{homeDataLabel} (MB)</Label>
@@ -259,7 +262,7 @@ export function ServerSettingsPage() {
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Default Mount (MB)</Label>
+                        <Label>Default mount (MB)</Label>
                         <Input
                             type="number"
                             min={10}
@@ -268,7 +271,7 @@ export function ServerSettingsPage() {
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Max Upload (MB)</Label>
+                        <Label>Max upload (MB)</Label>
                         <Input
                             type="number"
                             min={1}
@@ -281,7 +284,7 @@ export function ServerSettingsPage() {
                         </p>
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Trash Retention (days)</Label>
+                        <Label>Trash retention (days)</Label>
                         <Input
                             type="number"
                             min={0}

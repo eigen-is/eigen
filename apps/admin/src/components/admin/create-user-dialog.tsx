@@ -1,3 +1,6 @@
+// The admin's dialog for a new user account: name, username on the server's mail domain, password and role.
+// The users table opens it, and its hook creates the account on the server.
+
 import { useCreateUser } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
@@ -65,7 +68,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Create User</DialogTitle>
+                    <DialogTitle>Create user</DialogTitle>
                     <DialogDescription className="sr-only">
                         Set the name, username, password and role for the new user.
                     </DialogDescription>

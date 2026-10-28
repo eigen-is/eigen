@@ -1,3 +1,6 @@
+// The form that changes the user's password: the current one, the new one with a strength meter, and the choice
+// to sign out other sessions. Space's password page shows it.
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { MIN_PASSWORD_LENGTH, validatePasswordStrength } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
@@ -81,7 +84,7 @@ export function ChangePassword({
                         name="currentPassword"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Current Password</FormLabel>
+                                <FormLabel>Current password</FormLabel>
                                 <FormControl>
                                     <Input
                                         type="password"
@@ -100,7 +103,7 @@ export function ChangePassword({
                         name="newPassword"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>New Password</FormLabel>
+                                <FormLabel>New password</FormLabel>
                                 <FormControl>
                                     <Input
                                         type="password"
@@ -135,7 +138,7 @@ export function ChangePassword({
                         name="confirmPassword"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Confirm New Password</FormLabel>
+                                <FormLabel>Confirm new password</FormLabel>
                                 <FormControl>
                                     <Input
                                         autoComplete="new-password"
@@ -175,7 +178,7 @@ export function ChangePassword({
                     </div>
 
                     <div className="flex justify-end gap-3">
-                        <Button type="submit">Change Password</Button>
+                        <Button type="submit">Change password</Button>
                     </div>
                 </form>
             </Form>

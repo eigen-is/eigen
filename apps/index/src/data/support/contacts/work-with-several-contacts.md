@@ -5,14 +5,14 @@ type: how-to
 tags: [contacts, select, delete, labels, organize]
 related: [contacts/labels-and-groups, contacts/edit-or-delete, contacts/email-or-chat-a-contact]
 order: 80
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 You can act on more than one contact at a time. Pick a group in the list, then delete them or change their labels in a single step.
 
 ## Select several contacts
 
-1. Open Contacts and click **My Contacts** in the sidebar, or a label if you want to work inside one.
+1. Open Contacts and click **My contacts** in the sidebar, or a label if you want to work inside one.
 2. Click the first contact you want.
 3. Hold Cmd (Ctrl on Windows) and click each of the others. Cmd-click a selected contact again to drop it from the selection.
 4. To take a whole run at once, click the first contact, hold Shift, and click the last one. Everything between the two is selected.
@@ -31,7 +31,7 @@ If you right-click a row that is not selected, that row becomes the selection an
 
 1. Select the contacts you want to remove.
 2. Right-click one of them and click **Delete 3 contacts**. The number matches your selection.
-3. The **Delete Contact** dialog asks "Are you sure you want to delete 3 contacts?". Click **Delete** to confirm, or **Cancel** to keep them.
+3. The **Delete contact** dialog asks "Are you sure you want to delete 3 contacts?". Click **Delete** to confirm, or **Cancel** to keep them.
 
 Pressing **Delete** or **Backspace** with the list in focus opens the same dialog on the whole selection.
 

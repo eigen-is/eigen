@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, settings, landing, links]
 related: [admin/server-settings, admin/waitlist]
 order: 85
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 The landing page is what visitors see at the address of your server before they sign in. You can add your own buttons to it, each with a title you choose and a web address it opens. People use them for a status page, a handbook, or the organization's main website.
@@ -31,7 +31,7 @@ A few things happen when you save:
 
 ## Where the buttons show up
 
-The buttons sit on the landing page next to **Login**, in the order you listed them. If the waitlist is turned on, they come after the **Join Waitlist** button. See [Manage the waitlist](/support/admin/waitlist) for that form.
+The buttons sit on the landing page next to **Login**, in the order you listed them. If the waitlist is turned on, they come after the **Join waitlist** button. See [Manage the waitlist](/support/admin/waitlist) for that form.
 
 Clicking one opens the address in the same tab, so the visitor leaves the landing page.
 

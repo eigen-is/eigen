@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, waitlist, onboarding, invitations]
 related: [admin/get-started, admin/manage-members]
 order: 110
-updated: 2026-09-13
+updated: 2026-10-28
 ---
 
 When the waitlist is enabled, your Eigen landing page shows a sign-up form where people can submit their email address and a short note. You review each request in the admin panel and decide whether to invite them or reject their application.
@@ -16,7 +16,7 @@ When the waitlist is enabled, your Eigen landing page shows a sign-up form where
 2. Under **Waitlist**, turn on **Enable waitlist**.
 3. Click **Save**.
 
-Once enabled, a **Waitlist** entry appears in the sidebar. The landing page now shows a **Join Waitlist** button next to **Login**.
+Once enabled, a **Waitlist** entry appears in the sidebar. The landing page now shows a **Join waitlist** button next to **Login**.
 
 <div class="eigen-callout">
 
@@ -40,7 +40,7 @@ To filter the list, type in the **Filter by email...** bar at the top.
 ## Accept and invite
 
 1. Select the application in the **Pending** tab.
-2. Click **Accept & Invite** in the toolbar.
+2. Click **Accept & invite** in the toolbar.
 
 Eigen marks the entry as **Invited** and sends an invitation email immediately. The email contains a sign-up link that expires after seven days.
 
@@ -50,7 +50,7 @@ Select the entry and click **Reject** in the toolbar. The entry moves to the **R
 
 ## Resend an invitation
 
-If an invite has expired or the person did not receive the email, select their entry in the **Invited** tab and click **Resend Invite**. Eigen generates a fresh link (another seven days) and sends a new invitation email.
+If an invite has expired or the person did not receive the email, select their entry in the **Invited** tab and click **Resend invite**. Eigen generates a fresh link (another seven days) and sends a new invitation email.
 
 ## Delete an entry
 
@@ -59,7 +59,7 @@ Select the entry and click **Delete** in the toolbar. A confirmation dialog asks
 ## Customize the invitation email
 
 1. Open **Onboarding** in the sidebar.
-2. With **Enable waitlist** turned on, the **Invite Email** section appears below.
+2. With **Enable waitlist** turned on, the **Invite email** section appears below.
 3. Edit the **Subject** and **Body**. The body supports basic formatting.
 4. You can use the placeholders `{email}`, `{orgName}`, `{domain}`, and `{inviteLink}` anywhere in the subject or body.
 5. Click **Save**.

@@ -1,3 +1,6 @@
+// The Insert function dialog of the spreadsheet: function categories as tabs, a search, and the list of matching
+// functions. The pick goes into the cell being edited.
+
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -13,7 +16,7 @@ export const FUNCTION_CATEGORIES = [
     { t: 0, n: 'Math' },
     { t: 1, n: 'Statistical' },
     { t: 2, n: 'Lookup' },
-    { t: 4, n: 'Data Mining' },
+    { t: 4, n: 'Data mining' },
     { t: 5, n: 'Database' },
     { t: 6, n: 'Date' },
     { t: 7, n: 'Filter' },

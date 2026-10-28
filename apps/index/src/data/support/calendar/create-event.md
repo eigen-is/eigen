@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, events, recurring, attendees]
 related: [calendar/get-started, calendar/invite-people, calendar/recurring-events]
 order: 30
-updated: 2026-09-14
+updated: 2026-10-28
 ---
 
 You can create an event from the sidebar or by clicking any day in the calendar, then fill in the date, time, guests, and other details. This article covers creating an event, editing it, and deleting it.
@@ -17,7 +17,7 @@ There are two ways to open the new-event form.
 - Click **Create event** at the top of the sidebar.
 - Click any day in the month or week view. The form opens with that date already filled in.
 
-The **New Event** form opens as a dialog. Fill in the fields you need:
+The **New event** form opens as a dialog. Fill in the fields you need:
 
 1. Type a title in the **Add title** field at the top. A title is required.
 2. Set the date and, if it is a timed event, pick a start time and an end time from the dropdowns.
@@ -32,7 +32,7 @@ The **New Event** form opens as a dialog. Fill in the fields you need:
 ## Edit an event
 
 1. Click the event in the calendar. A detail panel opens showing the time, location, description, and any guests.
-2. Click the pencil icon in the bottom-left corner of the panel. The **Edit Event** dialog opens with all the same fields.
+2. Click the pencil icon in the bottom-left corner of the panel. The **Edit event** dialog opens with all the same fields.
 3. Make your changes, then click **Save**.
 
 On an event someone else invited you to, the details are grayed out, because only the organizer can change them. You can still move it to a different calendar, and you can [respond to the invitation](/support/calendar/respond-to-invitation).

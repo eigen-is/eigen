@@ -1,3 +1,5 @@
+// The dialog that adds a column to a board. It asks for the column's title and hands it to the board.
+
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -28,7 +30,7 @@ export function AddColumnDialog({ isOpen, onClose, onAddColumn }: AddColumnDialo
             <DialogContent size="sm" aria-describedby={undefined}>
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
-                        <DialogTitle>Add Column</DialogTitle>
+                        <DialogTitle>Add column</DialogTitle>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
@@ -48,7 +50,7 @@ export function AddColumnDialog({ isOpen, onClose, onAddColumn }: AddColumnDialo
                             Cancel
                         </Button>
                         <Button type="submit" disabled={!title.trim()}>
-                            Add Column
+                            Add column
                         </Button>
                     </DialogFooter>
                 </form>

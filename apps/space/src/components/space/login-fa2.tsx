@@ -1,3 +1,6 @@
+// The second sign-in step for a user with two-factor authentication: a code from their app, or one of their
+// backup codes. After it, the user goes back to the page that sent them to sign in.
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { getRouteApi } from '@tanstack/react-router';
 import { useVerifyBackupCode, useVerifyTotp } from '@workspace/lib/auth';
@@ -83,7 +86,7 @@ export default function LoginFa2Page() {
                                     name="code"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Verification Code</FormLabel>
+                                            <FormLabel>Verification code</FormLabel>
                                             <FormControl>
                                                 <Input
                                                     placeholder="Enter 6-digit code"
@@ -140,7 +143,7 @@ export default function LoginFa2Page() {
                                     name="code"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Backup Code</FormLabel>
+                                            <FormLabel>Backup code</FormLabel>
                                             <FormControl>
                                                 <Input
                                                     placeholder="Enter backup code"

@@ -1,3 +1,7 @@
+// The first-run wizard that names the organization, picks where files are stored, and creates the admin account.
+// The admin app shows it in place of everything else while the server reports that setup is still required, and
+// the setup link's token proves the visitor ran the setup command.
+
 import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3 } from '@workspace/lib/admin';
 import { getAdminAppUrl } from '@workspace/lib/api';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
@@ -100,14 +104,14 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                 <Card className="w-full max-w-md">
                     <CardHeader className="text-center">
                         <CheckCircle2 className="mx-auto h-16 w-16 text-success mb-4" />
-                        <CardTitle className="text-2xl">Setup Complete!</CardTitle>
+                        <CardTitle className="text-2xl">Setup complete!</CardTitle>
                         <CardDescription>
                             Eigen has been configured successfully. You can now log in with your admin account.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Button className="w-full" onClick={() => (window.location.href = getAdminAppUrl('login'))}>
-                            Go to Login
+                            Go to login
                         </Button>
                     </CardContent>
                 </Card>
@@ -128,10 +132,10 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-4">
-                            <h3 className="font-medium text-lg">Server Configuration</h3>
+                            <h3 className="font-medium text-lg">Server configuration</h3>
 
                             <div>
-                                <Label htmlFor="orgName">Organization Name</Label>
+                                <Label htmlFor="orgName">Organization name</Label>
                                 <Input
                                     id="orgName"
                                     value={orgName}
@@ -189,10 +193,10 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                         </div>
 
                         <div className="space-y-4 pt-6 border-t">
-                            <h3 className="font-medium text-lg">Admin Account</h3>
+                            <h3 className="font-medium text-lg">Admin account</h3>
 
                             <div>
-                                <Label htmlFor="adminName">Full Name</Label>
+                                <Label htmlFor="adminName">Full name</Label>
                                 <Input
                                     id="adminName"
                                     value={adminName}
@@ -244,7 +248,7 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
 
                         <div className="space-y-1.5">
                             <Button type="submit" disabled={completeSetup.isPending} className="w-full">
-                                {completeSetup.isPending ? 'Setting up...' : 'Complete Setup'}
+                                {completeSetup.isPending ? 'Setting up...' : 'Complete setup'}
                             </Button>
                             {!s3Verified && (
                                 <p className="text-xs text-muted-foreground text-center">

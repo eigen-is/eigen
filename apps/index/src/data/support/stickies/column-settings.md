@@ -5,22 +5,22 @@ type: how-to
 tags: [stickies, kanban, columns]
 related: [stickies/get-started, stickies/create-board]
 order: 50
-updated: 2026-06-08
+updated: 2026-10-28
 ---
 
-You can rename any column on a board you have write access to, or delete one you no longer need. Both actions are available from the **Column Settings** dialog.
+You can rename any column on a board you have write access to, or delete one you no longer need. Both actions are available from the **Column settings** dialog.
 
-## Open Column Settings
+## Open column settings
 
-Click the pencil icon in the column header. The **Column Settings** dialog opens for that column.
+Click the pencil icon in the column header. The **Column settings** dialog opens for that column.
 
 The pencil icon only appears if you can edit the board. If you have view-only access, the icon is not shown.
 
 ## Rename a column
 
-1. Open **Column Settings** for the column you want to rename.
+1. Open **Column settings** for the column you want to rename.
 2. Edit the text in the **Title** field.
-3. Click **Save Changes**.
+3. Click **Save changes**.
 
 The column header updates straight away.
 
@@ -28,8 +28,8 @@ The column header updates straight away.
 
 Deleting a column removes it and all the cards it contains. This cannot be undone.
 
-1. Open **Column Settings** for the column you want to remove.
-2. Click **Delete Column**.
+1. Open **Column settings** for the column you want to remove.
+2. Click **Delete column**.
 3. A confirmation dialog appears. If the column contains cards, it tells you how many will be deleted.
 4. Click **Delete** in the confirmation dialog.
 
