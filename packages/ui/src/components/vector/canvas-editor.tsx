@@ -622,9 +622,10 @@ export function CanvasEditor({
     // shape lives in the pure text-editing module; the canvas only picks the selection and opens.
     const openEditArrowLabel = (el: VectorArrowElement) => {
         const ed = arrowLabelEditing(el, arrowRoute(el, committedById));
-        if (!ed) return; // a degenerate arrow (< 2 points) has no label anchor
+        if (!ed) return false; // a degenerate arrow (< 2 points) has no label anchor
         setSelectedIds([el.id]);
         setEditing(ed);
+        return true;
     };
 
     // What this canvas sees (frame-scoped in frame mode) — the snap builder, the resize/move selection
@@ -1007,12 +1008,17 @@ export function CanvasEditor({
 
     // What opening an element does, for a double-click, a double-tap and Enter. An arrow opens the label overlay; a
     // kind with an edit dialog opens that (a chart's data); an element that holds text opens the in-place editor
-    // inside its own layer; anything else does nothing.
+    // inside its own layer; anything else does nothing. It says whether it opened anything.
     const editElement = (el: VectorElement) => {
-        if (!mayEdit()) return;
+        if (!mayEdit()) return false;
         if (el.type === 'arrow') return openEditArrowLabel(el);
-        if (ELEMENT_KIND_UI[el.type].EditDialog) return setEditDialogId(el.id);
-        if (isTextual(el)) openRichText(el.id);
+        if (ELEMENT_KIND_UI[el.type].EditDialog) {
+            setEditDialogId(el.id);
+            return true;
+        }
+        if (!isTextual(el)) return false;
+        openRichText(el.id);
+        return true;
     };
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes

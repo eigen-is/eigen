@@ -37,8 +37,8 @@ type CanvasKeyboardParams = {
     // The canvas element: Enter edits only when focus is on it or on the page itself, so a focused button,
     // link or rail thumbnail keeps its own Enter.
     containerRef: RefObject<HTMLElement | null>;
-    // What a double-click on the sole selected element does (the canvas' editElement).
-    onEdit: (el: VectorElement) => void;
+    // What a double-click on the sole selected element does (the canvas' editElement), and whether it did anything.
+    onEdit: (el: VectorElement) => boolean;
 };
 
 // Excalidraw's keys for its image tool and its tool lock; the toolbar shows them beside their rows.
@@ -193,9 +193,7 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
         if (e.target !== document.body && e.target !== p.containerRef.current) return;
         const el =
             p.selectedIds.length === 1 ? p.elements.find((candidate) => candidate.id === p.selectedIds[0]) : null;
-        if (!el) return;
-        e.preventDefault();
-        p.onEdit(el);
+        if (el && p.onEdit(el)) e.preventDefault();
     }, []);
     // The library takes every key it matches, a focused button's Enter too; this handler decides, so it asks for neither.
     const onEnter = useMemo(

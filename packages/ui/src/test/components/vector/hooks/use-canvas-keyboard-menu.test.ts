@@ -54,7 +54,7 @@ async function canvasWithMenuOpen() {
             reorderElements: () => {},
             duplicateElements: () => [],
             containerRef: { current: null },
-            onEdit: () => {},
+            onEdit: () => false,
         });
         return null;
     }

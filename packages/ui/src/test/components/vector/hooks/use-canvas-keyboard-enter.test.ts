@@ -28,10 +28,10 @@ const rectangle = (id: string): VectorElement => ({
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function canvas(selectedIds: string[], enabled = true) {
+async function canvas(selectedIds: string[], enabled = true, acts = true) {
     const container = document.createElement('div');
     document.body.append(container);
-    const onEdit = mock((_el: VectorElement) => {});
+    const onEdit = mock((_el: VectorElement) => acts);
     function Canvas() {
         useCanvasKeyboard({
             enabled,
@@ -73,6 +73,12 @@ test('Enter edits the sole selected element, from the page and from the canvas',
     expect(await enter(document.body)).toBe(true);
     expect(await enter(container)).toBe(true);
     expect(onEdit.mock.calls.map(([el]) => el.id)).toEqual(['e2', 'e2']);
+});
+
+test('Enter on an element that has nothing to open is not taken, so the key keeps its default', async () => {
+    const { enter, onEdit } = await canvas(['e1'], true, false);
+    expect(await enter(document.body)).toBe(false);
+    expect(onEdit).toHaveBeenCalledTimes(1);
 });
 
 test('Enter does nothing with no selection, with two, or while the keymap is off', async () => {
