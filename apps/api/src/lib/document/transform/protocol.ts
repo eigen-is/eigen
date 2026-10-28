@@ -10,8 +10,8 @@ import type { SlidePage } from '@workspace/lib/vector';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 
-// `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
-// subprocess, so the transform returns the document it renders from.
+// `pdf-html` is the HTML stage of the PDF export. WeasyPrint stays a subprocess of the main thread, so the
+// transform returns the document it renders from.
 export type SheetExportFormat = 'html' | 'xlsx' | 'pdf-html';
 export type DocumentExportFormat = 'html' | 'pdf-html';
 // Only eigendoc exports to docx and only eigenslides to pptx; the other routes reject them.
@@ -57,9 +57,8 @@ export type EmlPreviewJob = { kind: 'preview'; documentType: 'eml' };
 export type IcsPreviewJob = { kind: 'preview'; documentType: 'ics' };
 export type BytesPreviewJob = VCardPreviewJob | EmlPreviewJob | IcsPreviewJob;
 
-// `title` is the document title the renderer embeds — the transform has no DrivePath.
-// (Sheets and slides strip the eigen extension; eigendoc's <title> keeps the full
-// container name, frozen output.)
+// `title` is the document title the renderer embeds, because the transform has no DrivePath. Sheets and slides
+// strip the eigen extension from it. An eigendoc's <title> keeps the full container name, a frozen output.
 export type ExportTransformJob =
     | {
           kind: 'export';
@@ -95,9 +94,9 @@ export type ExtractTextJob = {
     documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' | 'eigenvector';
 };
 
-// Pure conversion of uploaded bytes: the transform learns nothing about the
-// destination — no owner, mount, ACL or path. One arm per supported source format,
-// so an impossible pairing (xlsx into an eigendoc) does not compile.
+// A pure conversion of uploaded bytes. The transform learns nothing about the destination, such as its owner,
+// mount, ACL or path. There is one arm per supported source format, so an impossible pairing, such as xlsx into
+// an eigendoc, does not compile.
 export type SheetsImportJob = {
     kind: 'import';
     sourceFormat: 'xlsx';
@@ -229,13 +228,12 @@ export function toTransformError(err: unknown): TransformError {
 // The route's preview less the mode it adds: a doc's carries its page and its Normal, which quick look and the hero
 // draw it on and in.
 export type PreviewResult = Omit<TextPreviewResult, 'mode'>;
-// Body text for the content index, already capped by the extractor — small like a
-// preview body.
+// Body text for the content index. The extractor already capped it, so it is as small as a preview body.
 export type ExtractTextResult = { text: string };
 // `zoom` is the one htmlToPdf hands WeasyPrint for a PDF document laid out at 1:1: a deck's, from its width.
 export type ExportTransformResult = { data: ArrayBuffer; zoom?: number };
-// UTF-8 bytes of the lean Sheet[] JSON — the main thread commits the string
-// without parsing it — plus the pictures its images name, which it writes through Mount.
+// The UTF-8 bytes of the lean Sheet[] JSON, which the main thread commits without parsing it. The pictures its
+// images name come beside it, and the main thread writes them through Mount.
 export type SheetsImportTransformResult = { snapshotJson: ArrayBuffer; images: TransformMedia[] };
 // A ready Yjs update plus the images extracted from the docx, its page and its Normal: the main thread
 // only commits the update, the page and the Normal and writes the media through Mount.
@@ -312,10 +310,9 @@ function isTransformMedia(value: unknown): boolean {
     );
 }
 
-// Which result member pairs with which request — the runner checks this at the trust
-// boundary, so every seam past it narrows without re-checking. Exhaustive over kind
-// (and, for imports, over the type produced), so a future union arm is a compile error
-// instead of a silent fallthrough.
+// Which result pairs with which request. The runner checks this at the trust boundary, so every seam past it
+// narrows without checking again. It is exhaustive over the kind, and for an import over the type it produces, so
+// a new arm of the union is a compile error instead of a silent fallthrough.
 export function resultMatchesRequest(request: DocumentTransformRequest, result: unknown): boolean {
     const r = result as
         | {
@@ -374,8 +371,8 @@ export function resultBytes(result: TransformResult): number {
     return result.images.reduce((sum, image) => sum + image.data.byteLength, main.byteLength);
 }
 
-// Buffers from TextEncoder and the writers can be views over a larger pool, and IPC
-// serializes a view's WHOLE backing buffer — copy to an exact standalone one first.
+// A buffer from TextEncoder or a writer can be a view over a larger pool. IPC sends a view's whole backing buffer,
+// so the bytes are copied to an exact buffer of their own first.
 export function toTransferableBuffer(bytes: Uint8Array): ArrayBuffer {
     const { buffer } = bytes;
     if (buffer instanceof ArrayBuffer && bytes.byteOffset === 0 && bytes.byteLength === buffer.byteLength)

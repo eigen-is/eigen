@@ -101,8 +101,9 @@ function collectCanvasText(elements: VectorElement[], kinds: ElementKindRegistry
     return out.parts.join('\n');
 }
 
-// Body text for one collab document, capped at about 100 KB. Sheets index their stored values and their charts' text:
-// as for the preview, the read never recalculates, so a formula cell with no value adds nothing.
+// Body text for one collab document, capped at about 100 KB. Sheets index their stored values and their charts' text.
+// As for the preview, the read never recalculates, so a formula cell with no value adds nothing. A full recalculation
+// of an old workbook that was never computed could take longer than the extract's deadline.
 export async function extractCollabText(
     documentType: ExtractTextJob['documentType'],
     doc: Y.Doc,
@@ -127,8 +128,6 @@ export async function extractCollabText(
                 import('../document/sheets'),
                 import('@workspace/sheet/engine'),
             ]);
-            // No recalc: the index serves stored values — a legacy never-computed
-            // workbook must not cost a full recalc inside the 30s extract deadline.
             const { sheets } = readSheetsFromDoc(doc, { recalc: false });
             const text = collectSheetsText(sheets, engine.cellDisplay, CONTENT_INDEX_MAX_BYTES);
             return { text, warnings: [] };

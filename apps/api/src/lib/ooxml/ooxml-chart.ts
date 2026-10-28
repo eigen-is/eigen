@@ -242,7 +242,7 @@ function chartSpec(
         isOnElement(child(labels, 'delete')) !== true &&
         isOnElement(child(labels, 'showVal')) === true;
     const groupShows = shows(child(group, 'dLbls'));
-    const labelled = (ser: XmlElement) => {
+    const labeled = (ser: XmlElement) => {
         const own = child(ser, 'dLbls');
         return own ? shows(own) : groupShows;
     };
@@ -251,12 +251,13 @@ function chartSpec(
         color: automatic(seriesColor(ser), index),
         line: { smooth: type === 'line' && isOnElement(child(ser, 'smooth')) === true },
         marker: { visible: markers && val(child(child(ser, 'marker'), 'symbol')) !== 'none' },
-        labels: { visible: labelled(ser) },
+        labels: { visible: labeled(ser) },
     });
 
     const [first] = series;
     const categories = series.map((ser) => child(ser, 'cat')).find(Boolean);
-    // The values' own format, which their labels read in: a 100% stack's axis formats shares, so its values carry it.
+    // The values' own format, which their labels show. A 100% stack's axis shows each value's share of its stack, so
+    // the values carry their own format.
     // A docx's or pptx's values are their caches, and an xlsx's cells carry their own.
     const numFmt = child(valueAxis, 'numFmt');
     const linked = stacking === 'percent' || !numFmt || isOn(xmlAttr(numFmt, '', 'sourceLinked')) === true;
