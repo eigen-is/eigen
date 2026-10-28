@@ -173,8 +173,9 @@ export type AlternateFormatEntry = {
 
 // The sheet as the editor holds it: lib's stored fields plus editor-only ones, such as the selections, the calc chain
 // and the filter criteria, which never reach the stored shape. `config` widens to the editor's SheetConfig. `id` is
-// required, because a stored sheet always has one and the editor names every sheet by it. Fields that persist, such
-// as the frozen panes, the hyperlinks and the tab colour, live on lib's Sheet, since the server reads them too.
+// required, because the editor names every sheet by it. A stored sheet may lack one: the Workbook takes lib's Sheet in
+// its `data` and gives such a sheet an id when it mounts. Fields that persist, such as the frozen panes, the hyperlinks
+// and the tab colour, live on lib's Sheet, since the server reads them too.
 export type Sheet = Omit<LibSheet, 'config' | 'id'> & {
     id: string;
     config?: SheetConfig;
