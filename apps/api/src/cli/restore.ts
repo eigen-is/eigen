@@ -134,6 +134,9 @@ type RestoreSwap = {
 
 type LightEntry = { path: string; dir: boolean };
 
+// What an orphan in staged.json may name: one user's or team's folder, never a hidden one such as a restore's own.
+const ORPHAN_HOME = new RegExp(`^(${USER_HOMES_DIR}|${TEAM_HOMES_DIR})/[^/.][^/]*$`);
+
 // What unsafeEntry() looks for. Not a setgid folder, which a setgid install folder hands down to every folder in it.
 const UNSAFE_FIND_ARGS =
     '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
@@ -466,9 +469,17 @@ function planLight(
         if (pathExists(join(DATA, top))) renames.push([join(DATA, top), join(aside, top)]);
         renames.push([join(staged, top), join(DATA, top)]);
     }
-    // Named at the stage; a home deleted since is gone already.
+    // Named at the stage, by the API's user, who can write staged.json: root moves only a home folder that is here and
+    // that the archive does not hold. A home deleted since is gone already.
+    const homesHere = new Set(
+        [USER_HOMES_DIR, TEAM_HOMES_DIR].flatMap((kind) =>
+            existsSync(join(DATA, kind)) ? readdirSync(join(DATA, kind)).map((id) => `${kind}/${id}`) : [],
+        ),
+    );
     for (const orphan of orphans) {
-        if (pathExists(join(DATA, orphan))) renames.push([join(DATA, orphan), join(aside, orphan)]);
+        if (ORPHAN_HOME.test(orphan) && homesHere.has(orphan) && !pathExists(join(staged, orphan))) {
+            renames.push([join(DATA, orphan), join(aside, orphan)]);
+        }
     }
     for (const kind of [USER_HOMES_DIR, TEAM_HOMES_DIR]) {
         if (!existsSync(join(staged, kind))) continue;

@@ -631,6 +631,42 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
+        'a Light swap moves aside only a home folder here that the archive does not hold, whatever staged.json names',
+        async () => {
+            const dir = install();
+            const staged = await stage(dir, basename(lightArchive));
+            expect(staged.code).toBe(0);
+            // The API's user writes staged.json, so it may name anything: root must not move the server's data, the
+            // staged tree, a home the archive holds or a file inside a home.
+            const recordPath = join(dir, 'data/.restoring/staged.json');
+            const record = JSON.parse(readFileSync(recordPath, 'utf8'));
+            const forged = ['server', 'dkim', 'certs', '.restoring', '', 'home', 'home/', 'home/../server'];
+            forged.push('home/.restoring', 'home/old/notes.txt', 'home/gone', `home/${alice.id}`, `team/${teamOwner}`);
+            mkdirSync(join(dir, 'data/home/.hidden'));
+            forged.push('home/.hidden');
+            writeFileSync(recordPath, JSON.stringify({ ...record, orphans: [...forged, ...record.orphans] }));
+            // Alice's home is here too, so the archive merges into it, and her files stay where they are.
+            const liveFile = join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, 'data/live.txt');
+            mkdirSync(dirname(liveFile), { recursive: true });
+            writeFileSync(liveFile, 'live file');
+
+            const swapped = await swap(dir);
+            expect(swapped.stderr).toBe('');
+            expect(swapped.code).toBe(0);
+            const [aside] = asideDirs(dir);
+            expect(readFileSync(join(dir, aside, 'home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+            expect(readFileSync(liveFile, 'utf8')).toBe('live file');
+            expect(existsSync(join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, 'metadata.db'))).toBe(true);
+            expect(existsSync(join(dir, 'data/home/.hidden'))).toBe(true);
+            expect(existsSync(join(dir, 'data/server', SERVER_DATABASES.users))).toBe(true);
+            expect(existsSync(join(dir, 'data/dkim/eigen.private'))).toBe(true);
+            expect(existsSync(join(homeDirOf(dir, teamOwner), 'mounts'))).toBe(true);
+            expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'a Light archive onto an empty install says which homes come back without files and mail',
         async () => {
             const dir = install();
