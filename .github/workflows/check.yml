@@ -15,10 +15,10 @@ permissions:
 jobs:
   # Every gate `bun run check` runs except the API suite, beside the jobs that run it.
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -58,14 +58,14 @@ jobs:
   # The API suite in three shards, balanced by the per-file times in apps/api/src/test/timings.json.
   api:
     name: api ${{ matrix.shard }}/3
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -78,7 +78,7 @@ jobs:
       # The venv and the packages the runner image lacks are cached per Ubuntu release and requirements, since the Ubuntu
       # mirror took anything from 1 to 50 s to serve them. Not per image version: two of them serve runs at once while a
       # new one rolls out. A cached copy that no longer installs is built again. A change to this file starts a fresh cache.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: pdf-engine
         with:
           path: |
@@ -110,7 +110,7 @@ jobs:
           grep -oE 'across [0-9]+ files?' "$RUNNER_TEMP/api.log" | tail -1 | grep -oE '[0-9]+' > "$RUNNER_TEMP/shard/files-${{ matrix.shard }}"
           cp src/test/timings.json "$RUNNER_TEMP/shard/timings-${{ matrix.shard }}.json"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: success() || failure()
         with:
           name: api-shard-${{ matrix.shard }}
@@ -120,12 +120,12 @@ jobs:
   # The shards ran every API test file between them: a file in no shard would fail no run.
   api-files:
     needs: api
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: api-shard-*
           merge-multiple: true
@@ -142,11 +142,11 @@ jobs:
   # after develop moved on. Here it turns develop red first. It blocks nothing, since a push to develop publishes none.
   container-db-marker:
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       # Every tag, for the previous release's db-config.ts files.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -160,9 +160,9 @@ jobs:
 
   # The launcher under dash, BusyBox and the runner's sh, with a stub docker: no stack, no Bun.
   launcher:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - run: bash docker/test-launcher.sh

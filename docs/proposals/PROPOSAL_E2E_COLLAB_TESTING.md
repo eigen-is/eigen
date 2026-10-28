@@ -38,7 +38,7 @@ The roadmap's own warning is the design constraint: **flaky suites get abandoned
 
 ## Current state (grounded)
 
-- **CI exists**: `../../.github/workflows/check.yml` runs on a push to `main`, `develop` or a `release-*` branch and on a PR to `main` or `develop` (`ubuntu-latest`, 15-minute timeout): `bun install --frozen-lockfile`, lint, typecheck, `primitives:check`, `bun --filter '*' test`. No E2E job, no browser step.
+- **CI exists**: `../../.github/workflows/check.yml` runs on a push to `main`, `develop` or a `release-*` branch and on a PR to `main` or `develop` (`ubuntu-26.04`, 15-minute timeout): `bun install --frozen-lockfile`, lint, typecheck, `primitives:check`, `bun --filter '*' test`. No E2E job, no browser step.
 - **Playwright is not a dependency anywhere.** No `playwright` in the root or any workspace `../../package.json`, no `playwright.config.*` in the repo. The verify-in-browser skill's recipe installs it ad-hoc (`bun add playwright` in a `/tmp` work dir, `chromium.launch({ channel: 'chrome' })`).
 - **Dev stack**: `bun run serve` = `bun --filter '*' dev` — every app's vite server plus the API. Ports in `../../vite.shared.config.ts` (`APP_PORTS`: index 3000 … sheets 3013); each app serves under its name as base path and builds to `dist/<app>`. The API listens on a **hardcoded port 8000** (`../../apps/api/src/index.ts`).
 - **API host resolution**: `resolveApiHost()` in `../../packages/lib/src/core/api.ts` — `VITE_API_HOST` absolute in dev (`http://localhost:8000`), relative in prod (`/eigen`, spliced onto `window.location.origin`). In production the frontend image's Caddy serves the built apps from `/www` and proxies the API (`../../docker/frontend/Dockerfile`). CORS/auth origins are the hardcoded `trustedOrigins` list in `../../apps/api/src/lib/auth/auth.ts` (localhost:3000…3013).
@@ -162,10 +162,10 @@ A separate job in `../../.github/workflows` (new `e2e.yml` or a second job in `c
 
 ```yaml
 e2e:
-  runs-on: ubuntu-latest
+  runs-on: ubuntu-26.04
   timeout-minutes: 15
   steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - uses: oven-sh/setup-bun@v2
     - run: bun install --frozen-lockfile
     - uses: actions/cache@v4
@@ -173,7 +173,7 @@ e2e:
     - run: bunx playwright install chromium --with-deps
     - run: bun run build:e2e     # vite build --mode e2e per app under test → committed root .env.e2e
     - run: bun run test:e2e
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: failure()
       with: { name: e2e-traces, path: e2e/test-results/, retention-days: 14 }
 ```

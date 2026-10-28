@@ -33,7 +33,7 @@ jobs:
   # migrates a container's database since the previous release tag needs a (full backup) line in CHANGELOG.md. So does
   # a push to main that migrates one since the release it runs on, under [Unreleased], which the main channel reads.
   meta:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
       version: ${{ steps.meta.outputs.version }}
@@ -44,7 +44,7 @@ jobs:
       bun-version: ${{ steps.meta.outputs.bun-version }}
     steps:
       # Every tag, for the previous release's db-config.ts files.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -96,7 +96,7 @@ jobs:
   publish:
     needs: meta
     name: publish ${{ matrix.image.name }} (${{ matrix.platform }})
-    runs-on: ${{ matrix.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.platform == 'arm64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -111,7 +111,7 @@ jobs:
           - { name: unbound, context: docker/unbound, file: docker/unbound/Dockerfile }
         platform: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: docker/login-action@v3
         with:
@@ -153,13 +153,13 @@ jobs:
   gate:
     needs: meta
     if: github.ref_type == 'tag'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 100
     permissions:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - run: bash docker/test-release.sh
         env:
@@ -172,10 +172,10 @@ jobs:
   boot-arm64:
     needs: [meta, publish]
     if: github.ref_type == 'tag'
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - run: bash docker/test-boot.sh
         env:
@@ -191,7 +191,7 @@ jobs:
       ${{ !cancelled() && needs.publish.result == 'success' && (
       (github.ref_type == 'tag' && needs.gate.result == 'success' && needs.boot-arm64.result == 'success') ||
       github.ref_type == 'branch') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -201,7 +201,7 @@ jobs:
       TARGET: ${{ needs.meta.outputs.target }}
       BUILT_AT: ${{ needs.meta.outputs.built-at }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: docker/login-action@v3
         with:
