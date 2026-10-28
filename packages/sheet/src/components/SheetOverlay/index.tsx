@@ -1,10 +1,12 @@
 // The DOM layer over the grid canvas: the row and column headers, the scrolling cell area with the cell editor,
 // selections and floating images and charts, the validation and link cards, and the add-rows footer. It turns the
 // pointer's down, move, up and double click on the cell area into the state handlers, such as
-// handleCellAreaMouseDown, and coalesces mouse moves to one update per frame.
+// handleCellAreaMouseDown, and coalesces mouse moves to one update per frame. A press that closes an open app-bar
+// menu is marked before the cells or a header read it, so it puts no reference into a formula.
 
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
+import { pressClosesMenu } from '@workspace/ui/components/menubar';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -417,6 +419,10 @@ export const SheetOverlay: React.FC = () => {
             className="sheet-overlay"
             ref={containerRef}
             tabIndex={-1}
+            // Radix closes an open menu on the pointerdown, before the mousedown of the cells or a header reads this.
+            onPointerDownCapture={() => {
+                refs.globalCache.pressClosedMenu = pressClosesMenu();
+            }}
             style={{
                 width: context.tableContentSize[0],
                 height: context.tableContentSize[1],

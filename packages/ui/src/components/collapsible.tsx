@@ -1,5 +1,8 @@
-import * as CollapsiblePrimitive from '@radix-ui/react-collapsible';
+// shadcn's Collapsible on Radix: a trigger that shows and hides a region below it, such as a
+// folder's children in a sidebar tree. The content animates open and closed with Radix's height variable.
+
 import { cn } from '@workspace/ui/lib/utils';
+import { Collapsible as CollapsiblePrimitive } from 'radix-ui';
 import type * as React from 'react';
 
 function Collapsible({ ...props }: React.ComponentProps<typeof CollapsiblePrimitive.Root>) {

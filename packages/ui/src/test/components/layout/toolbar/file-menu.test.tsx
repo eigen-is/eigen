@@ -19,6 +19,7 @@ const { CommandPaletteProvider } = await import(
     '../../../../components/layout/app/command-palette/command-palette-provider'
 );
 const { FileMenu } = await import('../../../../components/layout/toolbar/file-menu');
+const { Menubar } = await import('../../../../components/menubar');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -33,7 +34,7 @@ async function fileMenuItems(): Promise<(string | undefined)[]> {
     });
     const router = createRouter({
         routeTree: createRootRoute({
-            component: () => createElement(CommandPaletteProvider, null, menu),
+            component: () => createElement(CommandPaletteProvider, null, createElement(Menubar, null, menu)),
         }),
         history: createMemoryHistory(),
     });

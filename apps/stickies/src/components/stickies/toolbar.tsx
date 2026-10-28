@@ -1,11 +1,16 @@
+// The Stickies board's bar: File, Edit, Insert and Filter menus on the left, the color filter dots in the middle
+// and the share cluster on the right. The board owns the comment filter the Filter menu and the dots edit. The bar
+// holds which menu is open, so a pick in Filter that the menu can't close itself, such as an assignee, closes it.
+
 import { useYjsUndoState } from '@workspace/lib/collab';
 import type { useCommentFilter } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
-import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, ToolbarMenu } from '@workspace/ui';
+import { AppBarMenu, CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu } from '@workspace/ui';
 import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/comments';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
+import { Menubar } from '@workspace/ui/components/menubar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, Plus, SquareKanban } from 'lucide-react';
@@ -43,13 +48,13 @@ export function Toolbar({
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
     const isCompact = useIsCompactToolbar();
-    // Controlled so assignee/status/clear picks can dismiss the menu; color toggles keep it open.
-    const [filterOpen, setFilterOpen] = useState(false);
+    // The bar's open menu, held here so an assignee, status or clear pick in Filter can close it; a color toggle keeps it open.
+    const [openMenu, setOpenMenu] = useState('');
 
     return (
         <CenteredToolbar
             left={
-                <div className="flex items-center">
+                <Menubar value={openMenu} onValueChange={setOpenMenu}>
                     <FileMenu
                         path={path}
                         canWrite={canWrite}
@@ -60,21 +65,21 @@ export function Toolbar({
                     />
                     <EditMenu canEdit={canWrite} canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo} />
                     {canWrite && (
-                        <ToolbarMenu label="Insert">
+                        <AppBarMenu label="Insert">
                             <DropdownMenuItem onClick={onAddColumn}>
                                 <Plus className="h-4 w-4" /> Column
                             </DropdownMenuItem>
-                        </ToolbarMenu>
+                        </AppBarMenu>
                     )}
-                    <ToolbarMenu label="Filter" open={filterOpen} onOpenChange={setFilterOpen}>
+                    <AppBarMenu label="Filter" value="filter">
                         <CommentFilterMenuItems
                             filter={filter}
                             members={members}
                             currentUserEmail={currentUserEmail}
-                            onClose={() => setFilterOpen(false)}
+                            onClose={() => setOpenMenu('')}
                         />
-                    </ToolbarMenu>
-                </div>
+                    </AppBarMenu>
+                </Menubar>
             }
             center={
                 isCompact ? null : (

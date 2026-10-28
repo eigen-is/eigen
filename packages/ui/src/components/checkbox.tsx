@@ -1,9 +1,9 @@
 // The shared checkbox: Radix's, drawn in the theme's primary color when checked. An indeterminate box, which a panel
 // shows when the selection disagrees, takes the same fill with a minus, as a dropdown's checkbox item does.
 
-import * as CheckboxPrimitive from '@radix-ui/react-checkbox';
 import { cn } from '@workspace/ui/lib/utils';
 import { CheckIcon, MinusIcon } from 'lucide-react';
+import { Checkbox as CheckboxPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
 function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxPrimitive.Root>) {

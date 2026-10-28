@@ -1,9 +1,16 @@
+// The Edit menu of every document app's bar: Undo and Redo, a host's own entries such as Cut and Copy, and Find.
+// Each app has its own undo machinery, such as a Yjs UndoManager or Tiptap's history, so the handlers come in as
+// props. The Find entries come from the DocSearchProvider the bar sits under, and a Find pick hands the focus to the
+// find bar rather than to the host's editor.
+
 import { formatForDisplay } from '@tanstack/react-hotkeys';
+import { REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/collab';
 import { DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut } from '@workspace/ui/components/dropdown-menu';
 import { Redo, Search, TextSearch, Undo } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { FIND_HOTKEY, FIND_REPLACE_HOTKEY } from '../../search/doc-search-provider';
 import { useFindBarRefocus } from '../../search/find-in-document-button';
-import { ToolbarMenu } from './toolbar-menu';
+import { AppBarMenu } from './app-bar-menu';
 
 type EditMenuProps = {
     // Gates the undo/redo section — pass the same condition the surface used for its icon
@@ -23,9 +30,6 @@ type EditMenuProps = {
     onCloseAutoFocus?: (event: Event) => void;
 };
 
-// The 'Edit' menubar entry next to FileMenu, shared by all eigendoc toolbars. Undo machinery is
-// per-app (Yjs UndoManager, TipTap history), so handlers come in as props; the find entries come
-// from the DocSearchProvider the toolbar is mounted under (null-safe: absent provider → no items).
 export function EditMenu({
     canEdit,
     canUndo,
@@ -39,7 +43,7 @@ export function EditMenu({
     const { docSearchBar, focusFindBarRef, onCloseAutoFocus: refocusFindBar } = useFindBarRefocus();
 
     return (
-        <ToolbarMenu
+        <AppBarMenu
             label="Edit"
             onCloseAutoFocus={(event) => {
                 refocusFindBar(event);
@@ -50,11 +54,11 @@ export function EditMenu({
                 <>
                     <DropdownMenuItem onClick={onUndo} disabled={!canUndo}>
                         <Undo className="h-4 w-4" /> Undo
-                        <DropdownMenuShortcut>{formatForDisplay('Mod+Z')}</DropdownMenuShortcut>
+                        <DropdownMenuShortcut>{formatForDisplay(UNDO_HOTKEY)}</DropdownMenuShortcut>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={onRedo} disabled={!canRedo}>
                         <Redo className="h-4 w-4" /> Redo
-                        <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+Z')}</DropdownMenuShortcut>
+                        <DropdownMenuShortcut>{formatForDisplay(REDO_HOTKEY)}</DropdownMenuShortcut>
                     </DropdownMenuItem>
                     {children}
                 </>
@@ -70,7 +74,7 @@ export function EditMenu({
                     }}
                 >
                     <Search className="h-4 w-4" /> Find
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+F')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(FIND_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {docSearchBar?.canReplace && (
@@ -81,9 +85,9 @@ export function EditMenu({
                     }}
                 >
                     <TextSearch className="h-4 w-4" /> Find and replace
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+H')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(FIND_REPLACE_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
-        </ToolbarMenu>
+        </AppBarMenu>
     );
 }

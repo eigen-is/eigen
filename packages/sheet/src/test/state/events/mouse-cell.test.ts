@@ -44,12 +44,31 @@ function tickBoxContext(): Context {
 // empty style yields is NaN, the painter's middle default.
 const PAINTED_BOX = checkboxRect(cellTextBox(0, 20, 74, 40), checkboxAlign(null, TICK_BOX, 'FALSE'), Number.NaN);
 
-function mouseDownAt(ctx: Context, x: number, y: number) {
+function quietCache(state: Partial<GlobalCache> = {}): GlobalCache {
+    return {
+        undoList: [],
+        redoList: [],
+        scrollLeft: 0,
+        scrollTop: 0,
+        scrollListeners: new Set(),
+        notifyScrollListeners: () => {},
+        ...state,
+    };
+}
+
+// Returns whether the handler kept the browser from acting on the press, such as moving the focus out of the editor.
+function mouseDownAt(ctx: Context, x: number, y: number, cacheState: Partial<GlobalCache> = {}): boolean {
+    const globalCache = quietCache(cacheState);
     const container = win.document.createElement('div') as unknown as HTMLDivElement;
     container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
     const cellInput = win.document.createElement('div') as unknown as HTMLDivElement;
-    const event = { button: 0, pageX: x, pageY: y, shiftKey: false, preventDefault() {} } as unknown as MouseEvent;
-    handleCellAreaMouseDown(ctx, {} as GlobalCache, event, cellInput, container);
+    let prevented = false;
+    const preventDefault = () => {
+        prevented = true;
+    };
+    const event = { button: 0, pageX: x, pageY: y, shiftKey: false, preventDefault } as unknown as MouseEvent;
+    handleCellAreaMouseDown(ctx, globalCache, event, cellInput, container);
+    return prevented;
 }
 
 function mouseDownOnTickBox(ctx: Context) {
@@ -91,6 +110,28 @@ describe('handleCellAreaMouseDown — tick box', () => {
     });
 });
 
+// The menu bar's menus leave the page live, so the press that closes one reaches the grid too.
+describe('handleCellAreaMouseDown — a press that closes a menu', () => {
+    // The browser would move the focus out of the editor, and its caret to the start, as a reference press never does.
+    test('puts no reference into the formula being composed, and leaves the caret where it was', () => {
+        const ctx = tickBoxContext();
+        ctx.editingCellPosition = [0, 0];
+        ctx.formulaCache.rangestart = true;
+        ctx.formulaRangeHighlight = [];
+        expect(mouseDownAt(ctx, 30, 30, { pressClosedMenu: true })).toBe(true);
+        expect(ctx.formulaCache.func_selectedrange).toBeUndefined();
+
+        mouseDownAt(ctx, 30, 30, { pressClosedMenu: false });
+        expect(ctx.formulaCache.func_selectedrange?.row).toEqual([1, 1]);
+    });
+
+    test('still moves the selection when no formula waits for a reference', () => {
+        const ctx = tickBoxContext();
+        mouseDownAt(ctx, 30, 30, { pressClosedMenu: true });
+        expect(ctx.selections?.[0]?.row).toEqual([1, 1]);
+    });
+});
+
 // A press on a painted cell glyph outranks the selection box's DOM drag
 // targets. OverlayVisuals asks cellGlyphAtPointer before either handle starts
 // its drag, and lets a glyph press bubble to the cell area instead — these pin
@@ -99,7 +140,7 @@ describe('handleCellAreaMouseDown — tick box', () => {
 // are the fill handle's grab and the 2px inside every edge the move band's.
 describe('cell glyphs over the selection drag handles', () => {
     const LIST_RULE: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
-    const GLOBAL_CACHE = { scrollLeft: 0, scrollTop: 0 } as GlobalCache;
+    const GLOBAL_CACHE = quietCache();
 
     function selectedA1(): Context {
         const ctx = contextFactory() as Context;

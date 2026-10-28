@@ -1,6 +1,9 @@
-import * as RadioGroupPrimitive from '@radix-ui/react-radio-group';
+// shadcn's RadioGroup on Radix: a set of round options where exactly one is picked, for forms and dialogs.
+// Arrow keys move between the options, as Radix provides.
+
 import { cn } from '@workspace/ui/lib/utils';
 import { CircleIcon } from 'lucide-react';
+import { RadioGroup as RadioGroupPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
 function RadioGroup({ className, ...props }: React.ComponentProps<typeof RadioGroupPrimitive.Root>) {

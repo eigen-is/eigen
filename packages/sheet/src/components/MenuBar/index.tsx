@@ -2,7 +2,8 @@
 // and the host's own items at either end. While a cell is open, every menu hands the focus back to the cell
 // editor as it closes.
 
-import { ToolbarMenu } from '@workspace/ui/components/layout/toolbar';
+import { AppBarMenu } from '@workspace/ui/components/layout/toolbar';
+import { Menubar } from '@workspace/ui/components/menubar';
 import { useFindBarRefocus } from '@workspace/ui/components/search/find-in-document-button';
 import type { ReactNode } from 'react';
 import { useContext } from 'react';
@@ -36,9 +37,9 @@ export function MenuBar({ leftItems, rightItems }: Props) {
     return (
         <div className="@container border-b border-border bg-background">
             <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] @[1360px]:grid-cols-[1fr_auto_1fr] items-center gap-1 app-gutter-x h-12">
-                <div className="flex items-center gap-1 min-w-0 overflow-x-auto">
+                <Menubar className="min-w-0 overflow-x-auto">
                     {leftItems}
-                    <ToolbarMenu
+                    <AppBarMenu
                         label="Edit"
                         contentClassName="w-56 sheet-mousedown-cancel"
                         onCloseAutoFocus={(event) => {
@@ -47,47 +48,47 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                         }}
                     >
                         <SheetEditMenu focusFindBarRef={focusFindBarRef} />
-                    </ToolbarMenu>
+                    </AppBarMenu>
 
                     {/* View / Insert / Format / Data are wholly mutating — hidden for viewers, like
                         FormatToolbar. Edit stays (Copy / Find gate per-item); viewers still read
                         comments via the ungated Comments panel toggle. */}
                     {context.allowEdit && (
                         <>
-                            <ToolbarMenu
+                            <AppBarMenu
                                 label="View"
                                 contentClassName="w-56 sheet-mousedown-cancel"
                                 onCloseAutoFocus={refocusCellEditor}
                             >
                                 <ViewMenu />
-                            </ToolbarMenu>
+                            </AppBarMenu>
 
-                            <ToolbarMenu
+                            <AppBarMenu
                                 label="Insert"
                                 contentClassName="w-56 sheet-mousedown-cancel"
                                 onCloseAutoFocus={refocusCellEditor}
                             >
                                 <InsertMenu />
-                            </ToolbarMenu>
+                            </AppBarMenu>
 
-                            <ToolbarMenu
+                            <AppBarMenu
                                 label="Format"
                                 contentClassName="w-64 sheet-mousedown-cancel"
                                 onCloseAutoFocus={refocusCellEditor}
                             >
                                 <FormatMenu caret={caret} />
-                            </ToolbarMenu>
+                            </AppBarMenu>
 
-                            <ToolbarMenu
+                            <AppBarMenu
                                 label="Data"
                                 contentClassName="w-56 sheet-mousedown-cancel"
                                 onCloseAutoFocus={refocusCellEditor}
                             >
                                 <DataMenu />
-                            </ToolbarMenu>
+                            </AppBarMenu>
                         </>
                     )}
-                </div>
+                </Menubar>
 
                 <div className="flex justify-center">
                     <FormatToolbar caret={caret} />

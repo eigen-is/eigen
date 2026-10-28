@@ -45,8 +45,8 @@ export function FindInDocumentMenuItem({ focusFindBarRef }: { focusFindBarRef: R
 // Radix keeps focus inside the closing menu until its exit finishes, so a focus set by a Find pick is
 // stolen back to the trigger. A pick flags focusFindBarRef; onCloseAutoFocus then suppresses the
 // trigger-restore AND re-opens the bar (open() re-focuses when already open). Shared by the doc + sheet
-// Edit menus and the mobile kebab: spread onCloseAutoFocus onto the DropdownMenuContent, hand
-// focusFindBarRef to the Find item(s).
+// Edit menus and the mobile kebab: pass onCloseAutoFocus to the menu, and hand focusFindBarRef to the
+// Find item(s).
 export function useFindBarRefocus() {
     const docSearchBar = useOptionalDocSearchBar();
     const focusFindBarRef = useRef(false);

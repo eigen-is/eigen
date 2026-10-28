@@ -22,7 +22,12 @@ const { EditorToolbar } = await import('../../../components/docs/editor-toolbar'
 const { PositionedFigures } = await import('../../../components/docs/extensions/positioned-figure');
 
 let unmount = async () => {};
-afterEach(() => unmount());
+// A dialog that unmounts hands focus back a tick later. Let it land before the next test opens a bar menu, which closes
+// when the focus moves out of it.
+afterEach(async () => {
+    await unmount();
+    await new Promise((resolve) => setTimeout(resolve));
+});
 
 // Mounted in the document, so a test can read whether it holds focus.
 const editor = new Editor({
@@ -113,7 +118,8 @@ const iconRow = () =>
         (button.getAttribute('aria-label') ?? button.textContent ?? '').replace(/ \(.*\)$/, ''),
     );
 
-const menuItems = () => [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim());
+const menuItems = () =>
+    [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((item) => item.textContent?.trim());
 
 // The last-opened menu's items in order, a separator as '—'.
 const openMenuEntries = () =>
@@ -131,15 +137,19 @@ const menuTrigger = (label: string) =>
         (button) => button.textContent === label || button.getAttribute('aria-label') === label,
     );
 
+// The pointer reaches the trigger before it presses it, which opens a bar menu already while another one is open.
 async function openMenu(label: string) {
     const trigger = menuTrigger(label);
+    await act(async () => {
+        trigger?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    });
     await act(async () => {
         trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
     });
 }
 
 async function openSubmenu(label: string) {
-    const trigger = [...document.querySelectorAll('[role="menuitem"]')].find(
+    const trigger = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find(
         (item) => item.textContent?.trim() === label,
     );
     await act(async () => {
@@ -253,7 +263,7 @@ test("Format › Text › Size steps the size, with Google's keys", async () => 
         `Increase font size${formatForDisplay('Mod+Shift+.')}`,
         `Decrease font size${formatForDisplay('Mod+Shift+,')}`,
     ]);
-    const increase = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+    const increase = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find((item) =>
         item.textContent?.trim().startsWith('Increase font size'),
     );
     await act(async () => increase?.click());
@@ -647,12 +657,12 @@ const TABLE_AND_FIGURE = {
 };
 
 const submenuDisabled = (label: string) =>
-    [...document.querySelectorAll('[role="menuitem"]')]
+    [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
         .find((item) => item.textContent?.trim() === label)
         ?.getAttribute('aria-disabled') === 'true';
 
 async function clickItem(label: string) {
-    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find(
         (entry) => entry.textContent?.trim() === label,
     );
     await act(async () => item?.click());
@@ -714,7 +724,7 @@ test('Format › Table › Cell background color fills the cell the caret is in,
     await openMenu('Format');
     await openSubmenu('Table');
     await openSubmenu('Cell background color');
-    const swatch = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][title^="#"]')].at(-1);
+    const swatch = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"][title^="#"]')].at(-1);
     if (!swatch) throw new Error('no swatch');
     await act(async () => swatch.click());
     expect(fill()).toBe(swatch.title.toLowerCase());
@@ -869,8 +879,8 @@ test("in a band, Insert, Format and the style picker offer only what the band's 
     const band = new Editor({ extensions: rootExtensions({ band: true }) });
     await render(1920, true, { active: band });
     await openMenu('Insert');
-    const disabled = [...document.querySelectorAll('[role="menuitem"][aria-disabled="true"]')].map((item) =>
-        item.textContent?.trim(),
+    const disabled = [...document.querySelectorAll('[role="menu"] [role="menuitem"][aria-disabled="true"]')].map(
+        (item) => item.textContent?.trim(),
     );
     expect(
         disabled.filter(
@@ -997,6 +1007,53 @@ test.each(['File', 'Edit', 'Format', 'Insert', 'Tools'])(
             );
         });
         expect(document.activeElement === editor.view.dom).toBe(true);
+    },
+);
+
+// The closing Format menu would give the editor the focus, and Edit would close as the focus left it.
+test('a press on Edit while Format is open opens Edit, and the focus stays in it', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    await pickInBrowserFrames(() => openMenu('Edit'));
+    const menu = document.activeElement?.closest('[role="menu"]');
+    expect(menu?.getAttribute('aria-labelledby')).toBe(menuTrigger('Edit')?.id);
+});
+
+// The press lands on the trigger, which a browser focuses, and Radix would leave the focus there.
+test('a second press on Format closes it and gives focus back to the editor', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    const trigger = menuTrigger('Format');
+    if (!(trigger instanceof HTMLElement)) throw new Error('no Format trigger');
+    await pickInBrowserFrames(async () => {
+        await act(async () => {
+            trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+            trigger.focus();
+        });
+    });
+    expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
+    expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
+// A bar menu leaves the page live, so a press outside it focuses what it lands on, such as the size box, the find bar
+// or a comment's reply box, as the menu closes. The editor leaves the focus there.
+test.each(['Format', 'Normal text', 'Align'])(
+    'a press into the size box while %s is open closes it and the box keeps the focus',
+    async (menu) => {
+        editor.commands.setContent(ONE_PARAGRAPH);
+        editor.commands.setTextSelection(1);
+        await render(1920, true);
+        await openMenu(menu);
+        const box = document.querySelector<HTMLInputElement>('input[aria-label="Font size"]');
+        if (!box) throw new Error('no size box');
+        await pickInBrowserFrames(async () => {
+            await act(async () => {
+                box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+                box.focus();
+            });
+        });
+        expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
+        expect(document.activeElement === box).toBe(true);
     },
 );
 
@@ -1160,7 +1217,7 @@ const wordCountRows = () =>
 async function openWordCount() {
     await openMenu('Tools');
     expect(openMenuEntries()).toEqual([`Word count${formatForDisplay('Mod+Shift+C')}`]);
-    const item = document.querySelector<HTMLElement>('[role="menuitem"]');
+    const item = document.querySelector<HTMLElement>('[role="menu"] [role="menuitem"]');
     await act(async () => item?.click());
 }
 
@@ -1209,7 +1266,7 @@ test.each([true, false])("on a phone the kebab's Word count opens the dialog (wr
     expect(menus()).not.toContain('Tools');
     await openMenu('More actions');
 
-    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((entry) =>
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find((entry) =>
         entry.textContent?.trim().startsWith('Word count'),
     );
     await act(async () => item?.click());
@@ -1238,7 +1295,7 @@ test.each([true, false])("on a phone the kebab's Show outline opens the outline 
     onToggleOutline.mockClear();
     await render(390, canWrite);
     await openMenu('More actions');
-    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find(
         (entry) => entry.textContent?.trim() === 'Show outline',
     );
     await act(async () => item?.click());
@@ -1520,7 +1577,7 @@ describe('Print', () => {
 });
 
 const footnoteItem = () =>
-    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+    [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find((item) =>
         item.textContent?.trim().startsWith('Footnote'),
     );
 
