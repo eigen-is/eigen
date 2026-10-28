@@ -1,5 +1,5 @@
 // The chart spec every chart host stores, such as a canvas element, a Docs node or a sheet's chart, and the change an
-// editor hands its host. Shared by every package that reads, edits, draws or converts a chart.
+// editor hands its host. The API and the apps share these types, so a chart reads the same wherever it is drawn.
 
 import type {
     FillStyle,
