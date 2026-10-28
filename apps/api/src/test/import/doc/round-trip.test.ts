@@ -1635,3 +1635,29 @@ test("a block figure at a heading's start keeps the heading's space above it", (
     });
     expect(figureBefore(again)).toBe(figureBefore(first));
 });
+
+// The writer gives a block box a paragraph of its own, aligned as the box, with a figure's margin as its space.
+describe('a text box in the flow', () => {
+    test.each(['left', 'right'])('aligned %s keeps its alignment and its space over three round trips', (alignment) => {
+        const box = {
+            type: 'textBox',
+            attrs: { layout: 'block', alignment, width: 200 },
+            content: [p('Boxed')],
+        };
+        const source = docSchema()
+            .nodeFromJSON({ type: 'doc', content: [p('Before'), { type: 'paragraph', content: [box] }, p('After')] })
+            .toJSON();
+        let json = source;
+        for (let trip = 0; trip < 3; trip++) {
+            json = docxToPmJson(
+                Buffer.from(
+                    writeDocx(
+                        { json, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+                        { title: 'Box', media: [], lost: () => {} },
+                    ),
+                ),
+            ).json;
+        }
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});

@@ -721,6 +721,25 @@ describe('docx writer — text boxes', () => {
         expect(Number(xmlAttr(only(descendants(grown, A_NS, 'ext')), '', 'cy'))).toBeGreaterThan(40 * 9525 * 3);
     });
 
+    // The estimate counts characters at the body's size, so it can't tell a picture or larger type would fit.
+    test('a box holding a picture or type above the body size grows, whatever its height', async () => {
+        const fit = async (...content: JSONContent[]) =>
+            shape(
+                only(
+                    descendants(
+                        await shapeOf(doc(p(box({ layout: 'front', height: 200 }, p(...content))))),
+                        WPS,
+                        'bodyPr',
+                    ),
+                ),
+            );
+        const picture = { type: 'figure', attrs: { mediaName: 'a.png', width: 120 } };
+        const sized = (fontSize: number) => text('Big', { type: 'textStyle', attrs: { fontSize } });
+        expect(await fit(text('Short'), picture)).toEqual(['spAutoFit']);
+        expect(await fit(sized(DEFAULT_NORMAL_STYLE.size + 1))).toEqual(['spAutoFit']);
+        expect(await fit(sized(DEFAULT_NORMAL_STYLE.size))).toEqual(['noAutofit']);
+    });
+
     test('the fill, the outline with its dash or double line, and rounded corners are the shape’s', async () => {
         const look = async (attrs: Record<string, unknown>) => {
             const spPr = only(descendants(await shapeOf(doc(p(box({ layout: 'front', ...attrs })))), WPS, 'spPr'));
@@ -757,6 +776,20 @@ describe('docx writer — text boxes', () => {
         const body = await bodyOf(doc(cell(p(text('Cell'), box({ layout: 'front', offsetX: 5, offsetY: 5 })))));
         expect(descendants(body, WP, 'anchor')).toEqual([]);
         expect(descendants(body, WP, 'inline')).toHaveLength(1);
+    });
+
+    // A story never holds a story: Word refuses a note reference in a box, and a forged one writes as its text.
+    test('a note or a box inside a box writes as its text, after a space', async () => {
+        const note = { type: 'footnote', content: [p(text('Noted'))] };
+        const inner = box({ layout: 'block' }, p(text('Inner')));
+        const zip = await unzip(doc(p(box({ layout: 'front' }, p(text('Boxed'), note, inner)))));
+        const body = xmlChild(await part(zip, 'word/document.xml'), W, 'body');
+        if (!body) throw new Error('no w:body');
+        expect(descendants(body, W, 'footnoteReference')).toEqual([]);
+        expect(zip.read('word/footnotes.xml')).toBeUndefined();
+        const content = only(descendants(body, W, 'txbxContent'));
+        expect(descendants(content, WPS, 'wsp')).toEqual([]);
+        expect(xmlChildren(content, W, 'p').map(texts)).toEqual(['Boxed Noted Inner']);
     });
 
     test('the document declares wps, and a box loses nothing', async () => {
