@@ -5,6 +5,7 @@
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import type { BackupProgress } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { incompleteReason, parseBackupArtifactName } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
@@ -29,7 +30,6 @@ import {
 } from './paths';
 import { markRestoreComplete, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
-import type { SnapshotProgress } from './snapshot-home';
 import { requireVerified, verifyFolder } from './verify';
 
 // A safety copy of a home whose owner is gone is a delete candidate, not a restore: the folder on
@@ -115,7 +115,7 @@ export async function restoreHome(
     artifactName: string,
     ownerId: string,
     jobId: string,
-    onProgress?: SnapshotProgress,
+    onProgress?: BackupProgress,
 ): Promise<void> {
     if (!parseBackupArtifactName(artifactName)) {
         throw new ApiError(400, `${artifactName} is not a backup artifact name`);
@@ -190,7 +190,7 @@ export async function restoreSafetyCopy(
     ownerId: string,
     name: string,
     jobId: string,
-    onProgress?: SnapshotProgress,
+    onProgress?: BackupProgress,
 ): Promise<void> {
     const { folder, homeDir, kind } = await resolveSafetyCopy(ownerId, name);
     if (kind !== 'pre-restore') throw new ApiError(400, `${name} is not a pre-restore copy of this home`);

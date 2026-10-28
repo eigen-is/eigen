@@ -4,7 +4,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
+import type { BackupEntry, BackupManifest, BackupProgress } from '@workspace/lib/types/backup';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
 import { stageAuthDbCopy } from '../auth/auth';
@@ -23,7 +23,6 @@ import {
     INSTALL_FOLDERS,
     SERVER_ARCHIVE_ENV_MEMBER,
 } from './paths';
-import type { SnapshotProgress } from './snapshot-home';
 import { listFileTree } from './snapshot-home';
 
 type ServerDatabase = (typeof SERVER_DATABASES)[keyof typeof SERVER_DATABASES];
@@ -43,7 +42,7 @@ const STAGE_SERVER_DATABASE: Record<ServerDatabase, (destPath: string) => void |
 export async function snapshotServer(
     targetDir: string,
     at: Date,
-    onProgress?: SnapshotProgress,
+    onProgress?: BackupProgress,
 ): Promise<BackupManifest> {
     const folder = path.join(targetDir, buildServerFolderName(at));
     fs.mkdirSync(folder, { recursive: true });

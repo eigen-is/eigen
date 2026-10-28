@@ -13,13 +13,13 @@ import { createZstdCompress, createZstdDecompress } from 'node:zlib';
 import type {
     BackupEntry,
     BackupManifest,
+    BackupProgress,
     BackupVerifyRecord,
     ServerArchiveManifest,
 } from '@workspace/lib/types/backup';
 import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
 import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, sidecarPath } from './paths';
-import type { SnapshotProgress } from './snapshot-home';
 import { archiveEnd, BLOCK, collect, fileChunks, headerChunks, padding, tarEntries } from './tar';
 
 // A whole-server archive holds every secret of the server, so `tar -xf` hands its members to the user alone.
@@ -29,7 +29,7 @@ const SERVER_MEMBER_MODE = 0o600;
 // the tar is generated entry by entry into the zstd stream, and the compressed bytes go straight to
 // disk. It is built in the staging folder and renamed into place, so an interrupted pack never
 // leaves a short archive under a name the artifact list would offer for restore.
-export async function packFolder(dir: string, artifactPath: string, onProgress?: SnapshotProgress): Promise<void> {
+export async function packFolder(dir: string, artifactPath: string, onProgress?: BackupProgress): Promise<void> {
     fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
     const tempPath = getBackupTempPath('.tar.zst');
     try {
@@ -42,7 +42,7 @@ export async function packFolder(dir: string, artifactPath: string, onProgress?:
     fs.renameSync(tempPath, artifactPath);
 }
 
-async function* tarChunks(dir: string, rootName: string, onProgress?: SnapshotProgress): AsyncGenerator<Uint8Array> {
+async function* tarChunks(dir: string, rootName: string, onProgress?: BackupProgress): AsyncGenerator<Uint8Array> {
     const relPaths = await Array.fromAsync(new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true }));
     relPaths.sort();
 

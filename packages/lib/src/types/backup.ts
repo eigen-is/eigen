@@ -167,6 +167,9 @@ export type BackupJob = {
     finishedAt?: Date;
 };
 
+// How a job's steps report into its `progress`: the step they are on, and how far they are through it.
+export type BackupProgress = (step: string, done: number, total: number) => void;
+
 // One artifact in the backups folder as the admin pane sees it. `manifest` is null for an artifact
 // with no sidecar (one copied in by hand) — the list never opens an archive to find out.
 export type BackupArtifact = {

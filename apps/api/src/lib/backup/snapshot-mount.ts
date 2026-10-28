@@ -5,7 +5,7 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupEntry } from '@workspace/lib/types/backup';
+import type { BackupEntry, BackupProgress } from '@workspace/lib/types/backup';
 import { ApiError, eventLoopTurn } from '../core';
 import { withDocumentDb } from '../mount/document-db';
 import type { Mount } from '../mount/mount';
@@ -14,7 +14,6 @@ import { errnoOf, isMissingObjectCause } from '../storage';
 import { stageManagedDbCopy } from '../versioning/snapshot';
 import { archivePath, managedDbContainer, readMountPathRows, unreachableRows } from './archive-layout';
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
-import type { SnapshotProgress } from './snapshot-home';
 
 // A WAL-mode database does not open without the `-wal` beside it, which an archive leaves out, so the copy's
 // journal mode is rewritten. A failure keeps the copied bytes for verify's quick_check to flag.
@@ -114,7 +113,7 @@ export async function snapshotMountData(
     metadataPath: string,
     targetDir: string,
     relPrefix: string,
-    onProgress?: SnapshotProgress,
+    onProgress?: BackupProgress,
 ): Promise<MountSnapshot> {
     const rows = readArchivedRows(metadataPath);
     const byId = new Map(rows.map((row) => [row.id, row]));

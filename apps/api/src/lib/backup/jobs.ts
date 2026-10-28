@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
-import type { BackupJob } from '@workspace/lib/types/backup';
+import type { BackupJob, BackupProgress } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
 import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
 import { getOrgAdmins, getOrgOwner } from '../user';
@@ -18,7 +18,6 @@ import {
     getBackupsDir,
     wipeBackupStagingDir,
 } from './paths';
-import type { SnapshotProgress } from './snapshot-home';
 import { buildBackupJobEvent } from './sse-events';
 import { describeFailures, requireVerified, verifyFolder } from './verify';
 
@@ -141,7 +140,7 @@ export function startBackupJob(
     kind: BackupJob['kind'],
     ownerId: string,
     startedBy: string | undefined,
-    run: (job: BackupJob, onProgress: SnapshotProgress, signal: AbortSignal) => Promise<string>,
+    run: (job: BackupJob, onProgress: BackupProgress, signal: AbortSignal) => Promise<string>,
 ): BackupJob {
     if (holdsSlot(kind)) requireHomeSlotFree(ownerId, kind);
 
@@ -158,7 +157,7 @@ export function startBackupJob(
     poke(job);
 
     // Progress is no poke: the panes poll the job while it runs, and a poke makes them refetch every list.
-    const onProgress: SnapshotProgress = (step, done, total) => {
+    const onProgress: BackupProgress = (step, done, total) => {
         job.progress = { step, done, total };
     };
 
@@ -217,7 +216,7 @@ export function getBackupJob(id: string): BackupJob | undefined {
 // The backup job: snapshot into staging, judge the folder before it is packed, pack it, write the
 // sidecar. A failed verify still keeps the archive, because an admin needs to see a bad backup and the
 // sidecar is where its failures are recorded, but it ends the job failed and tells the admin.
-export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress: SnapshotProgress): Promise<string> {
+export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress: BackupProgress): Promise<string> {
     const staging = getBackupStagingDir(job.id);
     try {
         const manifest = await pullHomeSnapshot(ownerId, staging, { onProgress });
@@ -246,7 +245,7 @@ export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress:
 export async function runArtifactVerify(
     artifactName: string,
     job: BackupJob,
-    onProgress: SnapshotProgress,
+    onProgress: BackupProgress,
 ): Promise<string> {
     const artifactPath = path.join(getBackupsDir(), artifactName);
     const staging = getBackupStagingDir(job.id);

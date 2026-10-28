@@ -5,7 +5,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
+import type { BackupLevel, BackupManifest, BackupProgress } from '@workspace/lib/types/backup';
 import type {
     Attendee,
     CalendarEvent,
@@ -19,7 +19,6 @@ import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
-import type { SnapshotProgress } from '../backup/snapshot-home';
 import { captureBytes, snapshotHome } from '../backup/snapshot-home';
 import type { Calendar } from '../calendar/calendar';
 import { readCalendarTotalSize } from '../calendar/resource-store';
@@ -426,7 +425,7 @@ export const BACKUP_RELEASE_MS = 30_000;
 export async function pullHomeSnapshot(
     ownerId: string,
     targetDir: string,
-    options: { level?: BackupLevel; onProgress?: SnapshotProgress },
+    options: { level?: BackupLevel; onProgress?: BackupProgress },
 ): Promise<BackupManifest> {
     const startedAt = Date.now();
     const wasOpen = loadedHome(ownerId) !== undefined;

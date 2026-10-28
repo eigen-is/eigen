@@ -6,7 +6,7 @@
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import type { BackupEntry, BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
+import type { BackupEntry, BackupLevel, BackupManifest, BackupProgress } from '@workspace/lib/types/backup';
 import type { MountConfig } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
@@ -44,8 +44,6 @@ import {
     snapshotMountStaging,
     snapshotMountThumbs,
 } from './snapshot-mount';
-
-export type SnapshotProgress = (step: string, done: number, total: number) => void;
 
 // `mounts/` is walked from its paths tables instead (snapshotMountData), and each mailbox's `tmp/` delivery spool,
 // beside its `cur/` and `new/`, holds half-written deliveries only. Matched on the path from the home root, never on
@@ -155,7 +153,7 @@ export async function captureBytes(homeDir: string, level: BackupLevel): Promise
 export async function snapshotHome(
     home: Home,
     targetDir: string,
-    { onProgress, level = 'full-s3' }: { onProgress?: SnapshotProgress; level?: BackupLevel } = {},
+    { onProgress, level = 'full-s3' }: { onProgress?: BackupProgress; level?: BackupLevel } = {},
 ): Promise<BackupManifest> {
     const ownerId = home.user.id;
     const owner = parseOwnerId(ownerId);

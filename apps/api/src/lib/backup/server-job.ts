@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import type {
     BackupJob,
     BackupLevel,
+    BackupProgress,
     BackupReason,
     ServerArchiveManifest,
     ServerArchiveSidecar,
@@ -53,7 +54,6 @@ import {
     wipeBackupStagingDir,
 } from './paths';
 import { pruneLocalArchives, readServerSidecar, writeServerSidecar } from './server-archives';
-import type { SnapshotProgress } from './snapshot-home';
 import { treeBytes } from './snapshot-home';
 import { appendInstallFiles, assertEnvFileMounted, snapshotServer } from './snapshot-server';
 import { backupKey, uploadServerArchive } from './upload';
@@ -115,7 +115,7 @@ async function appendPacked(writer: ArchiveWriter, member: string, packed: strin
 async function appendHome(
     writer: ArchiveWriter,
     home: ServerHome,
-    { at, level, staging, onProgress }: { at: Date; level: BackupLevel; staging: string; onProgress: SnapshotProgress },
+    { at, level, staging, onProgress }: { at: Date; level: BackupLevel; staging: string; onProgress: BackupProgress },
 ): Promise<ServerArchiveManifest['homes'][number]> {
     const folder = path.join(staging, buildHomeFolderName(home.ownerId));
     const member = buildHomeMemberName(home.ownerId, at);
@@ -153,7 +153,7 @@ async function writeServerArchive(
     job: BackupJob,
     archivePath: string,
     { level, reason, at }: { level: BackupLevel; reason: BackupReason; at: Date },
-    onProgress: SnapshotProgress,
+    onProgress: BackupProgress,
 ): Promise<ServerArchiveManifest> {
     const staging = getBackupStagingDir(job.id);
     const tempPath = getBackupTempPath(SERVER_ARCHIVE_EXTENSION);
@@ -174,7 +174,7 @@ async function writeServerArchive(
         for (const [index, home] of homes.entries()) {
             const step = `home ${index + 1} of ${homes.length}`;
             onProgress(step, 0, 0);
-            const homeProgress: SnapshotProgress = (_step, done, total) => onProgress(step, done, total);
+            const homeProgress: BackupProgress = (_step, done, total) => onProgress(step, done, total);
             summaries.push(await appendHome(writer, home, { at, level, staging, onProgress: homeProgress }));
         }
 
@@ -213,7 +213,7 @@ async function runServerBackup(
     archivePath: string,
     options: { level: BackupLevel; reason: BackupReason; at: Date },
     admit: () => void,
-    onProgress: SnapshotProgress,
+    onProgress: BackupProgress,
 ): Promise<string> {
     const name = path.basename(archivePath);
     const sidecar: ServerArchiveSidecar = { state: 'running', startedAt: job.startedAt };

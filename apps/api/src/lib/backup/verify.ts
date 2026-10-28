@@ -6,7 +6,12 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import type { BackupEntry, BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
+import type {
+    BackupEntry,
+    BackupProgress,
+    BackupVerifyRecord,
+    ServerArchiveManifest,
+} from '@workspace/lib/types/backup';
 import { isCollabType } from '@workspace/lib/types/drive';
 import { parseBackupManifest, parseServerArchiveManifest } from '@workspace/lib/validation';
 import * as Y from 'yjs';
@@ -33,7 +38,6 @@ import {
     archiveServerPath,
     resolveInside,
 } from './paths';
-import type { SnapshotProgress } from './snapshot-home';
 
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
 const SAMPLE_LARGEST = 10;
@@ -183,7 +187,7 @@ function countYjsBlobs(dbPath: string): number {
 // the collab documents still decodes into a document with content (content). Works on any folder
 // with a manifest — a staging folder straight after a backup, or a fresh extract before a restore.
 // Every database is opened read-only: a verify never changes a byte of what it is checking.
-export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): Promise<BackupVerifyRecord> {
+export async function verifyFolder(dir: string, onProgress?: BackupProgress): Promise<BackupVerifyRecord> {
     const checkedAt = new Date();
     const manifestPath = path.join(dir, ARCHIVE_MANIFEST_FILE);
     if (!fs.existsSync(manifestPath)) {

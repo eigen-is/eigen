@@ -4,7 +4,7 @@
 
 import * as fs from 'node:fs';
 import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib/constants/backup';
-import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
+import type { BackupArtifact, BackupJob, BackupProgress, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { requireAdmin } from '../lib/auth/access';
@@ -23,7 +23,6 @@ import {
 import type { BackableOwner } from '../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies, resolveSafetyCopy } from '../lib/backup/safety-copy';
-import type { SnapshotProgress } from '../lib/backup/snapshot-home';
 import { ApiError } from '../lib/core';
 import { contentDisposition } from '../lib/core/http';
 import { getHome } from '../lib/home';
@@ -63,7 +62,7 @@ function startRestoreJob(
     ownerId: string,
     adminId: string,
     artifact: string,
-    restore: (jobId: string, onProgress: SnapshotProgress) => Promise<void>,
+    restore: (jobId: string, onProgress: BackupProgress) => Promise<void>,
 ): { jobId: string } {
     const job = startBackupJob('restore', ownerId, adminId, async (started, onProgress) => {
         await restore(started.id, onProgress);
