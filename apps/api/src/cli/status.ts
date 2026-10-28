@@ -9,7 +9,7 @@ import { formatFileSize } from '@workspace/lib/format';
 import { parseServerArchiveNames } from '@workspace/lib/validation';
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
-import { VERSION, VERSION_PATTERN } from './install';
+import { buildChannel, VERSION, VERSION_PATTERN } from './install';
 import type { Glyph } from './ui';
 import { createUi, glyphLine } from './ui';
 
@@ -122,7 +122,7 @@ function listedBackupRow(listing: string): Row {
 function printReport(flags: StatusFlags, services: Service[], api: ControlStatus | null): void {
     const { install, latest, 'mail-queue': queue, files } = flags;
     // The CLI runs in an api image: the running one, or the one .env.production pins.
-    const channel = process.env['EIGEN_CHANNEL'];
+    const channel = buildChannel();
     const commit = process.env['EIGEN_COMMIT'];
     const build: Row[] = install ? [{ level: 'ok', label: 'Folder', value: install }] : [];
     if (api) {

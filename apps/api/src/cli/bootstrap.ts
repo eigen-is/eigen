@@ -7,7 +7,7 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } f
 import { dirname, join } from 'node:path';
 import { API_IMAGE_KEY } from '../lib/config/release';
 import { readEnvFile, writeEnvFile } from './env-file';
-import { ENV_PATH, installOwner, ownAs, ROOT, VERSION } from './install';
+import { buildChannel, ENV_PATH, installOwner, ownAs, ROOT, VERSION } from './install';
 import { createUi } from './ui';
 
 // The demo reset ships so a release install can be a demo box.
@@ -64,7 +64,7 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
     // release pins into any file that has no version yet.
     const pin = !existing.has('EIGEN_VERSION');
     // A build of a channel pins the channel, which ./eigen update then follows.
-    const version = process.env['EIGEN_CHANNEL'] || VERSION;
+    const version = buildChannel() ?? VERSION;
     if (pin) {
         writeEnvFile(
             envPath,

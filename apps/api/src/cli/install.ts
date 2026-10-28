@@ -1,5 +1,5 @@
 // The facts about an install folder that every CLI command shares: where the repo root is, the names of
-// .env.production, data/ and backups/, this build's version, and the exit code of a question answered no. It also
+// .env.production, data/ and backups/, this build's version and channel, and the exit code of a question answered no. It also
 // gives the files the CLI writes as root to the operator who owns the install.
 
 import { chownSync, statSync } from 'node:fs';
@@ -15,6 +15,12 @@ export const VERSION = pkg.version;
 // The exit code of a question the operator said no to, which the launcher ends as a plain exit; DECLINED in ./eigen.
 export const DECLINED = 3;
 export const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
+
+// The channel this image was built for, such as main, which an install that runs it follows. A release image has
+// none: its build sets EIGEN_CHANNEL empty.
+export function buildChannel(): string | undefined {
+    return process.env['EIGEN_CHANNEL'] || undefined;
+}
 
 export type Owner = { uid: number; gid: number };
 

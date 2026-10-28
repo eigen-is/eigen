@@ -115,7 +115,7 @@ describe('releaseNotes', () => {
     });
 
     test('a build of the main channel also reads [Unreleased], last, which it runs', () => {
-        expect(releaseNotes(CHANGELOG, '0.2.10', '0.3.0', true)).toEqual([
+        expect(releaseNotes(CHANGELOG, '0.2.10', '0.3.0', { unreleased: true })).toEqual([
             {
                 version: '0.3.0',
                 intro: 'Big release. It spans two lines.',
@@ -126,7 +126,7 @@ describe('releaseNotes', () => {
         ]);
         const marked =
             '## [Unreleased]\n\n- **Comments (full backup)** — a new column\n\n## [0.2.1] - 2026-09-01\n\nOne.\n';
-        expect(backupLevel(releaseNotes(marked, '0.2.1', '0.2.1', true))).toBe('full');
+        expect(backupLevel(releaseNotes(marked, '0.2.1', '0.2.1', { unreleased: true }))).toBe('full');
         expect(backupLevel(releaseNotes(marked, '0.2.1', '0.2.1'))).toBe('light');
     });
 

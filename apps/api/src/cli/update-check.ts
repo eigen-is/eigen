@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { parseArgs } from 'node:util';
-import { DECLINED, ROOT, VERSION, VERSION_PATTERN } from './install';
+import { buildChannel, DECLINED, ROOT, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, wrap } from './ui';
 
 type ReleaseNote = { version: string; intro: string; breaking: string[]; fullBackup: string[] };
@@ -56,8 +56,8 @@ export async function updateCheck(
     if (flags.level) {
         // A build of the main channel runs what is still under [Unreleased], and shares its version with the build
         // before it, so a migration it carries is marked there.
-        const channel = Boolean(process.env['EIGEN_CHANNEL']);
-        console.log(`level=${backupLevel(releaseNotes(changelog, from, VERSION, channel))}`);
+        const onMain = buildChannel() !== undefined;
+        console.log(`level=${backupLevel(releaseNotes(changelog, from, VERSION, { unreleased: onMain }))}`);
         return;
     }
     const notes = releaseNotes(changelog, from, VERSION);
@@ -97,7 +97,12 @@ function markedLines(lines: string[], marker: string): string[] {
 
 // The CHANGELOG sections after `from` up to `to`, oldest first, with their intro and their (breaking) and (full backup)
 // lines. [Unreleased] comes last when `unreleased` is set, and is left out otherwise.
-export function releaseNotes(changelog: string, from: string, to: string, unreleased = false): ReleaseNote[] {
+export function releaseNotes(
+    changelog: string,
+    from: string,
+    to: string,
+    { unreleased = false }: { unreleased?: boolean } = {},
+): ReleaseNote[] {
     const sections = changelog.split(/^## /m).flatMap((section) => {
         const [heading = '', ...lines] = section.split('\n');
         const version = HEADING.exec(heading)?.[1];

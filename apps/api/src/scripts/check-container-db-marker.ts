@@ -82,7 +82,7 @@ export function containerDbMarkerError(
         return old === undefined || old === currentVersion ? [] : [`${name} ${old} → ${currentVersion}`];
     });
     if (moved.length === 0) return null;
-    const notes = releaseNotes(changelog, previous, version, onMain);
+    const notes = releaseNotes(changelog, previous, version, { unreleased: onMain });
     if (notes.some(({ fullBackup }) => fullBackup.length > 0)) return null;
     const build = onMain ? 'This build of main' : `Eigen ${version}`;
     const section = onMain ? 'Unreleased' : version;
