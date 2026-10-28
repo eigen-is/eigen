@@ -176,6 +176,15 @@ describe('.parse() logical formulas', () => {
         expect(parser!.parse('IFERROR(1 + "x", "fb")')).toMatchObject({ error: null, result: 'fb' });
     });
 
+    // An unknown name or function is #NAME? like any other error, so IFERROR traps it, as in Excel.
+    it('IFERROR traps an unknown name or function', () => {
+        expect(parser!.parse('IFERROR(NOSUCHNAME, "fb")')).toMatchObject({ error: null, result: 'fb' });
+        expect(parser!.parse('IFERROR(NOSUCH(1), "fb")')).toMatchObject({ error: null, result: 'fb' });
+        expect(parser!.parse('ISERROR(NOSUCHNAME)')).toMatchObject({ error: null, result: true });
+        expect(parser!.parse('NOSUCHNAME + 1')).toMatchObject({ error: '#NAME?', result: null });
+        expect(parser!.parse('NOSUCH(1)')).toMatchObject({ error: '#NAME?', result: null });
+    });
+
     it('IFNA', () => {
         expect(parser!.parse('IFNA(1, "fb")')).toMatchObject({ error: null, result: 1 });
         expect(parser!.parse('IFNA(NA(), "fb")')).toMatchObject({ error: null, result: 'fb' });

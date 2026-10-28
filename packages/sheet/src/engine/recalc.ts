@@ -11,6 +11,7 @@ import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { iscelldata, isFunctionRange, resolveCellRange } from './formula-utils';
+import { isKnownFunction } from './parser/evaluate-by-operator/evaluate-by-operator';
 import type {
     CalcChainEntry,
     EvaluationResult,
@@ -32,6 +33,20 @@ const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
 
 function isVolatileFormula(formula: string): boolean {
     return VOLATILE_RE.test(formula);
+}
+
+// A string or a quoted sheet name, whose text may read like a call. A doubled quote stands for one inside it.
+const QUOTED_RE = /"(?:[^"]|"")*"|'(?:[^']|'')*'/g;
+// A name the grammar reads as a function, because a `(` follows it.
+const CALL_RE = /(?<![\w.])[A-Za-z_][\w.]*(?=\()/g;
+
+// True when the formula calls a function the engine lacks, such as FILTER or LET. IFERROR traps the #NAME? that
+// function gives, so the result is no error, yet it is not what Excel computed.
+function callsUnknownFunction(formula: string): boolean {
+    for (const [name] of formula.replace(QUOTED_RE, '""').matchAll(CALL_RE)) {
+        if (!isKnownFunction(name)) return true;
+    }
+    return false;
 }
 
 // Materialized, id-keyed view the ported graph builder reads instead of a
@@ -371,15 +386,12 @@ export function recalcSheets(
             if (!rowArr) continue;
             const existing = rowArr[info.c];
             if (existing == null) continue;
-            // An engine error must never overwrite a good cached value: functions
-            // this build lacks (LET, FILTER, …) evaluate to
-            // #NAME?, which would otherwise destroy Excel's correct cached result
-            // at import. When the cell already carries a non-error cached value,
-            // keep it AND skip the execFunctionGlobalData seed so downstream
-            // formulas read that cached value through the resolver — not the error
-            // (same freeze-is-safe direction as volatiles). Cells with no cached
-            // value still get the error sentinel (better than a silent blank).
-            if (result.type === 'error' && hasNonErrorCachedValue(existing)) continue;
+            // Our result is unreliable when it is an error, or when the formula calls a function the engine lacks. It
+            // never overwrites a cached value that is no error, because that value is Excel's. Skipping the
+            // execFunctionGlobalData seed too makes the formulas downstream read the cached value. A cell with no
+            // cached value still shows the error.
+            const unreliable = result.type === 'error' || callsUnknownFunction(info.calc_funcStr);
+            if (unreliable && hasNonErrorCachedValue(existing)) continue;
             engine.state.execFunctionGlobalData[`${info.r}_${info.c}_${info.id}`] = { v: result.value };
             // Clone before writing: the materialized matrix may reference the
             // input snapshot's (frozen) cell objects.

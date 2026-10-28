@@ -15,7 +15,7 @@ import type {
     RangeCell,
 } from '../types';
 import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, toFormulaError } from './error';
-import evaluateByOperator, { callFunction } from './evaluate-by-operator/evaluate-by-operator';
+import { callFunction, evaluateByOperator } from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
 import { extractLabel, offsetCoordinate, offsetRange, toLabel } from './helper/cell';
 import { invertNumber, toNumber } from './helper/number';
@@ -112,13 +112,10 @@ class Parser {
         this.emitter.emit(event, ...args);
     }
 
+    // An unknown name is #NAME? in-band, like an unknown function, so IFERROR can trap it.
     private _callVariable(name: string): FormulaArg {
         const value = this.getVariable(name);
-        if (value === undefined) {
-            throw Error(ERROR_NAME);
-        }
-
-        return value;
+        return value === undefined ? toFormulaError(Error(ERROR_NAME)) : value;
     }
 
     // Retrieve value by its label (`B3`, `B$3`, `$B$3`).

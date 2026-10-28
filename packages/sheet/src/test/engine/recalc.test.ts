@@ -140,6 +140,29 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![0][2]?.v).toBe(8);
     });
 
+    // IFERROR traps our own #NAME?, so the result is no error, yet the fallback is not what Excel computed.
+    test('a formula naming a function the engine lacks keeps its cached value, inside IFERROR or ISERROR too', () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=IFERROR(FILTER(A1:A3,A1:A3>1),"none")', num(2))],
+                [num(2), formula('=IF(ISERROR(_xlfn.LET(x,A1,x+1)),0,1)', num(1))],
+                [num(3), formula('=B1+1')],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe(2);
+        expect(out[0].data![1][1]?.v).toBe(1);
+        // A cell that reads it sees the cached value, not the fallback.
+        expect(out[0].data![2][1]?.v).toBe(3);
+    });
+
+    test('a formula whose functions the engine knows recalculates under IFERROR, past a stale cached value', () => {
+        // Text that reads like a call is no call.
+        const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=IFERROR(SQRT(A1-2),"FILTER(")', num(5))]])];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe('FILTER(');
+    });
+
     test('imported VLOOKUP with a lower-case FALSE resolves against the looked-up sheet', () => {
         // The real shape of a converted-xlsx formula: Excel writes bare booleans lower-cased,
         // and `false` used to resolve as an unknown variable → #NAME?. Neither cell carries a

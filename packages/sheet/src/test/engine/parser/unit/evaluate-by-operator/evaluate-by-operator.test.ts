@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import evaluateByOperator, {
+import {
     callFunction,
+    evaluateByOperator,
+    isKnownFunction,
 } from '../../../../../engine/parser/evaluate-by-operator/evaluate-by-operator';
 
 describe('evaluate-by-operator dispatch', () => {
@@ -47,5 +49,13 @@ describe('evaluate-by-operator dispatch', () => {
         expect(callFunction('IF', [true, err, 'ok'])).toBe(err);
         // IF(Error, ...) → formulajs returns the Error from the test arg.
         expect(callFunction('IF', [err, 1, 2])).toBe(err);
+    });
+
+    test('isKnownFunction answers for the names callFunction evaluates, in any case', () => {
+        expect(isKnownFunction('xlookup')).toBe(true);
+        expect(isKnownFunction('NORM.S.DIST')).toBe(true);
+        expect(isKnownFunction('FILTER')).toBe(false);
+        expect(isKnownFunction('_xlfn.LET')).toBe(false);
+        expect(callFunction('FILTER', [1])).toBeInstanceOf(Error);
     });
 });
