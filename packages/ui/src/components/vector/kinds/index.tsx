@@ -1,7 +1,8 @@
 // The React half of the element registry. `packages/lib`'s ELEMENT_KINDS answers what a kind IS — its
 // fields, geometry, paint and search text; this answers how a kind is PRESENTED: the icon and label
-// every surface shows, the tool shortcut, the in-place editor a kind mounts when it is edited on the
-// canvas (or the dialog it opens instead), and the panel rows the generic capability rows do not cover.
+// every surface shows, the tool shortcut, the dialog a kind opens when it is edited on the canvas, and
+// the panel rows the generic capability rows do not cover. Text is edited in place for every kind that
+// holds it, so rich-text.tsx owns that editor and no kind names one.
 // Adding a kind = one entry here and one in lib; TypeScript forces both.
 
 import type { LetterKey, NumberKey } from '@tanstack/react-hotkeys';
@@ -24,9 +25,8 @@ import type { ComponentType } from 'react';
 import { ArrowPanelSection } from './arrow';
 import { ChartEditDialog, ChartPanelSection } from './chart';
 import { ImagePanelSection } from './image';
-import { RichTextInPlaceEditor, RichTextPanelSection } from './richtext';
 
-// Mounted inside the element's own layer while it is being edited on the canvas. `onChange` writes
+// Mounted inside the element's own layer while its text is being edited on the canvas. `onChange` writes
 // straight through (unsealed, so keystrokes coalesce into one undo step); `onExit` ends the session.
 export type InPlaceEditorProps = {
     element: VectorElement;
@@ -62,7 +62,6 @@ type ElementKindUi = {
     // Present exactly on the kinds a tool can create; an image arrives by upload, so it has none.
     // Letters are Excalidraw's; `digit` is the same tool on the number row.
     shortcut?: { letter: LetterKey; digit: NumberKey };
-    InPlaceEditor?: ComponentType<InPlaceEditorProps>;
     EditDialog?: ComponentType<KindEditDialogProps>;
     PanelSection?: ComponentType<KindPanelSectionProps>;
 };
@@ -82,12 +81,6 @@ export const ELEMENT_KIND_UI: Record<VectorElementType, ElementKindUi> = {
     },
     line: { icon: Minus, label: 'Line', shortcut: { letter: 'L', digit: '6' } },
     freedraw: { icon: Pencil, label: 'Draw', shortcut: { letter: 'P', digit: '7' } },
-    richtext: {
-        icon: Type,
-        label: 'Text',
-        shortcut: { letter: 'T', digit: '8' },
-        InPlaceEditor: RichTextInPlaceEditor,
-        PanelSection: RichTextPanelSection,
-    },
+    richtext: { icon: Type, label: 'Text', shortcut: { letter: 'T', digit: '8' } },
     image: { icon: ImageIcon, label: 'Image', PanelSection: ImagePanelSection },
 };

@@ -112,14 +112,78 @@ async function renderPanel(el: VectorElement | VectorElement[], slideWidth?: num
     return { container, sections, writes };
 }
 
+function rectangle(id: string): VectorElement {
+    return {
+        ...DEFAULT_ELEMENT_PROPS,
+        ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),
+        id,
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 60,
+        angle: 0,
+        index: 'a0',
+    };
+}
+
+const TEXT_SECTIONS = ['Text', 'Spacing'];
+
+describe('the text rows for an element that holds text', () => {
+    test('a rectangle with no text yet shows Text and Spacing between Transform and Fill', async () => {
+        const { sections } = await renderPanel(rectangle('r'));
+        expect(sections.slice(0, 4)).toEqual(['Transform', ...TEXT_SECTIONS, 'Fill']);
+    });
+
+    test('a closed path shows them, an open path does not', async () => {
+        expect((await renderPanel(path())).sections).toContain('Text');
+        expect((await renderPanel(path({ path: 'M 0 1 C 0 0 1 0 1 1', closed: false }))).sections).not.toContain(
+            'Text',
+        );
+    });
+
+    test('a line shows none', async () => {
+        const line: VectorElement = {
+            ...DEFAULT_ELEMENT_PROPS,
+            ...ELEMENT_KINDS.line.defaults(VECTOR_STYLE_DEFAULTS),
+            id: 'l',
+            type: 'line',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 0,
+            angle: 0,
+            index: 'a0',
+        };
+        expect((await renderPanel(line)).sections).not.toContain('Text');
+    });
+
+    test('a rectangle with a text box shows one merged set, each write reaching both', async () => {
+        const { container, sections, writes } = await renderPanel([rectangle('r'), textBox('t', { fontSize: 88 })]);
+        expect(sections.filter((section) => section === 'Text')).toHaveLength(1);
+        await type(rowInput(container, 'Padding'), '7');
+        expect(writes).toEqual([
+            [
+                { id: 'r', fields: { padding: 7 } },
+                { id: 't', fields: { padding: 7 } },
+            ],
+        ]);
+    });
+
+    test('a rectangle with an open path shows none', async () => {
+        const open = path({ path: 'M 0 1 C 0 0 1 0 1 1', closed: false });
+        expect((await renderPanel([rectangle('r'), open])).sections).not.toContain('Text');
+    });
+});
+
 describe('the panel for a path', () => {
     test('a closed path edits its transform, fill and hatch, stroke, sketch and opacity, with no corners', async () => {
         const { container, sections } = await renderPanel(path());
         const text = container.textContent ?? '';
         expect(text).toContain('Freeform');
-        expect(sections).toEqual(['Transform', 'Fill', 'Stroke', 'Sketch', 'Appearance', 'Arrange']);
-        // Fill's hatch, Stroke's dash and the Sketch style
-        expect(text.match(/Style/g)).toHaveLength(3);
+        expect(sections).toEqual(['Transform', 'Text', 'Spacing', 'Fill', 'Stroke', 'Sketch', 'Appearance', 'Arrange']);
+        // Fill's hatch, Stroke's dash, the Sketch style and the text's Style row
+        expect(text.match(/Style/g)).toHaveLength(4);
         expect(text).not.toContain('Corners');
         expect(text).not.toContain('Edges');
         expect(text).not.toContain('Convert to shapes');

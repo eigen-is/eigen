@@ -1,11 +1,10 @@
-// Rich text's UI entry: the in-place editor the canvas mounts inside the element's own layer, and the
-// typography rows ported from slides' TextProperties — one home for "how does text look", so the deck
+// Rich text's UI entry for every element that holds text, a text box or a closed shape: the in-place editor the
+// canvas mounts inside the element's own layer, and the typography rows ported from slides' TextProperties — one home for "how does text look", so the deck
 // shell and the drawing app cannot drift. The box background is the generic Fill row, its border the
 // generic Stroke row; this section is the text itself.
 
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
-import type { VectorRichTextElement } from '@workspace/lib/vector';
-import { RICH_TEXT_CLASS, richTextCssText, round, slidePtToPx, slidePxToPt } from '@workspace/lib/vector';
+import { isTextual, RICH_TEXT_CLASS, richTextCssText, round, slidePtToPx, slidePxToPt } from '@workspace/lib/vector';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import {
     AlignmentPicker,
@@ -41,17 +40,17 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
     const boxRef = useRef<HTMLDivElement>(null);
     // Not a state mirror: the element's own paint/typography, re-applied when a panel row changes it
     // mid-session. React never manages this attribute, so nothing fights over it.
-    const css = element.type === 'richtext' ? richTextCssText(element) : '';
+    const css = isTextual(element) ? richTextCssText(element) : '';
     // LightEditor reads `content` once, at creation — and the parent re-renders on every keystroke, so
     // sanitizing in the render body would re-parse a body of up to MAX_HTML_BYTES each time.
-    const initialHtml = useMemo(() => sanitizeToLightEditorHtml(element.type === 'richtext' ? element.html : ''), []);
+    const initialHtml = useMemo(() => sanitizeToLightEditorHtml(isTextual(element) ? element.html : ''), []);
     // Layout effect, not an effect: the box would otherwise paint once unstyled before the CSS lands,
     // flashing the text at the app's font on every session open.
     useLayoutEffect(() => {
         boxRef.current?.setAttribute('style', css);
     }, [css]);
 
-    if (element.type !== 'richtext') return null;
+    if (!isTextual(element)) return null;
     return (
         <div
             ref={boxRef}
@@ -90,8 +89,8 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
 }
 
 export function RichTextPanelSection({ elements, slideWidth, onChange, onChangeEach }: KindPanelSectionProps) {
-    // The panel mounts a kind's section only for a SOLE-kind selection, so this narrows rather than filters.
-    const boxes = elements.filter((el): el is VectorRichTextElement => el.type === 'richtext');
+    // The panel mounts this section only when every selected element holds text, so this narrows rather than filters.
+    const boxes = elements.filter(isTextual);
     const fontFamily = getMergedValue(boxes, (el) => el.fontFamily);
     const fontWeight = getMergedValue(boxes, (el) => el.fontWeight);
     const fontStyle = getMergedValue(boxes, (el) => el.fontStyle);
@@ -113,9 +112,7 @@ export function RichTextPanelSection({ elements, slideWidth, onChange, onChangeE
                 <FontSizeRow
                     sizes={boxes.map((el) => el.fontSize)}
                     slideWidth={slideWidth}
-                    onChange={(size) =>
-                        onChangeEach((el) => (el.type === 'richtext' ? { fontSize: size(el.fontSize) } : {}))
-                    }
+                    onChange={(size) => onChangeEach((el) => (isTextual(el) ? { fontSize: size(el.fontSize) } : {}))}
                 />
                 <ColorRow label="Color" value={color} onChange={(c) => onChange({ color: c })} />
                 <PropertyRow label="Style">

@@ -42,6 +42,7 @@ import {
     getElementsBounds,
     IMAGE_CASCADE_OFFSET,
     isLinearElement,
+    isTextual,
     isTransparentColor,
     marqueeMode,
     NEW_TEXT_BOX_SIZE,
@@ -103,6 +104,7 @@ import type { VectorTool } from './hooks/use-tool';
 import { useViewport } from './hooks/use-viewport';
 import { ELEMENT_KIND_UI } from './kinds';
 import { newChartElement } from './kinds/chart';
+import { RichTextInPlaceEditor } from './kinds/richtext';
 import { CANVAS_PAPER_CLASS, canvasSurfaceClass, FramePage } from './paper';
 import type { EditingState } from './text-editing';
 import { arrowLabelEditing } from './text-editing';
@@ -516,6 +518,8 @@ export function CanvasEditor({
         reorderElements,
         duplicateElements,
         onInsertImage,
+        containerRef,
+        onEdit: (el) => editElement(el),
     });
 
     // Freeze the viewport while an overlay is open (same latch as gestures): a pan/zoom would
@@ -757,8 +761,8 @@ export function CanvasEditor({
         setRichTextEditId(id);
     };
 
-    // Close it: a box that paints nothing at all is deleted (empty invisible chrome — the kind answers
-    // that, the same predicate the unpainted ring uses), otherwise the trailing seal closes the session's
+    // Close it: a text box that paints nothing at all is deleted (empty invisible chrome — the kind answers
+    // that, the same predicate the unpainted ring uses), a shape stays because the user drew it, otherwise the trailing seal closes the session's
     // coalesced writes. Reads the LIVE element — the session wrote through updateElement, so React state
     // may be one tick behind.
     const closeRichText = useCallback(() => {
@@ -767,7 +771,7 @@ export function CanvasEditor({
         setRichTextEditId(null);
         if (!id) return;
         const el = visibleRef.current.find((e) => e.id === id);
-        if (el && paintsNothing(el)) {
+        if (el && el.type === 'richtext' && paintsNothing(el)) {
             // Sealed on BOTH sides: without the leading seal the delete lands inside Y.UndoManager's 500ms
             // captureTimeout and merges into the session's last keystroke, so whether it is its own undo
             // step would depend on how fast the user clicked away.
@@ -998,24 +1002,30 @@ export function CanvasEditor({
         void insertImageFiles(files, viewportCenterScene());
     }, imagesEnabled);
 
+    // Whether an edit may start: the select tool, no session open, and frozenRef: no new session over a live gesture.
+    const mayEdit = () => canEdit && tool === 'select' && !textEditing && !frozenRef.current;
+
+    // What opening an element does, for a double-click, a double-tap and Enter. An arrow opens the label overlay; a
+    // kind with an edit dialog opens that (a chart's data); an element that holds text opens the in-place editor
+    // inside its own layer; anything else does nothing.
+    const editElement = (el: VectorElement) => {
+        if (!mayEdit()) return;
+        if (el.type === 'arrow') return openEditArrowLabel(el);
+        if (ELEMENT_KIND_UI[el.type].EditDialog) return setEditDialogId(el.id);
+        if (isTextual(el)) openRichText(el.id);
+    };
+
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
-    // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay; a
-    // kind with an edit dialog opens that (a chart's data); any kind with an in-place editor opens that
-    // instead, inside its own layer; empty canvas starts a new box there (Excalidraw's openNewText — rich
-    // text is the only text kind, so nothing to choose), placed like the text tool's own click: the
-    // starting box with its corner on the point.
+    // the tap-tap). An element opens as editElement says; empty canvas starts a new box there (Excalidraw's
+    // openNewText), placed like the text tool's own click: the starting box with its corner on the point.
     const openTextAtClient = (clientX: number, clientY: number) => {
-        if (!canEdit || tool !== 'select' || textEditing || frozenRef.current) return;
+        if (!mayEdit()) return;
         const p = clientToScene(clientX, clientY);
         if (offPage(p)) return;
         const hit = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
-        if (hitEl?.type === 'arrow') return openEditArrowLabel(hitEl);
-        if (hitEl && ELEMENT_KIND_UI[hitEl.type].EditDialog) return setEditDialogId(hitEl.id);
-        if (hitEl && !ELEMENT_KIND_UI[hitEl.type].InPlaceEditor) return;
-        const id = hitEl
-            ? hitEl.id
-            : sealed(undoManager, () => addElement({ type: 'richtext', x: p.x, y: p.y, ...NEW_TEXT_BOX_SIZE }));
+        if (hitEl) return editElement(hitEl);
+        const id = sealed(undoManager, () => addElement({ type: 'richtext', x: p.x, y: p.y, ...NEW_TEXT_BOX_SIZE }));
         if (id) openRichText(id);
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
@@ -1340,7 +1350,7 @@ export function CanvasEditor({
             undoManager?.stopCapturing();
             // A kind with an in-place editor opens it on creation — an empty box you cannot type into is
             // not a text tool.
-            if (id && ELEMENT_KIND_UI[c.type].InPlaceEditor) openRichText(id);
+            if (id && c.type === 'richtext') openRichText(id);
             return;
         }
         if (g.kind === 'move') {
@@ -1452,17 +1462,14 @@ export function CanvasEditor({
                 // The layer still paints the box's backdrop; only its text body gives way to the
                 // in-place editor inside it, styled with the same CSS the renderer would have emitted.
                 if (el.id === richTextEditId) {
-                    const Editor = ELEMENT_KIND_UI[el.type].InPlaceEditor;
-                    return Editor
-                        ? node(
-                              renderEl(el),
-                              <Editor
-                                  element={el}
-                                  onChange={(fields) => updateElement(el.id, fields)}
-                                  onExit={closeRichText}
-                              />,
-                          )
-                        : null;
+                    return node(
+                        renderEl(el),
+                        <RichTextInPlaceEditor
+                            element={el}
+                            onChange={(fields) => updateElement(el.id, fields)}
+                            onExit={closeRichText}
+                        />,
+                    );
                 }
                 return node(renderEl(el));
             })}
