@@ -211,15 +211,30 @@ export function countHomeDeliveries(): number {
     return deliveries.size;
 }
 
-// Tells the open tabs of each member, such as everyone a file is shared with, about one event. A
-// member without an account is skipped, and so is one whose lookup fails: a broadcast is best effort.
-export async function relayEventToMembers(members: EffectiveMember[], event: SSEvent): Promise<void> {
+// Tells the open tabs of the owner and of each member about one event, such as everyone who can read a
+// changed path. The owner hears it at once. The members may still be read, and a failed read costs only
+// their copies. Only homes that are open receive it, so a closed home costs nothing.
+export async function broadcastToOwnerAndMembers(
+    ownerId: string,
+    members: EffectiveMember[] | Promise<EffectiveMember[]>,
+    event: SSEvent,
+): Promise<void> {
+    await sendToHome(ownerId, { type: 'broadcast', event });
+    try {
+        await relayEventToMembers(ownerId, await members, event);
+    } catch {}
+}
+
+// Tells the open tabs of each member once, but for the owner, who heard it already. In a user's home the
+// owner is one of the members. A member without an account is skipped, and so is one whose lookup fails:
+// a broadcast is best effort.
+export async function relayEventToMembers(ownerId: string, members: EffectiveMember[], event: SSEvent): Promise<void> {
+    const emails = new Set(members.map((member) => member.email));
     await Promise.all(
-        members.map(async (member) => {
+        [...emails].map(async (email) => {
             try {
-                const user = await getUserByEmail(member.email);
-                if (!user) return;
-                await sendToHome(user.id, { type: 'broadcast', event });
+                const user = await getUserByEmail(email);
+                if (user && user.id !== ownerId) await sendToHome(user.id, { type: 'broadcast', event });
             } catch {}
         }),
     );

@@ -6,7 +6,7 @@ import type { EffectiveMember } from '@workspace/lib/types/drive';
 import type { SSEventChat } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { DriveLike } from '../drive/get-drive';
-import { relayEventToMembers, sendToHome } from '../home/home-relay';
+import { broadcastToOwnerAndMembers } from '../home/home-relay';
 
 export function buildChatEvent(type: SSEventChat['type'], chat: SSEventChat['chat']): SSEventChat {
     return { type, chat };
@@ -25,10 +25,9 @@ export async function broadcastCommentIndexUpdated(
     containerId: string,
     members?: EffectiveMember[],
 ): Promise<void> {
-    const event = buildCommentIndexUpdatedEvent(ownerId, mountId, containerId);
-    const resolved = members ?? (await drive.getEffectiveMembers(mountId, containerId));
-    await Promise.all([
-        sendToHome(ownerId, { type: 'broadcast', event }).catch(() => {}),
-        relayEventToMembers(resolved, event),
-    ]);
+    await broadcastToOwnerAndMembers(
+        ownerId,
+        members ?? drive.getEffectiveMembers(mountId, containerId),
+        buildCommentIndexUpdatedEvent(ownerId, mountId, containerId),
+    );
 }

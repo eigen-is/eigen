@@ -16,9 +16,9 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     // old folders, and with them the folder watchers this event is for.
     const preTrashChain = user ? await mount.getBreadcrumb(item.id) : [];
 
-    // Read before the trash for the same reason. The history broadcast at the end must still reach
-    // everyone who could see the item in its old place.
-    const members = user ? await drive.getEffectiveMembers(mount.id, item.id) : [];
+    // Read before the trash for the same reason. The trash takes the item away from everyone it is
+    // shared with, and they must still hear that it left their view.
+    const members = await drive.getEffectiveMembers(mount.id, item.id);
 
     // Open documents close before trashPath closes their databases, so each one saves its last state.
     // Drive.deletePath refuses new opens until the trash is done.
@@ -36,7 +36,7 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
             .closeCollabDocument(mount.id, id, { skipFinalSnapshot: true })
             .catch((error) => console.error(`Failed to close collab document ${id}:`, error));
     }
-    drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
+    drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined, members);
     if (user) {
         mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
         // The item as it was before the trash. fanOut skips paths in the trash, and this one isn't yet.
@@ -76,6 +76,9 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
     // the events and the notices of a delete of its own.
     const roots = isContainerType(item.type) ? [item, ...(await mount.listTrashRootsInside(item.id))] : [item];
     const notices = user ? await Promise.all(roots.map((root) => readDeleteNotice(mount, root, user))) : [];
+    // The delete takes the path that the members are read from. Everything here is in the trash, which
+    // only the owner, or a team's members, can see, so one read serves every root.
+    const members = await drive.getEffectiveMembers(mount.id, item.id);
 
     if (!(await mount.permanentlyDeleteFromTrash(item.id))) return false;
 
@@ -85,6 +88,8 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
         drive.emit(
             isContainerType(root.type) ? SSEventType.DRIVE_FOLDER_DELETED : SSEventType.DRIVE_FILE_DELETED,
             root,
+            undefined,
+            members,
         );
         const notice = notices[index];
         if (user && notice.watcherIds.length > 0) {

@@ -477,7 +477,7 @@ export class ChatRoom {
         // the change that sent the event.
         try {
             const resolved = members ?? (await this.drive.getEffectiveMembers(this.path.mountId, this.path.id));
-            await relayEventToMembers(resolved, event);
+            await relayEventToMembers(this.path.ownerId, resolved, event);
         } catch (error) {
             console.error('Failed to relay event to members:', error);
         }
