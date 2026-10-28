@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import type { MathRow } from '@workspace/math';
 import { MATH_LIMITS, writeMathml } from '@workspace/math';
-import { CODE_LOOK } from '../../../lib/document/looks';
+import { CODE_LOOK, LINK_LOOK } from '../../../lib/document/looks';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { writeZip } from '../../../lib/ooxml/zip';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
@@ -244,6 +244,19 @@ describe('links', () => {
         expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['Own']);
     });
 
+    // A re-save, as Google Docs does, writes the writer's Hyperlink style on each run.
+    test("the editor's link look as direct formatting is no mark", async () => {
+        const rels = `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`;
+        const json = await imported(
+            paragraph(
+                `<w:hyperlink r:id="rId9">${run('Eigen', `<w:color w:val="${LINK_LOOK.color}"/><w:u w:val="single"/>`)}</w:hyperlink>`,
+            ),
+            { rels },
+        );
+        expect(marksOfType(json, 'link').map((mark) => mark.text)).toEqual(['Eigen']);
+        expect([...marksOfType(json, 'textStyle'), ...marksOfType(json, 'underline')]).toEqual([]);
+    });
+
     // Word 2007's theme draws a link in 0000FF, Office 2023's in 467886: the run names the theme's color as well.
     test("a color from the theme's hyperlink colors is the link look, a link's own color is not", async () => {
         const rels = `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`;
@@ -260,7 +273,7 @@ describe('links', () => {
     });
 
     // Word draws the character style's color over the paragraph style's, so a link in a colored heading is the link look.
-    test("the Hyperlink style's theme color covers the heading's color on a link; a plain run keeps the heading's", async () => {
+    test("Word's Hyperlink style is no mark on a link, its theme color covering the heading's; a plain run keeps the heading's", async () => {
         const styles =
             '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0563C1" w:themeColor="hyperlink"/><w:u w:val="single"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:color w:val="2F5496"/></w:rPr></w:style>';
         const json = await imported(
@@ -278,6 +291,7 @@ describe('links', () => {
             ['Read ', '#2f5496'],
             [' bare', '#2f5496'],
         ]);
+        expect(marksOfType(json, 'underline')).toEqual([]);
     });
 
     // Word draws a custom Hyperlink style's color and underline; only a known link look is the editor's to draw.

@@ -868,8 +868,8 @@ const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efa
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '377cbeee6c018cf9a051e682ee0c6ddf208a66441052e3a9087ae3003d890a7b';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '2c7b36f8fe94a65f37aa5bc108b43ec377eded19a8cbab8b93194aa7cf27f793';
 // The doc's docx: the writer's parts and embedded fonts, deflated by libdeflate, and the thumbnail Worker's JPEG of the
-// image. It last moved when that image, an opaque PNG, went in as a JPEG instead of a PNG.
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '397346808f7793452b4a5024442e5f6ad3a587b7af928e2c14a2e65afb8bbdcc';
+// image. It last moved when the Hyperlink style took the editor's underline.
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '7e18568669cea9afc673aed909d64df660e1e9edec779d7ff7cf82fbe3f4fa36';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
 // The HTML download embeds canvas-text.css whole, its comments too, so it last moved with its header comment. The
 // PDF's last moved when the golden image went in as a JPEG made from its source instead of its WebP preview.

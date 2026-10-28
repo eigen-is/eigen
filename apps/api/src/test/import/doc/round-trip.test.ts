@@ -742,6 +742,13 @@ describe("a link's own look", () => {
         ]);
         expect(stored(json)).toEqual(stored(expected(source, json)));
     });
+
+    test('a plain link comes back plain, without the underline its style draws', async () => {
+        const { source, json } = await roundTrip([
+            { type: 'paragraph', content: [{ type: 'text', text: 'Link', marks: [link] }] },
+        ]);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
 });
 
 // Heading 6's style is italic, so an italic mark in it is written upright and read back as one.

@@ -3757,8 +3757,9 @@ describe('docx writer — styles from the CSS', () => {
 
         const hyperlink = style(all, 'Hyperlink');
         expect(w(hyperlink, 'type')).toBe('character');
-        expect(shape(child(hyperlink, 'rPr') ?? hyperlink)).toEqual(['color']);
+        expect(shape(child(hyperlink, 'rPr') ?? hyperlink)).toEqual(['color', 'u']);
         expect(w(child(child(hyperlink, 'rPr'), 'color'), 'val')).toBe('2563EB');
+        expect(w(child(child(hyperlink, 'rPr'), 'u'), 'val')).toBe('single');
 
         const caption = style(all, 'Caption');
         expect(w(child(caption, 'name'), 'val')).toBe('caption');
