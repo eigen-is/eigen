@@ -33,8 +33,8 @@ import { describeError } from '../lib/backup/errors';
 import {
     backupsDirPath,
     buildSafetyCopyName,
-    freeAt,
     INSTALL_FOLDERS,
+    nextFreeTime,
     roomShortfall,
     SERVER_ARCHIVE_ENV_MEMBER,
     STAGING_DIR,
@@ -591,7 +591,7 @@ async function swap(): Promise<void> {
     const stagedData = join(restoring, RESTORING_DATA_DIR);
 
     const asideOf = (path: string, at: Date) => buildSafetyCopyName(path, 'pre-restore', buildBackupStamp(at));
-    const at = freeAt(
+    const at = nextFreeTime(
         new Date(),
         (candidate) => lexists(asideOf(DATA, candidate)) || lexists(asideOf(ENV_PATH, candidate)),
     );

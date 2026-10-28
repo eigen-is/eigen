@@ -16,7 +16,13 @@ import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config
 import { buildStorageKey } from '../mount/names';
 import { paths, pendingUploads } from '../mount/schema';
 import { errnoOf } from '../storage/deadline';
-import { archivePath, HOME_DATABASES, listManagedDatabases, readMountPathRows, storageKeyOf } from './archive-layout';
+import {
+    HOME_DATABASES,
+    listManagedDatabases,
+    readMountPathRows,
+    rowArchivePath,
+    storageKeyOf,
+} from './archive-layout';
 import { requireMountDir, resolveInside } from './paths';
 
 // A restored database and the schema this build expects of it.
@@ -117,7 +123,7 @@ export function materializeMount(
         db.transaction(() => {
             for (const row of rows) {
                 if (row.type !== 'file') continue;
-                const archived = archivePath(row, byId);
+                const archived = rowArchivePath(row, byId);
                 const source = inData(archived);
                 // A bucket's objects did not move aside with the folder: every row gets a fresh key, even one with
                 // no bytes, so no upload lands on an object the `.pre-restore-` copy still names.

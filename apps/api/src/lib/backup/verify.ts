@@ -16,12 +16,12 @@ import { PATHS, SERVER_DATABASES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { hashFile } from '../storage/deadline';
 import {
-    archivePath,
     checkArchivedPathRows,
     HOME_DATABASE_PATHS,
     listManagedDatabases,
     managedDbContainer,
     readMountPathRows,
+    rowArchivePath,
 } from './archive-layout';
 import { describeError } from './errors';
 import {
@@ -130,7 +130,7 @@ function listArchiveDatabases(
                 for (const row of rows) {
                     if (row.type !== 'file' || managedDbContainer(row, byId)) continue;
                     const file = entries.get(
-                        archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${archivePath(row, byId)}`),
+                        archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${rowArchivePath(row, byId)}`),
                     );
                     if (!file) continue;
                     if (row.size !== file.bytes) {

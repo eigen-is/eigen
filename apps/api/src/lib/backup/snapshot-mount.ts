@@ -12,7 +12,7 @@ import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { errnoOf, isMissingObjectCause } from '../storage';
 import { stageManagedDbCopy } from '../versioning/snapshot';
-import { archivePath, managedDbContainer, readMountPathRows, unreachableRows } from './archive-layout';
+import { managedDbContainer, readMountPathRows, rowArchivePath, unreachableRows } from './archive-layout';
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 
 // One mount's data tree in an archive: the entries written, how many of them are Eigen's own
@@ -92,7 +92,7 @@ export async function snapshotMountData(
     const files: { id: string; captured: BackupEntry; updatedAt: Date }[] = [];
     for (const [index, row] of fileRows.entries()) {
         await eventLoopTurn();
-        const relPath = archivePath(row, byId);
+        const relPath = rowArchivePath(row, byId);
         const destPath = path.join(targetDir, relPath);
         const entryPath = `${relPrefix}/${relPath}`;
         // The row stays, with no bytes, which a restore mirrors.

@@ -18,18 +18,6 @@ import { parseSafetyCopyName } from './paths';
 
 export type ServerHome = Pick<ServerArchiveManifest['homes'][number], 'ownerId' | 'kind' | 'name'>;
 
-// The folders in `data/{dirName}` no row claims, as data-relative paths. A restore's safety copies
-// sit there too and are neither a home nor an orphan.
-function listOrphans(dirName: string, claimed: Set<string>): string[] {
-    const dir = path.join(getDataRoot(), dirName);
-    if (!fs.existsSync(dir)) return [];
-    return fs
-        .readdirSync(dir, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory() && !claimed.has(entry.name) && !parseSafetyCopyName(entry.name))
-        .map((entry) => `${dirName}/${entry.name}`)
-        .sort();
-}
-
 // The homes a whole-server archive takes, read from the users3.db its server member captured, so
 // the homes and the accounts in the archive are one moment. Guests are left out: their row stays
 // in users3.db and their home is disposable. A row whose folder is missing is skipped rather than
@@ -62,7 +50,26 @@ export function enumerateHomes(usersDbPath: string): { homes: ServerHome[]; orph
     }
 }
 
-type HomeMounts = { folder: string; mounts: BackupMountSettings[] | null };
+// The folders in `data/{dirName}` no row claims, as data-relative paths. A restore's safety copies
+// sit there too and are neither a home nor an orphan.
+function listOrphans(dirName: string, claimed: Set<string>): string[] {
+    const dir = path.join(getDataRoot(), dirName);
+    if (!fs.existsSync(dir)) return [];
+    return fs
+        .readdirSync(dir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && !claimed.has(entry.name) && !parseSafetyCopyName(entry.name))
+        .map((entry) => `${dirName}/${entry.name}`)
+        .sort();
+}
+
+// Whether some home keeps a drive in a bucket: Full + S3 is offered only then. A safety copy is no home.
+export function hasS3Mounts(): boolean {
+    return listHomeMounts().some(
+        ({ folder, mounts }) => !parseSafetyCopyName(folder) && mounts?.some((mount) => mount.storageType === 's3'),
+    );
+}
+
+export type HomeMounts = { folder: string; mounts: BackupMountSettings[] | null };
 
 // Every home folder's mounts, safety copies included, read off its settings.json so no home boots. `mounts` is
 // null when the file does not read.
@@ -78,13 +85,6 @@ export function listHomeMounts(): HomeMounts[] {
         }
     }
     return homes;
-}
-
-// Whether some home keeps a drive in a bucket: Full + S3 is offered only then. A safety copy is no home.
-export function hasS3Mounts(): boolean {
-    return listHomeMounts().some(
-        ({ folder, mounts }) => !parseSafetyCopyName(folder) && mounts?.some((mount) => mount.storageType === 's3'),
-    );
 }
 
 // A home folder's mounts off its settings.json, so no home boots: none without the file, null when it does not read.

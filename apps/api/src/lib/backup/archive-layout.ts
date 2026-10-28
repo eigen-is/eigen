@@ -29,6 +29,10 @@ export const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
     [NOTIFICATION_CENTER_DB_CONFIG, PATHS.NOTIFICATIONS.DB],
 ];
 
+// The home-relative paths of the databases above. Verify reads them back to know which archived .db
+// files are Eigen's own.
+export const HOME_DATABASE_PATHS = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
+
 // The home's mail, which a Light archive leaves where it is.
 export const MAILDIR_ROOT = `${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR}`;
 
@@ -40,13 +44,9 @@ export function isLightSkipped(rel: string): boolean {
     return LIGHT_SKIPPED.test(rel);
 }
 
-// Home-relative paths of the databases above; verify reads them back to know which archived .db
-// files are Eigen's own.
-export const HOME_DATABASE_PATHS = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
-
 // The columns every reader of an archived paths table wants, spelled once: readMountPathRows derives
 // its SELECT list from their names, and the row type it hands back is this object's keys.
-export const MOUNT_PATH_COLUMNS = {
+const MOUNT_PATH_COLUMNS = {
     id: paths.id,
     file: paths.file,
     name: paths.name,
@@ -64,7 +64,7 @@ type MountPathRow = Pick<typeof paths.$inferSelect, keyof typeof MOUNT_PATH_COLU
 type ManagedArchiveDatabase = {
     // Relative to the mount's data/ folder in the archive.
     path: string;
-    // The container's own data.db — the one a Yjs decode can be run on. False for comments.db and
+    // The container's own data.db, the one a Yjs decode can be run on. False for comments.db and
     // for a versions/ snapshot.
     isContainerData: boolean;
     containerType: DrivePathType;
@@ -75,45 +75,33 @@ type ManagedArchiveDatabase = {
     row: MountPathRow;
 };
 
-// The two databases a container owns; a mount never manages any other (see mount/document-db.ts).
+// The two databases a container owns. A mount never manages any other, as openDocumentDb shows.
 const CONTAINER_DATA_DB = 'data.db';
 const CONTAINER_COMMENTS_DB = 'comments.db';
 const CONTAINER_DB_NAMES = new Set([CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]);
 
-// Every schema a container's databases carry, which a Light backup leaves out: a release that migrates one is marked
-// (full backup) in CHANGELOG.md, which scripts/check-container-db-marker.ts holds a release tag to.
+// Every schema a container's databases carry, which a Light backup leaves out. A release that migrates one is marked
+// (full backup) in the changelog, and the release check on a version tag holds it to that.
 export const CONTAINER_DB_CONFIGS = {
     collab: COLLAB_DB_CONFIG,
     chat: CHAT_ROOM_DB_CONFIG,
     comments: COMMENT_INDEX_DB_CONFIG,
 };
 
-// Which schema a managed file carries: a comment index, or the container's own document database —
-// Yjs for every collab type, chat's own for a chat room. A versions/ snapshot is a copy of the
-// container's data.db, so it answers the same.
-function configOf(name: string, containerType: DrivePathType): DatabaseConfig<SchemaType> {
-    if (name === CONTAINER_COMMENTS_DB) return CONTAINER_DB_CONFIGS.comments;
-    return isCollabType(containerType) ? CONTAINER_DB_CONFIGS.collab : CONTAINER_DB_CONFIGS.chat;
+// The rows of an archived metadata.db, in the shape every reader of one wants.
+export function readMountPathRows(db: Database): MountPathRow[] {
+    const columns = Object.values(MOUNT_PATH_COLUMNS)
+        .map((column) => column.name)
+        .join(', ');
+    return db.query<MountPathRow, []>(`SELECT ${columns} FROM paths`).all();
 }
 
-// Ancestors of `row`, nearest first. Guarded against a corrupt parentId cycle, which would
-// otherwise spin forever on a table the backup does not get to trust.
-function* ancestors(row: MountPathRow, byId: Map<string, MountPathRow>): Generator<MountPathRow> {
-    const seen = new Set<string>([row.id]);
-    let current = row.parentId ? byId.get(row.parentId) : undefined;
-    while (current && !seen.has(current.id)) {
-        seen.add(current.id);
-        yield current;
-        current = current.parentId ? byId.get(current.parentId) : undefined;
-    }
-}
-
-// Where a row's bytes go inside the archive: the storage key it WOULD have on a `local` mount —
-// the name chain from the root, with a trash root at `.trash/{id}.{ext}` as trashPath spells it.
+// Where a row's bytes go inside the archive: the storage key it would have on a `local` mount. That
+// is the name chain from the root, with a trash root at `.trash/{id}.{ext}` as trashPath spells it.
 // Deriving it from metadata.db instead of the mount's own keys is what makes the archive
 // storage-independent: local-key and s3 mounts store flat keys, and restore re-derives whichever
 // shape the target mount needs.
-export function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string {
+export function rowArchivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string {
     const segment = (r: MountPathRow) => (r.trashedFrom ? trashStorageKey(r.id, r.name) : r.name);
     const segments = [segment(row)];
     for (const parent of ancestors(row, byId)) {
@@ -124,15 +112,14 @@ export function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>):
 }
 
 // What a flat-key backend (`local-key`, `s3`) stores a row's object under: `file`, falling back to
-// the id for a row written before that column carried a value — Mount.getStorageKey's own rule.
+// the id for a row written before that column carried a value, as Mount.getStorageKey does.
 // A path-based mount needs the whole ancestor chain instead (storageKeyOf).
 export function flatStorageKey(row: Pick<MountPathRow, 'id' | 'file'>): string {
     return row.file || row.id;
 }
 
-// Mirrors Mount.findStorageKey, resolved from the tree we already hold rather
-// than one recursive-CTE query per file. Restore puts every file back at the key the restored mount
-// looks for it under: one spelling of the rule for both directions.
+// Mirrors Mount.findStorageKey, resolved from the tree already held rather than one recursive-CTE
+// query per file. Restore puts every file back at the key the restored mount looks for it under.
 export function storageKeyOf(row: MountPathRow, byId: Map<string, MountPathRow>, isPathBased: boolean): string {
     if (!isPathBased) return flatStorageKey(row);
     const segments = row.file ? [row.file] : [];
@@ -144,7 +131,7 @@ export function storageKeyOf(row: MountPathRow, byId: Map<string, MountPathRow>,
 }
 
 // The databases the mount itself manages: a container's data.db/comments.db, and the versions/
-// snapshots of one. Returns the container to lock while copying, or null for anything else — a
+// snapshots of one. Returns the container to lock while copying, or null for anything else: a
 // user's own upload that happens to be SQLite must round-trip byte-identical.
 export function managedDbContainer(row: MountPathRow, byId: Map<string, MountPathRow>): MountPathRow | null {
     const parent = row.parentId ? byId.get(row.parentId) : undefined;
@@ -154,14 +141,6 @@ export function managedDbContainer(row: MountPathRow, byId: Map<string, MountPat
         return container && isDocumentType(container.type) ? container : null;
     }
     return CONTAINER_DB_NAMES.has(row.name) && isDocumentType(parent.type) ? parent : null;
-}
-
-// The rows of an archived metadata.db, in the shape every reader of one wants (verify, restore).
-export function readMountPathRows(db: Database): MountPathRow[] {
-    const columns = Object.values(MOUNT_PATH_COLUMNS)
-        .map((column) => column.name)
-        .join(', ');
-    return db.query<MountPathRow, []>(`SELECT ${columns} FROM paths`).all();
 }
 
 // Where a row's parent chain ends when it does not end at a root row: at a parent the table does not hold, or in a
@@ -217,7 +196,7 @@ export function checkArchivedPathRows(rows: MountPathRow[]): string[] {
 }
 
 // The same rule, read back from an archived metadata.db: which of a mount's archived files are
-// Eigen's own databases. Verify needs it to know what it may open — a user's own SQLite upload is
+// Eigen's own databases. Verify needs it to know what it may open: a user's own SQLite upload is
 // stored byte-identical, journal header and all, and opening it is not verify's business.
 export function listManagedDatabases(rows: MountPathRow[]): ManagedArchiveDatabase[] {
     const byId = new Map(rows.map((row) => [row.id, row]));
@@ -229,7 +208,7 @@ export function listManagedDatabases(rows: MountPathRow[]): ManagedArchiveDataba
         // The container is the parent of a live data.db and the grandparent of a version snapshot.
         const isContainerData = container.id === row.parentId && row.name === CONTAINER_DATA_DB;
         found.push({
-            path: archivePath(row, byId),
+            path: rowArchivePath(row, byId),
             isContainerData,
             containerType: container.type,
             config: configOf(row.name, container.type),
@@ -237,4 +216,24 @@ export function listManagedDatabases(rows: MountPathRow[]): ManagedArchiveDataba
         });
     }
     return found;
+}
+
+// Which schema a managed file carries: a comment index, or the container's own document database,
+// which is Yjs for every collab type and chat's own for a chat room. A versions/ snapshot is a copy
+// of the container's data.db, so it answers the same.
+function configOf(name: string, containerType: DrivePathType): DatabaseConfig<SchemaType> {
+    if (name === CONTAINER_COMMENTS_DB) return CONTAINER_DB_CONFIGS.comments;
+    return isCollabType(containerType) ? CONTAINER_DB_CONFIGS.collab : CONTAINER_DB_CONFIGS.chat;
+}
+
+// Ancestors of `row`, nearest first. Guarded against a corrupt parentId cycle, which would
+// otherwise spin forever on a table the backup does not get to trust.
+function* ancestors(row: MountPathRow, byId: Map<string, MountPathRow>): Generator<MountPathRow> {
+    const seen = new Set<string>([row.id]);
+    let current = row.parentId ? byId.get(row.parentId) : undefined;
+    while (current && !seen.has(current.id)) {
+        seen.add(current.id);
+        yield current;
+        current = current.parentId ? byId.get(current.parentId) : undefined;
+    }
 }

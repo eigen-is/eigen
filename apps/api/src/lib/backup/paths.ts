@@ -24,15 +24,6 @@ import {
 import { CERT_FILES, CERTS_DIR, DKIM_DIR, getDataRoot, PATHS, SERVER_DIR } from '../config/paths';
 import { ApiError } from '../core/errors';
 
-// Why the disk of `dir` has no room for `needed` bytes, or null: the one wording of every backup's and stage's room
-// check.
-export function roomShortfall(what: string, needed: number, dir: string, where: string): string | null {
-    const { bavail, bsize } = fs.statfsSync(dir);
-    const free = bavail * bsize;
-    if (needed <= free) return null;
-    return `${what} needs up to ${formatFileSize(needed)}; ${where} has ${formatFileSize(free)} free`;
-}
-
 // Where backup artifacts live. Outside `data/` on purpose, so one wipe of the data directory can never
 // take the backups with it. In the container it is the `./backups` bind mount, named by EIGEN_BACKUPS_DIR.
 export function backupsDirPath(): string {
@@ -67,7 +58,7 @@ export async function wipeBackupStagingDir(jobId: string): Promise<void> {
 }
 
 // Called on server start: a job interrupted by a restart leaves a half-written folder behind,
-// and nothing ever resumes it. Creates nothing — at boot the backups folder may not exist yet.
+// and nothing ever resumes it. It creates nothing, because at boot the backups folder may not exist yet.
 export function wipeBackupStaging(): void {
     fs.rmSync(getStagingRoot(), { recursive: true, force: true });
 }
@@ -83,10 +74,9 @@ const NO_CONTROL = new RegExp(NO_CONTROL_PATTERN);
 
 // An archive comes from outside: its manifest, its mount trees and the settings.json of a folder it
 // left behind all name paths this server then reads, opens and deletes. Anything that would leave
-// `root` — absolute, a `..` hop, a control character, or a path that walks through a symlink — is
-// refused before it reaches the filesystem. `root` is resolved to its real path here, so the
-// comparison holds on a macOS /var → /private/var temp folder too. One spelling for both sides:
-// verify judges an unpacked archive with it, and restore resolves every segment it is handed.
+// `root` is refused before it reaches the filesystem, such as an absolute path, a `..` hop, a control
+// character, or a path that walks through a symlink. `root` is resolved to its real path here, so the
+// comparison holds on a macOS temp folder too, where /var is /private/var.
 export function resolveInside(root: string, relPath: string): string | null {
     if (relPath === '' || path.isAbsolute(relPath) || !NO_CONTROL.test(relPath)) return null;
     if (relPath.split(/[\\/]/).includes('..')) return null;
@@ -100,14 +90,13 @@ export function resolveInside(root: string, relPath: string): string | null {
 }
 
 // The mount folder inside a home, for a mount id that came from outside (a manifest, a home's
-// settings.json). Null when the id would leave the home — the caller refuses rather than touching
+// settings.json). Null when the id would leave the home, so the caller refuses rather than touching
 // another home's databases and files.
 export function resolveMountDir(homeDir: string, mountId: string): string | null {
     return resolveInside(homeDir, `${PATHS.DRIVE.ROOT}/${mountId}`);
 }
 
-// The same folder for the callers that refuse an id they cannot place, spelled once. The null form
-// above is for the ones that tolerate a missing mount (safety-copy.ts walks what a copy still has).
+// The same folder, refusing a mount id that would leave the home.
 export function requireMountDir(homeDir: string, mountId: string): string {
     const mountDir = resolveMountDir(homeDir, mountId);
     if (!mountDir) throw new ApiError(400, `${mountId} is not a mount of this home`);
@@ -116,7 +105,6 @@ export function requireMountDir(homeDir: string, mountId: string): string {
 
 // The layout inside a backup folder: `home/` mirrors the home directory one-for-one, and every
 // mount keeps its metadata.db beside a `data/` tree of the files its paths table knows about.
-// snapshotHome writes it and verifyFolder reads it back — one spelling for both.
 export const ARCHIVE_HOME_DIR = 'home';
 
 // The three things beside `home/` that a user's archive carries: the users3.db rows, the
@@ -125,8 +113,7 @@ export const ARCHIVE_AUTH_FILE = 'auth.json';
 export const ARCHIVE_SHARES_FILE = 'shares.json';
 export const ARCHIVE_AVATAR_DIR = 'avatar';
 
-// The one file every reader of an archive starts from: snapshotHome writes it, verify judges the
-// folder against it, restore reads the home out of it and the artifact list reads its sidecar copy.
+// The list of what an archive holds, which every reader of an archive starts from.
 export const ARCHIVE_MANIFEST_FILE = 'manifest.json';
 
 export function archiveHomePath(relPath: string): string {
@@ -178,19 +165,10 @@ export function archiveServerPath(relPath: string): string {
     return `${SERVER_DIR}/${relPath}`;
 }
 
-// The one collision rule these names have: a stamp is a second wide, and two of a home's artifacts
-// or safety copies can land inside one. The later one is stamped a second on, so every name in
-// both grammars keeps exactly one shape.
-export function freeAt(at: Date, taken: (candidate: Date) => boolean): Date {
-    let candidate = at;
-    while (taken(candidate)) candidate = new Date(candidate.getTime() + 1000);
-    return candidate;
-}
-
 // The name a new artifact takes. Without the rule above, two backups of one home inside a second
 // would land on one name and the second would overwrite the first.
 export function freeArtifactName(ownerId: string, at: Date): string {
-    const free = freeAt(at, (candidate) =>
+    const free = nextFreeTime(at, (candidate) =>
         fs.existsSync(path.join(backupsDirPath(), buildArtifactName(ownerId, candidate))),
     );
     return buildArtifactName(ownerId, free);
@@ -214,7 +192,7 @@ export function serverSidecarPath(archivePath: string): string {
 // The stamp a new whole-server archive takes, under the same rule; its members carry it too. A
 // refused attempt leaves only its sidecar, and that name is taken as well.
 export function freeServerArchiveAt(reason: BackupReason, level: BackupLevel, at: Date): Date {
-    return freeAt(at, (candidate) => {
+    return nextFreeTime(at, (candidate) => {
         const archivePath = path.join(backupsDirPath(), buildServerArchiveName(reason, level, candidate));
         return fs.existsSync(archivePath) || fs.existsSync(serverSidecarPath(archivePath));
     });
@@ -235,11 +213,11 @@ export function buildSafetyCopyName(homeDir: string, kind: BackupSafetyCopy['kin
 
 // The stamp the two safety copies of one restore share, under the same collision rule: a second
 // restore of a home inside one second must not rename onto the first's copy (ENOTEMPTY, with the
-// home already moved aside) AND must not hand a flat-key mount the fresh storage keys the first
-// restore just wrote (see materializeMount).
+// home already moved aside). It also must not hand a flat-key mount the fresh storage keys the first
+// restore just wrote, which materializeMount derives from the stamp.
 export function freeSafetyCopyStamp(homeDir: string, at: Date): string {
     return buildBackupStamp(
-        freeAt(at, (candidate) => {
+        nextFreeTime(at, (candidate) => {
             const stamp = buildBackupStamp(candidate);
             return (
                 fs.existsSync(buildSafetyCopyName(homeDir, 'pre-restore', stamp)) ||
@@ -260,11 +238,28 @@ export function parseSafetyCopyName(
     return { homeName, kind: groups['suffix'] === PRE_RESTORE_SUFFIX ? 'pre-restore' : 'failed-restore', at };
 }
 
+// The one collision rule these names have: a stamp is a second wide, and two of a home's artifacts
+// or safety copies can land inside one. The later one is stamped a second on, so every name in
+// both grammars keeps exactly one shape.
+export function nextFreeTime(at: Date, taken: (candidate: Date) => boolean): Date {
+    let candidate = at;
+    while (taken(candidate)) candidate = new Date(candidate.getTime() + 1000);
+    return candidate;
+}
+
+// Why the disk of `dir` has no room for `needed` bytes, or null. Every backup's and stage's room check words
+// its refusal this way.
+export function roomShortfall(what: string, needed: number, dir: string, where: string): string | null {
+    const { bavail, bsize } = fs.statfsSync(dir);
+    const free = bavail * bsize;
+    if (needed <= free) return null;
+    return `${what} needs up to ${formatFileSize(needed)}; ${where} has ${formatFileSize(free)} free`;
+}
+
 export type BackableOwner = ParsedOwnerId & { type: 'user' | 'team' };
 
 // The two kinds of home an archive is of. An org home holds no databases and a guest home is
-// disposable (guest-cleanup deletes them), so neither is backed up and neither can be restored —
-// one spelling of that refusal, for the folder resolver and for the snapshot itself.
+// disposable (guest cleanup deletes them), so neither is backed up and neither can be restored.
 export function requireBackableOwner(owner: ParsedOwnerId): asserts owner is BackableOwner {
     if (owner.type !== 'user' && owner.type !== 'team') {
         throw new ApiError(400, `Not a user or team home (${owner.type})`);

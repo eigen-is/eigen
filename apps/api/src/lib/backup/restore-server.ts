@@ -12,7 +12,7 @@ import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
 import type { ArchiveMember } from './archive';
 import { copyArchiveMember, extractArtifact, readUnpackedHome } from './archive';
-import { archivePath, flatStorageKey, readMountPathRows } from './archive-layout';
+import { flatStorageKey, readMountPathRows, rowArchivePath } from './archive-layout';
 import { describeError } from './errors';
 import type { VersionedDatabase } from './materialize-mount';
 import { checkRestoredDatabases, materializeMount, movePath } from './materialize-mount';
@@ -112,7 +112,7 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
                 continue;
             }
             const row = byKey.get(storageKey);
-            const source = fromFiles ? row && resolveInside(dataDir, archivePath(row, byId)) : staged;
+            const source = fromFiles ? row && resolveInside(dataDir, rowArchivePath(row, byId)) : staged;
             if (!source || !isUsableName(name) || !fs.existsSync(source)) {
                 notReplayed.missing++;
                 continue;
