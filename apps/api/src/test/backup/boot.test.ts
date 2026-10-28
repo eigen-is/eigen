@@ -1,5 +1,15 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    symlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import {
@@ -99,11 +109,15 @@ describe('Backup boot', () => {
         // A sidecar whose archive is gone still names every file of the home.
         const orphanSidecar = sidecarPath(join(dir, buildArtifactName('bootmodesBBBBBBBBBBBBBBBBBBBBBBB', at)));
         const serverSidecar = serverSidecarPath(join(dir, buildServerArchiveName('manual', 'full', at)));
+        // A symlink named as an archive, to a file outside the backups folder that is not the server's to close.
+        const elsewhere = join(TEST_DATA_DIR, 'backups-modes-elsewhere');
+        const linked = join(dir, buildArtifactName('bootmodesCCCCCCCCCCCCCCCCCCCCCCC', at));
         mkdirSync(dir, { recursive: true });
-        for (const file of [archive, sidecarPath(archive), orphanSidecar, serverSidecar]) {
+        for (const file of [archive, sidecarPath(archive), orphanSidecar, serverSidecar, elsewhere]) {
             writeFileSync(file, '{}');
             chmodSync(file, 0o644);
         }
+        symlinkSync(elsewhere, linked);
         const previous = process.env['EIGEN_BACKUPS_DIR'];
         process.env['EIGEN_BACKUPS_DIR'] = dir;
         try {
@@ -111,10 +125,12 @@ describe('Backup boot', () => {
             const modeOf = (file: string) => statSync(file).mode & 0o777;
             expect([archive, sidecarPath(archive), orphanSidecar].map(modeOf)).toEqual([0o600, 0o600, 0o600]);
             expect(modeOf(serverSidecar)).toBe(0o644);
+            expect(modeOf(elsewhere)).toBe(0o644);
         } finally {
             if (previous === undefined) delete process.env['EIGEN_BACKUPS_DIR'];
             else process.env['EIGEN_BACKUPS_DIR'] = previous;
             rmSync(dir, { recursive: true, force: true });
+            rmSync(elsewhere, { force: true });
         }
     });
 

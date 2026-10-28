@@ -2,7 +2,7 @@
 // festival, ~3 weeks out, line-up ~80% confirmed, short on volunteers, iffy Sunday forecast.
 //
 // This module is DATA: personas, folder names, document/mail/event/chat/contact text, and the few one-line helpers
-// that spell some of it, such as an equation's MathML. The mechanics (seed-demo.ts) turn it into a live workspace
+// that spell some of it, such as an equation's MathML. The seeder's mechanics turn it into a live workspace
 // through the real product surfaces. Keep it that way so a later content-deepening pass swaps data here without
 // touching mechanics.
 //
@@ -188,8 +188,9 @@ export const DOCS: SeededDoc[] = [
     },
 ];
 
-// --- Workbooks (built from these specs by sheet-build.ts: the budget straight into its container's Y.Doc, the
-// generator quote into an xlsx mail attachment). Ranges are A1 text; a chart's ranges name the tab they read. ---
+// --- Workbooks (built from these specs: the budget straight into its container's Y.Doc by buildWorkbookDoc, the
+// generator quote into an xlsx mail attachment by buildWorkbook). Ranges are A1 text; a chart's ranges name the tab
+// they read. ---
 
 // Text, a number, or a formula: a string that starts with '='. null leaves the cell empty.
 export type SheetCellSpec = string | number | null;
@@ -303,7 +304,7 @@ export const GENERATOR_QUOTE: SheetSpec[] = [
 ];
 
 // --- Sponsor deck (a slide deck the seeder builds straight into the container's Y.Doc from this
-// spec — no fixture bytes; see deck-build.ts). A deck is a canvas of frames: one slide per frame,
+// spec by buildDeckDoc — no fixture bytes). A deck is a canvas of frames: one slide per frame,
 // pinned 1920x1080, its elements positioned relative to the frame's top-left corner. Slide keys are
 // stable so element ids stay the same across reseeds. ---
 
@@ -660,7 +661,7 @@ export const VCARD_FILES: SeededVCardFile[] = [
 ];
 
 // --- Site plan (a vector drawing the seeder builds straight into the container's Y.Doc from this
-// spec — no fixture bytes; see vector-build.ts). Scene units are pixels, y down; every shape's
+// spec by buildVectorDoc — no fixture bytes). Scene units are pixels, y down; every shape's
 // label is the shape's own text, centered in it. Shape keys are stable so arrows can bind to them by name. ---
 
 export type CanvasSide = 'top' | 'right' | 'bottom' | 'left';
