@@ -20,12 +20,12 @@ type StorageUsageProps = {
     condensed?: boolean;
 };
 
-const getStorageUsageColor = (storageUsed: number): string => {
-    if (!storageUsed || Number.isNaN(storageUsed) || storageUsed === Infinity) return '';
-    else if (storageUsed > 0.85) return 'bg-destructive';
-    else if (storageUsed > 0.65) return 'bg-warning';
+// The fill bar turns amber past 65% of the quota and red past 85%.
+function getStorageUsageColor(ratio: number) {
+    if (ratio > 0.85) return 'bg-destructive';
+    if (ratio > 0.65) return 'bg-warning';
     return '';
-};
+}
 
 // Presentational storage breakdown: total line + fill bar + Drive/Mail rows. Shared by the admin
 // user detail pane and any other surface that already has a StorageData in hand.
@@ -63,8 +63,8 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
     const homeDataLabel = useHomeDataLabel();
 
     const totalUsed = storageData?.total.used ?? 0;
-    const totalMax = storageData?.total.max ?? 1;
-    const ratio = totalUsed / totalMax;
+    const totalMax = storageData?.total.max ?? 0;
+    const ratio = totalMax > 0 ? Math.min(totalUsed / totalMax, 1) : 0;
 
     return (
         <button
