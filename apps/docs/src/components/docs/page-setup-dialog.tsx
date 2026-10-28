@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { numberAtStep } from '@workspace/ui/components/properties-panel';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
@@ -46,9 +47,9 @@ const MARGIN_FIELDS: { side: keyof PageMargin; label: string }[] = [
 
 const CUSTOM = 'Custom';
 
-// The cm fields step by 0.01 and show that many decimals while nobody types in them, as Google's 2.00 cm; the browser
-// writes the decimal separator of the reader's locale. What is typed stays as typed until the field is left.
-const CM_STEP = '0.01';
+// The cm fields step by 0.01 and show that many decimals while nobody types in them, as Google's 2.00 cm. What is
+// typed stays as typed until the field is left.
+const CM_STEP = 0.01;
 const CM_DECIMALS = 2;
 
 type CmInputProps = { id: string; value: string; onValueChange: (value: string) => void; disabled?: boolean };
@@ -56,7 +57,7 @@ type CmInputProps = { id: string; value: string; onValueChange: (value: string) 
 function CmInput({ id, value, onValueChange, disabled }: CmInputProps) {
     const [typing, setTyping] = useState(false);
     const number = Number(value);
-    const shown = typing || value.trim() === '' || !Number.isFinite(number) ? value : number.toFixed(CM_DECIMALS);
+    const shown = typing || value.trim() === '' || !Number.isFinite(number) ? value : numberAtStep(number, CM_STEP);
     return (
         <Input
             id={id}
@@ -80,7 +81,7 @@ const marginText = (mm: number) => cmText(mm, CM_DECIMALS);
 const paperLabel = (name: string, width: number, height: number) =>
     `${name} (${(Math.min(width, height) / 10).toFixed(1)} cm × ${(Math.max(width, height) / 10).toFixed(1)} cm)`;
 
-// Google Docs' Page setup without Apply to, Page colour and Set as default: a doc has one page and no page colour.
+// Google Docs' Page setup without Apply to, Page color and Set as default: a doc has one page and no page color.
 export function PageSetupDialog({
     open,
     onOpenChange,
@@ -232,7 +233,7 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone, textWidth, onTextWid
                         </div>
 
                         <FieldSet className="gap-3">
-                            <FieldLegend variant="label">Margins (centimetres)</FieldLegend>
+                            <FieldLegend variant="label">Margins (centimeters)</FieldLegend>
                             {MARGIN_FIELDS.map(({ side, label }) => (
                                 <Field key={side} orientation="horizontal">
                                     <FieldLabel htmlFor={`page-setup-${side}`}>{label}</FieldLabel>
@@ -306,8 +307,8 @@ type HeadersAndFootersDialogProps = {
 };
 
 const DISTANCE_FIELDS = [
-    { key: 'headerDistance', label: 'Header (centimetres from top)' },
-    { key: 'footerDistance', label: 'Footer (centimetres from bottom)' },
+    { key: 'headerDistance', label: 'Header (centimeters from top)' },
+    { key: 'footerDistance', label: 'Footer (centimeters from bottom)' },
 ] as const;
 
 type DistanceKey = (typeof DISTANCE_FIELDS)[number]['key'];

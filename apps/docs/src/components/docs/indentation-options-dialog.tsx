@@ -113,7 +113,7 @@ function IndentationOptionsForm({
             }}
         >
             <FieldSet className="gap-3">
-                <FieldLegend variant="label">Indentation (centimetres)</FieldLegend>
+                <FieldLegend variant="label">Indentation (centimeters)</FieldLegend>
                 {(['left', 'right'] as const).map((key) => (
                     <Field key={key} orientation="horizontal">
                         <FieldLabel htmlFor={`indentation-${key}`}>{key === 'left' ? 'Left' : 'Right'}</FieldLabel>

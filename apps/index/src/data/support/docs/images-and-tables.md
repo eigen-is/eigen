@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, images, charts, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 You can insert images, charts, and tables anywhere in a document. Images can come from your device or from Drive. Charts start with sample data you then edit. Tables start as a 3×3 grid and you can grow them from there.
@@ -50,7 +50,7 @@ On a wide screen, selecting an image also opens the **Image** panel on the right
 - **Cap**: add a caption that appears beneath the image. An image behind or in front of the text has no caption.
 - **Replace image**: swap the image for a different file from your device or Drive, keeping the same position in the document. The new image takes its own size and shape.
 
-**Format → Image** has **Replace image** and the same styles: **In line**, **Wrap left**, **Wrap right**, **Behind text**, and **In front of text**. It works on any screen, a phone included. The **Image** item is greyed out until you select an image.
+**Format → Image** has **Replace image** and the same styles: **In line**, **Wrap left**, **Wrap right**, **Behind text**, and **In front of text**. It works on any screen, a phone included. The **Image** item is grayed out until you select an image.
 
 ## Put an image behind or in front of the text
 
@@ -111,7 +111,7 @@ A chart prints and downloads as a PDF or a web page in its look. In a Word file 
 
 Click inside the table. The **Table** panel opens on the right side of the editor (on a wide screen).
 
-The same actions are under **Format → Table**, which works on any screen, a phone included: **Insert row above**, **Insert row below**, **Insert column left**, **Insert column right**, **Delete row**, **Delete column**, **Delete table**, **Distribute columns**, **Merge cells**, **Unmerge cells**, **Toggle header row**, **Cell background color**, **All borders**, **Outer borders**, and **No borders**. The **Table** item is greyed out until your cursor is in a table.
+The same actions are under **Format → Table**, which works on any screen, a phone included: **Insert row above**, **Insert row below**, **Insert column left**, **Insert column right**, **Delete row**, **Delete column**, **Delete table**, **Distribute columns**, **Merge cells**, **Unmerge cells**, **Toggle header row**, **Cell background color**, **All borders**, **Outer borders**, and **No borders**. The **Table** item is grayed out until your cursor is in a table.
 
 Right-click a cell for the same actions in one menu. It starts with **Cut**, **Copy**, and **Paste**, offers **Add comment** when you have text selected, and ends with **Delete row**, **Delete column**, and **Delete table** in red. The first time you choose **Paste**, your browser may ask to let the page see your clipboard. This menu needs edit access, and works in a header or footer while you edit it.
 

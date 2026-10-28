@@ -622,7 +622,7 @@ export const EditorToolbar = ({
                             Cancel
                         </Button>
                         <Button type="button" onClick={applyLink}>
-                            Add Link
+                            Add link
                         </Button>
                     </DialogFooter>
                 </DialogContent>
