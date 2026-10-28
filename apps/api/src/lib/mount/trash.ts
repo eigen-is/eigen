@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SQL } from 'drizzle-orm';
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
@@ -337,7 +337,13 @@ export async function listTrashRootsInside(mount: Mount, folderId: string): Prom
 
 // The trash roots whose original folder is the path or lies under it. They hang under the mount root,
 // and once the path is deleted they could never go back to it.
+// One subquery, not a variable per descendant: SQLite caps a statement's variables.
 function trashRootsFrom(mount: Mount, pathId: string): (typeof paths.$inferSelect)[] {
-    const allIds = [pathId, ...mount.collectDescendantIds(pathId)];
-    return mount.db.select().from(paths).where(inArray(paths.trashedFrom, allIds)).all();
+    return mount.db
+        .select()
+        .from(paths)
+        .where(
+            sql`${paths.trashedFrom} = ${pathId} OR ${paths.trashedFrom} IN (${descendantsOf(pathId)} SELECT id FROM descendants)`,
+        )
+        .all();
 }

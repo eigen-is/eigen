@@ -3,7 +3,7 @@ import type { DrivePath, EditorSaveResult, FileEditorContent } from '@workspace/
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import { MAX_INLINE_EDIT_SIZE } from '../../lib/drive/inline-edit';
 import { getHome } from '../../lib/home';
-import { authedRequest, driveGet, driveUpload, getTestContext } from '../setup';
+import { authedRequest, driveGet, drivePut, driveUpload, getTestContext } from '../setup';
 
 describe('Editor', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -33,12 +33,13 @@ describe('Editor', () => {
     async function editorPut(
         pathId: string,
         body: Record<string, unknown>,
+        token = ctx.alice.user.sessionToken,
     ): Promise<{ status: number; data: EditorSaveResult | null }> {
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/editor/${ctx.alice.user.id}/${mountId}/${pathId}/content`,
-            { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-        );
+        const res = await authedRequest(token, `/editor/${ctx.alice.user.id}/${mountId}/${pathId}/content`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
         // Error responses (413/507) return a plain-text ApiError message, not JSON — tolerate that.
         return { status: res.status, data: await res.json().catch(() => null) };
     }
@@ -117,56 +118,94 @@ describe('Editor', () => {
     });
 
     describe('PUT content', () => {
-        test('saves content when updatedAt matches', async () => {
+        test('saves content when the etag matches, and answers the new one', async () => {
             const uploaded = await uploadTextFile('editable.txt', 'original');
             const { data: initial } = await editorGet(uploaded.id);
-            const updatedAt = initial.updatedAt;
 
-            const { status, data } = await editorPut(uploaded.id, {
-                content: 'modified',
-                expectedUpdatedAt: updatedAt,
-            });
+            const { status, data } = await editorPut(uploaded.id, { content: 'modified', expectedEtag: initial.etag });
             expect(status).toBe(200);
-            expect(data?.conflict).toBe(false);
             if (data?.conflict !== false) throw new Error('expected a saved result');
-            expect(data.updatedAt).toBeDefined();
 
-            // Verify content was saved
             const { data: reloaded } = await editorGet(uploaded.id);
             expect(reloaded.content).toBe('modified');
+            expect(data.etag).toBe(reloaded.etag);
         });
 
-        test('returns conflict when updatedAt is stale', async () => {
+        // updatedAt has second precision, so a check on it let the second save of a second through.
+        test('of two saves from one etag within one second, the second is a conflict', async () => {
             const uploaded = await uploadTextFile('conflict.txt', 'original');
             const { data: initial } = await editorGet(uploaded.id);
-            const updatedAt = initial.updatedAt;
 
-            // Wait so updatedAt will differ after save
-            await new Promise((r) => setTimeout(r, 1100));
-
-            // First save succeeds and bumps updatedAt
-            const { data: saved } = await editorPut(uploaded.id, { content: 'version2', expectedUpdatedAt: updatedAt });
+            const { data: saved } = await editorPut(uploaded.id, { content: 'version2', expectedEtag: initial.etag });
             expect(saved?.conflict).toBe(false);
+            const { data } = await editorPut(uploaded.id, { content: 'version3', expectedEtag: initial.etag });
 
-            // Verify the first save actually changed updatedAt
-            const { data: refreshed } = await editorGet(uploaded.id);
-            const newUpdatedAt = refreshed.updatedAt;
-            expect(newUpdatedAt).not.toBe(updatedAt);
-
-            // Second save with original (now stale) updatedAt returns conflict
-            const { data } = await editorPut(uploaded.id, {
-                content: 'version3',
-                expectedUpdatedAt: updatedAt, // stale!
-            });
-            expect(data?.conflict).toBe(true);
             if (data?.conflict !== true) throw new Error('expected a conflict');
-            expect(data.currentUpdatedAt).toBeDefined();
+            const { data: reloaded } = await editorGet(uploaded.id);
+            expect(reloaded.content).toBe('version2');
+            expect(data.currentEtag).toBe(reloaded.etag);
         });
 
-        test('of two saves from one updatedAt, the one that writes second is a conflict', async () => {
+        // A tab opened before the editor sent an etag still sends the updatedAt it loaded. It gets the
+        // conflict dialog, whose Download and Overwrite keep its edits.
+        test('a save from a tab that sends updatedAt is a conflict', async () => {
+            const uploaded = await uploadTextFile('no-etag.txt', 'original');
+
+            const { status, data } = await editorPut(uploaded.id, {
+                content: 'unguarded',
+                expectedUpdatedAt: uploaded.updatedAt,
+            });
+            expect(status).toBe(200);
+            expect(data?.conflict).toBe(true);
+            expect((await editorGet(uploaded.id)).data.content).toBe('original');
+        });
+
+        // expectedEtag is one etag, not an If-Match value, so `*` doesn't act as force, nor a list with
+        // the file's etag in it.
+        test.each([
+            ['*', () => '*'],
+            ['a list', (etag: string) => `"stale", ${etag}`],
+        ])('a save with expectedEtag %s is refused', async (_, ifMatchValue) => {
+            const uploaded = await uploadTextFile('wildcard-etag.txt', 'original');
+            const { data: initial } = await editorGet(uploaded.id);
+
+            const expectedEtag = ifMatchValue(initial.etag);
+            const { status } = await editorPut(uploaded.id, { content: 'unguarded', expectedEtag });
+            expect(status).toBe(422);
+            expect((await editorGet(uploaded.id)).data.content).toBe('original');
+        });
+
+        // Another writer, such as a WebDAV PUT without If-Match, lands after the save lets go of the
+        // file's lock and before it answers. The save still answers its own etag, so its next save is a
+        // conflict and doesn't overwrite the other change.
+        test("a save answers its own write's etag, not that of a write landing right after it", async () => {
+            const uploaded = await uploadTextFile('own-etag.txt', 'original');
+            const { data: initial } = await editorGet(uploaded.id);
+            const { mount } = await (await getHome(ctx.alice.user.id)).drive.resolveFile(mountId, uploaded.id);
+            const writeFile = mount.writeFile.bind(mount);
+            const write = spyOn(mount, 'writeFile').mockImplementationOnce(async (...args) => {
+                const committed = await writeFile(...args);
+                await writeFile(uploaded.id, Buffer.from('theirs'));
+                return committed;
+            });
+            let saved: Awaited<ReturnType<typeof editorPut>>;
+            try {
+                saved = await editorPut(uploaded.id, { content: 'mine', expectedEtag: initial.etag });
+            } finally {
+                write.mockRestore();
+            }
+            if (saved.data?.conflict !== false) throw new Error('expected a saved result');
+
+            const { data: next } = await editorPut(uploaded.id, {
+                content: 'mine again',
+                expectedEtag: saved.data.etag,
+            });
+            expect(next?.conflict).toBe(true);
+            expect((await editorGet(uploaded.id)).data.content).toBe('theirs');
+        });
+
+        test('of two saves from one etag, the one that writes second is a conflict', async () => {
             const uploaded = await uploadTextFile('race.txt', 'original');
-            // updatedAt has second precision: a save in the upload's second would carry the same value
-            await new Promise((r) => setTimeout(r, 1100));
             const { data: initial } = await editorGet(uploaded.id);
 
             // Hold the file's lock until both saves have passed every check before it and wait on it.
@@ -184,7 +223,7 @@ describe('Editor', () => {
             try {
                 const saves = Promise.all(
                     ['first', 'second'].map((content) =>
-                        editorPut(uploaded.id, { content, expectedUpdatedAt: initial.updatedAt }),
+                        editorPut(uploaded.id, { content, expectedEtag: initial.etag }),
                     ),
                 );
                 await bothWaiting.promise;
@@ -205,23 +244,17 @@ describe('Editor', () => {
             const { data: reloaded } = await editorGet(uploaded.id);
             expect(reloaded.content).toBe(results.indexOf(saved[0]) === 0 ? 'first' : 'second');
             if (conflicts[0].data?.conflict !== true) throw new Error('expected a conflict');
-            expect(new Date(conflicts[0].data.currentUpdatedAt).getTime()).toBe(new Date(reloaded.updatedAt).getTime());
+            expect(conflicts[0].data.currentEtag).toBe(reloaded.etag);
         });
 
-        test('force save ignores stale updatedAt', async () => {
+        test('force save ignores a stale etag', async () => {
             const uploaded = await uploadTextFile('force.txt', 'original');
             const { data: initial } = await editorGet(uploaded.id);
-            const updatedAt = initial.updatedAt;
+            await editorPut(uploaded.id, { content: 'version2', expectedEtag: initial.etag });
 
-            await new Promise((r) => setTimeout(r, 1100));
-
-            // First save bumps updatedAt
-            await editorPut(uploaded.id, { content: 'version2', expectedUpdatedAt: updatedAt });
-
-            // Force save with stale updatedAt
             const { data } = await editorPut(uploaded.id, {
                 content: 'forced',
-                expectedUpdatedAt: updatedAt,
+                expectedEtag: initial.etag,
                 force: true,
             });
             expect(data?.conflict).toBe(false);
@@ -234,12 +267,11 @@ describe('Editor', () => {
             const content = '---\ntitle: Test\n---\n# Hello';
             const uploaded = await uploadTextFile('fm-save.md', content, 'text/markdown');
             const { data: initial } = await editorGet(uploaded.id);
-            const updatedAt = initial.updatedAt;
 
             await editorPut(uploaded.id, {
                 content: '# Updated',
                 frontmatter: 'title: Test',
-                expectedUpdatedAt: updatedAt,
+                expectedEtag: initial.etag,
             });
 
             const { data: reloaded } = await editorGet(uploaded.id);
@@ -252,32 +284,62 @@ describe('Editor', () => {
             const { data: initial } = await editorGet(uploaded.id);
             const { status } = await editorPut(uploaded.id, {
                 content: 'x'.repeat(MAX_INLINE_EDIT_SIZE + 1),
-                expectedUpdatedAt: initial.updatedAt,
+                expectedEtag: initial.etag,
             });
             expect(status).toBe(413);
         });
 
-        test('rejects a save that would exceed the mount quota with 507', async () => {
-            const editable = await uploadTextFile('quota-edit.txt', 'seed');
-            const { data: initial } = await editorGet(editable.id);
-
-            // The default mount persists maxSizeMB (500) and team overrides only *raise* it, so shrink
-            // the live mount config directly (mirrors team-mount-live-update.test.ts) to leave room for
-            // the seed but not for the 4 MB save. Snapshot a detached copy — getMountConfig returns the
-            // live object and applyConfig mutates it in place, so restore needs the pre-change values.
+        // The default mount persists maxSizeMB (500) and team overrides only *raise* it, so this shrinks
+        // the live mount config directly (mirrors team-mount-live-update.test.ts) to leave room for the
+        // seed but not for a 4 MB save. getMountConfig returns the live object and applyConfig mutates it
+        // in place, so the restore needs a detached copy of the values before the change.
+        async function withFullMount(run: () => Promise<void>): Promise<void> {
             const home = await getHome(ctx.alice.user.id);
             const snapshot = { ...home.drive.getMountConfig(mountId) };
             const usedMB = (await home.drive.size(mountId)) / (1024 * 1024);
             await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB + 1 }, true);
             try {
-                const { status } = await editorPut(editable.id, {
-                    content: 'y'.repeat(4 * 1024 * 1024),
-                    expectedUpdatedAt: initial.updatedAt,
-                });
-                expect(status).toBe(507);
+                await run();
             } finally {
                 await home.drive.updateMount(snapshot, true);
             }
+        }
+        const tooBig = 'y'.repeat(4 * 1024 * 1024);
+
+        test('rejects a save that would exceed the mount quota with 507', async () => {
+            const editable = await uploadTextFile('quota-edit.txt', 'seed');
+            const { data: initial } = await editorGet(editable.id);
+            await withFullMount(async () => {
+                const { status } = await editorPut(editable.id, { content: tooBig, expectedEtag: initial.etag });
+                expect(status).toBe(507);
+            });
+        });
+
+        test("a reader's save on a full mount is refused with 403", async () => {
+            const shared = await uploadTextFile('quota-reader.txt', 'seed');
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${shared.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: false }],
+            });
+            const { data: initial } = await editorGet(shared.id);
+            await withFullMount(async () => {
+                const { status } = await editorPut(
+                    shared.id,
+                    { content: tooBig, expectedEtag: initial.etag },
+                    ctx.bob.user.sessionToken,
+                );
+                expect(status).toBe(403);
+            });
+        });
+
+        test('a stale save on a full mount is a conflict', async () => {
+            const editable = await uploadTextFile('quota-stale.txt', 'seed');
+            const { data: initial } = await editorGet(editable.id);
+            await editorPut(editable.id, { content: 'changed', expectedEtag: initial.etag });
+            await withFullMount(async () => {
+                const { status, data } = await editorPut(editable.id, { content: tooBig, expectedEtag: initial.etag });
+                expect(status).toBe(200);
+                expect(data?.conflict).toBe(true);
+            });
         });
     });
 });

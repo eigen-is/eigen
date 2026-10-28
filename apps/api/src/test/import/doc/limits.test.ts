@@ -20,6 +20,7 @@ import { CHART_NOT_IMPORTED, chartCost } from '../../../lib/ooxml/ooxml-chart';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
 import { LIST_LEVELS } from '../../../lib/ooxml/wordml';
 import { MAX_DECOMPRESSED_BYTES, openZip, ZipReader } from '../../../lib/ooxml/zip';
+import { cpuClock } from '../../cpu-time';
 import {
     buildDocxWithBody,
     chartParts,
@@ -717,9 +718,9 @@ describe('structure', () => {
             numbering,
             styles,
         });
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const { json } = docxToPmJson(Buffer.from(docx));
-        expect(performance.now() - started).toBeLessThan(2000);
+        expect(cpuMs()).toBeLessThan(2000);
         expect(nodesOfType(json, 'listItem')).toHaveLength(10_000);
     }, 60_000);
 
@@ -795,19 +796,19 @@ describe('structure', () => {
         const body = Array.from({ length: 10_000 }, (_, index) => paragraph(run('Item'), ordered(100 + index))).join(
             '',
         );
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const json = await imported(body, { numbering: nums });
         expect(nodesOfType(json, 'orderedList')).toHaveLength(10_000);
-        expect(performance.now() - started).toBeLessThan(2000);
+        expect(cpuMs()).toBeLessThan(2000);
     }, 10_000);
 
     // A label grows with its lvlText and, in letters, with every item; a heading keeps it as text.
     test('numbered heading labels are capped, so many cost no more than short ones', async () => {
         const numbering = `<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:start w:val="30000"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="${'%1'.repeat(2000)}"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>`;
         const heading = paragraph(run('Title'), `<w:pStyle w:val="Heading1"/>${ordered(6)}`);
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const json = await imported(heading.repeat(5000), { numbering });
-        expect(performance.now() - started).toBeLessThan(2000);
+        expect(cpuMs()).toBeLessThan(2000);
         const [first] = nodesOfType(json, 'heading');
         expect(nodesOfType(first ?? {}, 'text')[0]?.text?.length).toBeLessThanOrEqual(255 + ' Title'.length);
     }, 20_000);
@@ -815,9 +816,9 @@ describe('structure', () => {
     test('a 4 MB lvlText costs a heading what a short one does', async () => {
         const numbering = `<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="${'%1'.repeat(2_000_000)}"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>`;
         const heading = paragraph(run('Title'), `<w:pStyle w:val="Heading1"/>${ordered(6)}`);
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const json = await imported(heading.repeat(200), { numbering });
-        expect(performance.now() - started).toBeLessThan(2000);
+        expect(cpuMs()).toBeLessThan(2000);
         expect(nodesOfType(json, 'heading')).toHaveLength(200);
     }, 30_000);
 
@@ -838,9 +839,9 @@ describe('structure', () => {
     test('a long note referenced 400 times is read once, and its copies are charged', async () => {
         const footnotes = footnote(1, paragraph(run('Note')).repeat(2000));
         expect(notes(await imported(paragraph(noteRef(1).repeat(2)), { footnotes }))).toHaveLength(2);
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const error = await rejection(() => imported(paragraph(noteRef(1).repeat(400)), { footnotes }));
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs()).toBeLessThan(1000);
         expect(error.status).toBe(413);
     }, 20_000);
 
@@ -849,9 +850,9 @@ describe('structure', () => {
     test('a note referenced 1,000 times in a note is read once there, and its copies are charged', async () => {
         const footnotes =
             footnote(1, paragraph(run('x')).repeat(1000)) + footnote(2, paragraph(noteRef(1).repeat(1000)));
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const error = await rejection(() => imported(paragraph(`${run('Body')}${noteRef(2)}`), { footnotes }));
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs()).toBeLessThan(1000);
         expect(error.status).toBe(413);
     }, 20_000);
 
@@ -861,9 +862,9 @@ describe('structure', () => {
             (_, index) =>
                 `<dgm:pt modelId="${index}"><dgm:t><a:p><a:r><a:t>P${index}</a:t></a:r></a:p></dgm:t></dgm:pt>`,
         ).join('');
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const { json, warnings } = await importDocxBody(paragraph(smartArt.repeat(1000)), smartArtData(points));
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs()).toBeLessThan(1000);
         expect(texts(json)).toHaveLength(1000);
         expect(warnings).toEqual([{ code: 'diagrams-dropped', count: 1000 }]);
     }, 60_000);
@@ -873,9 +874,9 @@ describe('structure', () => {
         const ids = Array.from({ length: count }, (_, index) => index + 1);
         const body = paragraph(ids.map(noteRef).join(''));
         const footnotes = ids.map((id) => footnote(id, paragraph(run(`N${id}`)))).join('');
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const json = await imported(body, { footnotes });
-        expect(performance.now() - started).toBeLessThan(2000);
+        expect(cpuMs()).toBeLessThan(2000);
         expect(notes(json)).toHaveLength(count);
     }, 60_000);
 
@@ -891,9 +892,9 @@ describe('structure', () => {
         const depth = 24;
         const open = '<w:tbl><w:tblPr><w:tblpPr w:tblpX="0"/></w:tblPr><w:tr><w:tc>';
         const body = `${open.repeat(depth)}${paragraph(run('Core'))}${'</w:tc></w:tr></w:tbl>'.repeat(depth)}`;
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const json = await imported(body);
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs()).toBeLessThan(1000);
         expect(nodesOfType(json, 'table')).toHaveLength(MAX_TABLE_DEPTH);
         expect(texts(json)).toEqual(['Core']);
     }, 20_000);
@@ -908,9 +909,9 @@ describe('structure', () => {
         const body = Array.from({ length: 300 }, (_, index) =>
             paragraph(run('Text'), `<w:pStyle w:val="s${count - 1 - index}"/>`),
         ).join('');
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const json = await imported(body, { styles });
-        expect(performance.now() - started).toBeLessThan(2000);
+        expect(cpuMs()).toBeLessThan(2000);
         expect(nodesOfType(json, 'paragraph')).toHaveLength(300);
     }, 60_000);
 
@@ -930,9 +931,9 @@ describe('structure', () => {
             )
             .join('');
         const body = paragraph(run('Item'), ordered(10)).repeat(10_000);
-        const started = performance.now();
+        const cpuMs = cpuClock();
         await imported(body, { numbering, styles });
-        expect(performance.now() - started).toBeLessThan(2000);
+        expect(cpuMs()).toBeLessThan(2000);
     }, 60_000);
 
     // y-tiptap passes a paragraph's children to one call: 740,000 overflowed the stack.
@@ -950,9 +951,9 @@ describe('structure', () => {
     test('fields left open cost each run what one field does', async () => {
         const open = '<w:fldChar w:fldCharType="begin"/><w:fldChar w:fldCharType="separate"/>';
         const body = paragraph(`<w:r>${open.repeat(40_000)}${'<w:t>x</w:t>'.repeat(40_000)}</w:r>`);
-        const started = performance.now();
+        const cpuMs = cpuClock();
         const json = await imported(body);
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs()).toBeLessThan(1000);
         expect(texts(json).join('')).toHaveLength(40_000);
     }, 60_000);
 });

@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { EIGEN_ACCENT_COLORS, EIGEN_ACCENT_COLORS_SHUFFLED } from '../../constants/colors';
+import {
+    EIGEN_ACCENT_COLORS,
+    EIGEN_ACCENT_COLORS_SHUFFLED,
+    hexChannels,
+    isHexColor,
+    isLightColor,
+    lightenColor,
+    parseRgb,
+} from '../../constants/colors';
 
 const ORDER = EIGEN_ACCENT_COLORS_SHUFFLED;
 
@@ -121,5 +129,111 @@ describe('accent order', () => {
 
     test('none of the first eight is under 2:1 on white', () => {
         for (const { value } of ORDER.slice(0, 8)) expect(contrastOnWhite(value)).toBeGreaterThanOrEqual(2);
+    });
+});
+
+describe('isHexColor', () => {
+    test.each([
+        ['#abc', [3]],
+        ['#ABC', [3]],
+        ['#abcd', [3, 4, 6, 8]],
+        ['#aabbcc', [6]],
+        ['#AaBbCc', [6]],
+        ['#aabbccdd', [3, 6, 8]],
+    ] as const)('%s has one of the digit counts %p', (value, digits) => {
+        expect(isHexColor(value, digits)).toBe(true);
+    });
+
+    test.each([
+        ['#abcd', [3, 6, 8]],
+        ['#abc', [6]],
+        ['#aabbccdd', [6]],
+        ['aabbcc', [6]],
+        ['#ggg', [3]],
+        ['#12345', [3, 4, 6, 8]],
+        ['#abc;color:red', [3]],
+        ['#abc\n', [3]],
+        ['', [3]],
+    ] as const)('%p is not a hex color of %p digits', (value, digits) => {
+        expect(isHexColor(value, digits)).toBe(false);
+    });
+});
+
+describe('hexChannels', () => {
+    test.each([
+        ['#e60076', { red: 230, green: 0, blue: 118, alpha: 1 }],
+        ['#E60076', { red: 230, green: 0, blue: 118, alpha: 1 }],
+        ['#e6007680', { red: 230, green: 0, blue: 118, alpha: 128 / 255 }],
+        ['#f08', { red: 255, green: 0, blue: 136, alpha: 1 }],
+        ['#f080', { red: 255, green: 0, blue: 136, alpha: 0 }],
+    ])('%s reads as its channels', (value, channels) => {
+        expect(hexChannels(value, [3, 4, 6, 8])).toEqual(channels);
+    });
+
+    test('a value of another digit count, or no hex at all, has none', () => {
+        expect(hexChannels('#f08', [6, 8])).toBeUndefined();
+        expect(hexChannels('#ggg', [3])).toBeUndefined();
+        expect(hexChannels('rgb(1, 2, 3)', [3, 6])).toBeUndefined();
+    });
+});
+
+describe('isLightColor and lightenColor', () => {
+    test('read #rrggbb, with or without an alpha', () => {
+        expect([isLightColor('#ffffff'), isLightColor('#000000'), isLightColor('#ffffff80')]).toEqual([
+            true,
+            false,
+            true,
+        ]);
+        expect(lightenColor('#000000', 0.5)).toBe('#808080');
+        expect(lightenColor('#00000080', 0.5)).toBe('#808080');
+    });
+
+    test('leave a color that is no #rrggbb as it is, and count it as dark', () => {
+        expect(isLightColor('#fff')).toBe(false);
+        expect(lightenColor('#fff', 0.5)).toBe('#fff');
+    });
+});
+
+describe('parseRgb', () => {
+    test.each([
+        ['rgb(0, 128, 255)', '#0080ff', 1],
+        ['rgb(0,128,255)', '#0080ff', 1],
+        ['rgb(0 128 255)', '#0080ff', 1],
+        ['RGB( 0, 128, 255 )', '#0080ff', 1],
+        ['rgba(1, 2, 3, 0.5)', '#010203', 0.5],
+        ['rgb(1 2 3 / 50%)', '#010203', 0.5],
+        ['rgba(0, 0, 0, 0)', '#000000', 0],
+        ['rgb(1.4, 2.6, 3)', '#010303', 1],
+        ['rgba(1, 2, 3, 2)', '#010203', 1],
+    ])('%s is %s at alpha %p', (color, hex, alpha) => {
+        expect(parseRgb(color)).toEqual({ hex, alpha });
+    });
+
+    test.each([
+        'rgb(300, 0, 0)',
+        'rgb(-1, 0, 0)',
+        'rgb(1, 2)',
+        'rgb(1.2.3, 0, 0)',
+        'rgb(50%, 0, 0)',
+        'rgb(1, 2, 3);background:url(x)',
+        'hsl(0, 0%, 0%)',
+        '#010203',
+        'red',
+        '',
+    ])('%p is no rgb() color', (color) => {
+        expect(parseRgb(color)).toBeUndefined();
+    });
+});
+
+describe('parseRgb on hostile input', () => {
+    test.each([
+        ['a channel slot', `rgb(${'1'.repeat(100_000)}x`],
+        ['an alpha slot', `rgba(1, 2, 3, ${'1'.repeat(100_000)}x`],
+        ['a long fraction', `rgb(1, 2, 3.${'1'.repeat(100_000)}x`],
+    ])('a 100k-character run in %s costs little CPU', (_slot, color) => {
+        const started = process.cpuUsage();
+        expect(parseRgb(color)).toBeUndefined();
+        const { user, system } = process.cpuUsage(started);
+        expect((user + system) / 1000).toBeLessThan(100);
     });
 });

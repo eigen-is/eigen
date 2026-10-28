@@ -9,6 +9,7 @@ import { useEditorState } from '@tiptap/react';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import {
+    canInsertTableOfContents,
     insertFootnote,
     readCellBackground,
     readFigureAttrs,
@@ -54,6 +55,8 @@ export type ToolbarState = {
     canComment: boolean;
     // Whether a note goes at the caret: not in a code block, nor in a band's schema or a note's.
     canInsertFootnote: boolean;
+    // Whether a table of contents goes at the caret: only between the body's blocks, and not in a band's schema.
+    canInsertTableOfContents: boolean;
     table: boolean;
     // The selected image's layout, none while no image is selected.
     figureLayout: FigureLayout | undefined;
@@ -162,6 +165,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 selectionEmpty: selection.empty,
                 canComment: canAnchorComment(editor.state),
                 canInsertFootnote: insertFootnote(editor.state.tr) !== null,
+                canInsertTableOfContents: canInsertTableOfContents(editor.state),
                 table,
                 figureLayout: active('figure')
                     ? (readFigureAttrs(getAttributes(state, 'figure')).layout ?? 'block')

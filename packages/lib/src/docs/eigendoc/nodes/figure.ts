@@ -1,6 +1,6 @@
 // The Docs image node: an inline atom that names its image by media name, in the frame it shares with the chart. It
-// reads an image back from Eigen's own span, a <figure> or a bare <img>, so a copy, an export and another app's HTML
-// paste as one.
+// stores a width, and a height only when the picture is stretched off its own ratio. It reads an image back from
+// Eigen's own span, a <figure> or a bare <img>, so a copy, an export and another app's HTML paste as one.
 
 import type { CommandProps } from '@tiptap/core';
 import { Node } from '@tiptap/core';
@@ -8,17 +8,20 @@ import type { FigureFrameAttrs } from './figure-frame';
 import {
     figureFrameAttributes,
     figureFrameHTML,
+    isOwnSpan,
     readFigureFrameAttrs,
-    readFrameWidth,
+    readFrameSide,
     updateFigureNodes,
 } from './figure-frame';
 
-// The node's attribute set, as it comes back off a stored document (every attr defaults to null).
+// The node's attribute set, as it comes back off a stored document (every attr defaults to null). With no height, the
+// picture's height follows its own ratio.
 export type FigureAttrs = FigureFrameAttrs & {
     mediaName?: string | null;
     src?: string | null;
     alt?: string | null;
     width?: number | null;
+    height?: number | null;
 };
 
 declare module '@tiptap/core' {
@@ -31,7 +34,7 @@ declare module '@tiptap/core' {
 }
 
 // A figure's attributes off untyped ones (TipTap's getAttributes): a value of the wrong type reads as unset, and the
-// width reads as the frame reads every stored width.
+// width and the height read as the frame reads every stored side.
 export function readFigureAttrs(attrs: Record<string, unknown>): FigureAttrs {
     const text = (key: keyof FigureAttrs) => {
         const value = attrs[key];
@@ -41,7 +44,8 @@ export function readFigureAttrs(attrs: Record<string, unknown>): FigureAttrs {
         mediaName: text('mediaName'),
         src: text('src'),
         alt: text('alt'),
-        width: readFrameWidth(attrs['width']),
+        width: readFrameSide(attrs['width']),
+        height: readFrameSide(attrs['height']),
         ...readFigureFrameAttrs(attrs),
     };
 }
@@ -79,13 +83,20 @@ export const FigureNode = Node.create({
             width: {
                 default: null,
                 parseHTML: (element: HTMLElement) => {
-                    const img = element.querySelector('img') || element;
-                    const attr = img.getAttribute('width');
-                    if (attr) return parseInt(attr, 10) || null;
-                    const styleWidth = (img as HTMLElement).style?.width;
-                    if (styleWidth?.endsWith('px')) return parseInt(styleWidth, 10) || null;
-                    return null;
+                    const img = element.querySelector<HTMLElement>('img') ?? element;
+                    const styleWidth = img.style?.width;
+                    const width = img.getAttribute('width') || (styleWidth?.endsWith('px') ? styleWidth : '');
+                    return readFrameSide(Number.parseFloat(width));
                 },
+            },
+            // Only Eigen's own span: a web page's <img width height> often carries a size its CSS overrides, and would
+            // paste stretched.
+            height: {
+                default: null,
+                parseHTML: (element: HTMLElement) =>
+                    isOwnSpan(element)
+                        ? readFrameSide(Number.parseFloat(element.querySelector('img')?.getAttribute('height') ?? ''))
+                        : null,
             },
             alignment,
             layout,
@@ -102,8 +113,7 @@ export const FigureNode = Node.create({
             {
                 tag: 'img[data-media-name]',
                 priority: 51,
-                getAttrs(dom) {
-                    const el = dom as HTMLElement;
+                getAttrs(el) {
                     return {
                         mediaName: el.getAttribute('data-media-name'),
                         src: el.getAttribute('src'),
@@ -114,8 +124,7 @@ export const FigureNode = Node.create({
             {
                 tag: 'img[src]',
                 priority: 50,
-                getAttrs(dom) {
-                    const el = dom as HTMLElement;
+                getAttrs(el) {
                     return {
                         src: el.getAttribute('src'),
                         alt: el.getAttribute('alt'),
@@ -135,6 +144,9 @@ export const FigureNode = Node.create({
         }
         if (HTMLAttributes['width']) {
             imgAttrs['width'] = HTMLAttributes['width'];
+        }
+        if (HTMLAttributes['height']) {
+            imgAttrs['height'] = HTMLAttributes['height'];
         }
         return figureFrameHTML({ class: 'figure' }, readFigureFrameAttrs(node.attrs), ['img', imgAttrs]);
     },

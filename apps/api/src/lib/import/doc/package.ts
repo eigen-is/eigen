@@ -1,6 +1,6 @@
-// The docx package as the reader reads it: the document part, the parts it names (styles, numbering, theme, notes, the
-// final section's headers and footers), the caps a crafted file is held to, and the WordprocessingML attribute
-// helpers every reader file shares.
+// The docx package as the reader reads it: the document part and the parts it names, such as the styles, the
+// numbering and the final section's headers and footers. It also holds the caps a crafted file is held to, and the
+// WordprocessingML attribute helpers every reader file shares.
 
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspace/lib/docs/eigendoc';
@@ -13,6 +13,7 @@ import { budget, CHARS_PER_UNIT } from '../../ooxml/budget';
 import { alternativeFor, isAlternateContent, isOnElement, measure, R_NS, W_NS } from '../../ooxml/ooxml';
 import type { OoxmlPackage, Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType } from '../../ooxml/opc';
+import { WEB_VIEW } from '../../ooxml/wordml';
 import type { ZipReader } from '../../ooxml/zip';
 import { IMPORT_MESSAGES } from '../messages';
 
@@ -41,6 +42,8 @@ export type DocxPackage = {
     // The final section's headers and footers, a first-page one only with w:titlePg, which makes page 1 different.
     bands: Partial<Record<BandRoot, Part>>;
     titlePg: boolean;
+    // Word opens the file in Web Layout, as a page-less doc's docx does, so it imports page-less.
+    webView: boolean;
     contentTypeOf: OoxmlPackage['contentTypeOf'];
     // A part a drawing names, read when met; a damaged one is no part.
     part(path: string): XmlElement | undefined;
@@ -98,8 +101,9 @@ export function readDocxPackage(bytes: Uint8Array, lost: Lost): DocxPackage {
         if (band) bands[root] = band;
         else lost('band-content-dropped');
     }
+    const settings = xml('settings');
     const even = ['header:even', 'footer:even'].filter((key) => references.has(key));
-    if (even.length > 0 && onOff(wChild(xml('settings'), 'evenAndOddHeaders')) === true)
+    if (even.length > 0 && onOff(wChild(settings, 'evenAndOddHeaders')) === true)
         for (const _ of even) lost('even-bands-dropped');
     return {
         zip: pkg.zip,
@@ -112,6 +116,7 @@ export function readDocxPackage(bytes: Uint8Array, lost: Lost): DocxPackage {
         endnotes: part('endnotes'),
         bands,
         titlePg,
+        webView: w(wChild(settings, 'view'), 'val') === WEB_VIEW,
         contentTypeOf: pkg.contentTypeOf,
         part: (path) => optional(() => pkg.part(path)),
         readMedia: pkg.readMedia,

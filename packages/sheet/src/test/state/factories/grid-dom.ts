@@ -14,6 +14,7 @@ const win = new Window();
 const g = globalThis as any;
 g.window = win;
 g.document = win.document;
+g.HTMLElement = win.HTMLElement;
 
 export const GRID_GEOMETRY = {
     rowHeaderWidth: 46,
@@ -33,6 +34,7 @@ export function withGridGeometry(ctx: Context): Context {
 export function gridElements(): { container: HTMLDivElement; scrollEl: HTMLDivElement } {
     g.window = win;
     g.document = win.document;
+    g.HTMLElement = win.HTMLElement;
     const container = win.document.createElement('div') as unknown as HTMLDivElement;
     container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
     const scrollEl = win.document.createElement('div') as unknown as HTMLDivElement;

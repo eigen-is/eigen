@@ -18,7 +18,7 @@ import type { ImportedMedia } from '../../../lib/import/image-types';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
 import { seriesIdsByPlace } from '../../../scripts/office-audit';
-import { axesOf, sampleChartParts } from '../../fixtures/chart-parts';
+import { axesOf, sampleChartParts, withDataLabels } from '../../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 import type { DocxParts } from '../../fixtures/golden-docx';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
@@ -43,7 +43,8 @@ function sourceNames(media: ImportedMedia[]): Map<string, string> {
 }
 
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
-// column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
+// column or an image without a width the one it lays it out at, and an image without a height the one its ratio
+// draws, which the import keeps (Word's extent is what Word drew). (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
 // (7) OWNER: a run of empty paragraphs right before a page break goes. (8) A chart is a paragraph of its own in Word,
 // as a display equation is (11), and its series ids are compared by place (byPlace). (9) Small is written as its
@@ -59,7 +60,7 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         if (source.type === 'paragraph')
             for (const name of ['lineSpacing', 'spaceBefore', 'spaceAfter'] as const)
                 if (attrs[name] === DEFAULT_NORMAL_STYLE[name]) attrs[name] = null;
-        for (const name of ['colwidth', 'width'])
+        for (const name of ['colwidth', 'width', ...(source.type === 'figure' ? ['height'] : [])])
             if (name in attrs && attrs[name] === null) attrs[name] = imported?.attrs?.[name] ?? null;
         if ('commentCardId' in attrs) attrs['commentCardId'] = null;
         if (attrs['textAlign'] === 'left') attrs['textAlign'] = null;
@@ -189,16 +190,18 @@ describe('a chart', () => {
         const { spec } = readChartSpec(attrs ?? {});
         return spec && seriesIdsByPlace(spec);
     };
-    const stacked = (type: 'column' | 'bar', stacking: ChartStacking) => {
+    const stacked = (type: 'column' | 'bar', stacking: ChartStacking, labelled: string[] = []) => {
         const spec = sampleChartSpec(type);
-        return newChartSpecParts({ ...spec, plots: { ...spec.plots, [type]: { stacking } } });
+        return newChartSpecParts(withDataLabels({ ...spec, plots: { ...spec.plots, [type]: { stacking } } }, labelled));
     };
 
     test.each([
         ['column', sampleChartParts('column')],
         ['stacked bar', stacked('bar', 'stacked')],
         ['100% stacked column', stacked('column', 'percent')],
+        ['100% stacked column with labels on one series', stacked('column', 'percent', ['s-2'])],
         ['line', sampleChartParts('line')],
+        ['line with labels on two series', newChartSpecParts(withDataLabels(sampleChartSpec('line'), ['s-1', 's-3']))],
         ['pie', sampleChartParts('pie')],
         ['column in Source Serif', sampleChartParts('column', 'Source Serif 4')],
     ])('a %s comes back as the same chart, at its size, its caption and layout kept', async (_, parts) => {
@@ -249,6 +252,7 @@ describe('the page', () => {
             headerDistance: 8,
             footerDistance: 5,
             differentFirstPage: false,
+            pageless: false,
         };
         const source = buildAllFeaturesDocJson();
         const { page: read } = docxToPmJson(
@@ -265,6 +269,24 @@ describe('the page', () => {
         expect(read.headerDistance).toBeCloseTo(8, 1);
         expect(read.footerDistance).toBeCloseTo(5, 1);
         expect(read.differentFirstPage).toBe(false);
+    });
+
+    test('a page-less doc comes back page-less, its wide table at its own widths', async () => {
+        const cell = (width: number) => ({ type: 'tableCell', attrs: { colwidth: [width] }, content: [p('x')] });
+        const json = {
+            type: 'doc',
+            content: [{ type: 'table', content: [{ type: 'tableRow', content: [cell(667), cell(667)] }] }],
+        };
+        const { json: back, page } = docxToPmJson(
+            Buffer.from(
+                writeDocx(
+                    { json, bands: {}, page: { ...DEFAULT_PAGE_SETUP, pageless: true }, style: DEFAULT_NORMAL_STYLE },
+                    { title: 'Wide', media: [], lost: () => {} },
+                ),
+            ),
+        );
+        expect(page.pageless).toBe(true);
+        expect(nodesOfType(back, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([[667], [667]]);
     });
 
     // Each band comes back where it was, page numbers as fields and an equation as Word's; page 1's footer is the empty
@@ -956,14 +978,15 @@ describe("the all-features doc's Google Docs re-save", () => {
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
-        // The recording predates the title, the subtitle, the note's paragraph, the equations' paragraph, the page
-        // number and the figures in front of and behind the text, so it holds none of them, and its export wrote no
-        // chart.
+        // The recording predates the title, the subtitle, the table of contents, the note's paragraph, the equations'
+        // paragraph, the page number and the figures in front of and behind the text, so it holds none of them, and its
+        // export wrote no chart.
         source.content = source.content
             .filter(
                 (block: JSONContent) =>
                     block.type !== 'title' &&
                     block.type !== 'subtitle' &&
+                    block.type !== 'tableOfContents' &&
                     !block.content?.some(
                         (inline: JSONContent) =>
                             ['pageNumber', 'equation', 'footnote'].includes(inline.type ?? '') ||
@@ -1388,6 +1411,31 @@ describe('a Word file, imported, written and imported again', () => {
 
 // The writer places a positioned figure from the text column and the paragraph's first line, and the reader places it
 // back from the paragraph's box, so each comes back where Eigen drew it (J1 § 9).
+// Word stretches a picture to its extent, which the import reads back as the size Word drew.
+test('a stretched picture comes back at its stored box, and one at its own ratio at the height that ratio gives', () => {
+    const media = [
+        { name: 'a.png', contentType: 'image/png', data: toTransferableText('png'), width: 400, height: 300 },
+    ];
+    const figure = (attrs: Record<string, unknown>): JSONContent => ({
+        type: 'paragraph',
+        content: [{ type: 'figure', attrs: { mediaName: 'a.png', width: 320, ...attrs } }],
+    });
+    const docx = writeDocx(
+        {
+            json: { type: 'doc', content: [figure({ height: 80 }), figure({})] },
+            bands: {},
+            page: DEFAULT_PAGE_SETUP,
+            style: DEFAULT_NORMAL_STYLE,
+        },
+        { title: 'Stretched', media, lost: () => {} },
+    );
+    const { json } = docxToPmJson(Buffer.from(docx));
+    expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+        [320, 80],
+        [320, 240],
+    ]);
+});
+
 describe('a figure in front of or behind the text', () => {
     const media = [
         { name: 'a.png', contentType: 'image/png', data: toTransferableText('png'), width: 400, height: 300 },

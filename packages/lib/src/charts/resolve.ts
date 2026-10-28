@@ -154,6 +154,7 @@ function seriesStyle(v: unknown): ChartSeriesStyle {
         color: color(prop(style, 'color'), defaults.color),
         line: { smooth: bool(prop(optionalRecord(prop(style, 'line')), 'smooth'), defaults.line.smooth) },
         marker: { visible: bool(prop(optionalRecord(prop(style, 'marker')), 'visible'), defaults.marker.visible) },
+        labels: { visible: bool(prop(optionalRecord(prop(style, 'labels')), 'visible'), defaults.labels.visible) },
     };
 }
 

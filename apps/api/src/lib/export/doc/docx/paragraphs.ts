@@ -31,7 +31,14 @@ import type { HastNode } from '../../../document/lowlight';
 import { lowlight } from '../../../document/lowlight';
 import { proseValueIfSet } from '../../../document/prose-css';
 import type { StyleId } from '../../../ooxml/wordml';
-import { BORDER_SIDES, codeBlockStyle, JUSTIFICATION, LIST_FORMATS, LIST_LEVELS } from '../../../ooxml/wordml';
+import {
+    BODY_TEXT_OUTLINE_LEVEL,
+    BORDER_SIDES,
+    codeBlockStyle,
+    JUSTIFICATION,
+    LIST_FORMATS,
+    LIST_LEVELS,
+} from '../../../ooxml/wordml';
 import { anchoredFigure, figureOf } from './drawings';
 import { useFace } from './fonts';
 import { CLEAR_FLOATS, checkboxXml, itemOf, listOf } from './numbering';
@@ -40,6 +47,7 @@ import type { RunProps } from './runs';
 import { INLINES, LINE_BREAK, rPrXml, runsXml, textXml } from './runs';
 import type { Styles } from './styles';
 import { HAIRLINE_TWIPS } from './styles';
+import { tableOfContentsBlocks, withBookmark } from './table-of-contents';
 import { TABLE_LOOK, tableOf } from './tables';
 
 type Spacing = { before?: number; after?: number; line?: number; exact?: true };
@@ -55,6 +63,8 @@ export type ParagraphProps = {
     numPr?: NumberingRef;
     pBdr?: Partial<Record<(typeof BORDER_SIDES)[number], Border>>;
     shading?: string;
+    // A right tab at this many twips, dotted up to it, which a table of contents entry ends its page number on.
+    rightTab?: number;
     spacing?: Spacing;
     ind?: { left: number; right?: number; firstLine?: number; hanging?: number };
     contextualSpacing?: true;
@@ -62,8 +72,9 @@ export type ParagraphProps = {
     outlineLvl?: number;
 };
 
-// A figure's paragraphs carry its margin as an inset, inside their own spacing, which never collapses.
-export type Paragraph = { props: ParagraphProps; runs: string; inset?: Inset };
+// A figure's paragraphs carry its margin as an inset, inside their own spacing, which never collapses. `opens` and
+// `closes` stand before and after the paragraph, as a content control around several does.
+export type Paragraph = { props: ParagraphProps; runs: string; inset?: Inset; opens?: string; closes?: string };
 
 export type Inset = { top: number; bottom: number };
 
@@ -79,6 +90,7 @@ export function pPrXml(props: ParagraphProps): string {
         numPr,
         pBdr,
         shading,
+        rightTab,
         spacing,
         ind,
         contextualSpacing,
@@ -92,6 +104,7 @@ export function pPrXml(props: ParagraphProps): string {
         numPr && `<w:numPr><w:ilvl w:val="${numPr.ilvl}"/><w:numId w:val="${numPr.numId}"/></w:numPr>`,
         pBdr && `<w:pBdr>${bordersXml(BORDER_SIDES, pBdr)}</w:pBdr>`,
         shading && `<w:shd w:val="clear" w:color="auto" w:fill="${shading}"/>`,
+        rightTab !== undefined && `<w:tabs><w:tab w:val="right" w:leader="dot" w:pos="${rightTab}"/></w:tabs>`,
         spacing &&
             `<w:spacing${spacing.before === undefined ? '' : ` w:before="${spacing.before}"`}${spacing.after === undefined ? '' : ` w:after="${spacing.after}"`}${spacing.line === undefined ? '' : ` w:line="${spacing.line}" w:lineRule="${spacing.exact ? 'exact' : 'auto'}"`}/>`,
         ind &&
@@ -119,10 +132,10 @@ export function bordersXml<Side extends string>(
 }
 
 // An empty paragraph keeps its properties; only one with none is <w:p/>.
-export function paragraphXml({ props, runs }: Paragraph): string {
+export function paragraphXml({ props, runs, opens = '', closes = '' }: Paragraph): string {
     const pPr = pPrXml(props);
-    if (!pPr && !runs) return '<w:p/>';
-    return `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${runs}</w:p>`;
+    if (!pPr && !runs) return `${opens}<w:p/>${closes}`;
+    return `${opens}<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${runs}</w:p>${closes}`;
 }
 
 // Word's built-in Title and Subtitle, in its gallery's order.
@@ -159,16 +172,19 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
                 context,
             );
             const upright = !!nodeLook('heading', level).italic;
-            return blocksOf(
+            const blocks = blocksOf(
                 node.content ?? [],
                 formatted(node, props, context),
                 { ...context, blockPt: sizePt, upright },
                 node,
             );
+            const number = context.pkg.outline.numbers.get(node);
+            return number === undefined ? blocks : withBookmark(blocks, number);
         },
     ],
     ...TITLE_STYLES.map(({ type, id }) => [type, titleOf(type, id)] as const),
     ['pageBreak', () => [{ props: { style: 'PageBreak' }, runs: '<w:r><w:br w:type="page"/></w:r>' }]],
+    ['tableOfContents', tableOfContentsBlocks],
     [
         'horizontalRule',
         (_node, context) => [
@@ -275,7 +291,7 @@ export function blocksOf(
         let own = scale === 1 ? props : { ...props, spacing: { ...props.spacing, line: Math.round(line * scale) } };
         // Word's navigator lists every paragraph at an outline level, so a heading a figure splits keeps one entry.
         if (pieces.length > 0 && props.style && context.pkg.styles.get(props.style)?.pPr?.outlineLvl !== undefined)
-            own = { ...own, outlineLvl: 9 };
+            own = { ...own, outlineLvl: BODY_TEXT_OUTLINE_LEVEL };
         pieces.push(blocks.push({ props: own, runs }) - 1);
         inline = [];
     };

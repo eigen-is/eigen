@@ -46,7 +46,7 @@ import { assertCommentChatExists, getCommentIndex, openCommentIndex } from '../c
 import { CollabDocument } from '../collab/collab-document';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
-import { ApiError } from '../core';
+import { ApiError, computeEtag } from '../core';
 import type { Home } from '../home';
 import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
@@ -94,6 +94,14 @@ import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 import { deletePath, permanentlyDelete, restorePath } from './trash';
 import { finalizeUpload, regenerateThumbnailAsync } from './upload';
+
+// How a content write is guarded and recorded. ifMatch is an If-Match value, checked under the file's
+// lock. The history row says `uploaded`, or `edited` for a save from the inline editor.
+export type ContentWriteOptions = { user?: User; ifMatch?: string; event?: 'uploaded' | 'edited' };
+
+// The row as this write committed it under the file's lock, and its etag, so a write landing right
+// after can't show in either. The caller answers them, and its next save is checked against its own bytes.
+export type ContentWriteResult = { path: DrivePath; etag: string };
 
 export class Drive {
     // WebDAV locks live as long as this Drive, so they go away when the home closes.
@@ -492,9 +500,8 @@ export class Drive {
         mountId: string,
         pathId: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
-        user?: User,
-        expectedUpdatedAt?: Date,
-    ): Promise<DrivePath> {
+        { user, ifMatch, event = 'uploaded' }: ContentWriteOptions = {},
+    ): Promise<ContentWriteResult> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
         if (path.type !== DRIVE_TYPE_FILE) {
@@ -503,8 +510,9 @@ export class Drive {
 
         // The thumbnail job starts as soon as the bytes land, so no error after that leaves its temp
         // file behind. A content write never changes the name or the type of the file.
+        let committed: DrivePath;
         if (Buffer.isBuffer(data)) {
-            await mount.writeFile(pathId, data, expectedUpdatedAt);
+            committed = await mount.writeFile(pathId, data, ifMatch);
             if (data.length > 0) regenerateThumbnailAsync(this, mount, pathId, data, path.mimeType, path.name);
         } else {
             // A stream goes through a temp file, so the bytes never sit in memory. The size and hash
@@ -512,7 +520,7 @@ export class Drive {
             const tempId = randomUUID();
             try {
                 const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
-                await mount.writeFileFromTemp(pathId, tempId, size, hash, expectedUpdatedAt);
+                committed = await mount.writeFileFromTemp(pathId, tempId, size, hash, ifMatch);
                 if (size > 0) {
                     regenerateThumbnailAsync(
                         this,
@@ -536,12 +544,16 @@ export class Drive {
         const updated = await mount.getActivePath(pathId);
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
         if (user) {
-            await this.recordFileEvent(mountId, pathId, user, {
-                eventType: 'uploaded',
-                details: { size: updated.size },
-            });
+            await this.recordFileEvent(
+                mountId,
+                pathId,
+                user,
+                event === 'edited'
+                    ? { eventType: 'edited' }
+                    : { eventType: 'uploaded', details: { size: updated.size } },
+            );
         }
-        return updated;
+        return { path: committed, etag: computeEtag(committed) };
     }
 
     // The folder that a create, copy or move puts something in. A folder on its way to the trash is a

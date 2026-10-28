@@ -1,3 +1,7 @@
+// What ./eigen update asks the new image before it switches: the CHANGELOG sections since the running version,
+// with their breaking changes, and the level of the backup the update makes first. A breaking change is asked
+// about on a terminal and refused elsewhere.
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { parseArgs } from 'node:util';

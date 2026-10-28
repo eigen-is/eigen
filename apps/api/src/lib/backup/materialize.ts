@@ -1,3 +1,8 @@
+// What a restore of one home writes outside its folder, from what the archive carries: the owner's auth rows in
+// users3.db, the share-registry rows they granted, and their avatar. A restore of one home, such as restoreHome,
+// calls these last, once the home folder is whole, because nothing takes such a row back. A user still on this
+// server keeps who they are.
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
@@ -9,13 +14,9 @@ import { getAuthDrizzleDb } from '../auth/auth';
 import { getAvatarsDir } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
 import { ApiError } from '../core';
-import { getEigenDb } from '../share/db';
-import { shareRegistry } from '../share/schema';
+import { addRegistryEntry } from '../share/registry';
 import { AUTH_TABLES, ownerKeyOf, RESTORED_MEMBER_ROLE, RESTORED_USER_ROLE } from './auth-tables';
 import { ARCHIVE_AUTH_FILE, ARCHIVE_AVATAR_DIR, ARCHIVE_SHARES_FILE } from './paths';
-
-// What a restore of one home writes outside its folder: the identity the archive carries. The mounts are
-// materialize-mount.ts's; the orchestration around both (the lock, the move-aside, the rollback) is in restore.ts.
 
 // JSON.stringify wrote every timestamp column as an ISO string and Drizzle wants a Date back. Which
 // columns those are comes from the schema itself, so a new better-auth column needs no edit here.
@@ -27,9 +28,9 @@ function reviveDates(row: Record<string, unknown>, table: SQLiteTable): void {
     }
 }
 
-// Re-insert the identity the archive carries, for a user the server no longer has. A user that IS
-// still here keeps every row it has: a restore puts a home's data back, it never rewrites who
-// somebody is — and an id whose email no longer matches the archive is a different person.
+// Re-inserts the identity the archive carries, for a user the server no longer has. A user who is still
+// here keeps every row they have: a restore puts a home's data back and never rewrites who somebody is.
+// An id whose email no longer matches the archive is a different person, so the restore stops.
 export function restoreAuthRows(ownerId: string, manifest: BackupManifest, folder: string): void {
     const authPath = path.join(folder, ARCHIVE_AUTH_FILE);
     if (!fs.existsSync(authPath)) return;
@@ -46,9 +47,8 @@ export function restoreAuthRows(ownerId: string, manifest: BackupManifest, folde
     const archive = parseBackupAuthRows(fs.readFileSync(authPath, 'utf8'));
     if (!archive) throw new ApiError(400, `${ARCHIVE_AUTH_FILE} is not a set of users3.db rows`);
 
-    // The identity itself: exactly one user row, this owner's id, the email the manifest was written
-    // with. Anything else and not a row goes in — an archive carrying a second user row is carrying
-    // somebody it invented.
+    // The identity itself is exactly one user row, with this owner's id and the email the manifest was
+    // written with. Anything else and no row goes in: a second user row is somebody the archive invented.
     const identity = (archive['user'] ?? []).filter((row) => row['id'] === ownerId);
     if (identity.length !== 1 || (manifest.email && identity[0]['email'] !== manifest.email)) {
         throw new ApiError(
@@ -61,8 +61,8 @@ export function restoreAuthRows(ownerId: string, manifest: BackupManifest, folde
         console.warn(`[backup] ${ownerId}: a ${table} row was not restored — ${reason}`);
     };
 
-    // One transaction for the whole identity: a clash on a later row would otherwise leave a user
-    // that exists but cannot sign in — and the next attempt would take the branch above and return.
+    // One transaction for the whole identity. A clash on a later row would otherwise leave a user who exists
+    // but cannot sign in, and the next attempt would find that user and return early.
     db.transaction((tx) => {
         for (const spec of AUTH_TABLES) {
             const ownerKey = ownerKeyOf(spec);
@@ -76,7 +76,7 @@ export function restoreAuthRows(ownerId: string, manifest: BackupManifest, folde
                 if (spec.key === 'user') row['role'] = RESTORED_USER_ROLE;
                 if (spec.key === 'member') {
                     // A user belongs to this server's one organization, whichever one the archive
-                    // named — so a second row would be a second membership of the same org.
+                    // named, so a second row would be a second membership of the same org.
                     if (membership) {
                         drop(spec.key, 'this server gives a user one organization');
                         continue;
@@ -89,7 +89,7 @@ export function restoreAuthRows(ownerId: string, manifest: BackupManifest, folde
                 // below is what keeps a membership of a team this server does not have out.
                 if (spec.parent) {
                     // A membership whose organization or team is gone would be an orphan, and
-                    // better-auth's listMembers chokes on those (see user/delete-user.ts).
+                    // better-auth's listMembers fails on those.
                     const parentId = row[spec.parent.column];
                     const found =
                         typeof parentId === 'string' &&
@@ -110,25 +110,19 @@ export function restoreAuthRows(ownerId: string, manifest: BackupManifest, folde
     });
 }
 
-// Insert missing only: a registry row that is already there describes a live share.
+// Inserts only the missing rows: a registry row that is already there describes a live share.
 export async function restoreShares(ownerId: string, folder: string): Promise<void> {
     const sharesPath = path.join(folder, ARCHIVE_SHARES_FILE);
     if (!fs.existsSync(sharesPath)) return;
     const rows = parseBackupShares(fs.readFileSync(sharesPath, 'utf8'));
     if (!rows) throw new ApiError(400, `${ARCHIVE_SHARES_FILE} is not a set of share-registry rows`);
-    const db = await getEigenDb();
-    for (const row of rows) {
-        db.insert(shareRegistry)
-            .values({ fromUserId: ownerId, targetIdentifier: row.targetIdentifier })
-            .onConflictDoNothing()
-            .run();
-    }
+    for (const row of rows) await addRegistryEntry(ownerId, row.targetIdentifier);
 }
 
-// The avatar is server data, not home data: put it back only where the server has none, so a picture
-// the user changed after the backup is not quietly reverted. The name comes out of the archive and
-// lands in the server-wide avatars folder, so it has to BE this user's: `{ownerId}.{ext}` and
-// nothing else, or a hostile archive would plant a picture for somebody who has none.
+// The avatar is server data, not home data. It goes back only where the server has none, so a picture
+// the user changed after the backup is not quietly reverted. The name comes from the archive and lands
+// in the server-wide avatars folder, so it must be this user's, `{ownerId}.{ext}`: otherwise a hostile
+// archive could plant a picture for somebody who has none.
 export async function restoreAvatar(ownerId: string, folder: string): Promise<void> {
     const avatarDir = path.join(folder, ARCHIVE_AVATAR_DIR);
     if (!fs.existsSync(avatarDir)) return;

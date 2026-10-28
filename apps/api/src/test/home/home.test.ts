@@ -1,7 +1,11 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { existsSync, utimesSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { evictHome, getHome } from '../../lib/home/get-home';
 import type { TestContext } from '../setup';
-import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { assertJson, authedRequest, createTestUser, findOrFail, getTestContext } from '../setup';
 
 type MyTeam = {
     id: string;
@@ -119,5 +123,24 @@ describe('home: my-teams', () => {
     test('rejects request for another user', async () => {
         const res = await authedRequest(ctx.bob.user.sessionToken, `/home/${ctx.alice.user.id}/my-teams`);
         expect(res.status).toBe(403);
+    });
+});
+
+describe('Home init', () => {
+    test("sweeps a settings file's staged copy a crash left a day ago, and keeps a young one", async () => {
+        const user = await createTestUser(`sweep-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Sweep');
+        await getHome(user.id);
+        await evictHome(user.id);
+        const homeDir = getUserHomePath(user.id);
+        const stale = join(homeDir, `.settings.json.tmp-${crypto.randomUUID()}`);
+        const young = join(homeDir, `.settings.json.tmp-${crypto.randomUUID()}`);
+        writeFileSync(stale, '{}');
+        writeFileSync(young, '{}');
+        const dayAndAnHourAgo = new Date(Date.now() - 25 * 60 * 60 * 1000);
+        utimesSync(stale, dayAndAnHourAgo, dayAndAnHourAgo);
+
+        await getHome(user.id);
+        expect(existsSync(stale)).toBe(false);
+        expect(existsSync(young)).toBe(true);
     });
 });

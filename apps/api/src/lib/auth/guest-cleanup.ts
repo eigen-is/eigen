@@ -1,3 +1,7 @@
+// The daily sweep that deletes guests who have been inactive longer than guests.inactivityDays. A guest whose
+// home is loaded is skipped, so an open session is never pulled away. A guest's deletion runs the same teardown
+// as any other user's.
+
 import { eq, max } from 'drizzle-orm';
 import { session, user as userTable } from '../../../auth-schema';
 import { isSetupRequired } from '../config/server-config';
@@ -11,12 +15,10 @@ export type GuestCleanupResult = {
     skipped: string[];
 };
 
-// Activity signal is MAX(session.updatedAt) — better-auth refreshes that on session
-// validation, so it tracks "last time the guest hit an authenticated route" with
-// roughly daily granularity. Falls back to user.updatedAt for guests that have no
-// sessions yet (e.g. just-created accounts).
+// A guest's last activity is the newest session.updatedAt, which better-auth moves forward about once a day while
+// the guest makes requests. A guest without a session falls back to user.updatedAt.
 export async function cleanupInactiveGuests(): Promise<GuestCleanupResult> {
-    // Auth tables don't exist until completeSetup() runs initializeDatabaseSchema().
+    // The auth tables only exist once setup has run.
     if (isSetupRequired()) return { deleted: [], skipped: [] };
 
     const days = getServerSettings().guests.inactivityDays;

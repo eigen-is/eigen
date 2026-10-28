@@ -66,6 +66,8 @@ import { Footnote, NOTE_EDIT, NoteDecorations, NoteFormatting } from './extensio
 import { PageNumber } from './extensions/page-number';
 import { PositionedFigures } from './extensions/positioned-figure';
 import { cellPosAt, EditorTable } from './extensions/table';
+import type { TableOfContentsOptions } from './extensions/table-of-contents';
+import { TableOfContents } from './extensions/table-of-contents';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { cleanPastedHTML } from './paste';
 
@@ -173,8 +175,8 @@ export function useDocMedia(path: DrivePath) {
             const target = editor();
             if (!mediaFolderId || !file.type.startsWith('image/') || !target) return;
             const { pendingName, promise } = startUpload(file);
-            // Reset width so the new image's aspect ratio is recomputed on load
-            target.chain().focus().updateFigure({ mediaName: pendingName, width: null }).run();
+            // The new picture takes its own size and ratio on load, never the old one's stretched box.
+            target.chain().focus().updateFigure({ mediaName: pendingName, width: null, height: null }).run();
             const result = await promise;
             const settled = settle();
             if (settled && !settled.isDestroyed) swapFigureMediaName(settled, pendingName, result?.name ?? null);
@@ -187,7 +189,7 @@ export function useDocMedia(path: DrivePath) {
             const settled = editor();
             // The selection may have left the figure during the copy; the copied file then stays unreferenced in media/.
             if (result?.[0] && settled && !settled.isDestroyed && settled.isActive('figure', { mediaName: replaced })) {
-                settled.chain().focus().updateFigure({ mediaName: result[0].name, width: null }).run();
+                settled.chain().focus().updateFigure({ mediaName: result[0].name, width: null, height: null }).run();
             }
         },
         // The name a pasted image item is stored under: another document's file is re-uploaded into this
@@ -211,6 +213,17 @@ type DocMedia = ReturnType<typeof useDocMedia>;
 
 // A note holds paragraphs, so a pasted heading, list or table lands as paragraphs.
 const NoteDocument = Node.create({ name: 'doc', topNode: true, content: 'paragraph+' });
+
+// A page-less doc has no pages to break, so Mod-Enter inserts no page break and no line break either, as in Google. In
+// a code block it still leaves the block. Above the page break's own shortcut, which would insert one.
+const noPageBreaksWhenPageless = (pageless: () => boolean) =>
+    Extension.create({
+        name: 'noPageBreaksWhenPageless',
+        priority: 102,
+        addKeyboardShortcuts() {
+            return { 'Mod-Enter': () => pageless() && !this.editor.isActive('codeBlock') };
+        },
+    });
 
 // A note has no history of its own: its edits forward into the body, whose undo takes them back and pulls the note
 // back with them, so ⌘Z in a note and in the body walk one history.
@@ -266,6 +279,7 @@ type DocEditorOptions = {
     // A right-click in a cell, at `pos`: true when the host opened the table menu.
     table?: { onContextMenu: (editor: Editor, pos: number, event: MouseEvent) => boolean };
     footnote?: Partial<FootnoteOptions>;
+    tableOfContents?: Partial<TableOfContentsOptions>;
     // An extension named as a schema node or mark takes its place, as the body's comment mark does.
     extensions?: Extensions;
     media: () => DocMedia;
@@ -285,6 +299,7 @@ export function docEditorOptions({
     equation,
     table,
     footnote,
+    tableOfContents,
     extensions = [],
     media,
     editor,
@@ -300,6 +315,8 @@ export function docEditorOptions({
         const { width, margin } = page();
         return width - margin.left - margin.right;
     };
+    const paperWidth = () => page().width;
+    const pageless = () => page().pageless;
     // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one. A note's
     // paragraphs draw at the footnote size, which its size box shows and a step steps from.
     const normalStyle = () => {
@@ -338,19 +355,22 @@ export function docEditorOptions({
                     'equation',
                     'table',
                     'pageNumber',
+                    'tableOfContents',
                     ...extensions.map((extension) => extension.name),
                 ],
             }).map((extension) =>
                 note && extension.name === 'starterKit' ? extension.configure({ document: false }) : extension,
             ),
             ...(note ? [NoteDocument] : []),
-            EditorTable.configure({ resizable: !coarsePointer }),
+            EditorTable.configure({ resizable: !coarsePointer, pageless, paperWidth }),
             Figure.configure(figure),
             ...(band ? [] : [Chart.configure(chart)]),
             Equation.configure(equation),
             PageNumber,
+            ...(band ? [] : [TableOfContents.configure(tableOfContents)]),
             ...(band || note ? [] : [Footnote.configure(footnote), NoteFormatting]),
-            TableWidthClamp.configure({ textColumnWidth }),
+            TableWidthClamp.configure({ textColumnWidth, paperWidth, band }),
+            noPageBreaksWhenPageless(pageless),
             PositionedFigures.configure({ page, band, note }),
             AtomMarks,
             ...extensions,

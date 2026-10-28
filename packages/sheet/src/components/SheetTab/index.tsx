@@ -1,3 +1,6 @@
+// The sheet tab strip below the grid: the add-sheet button, the list of all sheets, the tabs themselves and the
+// scroll buttons that bring a tab into view. Adding a sheet first commits an open cell edit.
+
 import {
     ChoiceMenuItems,
     DropdownMenu,
@@ -15,6 +18,7 @@ import {
     cancelNormalSelected,
     changeSheet,
     deselectFloatingObject,
+    sheetOrder,
     updateCell,
 } from '../../state';
 import { SheetItem } from './SheetItem';
@@ -84,7 +88,7 @@ export const SheetTab: React.FC = () => {
                                 draftCtx,
                                 draftCtx.editingCellPosition[0],
                                 draftCtx.editingCellPosition[1],
-                                refs.cellInput.current!,
+                                refs.cellInput.current,
                             );
                         }
                         addSheet(draftCtx, settings);
@@ -130,7 +134,7 @@ export const SheetTab: React.FC = () => {
                         value={context.currentSheetId}
                         options={context.sheets
                             .filter((s): s is typeof s & { id: string } => s.hide !== 1 && s.id != null)
-                            .sort((s1, s2) => Number(s1.order) - Number(s2.order))
+                            .sort((s1, s2) => sheetOrder(s1) - sheetOrder(s2))
                             .map((singleSheet) => ({
                                 value: singleSheet.id,
                                 label: (
@@ -164,7 +168,7 @@ export const SheetTab: React.FC = () => {
                     )}
                     <div ref={tabContainerRef} className="flex min-w-0 flex-1 overflow-hidden">
                         {[...context.sheets]
-                            .sort((a, b) => Number(a.order) - Number(b.order))
+                            .sort((a, b) => sheetOrder(a) - sheetOrder(b))
                             .map(
                                 (sheet) => sheet.id != null && <SheetItem key={sheet.id} id={sheet.id} sheet={sheet} />,
                             )}

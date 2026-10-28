@@ -42,12 +42,13 @@ describe('MATH_LIMITS', () => {
         ]);
         const mathml = element(MATHML_NAMESPACE, 'math', [element(MATHML_NAMESPACE, 'mi', [text])]);
         const elapsed = (run: () => void) => {
-            const start = performance.now();
+            const start = process.cpuUsage();
             run();
-            return performance.now() - start;
+            const { user, system } = process.cpuUsage(start);
+            return user + system;
         };
-        // The baseline is the one pass every reader makes over the text, so a slow machine scales both alike; holding
-        // every character costs hundreds of times that.
+        // The baseline is the one pass every reader makes over the text, timed in CPU, so neither load nor a slow machine
+        // moves the ratio; holding every character costs hundreds of times that.
         const baseline = Math.min(...[1, 2, 3].map(() => elapsed(() => checkedXml(text))));
         for (const read of [() => readOmml(omml), () => readMathml(mathml)]) {
             expect(read).toThrow(MathError);

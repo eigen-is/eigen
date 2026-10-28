@@ -1,3 +1,6 @@
+// The Custom date and time formats dialog: the format is a row of segments, such as a day, a month or a
+// literal, each with its variant, previewed on a fixed sample date and applied to the selection.
+
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import {
@@ -91,7 +94,9 @@ export function CustomDateTimeFormats() {
 
     const apply = () => {
         setContext((ctx) => {
-            handleNumberFormat(ctx, refs.cellInput.current!, pattern);
+            const cellInput = refs.cellInput.current;
+            if (!cellInput) return;
+            handleNumberFormat(ctx, cellInput, pattern);
         });
         hideDialog();
     };

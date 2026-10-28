@@ -1,3 +1,8 @@
+// Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts the cells, merges
+// and formulas of every sheet (applySheetsInsertRowCol, applySheetsDeleteRowCol); this module writes that result
+// back into the editor's draft and shifts what only the editor keeps, such as the filter, read-only rows, the
+// calc chain, validation rules, links and the selection. A local edit and a peer's op both come through here.
+
 import { isRecord } from '@workspace/lib/guards';
 import type { MergeCell, SingleRange } from '@workspace/lib/sheets';
 import { assign, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
@@ -6,9 +11,12 @@ import {
     applySheetsInsertRowCol,
     shiftCellKeyedForDelete,
     shiftCellKeyedForInsert,
+    shiftKeyedMapForDelete,
+    shiftKeyedMapForInsert,
     shiftRangeForDelete,
     shiftRangeForInsert,
 } from '../../engine/rowcol';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getSheetConfig } from '../context';
 import type { FilterEntry, FormulaCell, Sheet } from '../types';
@@ -112,8 +120,7 @@ function shiftStateOnlyFieldsForInsert(
             }
 
             if (filter != null) {
-                newFilterObj.filter = {};
-
+                const shifted: Record<string, FilterEntry> = {};
                 forEach(filter, (_v, k) => {
                     const f_rowhidden = filter[k].rowhidden;
                     const f_rowhidden_new: Record<string, number> = {};
@@ -132,11 +139,12 @@ function shiftStateOnlyFieldsForInsert(
                             f_rowhidden_new[n + count] = 0;
                         }
                     });
-                    newFilterObj!.filter![k] = cloneDeep(filter[k]);
-                    newFilterObj!.filter![k].rowhidden = f_rowhidden_new;
-                    newFilterObj!.filter![k].str = f_r1;
-                    newFilterObj!.filter![k].edr = f_r2;
+                    shifted[k] = cloneDeep(filter[k]);
+                    shifted[k].rowhidden = f_rowhidden_new;
+                    shifted[k].str = f_r1;
+                    shifted[k].edr = f_r2;
                 });
+                newFilterObj.filter = shifted;
             }
         } else if (type === 'column') {
             if (f_c1 < index) {
@@ -158,8 +166,7 @@ function shiftStateOnlyFieldsForInsert(
             }
 
             if (filter != null) {
-                newFilterObj.filter = {};
-
+                const shifted: Record<string, FilterEntry> = {};
                 forEach(filter, (_v, k) => {
                     let f_cindex = filter[k].cindex;
 
@@ -169,11 +176,12 @@ function shiftStateOnlyFieldsForInsert(
                         f_cindex += count;
                     }
 
-                    newFilterObj!.filter![f_cindex - f_c1] = cloneDeep(filter[k]);
-                    newFilterObj!.filter![f_cindex - f_c1].cindex = f_cindex;
-                    newFilterObj!.filter![f_cindex - f_c1].stc = f_c1;
-                    newFilterObj!.filter![f_cindex - f_c1].edc = f_c2;
+                    shifted[f_cindex - f_c1] = cloneDeep(filter[k]);
+                    shifted[f_cindex - f_c1].cindex = f_cindex;
+                    shifted[f_cindex - f_c1].stc = f_c1;
+                    shifted[f_cindex - f_c1].edc = f_c2;
                 });
+                newFilterObj.filter = shifted;
             }
         }
 
@@ -181,14 +189,10 @@ function shiftStateOnlyFieldsForInsert(
     }
 
     if (newFilterObj != null && newFilterObj.filter != null) {
-        if (cfg.rowhidden == null) {
-            cfg.rowhidden = {};
-        }
-
-        forEach(newFilterObj.filter, (_v, k) => {
-            const f_rowhidden = newFilterObj!.filter![k].rowhidden;
-            forEach(f_rowhidden, (_v1, n) => {
-                cfg.rowhidden![n] = 0;
+        const rowhidden = (cfg.rowhidden ??= {});
+        forEach(newFilterObj.filter, (entry) => {
+            forEach(entry.rowhidden, (_v1, n) => {
+                rowhidden[n] = 0;
             });
         });
     }
@@ -278,6 +282,7 @@ function shiftStateOnlyFieldsForDelete(
             }
 
             if (newFilterObj.filterRange != null && filter != null) {
+                const shifted: Record<string, FilterEntry> = {};
                 forEach(filter, (_v, k) => {
                     const f_rowhidden = filter[k].rowhidden;
                     const f_rowhidden_new: Record<string, number> = {};
@@ -292,16 +297,13 @@ function shiftStateOnlyFieldsForDelete(
                     });
 
                     if (!isEmpty(f_rowhidden_new)) {
-                        if (newFilterObj!.filter == null) {
-                            newFilterObj!.filter = {};
-                        }
-
-                        newFilterObj!.filter[k] = cloneDeep(filter[k]);
-                        newFilterObj!.filter[k].rowhidden = f_rowhidden_new;
-                        newFilterObj!.filter[k].str = f_r1;
-                        newFilterObj!.filter[k].edr = f_r2;
+                        shifted[k] = cloneDeep(filter[k]);
+                        shifted[k].rowhidden = f_rowhidden_new;
+                        shifted[k].str = f_r1;
+                        shifted[k].edr = f_r2;
                     }
                 });
+                if (!isEmpty(shifted)) newFilterObj.filter = shifted;
             }
         } else if (type === 'column') {
             if (f_c1 > end) {
@@ -337,42 +339,31 @@ function shiftStateOnlyFieldsForDelete(
             }
 
             if (newFilterObj.filterRange != null && filter != null) {
+                const shifted: Record<string, FilterEntry> = {};
                 forEach(filter, (_v, k) => {
                     let f_cindex = filter[k].cindex;
 
                     if (f_cindex < start) {
-                        if (newFilterObj!.filter == null) {
-                            newFilterObj!.filter = {};
-                        }
-
-                        newFilterObj!.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
-                        newFilterObj!.filter[f_cindex - f_c1].edc = f_c2;
+                        shifted[f_cindex - f_c1] = cloneDeep(filter[k]);
+                        shifted[f_cindex - f_c1].edc = f_c2;
                     } else if (f_cindex > end) {
                         f_cindex -= slen;
-
-                        if (newFilterObj!.filter == null) {
-                            newFilterObj!.filter = {};
-                        }
-
-                        newFilterObj!.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
-                        newFilterObj!.filter[f_cindex - f_c1].cindex = f_cindex;
-                        newFilterObj!.filter[f_cindex - f_c1].stc = f_c1;
-                        newFilterObj!.filter[f_cindex - f_c1].edc = f_c2;
+                        shifted[f_cindex - f_c1] = cloneDeep(filter[k]);
+                        shifted[f_cindex - f_c1].cindex = f_cindex;
+                        shifted[f_cindex - f_c1].stc = f_c1;
+                        shifted[f_cindex - f_c1].edc = f_c2;
                     }
                 });
+                if (!isEmpty(shifted)) newFilterObj.filter = shifted;
             }
         }
     }
 
     if (newFilterObj != null && newFilterObj.filter != null) {
-        if (cfg.rowhidden == null) {
-            cfg.rowhidden = {};
-        }
-
-        forEach(newFilterObj.filter, (_v, k) => {
-            const f_rowhidden = newFilterObj!.filter![k].rowhidden;
-            forEach(f_rowhidden, (_v1, n) => {
-                cfg.rowhidden![n] = 0;
+        const rowhidden = (cfg.rowhidden ??= {});
+        forEach(newFilterObj.filter, (entry) => {
+            forEach(entry.rowhidden, (_v1, n) => {
+                rowhidden[n] = 0;
             });
         });
     }
@@ -482,38 +473,20 @@ export function insertRowCol(
     const file = ctx.sheets[curOrder];
     if (!file) return;
 
-    const cfg = file.config || {};
-
-    // rowReadOnly/colReadOnly shift (state-only; engine handles rowlen/columnlen/rowhidden/colhidden)
-    if (type === 'row') {
-        const rowReadOnly_new: Record<string, number> = {};
-        forEach(cfg.rowReadOnly, (_v, rstr) => {
-            const r = parseFloat(rstr);
-            if (r < index) {
-                rowReadOnly_new[r] = cfg.rowReadOnly![r];
-            } else if (r > index) {
-                rowReadOnly_new[r + count] = cfg.rowReadOnly![r];
-            }
-        });
-        cfg.rowReadOnly = rowReadOnly_new;
-    } else {
-        const columnReadOnly_new: Record<string, number> = {};
-        forEach(cfg.colReadOnly, (_v, cstr) => {
-            const c = parseFloat(cstr);
-            if (c < index) {
-                columnReadOnly_new[c] = cfg.colReadOnly![c];
-            } else if (c > index) {
-                columnReadOnly_new[c + count] = cfg.colReadOnly![c];
-            }
-        });
-        cfg.colReadOnly = columnReadOnly_new;
+    // The engine refuses an op on a read-only row or column but does not move them.
+    // They shift here, by the same rule as hidden rows and columns.
+    const { config } = file;
+    if (type === 'row' && config?.rowReadOnly) {
+        config.rowReadOnly = shiftKeyedMapForInsert(config.rowReadOnly, index, count, op.direction);
+    }
+    if (type === 'column' && config?.colReadOnly) {
+        config.colReadOnly = shiftKeyedMapForInsert(config.colReadOnly, index, count, op.direction);
     }
 
     file.alternateFormatRules = (file.alternateFormatRules ?? []).map((af) => ({
         ...af,
         cellrange: shiftRangeForInsert(af.cellrange, op),
     }));
-    file.config = cfg;
 
     shiftStateOnlyFieldsForInsert(ctx, { ...op, id });
     if (changeSelection) adjustSelectionForInsert(ctx, { ...op, id });
@@ -541,7 +514,6 @@ export function deleteRowCol(
     if (typeof id !== 'string') return;
 
     const { type, start, end } = op;
-    const slen = end - start + 1;
 
     writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, { ...op, id }));
 
@@ -551,31 +523,14 @@ export function deleteRowCol(
     const file = ctx.sheets[curOrder];
     if (!file) return;
 
-    const cfg = file.config || {};
-
-    // rowReadOnly/colReadOnly shift (state-only; engine handles rowlen/columnlen/rowhidden/colhidden)
-    if (type === 'row') {
-        const rowReadOnly_new: Record<string, number> = {};
-        forEach(cfg.rowReadOnly, (_v, rstr) => {
-            const r = parseFloat(rstr);
-            if (r < start) {
-                rowReadOnly_new[r] = cfg.rowReadOnly![r];
-            } else if (r > end) {
-                rowReadOnly_new[r - slen] = cfg.rowReadOnly![r];
-            }
-        });
-        cfg.rowReadOnly = rowReadOnly_new;
-    } else {
-        const columnReadOnly_new: Record<string, number> = {};
-        forEach(cfg.colReadOnly, (_v, cstr) => {
-            const c = parseFloat(cstr);
-            if (c < start) {
-                columnReadOnly_new[c] = cfg.colReadOnly![c];
-            } else if (c > end) {
-                columnReadOnly_new[c - slen] = cfg.colReadOnly![c];
-            }
-        });
-        cfg.colReadOnly = columnReadOnly_new;
+    // The engine refuses an op on a read-only row or column but does not move them.
+    // They shift here, by the same rule as hidden rows and columns.
+    const { config } = file;
+    if (type === 'row' && config?.rowReadOnly) {
+        config.rowReadOnly = shiftKeyedMapForDelete(config.rowReadOnly, start, end);
+    }
+    if (type === 'column' && config?.colReadOnly) {
+        config.colReadOnly = shiftKeyedMapForDelete(config.colReadOnly, start, end);
     }
 
     const alternateFormats = [];
@@ -584,7 +539,6 @@ export function deleteRowCol(
         if (cellrange) alternateFormats.push({ ...af, cellrange });
     }
     file.alternateFormatRules = alternateFormats;
-    file.config = cfg;
 
     shiftStateOnlyFieldsForDelete(ctx, { ...op, id });
     ctx.selections = undefined;
@@ -598,8 +552,11 @@ export function deleteRowCol(
 // Hide selected rows/columns
 export function hideSelected(ctx: Context, type: string) {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const cfg = (ctx.sheets[index].config ??= {});
+    const sheet = getSheet(ctx);
+    const { data } = sheet;
+    // A sheet that is not loaded has nothing to hide.
+    if (!data) return '';
+    const cfg = (sheet.config ??= {});
     // Hide rows
     if (type === 'row') {
         /* TODO: Sheet protection check
@@ -614,7 +571,7 @@ export function hideSelected(ctx: Context, type: string) {
         for (let r = r1; r <= r2; r += 1) {
             rowhidden[r] = 0;
         }
-        const rowLen = ctx.sheets[index].data!.length;
+        const rowLen = data.length;
         const isEndRow =
             rowLen - 1 === rowhiddenNumber ||
             Object.keys(rowhidden).findIndex((o) => parseInt(o, 10) - 1 === rowhiddenNumber) >= 0;
@@ -634,7 +591,7 @@ export function hideSelected(ctx: Context, type: string) {
         for (let c = c1; c <= c2; c += 1) {
             colhidden[c] = 0;
         }
-        const columnLen = ctx.sheets[index].data![0].length;
+        const columnLen = data[0].length;
         // Check if the column to hide is the last column
         const isEndColumn =
             columnLen - 1 === colhiddenNumber ||

@@ -8,13 +8,14 @@ import type { Lost } from '../../../document/transform/protocol';
 import { A_NS, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../../ooxml/ooxml';
 import type { PartRelationships } from '../../../ooxml/opc';
 import type { NOTE_SEPARATORS, StyleId } from '../../../ooxml/wordml';
-import { SINGLE_LINE, WORD_SETTINGS_URI } from '../../../ooxml/wordml';
+import { SINGLE_LINE, WEB_VIEW, WORD_SETTINGS_URI } from '../../../ooxml/wordml';
 import type { OfficeCharts } from '../../office-chart';
 import type { OfficeImages } from '../../office-image';
 import type { FontSlot } from './fonts';
 import type { List } from './numbering';
 import type { Block, NumberingRef } from './paragraphs';
 import type { Styles } from './styles';
+import type { DocxOutline } from './table-of-contents';
 
 export const DOCUMENT_NAMESPACES = [
     `xmlns:w="${W_NS}"`,
@@ -50,11 +51,16 @@ export type Package = {
     faces: Map<string, Set<FontSlot>>;
     // The notes the body references, note n at index n - 1.
     footnotes: JSONContent[];
+    // The body's headings that a table of contents lists and links to.
+    outline: DocxOutline;
     // The doc's Normal, which docDefaults and the Normal style write, and the styles built on it.
     normal: NormalStyle;
     styles: Styles;
-    // The paper's width in twips, which a figure in front of or behind the text may span.
+    // The paper's width in twips, which a figure in front of or behind the text may span, and a page-less doc's table
+    // column.
     paper: number;
+    // A page-less doc, whose tables in the body keep their widths past the text column, as the editor draws them.
+    pageless: boolean;
     // Counts what the docx leaves out or draws simpler, for the export's warnings.
     lost: Lost;
 };
@@ -97,11 +103,15 @@ export function sectionXml(
     return `<w:sectPr>${references}<w:pgSz w:w="${width}" w:h="${height}"${orient}/><w:pgMar w:top="${margin.top}" w:right="${margin.right}" w:bottom="${margin.bottom}" w:left="${margin.left}" w:header="${headerDistance}" w:footer="${footerDistance}" w:gutter="0"/>${titlePg}</w:sectPr>`;
 }
 
-// Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
-// Word names the notes part's separators here.
-export function settingsXml(footnotes: boolean): string {
-    const separators = footnotes ? '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>' : '';
-    return `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/>${separators}<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="${WORD_SETTINGS_URI}" w:val="15"/></w:compat></w:settings>`;
+// Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset
+// flag is set. Word names the notes part's separators here. A page-less doc opens in Web Layout, where a wide table
+// fits the window. w:view comes first, because CT_Settings orders its children and the writer writes no
+// w:writeProtection.
+export function settingsXml(pkg: Package): string {
+    const separators =
+        pkg.footnotes.length > 0 ? '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>' : '';
+    const view = pkg.pageless ? `<w:view w:val="${WEB_VIEW}"/>` : '';
+    return `<w:settings xmlns:w="${W_NS}">${view}<w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/>${separators}<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="${WORD_SETTINGS_URI}" w:val="15"/></w:compat></w:settings>`;
 }
 
 // As Word writes them: single spaced with no space after, which Normal's spacing would add above the notes.

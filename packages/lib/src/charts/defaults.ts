@@ -42,6 +42,7 @@ export const DEFAULT_CHART_SERIES_STYLE: ChartSeriesStyle = {
     color: null,
     line: { smooth: false },
     marker: { visible: false },
+    labels: { visible: false },
 };
 
 // What a new chart of this data starts from, and what a missing or invalid field reads as.

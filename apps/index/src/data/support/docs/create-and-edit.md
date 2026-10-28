@@ -42,7 +42,7 @@ A page break makes the text after it start on a new page when you print the docu
 1. Place your cursor where the new page should start.
 2. Open the **Insert** menu and choose **Page break**, or press Cmd+Enter (Mac) or Ctrl+Enter (Windows).
 
-In the document, the page break shows as a dashed line labeled "Page break". The line itself doesn't print. In a code block, the shortcut leaves the block instead.
+In the document, the page break shows as a dashed line labeled "Page break". The line itself doesn't print. In a code block, the shortcut leaves the block instead. A page-less document has no page breaks to insert, and shows the ones it has as nothing ([Use page-less mode and set your text width](/support/docs/page-less)).
 
 A page break inside a list, a quote, or a table starts a new page in the Word file too. See [Export to Word, PDF, or HTML](/support/docs/export).
 

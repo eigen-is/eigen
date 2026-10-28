@@ -37,6 +37,8 @@ The PDF and the Word file put the header and footer on every page, with the page
 
 Footnotes print at the bottom of their page in the PDF and are Word footnotes in the Word file. When a document has more than 1,500 footnotes, or one footnote longer than a page, the PDF lists them all at the end instead, as the web page does. The web page numbers them in the text and lists them at the end, each linking back to its place.
 
+A table of contents shows each heading's page number in the PDF. In the Word file it is Word's own table of contents, and its page numbers fill in when Word updates it. The web page lists the headings as links, without page numbers. See [Add a table of contents](/support/docs/table-of-contents).
+
 A page break starts a new page in the PDF and the Word file. Equations show in all three formats. A PDF draws up to 1,000 different equations; past that, or when the equations are very large, the rest print as one-line text, such as `(a+b)/2`. The web page download and the preview in Drive have a similar limit, which only far larger documents reach. In all three formats, links to other files in Eigen point to your Eigen server, and a numbered list keeps the number it starts at and its style (1, a, A, i, or I).
 
 A download carries the images the document shows. When they add up to more than 200 MB, Eigen refuses the download with "This document's images are too large to export".
@@ -51,7 +53,7 @@ The PDF, the web page, and the Word file use the editor's spacing, including the
 - Quotes keep the bar along their left edge.
 - Equations become Word equations that you can edit in Word, and a displayed one stays on its own line. The LaTeX you typed stays behind, since Word has no place for it, so after a round trip through Word the **LaTeX** field shows Eigen's way of writing the equation, which may differ from yours.
 
-The PDF, the web page, and the Word file use the document's paper size, orientation, and margins, as set under **File → Page setup…**.
+The PDF, the web page, and the Word file use the document's paper size, orientation, and margins, as set under **File → Page setup…**. A page-less document prints on that paper too, with its header, footer and page numbers, and in the PDF and the web page a table wider than the text shrinks to fit the page. Its Word file keeps the table's width.
 
 <div class="eigen-callout">
 

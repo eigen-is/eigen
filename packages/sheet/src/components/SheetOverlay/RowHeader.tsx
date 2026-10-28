@@ -1,3 +1,8 @@
+// The row header strip left of the grid: the row numbers, the hovered and selected rows, the resize
+// handle and the freeze handle. Its mouse handlers hand the press to the state layer, such as
+// handleRowHeaderMouseDown, and a right click or long press opens the row menu. ColumnHeader is its
+// twin on the other axis.
+
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -58,7 +63,9 @@ export const RowHeader: React.FC = () => {
             if (context.rowsResizing) {
                 return;
             }
-            const mouseY = e.pageY - containerRef.current!.getBoundingClientRect().top - window.scrollY;
+            const container = containerRef.current;
+            if (!container) return;
+            const mouseY = e.pageY - container.getBoundingClientRect().top - window.scrollY;
             const _y = mouseY + refs.globalCache.scrollTop;
             const freeze = refs.globalCache.freezen?.[context.currentSheetId];
             const { y } = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
@@ -82,13 +89,16 @@ export const RowHeader: React.FC = () => {
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
             setContext((draftCtx) => {
+                const container = containerRef.current;
+                const cellInput = refs.cellInput.current;
+                if (!container || !cellInput) return;
                 handleRowHeaderMouseDown(
                     draftCtx,
                     refs.globalCache,
                     nativeEvent,
-                    containerRef.current!,
-                    refs.cellInput.current!,
-                    refs.fxInput.current!,
+                    container,
+                    cellInput,
+                    refs.fxInput.current,
                 );
             });
         },
@@ -106,13 +116,17 @@ export const RowHeader: React.FC = () => {
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
             setContext((draftCtx) => {
+                const container = containerRef.current;
+                const workbookContainer = refs.workbookContainer.current;
+                const cellArea = refs.cellArea.current;
+                if (!container || !workbookContainer || !cellArea) return;
                 handleRowSizeHandleMouseDown(
                     draftCtx,
                     refs.globalCache,
                     nativeEvent,
-                    containerRef.current!,
-                    refs.workbookContainer.current!,
-                    refs.cellArea.current!,
+                    container,
+                    workbookContainer,
+                    cellArea,
                 );
             });
             e.stopPropagation();
@@ -124,13 +138,11 @@ export const RowHeader: React.FC = () => {
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
             setContext((draftCtx) => {
-                handleRowFreezeHandleMouseDown(
-                    draftCtx,
-                    nativeEvent,
-                    containerRef.current!,
-                    refs.workbookContainer.current!,
-                    refs.cellArea.current!,
-                );
+                const container = containerRef.current;
+                const workbookContainer = refs.workbookContainer.current;
+                const cellArea = refs.cellArea.current;
+                if (!container || !workbookContainer || !cellArea) return;
+                handleRowFreezeHandleMouseDown(draftCtx, nativeEvent, container, workbookContainer, cellArea);
             });
             e.stopPropagation();
         },

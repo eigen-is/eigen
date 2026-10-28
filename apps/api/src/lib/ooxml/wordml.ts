@@ -1,16 +1,19 @@
-// Word's vocabulary, one source for the docx writer that writes it and the docx reader that recognizes it: content
-// types, style names, list formats and Word's spelling of a list number, alignment, table limits, units, and the
-// names a font table, a drawing's wrap or a link's look uses. The OOXML every format shares sits in its own module.
+// Word's vocabulary, one source for the docx writer that writes it and the docx reader that recognizes it. It holds,
+// for example, the content types, the style names, Word's spelling of a list number and the table of contents field.
+// The OOXML every format shares sits in its own module.
 
 import type { EigenFont } from '@workspace/lib/constants/fonts';
 import type { CellBorderStyle, PageNumberKind } from '@workspace/lib/docs/eigendoc';
-import { ptToTwips, pxToPt } from '@workspace/lib/docs/eigendoc';
+import { ptToTwips, pxToPt, readTocLevels } from '@workspace/lib/docs/eigendoc';
 
 // The prefix of WordprocessingML's content types.
 export const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
 
 // The uri of Word's compatibility settings, which looks like a namespace but is not one.
 export const WORD_SETTINGS_URI = 'http://schemas.microsoft.com/office/word';
+
+// w:view's Web Layout, ST_View's "Web Page View": the view a page-less doc's docx opens in, and imports page-less from.
+export const WEB_VIEW = 'web';
 
 // ── Styles ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -38,7 +41,7 @@ export const STYLE_NAMES = {
     FootnoteReference: 'footnote reference',
 } as const;
 
-export type StyleId = keyof typeof STYLE_NAMES | `Heading${number}` | `CodeBlock-${string}`;
+export type StyleId = keyof typeof STYLE_NAMES | `Heading${number}` | `TOC${number}` | `CodeBlock-${string}`;
 
 export function headingStyleName(level: number): string {
     return `heading ${level}`;
@@ -48,6 +51,24 @@ const HEADING_LEVEL = /^heading ([1-9])$/i;
 
 export function headingLevel(styleName: string): number | undefined {
     const level = HEADING_LEVEL.exec(styleName)?.[1];
+    return level === undefined ? undefined : Number(level);
+}
+
+// Eigen's headings go to level 6, where Word's go to 9.
+export const DEEPEST_HEADING_LEVEL = 6;
+
+// Word's outline level of body text. A paragraph at any lower level is listed in Word's navigation pane.
+export const BODY_TEXT_OUTLINE_LEVEL = 9;
+
+// Word's built-in style of a table of contents entry for a heading at `level`.
+export function tocStyleName(level: number): string {
+    return `toc ${level}`;
+}
+
+const TOC_LEVEL = /^toc ([1-9])$/i;
+
+export function tocLevel(styleName: string): number | undefined {
+    const level = TOC_LEVEL.exec(styleName)?.[1];
     return level === undefined ? undefined : Number(level);
 }
 
@@ -137,7 +158,7 @@ export const CHECKBOX_GLYPHS = { checked: '☒', unchecked: '☐' } as const;
 
 // ── Formatting ─────────────────────────────────────────────────────────────────────────────────────────────────
 
-// The colour of a highlight that names none: the browser's yellow <mark>, which is also Word's yellow highlight.
+// The color of a highlight that names none: the browser's yellow <mark>, which is also Word's yellow highlight.
 export const DEFAULT_HIGHLIGHT = 'FFFF00';
 
 // A paragraph's w:jc for each of the editor's text alignments.
@@ -173,6 +194,40 @@ export const PAGE_SECTION_TYPES = new Set(['nextPage', 'oddPage', 'evenPage']);
 
 // The field each page number kind writes, as w:instr names it.
 export const PAGE_NUMBER_FIELDS: Record<PageNumberKind, string> = { page: 'PAGE', pages: 'NUMPAGES' };
+
+// A table of contents as Word writes its field: the headings to `levels` by outline level (\o), each entry a link (\h),
+// no page numbers in Web Layout (\z), and paragraphs given an outline level directly (\u). It stands in a content
+// control of Word's gallery, so Word's Update Table and its references pane find it.
+export function tocInstruction(levels: number): string {
+    return `TOC \\o "1-${levels}" \\h \\z \\u`;
+}
+
+// A field's name is case-insensitive.
+const TOC_FIELD = /^TOC\b/i;
+
+export function isTocField(code: string): boolean {
+    return TOC_FIELD.test(code.trim());
+}
+
+// A table of contents' deepest level, read from its field: \o "a-b" lists to b, a bare \o every level and none Word's
+// default 1 to 3. A \t switch's numbers are the levels its styles list at, not headings'. A table of figures (\c or
+// \a) is no table of contents, so it has none.
+export function tocFieldLevels(code: string): number | undefined {
+    if (!isTocField(code) || /\\[ac]\b/i.test(code)) return undefined;
+    const outline = /\\o\b(?:\s*"\s*\d+\s*-\s*(\d+)\s*")?/i.exec(code);
+    if (!outline) return readTocLevels(undefined);
+    return outline[1] === undefined ? DEEPEST_HEADING_LEVEL : readTocLevels(Number(outline[1]));
+}
+
+export const TOC_GALLERY = 'Table of Contents';
+
+// The bookmark on the Nth heading of the outline, which its entry links to and its PAGEREF field reads the page of.
+export function tocBookmark(number: number): string {
+    return `_Toc${number}`;
+}
+
+// What Word's field shows for a doc with no headings.
+export const NO_TOC_ENTRIES = 'No table of contents entries found.';
 
 // Word's widest table. The reader and the writer cap a table's grid at it, so no row walks or fills a column past it.
 export const MAX_TABLE_COLUMNS = 63;

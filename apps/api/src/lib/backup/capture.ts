@@ -1,3 +1,7 @@
+// Copies one file into a backup's staging folder and returns its manifest entry, hashed as the bytes stream
+// through. The home, mount and server snapshots use it for every file they take, such as a database copy, a
+// drive file or a Maildir message.
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
@@ -43,7 +47,7 @@ export function countEntries(entries: BackupEntry[], databases: number): BackupM
     };
 }
 
-// The entry for a file already sitting in the archive — a VACUUM INTO copy, which SQLite writes
+// The entry for a file already sitting in the archive, such as a VACUUM INTO copy that SQLite wrote
 // itself, so hashing it means one read of the copy.
 export async function captureWrittenFile(destPath: string, relPath: string): Promise<BackupEntry> {
     const { size, hash } = await hashFile(destPath);

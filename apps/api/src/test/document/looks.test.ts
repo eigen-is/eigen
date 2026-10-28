@@ -33,7 +33,7 @@ import {
 import { PROSE_CSS, proseValue } from '../../lib/document/prose-css';
 import { writeDocx } from '../../lib/export/doc/docx/to-docx';
 import { W_NS } from '../../lib/ooxml/ooxml';
-import { codeBlockStyle, headingStyleName, STYLE_NAMES } from '../../lib/ooxml/wordml';
+import { codeBlockStyle, headingStyleName, STYLE_NAMES, tocStyleName } from '../../lib/ooxml/wordml';
 import { openZip } from '../../lib/ooxml/zip';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 
@@ -76,7 +76,10 @@ function descendants(root: XmlElement, local: string): XmlElement[] {
 describe('the writer names its styles by the vocabulary', () => {
     test('every style the writer defines carries its vocabulary name', () => {
         const names = new Map<string, string>(Object.entries(STYLE_NAMES));
-        for (const level of [1, 2, 3, 4, 5, 6]) names.set(`Heading${level}`, headingStyleName(level));
+        for (const level of [1, 2, 3, 4, 5, 6]) {
+            names.set(`Heading${level}`, headingStyleName(level));
+            names.set(`TOC${level}`, tocStyleName(level));
+        }
         // The languages of the doc's code blocks.
         for (const language of ['javascript', 'plaintext']) {
             const { id, name } = codeBlockStyle(language);

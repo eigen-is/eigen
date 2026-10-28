@@ -1,6 +1,11 @@
-// Event type constants
+// The events the server sends on a tab's event stream, shared by the API that builds them and the
+// handlers in the browser that read them. An event carries the ids a handler needs to know which queries
+// to refetch, and rarely data (a notification's display text, the home's data epochs). A new event type
+// gets its name in SSEventType and its shape in the SSEvent union.
+
+import type { NotificationType } from './notification';
+
 export const SSEventType = {
-    // Mail events
     MAIL_RECEIVED: 'mail:received',
     MAIL_DELETED: 'mail:deleted',
     MAIL_MOVED: 'mail:moved',
@@ -8,7 +13,6 @@ export const SSEventType = {
     MAIL_DRAFT_UPDATED: 'mail:draft-updated',
     MAIL_FLAGS_CHANGED: 'mail:flags-changed',
     MAIL_SENT: 'mail:sent',
-    // Drive events
     DRIVE_FOLDER_CREATED: 'drive:folder-created',
     DRIVE_FOLDER_DELETED: 'drive:folder-deleted',
     DRIVE_FILE_CREATED: 'drive:file-created',
@@ -21,14 +25,12 @@ export const SSEventType = {
     DRIVE_ACL_UNSHARED: 'drive:acl-unshared',
     DRIVE_PATH_TRASHED: 'drive:path-trashed',
     DRIVE_PATH_RESTORED: 'drive:path-restored',
-    // Fires whenever a file event is recorded — invalidates open Activity panels' history queries.
+    // Sent whenever a file event is recorded, so open Activity panels refresh.
     DRIVE_FILE_HISTORY_UPDATED: 'drive:file-history-updated',
-    // Chat events
     CHAT_MESSAGE_POSTED: 'chat:message-posted',
     CHAT_MESSAGE_EDITED: 'chat:message-edited',
     CHAT_MESSAGE_DELETED: 'chat:message-deleted',
     CHAT_COMMENT_INDEX_UPDATED: 'chat:comment-index-updated',
-    // Calendar events
     CALENDAR_EVENT_CREATED: 'calendar:event-created',
     CALENDAR_EVENT_UPDATED: 'calendar:event-updated',
     CALENDAR_EVENT_DELETED: 'calendar:event-deleted',
@@ -42,10 +44,8 @@ export const SSEventType = {
     CALENDAR_INVITE_CANCELLED: 'calendar:invite-cancelled',
     CALENDAR_INVITE_RSVP: 'calendar:invite-rsvp',
     CALENDAR_EVENTS_CHANGED: 'calendar:events-changed',
-    // Notification events
     NOTIFICATION_CREATED: 'notification:created',
     NOTIFICATION_CHANGED: 'notification:changed',
-    // Contact events
     CONTACT_CREATED: 'contacts:contact-created',
     CONTACT_UPDATED: 'contacts:contact-updated',
     CONTACT_DELETED: 'contacts:contact-deleted',
@@ -53,13 +53,9 @@ export const SSEventType = {
     LABEL_CREATED: 'contacts:label-created',
     LABEL_UPDATED: 'contacts:label-updated',
     LABEL_DELETED: 'contacts:label-deleted',
-    // Backup events (admin only)
     BACKUP_JOB_UPDATED: 'backup:job-updated',
-    // Home events
     HOME_DATA_EPOCHS: 'home:data-epochs',
 } as const;
-
-// --- Event data types (minimal — only what frontend handlers need for cache invalidation) ---
 
 type SSEventDrive = {
     type: (typeof SSEventType)[keyof typeof SSEventType] & `drive:${string}`;
@@ -87,9 +83,8 @@ type SSEventContact = {
     contactId: string;
 };
 
-// The list-level counterpart to the three per-card events, emitted once by a whole-file import instead of one
-// event per card. It carries no ids because the per-card handler ignores them too: a card change invalidates
-// the owner's whole list, so a thousand ids would be payload no handler reads.
+// A whole-file import sends this once instead of one event per card. It carries no ids, because a card
+// change refetches the owner's whole list anyway.
 type SSEventContactsChanged = {
     type: typeof SSEventType.CONTACTS_CHANGED;
 };
@@ -99,11 +94,12 @@ type SSEventLabel = {
     labelId: string;
 };
 
+// The one event that carries display text: it raises the toast, which has nothing to refetch.
 type SSEventNotificationCreated = {
     type: typeof SSEventType.NOTIFICATION_CREATED;
     title: string;
     body?: string;
-    notificationType?: string;
+    notificationType: NotificationType;
     tag?: string;
 };
 
@@ -111,24 +107,21 @@ type SSEventNotificationChanged = {
     type: typeof SSEventType.NOTIFICATION_CHANGED;
 };
 
-// Sent on every state or progress change: a home job's to every admin, since any of them can have the pane open,
-// and a server job's to the owner alone.
-// The payload is a poke: the pane refetches the job and artifact lists, which the server answers from
-// the job map.
+// Sent when a backup job starts and when it ends. The admin pane refetches the job and artifact lists,
+// which the server answers from its job map.
 type SSEventBackup = {
     type: typeof SSEventType.BACKUP_JOB_UPDATED;
     jobId: string;
     ownerId: string;
 };
 
-// Sent when a stream opens and with every keepalive: the data epoch of the user's own home and of each of their
-// teams, keyed by owner id. Only a restore changes one, so a tab reloads when an epoch it already holds changes.
+// Sent when a stream opens and with every keepalive: the data epoch of the user's own home and of each of
+// their teams, keyed by owner id. Only a restore changes one, so a tab reloads when an epoch it holds changes.
 type SSEventHomeDataEpochs = {
     type: typeof SSEventType.HOME_DATA_EPOCHS;
     epochs: Record<string, string>;
 };
 
-// Union of all events
 export type SSEvent =
     | SSEventBackup
     | SSEventDrive

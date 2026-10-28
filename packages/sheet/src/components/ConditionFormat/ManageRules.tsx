@@ -1,3 +1,6 @@
+// The Manage rules dialog: the current sheet's conditional-format rules, each with its range, a plain-English
+// description and a swatch of its style, and a delete button per rule.
+
 import type { ConditionalFormatRule, DefaultConditionalFormatRule, SingleRange } from '@workspace/lib/sheets';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
@@ -6,7 +9,7 @@ import { X } from 'lucide-react';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { getSheetIndex } from '../../state';
+import { findSheet } from '../../state';
 import { RULE_COPY } from './ConditionRules';
 
 function formatRange(range: SingleRange): string {
@@ -116,14 +119,12 @@ export function ManageRules() {
     const { hideDialog } = useDialog();
 
     const rules = useMemo(() => {
-        const index = getSheetIndex(context, context.currentSheetId) as number;
-        return context.sheets[index]?.conditionalFormatRules ?? [];
+        return findSheet(context, context.currentSheetId)?.conditionalFormatRules ?? [];
     }, [context]);
 
     const deleteRule = (ruleIndex: number) => {
         setContext((ctx) => {
-            const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-            const arr = ctx.sheets[index].conditionalFormatRules;
+            const arr = findSheet(ctx, ctx.currentSheetId)?.conditionalFormatRules;
             if (arr) arr.splice(ruleIndex, 1);
         });
     };

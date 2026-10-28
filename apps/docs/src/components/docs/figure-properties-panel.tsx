@@ -1,6 +1,6 @@
-// The Docs Image panel for the selected picture: its width, where it sits on the page and its caption, its alt text, and
+// The Docs Image panel for the selected picture: its size, where it sits on the page and its caption, its alt text, and
 // Replace image. It writes through the editor that holds the picture, the body's, a band's or a note's, and every
-// write keeps the picture selected so the panel stays open. Its layout rows serve the Chart panel too.
+// write keeps the picture selected so the panel stays open. Its size and layout sections serve the Chart panel too.
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
@@ -12,32 +12,47 @@ import { Input } from '@workspace/ui/components/input';
 import {
     AlignmentPicker,
     PropertiesPanel,
+    PropertyCheckbox,
     PropertyRow,
     PropertySection,
     PropertyToggle,
+    useCoupledSize,
 } from '@workspace/ui/components/properties-panel';
 import type { LucideIcon } from 'lucide-react';
 import { BringToFront, ImagePlus, PanelLeft, PanelRight, Rows3, SendToBack } from 'lucide-react';
 import { useState } from 'react';
-import { clampFigureWidth, figureMaxWidth, setImageLayout } from './extensions/figure-frame';
+import { pictureRatio } from './extensions/figure';
+import type { FigureSizeEdit } from './extensions/figure-frame';
+import {
+    figureMaxWidth,
+    fitFigureSize,
+    isAspectLocked,
+    setAspectLocked,
+    setImageLayout,
+} from './extensions/figure-frame';
 import { inBand, selectionDrawsInLine } from './extensions/positioned-figure';
 
-// Alt, Cap or Width. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
-// from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit writes
-// nothing back, and an unchanged Width keeps the stored px its cm rounds. A draft stays through a transaction that
-// moves the figure, a collaborator typing above it.
+// Alt, Cap, Width or Height. A keystroke starts a draft. Enter or a blur writes it if it differs from the value it
+// started from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit
+// writes nothing back, and an untouched Width keeps the stored px its cm rounds. A number field shows as many decimals
+// as its step has, and a draft as typed. A draft stays through a transaction that moves the figure, such as a
+// collaborator typing above it.
 export function FigureField({
     value,
     placeholder,
     type,
+    step,
     onCommit,
 }: {
     value: string;
     placeholder?: string;
     type?: 'number';
+    step?: number;
     onCommit: (value: string) => void;
 }) {
     const [draft, setDraft] = useState<{ text: string; base: string } | null>(null);
+    const decimals = step === undefined ? null : (String(step).split('.')[1]?.length ?? 0);
+    const shown = decimals === null || value === '' ? value : Number(value).toFixed(decimals);
     const commit = (next: string) => {
         if (draft !== null && next !== draft.base) onCommit(next);
         setDraft(null);
@@ -46,9 +61,10 @@ export function FigureField({
         <Input
             className="h-7 text-xs"
             type={type}
-            value={draft?.text ?? value}
+            step={step}
+            value={draft?.text ?? shown}
             placeholder={placeholder}
-            onChange={(e) => setDraft({ text: e.target.value, base: draft?.base ?? value })}
+            onChange={(e) => setDraft({ text: e.target.value, base: draft?.base ?? shown })}
             onBlur={(e) => commit(e.target.value)}
             onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing) return;
@@ -56,6 +72,55 @@ export function FigureField({
                 if (e.key === 'Escape') setDraft(null);
             }}
         />
+    );
+}
+
+// A side in cm to 0.01, written in px with the fraction the cm gives, so a typed 8 cm reads back as 8.00. A side is at
+// least a pixel, and the host floors a width further.
+function CmField({ px, onCommit }: { px: number | undefined; onCommit: (px: number) => void }) {
+    return (
+        <div className="flex items-center gap-1.5">
+            <FigureField
+                type="number"
+                step={0.01}
+                value={px === undefined ? '' : cmText(pxToMm(px), 2)}
+                onCommit={(value) => {
+                    const mm = readCm(value);
+                    if (Number.isFinite(mm)) onCommit(Math.max(1, mmToPx(mm)));
+                }}
+            />
+            <span className="text-xs text-muted-foreground">cm</span>
+        </div>
+    );
+}
+
+// A figure's width and height as it draws, with Keep aspect ratio. Each side has a row of its own, as a cm field and
+// its unit don't fit half the panel. While the box is checked an edit of one side writes the other at the figure's
+// ratio. The host fits the size to the page and decides what it stores.
+export function FigureSizeSection({
+    width,
+    height,
+    aspectLocked,
+    onAspectLockChange,
+    onChange,
+}: {
+    width: number | undefined;
+    height: number | undefined;
+    aspectLocked: boolean;
+    onAspectLockChange: (locked: boolean) => void;
+    onChange: (size: FigureSizeEdit) => void;
+}) {
+    const { changeWidth, changeHeight } = useCoupledSize(width, height, aspectLocked, onChange);
+    return (
+        <PropertySection title="Size">
+            <PropertyRow label="Width">
+                <CmField px={width} onCommit={changeWidth} />
+            </PropertyRow>
+            <PropertyRow label="Height">
+                <CmField px={height} onCommit={changeHeight} />
+            </PropertyRow>
+            <PropertyCheckbox label="Keep aspect ratio" checked={aspectLocked} onCheckedChange={onAspectLockChange} />
+        </PropertySection>
     );
 }
 
@@ -141,21 +206,28 @@ type FigurePropertiesPanelProps = {
 export function FigurePropertiesPanel({ editor, onReplaceImage }: FigurePropertiesPanelProps) {
     const { resolveMediaUrl } = useMediaResolver();
     // useEditor re-renders on no transaction, and a write that keeps the figure selected fires no selectionUpdate.
-    const { width, layout, alignment, alt, caption, mediaName, inFlowOnly } = useEditorState({
-        editor,
-        selector: ({ editor: e }) => {
-            const attrs = readFigureAttrs(e.getAttributes('figure'));
-            return {
-                width: attrs.width,
-                layout: attrs.layout || 'block',
-                alignment: attrs.alignment || 'center',
-                alt: attrs.alt || '',
-                caption: attrs.caption || '',
-                mediaName: attrs.mediaName,
-                inFlowOnly: selectionDrawsInLine(e),
-            };
+    const { width, height, stretched, locked, layout, alignment, alt, caption, mediaName, inFlowOnly } = useEditorState(
+        {
+            editor,
+            selector: ({ editor: e }) => {
+                const attrs = readFigureAttrs(e.getAttributes('figure'));
+                // With no height stored, the picture draws at its own ratio, which its <img> knows once loaded.
+                const ratio = attrs.height ? null : pictureRatio(e.view, e.state.selection.from);
+                return {
+                    width: attrs.width ?? undefined,
+                    height: attrs.height ?? (attrs.width && ratio ? attrs.width / ratio : undefined),
+                    stretched: attrs.height !== null,
+                    locked: isAspectLocked(e.state, 'figure'),
+                    layout: attrs.layout || 'block',
+                    alignment: attrs.alignment || 'center',
+                    alt: attrs.alt || '',
+                    caption: attrs.caption || '',
+                    mediaName: attrs.mediaName,
+                    inFlowOnly: selectionDrawsInLine(e),
+                };
+            },
         },
-    });
+    );
     const previewUrl = mediaName ? resolveMediaUrl(mediaName) : null;
 
     return (
@@ -168,24 +240,24 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
                 </div>
             )}
 
-            <PropertySection title="Size">
-                <PropertyRow label="Width">
-                    <div className="flex items-center gap-1.5">
-                        <FigureField
-                            type="number"
-                            value={width == null ? '' : cmText(pxToMm(width), 1)}
-                            onCommit={(value) => {
-                                const mm = readCm(value);
-                                if (!Number.isFinite(mm)) return;
-                                editor.commands.updateFigure({
-                                    width: clampFigureWidth(mmToPx(mm), figureMaxWidth(editor, layout)),
-                                });
-                            }}
-                        />
-                        <span className="text-xs text-muted-foreground">cm</span>
-                    </div>
-                </PropertyRow>
-            </PropertySection>
+            <FigureSizeSection
+                width={width}
+                height={height}
+                aspectLocked={locked}
+                onAspectLockChange={(next) => setAspectLocked(editor, 'figure', next)}
+                onChange={(size) => {
+                    // A picture at its own ratio stores its width alone, so it keeps that ratio wherever it draws. An
+                    // edit that stretches it, or one of a picture already stretched, stores both sides.
+                    const asked =
+                        locked && !stretched
+                            ? { width: size.width }
+                            : { width: size.width ?? width, height: size.height ?? height };
+                    // With no width stored, the picture draws at the width its <img> takes, which a height alone would
+                    // stretch once a width is stored.
+                    if (asked.width === undefined) return;
+                    editor.commands.updateFigure(fitFigureSize(asked, figureMaxWidth(editor, layout)));
+                }}
+            />
 
             <FigureLayoutSection
                 layout={layout}

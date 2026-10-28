@@ -18,6 +18,7 @@ import { Button } from '@workspace/ui/components/button';
 import {
     ColorRow,
     FontRow,
+    getMergedValue,
     MergedSelect,
     PropertyCheckbox,
     PropertyNumberInput,
@@ -109,6 +110,13 @@ export function ChartEditor({
         onChange([set(['points', id, String(index), 'color'], color)]);
 
     const setSeriesColor = (id: string, color: string | null) => onChange([set(['series', id, 'color'], color)]);
+
+    // A range series whose values were deleted draws nothing, so it has no row and no say in the Data labels box, which
+    // a chart without a drawn series doesn't show.
+    const drawn = data.series.flatMap((series, i) => (series.values === null ? [] : [{ series, i }]));
+    const labels = getMergedValue(drawn, ({ series }) => chartSeriesStyle(spec, series.id).labels.visible) ?? false;
+    const setLabels = (visible: boolean) =>
+        onChange(drawn.map(({ series }) => set(['series', series.id, 'labels', 'visible'], visible)));
 
     // An axis's rows take their section's name, since a bar chart swaps which section holds which axis.
     type AxisName = 'Horizontal axis' | 'Vertical axis';
@@ -286,9 +294,14 @@ export function ChartEditor({
                 </PropertySection>
             ) : (
                 <PropertySection title="Series">
-                    {/* A range series whose values were deleted draws nothing, so it has no row. */}
-                    {data.series.map((series, i) => {
-                        if (series.values === null) return null;
+                    {drawn.length > 0 && (
+                        <PropertyCheckbox
+                            label="Data labels"
+                            checked={labels}
+                            onCheckedChange={() => setLabels(labels !== true)}
+                        />
+                    )}
+                    {drawn.map(({ series, i }) => {
                         const { color } = chartSeriesStyle(spec, series.id);
                         return (
                             <ColorRow

@@ -1,18 +1,7 @@
-// Audits a docx importer on a corpus: per file, what Word shows, counted from the OOXML with the style chain resolved,
-// beside what reached the imported eigendoc JSON, and the raw OOXML elements the file holds.
-//
-// Usage:
-//   bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]
-//   bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>
-//   bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]
-//
-// The importer module exports `docxToPmJson` with that function's signature. It runs in a Worker, and the source is
-// read in another, so a hang is cut at the time cap and a crash is a result. Every importer is measured by the same
-// code. The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
-//
-// roundtrip is the docx writer's gate, on the round-trip gate the Office audits share. Each file the reader imports is
-// written by the writer (`--writer`, writeDocx's signature) and imported again. The two eigendoc JSON documents, their
-// bands, page and Normal are compared node by node, a picture by its type and pixel size.
+// Audits a docx importer on a corpus. For each file it counts what Word shows, from the OOXML with the style chain
+// resolved, beside what reached the imported eigendoc JSON. Its roundtrip command is the docx writer's gate: each file
+// is imported, written and imported again, and the two documents are compared node by node. Every import runs in a
+// Worker, so a hang is cut at the time cap and a crash is a result. A run with no valid arguments prints its usage.
 
 import * as fs from 'node:fs';
 import path from 'node:path';
@@ -474,7 +463,8 @@ type Chain = { last?: Paragraph; lists: OpenList[]; carry: Span[]; rule?: string
 // where Word draws the link style in the paragraph's look.
 type Link = 'out' | 'bookmark';
 
-type Field = { result: boolean; instr: string; link?: Link; toc?: boolean };
+// `contents`: a table of contents between the body's blocks, whose result the import derives again from the headings.
+type Field = { result: boolean; instr: string; link?: Link; toc?: boolean; contents?: boolean };
 
 function hyperlinkField(instr: string): Link | undefined {
     const args = instr.match(/^\s*HYPERLINK\b(.*)$/is)?.[1];
@@ -907,7 +897,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         };
     };
 
-    const visible = (scope: Scope) => scope.fields.every((field) => field.result);
+    const visible = (scope: Scope) => scope.fields.every((field) => field.result && !field.contents);
 
     // A checkbox control at any level shows its box: Word restricts its content to the glyph, which is no text.
     const checkbox = (sdt: XmlElement, scope: Scope) => {
@@ -1029,6 +1019,9 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                         field.result = true;
                         field.link = hyperlinkField(field.instr);
                         field.toc = /^\s*TOC\b/i.test(field.instr);
+                        const { cell, note } = context.scope;
+                        field.contents =
+                            field.toc && !/\\[ac]\b/i.test(field.instr) && !cell && !note && fields.length === 1;
                     }
                     if (type === 'end') fields.pop();
                     break;
@@ -1490,6 +1483,8 @@ export function auditImported(json: JSONContent, normalFont = DOCUMENT_FONT): Ta
 
 // ── Comparing the two sides ─────────────────────────────────────────────────────────────────────────────────────
 
+// The per-file JSON keeps only this many of the words that differ, so the out folder of a private corpus can stay
+// out of the repo.
 const SAMPLE = 20;
 
 // Text, marks and item numbers match as multisets of words and numbers, so a word moved, a mark on another word or
@@ -1586,7 +1581,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        `Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark, a link to a bookmark alone counting as no link, its link style drawn but in a table of contents; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; font size words in another size than it, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.`,
+        `Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark, a link to a bookmark alone counting as no link, its link style drawn but in a table of contents; a table of contents between the body's blocks is no text, as the import lists the document's headings in it again, while a table of figures' entries are; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; font size words in another size than it, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.`,
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), the text of a SmartArt and the title of a chart, which live in parts of their own, headers, footers and comments.',
         '',
@@ -1768,7 +1763,7 @@ function isReply(data: unknown): data is WorkerReply {
     }
 }
 
-// Another importer may answer with a Promise.
+// The module `--importer` names exports `docxToPmJson` with this signature, and may answer with a Promise.
 type Importer = (
     ...args: Parameters<typeof docxToPmJson>
 ) => ReturnType<typeof docxToPmJson> | Promise<ReturnType<typeof docxToPmJson>>;
@@ -2324,7 +2319,7 @@ async function docxRoundtripChild(
     options: { writer: string; reports: string; dump?: string },
 ): Promise<void> {
     const { docxToPmJson: read } = await import('../lib/import/doc/from-docx');
-    const { pastedFigureMedia } = await import('../lib/export/doc/docx/drawings');
+    const { pastedFigureMedia } = await import('../lib/export/doc/pasted-media');
     const module: unknown = await import(options.writer);
     const write = typeof module === 'object' && module !== null && 'writeDocx' in module && module.writeDocx;
     if (!isWriter(write)) throw new Error(`${options.writer} exports no writeDocx`);

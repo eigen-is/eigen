@@ -20,6 +20,7 @@ const LETTER_LANDSCAPE: PageSetup = {
     headerDistance: 15,
     footerDistance: 10,
     differentFirstPage: false,
+    pageless: false,
 };
 
 function mount() {
@@ -76,6 +77,26 @@ test('Different first page is a page key, and turning it on is an undo step of t
 
     editor.commands.undo();
     expect(readPageSetup(doc.getMap(PAGE_ROOT).toJSON()).differentFirstPage).toBe(false);
+    expect(editor.getText()).toBe('Hello');
+
+    editor.destroy();
+});
+
+// Format › Switch to page-less format and the Page-less tab write the one key, so a peer's margin change meanwhile stays.
+test("a switch to page-less is one key and one undo step of the body, and a peer's margin change survives it", () => {
+    const { doc, undoManager, editor } = mount();
+    editor.commands.insertContent('Hello');
+    const peer = new Y.Doc();
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(doc));
+    peer.getMap(PAGE_ROOT).set('marginLeft', 40);
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(peer));
+
+    writePageSetup(doc, undoManager, DEFAULT_PAGE_SETUP, { ...DEFAULT_PAGE_SETUP, pageless: true });
+    expect(doc.getMap(PAGE_ROOT).toJSON()).toEqual({ marginLeft: 40, pageless: true });
+    expect(undoManager.undoStack.length).toBe(2);
+
+    editor.commands.undo();
+    expect(doc.getMap(PAGE_ROOT).toJSON()).toEqual({ marginLeft: 40 });
     expect(editor.getText()).toBe('Hello');
 
     editor.destroy();

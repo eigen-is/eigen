@@ -89,9 +89,6 @@ export const STACKING_BY_GROUPING: ReadonlyMap<string, ChartStacking> = new Map<
     ['percentStacked', 'percent'],
 ]);
 
-// The format the writer gives a percent-stacked value axis that has none of its own. It reads back as none.
-export const PERCENT_AXIS_FORMAT = '0%';
-
 export const LEGEND_BY_POSITION: ReadonlyMap<string, LegendPosition> = new Map<string, LegendPosition>([
     ['t', 'top'],
     ['b', 'bottom'],
@@ -238,17 +235,32 @@ function chartSpec(
         const fill = type === 'line' ? shape && xmlChild(shape, A_NS, 'ln') : shape;
         return fillColor(fill) ?? accent(nonNegativeInt(val(child(ser, 'idx'))) ?? 0);
     };
+    // A series shows its values as its own c:dLbls says, else as its group's. A point's own c:dLbl is not read, and a
+    // pie keeps the labels it always draws.
+    const shows = (labels: XmlElement | undefined) =>
+        type !== 'pie' &&
+        isOnElement(child(labels, 'delete')) !== true &&
+        isOnElement(child(labels, 'showVal')) === true;
+    const groupShows = shows(child(group, 'dLbls'));
+    const labeled = (ser: XmlElement) => {
+        const own = child(ser, 'dLbls');
+        return own ? shows(own) : groupShows;
+    };
     const style = (ser: XmlElement, index: number): ChartSeriesStyle => ({
         ...DEFAULT_CHART_SERIES_STYLE,
         color: automatic(seriesColor(ser), index),
         line: { smooth: type === 'line' && isOnElement(child(ser, 'smooth')) === true },
         marker: { visible: markers && val(child(child(ser, 'marker'), 'symbol')) !== 'none' },
+        labels: { visible: labeled(ser) },
     });
 
     const [first] = series;
     const categories = series.map((ser) => child(ser, 'cat')).find(Boolean);
+    // The values' own format, which their labels show. A 100% stack's axis shows each value's share of its stack, so
+    // the values carry their own format.
+    // A docx's or pptx's values are their caches, and an xlsx's cells carry their own.
     const numFmt = child(valueAxis, 'numFmt');
-    const linked = !numFmt || isOn(xmlAttr(numFmt, '', 'sourceLinked')) === true;
+    const linked = stacking === 'percent' || !numFmt || isOn(xmlAttr(numFmt, '', 'sourceLinked')) === true;
     const format = linked
         ? data === 'cache'
             ? xmlTrimmedText(child(cacheOf(child(first, 'val')), 'formatCode'))
@@ -280,12 +292,7 @@ function chartSpec(
                 gridlines: {
                     visible: valueAxis ? child(valueAxis, 'majorGridlines') !== undefined : y.gridlines.visible,
                 },
-                labels: {
-                    format:
-                        format && format !== 'General' && !(stacking === 'percent' && format === PERCENT_AXIS_FORMAT)
-                            ? chartLabel(format)
-                            : null,
-                },
+                labels: { format: format && format !== 'General' ? chartLabel(format) : null },
                 scale: {
                     ...y.scale,
                     min: numberOf(val(child(scaling, 'min'))),

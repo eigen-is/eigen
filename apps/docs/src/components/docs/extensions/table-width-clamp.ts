@@ -1,23 +1,32 @@
+// TableWidthClamp keeps every table's stored widths within the page after any change in a writer's tab, a paste's or a
+// collaborator's included. A table in the body keeps its widths, each column at most the paper's width, as a page-less
+// doc's wide table scrolls sideways and keeps them when the doc goes back to pages. A table nested in a list item or a
+// cell, or one in a header or a footer, which has no such strip, is fitted to the text column, every column scaled by
+// one factor to a floor.
+
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
-import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+import { columnFit } from '@workspace/lib/docs/eigendoc';
 
 const DEFAULT_CELL_WIDTH = 100;
 
 type TableWidthClampOptions = {
     textColumnWidth: () => number;
+    paperWidth: () => number;
+    // A header's or a footer's editor, whose tables are all fitted.
+    band: boolean;
 };
 
 export const TableWidthClamp = Extension.create<TableWidthClampOptions>({
     name: 'tableWidthClamp',
 
     addOptions() {
-        return { textColumnWidth: () => Infinity };
+        return { textColumnWidth: () => Infinity, paperWidth: () => Infinity, band: false };
     },
 
     addProseMirrorPlugins() {
         const editor = this.editor;
-        const { textColumnWidth } = this.options;
+        const { textColumnWidth, paperWidth, band } = this.options;
 
         return [
             new Plugin({
@@ -28,11 +37,36 @@ export const TableWidthClamp = Extension.create<TableWidthClampOptions>({
                     const tr = newState.tr;
                     let modified = false;
                     let maxWidth: number | undefined;
+                    let maxColumnWidth: number | undefined;
+                    const setColwidth = (pos: number, attrs: Record<string, unknown>, colwidth: number[]) => {
+                        modified = true;
+                        tr.setNodeMarkup(pos, null, { ...attrs, colwidth });
+                    };
 
                     newState.doc.descendants((node, pos) => {
                         if (node.type.name !== 'table') return;
                         const firstRow = node.firstChild;
                         if (!firstRow) return;
+                        const tableContentStart = pos + 1;
+
+                        if (!band && newState.doc.resolve(pos).depth === 0) {
+                            maxColumnWidth ??= paperWidth();
+                            const cap = maxColumnWidth;
+                            node.descendants((child, childPos) => {
+                                if (child.type.name === 'table') return false;
+                                if (child.type.name !== 'tableCell' && child.type.name !== 'tableHeader') return;
+                                const cw: number[] | null = child.attrs.colwidth;
+                                if (cw?.some((w) => w > cap)) {
+                                    setColwidth(
+                                        tableContentStart + childPos,
+                                        child.attrs,
+                                        cw.map((w) => Math.min(w, cap)),
+                                    );
+                                }
+                                return false;
+                            });
+                            return;
+                        }
                         maxWidth ??= textColumnWidth();
 
                         // Sum column widths from the first row
@@ -47,23 +81,16 @@ export const TableWidthClamp = Extension.create<TableWidthClampOptions>({
 
                         if (totalWidth <= maxWidth) return;
 
-                        const scale = maxWidth / totalWidth;
-                        const tableContentStart = pos + 1;
+                        const fit = columnFit(maxWidth, totalWidth);
 
                         node.descendants((child, childPos) => {
                             if (child.type.name === 'table') return false;
                             if (child.type.name !== 'tableCell' && child.type.name !== 'tableHeader') return;
                             const cw: number[] | null = child.attrs.colwidth;
                             if (!cw) return false;
-                            const scaled = cw.map((w) =>
-                                w ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor(w * scale)) : w,
-                            );
+                            const scaled = cw.map((w) => (w ? fit(w) : w));
                             if (scaled.some((w, i) => w !== cw[i])) {
-                                modified = true;
-                                tr.setNodeMarkup(tableContentStart + childPos, null, {
-                                    ...child.attrs,
-                                    colwidth: scaled,
-                                });
+                                setColwidth(tableContentStart + childPos, child.attrs, scaled);
                             }
                             return false;
                         });

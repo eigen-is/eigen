@@ -1,6 +1,7 @@
-// Docs' Insert menu: links, images, charts, tables, page elements, equations, footnotes and comments. It asks the
-// editor it acts on what its schema holds, so a band's or a note's editor greys out what it can't take. An equation
-// or a footnote goes in once the menu has closed, so the focus lands in the new field rather than on the menu.
+// Docs' Insert menu: links, images, charts, tables, page elements, equations, footnotes, a table of contents and
+// comments. It asks the editor it acts on what its schema holds, so a band's or a note's editor greys out what it
+// can't take, and a page-less doc offers no page break, header, footer or page number. An equation or a footnote goes
+// in once the menu has closed, so the focus lands in the new field rather than on the menu.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
@@ -30,9 +31,10 @@ import {
     Sigma,
     Superscript,
     Table,
+    TableOfContents,
 } from 'lucide-react';
 import { useRef } from 'react';
-import { textColumnWidth } from './extensions/text-column';
+import { pageWidths } from './extensions/text-column';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import type { PageNumberPreset } from './page-numbers';
 import { PageNumberItems } from './page-numbers';
@@ -52,6 +54,7 @@ type InsertMenuProps = {
     inNote: boolean;
     // A band or a note is the active editor, not the body.
     held: boolean;
+    pageless: boolean;
 };
 
 // What a band can't hold is missing from its editor's schema, and a command for a node the schema lacks throws. A note's
@@ -68,6 +71,7 @@ export function InsertMenu({
     onInsertFootnote,
     inNote,
     held,
+    pageless,
     onEnterBand,
     onPageNumbers,
 }: InsertMenuProps) {
@@ -104,11 +108,7 @@ export function InsertMenu({
                         <DropdownMenuItem
                             key={option.value}
                             onClick={() =>
-                                editor
-                                    .chain()
-                                    .focus()
-                                    .insertChart(option.value, textColumnWidth(editor.view.dom) ?? undefined)
-                                    .run()
+                                editor.chain().focus().insertChart(option.value, pageWidths(editor).column).run()
                             }
                         >
                             <option.icon className="h-4 w-4" /> {option.label}
@@ -130,13 +130,15 @@ export function InsertMenu({
             <DropdownMenuItem disabled={inNote} onClick={() => editor.chain().focus().setHorizontalRule().run()}>
                 <Minus className="h-4 w-4" /> Horizontal rule
             </DropdownMenuItem>
-            <DropdownMenuItem
-                disabled={inNote || !('pageBreak' in editor.schema.nodes)}
-                onClick={() => editor.chain().focus().setPageBreak().run()}
-            >
-                <SeparatorHorizontal className="h-4 w-4" /> Page break
-                <DropdownMenuShortcut>{formatForDisplay('Mod+Enter')}</DropdownMenuShortcut>
-            </DropdownMenuItem>
+            {!pageless && (
+                <DropdownMenuItem
+                    disabled={inNote || !('pageBreak' in editor.schema.nodes)}
+                    onClick={() => editor.chain().focus().setPageBreak().run()}
+                >
+                    <SeparatorHorizontal className="h-4 w-4" /> Page break
+                    <DropdownMenuShortcut>{formatForDisplay('Mod+Enter')}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+            )}
             <DropdownMenuItem
                 disabled={inNote}
                 onClick={() =>
@@ -159,26 +161,30 @@ export function InsertMenu({
             >
                 <CodeXml className="h-4 w-4" /> Code block
             </DropdownMenuItem>
-            {onEnterBand && onPageNumbers && (
+            {((onEnterBand && onPageNumbers) || onInsertFootnote) && (
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
                         <PanelsTopLeft className="h-4 w-4" /> Page elements
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
-                        <DropdownMenuItem onClick={() => onEnterBand('header')}>
-                            <PanelTop className="h-4 w-4" /> Header
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onEnterBand('footer')}>
-                            <PanelBottom className="h-4 w-4" /> Footer
-                        </DropdownMenuItem>
-                        <DropdownMenuSub>
-                            <DropdownMenuSubTrigger>
-                                <Hash className="h-4 w-4" /> Page numbers
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent>
-                                <PageNumberItems editor={editor} onPreset={onPageNumbers} />
-                            </DropdownMenuSubContent>
-                        </DropdownMenuSub>
+                        {onEnterBand && onPageNumbers && (
+                            <>
+                                <DropdownMenuItem onClick={() => onEnterBand('header')}>
+                                    <PanelTop className="h-4 w-4" /> Header
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onEnterBand('footer')}>
+                                    <PanelBottom className="h-4 w-4" /> Footer
+                                </DropdownMenuItem>
+                                <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger>
+                                        <Hash className="h-4 w-4" /> Page numbers
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                        <PageNumberItems editor={editor} onPreset={onPageNumbers} />
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                            </>
+                        )}
                         {/* Google's Insert › Page elements › Footnote: none in a band, a code block or a note. */}
                         {onInsertFootnote && (
                             <DropdownMenuItem
@@ -194,6 +200,13 @@ export function InsertMenu({
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
             )}
+            {/* Last before the comment, as Google's Insert lists its table of contents. Only between the body's blocks. */}
+            <DropdownMenuItem
+                disabled={inNote || !active.canInsertTableOfContents}
+                onClick={() => editor.chain().focus().insertTableOfContents().run()}
+            >
+                <TableOfContents className="h-4 w-4" /> Table of contents
+            </DropdownMenuItem>
             {onAddComment && (
                 <>
                     <DropdownMenuSeparator />

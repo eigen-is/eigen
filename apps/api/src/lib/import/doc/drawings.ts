@@ -4,7 +4,7 @@
 
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
-import type { FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
+import type { FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import { isFigureFrameNode, mmToPx, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
@@ -87,8 +87,9 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             }
             const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];
             const cx = roundedInt(ext && xmlAttr(ext, '', 'cx'));
-            const width = cx ? widthPx(cx / EMU_PER_PX, room) : null;
-            figures.push({ type: 'figure', attrs: { mediaName: name, alt, width, ...layout } });
+            const cy = roundedInt(ext && xmlAttr(ext, '', 'cy'));
+            const size = cx ? pictureSize(cx / EMU_PER_PX, cy ? cy / EMU_PER_PX : null, room) : NO_SIZE;
+            figures.push({ type: 'figure', attrs: { mediaName: name, alt, ...size, ...layout } });
             if (anchored && inBand) reader.lost('band-images-unanchored');
         }
         // Only the body holds a chart: a band's schema has none and a note's Insert leaves it out, so there it keeps its
@@ -162,8 +163,10 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
                 if (id) pictureLeftOut(reader, context, context.scope.part.rels.get(id)?.external ? alt : null);
                 continue;
             }
-            const width = vmlWidthPx(xmlAttr(shape, '', 'style') ?? '', reader.columnPx);
-            context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, width } } });
+            const style = xmlAttr(shape, '', 'style') ?? '';
+            const width = vmlPx(style, VML_WIDTH);
+            const size = width ? pictureSize(width, vmlPx(style, VML_HEIGHT), reader.columnPx) : NO_SIZE;
+            context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, ...size } } });
         }
         for (const box of descendants(shape, W_NS, 'txbxContent'))
             for (const item of readBlocks(reader, xmlElements(box), onShapeFill(context.scope)))
@@ -206,9 +209,17 @@ function partPath(id: string | undefined, scope: Scope): string | undefined {
     return rel && !rel.external ? rel.target : undefined;
 }
 
-function widthPx(px: number, columnPx: number): number {
-    return Math.min(columnPx, Math.max(1, Math.round(px)));
+// A picture's size in px off the extent Word drew it at, stretched or not: the width capped at `columnPx`, and the
+// height scaled with it. One with no extent takes its own size once it loads.
+function pictureSize(width: number, height: number | null, columnPx: number): Pick<FigureAttrs, 'width' | 'height'> {
+    const scale = Math.min(1, columnPx / width);
+    return {
+        width: Math.min(columnPx, Math.max(1, Math.round(width))),
+        height: height ? Math.max(1, Math.round(height * scale)) : null,
+    };
 }
+
+const NO_SIZE: Pick<FigureAttrs, 'width' | 'height'> = { width: null, height: null };
 
 const NOT_IMPORTED: DocxChart = { title: '', dropped: [CHART_NOT_IMPORTED] };
 
@@ -294,9 +305,9 @@ function drawingLine(paragraph: XmlElement): JSONContent[] {
     return line;
 }
 
-// A shape's text sits on its fill, which the schema drops.
+// A shape's text sits on its fill, which the schema drops, and holds no table of contents node.
 function onShapeFill(scope: Scope): Scope {
-    return { ...scope, onFill: true };
+    return { ...scope, onFill: true, inShape: true };
 }
 
 // Where Word places an anchor, as the doc holds it. Wrapped beside the text, it sits on the side its alignment or its
@@ -379,11 +390,15 @@ const PX_PER_UNIT = new Map([
     ...[...POINTS_PER_UNIT].map(([unit, points]): [string, number] => [unit, ptToPx(points)]),
 ]);
 
-const VML_WIDTH = new RegExp(`(?:^|;)\\s*width\\s*:\\s*([\\d.]+)(${[...PX_PER_UNIT.keys()].join('|')})?`, 'i');
+const vmlSide = (side: string) =>
+    new RegExp(`(?:^|;)\\s*${side}\\s*:\\s*([\\d.]+)(${[...PX_PER_UNIT.keys()].join('|')})?`, 'i');
+const VML_WIDTH = vmlSide('width');
+const VML_HEIGHT = vmlSide('height');
 
-function vmlWidthPx(style: string, columnPx: number): number | null {
-    const match = style.match(VML_WIDTH);
+// A side a VML shape's style gives, in px; none for one it leaves out or can't be read.
+function vmlPx(style: string, side: RegExp): number | null {
+    const match = style.match(side);
     if (!match) return null;
     const px = Number(match[1]) * (PX_PER_UNIT.get((match[2] ?? 'px').toLowerCase()) ?? 1);
-    return Number.isFinite(px) && px > 0 ? widthPx(px, columnPx) : null;
+    return Number.isFinite(px) && px > 0 ? px : null;
 }

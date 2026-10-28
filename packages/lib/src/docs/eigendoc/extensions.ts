@@ -1,3 +1,6 @@
+// The Docs schema: every node, mark and extension a doc holds. The editor builds it with its own options, and the server
+// builds it headless to parse, render and export a stored doc. So a node one side writes is one the other can read.
+
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Highlight from '@tiptap/extension-highlight';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
@@ -24,6 +27,7 @@ import { PageNumberNode } from './nodes/page-number';
 import { EigenParagraphFormat } from './nodes/paragraph-format';
 import { SmallMark } from './nodes/small-mark';
 import { EigenTableCell, EigenTableHeader } from './nodes/table-cell';
+import { TableOfContentsNode } from './nodes/table-of-contents';
 import { SubtitleNode, TitleNode } from './nodes/title';
 import type { NormalStyle } from './normal-style';
 import { PROSE_TEXTBLOCKS } from './paragraph-format';
@@ -77,6 +81,7 @@ export function getDocExtensions(options?: {
         EquationNode,
         PageBreakNode,
         PageNumberNode,
+        TableOfContentsNode,
         FootnoteNode,
         // ⇧⌘H is Find and replace, as in Google Docs, which binds no key to highlighting.
         Highlight.extend({ addKeyboardShortcuts: () => ({}) }).configure({ multicolor: true }),

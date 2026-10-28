@@ -1,3 +1,8 @@
+// A doc's Normal text: the font, size, spacing and color that text and paragraphs without their own draw. A doc keeps
+// it in a Y.Map any peer writes, so readNormalStyle reads it back to known values only. The editor, the previews and
+// the exports, for example, draw the body through normalStyleProperties.
+
+import { isHexColor } from '../../constants/colors';
 import {
     DOCUMENT_FONT,
     DOCUMENT_FONT_SIZE,
@@ -7,7 +12,7 @@ import {
 } from '../../constants/fonts';
 import { cssLineHeight, DOCUMENT_PARAGRAPH_FORMAT, readParagraphFormat } from './paragraph-format';
 
-// The doc's Normal text, which text without a font, size or colour mark and a paragraph without a format draws: a
+// The doc's Normal text, which text without a font, size or color mark and a paragraph without a format draws: a
 // bundled font's name, the size and spacing in pt, line spacing a multiple, as a paragraph's.
 export type NormalStyle = {
     font: string;
@@ -31,10 +36,9 @@ export const DEFAULT_NORMAL_STYLE: NormalStyle = {
 // The doc's Y.Map root holding its Normal, one key per field of NormalStyle, so two people changing two of them merge.
 export const STYLE_ROOT = 'style';
 
-const HEX_COLOR = /^#[0-9a-f]{6}$/;
-
 // The one reader of a stored Normal (callers pass `map.toJSON()`): any peer writes the map, and the values reach CSS,
-// so each key is read as a run's size and a paragraph's format are, and a font or colour only from the vocabulary.
+// so each key is read as a run's size and a paragraph's format are, and a font or color only from the vocabulary.
+// The color is six lower-case hex digits, the one spelling Eigen's writers store.
 export function readNormalStyle(record: Record<string, unknown>): NormalStyle {
     const { font, color } = record;
     const { lineSpacing, spaceBefore, spaceAfter } = readParagraphFormat(record);
@@ -44,7 +48,10 @@ export function readNormalStyle(record: Record<string, unknown>): NormalStyle {
         lineSpacing: lineSpacing ?? DEFAULT_NORMAL_STYLE.lineSpacing,
         spaceBefore: spaceBefore ?? DEFAULT_NORMAL_STYLE.spaceBefore,
         spaceAfter: spaceAfter ?? DEFAULT_NORMAL_STYLE.spaceAfter,
-        color: typeof color === 'string' && HEX_COLOR.test(color) ? color : DEFAULT_NORMAL_STYLE.color,
+        color:
+            typeof color === 'string' && isHexColor(color, [6]) && color === color.toLowerCase()
+                ? color
+                : DEFAULT_NORMAL_STYLE.color,
     };
 }
 

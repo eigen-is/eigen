@@ -4,6 +4,7 @@
 import type { JSONContent } from '@tiptap/core';
 import {
     CELL_BORDER_SIDES,
+    columnFit,
     MIN_TABLE_COLUMN_PX,
     readCellBackground,
     readCellBorder,
@@ -100,7 +101,10 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
         cells.some((cell) => CELL_BORDER_SIDES.some(([name]) => readCellBorder(cell.node.attrs?.[name]))),
     );
 
-    const { dxa, fixed } = gridWidths(widths, columnPx);
+    // A page-less doc's table in the body, outside a list or a quote, keeps its widths, as the editor draws it past the
+    // text; nested ones fit their column, as there.
+    const wide = context.pkg.pageless && context.positions && context.depth === 0 && context.quotes === 0;
+    const { dxa, fixed } = gridWidths(widths, columnPx, wide ? context.pkg.paper / TWIPS_PER_PX : undefined);
     const spanWidth = (column: number, colspan: number) =>
         dxa.slice(column, column + colspan).reduce((sum, width) => sum + width, 0);
     // The merge each covered position continues.
@@ -177,16 +181,20 @@ function tcBorders(node: JSONContent): string {
     return `<w:tcBorders>${sideXml('top', attrs['borderTop'])}${sideXml('left', attrs['borderLeft'])}${sideXml('bottom', attrs['borderBottom'])}${sideXml('right', attrs['borderRight'])}</w:tcBorders>`;
 }
 
-// As TableWidthClamp: known columns scale down to the column, floored; unknown ones share the rest, as width: 100%.
-function gridWidths(widths: (number | undefined)[], columnPx: number): { dxa: number[]; fixed: boolean } {
+// Known columns fit the column, as the editor's table does, or with `paperPx` keep their widths within the paper; unknown
+// ones share what the known ones leave, as width: 100%.
+function gridWidths(
+    widths: (number | undefined)[],
+    columnPx: number,
+    paperPx?: number,
+): { dxa: number[]; fixed: boolean } {
     const known = widths.filter((width) => width !== undefined);
     const sum = known.reduce((total, width) => total + width, 0);
     const unknown = widths.length - known.length;
-    const scale = sum > columnPx ? columnPx / sum : 1;
-    const share = unknown > 0 ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor((columnPx - sum * scale) / unknown)) : 0;
-    const px = widths.map((width) =>
-        width === undefined ? share : scale < 1 ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor(width * scale)) : width,
-    );
+    const fit = paperPx === undefined ? columnFit(columnPx, sum) : (width: number) => Math.min(width, paperPx);
+    const fitted = paperPx === undefined ? Math.min(sum, columnPx) : sum;
+    const share = unknown > 0 ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor((columnPx - fitted) / unknown)) : 0;
+    const px = widths.map((width) => (width === undefined ? share : fit(width)));
     return { dxa: px.map((width) => Math.round(width * TWIPS_PER_PX)), fixed: unknown === 0 };
 }
 

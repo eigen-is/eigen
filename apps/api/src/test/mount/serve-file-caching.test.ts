@@ -84,11 +84,11 @@ describe('Serve-file caching', () => {
         const oldEtag = `"${sha256('first body')}"`;
 
         const contentRes = await authedRequest(token, `/editor/${ownerId}/${mountId}/${uploaded.id}/content`);
-        const { updatedAt } = await contentRes.json();
+        const { etag } = await contentRes.json();
         const save = await authedRequest(token, `/editor/${ownerId}/${mountId}/${uploaded.id}/content`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: 'second body', expectedUpdatedAt: updatedAt }),
+            body: JSON.stringify({ content: 'second body', expectedEtag: etag }),
         });
         expect(save.status).toBe(200);
 

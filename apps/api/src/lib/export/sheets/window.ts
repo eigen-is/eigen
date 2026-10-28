@@ -41,14 +41,17 @@ export type FloatingObject = { item: SheetFloatingItem; box: Box; bounds: Bounds
 
 // `rows` and `cols` are the shown tracks the window renders, in order. `range` is the rectangle they span, the hidden
 // tracks inside it included, and null for a sheet with nothing but images or charts. `offset` is the pixels from A1 to
-// the window's first cell, which the overlay subtracts from each stored box. `floating` is the sheet's images and
-// charts in paint order. `cells` is what the window costs.
+// the window's first cell, which the overlay subtracts from each stored box. `budgetEnd` is the last row and column of
+// the budget's box: as many shown tracks from the window's first as the budget holds, past a small sheet too. The track
+// maps reach it, and the preview clips its overlay there. `floating` is the sheet's images and charts in paint order.
+// `cells` is what the window costs.
 export type WindowedSheet = {
     sheet: Sheet;
     rows: number[];
     cols: number[];
     range: GridRange | null;
     offset: { left: number; top: number };
+    budgetEnd: { row: number; col: number };
     floating: FloatingObject[];
     truncated: boolean;
     cells: number;
@@ -91,14 +94,17 @@ export function windowedSheet(
     const floating = floatingObjects(sheet);
     const empty = budgetFor(0, 0);
     if (!bounds) {
-        const { maxRows, maxCols } = empty;
-        const blank = tracksOf([0, maxRows - 1], [0, maxCols - 1]);
+        const budgetEnd = {
+            row: shownTracks(0, REFERENCE_ROW_COUNT - 1, empty.maxRows, config.rowhidden).at(-1) ?? -1,
+            col: shownTracks(0, REFERENCE_COLUMN_COUNT - 1, empty.maxCols, config.colhidden).at(-1) ?? -1,
+        };
         return {
-            sheet: blank,
+            sheet: tracksOf([0, budgetEnd.row], [0, budgetEnd.col]),
             rows: [],
             cols: [],
             range: null,
             offset: { left: 0, top: 0 },
+            budgetEnd,
             floating,
             truncated: false,
             cells: 0,
@@ -136,11 +142,15 @@ export function windowedSheet(
         firstCol,
         keptCols < shownCols ? (cols.at(-1) ?? firstCol) : bounds.maxCol,
     ];
-    // The track sizes reach a budget's worth of tracks past a small sheet, as far as the preview's overlay box.
-    const tracks = tracksOf(
-        [firstRow, Math.min(REFERENCE_ROW_COUNT - 1, Math.max(range[1], firstRow + budget.maxRows - 1))],
-        [firstCol, Math.min(REFERENCE_COLUMN_COUNT - 1, Math.max(range[3], firstCol + budget.maxCols - 1))],
-    );
+    // The budget's box counts shown tracks as the window does, so it holds every one the window keeps. A budget of no
+    // columns or rows, where every one is hidden, still reaches the range's hidden ones.
+    const budgetRows = shownTracks(firstRow, REFERENCE_ROW_COUNT - 1, budget.maxRows, config.rowhidden);
+    const budgetCols = shownTracks(firstCol, REFERENCE_COLUMN_COUNT - 1, budget.maxCols, config.colhidden);
+    const budgetEnd = {
+        row: Math.max(range[1], budgetRows.at(-1) ?? firstRow - 1),
+        col: Math.max(range[3], budgetCols.at(-1) ?? firstCol - 1),
+    };
+    const tracks = tracksOf([firstRow, budgetEnd.row], [firstCol, budgetEnd.col]);
     const windowed: Sheet = {
         ...tracks,
         celldata: sheet.celldata?.filter(({ r, c }) => inRange(range, r, c)),
@@ -157,6 +167,7 @@ export function windowedSheet(
         cols,
         range,
         offset: { left: left.start, top: top.start },
+        budgetEnd,
         floating,
         truncated: keptRows < shownRows || keptCols < shownCols,
         cells: Math.max(1, keptRows) * rowCells,
@@ -336,21 +347,22 @@ function windowBorders(
     return kept;
 }
 
-// Each merge cut to the window, without the ones that overlap an earlier one in reading order, as Excel forbids
-// overlapping merges. The sweep keeps, for each column, the last row a kept merge covers, so a merge overlaps a kept
-// one exactly when one of its columns is covered at its first row. A merge as wide as the grid would make a scan of
-// its columns cost the window's width for each merge, so a segment tree answers for the whole span in log time.
+// The merges that meet the window, each as stored. Excel forbids overlapping merges, so a merge that overlaps an
+// earlier one in reading order is left out. A merge overlaps a kept one exactly when one of its columns is covered at
+// its first row. Two merges that overlap outside the window overlap inside it too, since both start inside it. A scan
+// of a merge's columns would cost the window's width for a merge as wide as the grid, so a segment tree answers in log
+// time.
 function windowMerges(merges: MergeCell[], range: GridRange): Record<string, MergeCell> {
     const [firstRow, lastRow, firstCol, lastCol] = range;
-    const clipped: MergeCell[] = [];
-    for (const m of merges) {
-        const r0 = Math.max(m.r, firstRow);
-        const c0 = Math.max(m.c, firstCol);
-        const r1 = Math.min(m.r + m.rs - 1, lastRow);
-        const c1 = Math.min(m.c + m.cs - 1, lastCol);
-        if (r0 <= r1 && c0 <= c1) clipped.push({ r: r0, c: c0, rs: r1 - r0 + 1, cs: c1 - c0 + 1 });
+    const clipped: { stored: MergeCell; m: MergeCell }[] = [];
+    for (const stored of merges) {
+        const r0 = Math.max(stored.r, firstRow);
+        const c0 = Math.max(stored.c, firstCol);
+        const r1 = Math.min(stored.r + stored.rs - 1, lastRow);
+        const c1 = Math.min(stored.c + stored.cs - 1, lastCol);
+        if (r0 <= r1 && c0 <= c1) clipped.push({ stored, m: { r: r0, c: c0, rs: r1 - r0 + 1, cs: c1 - c0 + 1 } });
     }
-    clipped.sort((a, b) => a.r - b.r || a.c - b.c);
+    clipped.sort((a, b) => a.m.r - b.m.r || a.m.c - b.m.c);
     // A node holds the last row covered anywhere in its span, and the last row a kept merge covers all of its span to.
     // A merge is kept only when its columns are covered above its first row, so its last row is past each of theirs.
     const width = lastCol - firstCol + 1;
@@ -375,11 +387,11 @@ function windowMerges(merges: MergeCell[], range: GridRange): Record<string, Mer
         cover(2 * node + 1, mid + 1, hi, from, to, row);
     };
     const kept: Record<string, MergeCell> = {};
-    for (const m of clipped) {
+    for (const { stored, m } of clipped) {
         const [from, to] = [m.c - firstCol, m.c - firstCol + m.cs - 1];
         if (coveredTo(1, 0, width - 1, from, to) >= m.r) continue;
         cover(1, 0, width - 1, from, to, m.r + m.rs - 1);
-        kept[`${m.r}_${m.c}`] = m;
+        kept[`${stored.r}_${stored.c}`] = stored;
     }
     return kept;
 }

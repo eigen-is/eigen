@@ -1,3 +1,8 @@
+// The formula parser: it compiles formula text through the grammar into a function and evaluates it.
+// It answers the grammar's callbacks for names, cell and range reads, and error literals, and asks its
+// listeners for cell values, so the same parser serves the editor and the server. The FormulaEngine
+// owns one, for example, and turns each result into a value or an error string.
+
 import { TinyEmitter } from 'tiny-emitter';
 import type {
     CellInfo,
@@ -9,7 +14,7 @@ import type {
     ParserOptions,
     RangeCell,
 } from '../types';
-import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, valueIsError } from './error';
+import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, toFormulaError } from './error';
 import evaluateByOperator, { callFunction } from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
 import { extractLabel, offsetCoordinate, offsetRange, toLabel } from './helper/cell';
@@ -31,7 +36,9 @@ class Parser {
             toNumber,
             trimEdges,
             invertNumber,
-            throwError: (errorName: string) => this._throwError(errorName),
+            // An error typed into a formula, such as `#N/A`, is a value like a computed one, so ISERROR,
+            // ERROR.TYPE or IFERROR around it can inspect it, as in Excel.
+            errorValue: (errorName: string) => toFormulaError(Error(errorName)),
             callVariable: (variable: string) => this._callVariable(variable),
             evaluateByOperator,
             callFunction,
@@ -190,14 +197,6 @@ class Parser {
         );
 
         return value;
-    }
-
-    private _throwError(errorName: string): never {
-        if (valueIsError(errorName)) {
-            throw Error(errorName);
-        }
-
-        throw Error(ERROR);
     }
 }
 

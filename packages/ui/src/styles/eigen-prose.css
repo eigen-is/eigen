@@ -189,6 +189,7 @@
     p[data-type="subtitle"],
     hr,
     .page-break,
+    nav[data-type="table-of-contents"],
     blockquote,
     pre,
     table,
@@ -265,6 +266,45 @@
         color: var(--color-muted-foreground);
         text-align: center;
         padding-top: 0.25em;
+    }
+
+    /* Table of contents: the outline's headings, a line each, indented by level. The docx writer reads the indents */
+
+    nav[data-type="table-of-contents"] {
+        margin: 1em 0;
+    }
+
+    /* An entry is body text, not a link's look, until the pointer is on it */
+    nav[data-type="table-of-contents"] > [data-level] {
+        display: block;
+        padding: 0.15em 0;
+        color: inherit;
+        text-decoration: none;
+    }
+
+    nav[data-type="table-of-contents"] > a[data-level]:hover {
+        text-decoration: underline;
+        cursor: pointer;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level="2"] {
+        padding-left: 1.5em;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level="3"] {
+        padding-left: 3em;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level="4"] {
+        padding-left: 4.5em;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level="5"] {
+        padding-left: 6em;
+    }
+
+    nav[data-type="table-of-contents"] > [data-level="6"] {
+        padding-left: 7.5em;
     }
 
     /* Images */
@@ -510,11 +550,13 @@
 
     a {
         color: var(--color-link, #2563eb);
-        text-decoration: none;
+        text-decoration: underline;
     }
 
-    a:hover {
-        text-decoration: underline;
+    /* A note's number and its link back, in the HTML download and the drive preview, are links but not text. */
+    sup > a[href^="#fn-"],
+    a[href^="#fnref-"] {
+        text-decoration: none;
     }
 
     ul,
@@ -594,8 +636,10 @@
 
     /* A figure in front of or behind the text is placed from its paragraph's padding box. That box holds the indent
        and the space before. The paragraph makes no stacking context, so the two layers stack in the page's. The
-       renderers write the offsets and the width inline, through figureLayoutStyle. Within a layer, document order
-       breaks the tie. The two layouts are lib's POSITIONED_LAYOUTS, written out here as CSS can't import that list. */
+       renderers write the offsets and the width inline, through figureLayoutStyle; the editor's node view writes the
+       left and the width as custom properties instead, which the docs app's globals.css draws, out of the exports.
+       Within a layer, document order breaks the tie. The two layouts are lib's POSITIONED_LAYOUTS, written out here
+       as CSS can't import that list. */
     p,
     h1,
     h2,

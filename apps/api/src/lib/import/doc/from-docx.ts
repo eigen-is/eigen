@@ -5,7 +5,13 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { BAND_EXCLUDED_NODES, BAND_ROOTS, bandHasContent, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
+import {
+    BAND_EXCLUDED_NODES,
+    BAND_ROOTS,
+    bandHasContent,
+    PROSE_TEXTBLOCKS,
+    readOutline,
+} from '@workspace/lib/docs/eigendoc';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { docSchema } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
@@ -81,6 +87,15 @@ export function readDocx(
             return node;
         };
         const doc = checked(content);
+        // Each table of contents lists the doc's headings now, which differ from the entries Word saved when the file
+        // lists other styles (\t), outline levels set by hand (\u), or headings renamed since Word last updated it.
+        // A numbered heading's number is set off by a tab in Word's entry and by a space in the heading's text.
+        const words = (texts: string[]) => texts.map((text) => text.replace(/\s+/g, ' ').trim()).join('\n');
+        const outline = readOutline(doc);
+        for (const toc of reader.tocs) {
+            const derived = outline.filter(({ level }) => level <= toc.levels).map(({ text }) => text);
+            if (words(derived) !== words(toc.saved)) losses.lost('toc-entries-changed');
+        }
         const bands: Partial<Record<BandRoot, Node>> = {};
         for (const [root, blocks] of bandContent) {
             const band = checked(blocks);

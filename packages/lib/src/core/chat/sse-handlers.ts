@@ -1,3 +1,6 @@
+// Handles the chat events from the stream: a message change refetches the room's messages, and a
+// changed comment index refetches the comment list of the document it belongs to.
+
 import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';

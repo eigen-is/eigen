@@ -1,3 +1,8 @@
+// Writes the files of a release install from the API image: the eigen launcher, the Compose file and the helper
+// files a server may need, such as the fail2ban filters, plus a starter .env.production that pins this release.
+// The launcher runs it when it sits alone in a new folder, and again with --force, for example when an update or a
+// restore moves the install to another build.
+
 import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { readEnvFile, writeEnvFile } from './env-file';
@@ -54,8 +59,8 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
         renameSync(temp, target);
     }
 
-    // A local build's file names no release until it moves to one: a file without a version is a file bootstrap owns
-    // the pins of.
+    // A local build's .env.production names no release until the install moves to one. So bootstrap writes the
+    // release pins into any file that has no version yet.
     const pin = !existing.has('EIGEN_VERSION');
     // A build of a channel pins the channel, which ./eigen update then follows.
     const version = process.env['EIGEN_CHANNEL'] || VERSION;

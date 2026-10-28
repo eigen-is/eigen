@@ -1,9 +1,7 @@
-// Pure pattern helpers for the custom-format dialogs. The date/time dialog
-// edits a numfmt pattern as an ordered list of segments — token chips with a
-// selected variant, and literal text between them — so it needs an exact
-// pattern ⇄ segments round-trip. Tokens follow the Google Sheets builder:
-// uppercase M is month and lowercase m is minute, h is 12-hour and H is
-// 24-hour (numfmt itself decides 12h/24h by AM/PM presence at render time).
+// Pattern helpers for the custom number, date and currency format dialogs. The date and time dialog edits a format
+// pattern as a list of segments: token chips, each with a chosen variant, and the literal text between them. So it
+// needs a pattern to turn into segments and back exactly. Tokens follow the Google Sheets builder: M is month and m
+// is minute, h is the 12-hour clock and H the 24-hour one, though numfmt itself picks the clock from an AM/PM part.
 
 import { update } from '../../engine/format';
 
@@ -273,7 +271,7 @@ export function previewPattern(
     try {
         return { ok: true, text: update(pattern, value) };
     } catch (e) {
-        return { ok: false, error: (e as Error).message };
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
 }
 

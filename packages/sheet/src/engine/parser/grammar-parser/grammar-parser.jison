@@ -1,22 +1,28 @@
-/* NOT the source of the shipped parser: grammar-parser.ts is hand-maintained and has diverged
-   (sheet-qualified cell regexes, quoted-string tail, NUMBER rule, bare-ref and unary-sign fixes). */
-/* description: Parses end evaluates mathematical expressions. */
+/* The formula grammar, kept beside grammar-parser.ts, which is the source: nothing generates from this file, and
+   regenerating from it would lose what only the TypeScript holds. Each lexer rule and production here matches one
+   there, in the same order, and an edit to one is made to both. What only the TypeScript holds:
+   - Its actions compile each production to a thunk instead of evaluating it, and the top-level formula reads a
+     bare reference to an empty cell as 0.
+   - Its lexer gives back a bare number the RELATIVE_CELL rule matched unless it is a row in a range, such as 1:3.
+   - Its parse table is edited by hand. The unary sign also reduces before '^', so -2^2 is (-2)^2 as in Excel, which
+     no precedence order here can say. The states of the empty-argument productions were added by hand too. */
 /* lexical grammar */
 %lex
+SHEET                                                                                           (?:[A-Za-z0-9_\u00C0-\u02AF]+|['](?:(?![']).|[']['])*['])[!]
 %%
 \s+                                                                                             {/* skip whitespace */}
 '"'("\\"["]|[^"])*'"'                                                                           {return 'STRING';}
-"'"('\\'[']|[^'])*"'"                                                                           {return 'STRING';}
-[A-Za-z]{1,}[A-Za-z_0-9\.]+(?=[(])                                                              {return 'FUNCTION';}
+"'"('\\'[']|[^'])*"'"[^'!]                                                                      {return 'STRING';}
+[A-Za-z_][A-Za-z_0-9\.]+(?=[(])                                                                 {return 'FUNCTION';}
 '#'[A-Z0-9\/]+('!'|'?')?                                                                        {return 'ERROR';}
-'$'[A-Za-z]+'$'[0-9]+                                                                           {return 'ABSOLUTE_CELL';}
-'$'[A-Za-z]+[0-9]+                                                                              {return 'MIXED_CELL';}
-[A-Za-z]+'$'[0-9]+                                                                              {return 'MIXED_CELL';}
-[A-Za-z]+[0-9]+                                                                                 {return 'RELATIVE_CELL';}
+{SHEET}?'$'[A-Za-z]+'$'[0-9]+                                                                   {return 'ABSOLUTE_CELL';}
+{SHEET}?'$'[A-Za-z]+[0-9]*                                                                      {return 'MIXED_CELL';}
+{SHEET}?[A-Za-z]*'$'[0-9]+                                                                      {return 'MIXED_CELL';}
+{SHEET}?(?:[A-Za-z]+[0-9]*|[A-Za-z]*[0-9]+)(?!\d)(?!\.)                                          {return 'RELATIVE_CELL';}
 [A-Za-z\.]+(?=[(])                                                                              {return 'FUNCTION';}
 [A-Za-z]{1,}[A-Za-z_0-9]+                                                                       {return 'VARIABLE';}
 [A-Za-z_]+                                                                                      {return 'VARIABLE';}
-[0-9]*\.?[0-9]+                                                                                 {return 'NUMBER';}
+(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?                                             {return 'NUMBER';}
 '['(.*)?']'                                                                                     {return 'ARRAY';}
 "&"                                                                                             {return '&';}
 " "                                                                                             {return ' ';}
@@ -33,7 +39,7 @@
 ")"                                                                                             {return ')';}
 ">"                                                                                             {return '>';}
 "<"                                                                                             {return '<';}
-"NOT"                                                                                           {return 'NOT';}
+"NOT"\b                                                                                         {return 'NOT';}
 '"'                                                                                             {return '"';}
 "'"                                                                                             {return "'";}
 "!"                                                                                             {return "!";}
@@ -236,7 +242,7 @@ number
 
 error
   : ERROR {
-      $$ = yy.throwError($1);
+      $$ = yy.errorValue($1);
     }
 ;
 

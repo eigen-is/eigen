@@ -19,6 +19,7 @@ import {
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { Range, RangeOrWholeAxis, Selection } from '../types';
@@ -385,7 +386,6 @@ function mergeMove(
     mc: MergeCell,
     columnseleted: number[],
     rowseleted: number[],
-    s: Partial<Selection>,
     top: number,
     height: number,
     left: number,
@@ -428,11 +428,7 @@ function mergeMove(
 
                 // Scroll down or compensate upward when centering
                 if (rowseleted[1] >= row_st && rowseleted[1] <= row_ed) {
-                    if (s.row_focus! >= row_st && s.row_focus! <= row_ed) {
-                        height = row - top;
-                    } else {
-                        height = row - top;
-                    }
+                    height = row - top;
 
                     rowseleted[1] = row_ed;
                 }
@@ -447,11 +443,7 @@ function mergeMove(
 
                 // Fill downward when sliding right or sliding left while centered
                 if (columnseleted[1] >= col_st && columnseleted[1] <= col_ed) {
-                    if (s.column_focus! >= col_st && s.column_focus! <= col_ed) {
-                        width = col - left;
-                    } else {
-                        width = col - left;
-                    }
+                    width = col - left;
 
                     columnseleted[1] = col_ed;
                 }
@@ -471,7 +463,6 @@ export function mergeMoveMain(
     ctx: Context,
     columnseleted: number[],
     rowseleted: number[],
-    s: Partial<Selection>,
     top: number,
     height: number,
     left: number,
@@ -502,7 +493,7 @@ export function mergeMoveMain(
                 continue;
             }
 
-            const changeparam = mergeMove(ctx, mc, columnseleted, rowseleted, s, top, height, left, width);
+            const changeparam = mergeMove(ctx, mc, columnseleted, rowseleted, top, height, left, width);
 
             if (changeparam != null) {
                 mergeMoveData[key] = mc;
@@ -552,8 +543,8 @@ export function updateCell(
     if (!flowdata) return;
 
     // Data validation: block input when the entered data is invalid
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const { dataVerification } = ctx.sheets[index];
+    const sheet = getSheet(ctx);
+    const { dataVerification } = sheet;
     if (!isNil(dataVerification)) {
         const dvItem = dataVerification[`${r}_${c}`];
         if (!isNil(dvItem) && dvItem.prohibitInput && !validateCellData(ctx, dvItem, inputText)) {
@@ -629,7 +620,7 @@ export function updateCell(
     }
 
     const d = flowdata;
-    if (isPlainObject(curv)) {
+    if (curv && isPlainObject(curv)) {
         if (!isCurInline) {
             if (isFormula(value)) {
                 const v = execfunction(ctx, value, r, c, undefined, undefined, true);
@@ -650,7 +641,7 @@ export function updateCell(
                 // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
                 else {
                     for (const attr of Object.keys(value)) {
-                        curv![attr as keyof Cell] = value[attr];
+                        curv[attr as keyof Cell] = value[attr];
                     }
                 }
             } else {
@@ -711,7 +702,7 @@ export function updateCell(
     if (written && ((cellWrapsText(written) && written.v) || isInlineStringCell(written))) {
         const { defaultrowlen } = ctx;
 
-        const cfg = (ctx.sheets[index].config ??= {});
+        const cfg = (sheet.config ??= {});
         if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
             const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
 

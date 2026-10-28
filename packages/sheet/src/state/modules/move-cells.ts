@@ -1,6 +1,11 @@
+// Dragging a selection by its border to move the cells: onCellsMoveStart grabs it, onCellsMove draws where it
+// would land, and onCellsMoveEnd moves the values, merges, borders, links and conditional-format ranges there.
+// The overlay's mouse handlers call all three.
+
 import { cloneDeep, set } from 'es-toolkit/compat';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import type { Cell, SingleRange } from '../../engine/types';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
@@ -63,9 +68,10 @@ export function onCellsMoveStart(
 
     // The move preview renders once per overlay pane region; write every copy —
     // each region's clip shows exactly its portion.
-    const eles = container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-move');
+    const eles = container.querySelectorAll('.sheet-cell-selected-move');
     if (eles.length === 0) return;
     for (const ele of eles) {
+        if (!(ele instanceof HTMLElement)) continue;
         ele.style.left = `${col_pre}px`;
         ele.style.top = `${row_pre}px`;
         ele.style.width = `${col - col_pre - 1}px`;
@@ -138,7 +144,8 @@ export function onCellsMove(
     row_pre = row_s - 1 === -1 ? 0 : ctx.visibledatarow[row_s - 1];
     row = ctx.visibledatarow[row_e];
 
-    for (const ele of container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-move')) {
+    for (const ele of container.querySelectorAll('.sheet-cell-selected-move')) {
+        if (!(ele instanceof HTMLElement)) continue;
         ele.style.left = `${col_pre}px`;
         ele.style.top = `${row_pre}px`;
         ele.style.width = `${col - col_pre - 2}px`;
@@ -157,7 +164,8 @@ export function onCellsMoveEnd(
     // Change selection box position and replace target cells
     if (!ctx.cellSelectMoving) return;
     ctx.cellSelectMoving = false;
-    for (const ele of container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-move')) {
+    for (const ele of container.querySelectorAll('.sheet-cell-selected-move')) {
+        if (!(ele instanceof HTMLElement)) continue;
         ele.style.display = 'none';
     }
     if (globalCache.dragCellStartPos != null) {
@@ -259,7 +267,7 @@ export function onCellsMoveEnd(
         }
     > = {};
     // Delete data from original position
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const sheet = getSheet(ctx);
     for (let r = last.row[0]; r <= last.row[1]; r += 1) {
         for (let c = last.column[0]; c <= last.column[1]; c += 1) {
             const cellData: Cell | null = d[r][c];
@@ -272,10 +280,10 @@ export function onCellsMoveEnd(
             }
 
             d[r][c] = null;
-            const link = ctx.sheets[index].hyperlink?.[`${r}_${c}`];
+            const link = sheet.hyperlink?.[`${r}_${c}`];
             if (link) {
                 hyperLinkList[`${r}_${c}`] = link;
-                delete ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].hyperlink?.[`${r}_${c}`];
+                delete sheet.hyperlink?.[`${r}_${c}`];
             }
         }
     }
@@ -311,19 +319,15 @@ export function onCellsMoveEnd(
                 }
             }
             d[r + row_s][c + col_s] = value;
-            if (hyperLinkList?.[`${r + last.row[0]}_${c + last.column[0]}`]) {
-                ctx.sheets[index].hyperlink![`${r + row_s}_${c + col_s}`] = hyperLinkList?.[
-                    `${r + last.row[0]}_${c + last.column[0]}`
-                ] as {
-                    linkType: string;
-                    linkAddress: string;
-                };
+            const link = hyperLinkList[`${r + last.row[0]}_${c + last.column[0]}`];
+            if (link) {
+                (sheet.hyperlink ??= {})[`${r + row_s}_${c + col_s}`] = link;
             }
         }
     }
 
     // Conditional format
-    const cdformat = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].conditionalFormatRules ?? [];
+    const cdformat = sheet.conditionalFormatRules ?? [];
     if (cdformat != null && cdformat.length > 0) {
         for (let i = 0; i < cdformat.length; i += 1) {
             const cdformat_cellrange = cdformat[i].cellrange;

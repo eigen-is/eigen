@@ -1,4 +1,7 @@
 #!/bin/sh
+# Starts Dovecot, Eigen's IMAP server, over the Maildirs in data/. It makes a self-signed certificate when there is
+# none, gives the TLS key to group 1000 so the server backup can read it, waits for the API that checks the
+# sign-ins, and reloads Dovecot whenever a new certificate lands.
 set -e
 
 echo "=== Eigen Dovecot Container ==="

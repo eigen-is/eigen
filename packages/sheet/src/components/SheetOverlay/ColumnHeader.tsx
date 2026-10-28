@@ -1,3 +1,8 @@
+// The column header strip above the grid: the column letters, the hovered and selected columns, the
+// resize handle (a drag resizes, a double click fits the width) and the freeze handle. Its mouse
+// handlers hand the press to the state layer, such as handleColumnHeaderMouseDown, and a right click
+// or long press opens the column menu. RowHeader is its twin on the other axis.
+
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { ChevronDown } from 'lucide-react';
 import type React from 'react';
@@ -65,7 +70,9 @@ export const ColumnHeader: React.FC = () => {
             if (context.colsResizing) {
                 return;
             }
-            const mouseX = e.pageX - containerRef.current!.getBoundingClientRect().left - window.scrollX;
+            const container = containerRef.current;
+            if (!container) return;
+            const mouseX = e.pageX - container.getBoundingClientRect().left - window.scrollX;
             const _x = mouseX + refs.globalCache.scrollLeft;
             const freeze = refs.globalCache.freezen?.[context.currentSheetId];
             const { x } = fixPositionOnFrozenCells(freeze, _x, 0, mouseX, 0);
@@ -92,13 +99,16 @@ export const ColumnHeader: React.FC = () => {
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
             setContext((draftCtx) => {
+                const container = containerRef.current;
+                const cellInput = refs.cellInput.current;
+                if (!container || !cellInput) return;
                 handleColumnHeaderMouseDown(
                     draftCtx,
                     refs.globalCache,
                     nativeEvent,
-                    containerRef.current!,
-                    refs.cellInput.current!,
-                    refs.fxInput.current!,
+                    container,
+                    cellInput,
+                    refs.fxInput.current,
                 );
             });
         },
@@ -116,13 +126,17 @@ export const ColumnHeader: React.FC = () => {
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
             setContext((draftCtx) => {
+                const container = containerRef.current;
+                const workbookContainer = refs.workbookContainer.current;
+                const cellArea = refs.cellArea.current;
+                if (!container || !workbookContainer || !cellArea) return;
                 handleColSizeHandleMouseDown(
                     draftCtx,
                     refs.globalCache,
                     nativeEvent,
-                    containerRef.current!,
-                    refs.workbookContainer.current!,
-                    refs.cellArea.current!,
+                    container,
+                    workbookContainer,
+                    cellArea,
                 );
             });
             e.stopPropagation();
@@ -132,9 +146,10 @@ export const ColumnHeader: React.FC = () => {
 
     const onColSizeHandleDoubleClick = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            if (!refs.canvas.current) return;
+            const canvas = refs.canvas.current;
+            if (!canvas) return;
             setContext((draftCtx) => {
-                autoFitColumnWidth(draftCtx, hoverLocation.col_index, refs.canvas.current!);
+                autoFitColumnWidth(draftCtx, hoverLocation.col_index, canvas);
             });
             e.stopPropagation();
         },
@@ -145,13 +160,11 @@ export const ColumnHeader: React.FC = () => {
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
             setContext((draftCtx) => {
-                handleColFreezeHandleMouseDown(
-                    draftCtx,
-                    nativeEvent,
-                    containerRef.current!,
-                    refs.workbookContainer.current!,
-                    refs.cellArea.current!,
-                );
+                const container = containerRef.current;
+                const workbookContainer = refs.workbookContainer.current;
+                const cellArea = refs.cellArea.current;
+                if (!container || !workbookContainer || !cellArea) return;
+                handleColFreezeHandleMouseDown(draftCtx, nativeEvent, container, workbookContainer, cellArea);
             });
             e.stopPropagation();
         },

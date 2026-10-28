@@ -1,3 +1,6 @@
+// The link card over a cell: it shows a cell's link and edits or adds one, to a web page or to a range in the
+// workbook. Picking a range hides the card while the range picker is open and puts the selection back after.
+
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -77,7 +80,7 @@ export function LinkEditCard({
     const setRangeModalVisible = useCallback(
         (visible: boolean) =>
             setContext((draftCtx) => {
-                draftCtx.selections! = lastCell.current!;
+                draftCtx.selections = lastCell.current;
                 if (draftCtx.linkCard != null) draftCtx.linkCard.selectingCellRange = visible;
             }),
         [setContext],

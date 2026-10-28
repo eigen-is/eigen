@@ -46,7 +46,20 @@ export type UserSettings = {
     driveView?: Partial<DriveViewPreferences>;
     // A finished checklist now and then gets a small burst of confetti. Read it through celebrationsOn.
     celebrations?: boolean;
+    docsView?: DocsViewPreferences;
 };
+
+// How wide a page-less doc draws its text for this user, Google's Text width: the same on every page-less doc they
+// open, whatever their collaborators chose. Read it through docsTextWidth.
+export const DOCS_TEXT_WIDTHS = ['narrow', 'medium', 'wide', 'full'] as const;
+export type DocsTextWidth = (typeof DOCS_TEXT_WIDTHS)[number];
+
+export type DocsViewPreferences = { textWidth?: DocsTextWidth };
+
+// Narrow, Google's default, for settings that never chose a width or hold one this build doesn't know.
+export function docsTextWidth(settings: UserSettings | undefined): DocsTextWidth {
+    return DOCS_TEXT_WIDTHS.find((width) => width === settings?.docsView?.textWidth) ?? 'narrow';
+}
 
 // Celebrations are on until the user turns them off, so settings that never mention them have them on.
 export function celebrationsOn(settings: UserSettings | undefined): boolean {

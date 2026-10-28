@@ -330,9 +330,9 @@ describe('links', () => {
         const end = '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
         const json = await imported(
             [
-                // A table of contents is a field around its entries' paragraphs.
+                // A table of figures is a field around its entries' paragraphs, which the import keeps.
                 paragraph(
-                    `${begin('TOC \\o "1-3" \\h')}<w:hyperlink w:anchor="_Toc1">${linked('Entry')}</w:hyperlink>`,
+                    `${begin('TOC \\h \\z \\c "Figure"')}<w:hyperlink w:anchor="_Toc1">${linked('Entry')}</w:hyperlink>`,
                 ),
                 paragraph(`${begin('HYPERLINK \\l "_Toc2"')}${linked('Field')}${end}${end}`),
                 paragraph(`<w:hyperlink w:anchor="ref1">${linked('Reference')}</w:hyperlink>`),

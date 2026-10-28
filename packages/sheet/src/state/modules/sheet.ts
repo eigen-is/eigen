@@ -14,7 +14,7 @@ import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
-import { generateRandomSheetName, getSheetIndex } from '../utils';
+import { generateRandomSheetName, getSheetIndex, sheetOrder } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { applySheetFilter } from './filter';
 
@@ -112,14 +112,9 @@ export function addSheet(
         return;
     }
     const order = ctx.sheets.length;
-    const id = newSheetID ?? (settings?.generateSheetId() as string);
+    const id = newSheetID ?? settings?.generateSheetId() ?? uuidv4();
     const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable);
-    if (!isNil(sheetData)) {
-        delete sheetData.data;
-        for (const sheet of ctx.sheets) {
-            sheet.order = (sheet.order as number) < sheetData.order! ? sheet.order : (sheet.order as number) + 1;
-        }
-    }
+    if (!isNil(sheetData)) delete sheetData.data;
     const sheetconfig: Sheet = isNil(sheetData)
         ? {
               name: sheetName === undefined ? sheetname : sheetName,
@@ -135,9 +130,18 @@ export function addSheet(
         : sheetData;
     normalizeSheetConfig(sheetconfig);
     if (sheetName !== undefined) sheetconfig.name = sheetName;
-    if (sheetconfig.id === undefined) sheetconfig.id = uuidv4();
+    // A sheet that comes without an id takes the one the add switches to.
+    sheetconfig.id ??= id;
     if (ctx.hooks.beforeAddSheet?.(sheetconfig) === false) {
         return;
+    }
+    // Only an add that goes ahead moves the other sheets along.
+    if (!isNil(sheetData)) {
+        const insertAt = sheetOrder(sheetData);
+        for (const sheet of ctx.sheets) {
+            const order = sheetOrder(sheet);
+            sheet.order = order < insertAt ? sheet.order : order + 1;
+        }
     }
 
     ctx.sheets.push(sheetconfig);
@@ -196,11 +200,10 @@ export function deleteSheet(
         return;
     }
 
+    const deletedOrder = sheetOrder(ctx.sheets[arrIndex]);
     ctx.sheets = ctx.sheets.map((sheet) => {
-        sheet.order =
-            (sheet.order as number) < (ctx.sheets[arrIndex].order as number)
-                ? sheet.order
-                : (sheet.order as number) - 1;
+        const order = sheetOrder(sheet);
+        sheet.order = order < deletedOrder ? sheet.order : order - 1;
         return sheet;
     });
 

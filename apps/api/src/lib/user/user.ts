@@ -1,13 +1,14 @@
+// The User type and the lookups in the server-wide users database, such as a user by email or id, their org and
+// team memberships and their org role. Routes, homes and the auth hooks read users through here.
+
 import { and, eq, inArray } from 'drizzle-orm';
 import { member, teamMember, user } from '../../../auth-schema';
 import type { auth } from '../auth/auth';
 import { getAuthDrizzleDb } from '../auth/auth';
 import { getServerConfig } from '../config/server-config';
 
-// Canonical User type — the better-auth session user, including plugin columns
-// (role, banned, twoFactorEnabled, etc.). Derived from the configured `auth`
-// instance so it always tracks the active plugin set, and matches the shape
-// served by `auth.api.getSession()` to Elysia route handlers.
+// The better-auth session user with its plugin columns, such as role and twoFactorEnabled. It is inferred from the
+// configured `auth`, so it follows the plugins and matches what getSession hands the route handlers.
 export type User = typeof auth.$Infer.Session.user;
 
 // Actor display: name, else email local-part, else undefined (callers guard the undefined case).
@@ -24,14 +25,13 @@ export async function getUserById(id: string): Promise<User | null> {
     return (await db.select().from(user).where(eq(user.id, id)).get()) ?? null;
 }
 
-export async function updateUser(userId: string, name: string, image: string) {
+export async function updateUser(userId: string, name: string, image: string): Promise<void> {
     const db = getAuthDrizzleDb();
-    return await db.update(user).set({ name, image }).where(eq(user.id, userId));
+    await db.update(user).set({ name, image }).where(eq(user.id, userId));
 }
 
-// Synthetic User for non-authenticatable owners (Org and Team Homes) that hold
-// resources but never sign in. Only `id`, `name`, and `email` carry meaning; the
-// rest are nulled out to satisfy the type — they're never read.
+// An org or team home holds resources but never signs in, so it gets a synthetic User. Only the id, the name
+// and the email mean anything. The other fields are filled to satisfy the type and are never read.
 export function makeSyntheticUser(id: string, name: string, email: string): User {
     const now = new Date();
     return {
@@ -64,10 +64,8 @@ export async function getMemberships(userId: string): Promise<Memberships> {
 }
 
 export async function getOrgRole(userId: string): Promise<string | null> {
-    // Scope to the default org (config.orgId, pinned at setup). A user can self-create a second
-    // org and become its 'owner'; a lookup that isn't org-scoped could return that role and pass
-    // the instance-wide requireAdmin check. Scoping to the pinned id (not "the first org row",
-    // whose order is unspecified) stays correct even if a stray second org exists.
+    // The role in the default org is the server-wide role that requireAdmin checks. The lookup names the org
+    // pinned at setup, because the order of member rows is unspecified if a stray second org exists.
     const orgId = getServerConfig()?.orgId;
     if (!orgId) return null;
     const db = getAuthDrizzleDb();
@@ -80,7 +78,7 @@ export async function getOrgRole(userId: string): Promise<string | null> {
 }
 
 export async function getOrgAdmins(): Promise<User[]> {
-    // Scope to the default org — same reason as getOrgRole; owners and admins are the server admins.
+    // The owners and admins of the default org are the server admins.
     const orgId = getServerConfig()?.orgId;
     if (!orgId) return [];
     const db = getAuthDrizzleDb();
@@ -94,8 +92,7 @@ export async function getOrgAdmins(): Promise<User[]> {
 }
 
 export async function getOrgOwner(): Promise<User | null> {
-    // Scope to the default org — same reason as getOrgRole: a self-created org's owner must not
-    // be returned as the instance owner.
+    // The owner of the default org is the owner of the server.
     const orgId = getServerConfig()?.orgId;
     if (!orgId) return null;
     const db = getAuthDrizzleDb();

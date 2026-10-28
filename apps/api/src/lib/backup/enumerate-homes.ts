@@ -13,6 +13,7 @@ import { asc } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { team, user } from '../../../auth-schema';
 import { getDataRoot, getTeamDataPath, getUserHomePath, PATHS, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
+import { isGuest } from '../user/guest';
 import { parseSafetyCopyName } from './paths';
 
 export type ServerHome = Pick<ServerArchiveManifest['homes'][number], 'ownerId' | 'kind' | 'name'>;
@@ -45,7 +46,7 @@ export function enumerateHomes(usersDbPath: string): { homes: ServerHome[]; orph
         const teams = db.select({ id: team.id, name: team.name }).from(team).orderBy(asc(team.id)).all();
         const homes: ServerHome[] = [
             ...users
-                .filter((row) => row.role !== 'guest' && fs.existsSync(getUserHomePath(row.id)))
+                .filter((row) => !isGuest(row) && fs.existsSync(getUserHomePath(row.id)))
                 .map((row): ServerHome => ({ ownerId: row.id, kind: 'user', name: row.name })),
             ...teams
                 .filter((row) => fs.existsSync(getTeamDataPath(row.id)))

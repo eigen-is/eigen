@@ -1,3 +1,6 @@
+// The workbook calls of the Workbook's imperative API: adding a sheet and setting the sheets' order, which it
+// renumbers from 0 so the tab strip and the sheet list agree.
+
 import { sortBy } from 'es-toolkit/compat';
 import type { Context, Sheet } from '..';
 import { addSheet as addSheetInternal } from '../modules';
@@ -16,8 +19,8 @@ export function addSheet(
 
 export function setSheetOrder(ctx: Context, orderList: Record<string, number>) {
     for (const sheet of ctx.sheets) {
-        if (sheet.id! in orderList) {
-            sheet.order = orderList[sheet.id!];
+        if (sheet.id != null && sheet.id in orderList) {
+            sheet.order = orderList[sheet.id];
         }
     }
     // re-order starting from 0

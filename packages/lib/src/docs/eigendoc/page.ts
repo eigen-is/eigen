@@ -1,7 +1,12 @@
-// In millimetres because paper is defined in them; pagePx and pageTwips return this shape in their unit. Orientation is width > height.
+// A doc's page: its paper, margins and bands, the one reader of the page a doc stores, and the units it is measured
+// in. The editor, the PDF and the docx all lay out from the PageSetup readPageSetup returns, so they agree on the page.
+
+// In millimeters, because paper is defined in them. pagePx and pageTwips return this shape in their unit. Orientation
+// is width > height.
 export type PageMargin = { top: number; right: number; bottom: number; left: number };
 // headerDistance and footerDistance: a band's distance from the paper's top or bottom edge, Word's Header from top and
 // Footer from bottom. differentFirstPage: page 1 takes the headerFirst and footerFirst bands instead of header and footer.
+// pageless: the screen draws no paper, bands or page breaks, only a column of text; the PDF still prints on this paper.
 export type PageSetup = {
     width: number;
     height: number;
@@ -9,6 +14,7 @@ export type PageSetup = {
     headerDistance: number;
     footerDistance: number;
     differentFirstPage: boolean;
+    pageless: boolean;
 };
 
 const A4 = { name: 'A4', width: 210, height: 297 } as const;
@@ -38,6 +44,7 @@ export const DEFAULT_PAGE_SETUP: PageSetup = {
     headerDistance: 12.7,
     footerDistance: 12.7,
     differentFirstPage: false,
+    pageless: false,
 };
 
 // The paper a page is cut from, either way round. Within 1 mm, because Word stores the page in twips.
@@ -60,7 +67,15 @@ export const MAX_PAPER_MM = 558.8;
 // The least text column and text height the margins leave.
 export const MIN_TEXT_MM = 25;
 
-export function pageRecord({ width, height, margin, headerDistance, footerDistance, differentFirstPage }: PageSetup) {
+export function pageRecord({
+    width,
+    height,
+    margin,
+    headerDistance,
+    footerDistance,
+    differentFirstPage,
+    pageless,
+}: PageSetup) {
     return {
         width,
         height,
@@ -71,10 +86,11 @@ export function pageRecord({ width, height, margin, headerDistance, footerDistan
         headerDistance,
         footerDistance,
         differentFirstPage,
+        pageless,
     };
 }
 
-type PageKey = Exclude<keyof ReturnType<typeof pageRecord>, 'differentFirstPage'>;
+type PageKey = Exclude<keyof ReturnType<typeof pageRecord>, 'differentFirstPage' | 'pageless'>;
 
 const DEFAULT_PAGE_RECORD = pageRecord(DEFAULT_PAGE_SETUP);
 
@@ -108,6 +124,7 @@ export function readPageSetup(record: Record<string, unknown>): PageSetup {
         headerDistance: distance('headerDistance', top),
         footerDistance: distance('footerDistance', bottom),
         differentFirstPage: record['differentFirstPage'] === true,
+        pageless: record['pageless'] === true,
     };
 }
 
@@ -131,6 +148,9 @@ function convert(setup: PageSetup, fromMm: (mm: number) => number): PageSetup {
 // The lengths a doc is measured in, unrounded: mm on paper, CSS px at 96 dpi (Docs stores a figure's width in them),
 // points, and Word's twips, twentieths of a point.
 export const mmToPx = (mm: number) => (mm / 25.4) * 96;
+// The largest paper's side in px, 2112. A stored box, such as a figure's or a chart's, is held to it, as no page holds
+// a larger one.
+export const MAX_PAPER_PX = mmToPx(MAX_PAPER_MM);
 export const pxToMm = (px: number) => (px / 96) * 25.4;
 export const mmToPt = (mm: number) => (mm / 25.4) * 72;
 export const ptToMm = (pt: number) => (pt / 72) * 25.4;

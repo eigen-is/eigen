@@ -10,6 +10,7 @@ import { usePrintPdf } from '@workspace/lib/drive';
 import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
+import type { DocsTextWidth } from '@workspace/lib/types/settings';
 import { TEXT_ALIGNS } from '@workspace/lib/vector';
 import {
     CenteredToolbar,
@@ -100,6 +101,9 @@ type EditorToolbarProps = {
     canRedo: boolean;
     pageSetup: PageSetup;
     onPageSetupChange: (from: PageSetup, to: PageSetup) => void;
+    // The reader's own column on a page-less doc, which Page setup shows beside the doc's format.
+    textWidth: DocsTextWidth;
+    onTextWidthChange: (width: DocsTextWidth) => void;
     // Update 'Normal text' to match, the body's only.
     onUpdateNormalStyle?: () => void;
     onAccessDialogOpen: () => void;
@@ -138,6 +142,8 @@ export const EditorToolbar = ({
     canRedo,
     pageSetup,
     onPageSetupChange,
+    textWidth,
+    onTextWidthChange,
     onUpdateNormalStyle,
     onAccessDialogOpen,
     onToggleCommentPanel,
@@ -331,6 +337,10 @@ export const EditorToolbar = ({
                                     onReplaceImage={onReplaceImage}
                                     onEnterBand={onEnterBand}
                                     onPageNumbers={onPageNumbers}
+                                    pageless={pageSetup.pageless}
+                                    onSwitchFormat={() =>
+                                        onPageSetupChange(pageSetup, { ...pageSetup, pageless: !pageSetup.pageless })
+                                    }
                                 />
 
                                 <InsertMenu
@@ -344,6 +354,7 @@ export const EditorToolbar = ({
                                     onInsertFootnote={onInsertFootnote}
                                     inNote={inNote}
                                     held={editor !== body}
+                                    pageless={pageSetup.pageless}
                                     onEnterBand={onEnterBand}
                                     onPageNumbers={onPageNumbers}
                                 />
@@ -620,6 +631,9 @@ export const EditorToolbar = ({
                 setup={pageSetup}
                 canWrite={canWrite}
                 onSetupChange={onPageSetupChange}
+                // A phone's column is its screen.
+                textWidth={isMobile ? undefined : textWidth}
+                onTextWidthChange={isMobile ? undefined : onTextWidthChange}
             />
 
             <WordCountDialog

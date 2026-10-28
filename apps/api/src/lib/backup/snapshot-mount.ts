@@ -1,3 +1,7 @@
+// Captures one drive mount for a home archive: the rows of its metadata.db copy, every file those rows name from
+// wherever the mount keeps it, and its thumbnails, or, for an s3 mount at the full level, only its staged uploads. The
+// home snapshot calls it once per mount; a storage failure fails the capture rather than leave holes unnamed.
+
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -172,8 +176,7 @@ export async function snapshotMountData(
         } else {
             // The path lock for the whole copy: an overwrite rewrites the file in place, so it and the copy wait for
             // each other. The shared tree lock only until the file is open, so no rename moves the bytes between the
-            // key and the open, and a rename after it waits for no copy: captureFile opens before its first await
-            // (capture-race.test.ts moves the bytes as the lock releases).
+            // key and the open, and a rename after it waits for no copy: captureFile opens before its first await.
             const entry = await mount.withPathLock(row.id, async () => {
                 const opened = await mount.withTreeShared(async () => {
                     const live = await mount.getPath(row.id);
@@ -317,7 +320,7 @@ export async function snapshotMountStaging(
 }
 
 // Thumbnails are not derived data: they are generated once, when a file is uploaded, and never
-// regenerated — the drive route answers 404 for a file whose thumbnail is gone — so a restore
+// regenerated. The drive route answers 404 for a file whose thumbnail is gone, so a restore
 // without them loses every thumbnail the home ever had. They are keyed by path id, which a restore
 // preserves. A thumbnail whose row is gone is an orphan no mount would ever serve and stays out.
 export async function snapshotMountThumbs(

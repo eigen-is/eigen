@@ -1,3 +1,6 @@
+// Split text to columns: the separator pattern built from the dialog's choices, the preview of the split
+// selected column, and the write that spreads each cell's parts over the columns to its right.
+
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { getCellValue, setCellValue } from './cell';
@@ -69,11 +72,12 @@ export function getDataArr(regStr: string, ctx: Context) {
     const r2 = ctx.selections[0].row[1];
     const c = ctx.selections[0].column[0];
     const data = getFlowdata(ctx);
+    if (!data) return arr;
     if (regStr !== null && regStr !== '') {
         const reg = new RegExp(regStr, 'g');
         const dataArr = [];
         for (let r = r1; r <= r2; r += 1) {
-            const value = getCellValue(r, c, data!, 'm') ?? getCellValue(r, c, data!);
+            const value = getCellValue(r, c, data, 'm') ?? getCellValue(r, c, data);
             dataArr.push(String(value ?? '').split(reg));
         }
         const rlen = dataArr.length;
@@ -94,7 +98,7 @@ export function getDataArr(regStr: string, ctx: Context) {
     } else {
         for (let r = r1; r <= r2; r += 1) {
             const rowArr = [];
-            const value = getCellValue(r, c, data!, 'm') ?? getCellValue(r, c, data!);
+            const value = getCellValue(r, c, data, 'm') ?? getCellValue(r, c, data);
 
             rowArr.push(value == null ? '' : String(value));
 

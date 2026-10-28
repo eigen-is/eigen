@@ -1,5 +1,9 @@
+// Small helpers the sheet's state modules share, such as finding a sheet by id or name, a new sheet's name, a color
+// as hex and whether a selection may be edited. The op-to-patch translation lives beside them and is re-exported here.
+
+import { parseRgb } from '@workspace/lib/constants/colors';
 import { parseCellKey } from '@workspace/lib/sheets';
-import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
+import { every, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { checkCellIsLocked } from '../modules';
@@ -28,16 +32,15 @@ export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean) {
     return `Sheet${index + 1}`;
 }
 
-// color: convert rgb to hex
+// A browser's rgb() or rgba() as the #rrggbb the sheet stores, its alpha dropped. Any other color comes back as it is.
 export function rgbToHex(color: string): string {
-    const stripped = color.indexOf('rgba') > -1 ? color.replace('rgba(', '') : color.replace('rgb(', '');
-    const rgb = stripped.replace(')', '').split(',');
+    return parseRgb(color)?.hex ?? color;
+}
 
-    const r = Number(rgb[0]);
-    const g = Number(rgb[1]);
-    const b = Number(rgb[2]);
-
-    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+// A sheet without an order sorts as 0. Every reader of a sheet's place asks here, so the tab strip, find and an add
+// or a delete agree on where it is.
+export function sheetOrder(sheet: Sheet): number {
+    return sheet.order ?? 0;
 }
 
 export function getSheetIndex(ctx: Context, id: string) {
@@ -58,15 +61,9 @@ export function getSheetIdByName(ctx: Context, name: string) {
     return null;
 }
 
-export function getSheetByIndex(ctx: Context, id: string) {
-    if (isNil(id)) {
-        id = ctx.currentSheetId;
-    }
-    const i = getSheetIndex(ctx, id);
-    if (isNil(i)) {
-        return null;
-    }
-    return ctx.sheets[i];
+// The sheet with this id, or undefined. getSheet in the API is the one that throws for a missing sheet.
+export function findSheet(ctx: Context, id: string) {
+    return ctx.sheets.find((sheet) => sheet.id === id);
 }
 
 // get the current date and time

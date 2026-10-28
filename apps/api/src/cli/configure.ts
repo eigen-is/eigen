@@ -1,3 +1,8 @@
+// The setup questions of ./eigen setup, and the .env.production they write: the web address, the mail domain,
+// the web server, mail and the relay, and a Docker subnet no other network uses. A rerun asks again with the
+// current answers as defaults and keeps every key it does not know. With --backfill, as an update runs it, it only
+// adds the keys a new release needs.
+
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { parseArgs } from 'node:util';
@@ -128,7 +133,7 @@ function validateRelay(value: string): string | undefined {
     }
 }
 
-// The server config setup wrote, read here without loading lib/config/server-config.ts, which opens its store.
+// The server config that setup wrote, read straight from its file. The server-config module would open its store.
 const SERVER_CONFIG = join(DATA, SERVER_DIR, SERVER_FILES.config);
 
 // Setup records the domain every account's address was made on; an unreadable data folder leaves the check to the

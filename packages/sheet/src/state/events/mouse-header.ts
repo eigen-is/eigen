@@ -1,3 +1,8 @@
+// A press on the row or column header strip. A plain click selects the whole row or column, Shift extends
+// the last selection and Ctrl or Cmd adds one; while a formula is being edited the press inserts a row or
+// column reference into it instead. The header components call handleRowHeaderMouseDown and
+// handleColumnHeaderMouseDown, and the drag that follows runs through the overlay's mouse-move handler.
+
 import { cloneDeep, isEmpty, isNil, last } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
@@ -77,16 +82,7 @@ export function handleRowHeaderMouseDown(
             israngeseleciton(ctx)
         ) {
             // Formula range selection
-            let changeparam = mergeMoveMain(
-                ctx,
-                [0, col_index],
-                rowseleted,
-                { row_focus: row_index, column_focus: 0 },
-                top,
-                height,
-                col_pre,
-                col,
-            );
+            let changeparam = mergeMoveMain(ctx, [0, col_index], rowseleted, top, height, col_pre, col);
             if (changeparam != null) {
                 [rowseleted, top, height] = [changeparam[1], changeparam[2], changeparam[3]];
             }
@@ -118,16 +114,7 @@ export function handleRowHeaderMouseDown(
                 height = rowGeom.span;
                 rowseleted = rowGeom.selected;
 
-                changeparam = mergeMoveMain(
-                    ctx,
-                    [0, col_index],
-                    rowseleted,
-                    { row_focus: row_index, column_focus: 0 },
-                    top,
-                    height,
-                    col_pre,
-                    col,
-                );
+                changeparam = mergeMoveMain(ctx, [0, col_index], rowseleted, top, height, col_pre, col);
                 if (changeparam != null) {
                     [rowseleted, top, height] = [changeparam[1], changeparam[2], changeparam[3]];
                 }
@@ -251,8 +238,9 @@ export function handleRowHeaderMouseDown(
     if (ctx.rowsSelected) {
         if (e.shiftKey) {
             // Shift+click on row header to select range
-            const last = cloneDeep(ctx.selections?.[ctx.selections.length - 1]); // Last selection
-            if (!last || isNil(last.top) || isNil(last.height) || isNil(last.row_focus)) {
+            const { selections } = ctx;
+            const last = cloneDeep(selections?.[selections.length - 1]); // Last selection
+            if (!selections || !last || isNil(last.top) || isNil(last.height) || isNil(last.row_focus)) {
                 return;
             }
 
@@ -277,7 +265,7 @@ export function handleRowHeaderMouseDown(
             last.top_move = _top;
             last.height_move = _height;
 
-            ctx.selections![ctx.selections!.length - 1] = last;
+            selections[selections.length - 1] = last;
         } else if (e.ctrlKey || e.metaKey) {
             ctx.selections?.push({
                 left: colLocationByIndex(0, ctx.visibledatacolumn)[0],
@@ -382,16 +370,7 @@ export function handleColumnHeaderMouseDown(
             israngeseleciton(ctx)
         ) {
             // Formula range selection
-            let changeparam = mergeMoveMain(
-                ctx,
-                columnseleted,
-                [0, row_index],
-                { row_focus: 0, column_focus: col_index },
-                row_pre,
-                row,
-                left,
-                width,
-            );
+            let changeparam = mergeMoveMain(ctx, columnseleted, [0, row_index], row_pre, row, left, width);
             if (changeparam != null) {
                 [columnseleted, left, width] = [changeparam[0], changeparam[4], changeparam[5]];
             }
@@ -423,16 +402,7 @@ export function handleColumnHeaderMouseDown(
                 width = colGeom.span;
                 columnseleted = colGeom.selected;
 
-                changeparam = mergeMoveMain(
-                    ctx,
-                    columnseleted,
-                    [0, row_index],
-                    { row_focus: 0, column_focus: col_index },
-                    row_pre,
-                    row,
-                    left,
-                    width,
-                );
+                changeparam = mergeMoveMain(ctx, columnseleted, [0, row_index], row_pre, row, left, width);
                 if (changeparam != null) {
                     [columnseleted, left, width] = [changeparam[0], changeparam[4], changeparam[5]];
                 }
@@ -553,13 +523,14 @@ export function handleColumnHeaderMouseDown(
     if (ctx.colsSelected) {
         if (e.shiftKey) {
             // Shift+click on column header to select range
-            const last = cloneDeep(ctx.selections?.[ctx.selections.length - 1]); // Last selection
+            const { selections } = ctx;
+            const last = cloneDeep(selections?.[selections.length - 1]); // Last selection
 
             let _left = 0;
             let _width = 0;
             let _columnseleted = [];
 
-            if (!last || isNil(last.left) || isNil(last.width) || isNil(last.column_focus)) {
+            if (!selections || !last || isNil(last.left) || isNil(last.width) || isNil(last.column_focus)) {
                 return;
             }
 
@@ -581,7 +552,7 @@ export function handleColumnHeaderMouseDown(
             last.left_move = _left;
             last.width_move = _width;
 
-            ctx.selections![ctx.selections!.length - 1] = last;
+            selections[selections.length - 1] = last;
         } else if (e.ctrlKey || e.metaKey) {
             // Add to selection
             ctx.selections?.push({

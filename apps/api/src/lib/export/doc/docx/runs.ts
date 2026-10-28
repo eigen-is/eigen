@@ -1,6 +1,6 @@
 // The docx writer's inline content: one run per text node, with its marks as run properties written in the ECMA-376
 // sequence, as a paragraph's are. Links, breaks, equations, page numbers and note references are runs too. A
-// paragraph writes its runs through runsXml.
+// paragraph writes its runs through runsXml. Any complex field is built here too, such as a table of contents.
 
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
@@ -76,21 +76,16 @@ export const INLINES = new Map<
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
-    // A complex field, as Word writes it: Google Docs leaves a w:fldSimple PAGE in the body blank. Word lays out the
-    // page and updates the field; 1 is what a reader without fields shows. Every run of the field gets the result's
-    // look, and none takes marks: the Yjs binding stores none on an atom, so a reloaded doc holds none.
+    // A complex field, because Google Docs leaves a w:fldSimple PAGE in the body blank. Word lays out the page and
+    // updates the field. 1 is what a reader without fields shows. Every run of the field gets the result's look. None
+    // takes marks, because the Yjs binding stores none on an atom, so a reloaded doc holds none.
     [
         'pageNumber',
-        (node, linked, context, style, faces) =>
-            [
-                '<w:fldChar w:fldCharType="begin"/>',
-                `<w:instrText xml:space="preserve"> ${PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])]} </w:instrText>`,
-                '<w:fldChar w:fldCharType="separate"/>',
-                textXml('1'),
-                '<w:fldChar w:fldCharType="end"/>',
-            ]
-                .map((content) => runXml(content, {}, linked, context, style, faces))
-                .join(''),
+        (node, linked, context, style, faces) => {
+            const run = (content: string) => runXml(content, {}, linked, context, style, faces);
+            const instruction = PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])];
+            return fieldStart(instruction, { run }) + run(textXml('1')) + fieldEnd(run);
+        },
     ],
     // Word's reference, numbered as met, which is footnotesInOrder's order; its note is written to the notes part after
     // the body. The atom takes no marks, as the Yjs binding stores none on one.
@@ -114,6 +109,25 @@ export const INLINES = new Map<
         },
     ],
 ]);
+
+// The runs that open a complex field, as Word writes one: begin, the instruction and separate. The field's result
+// follows, and fieldEnd closes it. That can be in a later paragraph, as in a table of contents. `run` wraps each part
+// in a run, so a caller can give the runs a look. Word updates a dirty field when it opens the file.
+export function fieldStart(instruction: string, { dirty = false, run = bareRun } = {}): string {
+    return [
+        `<w:fldChar w:fldCharType="begin"${dirty ? ' w:dirty="true"' : ''}/>`,
+        `<w:instrText xml:space="preserve"> ${instruction} </w:instrText>`,
+        '<w:fldChar w:fldCharType="separate"/>',
+    ]
+        .map(run)
+        .join('');
+}
+
+export function fieldEnd(run = bareRun): string {
+    return run('<w:fldChar w:fldCharType="end"/>');
+}
+
+const bareRun = (content: string) => `<w:r>${content}</w:r>`;
 
 // A run in the node's marks.
 function runXml(

@@ -37,14 +37,18 @@ import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
 import {
+    BODY_TEXT_OUTLINE_LEVEL,
     CHECKBOX_GLYPHS,
+    DEEPEST_HEADING_LEVEL,
     DEFAULT_RUN_SIZE,
     LIST_LEVELS,
+    NO_TOC_ENTRIES,
     NOTE_SEPARATORS,
     SINGLE_LINE,
     STYLE_NAMES,
     TWIPS_PER_PX,
     textAlignOf,
+    tocLevel,
 } from '../../ooxml/wordml';
 import type { MediaFiles } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
@@ -58,7 +62,7 @@ import type { Numbering } from './numbering';
 import { readNumbering } from './numbering';
 import type { DocxPackage } from './package';
 import { descendants, twipsOf, w, wChild, wordAlternative } from './package';
-import type { Field, Piece, RunContext } from './runs';
+import type { Field, OpenToc, Piece, RunContext, TocCut } from './runs';
 import { walkInline } from './runs';
 import type { DocxRunProps, ParaProps, Role } from './styles';
 import { mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
@@ -85,9 +89,12 @@ export type Reader = {
     notes: Map<string, { content: JSONContent[]; weight: number }>;
     openNotes: string[];
     fields: Field[];
+    // The table of contents whose result the walk is in, and each one the body holds, in document order.
+    openToc: OpenToc | undefined;
+    tocs: OpenToc[];
     // The parts of a SmartArt's or a band's chart read: each is read once.
     graphicParts: Set<string>;
-    // The theme's colours a chart's series take, and each chart part as read.
+    // The theme's colors a chart's series take, and each chart part as read.
     colors: DrawingTheme;
     charts: Map<XmlElement, DocxChart>;
     // The body's size in half-points, its complex script's, and its color, which no run needs a mark for.
@@ -108,8 +115,8 @@ export type Reader = {
 };
 
 // Per part: its relationships, the story it tells (only the body's breaks page, and only the body's pictures float), the
-// tables around it, the table style, the cell's width in px, whether the text sits on a fill the schema drops, and the
-// cell fill drawn behind it.
+// tables around it, the table style, the cell's width in px, whether the text sits on a fill the schema drops, the
+// cell fill drawn behind it, and whether it is a shape's text.
 export type Scope = {
     part: Part;
     story: 'body' | 'note' | 'band';
@@ -118,6 +125,7 @@ export type Scope = {
     room?: number;
     onFill?: boolean;
     fill?: string;
+    inShape?: boolean;
 };
 
 export function createReader(
@@ -134,7 +142,7 @@ export function createReader(
     const fontTable = readFontTable(pkg.fontTable);
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
     const size = sectionPage(sectPr);
-    const page = { ...size, differentFirstPage: pkg.titlePg };
+    const page = { ...size, differentFirstPage: pkg.titlePg, pageless: pkg.webView };
     const px = pagePx(page);
     const twips = pageTwips(page);
     // A size past the range lands in it, as a run's does.
@@ -156,6 +164,8 @@ export function createReader(
         notes: new Map(),
         openNotes: [],
         fields: [],
+        openToc: undefined,
+        tocs: [],
         graphicParts: new Set(),
         colors: drawingTheme(pkg.theme),
         charts: new Map(),
@@ -206,7 +216,9 @@ export function readDocument(reader: Reader): JSONContent[] {
     const body = wChild(reader.pkg.document.root, 'body');
     if (!body) return [];
     const scope: Scope = { part: reader.pkg.document, story: 'body', tables: 0 };
-    return placeAnchors(buildBlocks(readBlocks(reader, xmlElements(body), scope)), reader.normal);
+    // A table of contents the file never ends would take the rest of the doc with it.
+    const items = [...readBlocks(reader, xmlElements(body), scope), ...abandonToc(reader)];
+    return placeAnchors(buildBlocks(items), reader.normal);
 }
 
 // A header or footer part's blocks, read as the body's are, through the part's own relationships, its lists counting
@@ -214,6 +226,7 @@ export function readDocument(reader: Reader): JSONContent[] {
 // there isn't kept.
 export function readBand(reader: Reader, part: Part): JSONContent[] {
     reader.fields.length = 0;
+    reader.openToc = undefined;
     const { numbering } = reader;
     reader.numbering = numbering.restarted();
     const blocks = buildBlocks(readBlocks(reader, xmlElements(part.root), { part, story: 'band', tables: 0 }));
@@ -258,9 +271,11 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     }
     const found = reader.noteElements.get(note);
     if (!found || reader.openNotes.length > 1 || reader.openNotes.includes(note)) return undefined;
-    // A field open in the body around the reference stays open there, and so do the body's list counters.
-    const { fields, numbering } = reader;
+    // A field open in the body around the reference stays open there, a table of contents too, and so do the body's
+    // list counters.
+    const { fields, openToc, numbering } = reader;
     reader.fields = [];
+    reader.openToc = undefined;
     reader.numbering = numbering.restarted();
     reader.openNotes.push(note);
     const blocks = buildBlocks(
@@ -268,6 +283,7 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     );
     reader.openNotes.pop();
     reader.fields = fields;
+    reader.openToc = openToc;
     reader.numbering = numbering;
     const paragraphs = blocks.flatMap(noteParagraphs);
     trimStart(paragraphs[0]?.content ?? []);
@@ -299,7 +315,9 @@ export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope)
         if (isAlternateContent(element)) return readBlocks(reader, wordAlternative(element), scope);
         if (element.ns !== W_NS) return [];
         if (element.local === 'p') return readParagraph(reader, element, scope);
-        if (element.local === 'tbl') return readTable(reader, element, scope);
+        // A table of contents' result holds no table, so one ends a result the file ends late or never.
+        if (element.local === 'tbl')
+            return [...(betweenBodyBlocks(scope) ? abandonToc(reader) : []), ...readTable(reader, element, scope)];
         if (element.local === 'sdt')
             return readBlocks(reader, xmlElements(wChild(element, 'sdtContent') ?? element), scope);
         return WRAPPERS.has(element.local) ? readBlocks(reader, xmlElements(element), scope) : [];
@@ -322,16 +340,25 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const style = styles.get(styleId);
     const styled = mergePara(styles.docPara, styles.para(styleId));
     let role: Role = styles.role(styleId) ?? { kind: 'paragraph' };
-    // A custom heading style gives its outline level; one set on a paragraph directly, or a TOC entry's, draws as body text.
+    // A custom heading style gives its outline level. A level set on a paragraph directly, or a TOC entry's, draws as
+    // body text.
     const outline = styles.para(styleId).outlineLvl;
-    if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
+    const tocEntry = style !== undefined && tocLevel(style.name) !== undefined;
+    if (role.kind === 'paragraph' && outline !== undefined && outline < DEEPEST_HEADING_LEVEL && !tocEntry)
         role = { kind: 'heading', level: outline + 1 };
+    // A style based on a heading that sets body text's level, as TOC Heading does, is no heading.
+    if (role.kind === 'heading' && outline === BODY_TEXT_OUTLINE_LEVEL) role = { kind: 'paragraph' };
     const paraRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
     const numId = direct.numId ?? styled.numId;
     const listed = numId !== undefined && numId !== '0';
     // A numbered heading is outline structure, and demoted its number would read as a list.
     if (SIZED.has(role.kind) && !listed && isBodySized(reader, p, paraRun)) role = { kind: 'paragraph' };
     if (role.kind === 'code' && !isMonospace(reader, p, paraRun)) role = { kind: 'paragraph' };
+
+    const between = betweenBodyBlocks(scope);
+    // The cut of a result begun above, which runs into this paragraph.
+    const carried: TocCut | undefined =
+        between && reader.openToc ? { toc: reader.openToc, from: 0, opened: false } : undefined;
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
@@ -343,13 +370,110 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         pieces: [],
         pending: [],
         leftOut: [],
+        tocCuts: between ? (carried ? [carried] : []) : undefined,
     };
     walkInline(
         reader,
         xmlElements(p).filter((child) => child.ns !== W_NS || child.local !== 'pPr'),
         context,
     );
+    // A table of contents' result holds no heading, so a heading it runs into ends a result the file ends late or
+    // never. A field that ends before the heading's text ends where Word's result does.
+    const runOn =
+        carried && role.kind === 'heading' && (carried.to === undefined || isShown(context.pieces.slice(0, carried.to)))
+            ? carried
+            : undefined;
+    const released = runOn ? abandonToc(reader, runOn.toc) : [];
+    const setting: ParagraphSetting = {
+        p,
+        scope,
+        direct,
+        styleId,
+        styled,
+        role,
+        paraRun,
+        numId: listed ? numId : undefined,
+    };
+    const itemsOf = (pieces: Piece[], ends: ParagraphEnds) => paragraphItems(reader, setting, context, pieces, ends);
+    const cuts = (context.tocCuts ?? []).filter((cut) => cut !== runOn);
+    if (cuts.length === 0) return [...released, ...itemsOf(context.pieces, WHOLE)];
+
+    // A table of contents' result runs through this paragraph. The result's pieces are cut out. Word's saved entry,
+    // its text up to the tab before its page number, is kept to compare.
     const { pieces } = context;
+    for (const { toc, from, to } of cuts) {
+        const text = pieces
+            .slice(from, to)
+            .map((piece) => (piece.kind === 'node' ? (piece.node.text ?? '') : ''))
+            .join('');
+        const saved = text.includes('\t') ? text.slice(0, text.lastIndexOf('\t')) : text;
+        if (saved.trim() && saved.trim() !== NO_TOC_ENTRIES) toc.saved.push(saved);
+    }
+    // What the paragraph gives besides its own lines, such as its section break, which follows the result.
+    const extras: Item[] = [...context.pending];
+    if (direct.sectionBreak && scope.story === 'body') extras.push({ kind: 'break' });
+    // A paragraph that holds only the result waits until the field ends.
+    const [first] = cuts;
+    if (cuts.length === 1 && first && !first.opened && first.to === undefined) {
+        first.toc.held.push({ cut: extras, whole: itemsOf(pieces, WHOLE) });
+        return released;
+    }
+    const tocItem = (toc: OpenToc): Item => ({
+        kind: 'block',
+        node: { type: 'tableOfContents', attrs: { levels: toc.levels } },
+    });
+    // A result begun above and ended here gives what it held.
+    const items = cuts.flatMap(({ toc, opened, to }) =>
+        opened || to === undefined ? [] : toc.held.flatMap(({ cut }) => cut),
+    );
+    const goesOn = cuts.some(({ opened, to }) => opened && to === undefined);
+    const kept = pieces.filter((_, index) => !cuts.some(({ from, to }) => index >= from && index < (to ?? Infinity)));
+    if (isShown(kept) || kept.some((piece) => piece.kind === 'break'))
+        items.push(...itemsOf(kept, { before: true, after: !goesOn }));
+    else if (!goesOn) items.push(...extras);
+    // The node stands after what the paragraph keeps, where its field began. The result in the paragraph that begins
+    // a field which goes on is held too, with the paragraph's extras after it.
+    for (const { toc, from, to, opened } of cuts) {
+        if (opened && to === undefined)
+            toc.held.push({
+                cut: [tocItem(toc), ...extras],
+                whole: itemsOf(pieces.slice(from), { before: false, after: true }),
+            });
+        else if (opened) items.push(tocItem(toc));
+    }
+    return [...released, ...items];
+}
+
+// What a paragraph's properties and its style make of it, read before its runs.
+type ParagraphSetting = {
+    p: XmlElement;
+    scope: Scope;
+    direct: ParaProps;
+    styleId: string | undefined;
+    styled: ParaProps;
+    role: Role;
+    paraRun: DocxRunProps;
+    // The list it is in, if any.
+    numId: string | undefined;
+};
+
+// What a paragraph's items take besides its lines: `before` the page break before it, `after` the text boxes it
+// anchors and the section break after it.
+type ParagraphEnds = { before: boolean; after: boolean };
+const WHOLE: ParagraphEnds = { before: true, after: true };
+
+// A paragraph's pieces as its items, with the ends asked for.
+function paragraphItems(
+    reader: Reader,
+    { p, scope, direct, styleId, styled, role: paraRole, paraRun, numId }: ParagraphSetting,
+    context: RunContext,
+    pieces: Piece[],
+    ends: ParagraphEnds,
+): Item[] {
+    const { styles } = reader;
+    const style = styles.get(styleId);
+    const listed = numId !== undefined;
+    let role = paraRole;
     const task = taskOf(pieces);
     if (task?.checked && role.kind === 'paragraph') role = { kind: 'taskDone' };
     for (const [index, piece] of pieces.entries())
@@ -369,7 +493,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const textAlign = textAlignOf(props.jc, props.bidi);
 
     // Google Docs flattens the Code Block style: every run holding text monospace on the writer's fill, or on a light
-    // grey of any shade, as other editors shade code.
+    // gray of any shade, as other editors shade code.
     const texts = pieces.filter((piece) => piece.kind === 'node' && piece.node.type === 'text');
     const mono = (piece: Piece) => piece.kind === 'node' && isMonospaceFont(piece.font, reader.fontTable);
     const allMono =
@@ -495,7 +619,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // A paragraph whose mark and text are hidden is not there at all.
     const markHidden = direct.markHidden ?? styles.run(styleId).vanish ?? false;
     const items: Item[] = [];
-    if (props.pageBreakBefore && scope.story === 'body') items.push({ kind: 'break' });
+    if (ends.before && props.pageBreakBefore && scope.story === 'body') items.push({ kind: 'break' });
     const split = halves.length > 1;
     let numbered = false;
     for (const [index, half] of halves.entries()) {
@@ -585,6 +709,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         numbered = true;
         items.push(para);
     }
+    if (!ends.after) return items;
     // A text box's blocks follow the paragraph that anchors it, at its text and in its quotes, so they stay in its item.
     for (const item of context.pending) {
         if (item.kind === 'para') {
@@ -597,6 +722,23 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     for (const leftOut of context.leftOut) leftOut.textAlign = textAlign;
     if (props.sectionBreak && scope.story === 'body') items.push({ kind: 'break' });
     return items;
+}
+
+// Between the body's blocks, where the editor inserts a table of contents: not in a cell, a note, a band or a shape.
+function betweenBodyBlocks(scope: Scope): boolean {
+    return scope.story === 'body' && scope.tables === 0 && !scope.inShape;
+}
+
+// A heading, a table or the body's end inside a table of contents' result, which holds none, means the file ends the
+// field late or never. What the field held stays its paragraphs, counted as flattened. Left open, the field would hold
+// the next table of contents as one nested in it.
+function abandonToc(reader: Reader, toc = reader.openToc): Item[] {
+    if (!toc) return [];
+    if (reader.openToc === toc) reader.openToc = undefined;
+    if (reader.fields.at(-1) === toc.field) reader.fields.pop();
+    reader.tocs = reader.tocs.filter((other) => other !== toc);
+    reader.lost('blocks-flattened');
+    return toc.held.flatMap(({ whole }) => whole);
 }
 
 // Each run's text in the faces Word draws it in, beside the run's own properties. A run's text box is not searched.

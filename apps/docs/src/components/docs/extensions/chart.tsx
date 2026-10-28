@@ -10,11 +10,12 @@ import type { Box } from '@workspace/lib/vector';
 import { useCallback, useMemo } from 'react';
 import type { FigureFrameOptions } from './figure-frame';
 import {
-    clampFigureWidth,
-    FIGURE_MIN_SIZE,
+    aspectLockedIn,
+    CHART_MIN_HEIGHT,
     FigureFrame,
     figureFramePlugins,
     figureMaxWidth,
+    fitFigureBox,
     useFigureResize,
 } from './figure-frame';
 
@@ -23,33 +24,34 @@ export type ChartOptions = FigureFrameOptions & {
     onEditData: () => void;
 };
 
-type ChartSize = { width: number; height: number };
-
-// Free, as a chart has no aspect ratio of its own: each side within the floor, the width within the column too.
-const fitChart = (next: Box, maxWidth: number): ChartSize => ({
-    width: clampFigureWidth(next.width, maxWidth),
-    height: Math.round(Math.max(FIGURE_MIN_SIZE, next.height)),
+// A chart keeps both sides, whole.
+const storedSize = ({ width, height }: { width: number; height: number }) => ({
+    width,
+    height: Math.round(height),
 });
 
-// A chart keeps both sides.
-const storedSize = (size: ChartSize) => size;
-
 function ChartView(props: NodeViewProps) {
-    const { node, selected, editor, extension, getPos } = props;
+    const { node, selected, editor, extension, getPos, decorations } = props;
     const { onEditData }: ChartOptions = extension.options;
     // node.attrs is a new object only when an attribute changes, a part's and the look's among them.
     const attrs = useMemo(() => readChartAttrs(node.attrs), [node.attrs]);
     const { width, height, layout } = attrs;
     const isEditable = editor.isEditable;
 
+    const locked = aspectLockedIn(decorations, 'chart');
+    const stored = { width: width ?? CHART_DEFAULT_SIZE.width, height: height ?? CHART_DEFAULT_SIZE.height };
+    const ratio = locked ? stored.width / stored.height : null;
+
     const getMaxWidth = useCallback(() => figureMaxWidth(editor, layout), [editor, layout]);
-    const resize = useFigureResize({ editor, getPos, node, getMaxWidth, fit: fitChart, stored: storedSize });
+    // A chart has no ratio of its own, so its grips are free unless Keep aspect ratio is on.
+    const fit = useCallback(
+        (next: Box, maxWidth: number) => fitFigureBox(next, maxWidth, ratio, CHART_MIN_HEIGHT),
+        [ratio],
+    );
+    const resize = useFigureResize({ editor, getPos, node, getMaxWidth, fit, stored: storedSize });
 
     // A resize lays the chart out again at every move, as the canvas does.
-    const size = resize.preview?.size ?? {
-        width: width ?? CHART_DEFAULT_SIZE.width,
-        height: height ?? CHART_DEFAULT_SIZE.height,
-    };
+    const size = resize.preview?.size ?? stored;
     const parsed = useMemo(() => readChartSpec(node.attrs).spec, [node.attrs]);
     const svg = useMemo(() => chartSvg(parsed, { ...attrs, ...size }), [parsed, attrs, size.width, size.height]);
     const box: Box | null = selected && isEditable ? { x: 0, y: 0, ...size, angle: 0 } : null;
@@ -59,7 +61,7 @@ function ChartView(props: NodeViewProps) {
             {...props}
             box={box}
             shift={resize.preview?.shift}
-            resizeMode="free"
+            resizeMode={locked ? 'aspect' : 'free'}
             onTransform={resize.onTransform}
             onCommit={resize.onCommit}
             onGestureEnd={resize.onGestureEnd}
@@ -85,7 +87,7 @@ export const Chart = ChartNode.extend<ChartOptions>({
         return { onContextMenu: () => {}, onOpenComment: () => {}, onEditData: () => {} };
     },
     addProseMirrorPlugins() {
-        return figureFramePlugins(this.name);
+        return figureFramePlugins('chart');
     },
     addNodeView() {
         // TipTap skips the re-render when only decorations change, and the comment mark's color arrives as one.

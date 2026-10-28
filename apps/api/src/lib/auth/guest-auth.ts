@@ -1,6 +1,7 @@
-// Sign-in for guests, people with no account who were given access to something by email. A guest either uses a
-// password scoped to what was shared, or asks for a one-time code that is mailed to them and then checked.
-// Requesting and guessing codes are rate limited per address and per IP.
+// Sign-in for guests, people without an account who were given access to something by email. A guest asks for a
+// one-time code, gets it by mail and sends it back. A right code finds or creates the guest account, reconciles its
+// shares and signs it in. Requesting and guessing codes are rate limited. The session itself comes from
+// signInWithScopedPassword, which the demo entry shares.
 
 import { randomUUID } from 'node:crypto';
 import { generateId } from '@better-auth/core/utils/id';
@@ -12,8 +13,8 @@ import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
-import { reconcileSharesForNewUser } from '../share';
-import { getEntriesForTarget } from '../share/registry';
+import { getEntriesForTarget, reconcileSharesForNewUser } from '../share';
+import { isGuest } from '../user/guest';
 import { getUserByEmail } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
 import { checkOtpRateLimit, countOtpGuess, refundOtpRequests, resetOtpGuesses } from './otp-rate-limit';
@@ -21,15 +22,13 @@ import { checkOtpRateLimit, countOtpGuess, refundOtpRequests, resetOtpGuesses } 
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
 
 function generateOtp(): string {
-    const bytes = new Uint8Array(4);
-    crypto.getRandomValues(bytes);
-    const num = ((bytes[0]! << 24) | (bytes[1]! << 16) | (bytes[2]! << 8) | bytes[3]!) >>> 0;
+    const num = new DataView(crypto.getRandomValues(new Uint8Array(4)).buffer).getUint32(0);
     return String(num % 1_000_000).padStart(6, '0');
 }
 
-// Upsert the account's credential with the freshly derived password, then sign in and return the
-// response carrying the signed session cookie. Re-deriving + overwriting on every call is
-// load-bearing: it heals a tampered password so one visitor can't lock out the next.
+// Writes a password derived from the scope and the email onto the account, then signs in with it and returns
+// the response that carries the session cookie. The password is written on every call, so one that was changed
+// heals, and one visitor cannot lock out the next.
 export async function signInWithScopedPassword(
     scope: 'guest' | 'demo',
     userId: string,
@@ -66,7 +65,7 @@ export async function requestOtp(email: string, ip: string): Promise<void> {
 
     const existingUser = await getUserByEmail(email);
     if (existingUser) {
-        if (existingUser.role !== 'guest') throw new ApiError(400, 'Use password login');
+        if (!isGuest(existingUser)) throw new ApiError(400, 'Use password login');
     } else {
         // A direct insert bypasses the auth hook, so refuse a guest on our own mail domain here.
         if (isInternalAddress(email)) throw new ApiError(400, 'Not a guest address');
@@ -80,18 +79,15 @@ export async function requestOtp(email: string, ip: string): Promise<void> {
     const now = new Date();
     const otp = generateOtp();
     const identifier = `guest-otp:${email}`;
-    // Hash before any DB writes — `Bun.password.hash` yields the event loop, and
-    // doing it between the delete and insert lets a concurrent request for the same
-    // email interleave (delete each other's row, both insert) and end up with two
-    // live OTPs racing in the verification table.
+    // Hash before the transaction. Bun.password.hash yields the event loop, so hashing between the delete and the
+    // insert would let two requests for one email both insert, leaving two live codes.
     const hashedOtp = await Bun.password.hash(otp);
 
     db.transaction((tx) => {
-        // Purge expired guest OTPs
+        // Expired codes of every guest go too.
         tx.delete(verification)
             .where(and(like(verification.identifier, 'guest-otp:%'), lt(verification.expiresAt, now)))
             .run();
-        // Replace any existing OTP for this email
         tx.delete(verification).where(eq(verification.identifier, identifier)).run();
         tx.insert(verification)
             .values({
@@ -132,8 +128,8 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
     const valid = await Bun.password.verify(otp, record.value);
     if (!valid) throw new ApiError(400, 'Invalid code');
 
-    // bun:sqlite is synchronous, so of two concurrent requests with the right code only one
-    // deletes the row: one OTP can never mint two sessions.
+    // bun:sqlite is synchronous, so of two requests with the right code only one deletes the row, and one code
+    // cannot mint two sessions.
     const consumed = db
         .delete(verification)
         .where(eq(verification.id, record.id))
@@ -143,16 +139,14 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
     resetOtpGuesses(email);
     refundOtpRequests(email, ip);
 
-    // Find or create guest user
     let guestUser = await getUserByEmail(email);
-    if (guestUser && guestUser.role !== 'guest') throw new ApiError(400, 'Use password login');
+    if (guestUser && !isGuest(guestUser)) throw new ApiError(400, 'Use password login');
 
     if (!guestUser) {
         const now = new Date();
-        // Insert directly to bypass databaseHooks (guests must not be auto-added to org).
-        // `generateId` (clean a-zA-Z0-9) — NOT `generateRandomString` (base64-url, includes
-        // '_' and '-'); `parseOwnerId` only accepts alphanumeric, and a guest id with '_'
-        // would fail every owner-scoped lookup.
+        // A direct insert skips better-auth's user hooks, so a guest joins no org. The id comes from generateId,
+        // which is plain letters and digits: parseOwnerId accepts nothing else, and generateRandomString can give
+        // '_' or '-'.
         db.insert(userTable)
             .values({
                 id: generateId(),
@@ -168,12 +162,8 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
         if (!guestUser) throw new ApiError(500, 'Failed to create guest user');
     }
 
-    // Reconcile every successful login, not just the first. The previous version only
-    // ran inside the create branch, so any error after creation (including the parseOwnerId
-    // bug above) left the guest's shared_paths permanently empty — the second login would
-    // succeed but "Shared with me" stayed blank.
+    // Every sign-in reconciles, not only the first, so a first reconcile that failed heals at the next sign-in.
     await reconcileSharesForNewUser(guestUser);
 
-    // Upsert credential account and return the response with the signed session cookie.
     return signInWithScopedPassword('guest', guestUser.id, email);
 }

@@ -22,6 +22,7 @@ import type { Context, Package } from './package';
 import { BAND_TAGS, DOCUMENT_NAMESPACES, sectionXml, separatorXml, settingsXml, withNoteNumber } from './package';
 import { blocksOf, blocksXml, withoutAfter } from './paragraphs';
 import { styleDefinitions, stylesXml } from './styles';
+import { docxOutline } from './table-of-contents';
 
 // Every look comes from eigen-prose.css. No schema checked the CRDT's JSON, so attrs are checked where they are used.
 export function writeDocx(
@@ -39,6 +40,7 @@ export function writeDocx(
     }: { title: string; media: OfficeMedia[]; publicOrigin?: string; lost: LossCounter['lost'] },
 ): Uint8Array {
     const page = pageTwips(setup);
+    const outline = docxOutline(json);
     const document = partRelationships();
     for (const type of ['styles', 'numbering', 'settings', 'fontTable']) document.relate(type, `${type}.xml`);
     const pkg: Package = {
@@ -54,11 +56,15 @@ export function writeDocx(
         charts: officeCharts('word'),
         lastDrawingId: 0,
         footnotes: [],
+        outline,
         // A Spacer's and a figure's mark draw in the Normal's Regular.
         faces: new Map([[normal.font, new Set<FontSlot>(['Regular'])]]),
         normal,
-        styles: new Map(styleDefinitions(normal).map((style) => [style.id, style])),
+        styles: new Map(
+            styleDefinitions(normal, { contents: outline.entries.length > 0 }).map((style) => [style.id, style]),
+        ),
         paper: page.width,
+        pageless: setup.pageless,
         lost,
     };
     const column = page.width - page.margin.left - page.margin.right;
@@ -133,7 +139,7 @@ export function writeDocx(
             ...pkg.charts.parts,
             ['word/styles.xml', stylesXml(pkg), `${WML}.styles+xml`],
             ['word/numbering.xml', numberingXml(pkg.abstractNums, pkg.numToAbstract), `${WML}.numbering+xml`],
-            ['word/settings.xml', settingsXml(pkg.footnotes.length > 0), `${WML}.settings+xml`],
+            ['word/settings.xml', settingsXml(pkg), `${WML}.settings+xml`],
             ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
             ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
         ],

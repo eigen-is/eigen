@@ -1,6 +1,6 @@
-// The Docs panel and Edit data for the selected chart node: the shared chart sections over its spec and look, then its
-// layout and caption. Each write is one undo step, and a spec edit is a change applied onto the parts the node stores,
-// written as the part attributes it changed.
+// The Docs panel and Edit data for the selected chart node: its size, its layout and caption, then the shared chart
+// sections over its spec and look. Each write is one undo step, and a spec edit is a change applied onto the parts the
+// node stores, written as the part attributes it changed.
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
@@ -24,9 +24,16 @@ import {
 } from '@workspace/ui/components/properties-panel';
 import { useCallback, useMemo } from 'react';
 import type * as Y from 'yjs';
-import { setFigureLayout } from './extensions/figure-frame';
+import {
+    CHART_MIN_HEIGHT,
+    figureMaxWidth,
+    fitFigureSize,
+    isAspectLocked,
+    setAspectLocked,
+    setFigureLayout,
+} from './extensions/figure-frame';
 import { selectionDrawsInLine } from './extensions/positioned-figure';
-import { FigureLayoutSection } from './figure-properties-panel';
+import { FigureLayoutSection, FigureSizeSection } from './figure-properties-panel';
 
 // The selected chart's attributes. useEditor re-renders on no transaction, and a write that keeps the chart selected
 // fires no selectionUpdate.
@@ -43,6 +50,7 @@ function useSelectedChart(editor: Editor) {
                 width: attrs.width ?? CHART_DEFAULT_SIZE.width,
                 height: attrs.height ?? CHART_DEFAULT_SIZE.height,
                 look: readChartLook(attrs),
+                locked: isAspectLocked(e.state, 'chart'),
                 inFlowOnly: selectionDrawsInLine(e),
             };
         },
@@ -62,7 +70,8 @@ type ChartPropertiesPanelProps = {
 };
 
 export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartPropertiesPanelProps) {
-    const { stored, spec, layout, alignment, caption, width, height, look, inFlowOnly } = useSelectedChart(editor);
+    const { stored, spec, layout, alignment, caption, width, height, look, locked, inFlowOnly } =
+        useSelectedChart(editor);
     const beginGesture = useCallback(() => holdCapture(undoManager), [undoManager]);
     // A field that writes as the user types keeps the caret out of the editor's keymap, so it hands ⌘Z to the doc.
     const history = useMemo(
@@ -75,17 +84,15 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
         <PropertyGestureContext.Provider value={beginGesture}>
             <PropertyHistoryContext.Provider value={history}>
                 <PropertiesPanel title="Chart">
-                    {spec && (
-                        <ChartSections
-                            spec={spec}
-                            stored={stored}
-                            onChange={(change) => write(chartSpecWrites(stored, change))}
-                            look={look}
-                            onLookChange={write}
-                            sketchCapped={isInlineSketchCapped(spec)}
-                            onEditData={onEditData}
-                        />
-                    )}
+                    <FigureSizeSection
+                        width={width}
+                        height={height}
+                        aspectLocked={locked}
+                        onAspectLockChange={(next) => setAspectLocked(editor, 'chart', next)}
+                        onChange={(size) =>
+                            write(fitFigureSize(size, figureMaxWidth(editor, layout), CHART_MIN_HEIGHT))
+                        }
+                    />
                     <FigureLayoutSection
                         layout={layout}
                         alignment={alignment}
@@ -99,6 +106,17 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                             )
                         }
                     />
+                    {spec && (
+                        <ChartSections
+                            spec={spec}
+                            stored={stored}
+                            onChange={(change) => write(chartSpecWrites(stored, change))}
+                            look={look}
+                            onLookChange={write}
+                            sketchCapped={isInlineSketchCapped(spec)}
+                            onEditData={onEditData}
+                        />
+                    )}
                 </PropertiesPanel>
             </PropertyHistoryContext.Provider>
         </PropertyGestureContext.Provider>

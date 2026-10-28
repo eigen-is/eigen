@@ -14,7 +14,7 @@ const { default: Collaboration } = await import('@tiptap/extension-collaboration
 const { chartSeriesStyle, mapChartSpecParts, readChartSpec, sampleChartSpec } = await import('@workspace/lib/charts');
 const { parseFill } = await import('@workspace/lib/vector');
 const { getFontFamily } = await import('@workspace/lib/constants/fonts');
-const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { getDocExtensions, mmToPx } = await import('@workspace/lib/docs/eigendoc');
 const { Chart } = await import('../../../components/docs/extensions/chart');
 const { PositionedFigures } = await import('../../../components/docs/extensions/positioned-figure');
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
@@ -197,6 +197,51 @@ test("a font picked in the Font row is one undo step, and the chart's labels dra
     expect(spec()?.chart.fontFamily).toBe('Inter');
 });
 
+// The panel's geometry comes first, as on a slide: its size, then its place on the page, then the chart's own rows.
+test('Size and Layout lead the panel, and a chart starts unlocked', async () => {
+    await mount();
+    const titles = [...document.querySelectorAll('h4')].map((h) => h.textContent);
+    expect(titles.slice(0, 2)).toEqual(['Size', 'Layout']);
+    expect(document.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('false');
+});
+
+const sizeField = (index: number) => document.querySelectorAll<HTMLInputElement>('input[type="number"]')[index] ?? null;
+const commitSize = async (index: number, value: string) => {
+    await type(sizeField(index), value);
+    await press(sizeField(index), { key: 'Enter' });
+};
+
+// 10 cm is 377.95 px, stored as typed, and a side Keep aspect ratio derives is exact too. The sample is 600 x 371 px.
+test('a W edit of an unlocked chart writes the width alone, in one undo step', async () => {
+    const { editor, undoManager } = await mount();
+    expect([sizeField(0)?.value, sizeField(1)?.value]).toEqual(['15.88', '9.82']);
+    await commitSize(0, '10');
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: mmToPx(100), height: 371 });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
+
+    undoManager.undo();
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: 600, height: 371 });
+});
+
+test('with Keep aspect ratio checked, a W edit writes both sides in one undo step', async () => {
+    const { editor, undoManager } = await mount();
+    const box = document.querySelector<HTMLElement>('[role="checkbox"]');
+    if (!box) throw new Error('no Keep aspect ratio box');
+    await click(box);
+    await commitSize(0, '10');
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: mmToPx(100), height: mmToPx(100) / (600 / 371) });
+
+    undoManager.undo();
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: 600, height: 371 });
+});
+
+// A chart keeps its 100 px floor, as its grips do: 1 cm is 37.8 px.
+test('an H edit of a chart keeps its height to 100 px', async () => {
+    const { editor } = await mount();
+    await commitSize(1, '1');
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ width: 600, height: 100 });
+});
+
 test("a Style toggle wraps the chart in one undo step and lights it, the spec's rows untouched", async () => {
     const { editor, undoManager, spec } = await mount();
     const before = spec();
@@ -225,6 +270,18 @@ test('In front of text places the chart in one undo step, keeps it selected and 
 
     undoManager.undo();
     expect(editor.state.doc.nodeAt(1)?.attrs['layout']).toBe('block');
+});
+
+// The paper caps the width as the chart leaves the column, and the height follows, or the chart changes shape.
+test('a chart wider than the paper keeps its shape as it goes in front of the text', async () => {
+    const { editor } = await mount();
+    await act(async () => void editor.commands.updateChart({ width: 2000, height: 1000 }));
+    const front = document.querySelector<HTMLButtonElement>('button[aria-label="In front of text"]');
+    if (!front) throw new Error('no In front of text toggle');
+    await click(front);
+    const { width, height } = editor.state.doc.nodeAt(1)?.attrs ?? {};
+    expect(width).toBeLessThan(2000);
+    expect(height).toBe(Math.round(width / 2));
 });
 
 test("the sample's colors are Automatic, and a picked color and a Stacking pick are one undo step each", async () => {

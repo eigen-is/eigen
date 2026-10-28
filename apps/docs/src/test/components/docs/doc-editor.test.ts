@@ -402,17 +402,19 @@ test('a remote update that brings a wide table and a page it fits keeps the tabl
     expect(colwidths(editor)).toEqual([[490], [490]]);
 });
 
-test('a table wider than a narrower page shrinks to its text column at the next edit', () => {
+// A table in the body scrolls inside a narrower column and keeps its widths, as a page-less doc's wide table keeps them
+// back on pages; a nested one is fitted to the column of the page the doc holds.
+test('at the next edit after a narrower page, a nested table shrinks to its text column and one in the body stays', () => {
     const doc = new Y.Doc();
     setPage(doc, LETTER_LANDSCAPE);
     const editor = body(doc);
-    editor.commands.setContent({ type: 'doc', content: [wideTable, { type: 'paragraph' }] });
-    expect(colwidths(editor)).toEqual([[490], [490]]);
+    const nested = { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }, wideTable] }] };
+    editor.commands.setContent({ type: 'doc', content: [wideTable, nested, { type: 'paragraph' }] });
+    expect(colwidths(editor)).toEqual([[490], [490], [490], [490]]);
 
     setPage(doc, A5);
-    expect(colwidths(editor)).toEqual([[490], [490]]);
     editor.commands.insertContentAt(editor.state.doc.content.size - 1, 'x');
-    expect(colwidths(editor)).toEqual([[204], [204]]);
+    expect(colwidths(editor)).toEqual([[490], [490], [204], [204]]);
 });
 
 // A5's 108 mm column is 306.15 pt to Word's twentieth; a band prints in the body's column.
@@ -720,4 +722,24 @@ test("a band left or entered by a viewer's tab takes no edits", async () => {
     }
     ({ unmount } = await render(createElement(Host)));
     expect(Object.values(shown.bands).map((editor) => editor.isEditable)).toEqual([false, false, false, false]);
+});
+
+// A page-less doc has no pages, so Mod-Enter breaks none there, as in Google; the page map is read at each press.
+test('Mod-Enter inserts a page break in a paged doc and nothing in a page-less one', () => {
+    const doc = new Y.Doc();
+    const page = body(doc);
+    // prosemirror-keymap reads Mod off the navigator of whichever file loaded it first, so both are pressed.
+    const modEnter = () =>
+        [{ metaKey: true }, { ctrlKey: true }].some((mod) =>
+            page.view.someProp('handleKeyDown', (handle) =>
+                handle(page.view, new KeyboardEvent('keydown', { key: 'Enter', ...mod })),
+            ),
+        );
+    const breaks = () => page.getJSON().content?.filter((node) => node.type === 'pageBreak').length;
+    modEnter();
+    expect(breaks()).toBe(1);
+    doc.getMap(PAGE_ROOT).set('pageless', true);
+    expect(modEnter()).toBe(true);
+    expect(breaks()).toBe(1);
+    expect(page.getJSON().content?.filter((node) => node.type === 'hardBreak').length ?? 0).toBe(0);
 });

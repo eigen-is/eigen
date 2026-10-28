@@ -1,3 +1,7 @@
+// Handles the mail events from the stream, which always concern the signed-in user's own mail. Each
+// refetches the message list it touched and, as needed, the unread counts, the home size and the search
+// results.
+
 import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -32,8 +36,8 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             invalidateSearchOwner(queryClient, userId);
             return true;
 
-        // For the four cases below, skip the list refetch when this is the echo of our own optimistic
-        // mutation (the list is already patched); the cheap counts/search/home invalidations still run.
+        // In the four cases below, the echo of this tab's own optimistic change skips the list refetch,
+        // since the list is patched already. The counts, the search and the home size still refetch.
 
         case SSEventType.MAIL_DELETED:
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
@@ -45,8 +49,8 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             return true;
 
         case SSEventType.MAIL_MOVED: {
-            // Own move: source list already patched + target list invalidated in the mutation onSuccess,
-            // so skip the echo. A move by another client (no registry entry) invalidates both lists here.
+            // This tab's own move patched the source list and refetched the target list already. A move
+            // made elsewhere refetches both lists here.
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
                 invalidateMailMoved(queryClient, userId, mail.messageId, mailbox, mail.toMailbox ?? null);
             }
@@ -60,8 +64,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
                 invalidateMailMessageChanged(queryClient, userId, mail.messageId, mailbox);
             }
             invalidateMailboxesSoon(queryClient, userId);
-            // Palette mail rows carry isRead on the EmailSummary and bold-on-unread —
-            // invalidate so the cached search response reflects the new flag.
+            // The palette shows an unread mail in bold, from the cached search response.
             invalidateSearchOwner(queryClient, userId);
             return true;
 
@@ -69,6 +72,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
                 invalidateMailMessageChanged(queryClient, userId, mail.messageId, mailbox);
             }
+            invalidateMailboxesSoon(queryClient, userId);
             invalidateSearchOwner(queryClient, userId);
             return true;
 

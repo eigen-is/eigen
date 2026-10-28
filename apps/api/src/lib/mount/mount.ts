@@ -21,7 +21,7 @@ import { RWLock } from '../../utils/rw-lock';
 import { PATHS } from '../config/paths';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
-import { ApiError, StaleWriteError, storageGone } from '../core';
+import { ApiError, computeEtag, matchesIfMatch, StaleWriteError, storageGone } from '../core';
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import type { StorageBackend, StorageFile } from '../storage';
@@ -951,9 +951,8 @@ export class Mount {
         return files;
     }
 
-    // The queued upload and its staged copy are cancelled first, so a PUT in flight can't bring back
-    // the object this deletes. Every delete of a document database ends here, such as a container
-    // delete or the chat-restore replace.
+    // Every delete of one object ends here, such as a file's delete or a failed create. The queued upload
+    // and its staged copy are canceled first, so a PUT in flight can't bring back the object this deletes.
     private async removeObject(pathId: string, storageKey: string): Promise<void> {
         await deleteThumbnail(this.thumbsDir, pathId);
         if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
@@ -1087,20 +1086,23 @@ export class Mount {
 
     // ---- Overwriting ----
 
+    // ifMatch is an If-Match value: one etag, a list of them or `*`. The write happens only when the
+    // file's etag matches it. It answers the row it committed, taken under the lock, so a write that
+    // lands after this one can't hand its etag or updatedAt to this caller.
     public async writeFile(
         pathId: string,
         data: Buffer | Uint8Array | ArrayBuffer | BunFile,
-        expectedUpdatedAt?: Date,
-    ): Promise<void> {
+        ifMatch?: string,
+    ): Promise<DrivePath> {
         const size = data instanceof Blob ? data.size : data.byteLength;
         const hash = await this.computeHash(data);
 
-        await this.withPathLock(pathId, () =>
+        return this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
-                await this.assertOverwritable(pathId, expectedUpdatedAt);
+                await this.assertOverwritable(pathId, ifMatch);
                 const storageKey = await this.getStorageKey(pathId);
                 await this.storage.write(storageKey, data);
-                await this.commitOverwrite(pathId, storageKey, size, hash);
+                return this.commitOverwrite(pathId, storageKey, size, hash);
             }),
         );
     }
@@ -1112,14 +1114,14 @@ export class Mount {
         tempId: string,
         size: number,
         hash: string,
-        expectedUpdatedAt?: Date,
-    ): Promise<void> {
-        await this.withPathLock(pathId, () =>
+        ifMatch?: string,
+    ): Promise<DrivePath> {
+        return this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
-                await this.assertOverwritable(pathId, expectedUpdatedAt);
+                await this.assertOverwritable(pathId, ifMatch);
                 const storageKey = await this.getStorageKey(pathId);
                 await this.uploadFromTemp(storageKey, tempId);
-                await this.commitOverwrite(pathId, storageKey, size, hash);
+                return this.commitOverwrite(pathId, storageKey, size, hash);
             }),
         );
     }
@@ -1128,17 +1130,17 @@ export class Mount {
     // the path lock every overwrite takes, so of two saves from the same base only the first writes.
     // And it runs under the tree lock, so on `local` an ancestor's trash can't land between the check
     // and the write.
-    private async assertOverwritable(pathId: string, expectedUpdatedAt: Date | undefined): Promise<void> {
-        const { updatedAt } = await this.getActivePath(pathId);
-        if (expectedUpdatedAt && updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
-            throw new StaleWriteError(updatedAt);
-        }
+    private async assertOverwritable(pathId: string, ifMatch: string | undefined): Promise<void> {
+        const etag = computeEtag(await this.getActivePath(pathId));
+        if (ifMatch !== undefined && !matchesIfMatch(ifMatch, etag)) throw new StaleWriteError(etag);
     }
 
     // Runs under the path lock once the bytes landed. deletePath doesn't wait for that lock, so a delete
     // during the write leaves the new bytes behind, and they go here. Off `local` no lock this holds
     // stops an ancestor's trash either. The row then still records the new bytes, and the caller gets a 404.
-    private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<void> {
+    // It answers the row as the update stored it, so its etag and updatedAt are what a GET reads: the
+    // column keeps whole seconds, which a Date taken here would not.
+    private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<DrivePath> {
         const row = await this.db
             .select({ name: paths.name, mimeType: paths.mimeType })
             .from(paths)
@@ -1150,17 +1152,16 @@ export class Mount {
             .update(paths)
             .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
             .where(eq(paths.id, pathId))
-            .returning({ trashedAt: paths.trashedAt })
+            .returning()
             .get();
         if (!committed) {
-            if (!(await this.storage.delete(storageKey))) {
-                console.warn(`[Mount] overwrite of deleted ${pathId} left its object ${storageKey} behind`);
-            }
+            await this.removeObject(pathId, storageKey);
             throw new ApiError(404, 'File not found');
         }
         await this.invalidateAncestorsOf(pathId);
         if (searchable) this.reindexQueue?.kick();
         if (committed.trashedAt) throw new ApiError(404, 'File is in trash');
+        return this.toDrivePath(committed);
     }
 
     // ---- Temp files ----

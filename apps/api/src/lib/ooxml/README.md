@@ -189,7 +189,7 @@ Signatures are as the code declares them. Types the signatures name but the modu
 - `readChart(root, { theme, data }): ChartRead`: `data` is `'cache'` or `{ ranges: (sheetName) => sheetId | undefined }`. The result is `{ spec }` or `{ unsupported: { title, name } }`.
 - `readChartPartLook(root, { theme, emuPerPx, host }): Pick<ChartLook, …>`: the background, label color, stroke and line series width.
 - `droppedChart({ title, name }): string[]`, `CHART_NOT_IMPORTED`, `KIND_NOT_IMPORTED`: what a format shows in place of an unsupported chart. A chart past the spec's caps names no kind.
-- `CHART_CONTENT_TYPE`, `STACKING_BY_GROUPING`, `LEGEND_BY_POSITION`, `PERCENT_AXIS_FORMAT`, `ChartHost`.
+- `CHART_CONTENT_TYPE`, `STACKING_BY_GROUPING`, `LEGEND_BY_POSITION`, `ChartHost`.
 
 ### ooxml-chart-writer.ts
 

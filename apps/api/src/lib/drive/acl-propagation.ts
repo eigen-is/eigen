@@ -10,7 +10,7 @@ import { composeShareEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
-import { getUserByEmail } from '../user/';
+import { getUserByEmail, isGuest } from '../user/';
 import { canonicalACLId } from './acl';
 
 // 'registered' skips the share email for entries that resolve to a registered user — mirror fan-out,
@@ -163,8 +163,8 @@ export async function propagateSharedPathChange(
                 const target = await getUserByEmail(email);
                 // Suppression only covers users reachable in-app; an account-less email still needs the invite.
                 if (suppress === 'registered' && target) continue;
-                const isGuest = !target || target.role === 'guest';
-                const enabled = isGuest
+                const toGuest = !target || isGuest(target);
+                const enabled = toGuest
                     ? settings.notifications.email.guestOnAclAdd
                     : settings.notifications.email.userOnAclAdd;
                 if (!enabled) continue;
