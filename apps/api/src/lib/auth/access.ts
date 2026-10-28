@@ -43,10 +43,10 @@ export function _setRouteTableForTests(table: Route[]): void {
 
 type RequestServer = { requestIP(req: Request): { address: string } | null } | null;
 
-// One source of truth for the real client IP behind Caddy, which overwrites X-Real-IP /
-// X-Forwarded-For with the true client on proxied routes (not spoofable). The socket peer is
-// only the proxy — fall back to it for direct bridge callers (Postfix/Dovecot) and to 'unknown'
-// with no server (tests). Every rate-limit / abuse key routes through here; don't re-derive inline.
+// The real client IP behind Caddy, the one key every rate limit uses. Caddy overwrites X-Real-IP and
+// X-Forwarded-For on proxied routes, so a client cannot fake them. On those routes the socket peer is only
+// the proxy. A bridge caller, such as Postfix or Dovecot, connects directly, so its socket peer is the key.
+// A request with no server, as app.handle() sends in a test, is 'unknown'.
 export function clientIpKey(request: Request, server: RequestServer): string {
     return (
         request.headers.get('x-real-ip') ??
@@ -57,14 +57,15 @@ export function clientIpKey(request: Request, server: RequestServer): string {
 }
 
 export function requireLocalhost(request: Request, server: RequestServer): void {
-    // Belt-and-suspenders with the Caddyfile edge 404: a genuine bridge caller (Postfix/Dovecot)
-    // connects directly and sets no proxy headers, but every Caddy-proxied request carries
-    // X-Real-IP / X-Forwarded-For — reject those even though Caddy's socket peer is trusted.
+    // Caddy already answers these routes with a 404 at the edge. This is a second guard behind it. A real
+    // bridge caller, such as Postfix or Dovecot, connects directly and sets no proxy headers. Every request
+    // Caddy proxies carries them, so it is refused, even though Caddy's own address is trusted.
     if (request.headers.has('x-real-ip') || request.headers.has('x-forwarded-for')) {
         throw new ApiError(403, 'Access denied: localhost only');
     }
     const ip = server?.requestIP(request)?.address;
-    // No address falls through open: app.handle() (tests) has no server, and requestIP() is null once the peer socket is gone.
+    // No address lets the request through. A test's app.handle() has no server, and requestIP() is null once the
+    // peer's socket is gone.
     if (!ip) return;
     if (!isIpTrusted(ip)) {
         throw new ApiError(403, 'Access denied: localhost only');

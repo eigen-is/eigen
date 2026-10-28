@@ -1,5 +1,6 @@
-// The daily sweep that deletes guests who have been inactive longer than guests.inactivityDays. A guest whose home is loaded is skipped, so an open session is never pulled away,
-// and the deletion is the same teardown as any other user's.
+// The daily sweep that deletes guests who have been inactive longer than guests.inactivityDays. A guest whose
+// home is loaded is skipped, so an open session is never pulled away. A guest's deletion runs the same teardown
+// as any other user's.
 
 import { eq, max } from 'drizzle-orm';
 import { session, user as userTable } from '../../../auth-schema';
