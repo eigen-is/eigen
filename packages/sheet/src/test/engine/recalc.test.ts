@@ -76,12 +76,16 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data?.[0][0]?.v).toBe(11);
     });
 
+    test('a formula that starts and ends with a string, as ="x"&B1&"y" does, still reads the cells between', () => {
+        // A1 is scanned first, so only a recorded dependency makes it read B1's fresh 6 over the cached 0.
+        const sheets = [sheet('s1', 'Sheet1', [[formula('="x"&B1&"y"'), formula('=2*3', { v: 0 })]])];
+        const out = recalcSheets(sheets);
+        expect(out[0].data?.[0][0]?.v).toBe('x6y');
+    });
+
     test('INDEX-carrying formula is parsed via the special-case branch and evaluates', () => {
-        // The isOffsetFunc branch routes INDEX/OFFSET/INDIRECT through the ported
-        // isFunctionRange rather than the naive tokenizer (audit Risk 8). INDEX
-        // over literals resolves through the range read. (Note: a plain range
-        // arg registers no ORDERING dependency — that is the state layer's own
-        // behavior, faithfully preserved: only single-quoted range endpoints do.)
+        // A formula calling INDEX, OFFSET or INDIRECT finds its ranges through isFunctionRange, not the tokenizer.
+        // A plain range argument records no dependency there, as in the editor: only a single-quoted endpoint does.
         const sheets = [sheet('s1', 'Sheet1', [[num(10), num(20), formula('=INDEX(A1:B1,1,2)')]])];
         const out = recalcSheets(sheets);
         expect(out[0].data![0][2]?.v).toBe(20);

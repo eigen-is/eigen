@@ -220,13 +220,13 @@ function extractDependencies(g: GraphCtx, formula: string, sheetId: string, data
                 dependencies.push(range);
             }
         });
-    } else if (!(formula.substring(0, 2) === '="' && formula.substring(formula.length - 1, 1) === '"')) {
+    } else {
         for (const token of tokenize(formula)) {
             if (token.length <= 1) {
                 continue;
             }
 
-            if ((token.substring(0, 1) === '"' && token.substring(token.length - 1, 1) === '"') || !iscelldata(token)) {
+            if (!iscelldata(token)) {
                 continue;
             }
 
