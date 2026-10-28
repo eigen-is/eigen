@@ -268,6 +268,24 @@ export const PPTX_LISTED: Listed<RoundtripDifference, PptxRoundtripContext>[] = 
         },
     },
     {
+        kind: "an arrow's points as its freeform's path keeps them",
+        why: "The writer writes an arrow of more than two points as a freeform, whose path the reader keeps to a ten-thousandth of its box (customGeometry's inBox), so each point, and the box they span, comes back within that and the hundredth of a pixel a point is stored to",
+        matches: ({ feature, at, a, b }, context) => {
+            const element = elementAt(context.a, at);
+            if (element?.type !== 'arrow' || !/^arrow (?:x|y|width|height|points)$/.test(feature)) return false;
+            if (parsePoints(element.points).length <= 2) return false;
+            const within = unitsOf(context.a.scene).emu(Math.max(element.width, element.height) / 10_000 + 0.01);
+            const [x, y] = [[a].flat(2), [b].flat(2)];
+            return (
+                x.length === y.length &&
+                x.every((value, i) => {
+                    const other = y[i];
+                    return typeof value === 'number' && typeof other === 'number' && Math.abs(value - other) <= within;
+                })
+            );
+        },
+    },
+    {
         kind: 'gradients as the canvas samples them',
         why: 'A gradient is written as the stops the canvas samples (gradientStops), where a fully transparent end carries no colour of its own, so its colour comes back as the canvas draws it',
         matches: ({ feature, a, b }) => {

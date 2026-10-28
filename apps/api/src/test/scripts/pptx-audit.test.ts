@@ -202,4 +202,34 @@ describe('round trip', () => {
         expect(groups(0.5999)).toEqual([["a line's box is its points' box", true]]);
         expect(groups(0.59)).toEqual([['line height', false]]);
     });
+
+    // An arrow of more than two points comes back from a freeform's path, which the reader keeps to a ten-thousandth of
+    // its box, 0.05 px on this 500 px one, and to the hundredth of a pixel a point is stored to.
+    test("an arrow's points within its freeform path's precision are the same points", () => {
+        const scene = (bend: number) => {
+            const doc = new Y.Doc();
+            writeFrameInDoc(doc, { id: 'f1', index: 'a0', name: '', width: 1920, height: 1080, background: '' });
+            const points = JSON.stringify([
+                [0, 0],
+                [bend, 0],
+                [bend, 200],
+                [500, 200],
+            ]);
+            writeElementInDoc(
+                doc,
+                { type: 'arrow', x: 0, y: 0, width: 500, height: 200, angle: 0, points, elbow: false, frameId: 'f1' },
+                'a0',
+                SLIDES_STYLE_DEFAULTS,
+                'el-0',
+            );
+            return { scene: readVectorFromDoc(doc), media: [], pictures: new Map() };
+        };
+        const groups = (bend: number) =>
+            classifyPptx({ a: scene(250), b: scene(bend), prepared: new Map() }).map(({ kind, listed }) => [
+                kind,
+                listed,
+            ]);
+        expect(groups(250.04)).toEqual([["an arrow's points as its freeform's path keeps them", true]]);
+        expect(groups(250.2)).toEqual([['arrow points', false]]);
+    });
 });

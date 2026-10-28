@@ -54,6 +54,7 @@ import type { Part } from '../../ooxml/opc';
 import { PICTURE_NOT_IMPORTED } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import { frameChart } from './chart';
+import { CONNECTORS, connectorArrow, freeformArrow } from './connector';
 import type { GeometryPath } from './custom-geometry';
 import { closedPath, customGeometry } from './custom-geometry';
 import type { Guides } from './guides';
@@ -250,6 +251,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const kind = PRESET_KINDS.get(geometry);
     const native = kind !== undefined || geometry === 'pie';
     const linear = LINES.has(geometry);
+    const connector = CONNECTORS.get(geometry);
     const outline = native || linear ? undefined : outlineOf(shaped?.geom, geometry, placed);
     const body = childOf(shape, shape.ns, 'txBody');
     const lines = linesOf(chain, walk, style);
@@ -300,12 +302,30 @@ function readShape(walk: Walk, leaf: Leaf): void {
         if (paint.strokeColor !== TRANSPARENT_COLOR) push(walk, lineOf(placed, paint, lines.lns));
         textOnTop();
     } else if (outline) {
-        const paths = pathsOf(outline, box, paint);
-        for (const element of paths) push(walk, element);
-        // A path has no arrowheads, and PowerPoint draws a line's ends only on an open one: a connector's, an arc's.
         const ends = [arrowheadOf(lines.lns, 'headEnd'), arrowheadOf(lines.lns, 'tailEnd')];
-        const open = paint.strokeColor !== TRANSPARENT_COLOR && outline.some((g) => g.stroked && !g.closed);
-        if (open && ends.some((end) => end !== 'none')) lost('shapes-simplified');
+        const headed = ends.some((end) => end !== 'none') && paint.strokeColor !== TRANSPARENT_COLOR;
+        // A connector with a head is the arrow that draws it, and so is an open freeform line with one, which is how
+        // the pptx export writes an arrow of more than two points. One without a head has nothing to lose as a path,
+        // and a path comes back from the pptx export as it went.
+        const [line, ...more] = outline;
+        const freeform =
+            geometry === 'custGeom' &&
+            more.length === 0 &&
+            line.stroked &&
+            (!line.filled || paint.fill === TRANSPARENT_FILL_JSON);
+        const arrow = !headed
+            ? undefined
+            : connector
+              ? connectorArrow(connector, line.path, box, paint, ends)
+              : freeform
+                ? freeformArrow(line.path, box, paint, ends)
+                : undefined;
+        if (arrow) push(walk, arrow);
+        else {
+            for (const element of pathsOf(outline, box, paint)) push(walk, element);
+            // A path has no arrowheads, and PowerPoint draws a line's ends only on an open one, such as an arc's.
+            if (headed && outline.some((g) => g.stroked && !g.closed)) lost('shapes-simplified');
+        }
         textOnTop();
     } else {
         // A custGeom or preset past the path caps or the read's budget, or a preset no definition names.

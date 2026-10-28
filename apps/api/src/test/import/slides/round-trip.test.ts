@@ -7,6 +7,8 @@ import {
     generateNKeysBetween,
     normalizeAngle,
     parseFill,
+    parseFixedSegments,
+    parsePoints,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
@@ -23,7 +25,7 @@ import { writePptx } from '../../../lib/export/slides/pptx/to-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { seriesIdsByPlace } from '../../../scripts/office-audit';
 import { axesOf, sampleChartParts, withDataLabels } from '../../fixtures/chart-parts';
-import { box, buildPptx, dspSp, PIXEL_PNG, para, scheme, smartArt, solid, sp, textBox } from '../../fixtures/pptx';
+import { box, buildPptx, cxn, dspSp, PIXEL_PNG, para, scheme, smartArt, solid, sp, textBox } from '../../fixtures/pptx';
 
 // A deck exported to .pptx and read back: what the writer states, the reader reads the same.
 
@@ -435,6 +437,58 @@ describe("a shape's overlapping paths imported, exported and read back", () => {
         ]);
         for (const found of back)
             expect(parseFill(String(found.fill))).toMatchObject({ type: 'solid', color: '#993300' });
+    });
+});
+
+// A bent or curved connector comes in as an arrow, which the writer writes as a freeform with its line ends once it
+// has more than two points, and that freeform reads back as the arrow.
+describe('connectors imported, exported and read back', () => {
+    test('keep their kind, points, pins and heads', () => {
+        const ln = `<a:ln w="25400">${solid('0000FF')}<a:headEnd type="oval"/><a:tailEnd type="triangle"/></a:ln>`;
+        const shapes = [
+            cxn({ xfrm: box(100, 100, 200, 100), geom: 'bentConnector3', ln }),
+            cxn({ xfrm: box(100, 300, 200, 100, ' rot="5400000"'), geom: 'bentConnector4', ln }),
+            cxn({ xfrm: box(400, 100, 200, 100), geom: 'bentConnector2', ln }),
+            cxn({ xfrm: box(400, 300, 200, 100, ' rot="1800000"'), geom: 'bentConnector3', ln }),
+            cxn({ xfrm: box(700, 100, 400, 200), geom: 'curvedConnector3', ln }),
+            cxn({ xfrm: box(700, 400, 400, 200, ' flipV="1"'), geom: 'curvedConnector5', ln }),
+        ].join('');
+        const imported = readPptx(buildPptx({ slides: [{ shapes }] }), { maxMediaBytes: 1024 * 1024 }).slides[0]
+            .elements;
+        const { deck } = roundTrip(imported);
+        const back = deck.slides[0].elements;
+        const kind = (found: NewVectorElement) => [
+            found.type,
+            found.elbow,
+            found.roundness,
+            found.startArrowhead,
+            found.endArrowhead,
+            parseFixedSegments(String(found.fixedSegments)).segments.map((segment) => segment.index),
+        ];
+        expect(imported.map(kind)).toEqual([
+            ['arrow', true, 'sharp', 'circle', 'triangle', [2]],
+            ['arrow', true, 'sharp', 'circle', 'triangle', [2, 3]],
+            ['arrow', false, 'sharp', 'circle', 'triangle', []],
+            ['arrow', false, 'sharp', 'circle', 'triangle', []],
+            ['arrow', false, 'round', 'circle', 'triangle', []],
+            ['arrow', false, 'round', 'circle', 'triangle', []],
+        ]);
+        expect(back.map(kind)).toEqual(imported.map(kind));
+        // Each point on the slide comes back within the path's precision, a ten-thousandth of its box.
+        const onSlide = (found: NewVectorElement) =>
+            parsePoints(String(found.points)).map((point) => ({
+                x: (found.x ?? 0) + point.x,
+                y: (found.y ?? 0) + point.y,
+            }));
+        for (const [i, found] of back.entries()) {
+            const [points, sent] = [onSlide(found), onSlide(imported[i])];
+            expect(points).toHaveLength(sent.length);
+            for (const [j, point] of points.entries()) {
+                expect(point.x).toBeCloseTo(sent[j].x, 1);
+                expect(point.y).toBeCloseTo(sent[j].y, 1);
+            }
+        }
+        expect(deck.warnings).toEqual([]);
     });
 });
 

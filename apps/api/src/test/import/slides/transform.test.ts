@@ -201,6 +201,29 @@ describe('a pptx converted to a deck', () => {
         expect(readVectorFromDoc(doc).elements[0].width).toBe(1_000_000);
     });
 
+    test('every bent and curved connector keeps its arrowheads in the deck, a bent one its pinned bends', () => {
+        const presets = [2, 3, 4, 5].flatMap((n) => [`bentConnector${n}`, `curvedConnector${n}`]);
+        const ln = `<a:ln w="12700">${solid('0000FF')}<a:headEnd type="arrow"/><a:tailEnd type="triangle"/></a:ln>`;
+        const pptx = buildPptx({
+            slides: [{ shapes: presets.map((geom) => cxn({ xfrm: box(100, 100, 300, 200), geom, ln })).join('') }],
+        });
+        const { update, warnings } = importPptxToSlidesUpdate(toTransferableBuffer(pptx), JOB);
+        const doc = new Y.Doc();
+        replaceSlidesInYjs(doc, readSlidesUpdate(new Uint8Array(update)));
+        const arrows = readVectorFromDoc(doc).elements.flatMap((el) => (el.type === 'arrow' ? [el] : []));
+        expect(
+            arrows.map((arrow) => [arrow.startArrowhead, arrow.endArrowhead, arrow.elbow, arrow.fixedSegments !== '']),
+        ).toEqual(
+            presets.map((geom) => [
+                'arrow',
+                'triangle',
+                geom !== 'bentConnector2' && geom.startsWith('bent'),
+                geom !== 'bentConnector2' && geom.startsWith('bent'),
+            ]),
+        );
+        expect(warnings).toEqual([]);
+    });
+
     test('runs in the transform process, its warnings and refusals crossing the boundary', async () => {
         spyOn(console, 'log').mockImplementation(() => {});
         const job: SlidesImportJob = { kind: 'import', sourceFormat: 'pptx', targetType: 'eigenslides', ...JOB };
